@@ -35,7 +35,7 @@ def _roles() -> dict:
     core = (WEB / "js" / "10-robot-core.js").read_text()
     body = core[core.index("const ROLES = {"):core.index("};", core.index("const ROLES = {"))]
     out = {}
-    for m in re.finditer(r"^\s*(\w+): \{ name: '[^']*', color: '(#[0-9a-f]{6})'(?:, pill: '(#[0-9a-f]{6})')? \}", body, re.M):
+    for m in re.finditer(r"^\s*(\w+): \{ name: (?:'[^']*'|tl\('[^']*'\)), color: '(#[0-9a-f]{6})'(?:, pill: '(#[0-9a-f]{6})')? \}", body, re.M):
         out[m.group(1)] = (m.group(2), m.group(3))
     return out
 

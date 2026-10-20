@@ -2,8 +2,8 @@
 // Demo: the script's clock, with play / speed. Live: the wall clock (the local time of day in seconds), no
 // controls; the state comes from the server (25-net.js).
 let simT = START_AT, prevSim = -0.001, playing = true, speed = 1, lastMs = performance.now(), lastPanel = -1e9, lastBoard = -1e9;
-$('btn-play').addEventListener('click', (e) => { playing = !playing; e.currentTarget.textContent = playing ? '一時停止' : '再生'; e.currentTarget.setAttribute('aria-pressed', String(!playing)); });
-$('btn-speed').addEventListener('click', (e) => { speed = speed === 1 ? 3 : 1; e.currentTarget.textContent = `速度 ×${speed}`; });
+$('btn-play').addEventListener('click', (e) => { playing = !playing; e.currentTarget.textContent = playing ? tl('demo.pause') : tl('demo.play'); e.currentTarget.setAttribute('aria-pressed', String(!playing)); });
+$('btn-speed').addEventListener('click', (e) => { speed = speed === 1 ? 3 : 1; e.currentTarget.textContent = tl('demo.speed', { n: speed }); });
 
 /* ?fps=1: frames per second in the corner, from the requestAnimationFrame intervals (plan 10 §7). */
 const fpsMeter = new URLSearchParams(location.search).get('fps') === '1' ? { el: document.createElement('p'), n: 0, from: performance.now() } : null;
@@ -47,7 +47,7 @@ function frame(ms) {
     $('chip-clock').textContent = fmtClock(BASE_CLOCK + simT);
     if (SOURCE.mode === 'live') liveChrome();
     floorNavSync();
-    if (SOURCE.mode === 'demo') { const el = $('demo-clock'); el.hidden = false; setText(el, `デモの時計 ${fmtClock(Math.floor(demoHour(latestModel.t) * 3600)).slice(0, 5)}（早回し）`); }
+    if (SOURCE.mode === 'demo') { const el = $('demo-clock'); el.hidden = false; setText(el, tl('demo.clock', { time: fmtClock(Math.floor(demoHour(latestModel.t) * 3600)).slice(0, 5) })); }
     lastPanel = ms;
   }
   if (fpsMeter) {
@@ -64,13 +64,13 @@ function liveChrome() {
   const chip = document.querySelector('.chip.demo');
   if (chip) {
     const ok = NET.state === 'connected';
-    setText(chip, ok ? '接続中' : NET.state === 'connecting' && !LIVE.connectedOnce ? '接続しています…' : '再接続中…');
+    setText(chip, ok ? tl('net.connected') : NET.state === 'connecting' && !LIVE.connectedOnce ? tl('net.connecting') : tl('net.reconnecting'));
     chip.dataset.conn = ok ? 'ok' : 'wait';
   }
   const empty = $('live-empty');
   if (empty) empty.hidden = !SOURCE.connected || SESSIONS.length > 0;
   const err = $('live-error');
-  if (err) { err.hidden = !LIVE.serverError; setText(err, LIVE.serverError ? `取得元の故障: ${LIVE.serverError}` : ''); }
+  if (err) { err.hidden = !LIVE.serverError; setText(err, LIVE.serverError ? tl('net.source.error', { error: LIVE.serverError }) : ''); }
 }
 if (SOURCE.mode === 'live') {
   document.body.dataset.mode = 'live';
@@ -86,9 +86,9 @@ renderPanel(latestModel);
 if (UI.project !== 'all' && SOURCE.mode === 'demo') focusProject(UI.project, true);
 const redrawAll = () => { fontRedraws.forEach((fn) => fn()); if (has3D) redrawBoards(latestModel, 0, true); };
 Promise.all([
-  document.fonts.load(`40px ${FONT_DISPLAY}`, 'a0!仕様書ログインテスト実行タスクボード'),
+  document.fonts.load(`40px ${FONT_DISPLAY}`, tl('font.sample.display')),
   document.fonts.load(`700 40px ${FONT_MONO}`, '{ }$✓▶○⚠#'),
-  document.fonts.load(`700 16px ${FONT_BODY}`, 'ログインカート購入する未着手待ち作業中完了'),
+  document.fonts.load(`700 16px ${FONT_BODY}`, tl('font.sample.body')),
 ]).then(redrawAll, redrawAll);
 requestAnimationFrame(frame);
 if (SOURCE.mode === 'live') { LIVE.uiReady = true; netConnect(); }

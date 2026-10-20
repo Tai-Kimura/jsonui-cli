@@ -11,12 +11,27 @@ const I18N = (() => {
 })();
 const LOCALE = I18N.locale || 'en-US';
 const PLURAL = new Intl.PluralRules(LOCALE);
-function tl(key, params) {
-  let v = I18N.strings[key];
+function tlWords(key, p) {
+  const v = I18N.strings[key];
   if (v === undefined) return key;
+  return typeof v === 'object' ? v[PLURAL.select(Number(p.n))] ?? v.other ?? key : v;
+}
+function tl(key, params) {
   const p = params || {};
-  if (typeof v === 'object') v = v[PLURAL.select(Number(p.n))] ?? v.other ?? key;
-  return v.replace(/\{(\w+)\}/g, (m, name) => (name in p ? String(p[name]) : m));
+  return tlWords(key, p).replace(/\{(\w+)\}/g, (m, name) => (name in p ? String(p[name]) : m));
+}
+/* tl() as HTML, for words that hold markup: the words and every slot escaped, then `…` in the words drawn as
+   <code>…</code> — the only markup a table's words can make (a slot's backtick is escaped first, so it makes none). */
+const TL_ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '\x60': '&#96;' };   // \x60: the backtick
+const TL_CODE = new RegExp('\\x60([^\\x60]*)\\x60', 'g');
+const tlEsc = (s) => String(s).replace(/[&<>"'\x60]/g, (c) => TL_ESC[c]);
+function tlHTML(key, params) {
+  const p = params || {};
+  return tlWords(key, p).split(/(\{\w+\})/).map((part) => {
+    const slot = /^\{(\w+)\}$/.exec(part);
+    if (slot && slot[1] in p) return tlEsc(p[slot[1]]);
+    return tlEsc(part).replace(/&#96;/g, '\x60');
+  }).join('').replace(TL_CODE, '<code>$1</code>');
 }
 /* Times and counts in the language's own form */
 const fmtTime = (d, opts) => new Date(d).toLocaleTimeString(LOCALE, opts);

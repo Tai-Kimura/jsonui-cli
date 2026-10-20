@@ -11,7 +11,7 @@
    bubble is a button over the tag (placeRobotTags keeps it on the tag's box), in front of everything 3D; a press opens
    the wait's card in the panel — the question card, the permission (or the stopped call's) card — or the session's
    talk. A press on the robot or its tag does what it did. Text 4.5:1 on each bubble, light and dark (fixed colours). */
-const WAIT = { picked: null, mark: { perm: '!', ask: '?', input: '…' }, name: { perm: '許可待ち', ask: '質問に回答待ち', input: '入力待ち' } };
+const WAIT = { picked: null, mark: { perm: '!', ask: '?', input: '…' }, name: { perm: tl('status.waiting'), ask: tl('status.asking'), input: tl('status.input') } };
 function waitKindOf(id) {
   const st = robotState[id];
   if (!st || !DEF[id]) return null;
@@ -44,7 +44,7 @@ function waitSync(R) {
     R.waitEl = b;
   }
   const text = waitText(R.def.id, kind);
-  if (R.waitEl.dataset.waitKind !== kind) { R.waitEl.dataset.waitKind = kind; R.waitEl.title = `${WAIT.name[kind]}（押すと開く）`; }
+  if (R.waitEl.dataset.waitKind !== kind) { R.waitEl.dataset.waitKind = kind; R.waitEl.title = tl('wait.open', { name: WAIT.name[kind] }); }
   if (R.waitEl.textContent !== text) R.waitEl.textContent = text;
   R.waitEl.hidden = false;
 }
@@ -92,7 +92,7 @@ function waitChips() {
   for (const d of ROBOT_DEFS) if (waitKindOf(d.id) === 'input') input += 1;
   const chip = $('chip-input');
   chip.hidden = input === 0;
-  setText(chip, `… 入力待ち ${input}`);
+  setText(chip, tl('wait.chip.input', { n: input }));
 }
 $('chip-input').addEventListener('click', () => {
   const d = ROBOT_DEFS.find((x) => waitKindOf(x.id) === 'input');

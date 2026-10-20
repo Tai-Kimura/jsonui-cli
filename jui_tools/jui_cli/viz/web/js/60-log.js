@@ -2,7 +2,7 @@
 /* ---------- full-screen event log ---------- */
 let logSeq = 0;
 const logItems = [];
-const CAT_LABEL = { tool: 'ツール', spec: 'spec', test: 'テスト', task: 'タスク', session: '許可・停止' };
+const CAT_LABEL = { tool: tl('log.cat.tool'), spec: 'spec', test: tl('log.cat.test'), task: tl('log.cat.task'), session: tl('log.cat.session') };
 const kindCat = (k) => (/^(Read|Edit|Write|Bash|MCP)$/.test(k) ? 'tool' : k === 'spec 更新' ? 'spec' : /^(case|retry)/.test(k) ? 'test' : /^Task/.test(k) ? 'task' : 'session');
 /* Live events carry their category (plan 04 §2); the demo's are read from the kind. */
 const catOf = (e) => e.cat || kindCat(e.kind);
@@ -10,9 +10,9 @@ function payloadFor(e) {
   if (SOURCE.mode === 'live') return e.detail === undefined ? { kind: e.kind, text: e.what } : e.detail;
   const cat = kindCat(e.kind), sess = SESSION_OF[e.who];
   if (e.kind === 'PermissionRequest' && e.perm) return permRequestPayload(PERM_BY_ID[e.perm]);
-  if (e.decision) return { source: 'エージェントビュー → Claude Code（PermissionRequest フックへの応答）', ...permResponse(PERM_BY_ID[e.perm], e.decision, e.reason) };
-  if (cat === 'spec') { const [file, section] = e.what.split(' › '); return { source: 'ファイル監視（可視化サーバー）', event: 'change', path: `docs/screens/json/${file}`, section }; }
-  if (cat === 'test') return { source: 'jsonui-test-runner（追加予定の進捗出力）', file: 'tests/screens/cart.test.json', case: e.what, status: e.kind === 'retry' ? 'retrying' : e.kind.includes('✗') ? 'failed' : 'passed' };
+  if (e.decision) return { source: tl('log.demo.source.decision'), ...permResponse(PERM_BY_ID[e.perm], e.decision, e.reason) };
+  if (cat === 'spec') { const [file, section] = e.what.split(' › '); return { source: tl('log.demo.source.watch'), event: 'change', path: `docs/screens/json/${file}`, section }; }
+  if (cat === 'test') return { source: tl('log.demo.source.tests'), file: 'tests/screens/cart.test.json', case: e.what, status: e.kind === 'retry' ? 'retrying' : e.kind.includes('✗') ? 'failed' : 'passed' };
   const p = { hook_event_name: cat === 'tool' ? 'PreToolUse' : e.kind, session_id: SESSION_UUID[sess], cwd: CWD[sess] };
   if (AGENT_ID[e.who]) { p.agent_id = AGENT_ID[e.who]; p.agent_type = DEF[e.who].agent; }
   if (['Read', 'Edit', 'Write'].includes(e.kind)) { p.tool_name = e.kind; p.tool_input = { file_path: `${CWD[sess]}/${e.what}` }; }
@@ -77,13 +77,13 @@ function renderLog(force) {
   if (!logState.open) return;
   const follow = $('log-follow').checked;
   const list = logItems.filter((e) => logState.cats.has(catOf(e)) && inScope(projectOfRobot(e.who)) && !logState.hiddenRobots.has(e.who) && (!logState.q || `${e.who} ${e.kind} ${e.what}`.toLowerCase().includes(logState.q)));
-  $('log-count').textContent = `${list.length} 件（全 ${logItems.length} 件）`;
-  setText($('log-title'), UI.project === 'all' ? 'イベントログ' : `イベントログ · ${PROJECT[UI.project].name}`);
+  $('log-count').textContent = tl('log.count', { n: list.length, all: logItems.length });
+  setText($('log-title'), UI.project === 'all' ? tl('log.title') : tl('log.title.project', { name: PROJECT[UI.project].name }));
   const more = $('log-more');
   if (!follow && !force && logState.shownTop !== null) {
     const newer = list.filter((e) => e.seq > logState.shownTop).length;
     more.hidden = newer === 0;
-    more.textContent = `新着 ${newer} 件を表示`;
+    more.textContent = tl('log.more', { n: newer });
     return;
   }
   more.hidden = true;
@@ -91,10 +91,10 @@ function renderLog(force) {
   const rowsHTML = list.slice(0, 400).map((e) => {
     const cat = catOf(e), d = DEF[e.who], open = logState.expanded.has(String(e.seq));
     const rowHTML = `<tr class="ev" tabindex="0" data-key="${e.seq}" aria-expanded="${open ? 'true' : 'false'}"><td class="time">${fmtClock(BASE_CLOCK + e.abs)}</td><td class="who">${pill(e.who, d.role)} ${esc(d.agent)}</td><td><span class="cat cat-${esc(cat)}">${esc(e.kind)}</span></td><td class="what">${esc(e.what)}</td></tr>`;
-    const note = SOURCE.mode === 'live' ? 'サーバーが受けた入力（長いものは切り詰め）' : e.decision ? 'ビューで押した答えを Claude Code へ返す内容の例' : cat === 'spec' || cat === 'test' ? '可視化サーバーが作るイベントの例' : 'フック入力の例（項目名は実際と同じ。値はデモ）';
+    const note = SOURCE.mode === 'live' ? tl('log.note.live') : e.decision ? tl('log.note.decision') : cat === 'spec' || cat === 'test' ? tl('log.note.server') : tl('log.note.hook');
     return open ? `${rowHTML}<tr class="payload"><td colspan="4"><p>${esc(note)}</p><pre>${esc(JSON.stringify(payloadFor(e), null, 2))}</pre></td></tr>` : rowHTML;
   }).join('');
-  setHTML(logRows, rowsHTML || '<tr><td colspan="4" class="log-empty">条件に合うイベントがありません</td></tr>');
+  setHTML(logRows, rowsHTML || `<tr><td colspan="4" class="log-empty">${esc(tl('log.empty'))}</td></tr>`);
   if (follow) logBody.scrollTop = 0;
 }
 document.addEventListener('keydown', (e) => {

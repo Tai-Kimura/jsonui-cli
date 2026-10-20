@@ -7,7 +7,7 @@
    設定 › お札 turns it off (kept per browser, readPref); reduced motion: shown and gone, no rise. The 単価 sheet lists
    the table in use and changes the user's table (POST /api/prices); a model with no price is told in the top bar. */
 const BILL = { showMs: 4200, rise: 12, gap: 3, on: readPref('bills', 'on') !== 'off', seen: new Map(), primed: false,
-  notice: 'お札の金額は概算です（公式の単価 × 応答のトークン数）。サブスクリプションでの利用では、実際の請求とは一致しません。' };
+  notice: tl('bill.notice') };
 const BILL_ICON_HTML = '<svg class="bill-ico" viewBox="0 0 22 14" aria-hidden="true"><rect x="0.75" y="0.75" width="20.5" height="12.5" rx="2" /><circle cx="11" cy="7" r="3" /><path d="M3.5 4v6M18.5 4v6" /></svg>';
 function billMoney(usd) {
   if (usd < 0.01) return '< $0.01';
@@ -48,8 +48,8 @@ function billShow(label, item) {
   el.querySelector('b').textContent = text;
   el.classList.toggle('unknown', unknown);
   const models = [...new Set([...R.billItems.values()].map((x) => x.model))].join(', ');
-  const from = [...new Set([...R.billItems.values()].filter((x) => typeof x.usd === 'number').map((x) => (x.from === 'user' ? 'あなたの表' : '既定')))].join('・');
-  el.title = `${R.billItems.size} 回の応答 · ${models}${from ? ` · 単価: ${from}` : ''}${unknown ? ' · 単価の無いモデル（設定 › 単価の表で足せます）' : ''}\n${BILL.notice}`;
+  const from = [...new Set([...R.billItems.values()].filter((x) => typeof x.usd === 'number').map((x) => (x.from === 'user' ? tl('bill.from.user') : tl('bill.from.default'))))].join(tl('bill.from.sep'));
+  el.title = `${tl('bill.title.responses', { n: R.billItems.size })} · ${models}${from ? ` · ${tl('bill.title.prices', { from })}` : ''}${unknown ? ` · ${tl('bill.title.unpriced')}` : ''}\n${BILL.notice}`;
   el.classList.toggle('own-price', [...R.billItems.values()].some((x) => x.from === 'user' && typeof x.usd === 'number'));
   if (el.hidden) el.style.visibility = 'hidden';   // placeRobotTags shows it where it belongs, from the next frame
   el.hidden = false;
@@ -106,7 +106,7 @@ function billPaint() {
   const b = document.getElementById('bill-switch');
   if (b) b.setAttribute('aria-checked', BILL.on ? 'true' : 'false');
   const n = document.getElementById('bill-note');
-  if (n) setText(n, BILL.on ? 'オン — 応答ごとの概算の金額をロボットの頭上に出します' : 'オフ — 出しません');
+  if (n) setText(n, BILL.on ? tl('bill.switch.on') : tl('bill.switch.off'));
 }
 { const b = document.getElementById('bill-switch');
   if (b) b.addEventListener('click', () => {
@@ -120,8 +120,8 @@ function billPaint() {
 /* ---------- the 単価 sheet: the table in use, and the user's own (live only) ---------- */
 const prEl = $('pr'), prBody = $('pr-body');
 const pr = { open: false, edit: null, msg: '', busy: false, opener: null, sig: '' };
-const PR_KINDS = [['input', '入力'], ['cache_write_5m', 'キャッシュ書込（5 分）'], ['cache_write_1h', 'キャッシュ書込（1 時間）'], ['cache_read', 'キャッシュ読込'], ['output', '出力']];
-const PR_ORIGIN = { default: '既定', user: '追加', changed: '変更', removed: '削除' };
+const PR_KINDS = [['input', tl('pr.kind.input')], ['cache_write_5m', tl('pr.kind.cache_write_5m')], ['cache_write_1h', tl('pr.kind.cache_write_1h')], ['cache_read', tl('pr.kind.cache_read')], ['output', tl('pr.kind.output')]];
+const PR_ORIGIN = { default: tl('pr.origin.default'), user: tl('pr.origin.user'), changed: tl('pr.origin.changed'), removed: tl('pr.origin.removed') };
 function pricesSlice() { const p = LIVE.slices && LIVE.slices.prices; return p && !Array.isArray(p) && typeof p === 'object' ? p : null; }
 function openPrices(opener, model) {
   if (SOURCE.mode !== 'live') return;
@@ -155,40 +155,40 @@ function renderPrices(force) {
   // a form being typed into is not drawn again under the cursor: only the list and the notes change
   if (!force && prBody.contains(document.activeElement) && document.activeElement.matches('input')) return;
   pr.sig = sig;
-  if (!p) { prBody.innerHTML = '<p class="ds-none">単価の表がまだ届いていません。</p>'; return; }
+  if (!p) { prBody.innerHTML = `<p class="ds-none">${esc(tl('pr.none'))}</p>`; return; }
   const num = (v) => (typeof v === 'number' ? String(v) : '—');
-  const unpricedHTML = (p.unpriced || []).map((m) => `<li><code>${esc(m)}</code> <button type="button" class="mini-btn" data-pr-add="${esc(m)}">単価を足す</button></li>`).join('');
+  const unpricedHTML = (p.unpriced || []).map((m) => `<li><code>${esc(m)}</code> <button type="button" class="mini-btn" data-pr-add="${esc(m)}">${esc(tl('pr.add'))}</button></li>`).join('');
   const errorsHTML = (p.errors || []).map((e) => `<li>${esc(e)}</li>`).join('');
   const rowsHTML = (p.rows || []).map((r) => {
     const removed = r.origin === 'removed', mine = r.origin !== 'default';
-    const extra = [r.long ? `プロンプト ${Number(r.long.over).toLocaleString('en-US')} 超は別の単価` : '', r.fast ? 'fast あり' : '', r.us ? `us ×${r.us}` : ''].filter(Boolean).join(' · ');
+    const extra = [r.long ? tl('pr.extra.long', { over: fmtNum(r.long.over) }) : '', r.fast ? tl('pr.extra.fast') : '', r.us ? `us ×${r.us}` : ''].filter(Boolean).join(' · ');
     return `<tr data-pr-row="${esc(r.model)}"${removed ? ' class="removed"' : ''}><th scope="row"><code>${esc(r.model)}</code>${extra ? `<span class="pr-extra">${esc(extra)}</span>` : ''}</th>`
       + PR_KINDS.map(([k]) => `<td>${removed ? '' : esc(num(r[k]))}</td>`).join('')
       + `<td><span class="pr-origin" data-origin="${esc(r.origin)}">${esc(PR_ORIGIN[r.origin] || r.origin)}</span></td><td class="pr-acts">`
-      + (removed ? '' : `<button type="button" class="mini-btn" data-pr-edit="${esc(r.model)}">変更</button><button type="button" class="mini-btn" data-pr-op="remove" data-pr-model="${esc(r.model)}">削除</button>`)
-      + (mine && r.origin !== 'user' ? `<button type="button" class="mini-btn" data-pr-op="reset" data-pr-model="${esc(r.model)}">既定に戻す</button>` : '')
+      + (removed ? '' : `<button type="button" class="mini-btn" data-pr-edit="${esc(r.model)}">${esc(tl('pr.edit'))}</button><button type="button" class="mini-btn" data-pr-op="remove" data-pr-model="${esc(r.model)}">${esc(tl('pr.remove'))}</button>`)
+      + (mine && r.origin !== 'user' ? `<button type="button" class="mini-btn" data-pr-op="reset" data-pr-model="${esc(r.model)}">${esc(tl('pr.reset'))}</button>` : '')
       + '</td></tr>';
   }).join('');
   const e = pr.edit;
-  const formHTML = e ? `<form class="pr-form" id="pr-form"><h3>${e.isNew ? '単価を足す' : '単価を変える'}</h3>
-      <label class="pr-model">モデル（記録の message.model のとおり）<input data-pr-in="model" value="${esc(e.model || '')}" ${e.isNew ? '' : 'readonly'} required maxlength="100" autocomplete="off" spellcheck="false"></label>
+  const formHTML = e ? `<form class="pr-form" id="pr-form"><h3>${esc(e.isNew ? tl('pr.add') : tl('pr.change'))}</h3>
+      <label class="pr-model">${esc(tl('pr.model.label'))}<input data-pr-in="model" value="${esc(e.model || '')}" ${e.isNew ? '' : 'readonly'} required maxlength="100" autocomplete="off" spellcheck="false"></label>
       <div class="pr-nums">${PR_KINDS.map(([k, ja]) => `<label>${esc(ja)}<input data-pr-in="${esc(k)}" type="number" min="0" max="100000" step="any" required value="${esc(e.values[k] === undefined ? '' : String(e.values[k]))}"></label>`).join('')}</div>
-      <p class="set-hint">USD / 100 万トークン。公式の価格のページの値を写してください。</p>
-      <div class="pr-btns"><button type="submit" class="mini-btn pr-save"${pr.busy ? ' disabled' : ''}>保存</button><button type="button" class="mini-btn" data-pr-cancel>やめる</button></div></form>`
-    : '<p><button type="button" class="mini-btn" data-pr-add="">単価を足す</button></p>';
-  const aboutHTML = `<p class="pr-about">${esc(BILL.notice)} 既定の単価の出典: <code>${esc(p.source || '')}</code>（${esc(p.checked || '')} に確認）。変更はあなたの表 <code>${esc(p.userPath || '')}</code> に書き、次の応答から効きます（<code>jui viz prices</code> でも変えられます）。</p>`;
+      <p class="set-hint">${esc(tl('pr.hint'))}</p>
+      <div class="pr-btns"><button type="submit" class="mini-btn pr-save"${pr.busy ? ' disabled' : ''}>${esc(tl('pr.save'))}</button><button type="button" class="mini-btn" data-pr-cancel>${esc(tl('pr.cancel'))}</button></div></form>`
+    : `<p><button type="button" class="mini-btn" data-pr-add="">${esc(tl('pr.add'))}</button></p>`;
+  const aboutHTML = `<p class="pr-about">${esc(BILL.notice)} ${tlHTML('pr.about', { source: p.source || '', checked: p.checked || '', path: p.userPath || '' })}</p>`;
   const msgHTML = pr.msg ? `<p class="pr-msg" role="status">${esc(pr.msg)}</p>` : '';
   const headHTML = PR_KINDS.map(([, ja]) => `<th>${esc(ja)}</th>`).join('');
   prBody.innerHTML = `${aboutHTML}${msgHTML}`
-    + (unpricedHTML ? `<section class="pr-unpriced"><h3>単価の無いモデル（金額は出していません）</h3><ul>${unpricedHTML}</ul></section>` : '')
-    + (errorsHTML ? `<section class="pr-errors"><h3>使っていない行（その行だけ）</h3><ul>${errorsHTML}</ul></section>` : '')
-    + `${formHTML}<table class="ds-table pr-table"><thead><tr><th>モデル</th>${headHTML}<th>出どころ</th><th></th></tr></thead><tbody>${rowsHTML}</tbody></table>`;
+    + (unpricedHTML ? `<section class="pr-unpriced"><h3>${esc(tl('pr.unpriced'))}</h3><ul>${unpricedHTML}</ul></section>` : '')
+    + (errorsHTML ? `<section class="pr-errors"><h3>${esc(tl('pr.errors'))}</h3><ul>${errorsHTML}</ul></section>` : '')
+    + `${formHTML}<table class="ds-table pr-table"><thead><tr><th>${esc(tl('pr.col.model'))}</th>${headHTML}<th>${esc(tl('pr.col.origin'))}</th><th></th></tr></thead><tbody>${rowsHTML}</tbody></table>`;
 }
 async function pricesSend(op, model, row) {
   pr.busy = true; renderPrices(true);
-  const got = typeof SOURCE.pricesOp === 'function' ? await SOURCE.pricesOp(op, model, row) : { ok: false, error: 'ライブ表示だけで変えられます' };
+  const got = typeof SOURCE.pricesOp === 'function' ? await SOURCE.pricesOp(op, model, row) : { ok: false, error: tl('pr.live.only') };
   pr.busy = false;
-  pr.msg = got.ok ? `${model}: ${{ set: '保存しました', remove: '削除しました', reset: '既定に戻しました' }[op]}（次の応答から）` : `できませんでした: ${got.error || '不明'}`;
+  pr.msg = got.ok ? tl({ set: 'pr.done.set', remove: 'pr.done.remove', reset: 'pr.done.reset' }[op], { model }) : tl('pr.failed', { error: got.error || tl('pr.unknown') });
   if (got.ok && op === 'set') pr.edit = null;
   renderPrices(true);
 }
@@ -220,8 +220,8 @@ function pricesNotice() {
   if (!chip) return;
   const p = SOURCE.mode === 'live' ? pricesSlice() : null, list = (p && p.unpriced) || [];
   chip.hidden = !list.length;
-  setText(chip, `単価の無いモデル ${list.length}`);
-  chip.title = `${list.join(', ')} — 金額を出していません。押すと単価を足せます`;
+  setText(chip, tl('pr.chip', { n: list.length }));
+  chip.title = tl('pr.chip.title', { models: list.join(', ') });
 }
 $('chip-price').addEventListener('click', (e) => { const p = pricesSlice(); openPrices(e.currentTarget, p && p.unpriced && p.unpriced[0]); });
 { const b = document.getElementById('prices-open'); if (b) b.addEventListener('click', (e) => openPrices(e.currentTarget)); }

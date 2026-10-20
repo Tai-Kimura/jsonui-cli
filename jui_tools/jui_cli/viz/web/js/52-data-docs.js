@@ -20,10 +20,10 @@ async function openDataDocs(project, opener) {
   renderDataDocs();
   $('ds-close').focus({ preventScroll: true });
   const seq = ++ds.seq;
-  const got = typeof SOURCE.dataDocs === 'function' ? await SOURCE.dataDocs(project) : { ok: false, error: 'ライブ表示だけで見られます' };
+  const got = typeof SOURCE.dataDocs === 'function' ? await SOURCE.dataDocs(project) : { ok: false, error: tl('ds.live.only') };
   if (seq !== ds.seq || !ds.open) return;
   ds.loading = false;
-  if (!got.ok) ds.error = got.error || '読めなかった';
+  if (!got.ok) ds.error = got.error || tl('ds.unreadable');
   else { ds.doc = got.doc; ds.tab = got.doc.api.length ? 'api' : 'db'; }
   renderDataDocs();
 }
@@ -66,16 +66,16 @@ function dsContentHTML(content, schemas) {
 function dsParamType(p) { return p.schema && typeof p.schema === 'object' ? String(p.schema.type || (p.schema.$ref || '').split('/').pop() || '') : ''; }
 function dsEndpointHTML(e, schemas) {
   const params = (Array.isArray(e.parameters) ? e.parameters : []).filter((p) => p && typeof p === 'object');
-  const paramRowsHTML = params.map((p) => `<tr><td><code>${esc(p.name || '')}</code></td><td>${esc(p.in || '')}</td><td>${p.required ? '必須' : ''}</td><td><code>${esc(dsParamType(p))}</code></td><td>${esc(p.description || '')}</td></tr>`).join('');
-  const paramsHTML = params.length ? `<table class="ds-table"><thead><tr><th>名前</th><th>場所</th><th>必須</th><th>型</th><th>説明</th></tr></thead><tbody>${paramRowsHTML}</tbody></table>` : '<p class="ds-none">パラメータなし</p>';
+  const paramRowsHTML = params.map((p) => `<tr><td><code>${esc(p.name || '')}</code></td><td>${esc(p.in || '')}</td><td>${p.required ? esc(tl('ds.required')) : ''}</td><td><code>${esc(dsParamType(p))}</code></td><td>${esc(p.description || '')}</td></tr>`).join('');
+  const paramsHTML = params.length ? `<table class="ds-table"><thead><tr><th>${esc(tl('ds.col.name'))}</th><th>${esc(tl('ds.col.in'))}</th><th>${esc(tl('ds.required'))}</th><th>${esc(tl('ds.col.type'))}</th><th>${esc(tl('ds.col.description'))}</th></tr></thead><tbody>${paramRowsHTML}</tbody></table>` : `<p class="ds-none">${esc(tl('ds.params.none'))}</p>`;
   const rb = e.requestBody && typeof e.requestBody === 'object' ? e.requestBody : null;
   const rbDescHTML = rb && rb.description ? `<p>${esc(rb.description)}</p>` : '';
-  const reqHTML = rb ? rbDescHTML + dsContentHTML(rb.content, schemas) : '<p class="ds-none">リクエストの本文なし</p>';
+  const reqHTML = rb ? rbDescHTML + dsContentHTML(rb.content, schemas) : `<p class="ds-none">${esc(tl('ds.request.none'))}</p>`;
   const responses = Object.entries(e.responses && typeof e.responses === 'object' ? e.responses : {}).slice(0, 20);
   const resRowsHTML = responses.map(([code, r]) => `<div class="ds-res"><p><b class="ds-code">${esc(code)}</b> ${esc((r && r.description) || '')}</p>${dsContentHTML(r && r.content, schemas)}</div>`).join('');
-  const resHTML = resRowsHTML || '<p class="ds-none">レスポンスの記述なし</p>';
+  const resHTML = resRowsHTML || `<p class="ds-none">${esc(tl('ds.responses.none'))}</p>`;
   const descHTML = e.description ? `<p class="ds-desc">${esc(e.description)}</p>` : '';
-  return `<div class="ds-detail">${descHTML}<h5>パラメータ</h5>${paramsHTML}<h5>リクエスト</h5>${reqHTML}<h5>レスポンス</h5>${resHTML}</div>`;
+  return `<div class="ds-detail">${descHTML}<h5>${esc(tl('ds.params'))}</h5>${paramsHTML}<h5>${esc(tl('ds.request'))}</h5>${reqHTML}<h5>${esc(tl('ds.responses'))}</h5>${resHTML}</div>`;
 }
 function dsEpHTML(e, i, k, schemas) {
   const key = `${i}:${k}`, open = ds.ep === key, m = DS_METHODS.has(e.method) ? e.method : 'GET';
@@ -103,27 +103,27 @@ function dsTableHTML(t) {
     const notesHTML = c.notes.map((x) => esc(x)).join('<br>') || '-';
     return `<tr><td><code>${esc(c.name)}</code></td><td><code>${esc(c.type)}</code></td><td>${esc(c.description)}</td><td><code>${esc(c.default)}</code></td><td>${keysHTML}</td><td>${consHTML}</td><td>${notesHTML}</td></tr>`;
   }).join('');
-  return `<div class="ds-tbl"><h4>${esc(t.name)}</h4><code class="ds-file">${esc(t.file || '')}</code>${descHTML}<table class="ds-table"><thead><tr><th>列</th><th>型</th><th>説明</th><th>既定</th><th>キー</th><th>制約</th><th>メモ</th></tr></thead><tbody>${rowsHTML}</tbody></table></div>`;
+  return `<div class="ds-tbl"><h4>${esc(t.name)}</h4><code class="ds-file">${esc(t.file || '')}</code>${descHTML}<table class="ds-table"><thead><tr><th>${esc(tl('ds.col.column'))}</th><th>${esc(tl('ds.col.type'))}</th><th>${esc(tl('ds.col.description'))}</th><th>${esc(tl('ds.col.default'))}</th><th>${esc(tl('ds.col.key'))}</th><th>${esc(tl('ds.col.constraints'))}</th><th>${esc(tl('ds.col.note'))}</th></tr></thead><tbody>${rowsHTML}</tbody></table></div>`;
 }
 function dsDbHTML(doc) {
   const dbsHTML = doc.db.map((d, k) => {
-    const erdHTML = d.erd ? `<div class="flow-mmd ds-erd" data-erd="${k}" role="img" aria-label="${esc(d.name)} の ER 図"></div>` : '';
+    const erdHTML = d.erd ? `<div class="flow-mmd ds-erd" data-erd="${k}" role="img" aria-label="${esc(tl('ds.erd', { name: d.name }))}"></div>` : '';
     const tablesHTML = d.tables.map((t) => dsTableHTML(t)).join('');
-    return `<section class="ds-doc"><header><h3>${esc(d.name)}</h3><span class="chip">${Number(d.tables.length)} 件</span></header>${erdHTML}${tablesHTML}</section>`;
+    return `<section class="ds-doc"><header><h3>${esc(d.name)}</h3><span class="chip">${esc(tl('ds.tables', { n: Number(d.tables.length) }))}</span></header>${erdHTML}${tablesHTML}</section>`;
   });
   return dbsHTML.join('');
 }
 function renderDataDocs() {
   if (!ds.open) return;
   const doc = ds.doc;
-  const tabs = doc ? [['api', 'API 仕様書', doc.api.length], ['db', 'DB 仕様書', doc.db.length]].filter((t) => t[2] > 0) : [];
+  const tabs = doc ? [['api', tl('ds.tab.api'), doc.api.length], ['db', tl('ds.tab.db'), doc.db.length]].filter((t) => t[2] > 0) : [];
   const tabsHTML = tabs.map(([k, label, n]) => `<button type="button" role="tab" class="ds-tab" data-ds-tab="${esc(k)}" data-fk="ds-tab-${esc(k)}" aria-selected="${ds.tab === k ? 'true' : 'false'}">${esc(label)}<b>${Number(n)}</b></button>`).join('');
   setHTML(dsTabs, tabsHTML);
-  const bodyHTML = ds.loading ? '<p class="ds-none">読み込み中…</p>'
+  const bodyHTML = ds.loading ? `<p class="ds-none">${esc(tl('ds.loading'))}</p>`
     : ds.error ? `<p class="ds-none">${esc(ds.error)}</p>`
-    : !tabs.length ? '<p class="ds-none">この部屋の docs/api・docs/db に仕様書が見つかりません</p>'
+    : !tabs.length ? `<p class="ds-none">${esc(tl('ds.none'))}</p>`
     : ds.tab === 'db' ? dsDbHTML(doc) : dsApiHTML(doc);
-  const skippedHTML = doc && doc.skipped ? `<p class="ds-none">大きさの上限で ${Number(doc.skipped)} 件を読んでいません</p>` : '';
+  const skippedHTML = doc && doc.skipped ? `<p class="ds-none">${esc(tl('ds.skipped', { n: Number(doc.skipped) }))}</p>` : '';
   const sheetHTML = `${bodyHTML}${skippedHTML}`;
   setHTML(dsBody, sheetHTML);
   if (doc && ds.tab === 'db') dsBody.querySelectorAll('[data-erd]').forEach((el) => { const d = doc.db[Number(el.dataset.erd)]; if (d && d.erd) drawMermaid(el, d.erd); });

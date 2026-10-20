@@ -70,7 +70,7 @@ const talkNow = () => Date.now();
 function talkTime(at, short) {
   if (!Number.isFinite(at)) return '';
   const d = new Date(at), n = new Date(talkNow());
-  const hm = d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+  const hm = fmtTime(d, { hour: '2-digit', minute: '2-digit' });
   if (d.toDateString() === n.toDateString()) return hm;
   return short ? `${d.getMonth() + 1}/${d.getDate()}` : `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
 }
@@ -91,14 +91,14 @@ function talkFollow(agent) {
   TALK.list = null; TALK.listError = ''; TALK.more = false; TALK.msgs.clear(); TALK.nodes.clear();
   talkSend('talk.open', { agentId: agent }).then((got) => {
     if (TALK.opened !== agent || got.ok) return;
-    TALK.listError = got.error === 'offline' ? 'サーバーにつながっていない（つながると読み直す）' : `トークを読めない（${got.error || '不明'}）`;
+    TALK.listError = got.error === 'offline' ? tl('talk.offline') : tl('talk.list.error', { error: got.error || tl('talk.unknown') });
     talkRender();
   });
 }
 /* The socket closed or came back (live): the server forgot what was open, so it is opened again. */
 function talkConn(state) {
   if (state === 'connected') { const a = TALK.opened; TALK.opened = null; if (a) { talkFollow(a); if (TALK.conv) talkLoad(TALK.conv, false); } }
-  else if (TALK.opened && !TALK.list) { TALK.listError = 'サーバーにつながっていない（つながると読み直す）'; talkRender(); }
+  else if (TALK.opened && !TALK.list) { TALK.listError = tl('talk.offline'); talkRender(); }
 }
 async function talkLoad(convId, older) {
   const agent = TALK.agent;
@@ -112,7 +112,7 @@ async function talkLoad(convId, older) {
   box.busy = false;
   if (TALK.agent !== agent || TALK.msgs.get(convId) !== box) return;
   if (!got.ok || !got.data || !Array.isArray(got.data.items)) {
-    box.error = got.error === 'offline' ? 'サーバーにつながっていない（つながると読み直す）' : `メッセージを読めない（${got.error || '不明'}）`;
+    box.error = got.error === 'offline' ? tl('talk.offline') : tl('talk.messages.error', { error: got.error || tl('talk.unknown') });
   } else {
     const pane = talkPane(), keep = older && pane ? pane.scrollHeight - pane.scrollTop : null;
     talkMerge(box, got.data.items);
@@ -171,7 +171,7 @@ function talkReceive(f) {
       TALK.msgs.delete(op.convId);
       if (TALK.conv === op.convId) {
         TALK.conv = null;
-        TALK.note = op.reason === 'owner-ended' ? 'このロボットのセッションが終わって 1 時間たったので、トークは消えた' : '相手のセッションが終わって 1 時間たったので、トークは消えた';
+        TALK.note = op.reason === 'owner-ended' ? tl('talk.gone.owner') : tl('talk.gone.peer');
       }
     }
   }
@@ -185,11 +185,11 @@ function talkPane() { return TALK.node ? TALK.node.querySelector('[data-tk-body]
 function talkBuildNode() {
   const root = hNode('section', 'tk');
   root.dataset.talk = '';
-  root.setAttribute('aria-label', 'トーク');
+  root.setAttribute('aria-label', tl('talk.title'));
   const head = hNode('div', 'talk-head'); head.dataset.tkHead = '';
   const body = hNode('div', 'talk-body'); body.dataset.tkBody = ''; body.tabIndex = 0;
-  const newer = hNode('button', 'h-newer talk-newer', '新しいメッセージ ↓'); newer.type = 'button'; newer.dataset.tkNewer = ''; newer.hidden = true;
-  const foot = hNode('p', 'talk-foot', '見るだけ（トークからは送れない）');
+  const newer = hNode('button', 'h-newer talk-newer', tl('talk.newer')); newer.type = 'button'; newer.dataset.tkNewer = ''; newer.hidden = true;
+  const foot = hNode('p', 'talk-foot', tl('talk.foot'));
   root.append(head, body, newer, foot);
   body.addEventListener('scroll', () => talkRemember(body), { passive: true });
   root.addEventListener('click', talkClick);
@@ -222,13 +222,13 @@ function talkPeerMark(peer) {
     mark.style.setProperty('--c', pillBg(role)); mark.style.setProperty('--t', pillInk(role));
     span.appendChild(mark);
   }
-  else span.appendChild(hNode('span', `talk-kind talk-kind-${peer.kind}`, peer.kind === 'external' ? '外' : peer.kind === 'subagent' ? 'サブ' : '？'));
+  else span.appendChild(hNode('span', `talk-kind talk-kind-${peer.kind}`, peer.kind === 'external' ? tl('talk.mark.external') : peer.kind === 'subagent' ? tl('talk.mark.subagent') : tl('talk.mark.other')));
   return span;
 }
-const TALK_KIND = { session: 'セッション', subagent: 'サブエージェント', external: 'この機械の外の相手' };
+const TALK_KIND = { session: tl('talk.kind.session'), subagent: tl('talk.kind.subagent'), external: tl('talk.kind.external') };
 function talkGoneText(peer) {
   if (peer.alive) return '';
-  return Number.isFinite(peer.removeAt) ? `終了 · ${talkTime(peer.removeAt)} に消える` : '終了';
+  return Number.isFinite(peer.removeAt) ? tl('talk.ended.until', { at: talkTime(peer.removeAt) }) : tl('talk.ended');
 }
 function talkHead() {
   const head = TALK.node.querySelector('[data-tk-head]');
@@ -239,20 +239,20 @@ function talkHead() {
   const fk = head.contains(document.activeElement) ? document.activeElement.dataset.fk : undefined;
   const kids = [];
   if (!TALK.conv) {
-    const back = hNode('button', 'wb-btn talk-back', '← カードに戻る'); back.type = 'button'; back.dataset.tkClose = ''; back.dataset.fk = 'talk-close';
-    const title = hNode('h3', 'talk-title', 'トーク');
+    const back = hNode('button', 'wb-btn talk-back', tl('talk.back.card')); back.type = 'button'; back.dataset.tkClose = ''; back.dataset.fk = 'talk-close';
+    const title = hNode('h3', 'talk-title', tl('talk.title'));
     kids.push(back, title);
   } else {
-    const back = hNode('button', 'wb-btn talk-back', '← 一覧'); back.type = 'button'; back.dataset.tkBack = ''; back.dataset.fk = 'talk-back';
-    back.setAttribute('aria-label', 'トークの一覧に戻る');
+    const back = hNode('button', 'wb-btn talk-back', tl('talk.back.list')); back.type = 'button'; back.dataset.tkBack = ''; back.dataset.fk = 'talk-back';
+    back.setAttribute('aria-label', tl('talk.back.list.aria'));
     kids.push(back);
     if (conv) {
       const p = conv.peer;
       // The peer's name, one line (cut with … : the whole name on hover and focus, 57-fulltext.js). Pressed: that robot.
       const who = p.agentId ? hNode('button', 'talk-peer') : hNode('span', 'talk-peer talk-peer-off');
-      if (p.agentId) { who.type = 'button'; who.dataset.tkPeer = p.agentId; who.dataset.fk = 'talk-peer'; who.setAttribute('aria-label', `${p.name || '相手'} に切り替える`); }
-      else who.title = 'この機械で見えない相手（切り替えられない）';
-      who.append(talkPeerMark(p), hNode('span', 'talk-peer-name', p.name || '（名前なし）'));
+      if (p.agentId) { who.type = 'button'; who.dataset.tkPeer = p.agentId; who.dataset.fk = 'talk-peer'; who.setAttribute('aria-label', tl('talk.peer.switch', { name: p.name || tl('talk.peer.someone') })); }
+      else who.title = tl('talk.peer.unseen');
+      who.append(talkPeerMark(p), hNode('span', 'talk-peer-name', p.name || tl('talk.noname')));
       const sub = hNode('p', 'talk-peer-sub', [TALK_KIND[p.kind] || '', talkGoneText(p)].filter(Boolean).join(' · '));
       const box = hNode('div', 'talk-peer-box'); box.append(who, sub);
       kids.push(box);
@@ -266,18 +266,18 @@ function talkRow(c) {
   b.type = 'button'; b.dataset.tkConv = c.id; b.dataset.fk = `talk-${c.id}`;
   if (!c.peer.alive) b.classList.add('talk-row-gone');
   const top = hNode('span', 'talk-row-top');
-  top.append(hNode('span', 'talk-row-name', c.peer.name || '（名前なし）'), hNode('time', 'talk-row-at', talkTime(c.lastAt, true)));
+  top.append(hNode('span', 'talk-row-name', c.peer.name || tl('talk.noname')), hNode('time', 'talk-row-at', talkTime(c.lastAt, true)));
   const bottom = hNode('span', 'talk-row-bottom');
-  bottom.append(hNode('span', 'talk-row-pre', `${c.lastDir === 'out' ? '自分: ' : ''}${c.preview}`));
+  bottom.append(hNode('span', 'talk-row-pre', `${c.lastDir === 'out' ? tl('talk.row.mine') : ''}${c.preview}`));
   if (c.unread > 0) { const u = hNode('span', 'talk-unread', c.unread > 99 ? '99+' : String(c.unread)); u.dataset.tkUnread = String(c.unread); bottom.append(u); }
   const text = hNode('span', 'talk-row-text'); text.append(top, bottom);
   const gone = talkGoneText(c.peer);
   if (gone) text.append(hNode('span', 'talk-row-gone-note', gone));
   b.append(talkPeerMark(c.peer), text);
-  b.setAttribute('aria-label', `${c.peer.name}、${talkTime(c.lastAt)}、${c.unread ? `未読 ${c.unread}、` : ''}${c.preview}`);
+  b.setAttribute('aria-label', tl('talk.row.aria', { name: c.peer.name, at: talkTime(c.lastAt), unread: c.unread ? tl('talk.row.unread', { n: c.unread }) : '', preview: c.preview }));
   return b;
 }
-const TALK_STATE = { read: '既読', delivered: '届いた', sent: '送信済み', undelivered: '届かなかった' };
+const TALK_STATE = { read: tl('talk.state.read'), delivered: tl('talk.state.delivered'), sent: tl('talk.state.sent'), undelivered: tl('talk.state.undelivered') };
 function talkMsgSig(m) { return JSON.stringify([m.id, m.state, m.readAt, m.deliveredAt, m.text, m.cut, m.merged, m.dir]); }
 function talkMsgNode(m) {
   const n = hNode('div', `talk-msg talk-${m.dir === 'out' ? 'out' : 'in'}`);
@@ -288,19 +288,19 @@ function talkMsgNode(m) {
   const text = hNode('div', 'talk-text talk-folded');
   text.dataset.tkText = '';
   text.appendChild(histMarkdown(m.text));
-  const more = hNode('button', 'talk-more', '全文を表示'); more.type = 'button'; more.dataset.tkMore = ''; more.hidden = true;
+  const more = hNode('button', 'talk-more', tl('talk.more')); more.type = 'button'; more.dataset.tkMore = ''; more.hidden = true;
   bubble.append(text, more);
-  if (m.cut) bubble.appendChild(hNode('p', 'talk-note', '（長いので途中まで）'));
-  if (m.merged) bubble.appendChild(hNode('p', 'talk-note', '（受け手は 2 通をまとめて受け取った）'));
+  if (m.cut) bubble.appendChild(hNode('p', 'talk-note', tl('talk.cut')));
+  if (m.merged) bubble.appendChild(hNode('p', 'talk-note', tl('talk.merged')));
   const meta = hNode('p', 'talk-meta');
   meta.appendChild(hNode('time', 'talk-at', talkTime(m.at)));
   if (m.dir === 'out') {
-    const st = hNode('span', `talk-state talk-state-${m.state}`, m.state === 'read' && Number.isFinite(m.readAt) ? `既読 ${talkTime(m.readAt)}` : TALK_STATE[m.state] || '');
+    const st = hNode('span', `talk-state talk-state-${m.state}`, m.state === 'read' && Number.isFinite(m.readAt) ? tl('talk.state.read.at', { at: talkTime(m.readAt) }) : TALK_STATE[m.state] || '');
     st.dataset.tkState = m.state;
-    if (m.state === 'undelivered') st.title = '相手に届かなかった（この機械にいない、または名前が解けなかった）';
+    if (m.state === 'undelivered') st.title = tl('talk.state.undelivered.why');
     meta.appendChild(st);
   }
-  if (m.via === 'subagent' || m.via === 'parent') meta.appendChild(hNode('span', 'talk-via', m.via === 'subagent' ? 'サブエージェントへ' : '親へ'));
+  if (m.via === 'subagent' || m.via === 'parent') meta.appendChild(hNode('span', 'talk-via', m.via === 'subagent' ? tl('talk.via.subagent') : tl('talk.via.parent')));
   n.append(bubble, meta);
   return n;
 }
@@ -324,7 +324,7 @@ function talkMeasure() {
 function talkFold(text, open) {
   const more = text.parentNode.querySelector('[data-tk-more]');
   text.classList.toggle('talk-folded', !open);
-  if (more) { more.textContent = open ? 'たたむ' : '全文を表示'; more.setAttribute('aria-expanded', String(open)); }
+  if (more) { more.textContent = open ? tl('talk.fold') : tl('talk.more'); more.setAttribute('aria-expanded', String(open)); }
   if (!open) {   // folded: its start stays in view
     const pane = talkPane(), msg = text.closest('.talk-msg');
     if (pane && msg && msg.getBoundingClientRect().top < pane.getBoundingClientRect().top) msg.scrollIntoView({ block: 'nearest' });
@@ -361,7 +361,7 @@ function talkOpenConv(convId) {
    the same seen from either side). A peer not on this page says so and stays. */
 function talkSwitch(agentId) {
   const label = SOURCE.talkLabel(agentId);
-  if (!label || !DEF[label]) { showToast('このロボットは今この画面にいない（切り替えられない）'); return; }
+  if (!label || !DEF[label]) { showToast(tl('talk.robot.absent')); return; }
   if (label === TALK.owner) return;
   TALK.want = TALK.conv;
   openRobot(label);
@@ -376,13 +376,13 @@ function talkBody() {
     const kids = [];
     if (TALK.note) kids.push(hNode('p', 'talk-empty talk-gone-note', TALK.note));
     if (TALK.listError) kids.push(hNode('p', 'talk-empty talk-error', TALK.listError));
-    else if (!TALK.list) kids.push(hNode('p', 'talk-empty', '読み込み中…'));
-    else if (!TALK.list.length) kids.push(hNode('p', 'talk-empty', 'まだトークがない（このロボットが SendMessage で送った・受け取った会話がここに出る）'));
+    else if (!TALK.list) kids.push(hNode('p', 'talk-empty', tl('talk.loading')));
+    else if (!TALK.list.length) kids.push(hNode('p', 'talk-empty', tl('talk.list.empty')));
     else {
       const ul = hNode('ul', 'talk-list');
       for (const c of TALK.list) { const li = hNode('li'); li.appendChild(talkRow(c)); ul.appendChild(li); }
       kids.push(ul);
-      if (TALK.more) kids.push(hNode('p', 'talk-empty', `新しい ${TALK.list.length} 件だけを表示`));
+      if (TALK.more) kids.push(hNode('p', 'talk-empty', tl('talk.list.newest', { n: TALK.list.length })));
     }
     pane.replaceChildren(...kids);
     pane.scrollTop = 0;
@@ -396,17 +396,17 @@ function talkBody() {
   const keepTop = !TALK.atEnd && pane.firstChild ? talkAnchor(pane) : null;
   const kids = [];
   if (box.more) {
-    const older = hNode('button', 'talk-older', box.busy ? '読み込み中…' : 'さらに前を読み込む'); older.type = 'button'; older.dataset.tkOlder = '';
+    const older = hNode('button', 'talk-older', box.busy ? tl('talk.loading') : tl('talk.older')); older.type = 'button'; older.dataset.tkOlder = '';
     kids.push(older);
   }
   if (box.error) kids.push(hNode('p', 'talk-empty talk-error', box.error));
-  if (!box.loaded && !box.error) kids.push(hNode('p', 'talk-empty', '読み込み中…'));
-  else if (box.loaded && !box.items.length) kids.push(hNode('p', 'talk-empty', 'まだメッセージがない'));
+  if (!box.loaded && !box.error) kids.push(hNode('p', 'talk-empty', tl('talk.loading')));
+  else if (box.loaded && !box.items.length) kids.push(hNode('p', 'talk-empty', tl('talk.messages.empty')));
   let day = '';
   const keep = new Map();
   for (const m of box.items) {
     const d = new Date(m.at).toDateString();
-    if (d !== day) { day = d; const dt = new Date(m.at); kids.push(hNode('p', 'talk-day', `${dt.getMonth() + 1}月${dt.getDate()}日`)); }
+    if (d !== day) { day = d; const dt = new Date(m.at); kids.push(hNode('p', 'talk-day', dt.toLocaleDateString(LOCALE, { month: 'long', day: 'numeric' }))); }
     const ms = talkMsgSig(m), old = TALK.nodes.get(m.id);
     const node = old && old.sig === ms ? old.node : talkMsgNode(m);
     keep.set(m.id, { sig: ms, node });
@@ -478,7 +478,7 @@ function talkPaintButton() {
   const badge = b.querySelector('[data-rb-talk-n]');
   const text = n > 99 ? '99+' : String(n);
   if (badge) { badge.hidden = !n; if (badge.textContent !== text) badge.textContent = text; }
-  const label = n ? `トーク（未読 ${n}）` : 'トーク';
+  const label = n ? tl('talk.title.unread', { n }) : tl('talk.title');
   if (b.getAttribute('aria-label') !== label) b.setAttribute('aria-label', label);
   if (b.getAttribute('aria-pressed') !== String(TALK.on)) b.setAttribute('aria-pressed', String(TALK.on));
 }

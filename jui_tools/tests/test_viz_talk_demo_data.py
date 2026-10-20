@@ -12,6 +12,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from jui_cli.viz import bundle
 from jui_cli.viz import talk_contract as C
 from jui_cli.viz.talk import conv_id
@@ -21,11 +23,34 @@ FILE = JT / "jui_cli" / "viz" / "web" / "js" / "31-talk-demo-data.js"
 DEMO_ROBOTS = {"a0", "a3", "a5", "a2", "a7", "b4", "e6", "f2", "d8", "4f", "7c", "c9", "e1"}
 
 
-def data() -> dict:
+LANGUAGES = ("en", "ja")
+#: the one line of code: the set of the page's language (I18N, web/js/05-i18n.js), English when it has none
+PICK = "const TALK_DEMO = TALK_DEMO_BY_LANGUAGE[typeof I18N === 'object' ? I18N.language : 'en'] || TALK_DEMO_BY_LANGUAGE.en;"
+
+
+def by_language() -> dict:
     text = FILE.read_text(encoding="utf-8")
-    m = re.search(r"^const TALK_DEMO = (\{.*\});\n\Z", text, re.S | re.M)
-    assert m, "the file is one const of JSON"
+    m = re.search(r"^const TALK_DEMO_BY_LANGUAGE = (\{.*\});\n// eslint-disable-next-line no-unused-vars\n"
+                  + re.escape(PICK) + r"\n\Z", text, re.S | re.M)
+    assert m, "the file is one const of JSON, then the line that picks the language"
     return json.loads(m.group(1))
+
+
+def data(lang: str = "ja") -> dict:
+    return by_language()[lang]
+
+
+def test_one_set_per_language_with_the_same_shape():
+    """Only the words differ: the same frames, ids, times, states and robots in every language; no Japanese in English."""
+    sets = by_language()
+    assert set(sets) == set(LANGUAGES)
+
+    def shape(v):
+        if isinstance(v, dict):
+            return {k: (None if k in ("text", "preview", "summary", "name", "fromName", "toName") else shape(x)) for k, x in v.items()}
+        return [shape(x) for x in v] if isinstance(v, list) else v
+    assert shape(sets["en"]) == shape(sets["ja"])
+    assert not re.search(r"[\u3040-\u30ff\u3400-\u9fff]", json.dumps(sets["en"], ensure_ascii=False))
 
 
 def frames(d):
@@ -35,8 +60,9 @@ def frames(d):
     yield from (s["frame"] for s in d["script"])
 
 
-def test_every_frame_conforms_to_the_contract():
-    d = data()
+@pytest.mark.parametrize("lang", LANGUAGES)
+def test_every_frame_conforms_to_the_contract(lang):
+    d = data(lang)
     assert d["contractVersion"] == C.load()["version"]
     for f in frames(d):
         assert C.validate(f) == [], (f["type"], C.validate(f)[:3])
@@ -48,8 +74,9 @@ def test_the_file_is_what_the_generator_writes(tmp_path):
     assert out.read_text(encoding="utf-8") == FILE.read_text(encoding="utf-8")
 
 
-def test_ids_unread_and_badges_agree():
-    d = data()
+@pytest.mark.parametrize("lang", LANGUAGES)
+def test_ids_unread_and_badges_agree(lang):
+    d = data(lang)
     for owner, listing in d["lists"].items():
         assert listing["agentId"] == owner
         for conv in listing["items"]:
@@ -62,8 +89,9 @@ def test_ids_unread_and_badges_agree():
     assert d["badges"]["counts"] == {o: n for o, n in totals.items() if n}
 
 
-def test_it_shows_every_case_the_ui_draws():
-    d = data()
+@pytest.mark.parametrize("lang", LANGUAGES)
+def test_it_shows_every_case_the_ui_draws(lang):
+    d = data(lang)
     msgs = [m for f in d["messages"].values() for m in f["items"]]
     peers = [c["peer"] for c in d["lists"]["a0"]["items"]]
     assert {m["state"] for m in msgs} >= {"read", "delivered", "undelivered"}
@@ -77,8 +105,9 @@ def test_it_shows_every_case_the_ui_draws():
     assert ops == {"message", "conv", "remove"}
 
 
-def test_the_robots_are_the_demos_own():
-    d = data()
+@pytest.mark.parametrize("lang", LANGUAGES)
+def test_the_robots_are_the_demos_own(lang):
+    d = data(lang)
     keys = {c["peer"]["key"] for l in d["lists"].values() for c in l["items"]} | set(d["lists"])
     assert {k for k in keys if not k.startswith("x:")} <= DEMO_ROBOTS
 
@@ -87,5 +116,6 @@ def test_in_the_demo_bundle_only_and_data_only():
     assert "31-talk-demo-data.js" in bundle.parts("demo", e2e=False)
     assert "31-talk-demo-data.js" not in bundle.parts("live", e2e=False)
     code = "\n".join(l for l in FILE.read_text(encoding="utf-8").splitlines() if not l.startswith("//"))
-    assert code.startswith("const TALK_DEMO = {") and "function" not in code.split("\n", 1)[0]
+    assert code.startswith("const TALK_DEMO_BY_LANGUAGE = {") and code.endswith("\n" + PICK)
+    assert "function" not in code and "=>" not in code
     assert "__dbg" not in FILE.read_text(encoding="utf-8")

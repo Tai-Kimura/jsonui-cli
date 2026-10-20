@@ -164,7 +164,7 @@ def test_the_unsanitized_mermaid_hook_is_the_tests_only():
 # therefore safe wherever it is used: everything ever put in it was checked as HTML.
 # Parts that never take server data (the demo script, the robot model's canvases).
 NOT_SERVER_PARTS = {"10-robot-core.js", "30-source-demo.js"}
-ESCAPING_CALLS = {"esc", "CSS.escape"}
+ESCAPING_CALLS = {"esc", "CSS.escape", "tlHTML"}   # tlHTML: 05-i18n.js, the words and every slot escaped
 SAFE_CALLS = {
     "pct": "Math.round of a number",
     "fmtClock": "HH:MM:SS from a number of seconds", "clock": "fmtClock of a number",
@@ -228,7 +228,7 @@ SINK_METHODS = {"insertAdjacentHTML": 1, "createContextualFragment": 0, "parseFr
 _SINK_METHOD = re.compile(r"(?:\.(insertAdjacentHTML|createContextualFragment|parseFromString|setHTMLUnsafe|parseHTMLUnsafe)"
                           r"|(?<![\w$.])document\s*\.\s*(write|writeln)|\.(setAttribute)(?=\(\s*['\"`]srcdoc['\"`]))\s*\(")
 
-_ESCAPES = re.compile(r"(?:esc|CSS\.escape)\((?s:.*)\)$")
+_ESCAPES = re.compile(r"(?:esc|CSS\.escape|tlHTML)\((?s:.*)\)$")
 
 
 def _skip_string(src: str, i: int) -> int:

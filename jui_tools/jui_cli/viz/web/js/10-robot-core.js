@@ -10,7 +10,7 @@ const FONT_BODY = '"BIZ UDPGothic", "Hiragino Sans", "Yu Gothic", sans-serif';
 const FONT_MONO = '"JetBrains Mono", ui-monospace, Menlo, monospace';
 
 const ROLES = {
-  main: { name: 'メイン', color: '#0ea5e9', pill: '#0369a1' },   // sky blue (2.3.5, requester 10-19: 「スカイブルーにしようか」; it was orange, beside the subagents' orange coveralls)
+  main: { name: tl('role.main'), color: '#0ea5e9', pill: '#0369a1' },   // sky blue (2.3.5, requester 10-19: 「スカイブルーにしようか」; it was orange, beside the subagents' orange coveralls)
   // `pill` (2.3.6, ticket 2026-10-20-jui-viz-main-pill-text-contrast): a role's pills (over the robot, in the panels, on the
   // boards) take it in place of `color`, white text on it. Main's is one step darker (#0369a1, white 5.93:1); its body stays #0ea5e9.
   // define / ground / navigation / test / other the same (requester 10-20: 「全部直す」): each the body's hue, darker, white ≥ 4.7:1.
@@ -20,7 +20,7 @@ const ROLES = {
   navigation: { name: 'navigation', color: '#10a693', pill: '#0c8172' },
   test: { name: 'test', color: '#3fae4a', pill: '#2f8338' },
   debug: { name: 'debug', color: '#f0b400' },
-  other: { name: 'その他', color: '#8a9bb0', pill: '#60748e' },
+  other: { name: tl('role.other'), color: '#8a9bb0', pill: '#60748e' },
 };
 /* Whatever is filled with a role's colour and has text on it (pills, the talk's marks, a phone's header and button) takes
    pillBg, with pillInk (20-core.js) for the text; the robot's own parts keep ROLES[role].color. */
@@ -40,19 +40,19 @@ const SUB_SIZE = 0.8;
 // asking: a question waits (ticket 2026-10-20-jui-viz-3d-waiting-kinds-question-permission-input): a violet far from the permission's amber
 const LAMP = { idle: '#8fa3bf', busy: '#35d07f', think: '#8fe0b4', bg: '#4cc3d9', waiting: '#ffb020', asking: '#b48cff', done: '#35d07f', off: '#2a3a30' };
 const STATES = {
-  idle: { name: '待機', lamp: 'idle', face: 'normal' },
-  thinking: { name: '考え中', lamp: 'think', face: 'normal' },
-  background: { name: '裏で作業中', lamp: 'bg', face: 'normal' },   // waiting on background work: lit, watching its screen (10-18)
-  typing: { name: '入力', lamp: 'busy', face: 'focus' },
-  reading: { name: '読む', lamp: 'busy', face: 'normal' },
-  command: { name: 'コマンド', lamp: 'busy', face: 'focus' },
-  phone: { name: 'スマホ', lamp: 'busy', face: 'focus' },
-  waiting: { name: '許可待ち', lamp: 'waiting', face: 'wide' },
-  carry: { name: '運ぶ', lamp: 'busy', face: 'normal' },
-  stroll: { name: '歩く', lamp: 'idle', face: 'normal' },   // to and from play (10-18): no papers; the lamp is the real state's
-  done: { name: '完了', lamp: 'done', face: 'happy' },
+  idle: { name: tl('status.idle'), lamp: 'idle', face: 'normal' },
+  thinking: { name: tl('status.thinking'), lamp: 'think', face: 'normal' },
+  background: { name: tl('status.background'), lamp: 'bg', face: 'normal' },   // waiting on background work: lit, watching its screen (10-18)
+  typing: { name: tl('robot.state.typing'), lamp: 'busy', face: 'focus' },
+  reading: { name: tl('robot.state.reading'), lamp: 'busy', face: 'normal' },
+  command: { name: tl('robot.state.command'), lamp: 'busy', face: 'focus' },
+  phone: { name: tl('robot.state.phone'), lamp: 'busy', face: 'focus' },
+  waiting: { name: tl('status.waiting'), lamp: 'waiting', face: 'wide' },
+  carry: { name: tl('robot.state.carry'), lamp: 'busy', face: 'normal' },
+  stroll: { name: tl('robot.state.stroll'), lamp: 'idle', face: 'normal' },   // to and from play (10-18): no papers; the lamp is the real state's
+  done: { name: tl('status.done'), lamp: 'done', face: 'happy' },
 };
-const LAMP_TEXT = { idle: '青灰（待機）', busy: '緑（作業中）', think: '淡い緑のゆっくり点滅（考え中）', waiting: '黄（許可待ち）', asking: '紫（質問に回答待ち）', done: '緑の点滅（完了）', bg: '水色（裏で作業中）' };
+const LAMP_TEXT = { idle: tl('lamp.idle'), busy: tl('lamp.busy'), think: tl('lamp.think'), waiting: tl('lamp.waiting'), asking: tl('lamp.asking'), done: tl('lamp.done'), bg: tl('lamp.bg') };
 
 const HIPS_Y = 0.36;
 const HEAD = { w: 1.1, h: 0.9, d: 0.92, r: 0.17 };
@@ -215,7 +215,7 @@ function drawCover(c) {
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)'; ctx.lineWidth = 3; ctx.strokeRect(10, 10, c.width - 20, c.height - 20);
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillStyle = '#ffd166'; ctx.font = `700 34px ${FONT_MONO}`; ctx.fillText('{ }', c.width / 2, 58);
-  ctx.fillStyle = '#ffffff'; ctx.font = `30px ${FONT_DISPLAY}`; ctx.fillText('仕様書', c.width / 2, 112);
+  ctx.fillStyle = '#ffffff'; ctx.font = `30px ${FONT_DISPLAY}`; ctx.fillText(tl('robot.paper.spec'), c.width / 2, 112);
   ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'; ctx.font = `700 18px ${FONT_MONO}`; ctx.fillText('Login', c.width / 2, 150);
 }
 
@@ -317,7 +317,7 @@ function drawPhoneUI(r, t) {
   ctx.fillStyle = accent; ctx.fillRect(sx, sy, sw, 64);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = ink; ctx.font = `700 11px ${FONT_MONO}`; ctx.fillText('9:41', sx + 12, sy + 17); ctx.fillRect(sx + sw - 32, sy + 8, 18, 9);
-  ctx.fillStyle = ink; ctx.font = `700 19px ${FONT_BODY}`; ctx.fillText('ログイン', sx + 14, sy + 50);
+  ctx.fillStyle = ink; ctx.font = `700 19px ${FONT_BODY}`; ctx.fillText(tl('robot.screen.login'), sx + 14, sy + 50);
   for (let i = 0; i < 2; i++) {
     const y = sy + 84 + i * 52;
     ctx.fillStyle = '#7a879b'; ctx.fillRect(sx + 14, y, 56 + i * 20, 7);
@@ -328,7 +328,7 @@ function drawPhoneUI(r, t) {
   }
   const by = sy + 200;
   rr(ctx, sx + 14, by, sw - 28, 40, 10); ctx.fillStyle = accent; ctx.fill();
-  ctx.fillStyle = ink; ctx.font = `700 15px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.fillText('ログイン', sx + sw / 2, by + 26);
+  ctx.fillStyle = ink; ctx.font = `700 15px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.fillText(tl('robot.screen.login'), sx + sw / 2, by + 26);
   const ph = (t * 0.7) % 1;
   ctx.beginPath(); ctx.arc(sx + sw / 2 + 24, by + 20, 6 + ph * 30, 0, Math.PI * 2);
   ctx.strokeStyle = `rgba(255, 255, 255, ${(0.9 * (1 - ph)).toFixed(2)})`; ctx.lineWidth = 4; ctx.stroke();
@@ -673,7 +673,7 @@ function whistleProp() {
   g.userData.whistle = true;
   return g;
 }
-function pipiBubble(text = 'ピッ！') {                        // 「ピッ」 over the head while the whistle blows
+function pipiBubble(text = tl('robot.whistle')) {                        // 「ピッ」 over the head while the whistle blows
   const canvas = makeCanvas(192, 112), ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#1f2532'; ctx.lineWidth = 6;
   rr(ctx, 6, 6, 180, 78, 30); ctx.fill(); ctx.stroke();
@@ -706,7 +706,7 @@ function lookUpdate(r, t, dt) {
   if (blow && !r.whistle) { r.whistle = whistleProp(); r.head.add(r.whistle); }
   if (r.whistle) r.whistle.visible = blow;
   if (look === 'whistle' && !r.launch && !r.pipi) { r.pipi = pipiBubble(); r.root.add(r.pipi); }
-  if (r.launch && !r.pipiLong) { r.pipiLong = pipiBubble('ピーッ！'); r.pipiLong.userData.launch = true; r.root.add(r.pipiLong); }
+  if (r.launch && !r.pipiLong) { r.pipiLong = pipiBubble(tl('robot.whistle.long')); r.pipiLong.userData.launch = true; r.root.add(r.pipiLong); }
   for (const [bubble, on] of [[r.pipi, look === 'whistle' && !r.launch], [r.pipiLong, !!r.launch]]) {
     if (!bubble) continue;
     bubble.visible = on;
@@ -913,7 +913,7 @@ function callPose(p, t) {   // the right hand at the ear, the head toward it
    the inner hands (the walk and the パチン mark are the scene's); rps (じゃんけん): three pumps, then the hand drawn in a
    bubble that stays up until the next pump, the winner raises both arms, the loser hangs its head, あいこ plays again
    at once. The timing helpers are shared with the scene (40-scene.js), so the arms, the ball and the walk agree. */
-const RPS_HANDS = ['グー', 'チョキ', 'パー'];
+const RPS_HANDS = [tl('rps.rock'), tl('rps.scissors'), tl('rps.paper')];
 const playEase = (v) => { const k = Math.max(0, Math.min(1, v)); return k * k * (3 - 2 * k); };
 const playMix = (a, b, k) => a + (b - a) * k;
 // ball: one throw per half; the thrower winds up until windup, the ball leaves the hand at release
@@ -1010,7 +1010,7 @@ function rpsDraw(ctx, W, H, hand, res) {
   ctx.fillStyle = '#1f2532'; ctx.font = `700 50px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(RPS_HANDS[hand], 200, res ? 74 : 104);
   if (res) {
-    const [text, color] = { win: ['かち！', '#d0352b'], lose: ['まけ…', '#5b6577'], tie: ['あいこ', '#d88a00'] }[res];
+    const [text, color] = { win: [tl('rps.win'), '#d0352b'], lose: [tl('rps.lose'), '#5b6577'], tie: [tl('rps.tie'), '#d88a00'] }[res];
     ctx.fillStyle = color; ctx.font = `700 46px ${FONT_DISPLAY}`; ctx.fillText(text, 200, 150);
   }
 }

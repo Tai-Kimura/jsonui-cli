@@ -24,12 +24,16 @@ WEB_JS = VIZ / "web" / "js"
 JA = re.compile(r"[぀-ヿ㐀-鿿！-｠]")
 
 #: Files whose words are all in the table: no Japanese outside their comments. Closed: a file joins when it is moved.
-MOVED = {"05-i18n.js"}
-#: Not moved yet (the ticket's stages 1–3). Each is counted, not held: the count is what is left to move.
+MOVED = {"05-i18n.js", "10-robot-core.js", "25-net.js", "52-data-docs.js", "53-waits.js", "54-bills.js", "57-fulltext.js",
+         "58-talk.js", "80-dbg.js"}
+#: Content written once per language (not words of the table): each set checked where it is made.
+PER_LANGUAGE = {"31-talk-demo-data.js": "the demo's talks, one set per language (tests/test_viz_talk_demo_data.py)"}
+#: Not moved yet (the ticket's stages 2–3). Each is counted, not held: the count is what is left to move. 60-log.js
+#: and 70-main.js keep one word each that another file says too: the demo's event kind 'spec 更新' (30-source-demo.js)
+#: and the hook chip's title (index.html); they move with those files.
 NOT_YET = {
-    "10-robot-core.js", "20-core.js", "25-net.js", "30-source-demo.js", "30-source-live.js", "31-talk-demo-data.js",
-    "40-scene.js", "50-panel.js", "51-denials.js", "52-data-docs.js", "53-waits.js", "53-devices.js", "54-bills.js", "55-history.js",
-    "56-server-room.js", "57-fulltext.js", "58-talk.js", "60-log.js", "70-main.js", "80-dbg.js",
+    "20-core.js", "30-source-demo.js", "30-source-live.js", "40-scene.js", "50-panel.js", "51-denials.js",
+    "53-devices.js", "55-history.js", "56-server-room.js", "60-log.js", "70-main.js",
 }
 
 
@@ -96,7 +100,7 @@ def js_code_japanese(text: str) -> list[str]:
             if c == "\\":
                 i += 2
                 continue
-            if c == quote:
+            if c == quote or (c == "\n" and quote != "`"):   # a ' or " string cannot pass its line (a regex's quote)
                 quote = None
             elif JA.match(c):
                 out.append(c)
@@ -110,6 +114,15 @@ def js_code_japanese(text: str) -> list[str]:
             continue
         elif c in "'\"`":
             quote = c
+        elif c == "/" and re.search(r"(^|[(,=:\[!&|?{};+\-*%<>~^]|\breturn)\s*$", text[max(0, i - 40):i]):
+            # a regex literal (where a value starts): its Japanese is code, a quote in it opens nothing
+            j, in_class = i + 1, False
+            while j < n and text[j] != "\n" and (in_class or text[j] != "/"):
+                in_class = (in_class or text[j] == "[") and text[j] != "]"
+                j += 2 if text[j] == "\\" else 1
+            out.extend(JA.findall(text[i:j]))
+            i = j + 1
+            continue
         elif JA.match(c):
             out.append(c)
         i += 1
@@ -124,14 +137,17 @@ def test_a_moved_file_has_no_japanese_in_its_code():
 def test_the_files_lists_are_closed():
     """Every part is moved or not yet (a new part says which); 80-dbg.js only runs under the browser tests."""
     on_disk = {p.name for p in WEB_JS.glob("*.js")}
-    assert MOVED.isdisjoint(NOT_YET)
-    assert on_disk - MOVED - NOT_YET == set(), "a part neither moved nor listed as not yet"
-    assert (MOVED | NOT_YET) - on_disk == set(), "a listed part that is gone"
+    lists = (MOVED, set(PER_LANGUAGE), NOT_YET)
+    assert sum(len(x) for x in lists) == len(set().union(*lists)), "a part in two lists"
+    assert on_disk - set().union(*lists) == set(), "a part neither moved nor listed as not yet"
+    assert set().union(*lists) - on_disk == set(), "a listed part that is gone"
 
 
 def test_the_finder_sees_japanese_in_code_and_not_in_comments():
-    sample = "// 日本語\n/* 日本語 */ const a = '待機'; const b = `作業${x}中`; const c = /^添付/; const d = 'http://x'; // 後\n"
-    assert "".join(js_code_japanese(sample)) == "待機作業中添付"
+    sample = ("// 日本語\n/* 日本語 */ const a = '待機'; const b = `作業${x}中`; const c = /^添付/; const d = 'http://x'; // 後\n"
+              "const e = /[\"']/; // 注\nconst f = `複\n行`;\n")
+    assert "".join(js_code_japanese(sample)) == "待機作業中添付複行"
+    assert "".join(js_code_japanese("const r = /[/']待/; // 注\nx = a / b; // 割\n")) == "待"
 
 
 # ---- the person's words ------------------------------------------------------------------------------------------
@@ -266,14 +282,14 @@ def test_the_page_gets_its_language_and_words(home):
     assert data["strings"]["status.idle"] == "</script><b>" and data["strings"]["status.busy"] == "作業中"
 
 
-def run_tl(table: dict, locale: str, calls: list) -> list:
+def run_tl(table: dict, locale: str, calls: list, fn: str = "tl") -> list:
     node = shutil.which("node")
     assert node, "node is needed (the jui_tools job has it)"
     script = (WEB_JS / "05-i18n.js").read_text(encoding="utf-8")
     blob = json.dumps({"language": locale[:2], "locale": locale, "strings": table})
     prelude = f"globalThis.document = {{ getElementById: () => ({{ textContent: {json.dumps(blob)} }}) }};\n"
     out = subprocess.run([node, "-e", prelude + script + f"\nprocess.stdout.write(JSON.stringify({json.dumps(calls)}"
-                          ".map(([k, p]) => tl(k, p))));"], capture_output=True, text=True, timeout=30)
+                          f".map(([k, p]) => {fn}(k, p))));"], capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout)
 
@@ -284,6 +300,15 @@ def test_the_page_tl_fills_slots_and_picks_plurals():
                                    ["s", {"who": "a1"}], ["missing", None]]) \
         == ["1 robot", "3 robots", "a1 is idle", "a1 is {what}", "missing"]
     assert run_tl({"k": {"other": "{n} 体"}}, "ja-JP", [["k", {"n": 1}]]) == ["1 体"]
+
+
+def test_tlhtml_escapes_the_words_and_every_slot_and_draws_only_code():
+    """Words that hold markup (a <code> in a sentence): the table's words and the slots are text; `…` in the words is
+    the one mark they can make, and a slot's backtick makes none."""
+    table = {"k": "use `{cmd}` <b>now</b> & {what}"}
+    assert run_tl(table, "en-US", [["k", {"cmd": "jui <x>", "what": "`a` \"q\" 'q'"}]], fn="tlHTML") == [
+        "use <code>jui &lt;x&gt;</code> &lt;b&gt;now&lt;/b&gt; &amp; &#96;a&#96; &quot;q&quot; &#39;q&#39;"]
+    assert run_tl({"p": {"one": "`{n}` robot", "other": "`{n}` robots"}}, "en-US", [["p", {"n": 2}]], fn="tlHTML") == ["<code>2</code> robots"]
 
 
 def test_the_page_reads_its_words_first():
