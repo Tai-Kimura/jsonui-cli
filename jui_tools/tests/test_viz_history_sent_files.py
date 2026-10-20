@@ -169,3 +169,23 @@ def test_the_route_gives_a_sent_picture_to_the_page_and_says_gone_without_an_err
     assert got[5][1].startswith("application/json") and json.loads(got[5][2]) == {"gone": True}
     for st, _ct, body, _h in got[1:]:
         assert PNG not in body and b"secret" not in body
+
+
+def test_a_folder_or_a_fifo_named_png_and_a_riff_that_is_no_webp_are_refused(tmp_path):
+    """dd's U1 and U2 (10-20): a path named like a picture that is a folder or a FIFO is no file to read (403, never an
+    exception or a read that waits); a RIFF whose type is not WEBP (a WAVE named .webp) is no picture (415)."""
+    d = tmp_path / "odd"
+    d.mkdir()
+    (d / "folder.png").mkdir()
+    os.mkfifo(d / "pipe.png")
+    (d / "sound.webp").write_bytes(b"RIFF\x24\x00\x00\x00WAVEfmt " + b"\x00" * 24)
+    (d / "real.webp").write_bytes(b"RIFF\x24\x00\x00\x00WEBPVP8 " + b"\x00" * 24)
+    p = _write(tmp_path / "t.jsonl", [_send([str(d / "folder.png"), str(d / "pipe.png"), str(d / "sound.webp"), str(d / "real.webp")])])
+    fd = os.open(p, os.O_RDONLY)
+    try:
+        assert H.sent_file_at(fd, 0, 0) == (403, "not a file to read")
+        assert H.sent_file_at(fd, 0, 1) == (403, "not a file to read")
+        assert H.sent_file_at(fd, 0, 2) == (415, "not a picture")
+        assert H.sent_file_at(fd, 0, 3)[0] == 200
+    finally:
+        os.close(fd)
