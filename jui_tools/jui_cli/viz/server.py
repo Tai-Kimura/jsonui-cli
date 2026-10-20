@@ -1166,12 +1166,16 @@ async def _handle_browser_message(ctx: ServerContext, sock, message: dict) -> No
         # Only the robot whose 応答の履歴 tab is open, only when asked: never a slice, so never in a snapshot,
         # the event log or an export (sources/history.py).
         agent_id = message.get("agentId")
-        got = ctx.world.history(agent_id) if ctx.world is not None and isinstance(agent_id, str) else None
+        # further back (2.3.12): `before` reads the items before that byte (「もっと前を読む」), `stop` reads from that byte
+        # to the end (the newest part, joined to what was read before it); both are offsets the server itself gave
+        num = lambda v: v if type(v) is int and v >= 0 else None   # noqa: E731
+        got = (ctx.world.history(agent_id, end=num(message.get("before")), stop=num(message.get("stop")))
+               if ctx.world is not None and isinstance(agent_id, str) else None)
         if got is None:
             await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": "no transcript for this robot"})
             return
         await sock.send_json({"type": "history", "reqId": req_id, "agentId": agent_id, "items": got["items"],
-                              "bytes": got["bytes"], "more": got["more"]})
+                              "bytes": got["bytes"], "more": got["more"], "from": got.get("from"), "results": got.get("results") or {}})
     elif isinstance(kind, str) and kind.startswith("talk."):
         # The talk view (talk_contract.json): read only; there is no request that sends a message.
         if ctx.talk is None:

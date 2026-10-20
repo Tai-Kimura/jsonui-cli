@@ -220,6 +220,41 @@ async def run_hist_images(pw, out, failures):
               f"a press on the Write row's notes.md shows that file, the row stays closed: {shown2} {wl}")
         await page.evaluate("() => [...document.querySelectorAll('[data-rb-hist] .h-tool')].find((x) => x.querySelector('summary .h-tname').textContent === 'Read').scrollIntoView({ block: 'center' })")
         await page.screenshot(path=str(out / "closed-row-mark.png"))
+
+        # ---- further back (2.3.12, ticket 2026-10-21-jui-viz-hist-tab-cannot-scroll-back; the requester's ruling of 10-21):
+        # a call stopped by auto mode, then 45 more lines: everything before them leaves the 40 shown. 「もっと前を読む」
+        # brings the 40 before back above (the place kept), the stopped call's row says 止められた with the reason, no row
+        # twice, and the next refresh keeps them
+        denied = ("Permission for this action was denied by the Claude Code auto mode classifier. Reason: [Git Destructive]. "
+                  "If you have other tasks that don't depend on this action, continue working on those.")
+        now = lambda: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())   # noqa: E731
+        with open(st.paths[A], "a") as f:
+            f.write(json.dumps({"type": "assistant", "timestamp": now(), "message": {"id": "m-deny", "role": "assistant", "content": [
+                {"type": "tool_use", "id": "tu-deny", "name": "Bash", "input": {"command": "git filter-branch --force HEAD", "description": "練習のリポジトリで歴史を書き換える"}}]}}) + "\n")
+            f.write(json.dumps({"type": "user", "timestamp": now(), "message": {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "tu-deny", "content": denied, "is_error": True}]}}) + "\n")
+            for k in range(45):
+                f.write(json.dumps({"type": "user", "timestamp": now(), "message": {"role": "user", "content": f"後の指示 {k}"}}, ensure_ascii=False) + "\n")
+        ROWS = """() => { const b = [...document.querySelectorAll('[data-rb-hist] .h-list-box > *')];
+          return { n: b.length, older: !!document.querySelector('[data-rb-hist] [data-h-older]'),
+            read: [...document.querySelectorAll('[data-rb-hist] .h-tool summary .h-tname')].filter((x) => x.textContent === 'Read').length,
+            deny: [...document.querySelectorAll('[data-rb-hist] .h-tool')].filter((d) => d.querySelector('.h-denied')).map((d) => ({ mark: d.querySelector('.h-denied').textContent, title: d.querySelector('.h-denied').title })),
+            last: (b.filter((x) => x.classList.contains('h-user')).pop() || {}).textContent || '' }; }"""
+        await wait(page, f"() => ({ROWS})().last.includes('後の指示 44')", timeout=20000, label="the 45 lines")
+        r0 = res["backBefore"] = await page.evaluate(ROWS)
+        check(failures, r0["older"] and r0["read"] == 0 and not r0["deny"], f"the older rows left the 40 shown, 「もっと前を読む」 is there: {r0}")
+        await page.click("[data-rb-hist] [data-h-older]")
+        await wait(page, f"() => ({ROWS})().read === 1", timeout=20000, label="the older rows back")
+        r1 = res["backAfter"] = await page.evaluate(ROWS)
+        check(failures, r1["n"] > r0["n"] and r1["read"] == 1 and r1["deny"] == [{"mark": "止められた", "title": "自動モードが止めた: [Git Destructive]"}],
+              f"further back: the older rows above, each once, the stopped call marked with its reason: {r1}")
+        await page.wait_for_timeout(2 * 3000 + 500)   # two refreshes (HIST_POLL_MS = 3000)
+        r2 = res["backKept"] = await page.evaluate(ROWS)
+        check(failures, r2["read"] == 1 and r2["deny"] == r1["deny"] and r2["n"] >= r1["n"], f"the next refreshes keep what was read further back: {r2}")
+        await page.evaluate("() => { const d = [...document.querySelectorAll('[data-rb-hist] .h-tool')].find((x) => x.querySelector('.h-denied')); d.open = true; d.scrollIntoView({ block: 'center' }); }")
+        why = await page.evaluate("() => (document.querySelector('[data-rb-hist] .h-denied-why') || {}).textContent || null")
+        check(failures, why == "[Git Destructive]", f"opened, the row says why: {why!r}")
+        await page.screenshot(path=str(out / "denied-row.png"))
         await page.close()
         for scheme in ("light", "dark"):
             ph = await st.page(f"hist-images-phone-{scheme}", **dict(PHONE, color_scheme=scheme))

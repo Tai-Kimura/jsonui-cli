@@ -1589,17 +1589,18 @@ class World:
 
     # ---------------------------------------------------------------- the 応答の履歴 tab (10-18)
 
-    def history(self, agent_id: str) -> dict | None:
-        """The last turns of one robot's transcript, read now (never kept in a slice), or None."""
+    def history(self, agent_id: str, end: int | None = None, stop: int | None = None) -> dict | None:
+        """The last turns of one robot's transcript, read now (never kept in a slice), or None. end / stop: further back
+        (sources/history.read_tail)."""
         agent = self.agents.get(agent_id)
         if agent is None or self.history_reader is None:
             return None
         sid = agent["sessionId"]
         cwd, given = self._paths.get(sid, (None, None))
         if agent["kind"] == "sub":
-            got = self.history_reader(sid, cwd, given, agent_id, self._agent_paths.get(agent_id))
+            got = self.history_reader(sid, cwd, given, agent_id, self._agent_paths.get(agent_id), end=end, stop=stop)
         else:
-            got = self.history_reader(sid, cwd, given)
+            got = self.history_reader(sid, cwd, given, end=end, stop=stop)
         return self._history_peers(got, sid)
 
     def _history_peers(self, got: dict | None, own: str) -> dict | None:

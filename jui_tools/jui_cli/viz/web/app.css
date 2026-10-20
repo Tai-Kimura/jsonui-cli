@@ -972,6 +972,10 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .h-filelink:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .h-tool summary > .h-head-file { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .h-filelink.h-file-gone { color: var(--ink-soft); text-decoration: line-through; cursor: default; }
+/* a row stopped by auto mode (55-history.js, 2.3.12) and the way further back */
+.h-denied { flex: none; padding: 0 6px; border-radius: 3px; background: var(--warn); color: var(--panel); font-size: 11px; font-weight: 700; line-height: 1.5; white-space: nowrap; }
+.h-denied-why { margin: 0; color: var(--warn); font-weight: 700; }
+.h-older { display: block; margin: 4px auto 10px; }
 .h-imgmark { flex: none; padding: 0 6px; border: 1px solid var(--info); border-radius: 3px; color: var(--info); font-size: 11px; line-height: 1.5; white-space: nowrap; }
 .h-io { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 8px; padding: 0 8px 8px; }
 .h-io-k { color: var(--ink-soft); font: 700 11px/1.9 var(--font-mono); }

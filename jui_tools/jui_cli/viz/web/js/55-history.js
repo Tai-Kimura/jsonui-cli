@@ -14,7 +14,11 @@ const HIST_POLL_MS = 3000;
    a working session sent the reader to the top). newer: answers came while the reader was above (the 新しい応答 marker). */
 const HIST = { tab: 'now', id: null, data: null, error: '', timer: 0, busy: false, node: null, sig: '',
   atEnd: true, top: 0, newer: false, marker: null, compose: null, sent: null, wide: false, imgs: new Map(), box: null,
-  attach: [] };
+  attach: [],
+  // further back (2.3.12): the older items read with 「もっと前を読む」 (oldest first), where they start, whether more is
+  // there, the byte the newest part is read down to once the reader went back, and the tool results read whose call
+  // was older than what was shown then (joined to it when it comes)
+  older: [], olderFrom: null, olderMore: false, tailStop: null, orphans: {}, olderBusy: false, latest: null };
 
 function hNode(tag, cls, text) {
   const n = document.createElement(tag);
@@ -257,7 +261,10 @@ function histItem(item) {
       const link = histFileLink({ tool: { off: item.file.off, id: item.id } }, item.file.name, 'h-head-file');
       if (item.description) title.splice(1, 0, link); else title.splice(1, 1, link);   // no description: the name takes the input's first line's place
     }
-    if (item.error) title.push(hNode('span', 'h-err', 'エラー'));
+    // stopped by auto mode (2.3.12, the requester's ruling of 10-21): on the row itself, however long ago (the board's card
+    // goes a minute after it is answered); the reason in its title and under the OUT
+    if (item.denied) { const m = hNode('span', 'h-denied', '止められた'); m.title = `自動モードが止めた: ${item.denied}`; title.push(m); }
+    else if (item.error) title.push(hNode('span', 'h-err', 'エラー'));
     if (item.out === undefined) title.push(hNode('span', 'h-run', '結果待ち'));
     // Pictures inside, seen with the row closed (2.3.12, requester 10-21: 「閉じてる時でも画像があるってわかるように」,
     // ticket 2026-10-21-jui-viz-hist-tool-row-shows-no-image-when-closed): as the requester's own attachments show (a
@@ -285,6 +292,7 @@ function histItem(item) {
     if (item.out !== undefined) {
       io.appendChild(hNode('span', 'h-io-k', 'OUT'));
       io.appendChild(hNode('pre', `h-code${item.error ? ' h-code-err' : ''}`, `${item.out}${item.outCut ? '\n…' : ''}`));
+      if (item.denied) { io.appendChild(hNode('span', 'h-io-k', '止めた理由')); io.appendChild(hNode('p', 'h-denied-why', item.denied)); }
       if (Array.isArray(item.imgs) && item.imgs.length) { const row = hNode('div', 'h-imgs'); for (const ref of item.imgs) row.appendChild(histThumb(ref)); io.appendChild(row); }
     }
     // SendUserFile (ticket 2026-10-20-jui-viz-history-senduserfile-image-no-thumb): the transcript holds only the paths, so
@@ -313,7 +321,15 @@ function histItem(item) {
 function histBuild(data) {
   const box = hNode('div', 'h-list-box');
   const items = Array.isArray(data.items) ? data.items : [];
-  if (data.more) box.appendChild(hNode('p', 'h-note', `直近 ${items.filter((x) => x.kind !== 'thought' && x.kind !== 'image').length} 件（それより前は表示しない）`));
+  // 40 at a time further back (2.3.12, ticket 2026-10-21-jui-viz-hist-tab-cannot-scroll-back; the requester's ruling: keep
+  // the 40, add a way back): the button reads the 40 before the oldest shown, from where they start in the transcript
+  if (data.more) {
+    const b = hNode('button', 'h-older wb-btn', 'もっと前を読む');
+    b.type = 'button'; b.dataset.hOlder = '';
+    b.title = `今は ${items.filter((x) => x.kind !== 'thought' && x.kind !== 'image').length} 件。その前の ${HIST_OLDER_N} 件を読む`;
+    b.addEventListener('click', () => histOlder(b));
+    box.appendChild(b);
+  }
   let prev = null;
   const seen = new Map();
   for (const item of items) {
@@ -386,37 +402,74 @@ function histAnchor(pane) {
   }
   return null;
 }
+const HIST_OLDER_N = 40;   // sources/history.ITEMS_MAX: a page further back
+/* What the tab shows: the older items read so far, then the newest part; a tool call older than a part its result was
+   read in gets that result now (the server gives the results whose call it did not give). */
+function histCombine(latest) {
+  Object.assign(HIST.orphans, latest.results || {});
+  const items = [...HIST.older, ...(Array.isArray(latest.items) ? latest.items : [])];
+  for (const it of items) if (it.kind === 'tool' && it.out === undefined && HIST.orphans[it.id]) Object.assign(it, HIST.orphans[it.id]);
+  return { items, more: HIST.older.length ? HIST.olderMore : !!latest.more, from: HIST.older.length ? HIST.olderFrom : latest.from };
+}
+/* The anchor kept across a rebuild: the same item at the same place (the oldest left, or older ones came above). */
+function histKeepPlace(pane, anchor) {
+  if (!anchor || !pane || !pane.contains(HIST.node)) return;
+  const top = pane.getBoundingClientRect().top;
+  const same = [...HIST.node.children].find((n) => n._hk === anchor.key);
+  if (same) pane.scrollTop += same.getBoundingClientRect().top - top - anchor.y;
+  HIST.top = pane.scrollTop;
+}
+async function histOlder(btn) {
+  const id = HIST.id;
+  if (!id || HIST.olderBusy || !HIST.data || typeof HIST.data.from !== 'number') return;
+  HIST.olderBusy = true; btn.disabled = true; btn.textContent = '読み込み中…';
+  const before = HIST.data.from;
+  const got = await SOURCE.history(id, { before });
+  HIST.olderBusy = false;
+  if (HIST.id !== id) return;
+  if (!got.ok) { btn.disabled = false; btn.textContent = '読めなかった（もう一度）'; return; }
+  if (HIST.tailStop === null) HIST.tailStop = HIST.latest && typeof HIST.latest.from === 'number' ? HIST.latest.from : before;   // the newest part keeps reaching down to here
+  HIST.older = [...got.data.items, ...HIST.older];
+  HIST.olderFrom = got.data.from; HIST.olderMore = !!got.data.more;
+  Object.assign(HIST.orphans, got.data.results || {});
+  const pane = histPane(), anchor = pane ? histAnchor(pane) : null;
+  HIST.data = histCombine(HIST.latest || { items: [] });
+  HIST.sig = JSON.stringify([HIST.data.items, HIST.data.more]); HIST.node = histBuild(HIST.data);
+  HIST.atEnd = false;
+  histShow();
+  histKeepPlace(pane, anchor);
+}
 async function histFetch() {
   const id = HIST.id;
   if (!id || HIST.busy || HIST.tab !== 'history') return;
   HIST.busy = true;
-  const got = await SOURCE.history(id);
+  const got = await SOURCE.history(id, HIST.tailStop !== null ? { stop: HIST.tailStop } : null);
   HIST.busy = false;
   if (HIST.id !== id || HIST.tab !== 'history') return;
   if (!got.ok) { HIST.error = got.error === 'demo' ? 'デモでは応答の履歴を表示しない' : '応答の履歴を読めない（このロボットの記録が見つからない）'; histShow(); return; }
   HIST.error = '';
-  const sig = JSON.stringify(got.data.items);
+  HIST.latest = got.data;
+  const data = histCombine(got.data);
+  const sig = JSON.stringify([data.items, data.more]);
   if (sig === HIST.sig && HIST.node) return;           // nothing new: the open folds and the scroll stay
   const pane = histPane();
   const shown = pane && !pane.hidden && HIST.node && pane.contains(HIST.node);
   const anchor = shown && !HIST.atEnd ? histAnchor(pane) : null;
   const had = !!HIST.data;
-  HIST.sig = sig; HIST.data = got.data; HIST.node = histBuild(got.data);
+  HIST.sig = sig; HIST.data = data; HIST.node = histBuild(data);
   composeArrived(got.data.items);
   if (had && !HIST.atEnd) HIST.newer = true;          // the reader is above: leave the place, show the marker
   histShow();                                          // at the end: histRestore sends the pane to the newest
-  if (anchor && pane && pane.contains(HIST.node)) {   // the same item at the same place, though the oldest left
-    const top = pane.getBoundingClientRect().top;
-    const same = [...HIST.node.children].find((n) => n._hk === anchor.key);
-    if (same) pane.scrollTop += same.getBoundingClientRect().top - top - anchor.y;
-    HIST.top = pane.scrollTop;
-  }
+  histKeepPlace(pane, anchor);                         // the same item at the same place, though the oldest left
 }
 function histStop() { clearInterval(HIST.timer); HIST.timer = 0; }
 /* After every renderRobot: which tab shows, and the polling that keeps an open history fresh. */
 function histSync() {
   const id = rbEl.hidden ? null : rbState.id;
-  if (id !== HIST.id) { HIST.id = id; HIST.data = null; HIST.node = null; HIST.sig = ''; HIST.error = ''; HIST.atEnd = true; HIST.newer = false; histStop(); histImgsDrop(); }
+  if (id !== HIST.id) {
+    HIST.id = id; HIST.data = null; HIST.node = null; HIST.sig = ''; HIST.error = ''; HIST.atEnd = true; HIST.newer = false; histStop(); histImgsDrop();
+    Object.assign(HIST, { older: [], olderFrom: null, olderMore: false, tailStop: null, orphans: {}, olderBusy: false, latest: null });
+  }
   const tabs = rbEl.querySelectorAll('[data-rb-tab]');
   tabs.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.rbTab === HIST.tab)));
   const body = rbEl.querySelector('.rb-body:not([data-rb-hist])'), pane = histPane();

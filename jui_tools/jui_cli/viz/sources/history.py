@@ -46,6 +46,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
+from ..denials import DENIED_PREFIX, reason_of
 from .talk_records import delivery, delivery_key
 from .transcripts import candidates
 
@@ -292,6 +293,11 @@ def items_of(rec, results: dict, off: int | None = None) -> list[dict]:
             elif b.get("type") == "tool_result" and isinstance(b.get("tool_use_id"), str):
                 text, cut = _cut(_result_text(b.get("content")), IO_MAX)
                 got = {"out": text, "outCut": cut, "error": b.get("is_error") is True}
+                full = _result_text(b.get("content"))
+                if got["error"] and full.startswith(DENIED_PREFIX):
+                    # stopped by auto mode (denials.py): kept on the row itself, so it is there however long ago (2.3.12,
+                    # the requester's ruling of 10-21: the board's card goes a minute after it is answered, the row stays)
+                    got["denied"] = reason_of(full) or "理由は書かれていない"
                 imgs = []
                 for x in _image_blocks([b]):
                     ref = _image_ref(x, off, n)
@@ -560,10 +566,29 @@ def image_at(fd: int, off, n) -> tuple[int, str | bytes]:
     return 200, (media, data)
 
 
-def read_tail(fd: int, items_max: int = ITEMS_MAX, bytes_max: int = BYTES_MAX) -> dict:
-    """The last items_max items of the transcript open on fd, oldest first, reading backwards from its end."""
+#: How many items a read down to `stop` may give at most (the newest part of a tab the reader went back in: everything
+#: from where it went back to, up to the end; BYTES_MAX bounds it too).
+STOP_ITEMS_MAX = 2_000
+
+
+def read_tail(fd: int, items_max: int = ITEMS_MAX, bytes_max: int = BYTES_MAX, end: int | None = None, stop: int | None = None) -> dict:
+    """The last items_max items of the transcript open on fd, oldest first, reading backwards from its end.
+
+    Going further back (2.3.12, ticket 2026-10-21-jui-viz-hist-tab-cannot-scroll-back: the requester could not reach a
+    card of 30 minutes before): ``end`` reads the items_max items before that byte (the page's 「もっと前を読む」 passes the
+    ``from`` of what it shows), and ``stop`` reads everything from that byte to the end instead of items_max (the page's
+    newest part, kept joined to the older items it read). ``from`` is where the oldest line given starts (a line is
+    given whole or not at all, so the next ``end`` loses nothing); ``results`` the tool results read whose call is not
+    among the items given (the call is older: the page joins them when it reads that far)."""
     size = os.fstat(fd).st_size
-    pos, buf, read, records, bad, skip_tail = size, b"", 0, 0, 0, False
+    if stop is not None:
+        items_max = STOP_ITEMS_MAX
+    start_at = size if end is None or not isinstance(end, int) or isinstance(end, bool) or end < 0 or end > size else end
+    if start_at < size and start_at > 0 and os.pread(fd, 1, start_at - 1) != b"\n":
+        start_at = size + 1                              # not the start of a line: nothing is given (below)
+    if start_at > size:
+        return {"items": [], "bytes": 0, "size": size, "records": 0, "bad": 0, "more": False, "from": None, "results": {}}
+    pos, buf, read, records, bad, skip_tail = start_at, b"", 0, 0, 0, False
     newest_first: list[dict] = []
     results: dict = {}
     counted, more = 0, False
@@ -590,6 +615,9 @@ def read_tail(fd: int, items_max: int = ITEMS_MAX, bytes_max: int = BYTES_MAX) -
         if len(buf) > LINE_MAX:
             buf, skip_tail = b"", True
         for line, start in zip(reversed(lines), reversed(starts)):
+            if stop is not None and start < stop:
+                pos, counted = 0, items_max          # read down to stop: nothing older is given
+                break
             if not line or len(line) > LINE_MAX:
                 continue
             try:
@@ -620,6 +648,7 @@ def read_tail(fd: int, items_max: int = ITEMS_MAX, bytes_max: int = BYTES_MAX) -
                     if key in seen:
                         continue
                     seen.add(key)
+                item["_line"] = start                # where its line starts: ``from`` (after the key: taken out before the items go)
                 newest_first.append(item)
                 if item["kind"] in COUNTED:
                     counted += 1
@@ -627,16 +656,27 @@ def read_tail(fd: int, items_max: int = ITEMS_MAX, bytes_max: int = BYTES_MAX) -
                 more = more or line is not lines[0]   # older lines of this chunk left unread
                 break
     items = list(reversed(newest_first))
+    cut_line = None
     while len([i for i in items if i["kind"] in COUNTED]) > items_max:
-        items.pop(0)
+        cut_line = items.pop(0)["_line"]
         more = True
+    if cut_line is not None:                             # a line is given whole or not at all: its other items go too
+        while items and items[0]["_line"] == cut_line:
+            items.pop(0)
     while items and items[0]["kind"] not in COUNTED:
         items.pop(0)                                     # a mark with nothing before it
+    given = set()
     for item in items:
-        if item["kind"] == "tool" and item["id"] in results:
-            item.update(results[item["id"]])
+        if item["kind"] == "tool":
+            given.add(item["id"])
+            if item["id"] in results:
+                item.update(results[item["id"]])
+    oldest = items[0]["_line"] if items else None
+    for item in items:
+        item.pop("_line", None)
     return {"items": items, "bytes": read, "size": size, "records": records, "bad": bad,
-            "more": more or pos > 0}
+            "more": (oldest > 0) if oldest is not None else (pos > 0 and start_at > 0), "from": oldest,
+            "results": {k: v for k, v in results.items() if k not in given}}
 
 
 def reader(projects: Path) -> Callable[..., dict | None]:
@@ -657,23 +697,23 @@ def reader(projects: Path) -> Callable[..., dict | None]:
         return out
 
     def read(session_id: str, cwd: str | None, given: str | None, agent_id: str | None = None,
-             agent_given: str | None = None) -> dict | None:
+             agent_given: str | None = None, end: int | None = None, stop: int | None = None) -> dict | None:
         for path in paths(session_id, cwd, given, agent_id, agent_given):
             fd = safe_open(projects, path)
             if fd is None:
                 continue
             try:
                 st = os.fstat(fd)
-                key = (str(path), st.st_size, st.st_mtime_ns)
-                hit = cache.get(str(path))
+                key = (str(path), st.st_size, st.st_mtime_ns, end, stop)
+                hit = cache.get((str(path), end, stop))
                 if hit and hit[0] == key:
                     return {**hit[1], "cached": True}
-                got = read_tail(fd)
+                got = read_tail(fd, end=end, stop=stop)
             finally:
                 os.close(fd)
             if len(cache) >= 16:
                 cache.pop(next(iter(cache)))
-            cache[str(path)] = (key, got)
+            cache[(str(path), end, stop)] = (key, got)
             return {**got, "cached": False}
         return None
 
