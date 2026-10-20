@@ -65,11 +65,15 @@ def test_a_relative_path_is_shown_from_the_calls_cwd(tmp_path):
 
 @pytest.fixture()
 def opened(tmp_path, monkeypatch):
-    """`open -R` replaced by a stand-in that writes its arguments, one call a line; macOS as far as the route knows."""
+    """`open` found first on PATH is a stand-in that writes its arguments, one call a line (the server starts "open"
+    by name, as the real one is found); macOS as far as the route knows."""
     log = tmp_path / "opened.txt"
-    stand = tmp_path / "open.py"
-    stand.write_text(f"import json, sys\nopen({str(log)!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n")
-    monkeypatch.setattr(srv, "REVEAL", (sys.executable, "-I", str(stand), "-R"))   # the flag kept: it must come before the path
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    stand = bin_dir / "open"
+    stand.write_text(f"#!{sys.executable} -I\nimport json, sys\nopen({str(log)!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n")
+    stand.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
     monkeypatch.setattr(srv.sys, "platform", "darwin")
     monkeypatch.setenv("JUI_VIZ_HOME", str(tmp_path / "viz"))
     return lambda: [json.loads(x) for x in log.read_text().splitlines()] if log.exists() else []

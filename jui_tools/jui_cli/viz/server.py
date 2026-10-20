@@ -1108,7 +1108,7 @@ async def _reveal(path: str) -> bool:
             f.write(path + "\n")
         return True
     try:
-        proc = await asyncio.create_subprocess_exec(*REVEAL, path, stdin=asyncio.subprocess.DEVNULL,
+        proc = await asyncio.create_subprocess_exec("open", "-R", path, stdin=asyncio.subprocess.DEVNULL,
                                                     stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
     except OSError:
         return False
@@ -1119,8 +1119,6 @@ async def _reveal(path: str) -> bool:
         await proc.wait()
         return False
 
-
-REVEAL = ("open", "-R")   # a test puts a stand-in here
 
 
 def _dispatch_hook(ctx: ServerContext, payload: dict) -> None:
