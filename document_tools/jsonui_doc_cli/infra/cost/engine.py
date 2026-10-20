@@ -3,8 +3,10 @@
 For each node of the environment: its rule (infra/rules lookup), how many run and which step each hour (scale.py),
 what it carries each hour (the load's quantities times the hour's multiplier; the part over capacity left out unless
 the rule charges it), its meters (the rule's formula), and each meter's price and charge on the month's total so far
-(parts.py; the totals are kept per price row: a free amount and the steps are the account's). A node billed by the
-hour with no load row runs the model's count all month; one billed by use with no load row is "load undefined".
+(parts.py; the totals are kept per price row: a free amount and the steps are the account's, within one scenario — a
+scenario is one environment, so environments sharing an account each take its free amount, and the result says so).
+A node billed by the hour with no load row runs the model's count all month; one billed by use with no load row is
+"load undefined".
 
 The result keeps, per node, per meter, one number per hour; day_lines and month_totals read it. Nothing raises: a
 problem is a warning naming the function, the node, the hour and the meter.
@@ -53,8 +55,8 @@ class Result:
 
 
 def _warn(out: list, fn: str, message: str, node: str | None = None, hour: dict | None = None,
-          meter: str | None = None) -> None:
-    w = {"fn": fn, "message": message}
+          meter: str | None = None, code: str | None = None, **extra) -> None:
+    w = {"fn": fn, "message": message, **({"code": code} if code else {}), **extra}
     if node:
         w["node"] = node
     if hour:
@@ -149,10 +151,20 @@ def price_meter(book: PB.Book, totals: dict, meter: F.Meter, node: dict, region:
         return None, None
     row = found["row"]
     key = (found["layer"], row.get("file"), row.get("index"))
+    if row.get("free") or (row.get("tiers") and row["tiers"][0].get("price_usd") == 0):
+        totals.setdefault(FREE_USED, {})[key] = f"{row['provider']} {row['service']} {row['sku']} ({row['region']})"
     before = totals.get(key, 0.0)
     usd, _detail = parts.charge(before, meter.amount, row)
     totals[key] = before + meter.amount
     return usd, PB.ref(found)
+
+
+#: totals' entry for the price rows with a free amount this scenario used (simulate says so: see FREE_PER_SCENARIO)
+FREE_USED = ("free amounts used",)
+FREE_PER_SCENARIO = ("free amounts are taken once per scenario: a scenario is one environment, so environments that "
+                     "share one account (production and staging in one AWS account) each take the account's free "
+                     "amount here, and the sum of their scenarios is low by it. Put the account's environments in one "
+                     "scenario to take it once.")
 
 
 def _meter_slot(run: NodeRun, m: F.Meter, n: int) -> dict:
@@ -269,6 +281,9 @@ def simulate(scenario: dict, model: dict, book: PB.Book) -> Result:
     for edge in scenario.get("edges", []):
         if edge["from"] in nodes and edge["to"] in nodes:
             runs.append(run_edge(edge, nodes, book, totals, hours, on, warnings))
+    if totals.get(FREE_USED) and len(model.get("environments") or []) > 1:
+        _warn(warnings, "simulate", FREE_PER_SCENARIO, code="cost.free_per_scenario",
+              rows=sorted(totals[FREE_USED].values()))
     return Result(scenario=scenario["id"], month=scenario["month"], hours=hours, nodes=runs, warnings=warnings)
 
 

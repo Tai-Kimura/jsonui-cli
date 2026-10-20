@@ -405,3 +405,65 @@ def test_the_currency_is_usd_and_a_converter_is_only_read(tmp_path):
     (tmp_path / "jui.config.json").write_text(json.dumps({"infra": {"currency": {"plugin": "rm -rf /"}}}))
     assert CUR.config(tmp_path)[0] is None
     assert CUR.convert(1.5, cfg) == {"usd": 1.5}
+
+
+# ---------------------------------------------------------------- free amounts per scenario (ticket 2026-10-21-infra-
+# bundled-prices-missing-common-aws-rows: a scenario is one environment, so environments sharing an account each take
+# its free amount; the result says so)
+
+def _free_warnings(result) -> list[dict]:
+    return [w for w in E.month_totals(result)["warnings"] if w.get("code") == "cost.free_per_scenario"]
+
+
+def _env_run(envs: list[str], book=BUNDLED):
+    """A Lambda function (free requests and GB-seconds) in a model of ``envs``, priced for the first."""
+    doc = {"version": 0, "environments": [{"id": e} for e in envs], "groups": [], "edges": [],
+           "nodes": [{"id": "fn", "category": "compute.function", "provider": "aws", "service": "lambda",
+                      "region": "us-east-1"}]}
+    model, problems = M.merge([("m.json", json.dumps(doc).encode())])
+    assert M.errors(problems) == []
+    load = {"version": 0, "id": "t", "month": "2026-11", "environment": envs[0],
+            "loads": [{"node": "fn", "quantities": {"requests": _per_hour(3_000_000), "duration_ms": 120, "memory_mb": 1536}}]}
+    scenario, problems = L.normalize("t.json", load, model)
+    assert [p for p in problems if p["severity"] == "error"] == []
+    return E.simulate(scenario, model, book)
+
+
+def test_a_model_of_several_environments_is_told_free_amounts_are_per_scenario():
+    got = _free_warnings(_env_run(["production", "staging"]))
+    assert len(got) == 1 and got[0]["fn"] == "simulate" and "once per scenario" in got[0]["message"]
+    assert got[0]["rows"] == ["aws lambda compute (us-east-1)", "aws lambda requests (us-east-1)"]
+
+
+def test_one_environment_or_no_free_amount_is_not_told():
+    assert _free_warnings(_env_run(["production"])) == []
+    plain = [{k: v for k, v in r.items() if k != "free"} for r in PB.bundled_rows()
+             if not (r.get("tiers") and r["tiers"][0]["price_usd"] == 0)]
+    assert _free_warnings(_env_run(["production", "staging"], PB.Book(bundled=plain))) == []
+
+
+def test_two_scenarios_of_one_account_take_the_free_amount_twice():
+    """What the warning says, measured: 113 custom metrics priced in two scenarios are $30.90 each (10 free taken in
+    each); in one they are $30.90 and $33.90."""
+    node = {"id": "logs", "category": "monitoring", "provider": "aws", "providerResolved": "aws", "service": "cloudwatch"}
+
+    def month(totals):
+        usd = 0.0
+        for _ in range(730):
+            for m in RULES.lookup(node).cost(F.Hour(node=node, q={"metrics": 113.0}, hours_in_month=730)):
+                usd += E.price_meter(BUNDLED, totals, m, node, "ap-northeast-1", "2027-06-01")[0]
+        return round(usd, 2)
+    assert (month({}), month({})) == (30.9, 30.9)
+    shared: dict = {}
+    assert (month(shared), month(shared)) == (30.9, 33.9)
+
+
+def test_a_free_first_step_counts_as_a_free_amount():
+    """EventBridge Scheduler's 14 million free invocations are the offer's first step at $0, not a free amount."""
+    rows = [{"provider": "aws", "service": "lambda", "sku": "requests", "region": "us-east-1", "unit": "request",
+             "per_units": 1_000_000, "tiers": [{"from": 0, "to": 1_000_000, "price_usd": 0}, {"from": 1_000_000, "price_usd": 0.2}],
+             "effective": "2026-01-01"},
+            {"provider": "aws", "service": "lambda", "sku": "compute", "region": "us-east-1", "unit": "GB-second",
+             "price_usd": 0.0000166667, "effective": "2026-01-01"}]
+    got = _free_warnings(_env_run(["production", "staging"], _user(rows)))
+    assert len(got) == 1 and got[0]["rows"] == ["aws lambda requests (us-east-1)"]

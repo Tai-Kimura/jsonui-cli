@@ -29,7 +29,7 @@
     },
     "environment": {
       "$ref": "#/$defs/id",
-      "description": "The model's environment this scenario is for. Left out: the model's first (a warning when it has several)."
+      "description": "The model's environment this scenario is for. Left out: the model's first (a warning when it has several). Free amounts and price steps are taken once per scenario: environments that share one account (production and staging in one AWS account) each take the account's free amount when priced as two scenarios, and the simulator says so (warning cost.free_per_scenario)."
     },
     "month": {
       "type": "string",
