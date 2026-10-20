@@ -162,6 +162,14 @@ def test_every_drafted_provider_is_bundled_or_said_not_to_be():
     assert set(NOT_BUNDLED) - provs == set()
 
 
+@pytest.mark.parametrize("value", ["arm64", "ARM", "aarch64", "Graviton"])
+def test_each_way_of_saying_arm_is_read(value):
+    assert F.arm({"spec": [{"key": "arch", "value": value}]})
+    assert {m.sku for m in meters("aws", "compute.container", "ecs.fargate", [{"key": "arch", "value": value}])} >= {
+        "vcpu:arm64", "memory:arm64"}
+    assert not F.arm({"spec": [{"key": "arch", "value": "x86_64"}]}) and not F.arm({"spec": [{"key": "app", "value": "arm64"}]})
+
+
 @pytest.mark.parametrize("prov, cat, svc", [("aws", "compute.container", "ecs.fargate"), ("aws", "compute.function", "lambda")])
 def test_arm_is_priced_on_its_own_rows(prov, cat, svc):
     """Fargate and Lambda on ARM are 20-25% under x86 (draft A: $0.04045 against $0.05056 a
@@ -181,6 +189,28 @@ def test_the_seeds_service_is_the_price_rows():
     assert T.priced_service("elb", lb_type="network", lb_type_written=True) == "elb.nlb"
     assert T.priced_service("elb", lb_type=None, lb_type_written=True) == "elb"   # a variable: not guessed
     assert T.priced_service("elb.classic") == "elb.classic" and T.priced_service("s3", "x") == "s3"
+
+
+@pytest.mark.parametrize("kind", ["LoadBalancer", "DBInstance"])
+def test_a_cfn_value_written_as_a_reference_is_not_guessed(tmp_path, kind):
+    """CloudFormation, through the seed: a load balancer's Type or an RDS's Engine written as {"Ref": ...} keeps "elb" /
+    "rds" (no price is better than the wrong one); a load balancer with no Type is AWS's default, application."""
+    typ = {"LoadBalancer": "AWS::ElasticLoadBalancingV2::LoadBalancer", "DBInstance": "AWS::RDS::DBInstance"}[kind]
+    key = {"LoadBalancer": "Type", "DBInstance": "Engine"}[kind]
+
+    def service(props, n=[0]):
+        n[0] += 1
+        root = tmp_path / f"r{n[0]}"
+        root.mkdir()
+        (root / "template.json").write_text(json.dumps({"AWSTemplateFormatVersion": "2010-09-09", "Resources": {
+            "Res": {"Type": typ, "Properties": props}}}))
+        doc, _rep = S.draft(root)
+        return next(nd["service"] for nd in doc["nodes"] if nd["category"] in ("load_balancer", "database.relational"))
+    assert service({key: {"Ref": "Param"}}) == ("elb" if kind == "LoadBalancer" else "rds")
+    if kind == "LoadBalancer":
+        assert (service({}), service({"Type": "network"})) == ("elb.alb", "elb.nlb")
+    else:
+        assert (service({}), service({"Engine": "postgres"})) == ("rds", "rds.postgres")
 
 
 def test_a_seeded_rds_and_load_balancer_are_priced(tmp_path):
