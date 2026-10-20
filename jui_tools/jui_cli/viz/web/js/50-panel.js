@@ -309,14 +309,20 @@ function setProject(id, { camera: moveCamera = true } = {}) {
   if (!(id === 'all' || PROJECT[id]) || UI.project === id) return;
   // only a picked robot carries over: with none picked, the room is shown and nothing opens
   const pick = rbState.id ? robotToPick(id) : undefined;
+  // The card closes and the next opens with the 3D held (ticket 2026-10-21-jui-viz-3d-zoom-lost-after-project-switch):
+  // closing alone used to start the flight back, which then ran to its end under the card opened next.
+  const held = !!rbState.id;
+  if (held) holdView('switch');
   if (rbState.id) closeRobot();
   UI.project = id; writePref('project', id);
   if (wb.open && wb.idx >= 0 && !inScope(SPECS[wb.idx].project)) wb.idx = -1;
   if (tb.detail && !tb.detail.startsWith('perm:') && !inScope(PROJECT_OF[tb.detail.split('#')[0]])) tb.detail = null;
   if (SOURCE.mode === 'live' && has3D) liveShowFloorOf(id);   // a room on another floor: go there first
   if (SOURCE.mode === 'live') liveRelayout();                // one room at a time: the room picked, wider (or the floor again)
+  if (has3D && zoom.zoomed) zoom.returnPose = roomPose(id);   // what closes later goes back to this room, not the last one's
   if (pick) openRobot(pick, document.getElementById('scene-canvas'));   // the camera goes to it, not to the room
   else if (moveCamera) focusProject(id);
+  if (held) releaseView('switch');   // no card now: back to this room; a card open: it holds the view
   paintScopeButtons();
   refreshNow();
   if (wb.open) { wbCode.scrollTop = 0; renderWhiteboard(latestModel, true); }
@@ -600,7 +606,7 @@ function renderTicker() {
 }
 
 /* ---------- zooming into a board: camera flight, then the board as a page ---------- */
-const zoom = { zoomed: false, returnPose: null, opener: null };
+const zoom = { zoomed: false, returnPose: null, opener: null, waitFor: null };   // waitFor: a robot whose card is open, not yet in the scene
 let camTween = null;
 const viewTarget = new THREE.Vector3();
 function flyTo(pos, target, fromTarget, dur, done) {
@@ -1525,10 +1531,17 @@ function openRobot(id, opener) {
   if (tb.open) closeTaskBoard();
   const showing = !!rbState.id;
   rbState.id = id;
-  if (showing) { renderRobot(latestModel); $('rb-close').focus({ preventScroll: true }); return; }
-  // no 3D, or the robot is not in the scene (another floor, another room of the one-room view): the card alone
+  zoom.waitFor = null;
+  if (showing) {   // another robot on the open card: the camera goes to it too (as ← → do)
+    renderRobot(latestModel); $('rb-close').focus({ preventScroll: true });
+    zoomToRobot(id);
+    return;
+  }
+  // no 3D, or the robot is not in the scene yet (another floor, another room of the one-room view): the card alone, and
+  // the camera goes to the robot when the scene puts it there (rbZoomWhenBuilt)
   if (!has3D || !robots.some((x) => x.def.id === id)) {
     if (!zoom.zoomed) zoom.returnPose = null;   // nothing to fly back from when the card closes
+    if (has3D) zoom.waitFor = id;
     showOverlay(rbEl); renderRobot(latestModel); $('rb-close').focus({ preventScroll: true }); return; }
   zoomTo(robotPose(id), opener, () => {
     if (rbState.id !== id) return;
@@ -1537,7 +1550,22 @@ function openRobot(id, opener) {
     $('rb-close').focus({ preventScroll: true });
   });
 }
+/* The camera to the robot whose card is open: now when it is in the scene, else when the scene puts it there. */
+function zoomToRobot(id) {
+  if (!has3D) return;
+  if (robots.some((x) => x.def.id === id)) { zoom.waitFor = null; zoomTo(robotPose(id), null, () => {}); }
+  else zoom.waitFor = id;
+}
+/* Called by the scene after it has put its robots (40-scene.js liveSync): a card opened before its robot was there gets
+   the camera now — the switch back to a project in the one-room view puts that room's robots a frame later. */
+function rbZoomWhenBuilt() {
+  const id = zoom.waitFor;
+  if (!id) return;
+  if (rbState.id !== id) { zoom.waitFor = null; return; }
+  if (robots.some((x) => x.def.id === id)) zoomToRobot(id);
+}
 function closeRobot({ byHand = false } = {}) {
+  zoom.waitFor = null;
   if (!rbState.id) { releaseView('rb'); return; }
   if (byHand && projectOfRobot(rbState.id)) LAST_ROBOT.set(projectOfRobot(rbState.id), null);   // closed by hand: none is remembered
   rbState.id = null;
@@ -1570,7 +1598,7 @@ function goRobot(next) {
   if (!rbState.id || !next || next === rbState.id) return;
   rbState.id = next;
   renderRobot(latestModel);
-  if (has3D && robots.some((x) => x.def.id === next)) zoomTo(robotPose(next), null, () => {});
+  zoomToRobot(next);
 }
 rbEl.addEventListener('click', (e) => { const b = e.target.closest('[data-rb-step]'); if (b) stepRobot(Number(b.dataset.rbStep)); });
 /* 2.3.4 (requester 10-19: "タブ選択してる時左右キーがタブの移動になるのやめてほしい 左右はロボットの移動でタブの移動はtabキーに

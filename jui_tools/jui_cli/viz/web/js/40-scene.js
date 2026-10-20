@@ -762,6 +762,7 @@ function liveSync() {
     else if (!zoom.zoomed) focusProject(UI.project, false);
   }
   redrawBoards(latestModel, performance.now() / 1000, true);
+  rbZoomWhenBuilt();   // 50-panel.js: a card opened before its robot was put here gets the camera now
   const empty = $('live-empty');
   if (empty) empty.hidden = !!SESSIONS.length || !SOURCE.connected;
 }

@@ -382,6 +382,16 @@ window.__dbg = {
       blockersNow: now.length, blockersFaded: now.filter((o) => FOCUS.faded.has(o)).length, faded: FOCUS.faded.size,
       fadedOpacity: [...FOCUS.faded.keys()].map((o) => [].concat(o.material)[0].opacity) };
   },
+  // the card and the camera agree (ticket 2026-10-21-jui-viz-3d-zoom-lost-after-project-switch): how far what the camera
+  // looks at is from the open robot, and how far the camera is from the room's (or the floor's) own view
+  camOn: () => {
+    const t = zoom.zoomed ? viewTarget : controls.target, R = rbState.id ? robots.find((x) => x.def.id === rbState.id) : null;
+    const room = roomPose(UI.project);
+    const flat = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+    return { card: rbState.id, zoomed: zoom.zoomed, tween: !!camTween, waitFor: zoom.waitFor, inScene: !!R,
+      toRobot: R ? +flat(t, R.robot.root.position).toFixed(2) : null, toRoom: +camera.position.distanceTo(room.p).toFixed(2),
+      returnToRoom: zoom.returnPose ? +zoom.returnPose.p.distanceTo(room.p).toFixed(2) : null };
+  },
   // what holds the 3D view (ticket 2026-10-20-jui-viz-data-server-from-robot-card-freezes-3d): the camera's zoom and
   // tween, whether the orbit takes input, the card, every screen open over the 3D, the tags layer
   view: () => ({ zoomed: zoom.zoomed, controls: controls.enabled, tween: !!camTween, card: rbState.id,

@@ -13,7 +13,9 @@ project picker, as a person does. Checked, in order:
   * a1 closed by hand (← 3D に戻る) → B with nothing picked: nothing opens (only a picked robot carries over)
   * b2 picked → A: nothing picked (closed by hand is remembered)
   * a1 picked again → B (b2) → a1's session ends and its robot walks out → A: nothing picked
-  * with a robot picked → すべて: nothing picked
+  * with a robot picked, another opened from the list → すべて: nothing picked
+  * at each step the 3D agrees with the card (ticket 2026-10-21-jui-viz-3d-zoom-lost-after-project-switch): a card open is
+    the camera on its robot, closing goes back to the room shown; no card is the camera on the room (or the floor) shown
 No console error; nothing outside the server.
 """
 
@@ -102,9 +104,19 @@ async def run_project_switch(pw, out, failures):
 
         async def state(step, want_robot, want_project):
             got = await page.evaluate(STATE)
-            res["steps"].append({"step": step, **got})
+            # the card and the 3D agree (ticket 2026-10-21-jui-viz-3d-zoom-lost-after-project-switch): a card open is the
+            # camera on its robot; none is the camera back on the room (or the floor) shown, not on the last one
+            await wait(page, "() => { const c = window.__dbg.camOn(); return !c.tween && !c.waitFor; }", label=f"{step}: the camera settled")
+            cam = await page.evaluate("() => window.__dbg.camOn()")
+            res["steps"].append({"step": step, **got, "cam": cam})
             want = {"robot": who[want_robot] if want_robot else None, "project": want_project, "card": bool(want_robot)}
             check(got == want, f"{step}: {want} expected, got {got}")
+            if want_robot:
+                check(cam["zoomed"] and cam["inScene"] and cam["toRobot"] is not None and cam["toRobot"] < 1.5,
+                      f"{step}: the 3D on {want_robot} as its card is open: {cam}")
+                check(cam["returnToRoom"] is not None and cam["returnToRoom"] < 0.5, f"{step}: closing goes back to this room: {cam}")
+            else:
+                check(not cam["zoomed"] and cam["toRoom"] < 0.5, f"{step}: no card, the camera on the room shown: {cam}")
 
         await pick_project(A)
         await open_robot("a1")
@@ -143,8 +155,11 @@ async def run_project_switch(pw, out, failures):
         await page.screenshot(path=str(out / "a-unpicked.png"))
         await pick_project(B)
         await open_robot("b1")
+        await state("b1 picked in B", "b1", B)
+        await open_robot("b2")                  # another robot from the list, the card open: the camera goes to it too
+        await state("b1's card open, b2 opened from the list: on b2", "b2", B)
         await pick_project("all")
-        await state("with b1 picked → すべて: nothing picked", None, "all")
+        await state("with b2 picked → すべて: nothing picked", None, "all")
         await page.close()
         for line in watch.console:
             failures.append(f"project-switch: console: {line}")
