@@ -8,7 +8,7 @@ A denial reaches viz two ways, both kept to one card by the session and the tool
   * the session's transcript: the tool_result of that call, is_error, whose text starts with DENIED_PREFIX
     (sources/transcripts.denial_of), for a session whose hook did not come.
 
-The card offers 「許可して続けさせる」: after a confirmation on the page, the server sends prompt_text(card) to that
+The card offers 「実行してよいと伝える」: after a confirmation on the page, the server sends prompt_text(card) to that
 session as a prompt from the page (World.send_prompt, the path of POST /api/prompt). That is all viz does — the same
 words the person would type. It never writes a permission rule or a setting, never answers the hook (no retry), and
 whether the next try passes stays with Claude Code's own check. 「そのまま」 closes the card and sends nothing.
@@ -30,8 +30,11 @@ _SENTENCE = re.compile(r"Reason: (.{1,200}?)(?:\. If you have other tasks|\.?\n|
 INPUT_HEAD = 200
 REASON_MAX = 160
 CARDS_MAX = 50
-#: how long a card that was answered (sent / dismissed) or whose session ended stays on the page
+#: how long a card that was answered (sent / dismissed) or whose session ended stays on the page; a sent card stays
+#: until the receiver's next response shows under it and DONE_SHOW_MS more, and at most SENT_WAIT_MS
 DONE_SHOW_MS = 60_000
+SENT_WAIT_MS = 600_000
+REPLY_HEAD = 300
 #: the hook and the transcript of one call, when one of them has no tool_use_id: this close in time
 SAME_CALL_MS = 30_000
 
@@ -59,11 +62,25 @@ def _clip(text: str, n: int = INPUT_HEAD) -> str:
     return text if len(text) <= n else text[: n - 1] + "…"
 
 
+#: the first line of the words: where they come from, said as it is (never that the sender was verified)
+SOURCE_LINE = "[jui viz の「止められた操作」の札から、依頼者がボタンで送った文です]"
+
+
 def prompt_text(card: dict) -> str:
-    """The words sent for 「許可して続けさせる」 (ticket, cd's wording): what was stopped, and that the person confirmed it."""
+    """The words 「実行してよいと伝える」 sends (cd's ruling 10-20 15:30: the receiver may answer in the terminal, and
+    that is right — its care with a channel's words is not to be talked around). Where they come from; the call that
+    was stopped and the reason, each taken from the card as it is; the person's judgement; and the way left open to
+    ask for a confirmation in the terminal. What viz claims is that the person's judgement reaches the receiver
+    unmistaken, not that the receiver goes on."""
     what = f"{card['tool']}: {card['input']}" if card["input"] else card["tool"]
-    why = f"、理由 {card['reason']}" if card["reason"] else ""
-    return f"止められた操作（{what}{why}）は、私が確認しました。実行して続けてください。"
+    why = card["reason"] or "（記録に理由が無い）"
+    return "\n".join([
+        SOURCE_LINE,
+        f"止められた操作: {what}",
+        f"止めた理由（自動モードの判定）: {why}",
+        "この操作は、私が内容を見て、実行してよいと判断しました。もう一度試してください。",
+        "判定がまた止めるとき、またはあなたが端末での確認が要ると判断するときは、そう返してください。端末で答えます。",
+    ])
 
 
 class DenialBook:
@@ -95,7 +112,7 @@ class DenialBook:
         self._seq += 1
         self.cards[key] = {"id": f"d{self._seq}", "key": key, "sessionId": sid, "agentId": agent_id, "toolUseId": use_id,
                            "tool": tool or "?", "input": head, "reason": (reason or "")[:REASON_MAX], "at": at,
-                           "status": "pending", "via": [via], "doneAt": None}
+                           "status": "pending", "via": [via], "doneAt": None, "reply": None, "replyAt": None}
         while len(self.cards) > CARDS_MAX:
             oldest = min(self.cards.values(), key=lambda c: (c["status"] == "pending", c["at"]))
             del self.cards[oldest["key"]]
@@ -133,8 +150,30 @@ class DenialBook:
                 card["status"], card["doneAt"], changed = "ended", at, True
         return changed
 
+    def reply(self, sid: str, replies, at: int) -> bool:
+        """The receiver's next response after the words were sent (sources/transcripts: its assistant texts with their
+        times): its head goes under each sent card of that session that has none yet."""
+        changed = False
+        for card in self.cards.values():
+            if card["sessionId"] != sid or card["status"] != "sent" or card.get("reply") is not None:
+                continue
+            nxt = next(((when, text) for when, text in replies or [] if when is not None and when >= card["doneAt"] and text.strip()), None)
+            if nxt:
+                head = " ".join(nxt[1].split())
+                card["reply"] = head if len(head) <= REPLY_HEAD else head[: REPLY_HEAD - 1] + "…"
+                card["replyAt"] = at
+                changed = True
+        return changed
+
+    def _gone(self, c: dict, at: int) -> bool:
+        if c["status"] == "pending":
+            return False
+        if c["status"] == "sent" and c.get("reply") is None:
+            return at - (c["doneAt"] or at) >= SENT_WAIT_MS
+        return at - (c.get("replyAt") or c["doneAt"] or at) >= DONE_SHOW_MS
+
     def tick(self, at: int) -> bool:
-        gone = [k for k, c in self.cards.items() if c["status"] != "pending" and at - (c["doneAt"] or at) >= DONE_SHOW_MS]
+        gone = [k for k, c in self.cards.items() if self._gone(c, at)]
         for k in gone:
             del self.cards[k]
         return bool(gone)

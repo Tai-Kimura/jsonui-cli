@@ -169,6 +169,13 @@ def denial_of(rec) -> list[tuple[str, str]]:
     return out
 
 
+def reply_of(rec) -> str:
+    """The text an assistant record says to the person (its text blocks), or ''."""
+    msg = rec.get("message") if isinstance(rec, dict) and rec.get("type") == "assistant" else None
+    content = msg.get("content") if isinstance(msg, dict) else None
+    return "".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text") if isinstance(content, list) else ""
+
+
 class UsageTail:
     """The new complete lines of one transcript, from the end it had when first seen."""
 
@@ -182,8 +189,9 @@ class UsageTail:
     def read(self) -> dict:
         """{'usage': [(id, tokens, at)], 'bills': [(id, model, usage, at)], 'calls': [(kind, sender name, at)],
         'denials': [(tool_use_id, tool, input, the result's text, at)] (auto mode denials: denial_of),
+        'replies': [(at, text)] (what each assistant record says: reply_of),
         'bytes': n, 'assistant': n, 'bad': n} for what was added. ``calls``: the receiver's records of a cross-session message (calls.record_event)."""
-        out = {"usage": [], "bills": [], "calls": [], "denials": [], "bytes": 0, "assistant": 0, "bad": 0}
+        out = {"usage": [], "bills": [], "calls": [], "denials": [], "replies": [], "bytes": 0, "assistant": 0, "bad": 0}
         try:
             fd = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW)
         except OSError:
@@ -234,6 +242,9 @@ class UsageTail:
                 self.uses[use_id] = (name, tool_input)
                 if len(self.uses) > USES_KEPT:
                     self.uses.pop(next(iter(self.uses)))
+            said = reply_of(rec)
+            if said:
+                out["replies"].append((_epoch_ms(rec.get("timestamp")), said))
             for use_id, text in denial_of(rec):
                 name, tool_input = self.uses.get(use_id, ("?", None))
                 out["denials"].append((use_id, name, tool_input, text, _epoch_ms(rec.get("timestamp"))))

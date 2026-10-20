@@ -420,6 +420,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .dwhat code { min-width: 0; overflow-wrap: anywhere; font: 500 12px/1.5 var(--font-mono); }
 .dwhy { margin: 0; color: var(--ink-soft); font: 600 12px/1.5 var(--font-mono); }
 .dconfirm { display: grid; gap: 6px; }
+.dreply { margin: 0; padding: 6px 10px; border-left: 3px solid var(--line); background: var(--bg); color: var(--ink); font-size: 13px; overflow-wrap: anywhere; }
 .dconfirm-to { margin: 0; font-weight: 700; font-size: 12px; }
 .dprompt { margin: 0; padding: 6px 10px; border-left: 3px solid var(--warn); background: var(--bg); color: var(--ink); font-size: 13px; overflow-wrap: anywhere; }
 .qcard.q-closed .qopt { cursor: not-allowed; opacity: .5; }

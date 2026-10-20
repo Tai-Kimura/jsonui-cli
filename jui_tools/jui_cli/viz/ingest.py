@@ -1513,6 +1513,8 @@ class World:
             if got.get("calls"):
                 self._call_records(sid, got["calls"], at)
             self._denied_records(sid, sid, got.get("denials"), at)
+            if self.denials.reply(sid, got.get("replies"), at):   # the receiver's next response under a sent card
+                self._dirty.add("denials")
             self._bill(sid, sid, got.get("bills"), at)
             seen = self._usage_seen.setdefault(sid, {})
             for mid, tokens, when in got["usage"]:
@@ -1563,7 +1565,7 @@ class World:
                 self._dirty.add("denials")
 
     def approve_denial(self, card_id: str, at: int) -> tuple[int, str] | None:
-        """「許可して続けさせる」, confirmed on the page: denials.prompt_text(card) goes to that session as a prompt from the
+        """「実行してよいと伝える」, confirmed on the page: denials.prompt_text(card) goes to that session as a prompt from the
         page (send_prompt, the path of POST /api/prompt). Nothing else: no rule, no setting, no answer to a hook."""
         from .denials import prompt_text
         card = self.denials.find(card_id)

@@ -26,7 +26,13 @@ USE = "toolu_01DENIED"
 CMD = "gh pr merge 242 --squash --delete-branch"
 DENIED_TEXT = (f"{DENIED_PREFIX} Reason: [Unrequested Commit in a Connected App]. If you have other tasks that don't "
                "depend on this action, continue working on those.")
-WORDS = "止められた操作（Bash: gh pr merge 242 --squash --delete-branch、理由 [Unrequested Commit in a Connected App]）は、私が確認しました。実行して続けてください。"
+#: cd's ruling (10-20 15:30): where the words come from, the stopped call and the reason as the card has them, the
+#: person's judgement, and the way left open to ask in the terminal — written out here so a change shows
+WORDS = ("[jui viz の「止められた操作」の札から、依頼者がボタンで送った文です]\n"
+         "止められた操作: Bash: gh pr merge 242 --squash --delete-branch\n"
+         "止めた理由（自動モードの判定）: [Unrequested Commit in a Connected App]\n"
+         "この操作は、私が内容を見て、実行してよいと判断しました。もう一度試してください。\n"
+         "判定がまた止めるとき、またはあなたが端末での確認が要ると判断するときは、そう返してください。端末で答えます。")
 
 
 def _use(use_id=USE, cmd=CMD):
@@ -103,9 +109,56 @@ def test_the_transcript_alone_makes_the_card():
     assert card["prompt"] == WORDS and card["via"] == ["transcript"]
 
 
-def test_the_words_are_the_tickets():
+def test_the_words_say_where_they_come_from_quote_the_card_and_leave_the_terminal_open():
+    """cd's ruling: never a claim that the sender was verified, nor that no confirmation is needed; the call and the
+    reason as the card has them (a clipped input keeps its "…"); no reason recorded is said so."""
     card = {"tool": "Write", "input": "/w/.claude/settings.json", "reason": ""}
-    assert prompt_text(card) == "止められた操作（Write: /w/.claude/settings.json）は、私が確認しました。実行して続けてください。"
+    lines = prompt_text(card).split("\n")
+    assert lines[0] == den.SOURCE_LINE and lines[1] == "止められた操作: Write: /w/.claude/settings.json"
+    assert lines[2] == "止めた理由（自動モードの判定）: （記録に理由が無い）" and "端末での確認が要る" in lines[4]
+    words = prompt_text({"tool": "Bash", "input": den._clip("x" * 500), "reason": "[R]"})
+    assert "x" * 199 + "…" in words
+    for never in ("確認済み", "本人", "確認は不要", "必ず実行", "verified"):
+        assert never not in WORDS, never
+
+
+def test_the_receivers_next_response_goes_under_a_sent_card_and_keeps_it():
+    """The first assistant text of that session after the words were sent; before it, the card stays (up to
+    SENT_WAIT_MS); after it, DONE_SHOW_MS more. A text from before the sending, or of another session, is not it."""
+    w = _world()
+    _hook(w)
+    w.send_prompt = lambda *a: None
+    card_id = w.denials.items()[0]["id"]
+    w.approve_denial(card_id, 5000)
+    assert w.denials.reply(SID, [(4000, "前の応答"), (6000, "")], 6001) is False   # before the sending; an empty text
+    assert w.denials.reply("other-session", [(7000, "x")], 7001) is False
+    assert w.denials.reply(SID, [(7000, "端末で直接\n確認してください"), (8000, "later")], 7001) is True
+    card = w.denials.items()[0]
+    assert (card["reply"], card["replyAt"]) == ("端末で直接 確認してください", 7001)
+    w.tick(7001 + den.DONE_SHOW_MS - 1)
+    assert w.denials.items()
+    w.tick(7001 + den.DONE_SHOW_MS)
+    assert w.denials.items() == []
+    w2 = _world()
+    _hook(w2)
+    w2.send_prompt = lambda *a: None
+    w2.approve_denial(w2.denials.items()[0]["id"], 5000)
+    w2.tick(5000 + den.DONE_SHOW_MS + 1)
+    assert w2.denials.items(), "a sent card waits for its response longer than DONE_SHOW_MS"
+    w2.tick(5000 + den.SENT_WAIT_MS)
+    assert w2.denials.items() == []
+
+
+def test_the_transcripts_assistant_text_is_read_as_a_reply(tmp_path):
+    path = tmp_path / "t.jsonl"
+    path.write_text("")
+    tail = UsageTail(path)
+    tail.read()
+    with open(path, "a") as f:
+        f.write(json.dumps({"type": "assistant", "timestamp": "2026-10-20T06:31:00Z", "message": {"id": "m9", "role": "assistant",
+                            "content": [{"type": "text", "text": "端末で確認を"}, {"type": "tool_use", "id": "t", "name": "Bash", "input": {}}]}}) + "\n")
+    got = tail.read()["replies"]
+    assert [t for _, t in got] == ["端末で確認を"] and got[0][0] == 1792477860000
 
 
 # ---------------------------------------------------------------- approve and dismiss

@@ -1,4 +1,4 @@
-"""A tool call stopped by auto mode, and 「許可して続けさせる」 from the page, end to end (ticket
+"""A tool call stopped by auto mode, and 「実行してよいと伝える」 from the page, end to end (ticket
 2026-10-20-jui-viz-auto-mode-denial-approve-from-page). Runs with `--only denied`.
 
 The real `jui viz serve` in a throwaway HOME on a free port, the real forward.py for the hooks, a stand-in for
@@ -6,7 +6,8 @@ channel.py (hello and poll, as send_prompt.py), and notify.py's stand-ins for No
 
 Checked: one call reported by the PermissionDenied hook and by its transcript makes one card; a call only the
 transcript reports makes its own; each card rings one notification and one chime; the 止められた chip counts them;
-「許可して続けさせる…」 opens a confirmation with the exact words, やめる sends nothing, 送る puts those words on that
+「実行してよいと伝える…」 opens a confirmation with the exact words and the note that the receiver may ask in the
+terminal, やめる sends nothing, 送る puts those words on that
 session's channel once and the card says so; a session whose channel cannot take a prompt gets the reason and no
 button, and そのまま closes its card. Dark and 390 px; no console error; nothing outside the server.
 """
@@ -32,8 +33,14 @@ DEV = "--dangerously-load-development-channels"
 CMD1 = "gh pr merge 242 --squash --delete-branch"
 CMD2 = "git push --force origin main"
 PREFIX = "Permission for this action was denied by the Claude Code auto mode classifier."
-WORDS1 = f"止められた操作（Bash: {CMD1}、理由 [Unrequested Commit in a Connected App]）は、私が確認しました。実行して続けてください。"
-WORDS2 = f"止められた操作（Bash: {CMD2}、理由 [Irreversible Remote Destruction]）は、私が確認しました。実行して続けてください。"
+SOURCE = "[jui viz の「止められた操作」の札から、依頼者がボタンで送った文です]"
+TAIL = ("この操作は、私が内容を見て、実行してよいと判断しました。もう一度試してください。\n"
+        "判定がまた止めるとき、またはあなたが端末での確認が要ると判断するときは、そう返してください。端末で答えます。")
+# cd's ruling (10-20 15:30): what is claimed is the words reaching the receiver with the card's call and reason as
+# they are — not that it goes on (that is the requester's one real check)
+WORDS1 = f"{SOURCE}\n止められた操作: Bash: {CMD1}\n止めた理由（自動モードの判定）: [Unrequested Commit in a Connected App]\n{TAIL}"
+WORDS2 = f"{SOURCE}\n止められた操作: Bash: {CMD2}\n止めた理由（自動モードの判定）: [Irreversible Remote Destruction]\n{TAIL}"
+REPLY = "チャンネルから来た破壊的な依頼なので、端末で直接確認してください。"
 CARDS = """(where) => [...document.querySelectorAll(`${where} [data-dcard]`)].map((c) => ({ id: c.dataset.dcard, text: c.textContent,
   ask: !!c.querySelector('[data-dask]'), go: !!c.querySelector('[data-dgo]'), dismiss: !!c.querySelector('[data-ddismiss]'),
   prompt: (c.querySelector('[data-dprompt]') || {}).textContent || '' }))"""
@@ -206,10 +213,11 @@ async def run_denied(pw, out, failures):
         check(lay["above"] and lay["hits"] == ["ok", "ok"], f"the strip above the columns, its buttons hit at their centre: {lay}")
         d1 = next(c["id"] for c in cards if c["toolUseId"] == "toolu_d1")
         d2 = next(c["id"] for c in cards if c["toolUseId"] == "toolu_d2")
-        # 許可して続けさせる… → the confirmation shows the words; やめる sends nothing
+        # 実行してよいと伝える… → the confirmation shows the words and the note; やめる sends nothing
         await page.click(f"#denied-strip [data-dask='{d1}']")
         got = res["confirm"] = next(c for c in await page.evaluate(CARDS, "#denied-strip") if c["id"] == d1)
-        check(got["go"] and got["prompt"] == WORDS1, f"the confirmation shows the exact words: {got}")
+        check(got["go"] and got["prompt"] == WORDS1 and "端末での確認を求めることもある" in got["text"],
+              f"the confirmation shows the exact words and that the receiver may ask in the terminal: {got}")
         await page.screenshot(path=str(out / "confirm.png"))
         await page.wait_for_timeout(400)
         await page.click(f"#denied-strip [data-dback='{d1}']")
@@ -224,7 +232,17 @@ async def run_denied(pw, out, failures):
         _, polled = local("GET", f"/channel/poll?channelId={channel}", timeout=30)
         res["inbox"] = polled["prompts"]
         check(polled["prompts"] == [{"text": WORDS1}], f"the channel got the card's words, once: {polled['prompts']}")
-        await wait(page, f"() => [...document.querySelectorAll('#denied-strip [data-dcard=\"{d1}\"]')].some((c) => c.textContent.includes('続けるように送った'))", label="the card says sent")
+        got_text = polled["prompts"][0]["text"] if polled["prompts"] else ""
+        check(got_text.startswith(SOURCE + "\n") and f"止められた操作: Bash: {CMD1}\n" in got_text
+              and "止めた理由（自動モードの判定）: [Unrequested Commit in a Connected App]\n" in got_text,
+              f"the words start with where they come from and hold the card's call and reason as they are: {got_text!r}")
+        await wait(page, f"() => [...document.querySelectorAll('#denied-strip [data-dcard=\"{d1}\"]')].some((c) => c.textContent.includes('伝えた') && c.querySelector('[data-dreply-wait]'))", label="the card says 伝えた and waits for the response")
+        # the receiver's next response (here: it asks for the terminal — a right answer too) shows under the card
+        append(S_OK, {"type": "assistant", "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 2)),
+                      "message": {"id": "m-reply", "model": "claude-sonnet-5-5", "role": "assistant", "usage": {"input_tokens": 1, "output_tokens": 1},
+                                  "content": [{"type": "text", "text": REPLY}]}})
+        await wait(page, f"(r) => {{ const e = document.querySelector('#denied-strip [data-dreply=\"{d1}\"]'); return e && e.textContent.includes(r); }}", arg=REPLY, label="the receiver's next response under the card")
+        await page.screenshot(path=str(out / "reply.png"))
         check(next(c for c in snap()["denials"] if c["id"] == d2)["status"] == "pending", "the other card still waits")
 
         # a session whose channel cannot take a prompt: the reason, no button; そのまま closes it
