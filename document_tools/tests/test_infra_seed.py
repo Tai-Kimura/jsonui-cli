@@ -44,6 +44,16 @@ VALUE_FILES = {
     "infra/terraform.tfstate.backup": json.dumps({"version": 4, "resources": [{"type": "aws_sqs_queue", "name": "only_in_state"}]}),
     "infra/prod.tfvars": 'db_password = "only-in-tfvars"\n',
     "api/.env": "DATABASE_URL=postgres://app:only-in-dotenv@10.0.1.23:5432/app\nONLY_IN_DOTENV_S3_BUCKET=x\n",
+    # each of these is counted in skipped too (not only left unread): a missing count is red
+    "infra/x.tfvars.json": json.dumps({"db_password": "only-in-tfvars"}),
+    "infra/plan.tfplan": "only-in-state",
+    "infra/terraform.tfstate.1700000000.backup": json.dumps({"resources": [{"name": "only_in_state"}]}),
+    "api/.env.production.local": "ONLY_IN_DOTENV_A=1\n",
+    "api/secrets.env": "ONLY_IN_DOTENV_B=1\n",
+    "api/.envrc": "export ONLY_IN_DOTENV_C=1\n",
+    "Pulumi.prod.yaml": "config:\n  app:dbPassword: only-in-tfvars\n",
+    "charts/values.yaml": "password: only-in-tfvars\n",
+    "infra/credentials.json": json.dumps({"secret": "only-in-tfvars"}),
 }
 SENTINELS = ("only_in_state", "only-in-state", "only-in-tfvars", "only-in-dotenv", "ONLY_IN_DOTENV")
 
@@ -53,6 +63,7 @@ def _project(tmp_path: Path, name: str) -> Path:
     shutil.copytree(FIX / name, root)
     if name == "multi-cloud":
         for rel, text in VALUE_FILES.items():
+            (root / rel).parent.mkdir(parents=True, exist_ok=True)
             (root / rel).write_text(text)
     return root
 
@@ -128,11 +139,11 @@ def test_state_variables_and_env_files_are_never_read(tmp_path, monkeypatch):
     monkeypatch.setattr(S, "read_text", watch)
     doc, rep = S.draft(root)
     assert "main.tf" in read and ".env.example" in read            # the watch sees the reads
-    assert not [n for n in read if ".tfstate" in n or n.endswith(".tfvars") or n == ".env"]
+    assert not set(read) & {Path(r).name for r in VALUE_FILES}
     out = json.dumps([doc, rep])
     assert not [s for s in SENTINELS if s in out]
     skipped = {s["file"] for s in rep["skipped"]}
-    assert skipped == {"infra/terraform.tfstate", "infra/terraform.tfstate.backup", "infra/prod.tfvars", "api/.env"}
+    assert skipped == set(VALUE_FILES) and rep["skippedCount"] == len(VALUE_FILES)
 
 
 # ---------------------------------------------------------------- what could not be matched is said, per provider
@@ -322,3 +333,185 @@ def test_seed_keeps_no_table_of_its_own():
         "a CloudFormation or Bicep type": r'AWS::[A-Za-z0-9]+::|[Mm]icrosoft\.[A-Za-z]+/',
     }
     assert {k: re.findall(rx, src) for k, rx in shapes.items() if re.findall(rx, src)} == {}
+
+
+# ---------------------------------------------------------------- value-shaped names: masked where they are, the rest drafted
+
+# A room whose names and folders have a value's shape (an account id as a folder, an IP in a resource or service
+# name, a version that is an IP). Written at test time; none of these strings may reach the draft or the report.
+VALUE_NAMED = {
+    "accounts/123456789012/main.tf": 'provider "aws" {\n  region = "us-east-1"\n}\n\n'
+                                     'resource "aws_sqs_queue" "q_123456789012" {}\n\n'
+                                     'resource "aws_sqs_queue" "jobs" {}\n\n'
+                                     'resource "aws_db_instance" "orders" {\n  engine         = "postgres"\n'
+                                     '  engine_version = "10.0.0.5"\n}\n',
+    "edge/wrangler.toml": 'name = "edge"\nmain = "src/index.ts"\n\n[[services]]\nbinding = "PEER"\nservice = "svc-10.0.0.5"\n',
+    "ops/10.0.0.5/compose.yml": "services:\n  cache:\n    image: redis:7\n",
+    "api/pyproject.toml": "[project]\nname = 'api'\n",
+    "api/app.py": 'import os\n\nBUCKET = os.getenv("S3_BUCKET_10_0_0_5")\nREDIS = os.getenv("REDIS_10_0_0_5_URL")\n',
+    "10.0.0.5/.env": "X=1\n",
+    "envs/123456789012/Pulumi.yaml": "name: x\nruntime: python\n",
+}
+VALUE_MARKS = ("123456789012", "10.0.0.5", "10_0_0_5")
+
+
+def _value_named_room(tmp_path: Path) -> Path:
+    root = tmp_path / "value-named"
+    for rel, text in VALUE_NAMED.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text)
+    return root
+
+
+def _leaks(value) -> list[str]:
+    return [s for s in _strings(value) if M.secret_findings(s) or S.value_shaped(s) or any(m in s for m in VALUE_MARKS)]
+
+
+def test_value_shaped_names_are_masked_in_the_draft_and_the_rest_is_drafted(tmp_path):
+    """The masking itself, read off the draft (not left to the last gate, check_draft): an id, a label, an iac
+    address, an evidence file or pattern, an engine with a value's shape never reaches the draft; the rest of the room
+    is still drafted (one such name does not stop the whole draft)."""
+    root = _value_named_room(tmp_path)
+    doc, rep = S.draft(root)
+    assert _leaks(doc) == []
+    assert S.check_draft(doc) == []
+    by_iac = _by_iac(doc)
+    assert {"aws_sqs_queue.jobs", "aws_db_instance.orders", "edge/wrangler.toml"} <= set(by_iac)
+    assert by_iac["aws_db_instance.orders"].get("engine") is None          # "postgres 10.0.0.5" is withheld
+    ids = {n["id"] for n in doc["nodes"]}
+    assert {"withheld", "withheld-2"} <= ids                                 # q_123456789012 and svc-10.0.0.5
+    queue = next(n for n in doc["nodes"] if n["id"] in ("withheld", "withheld-2") and n["category"].startswith("queue"))
+    assert queue["provider"] == "aws" and "iac" not in queue
+    worker = by_iac["edge/wrangler.toml"]["id"]
+    assert any(e["from"] == worker and e["to"].startswith("withheld") for e in doc["edges"])
+    cache = next(n for n in doc["nodes"] if n["id"] == "compose-cache")
+    assert "evidence" not in cache and "iac" not in cache                    # its file is ops/10.0.0.5/compose.yml
+    app_hits = [e for n in doc["nodes"] for e in n.get("evidence") or [] if e["file"] == "api/app.py"]
+    assert app_hits and all("10_0_0_5" not in (e.get("pattern") or "") for e in app_hits)
+    assert rep["withheld"] >= 8
+
+
+def test_the_report_says_where_each_withheld_string_was_and_masks_only_the_value(tmp_path):
+    root = _value_named_room(tmp_path)
+    assert S.run(root, echo=lambda s: None, err=lambda s: None) == 0       # written: one value-shaped name stops nothing
+    raw = (root / "docs" / "infra" / "seed" / "seed-report.json").read_text()
+    rep = json.loads(raw)
+    assert _leaks(rep) == [] and not any(m in raw for m in VALUE_MARKS)
+    where = {(w["file"], w.get("line"), w["what"]) for w in rep["withheldFrom"]}
+    assert ("accounts/(withheld)/main.tf", 5, "an id") in where
+    assert ("accounts/(withheld)/main.tf", 9, "engine") in where           # the line of its resource block
+    assert {("ops/(withheld)/compose.yml", "the file's path (evidence)"), ("ops/(withheld)/compose.yml", "an iac address"),
+            ("api/app.py", "an evidence pattern")} <= {(f, w) for f, _l, w in where}
+    assert ("edge/wrangler.toml", 6, "an id") in where
+    assert rep["withheldFromCount"] == len(rep["withheldFrom"])
+    assert {s["file"] for s in rep["skipped"]} == {"(withheld)/.env"}
+    assert ("pulumi", "envs/(withheld)/Pulumi.yaml", "envs/(withheld)/Pulumi.yaml") in {
+        (p, i["file"], i["what"]) for p, v in rep["unmatched"].items() for i in v["items"]}
+
+
+def test_a_region_with_a_values_shape_is_not_a_group(tmp_path):
+    root = tmp_path / "region"
+    (root / "infra").mkdir(parents=True)
+    (root / "infra" / "main.tf").write_text('provider "aws" {\n  region = "123456789012"\n}\n\n'
+                                            'resource "aws_sqs_queue" "jobs" {}\n')
+    assert S.REGION_RX.match("123456789012")                # the premise: the shape check is what stops it
+    doc, _rep = S.draft(root)
+    assert _leaks(doc) == [] and S.check_draft(doc) == []
+    assert [g["kind"] for g in doc["groups"]] == ["account"]
+    assert _by_iac(doc)["aws_sqs_queue.jobs"]["group"] == doc["groups"][0]["id"]
+
+
+# ---------------------------------------------------------------- symlinks: never read through, never written through
+
+def test_an_input_that_is_a_symlink_is_skipped_not_read(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "x.tf").write_text('resource "aws_sqs_queue" "outside_q" {}\n')
+    root = tmp_path / "room"
+    (root / "infra").mkdir(parents=True)
+    (root / "infra" / "main.tf").write_text('resource "aws_sqs_queue" "inside_q" {}\n')
+    (root / "infra" / "link.tf").symlink_to(outside / "x.tf")
+    doc, rep = S.draft(root)
+    assert "aws_sqs_queue.inside_q" in _by_iac(doc) and "aws_sqs_queue.outside_q" not in _by_iac(doc)
+    assert {s["file"] for s in rep["skipped"]} == {"infra/link.tf"}
+
+
+def _symlinked_out(tmp_path: Path, how: str) -> tuple[Path, Path]:
+    root = _project(tmp_path, "mixed-config")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    seed = root / "docs" / "infra" / "seed"
+    if how == "file":                    # seed/draft.json -> a file outside, not there yet
+        seed.mkdir(parents=True)
+        (seed / "draft.json").symlink_to(outside / "draft.json")
+    elif how == "existing":              # seed/draft.json -> a file outside that is there (--force must not follow it)
+        seed.mkdir(parents=True)
+        (outside / "draft.json").write_text("keep")
+        (seed / "draft.json").symlink_to(outside / "draft.json")
+    elif how == "folder":                # seed -> a folder outside
+        seed.parent.mkdir(parents=True)
+        seed.symlink_to(outside, target_is_directory=True)
+    elif how == "docs":                  # docs -> a folder outside (a part on the way)
+        root.joinpath("docs").symlink_to(outside, target_is_directory=True)
+    return root, outside
+
+
+@pytest.mark.parametrize("how", ["file", "existing", "folder", "docs"])
+@pytest.mark.parametrize("force", [False, True])
+def test_the_draft_is_never_written_through_a_symlink(tmp_path, how, force):
+    root, outside = _symlinked_out(tmp_path, how)
+    before = {p.relative_to(outside).as_posix(): p.read_bytes() for p in outside.rglob("*") if p.is_file()}
+    errs: list[str] = []
+    assert S.run(root, force=force, echo=lambda s: None, err=errs.append) == 2
+    after = {p.relative_to(outside).as_posix(): p.read_bytes() for p in outside.rglob("*") if p.is_file()}
+    assert after == before
+    assert any("nothing written" in e for e in errs)
+
+
+def test_an_out_folder_outside_the_room_is_written_and_its_symlink_refused(tmp_path):
+    root = _project(tmp_path, "mixed-config")
+    out = tmp_path / "elsewhere" / "seed"
+    assert S.run(root, out_dir=out, echo=lambda s: None, err=lambda s: None) == 0
+    assert (out / "draft.json").is_file() and (out / "seed-report.json").is_file()
+    link = tmp_path / "linked"
+    link.symlink_to(tmp_path / "elsewhere", target_is_directory=True)
+    assert S.run(root, out_dir=link, force=True, echo=lambda s: None, err=lambda s: None) == 2
+
+
+# ---------------------------------------------------------------- inputs check reads, seed reads too (the round trip)
+
+READ_BY_BOTH = {
+    "infra/main.tofu": 'resource "aws_sqs_queue" "tofu_q" {}\n',
+    "k8s/app.json": json.dumps({"apiVersion": "apps/v1", "kind": "Deployment", "metadata": {"name": "json-web"},
+                                "spec": {"template": {"metadata": {"labels": {"app": "w"}}}}}),
+    "k8s/list.json": json.dumps({"apiVersion": "v1", "kind": "List", "items": [
+        {"apiVersion": "apps/v1", "kind": "StatefulSet", "metadata": {"name": "listed-db"}, "spec": {}}]}),
+    "infra/stack.json": json.dumps({"Resources": {"JsonQueue": {"Type": "AWS::SQS::Queue"}}}),
+    "cfn/stack.yaml": "Resources:   # the stack\n  CommentedTopic:\n    Type: AWS::SNS::Topic\n",
+    "tmp/extra.tf": 'resource "aws_sqs_queue" "tmp_q" {}\n',
+}
+
+
+def test_the_inputs_check_reads_are_drafted_and_compare_clean(tmp_path):
+    root = tmp_path / "both"
+    for rel, text in READ_BY_BOTH.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text)
+    doc, _rep = S.draft(root)
+    assert {"aws_sqs_queue.tofu_q", "Deployment/json-web", "StatefulSet/listed-db", "JsonQueue", "CommentedTopic",
+            "aws_sqs_queue.tmp_q"} <= set(_by_iac(doc))
+    assert S.check_draft(doc) == []
+    (root / "docs" / "infra").mkdir(parents=True)
+    (root / "docs" / "infra" / "draft.json").write_text(json.dumps(doc))
+    iac = IC.run_infra_iac(SimpleNamespace(gate=False, ignore_types=[]), root).results
+    assert [(r.target, r.message) for r in iac if r.status != "ok" and r.status != "skipped"] == []
+    assert sum(r.status == "ok" for r in iac) == 6
+
+
+def test_code_is_not_read_under_a_folder_seed_reads_only_iac_in(tmp_path):
+    root = tmp_path / "scratch"
+    (root / "tmp").mkdir(parents=True)
+    (root / "tmp" / "probe.py").write_text("import stripe\n")
+    (root / "tmp" / "extra.tf").write_text('resource "aws_sqs_queue" "tmp_q" {}\n')
+    doc, _rep = S.draft(root)
+    assert {n.get("provider") for n in doc["nodes"]} == {"aws"}

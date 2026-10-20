@@ -8,9 +8,11 @@ nor ``validate infra`` reads) and a person moves what they keep into the model's
 What it reads, in the research's order:
 
 1. Docker Compose (the environment ``local``);
-2. Terraform / OpenTofu (``*.tf`` and ``*.tf.json``: several providers in one configuration; the state is never read);
-3. Kubernetes manifests (a Helm template is reported, not rendered);
-4. CloudFormation / SAM templates and a synthesized CDK (``cdk.out/*.template.json``);
+2. Terraform / OpenTofu (``*.tf``, ``*.tofu`` and ``*.tf.json``: several providers in one configuration; the state is
+   never read);
+3. Kubernetes manifests, YAML or JSON (a Helm template is reported, not rendered);
+4. CloudFormation / SAM templates (told as check tells them, by name or by their text) and a synthesized CDK
+   (``cdk.out/*.template.json``);
 5. Cloudflare wrangler (``wrangler.toml`` / ``.json`` / ``.jsonc``: its bindings are the edges);
 6. firebase.json, vercel.json, netlify.toml, serverless.yml, fly.toml, render.yaml, app.yaml (App Engine);
 7. Bicep (Pulumi needs a stack export and is reported, not read);
@@ -19,11 +21,17 @@ What it reads, in the research's order:
 
 What it never does:
 
-- read Terraform state (``*.tfstate``), variable values (``*.tfvars``) or ``.env`` files — they hold values in plain
-  text; they are counted in the report as skipped;
+- read Terraform state (``*.tfstate``), variable values (``*.tfvars``), ``.env`` files, a Pulumi stack's settings,
+  Helm values or a secrets / credentials file — they hold values in plain text; they are counted in the report as
+  skipped;
+- read or write through a symlink: an input that is one is skipped, and the output folder and files are opened
+  O_NOFOLLOW one part at a time (a symlinked draft, report or folder is refused, --force or not);
 - write a value: an ARN, an account id, an IP address or CIDR block, a connection string, a key or token. Labels are
-  ids, resource names and the names of environment variables. Every string goes through ``model.secret_findings``
-  and the finished draft through ``model.check_file`` and ``model.merge``: a draft with any error is not written;
+  ids, resource names and the names of environment variables. Every string goes through ``value_shaped``
+  (``model.secret_findings``, and an IPv4 address inside a name) and the finished draft through ``model.check_file``
+  and ``model.merge``: a draft with any error is not written. A value-shaped id becomes ``withheld`` and a
+  value-shaped evidence file is left out, so one such name withholds itself, not the whole draft; the report's
+  ``withheldFrom`` says which input and line each came from, its path masked only where the value is;
 - disagree with ``check kind=infra``: what each IaC resource is, and the ``iac`` address a node holds, come from
   iac_tables.py — the one table check reads too — so a draft taken as it is compares clean with check
   (docs/bugs/2026-10-20-jui-infra-seed-and-check-tables-disagree.md);
@@ -36,6 +44,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import stat
 from pathlib import Path, PurePosixPath
 
 from . import code_hints as C
@@ -66,17 +75,47 @@ SERVICE_RX = re.compile(M.schema()["$defs"]["node"]["properties"]["service"]["pa
 PROVIDER_RX = re.compile(M.schema()["$defs"]["provider"]["pattern"])
 REGION_RX = re.compile(M.schema()["$defs"]["group"]["properties"]["region"]["pattern"])
 FOLDED = set(M.FOLDED_BY_DEFAULT)
+WITHHELD = "(withheld: value-shaped)"
+
+# An IPv4 address written with "_" or "-" between its parts inside a name (REDIS_10_0_0_5_URL, ip-10-0-0-5): seed
+# withholds it too, over what model.secret_findings says (the model's own rule is (A)'s; this only masks more).
+NAME_IPV4 = re.compile(r"(?<![0-9])[0-9]{1,3}([_-])[0-9]{1,3}\1[0-9]{1,3}\1[0-9]{1,3}(?![0-9])")
+
+
+def value_shaped(text: str) -> bool:
+    """A string seed never writes: a secret's shape (model.secret_findings), or an IPv4 address inside a name."""
+    return bool(M.secret_findings(text)) or bool(NAME_IPV4.search(text))
+
+
+def mask_tokens(text: str) -> str:
+    """text with each value-shaped token (between "/" and white space) replaced by "(withheld)", so a path still says
+    where it is (accounts/(withheld)/main.tf); the whole string withheld when that is not enough."""
+    out = "".join("(withheld)" if tok and not re.fullmatch(r"[/\s]+", tok) and value_shaped(tok) else tok
+                  for tok in re.split(r"([/\s]+)", text))
+    return WITHHELD if value_shaped(out) else out
 
 
 def read_text(path: Path) -> str | None:
     """The one place an input file is read (tests watch it). None: a symlink, not a regular file, over FILE_CAP, or
-    unreadable."""
+    unreadable. Opened O_NOFOLLOW (a symlink is never followed, even one swapped in after the walk saw a file) and
+    O_NONBLOCK (a FIFO never holds the open), then fstat'ed as a regular file."""
     try:
-        if path.is_symlink() or not path.is_file() or path.stat().st_size > FILE_CAP:
-            return None
-        return path.read_text(encoding="utf-8", errors="replace")
+        fd = os.open(str(path), os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except OSError:
         return None
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_size > FILE_CAP:
+            return None
+        with os.fdopen(fd, "rb") as f:
+            fd = None
+            data = f.read(FILE_CAP + 1)
+        return None if len(data) > FILE_CAP else data.decode("utf-8", errors="replace")
+    except OSError:
+        return None
+    finally:
+        if fd is not None:
+            os.close(fd)
 
 
 # ================================================================ the vocabulary of the inputs
@@ -109,20 +148,36 @@ class Draft:
         self.notes: list[str] = []
         self.inputs: dict[str, list[str]] = {}
         self.withheld = 0
+        self.withheld_from: list[dict] = []          # where each withheld string was (the report masks the path)
         self.by_key: dict[tuple, str] = {}
 
     # ---- values never leave: every string passes here
-    def safe(self, text, fallback: str | None = None):
+    def withhold(self, where: tuple | None, what: str) -> None:
+        """Count one withheld string and say where it came from, so a person can find the input (the report shows
+        the file with its value-shaped parts masked, and the line)."""
+        self.withheld += 1
+        if not where or not where[0]:
+            return
+        item = {"file": str(where[0]), "what": what}
+        if len(where) > 1 and where[1]:
+            item["line"] = where[1]
+        if item not in self.withheld_from:
+            self.withheld_from.append(item)
+
+    def safe(self, text, fallback: str | None = None, where: tuple | None = None, what: str = "a name"):
         if text is None:
             return fallback
         text = str(text)
-        if M.secret_findings(text):
-            self.withheld += 1
+        if value_shaped(text):
+            self.withhold(where, what)
             return fallback
         return text
 
-    def new_id(self, base: str) -> str:
+    def new_id(self, base: str, where: tuple | None = None) -> str:
         b = _slug(base)
+        if value_shaped(b):                  # an id is a name too: a value-shaped one is replaced, never written
+            self.withhold(where, "an id")
+            b = "withheld"
         nid, k = b, 2
         while nid in self.ids:
             nid, k = f"{b}-{k}", k + 1
@@ -134,7 +189,8 @@ class Draft:
 
     def miss(self, provider: str, file: str, what: str, why: str) -> None:
         self.unmatched.setdefault(provider or "(unknown)", []).append(
-            {"file": file, "what": self.safe(what, "(withheld: value-shaped)"), "why": why})
+            {"file": file, "what": self.safe(what, mask_tokens(str(what)), (file,), "an unmatched input's name"),
+             "why": why})
 
     def part(self, provider: str, what: str) -> None:
         d = self.not_drawn.setdefault(provider, {})
@@ -160,11 +216,11 @@ class Draft:
         return self.by_key[key]
 
     def add_group(self, key: tuple, base: str, kind: str, provider: str | None, label: str, parent: str | None,
-                  origin: str = "deployed", **extra) -> str:
+                  origin: str = "deployed", where: tuple | None = None, **extra) -> str:
         if key in self.by_key:
             return self.by_key[key]
-        gid = self.new_id(base)
-        g = {"id": gid, "kind": kind, "label": self.safe(label, gid)}
+        gid = self.new_id(base, where)
+        g = {"id": gid, "kind": kind, "label": self.safe(label, gid, where, "a label")}
         if provider:
             g["provider"] = provider
         if parent:
@@ -178,14 +234,15 @@ class Draft:
     def add_node(self, key: tuple, base: str, category: str, provider: str | None, service: str | None, label: str,
                  group: str | None, file: str, pattern: str | None = None, line: int | None = None,
                  iac: str | None = None, origin: str = "deployed", **extra) -> str:
+        where = (file, line)
         if key in self.by_key:
             nid = self.by_key[key]
             self.evidence(nid, file, pattern, line)
             if iac:
-                self.add_iac(nid, iac)
+                self.add_iac(nid, iac, where)
             return nid
-        nid = self.new_id(base)
-        n = {"id": nid, "category": category, "label": self.safe(label, nid)}
+        nid = self.new_id(base, where)
+        n = {"id": nid, "category": category, "label": self.safe(label, nid, where, "a label")}
         if provider and PROVIDER_RX.match(provider):
             n["provider"] = provider
         if service and SERVICE_RX.match(service):
@@ -193,28 +250,33 @@ class Draft:
         if group:
             n["group"] = group
         for k, v in extra.items():
-            v = self.safe(v) if isinstance(v, str) else v
+            v = self.safe(v, None, where, k) if isinstance(v, str) else v
             if v is not None:
                 n[k] = v
         self.nodes[nid] = n
         self.origin[nid] = origin
         self.by_key[key] = nid
         if iac:
-            self.add_iac(nid, iac)
+            self.add_iac(nid, iac, where)
         self.evidence(nid, file, pattern, line)
         return nid
 
-    def add_iac(self, nid: str, iac: str) -> None:
-        iac = self.safe(iac)
+    def add_iac(self, nid: str, iac: str, where: tuple | None = None) -> None:
+        iac = self.safe(iac, None, where, "an iac address")
+        if not iac or len(iac) > 300:
+            return
         lst = self.nodes[nid].setdefault("iac", [])
-        if iac and iac not in lst and len(lst) < 50 and len(iac) <= 300:
+        if iac not in lst and len(lst) < 50:
             lst.append(iac)
 
     def evidence(self, nid: str, file: str, pattern: str | None, line: int | None) -> None:
         if not REL_RX.match(file or ""):
             return
+        if value_shaped(file):               # the path itself holds a value: no evidence, said in withheldFrom
+            self.withhold((file, line), "the file's path (evidence)")
+            return
         ev = {"file": file}
-        p = self.safe(pattern)
+        p = self.safe(pattern, None, (file, line), "an evidence pattern")
         if p:
             ev["pattern"] = p[:200]
         if line:
@@ -297,14 +359,16 @@ class Draft:
                "unmatched": {p: capped(v) for p, v in sorted(self.unmatched.items())},
                "notDrawn": {p: dict(sorted(v.items())) for p, v in sorted(self.not_drawn.items())},
                "skipped": self.skipped[:LIST_CAP], "skippedCount": len(self.skipped),
-               "notes": self.notes, "withheld": self.withheld}
+               "notes": self.notes, "withheld": self.withheld,
+               "withheldFrom": self.withheld_from[:LIST_CAP], "withheldFromCount": len(self.withheld_from)}
         return _scrub(rep)
 
 
 def _scrub(value):
-    """The report holds no value either (a file name could): any string with a secret's shape is replaced."""
+    """The report holds no value either (a file name could): in any string, a value-shaped part (between "/" and
+    white space) is masked, so a path still says where to look; the whole string when that is not enough."""
     if isinstance(value, str):
-        return "(withheld: value-shaped)" if M.secret_findings(value) else value
+        return mask_tokens(value) if value_shaped(value) else value
     if isinstance(value, dict):
         return {_scrub(k): _scrub(v) for k, v in value.items()}
     if isinstance(value, list):
@@ -314,27 +378,54 @@ def _scrub(value):
 
 # ================================================================ walking the project
 
-def _walk(root: Path, exclude: list[Path], d: Draft) -> list[str]:
-    out: list[str] = []
+def _check():
+    from ..check import infra_check as IC  # noqa: PLC0415 — check's own reading of "which file is what"
+    return IC
+
+
+def _iac_only_dirs() -> set[str]:
+    """Folders seed leaves out for code (caches, scratch) but check kind=infra reads IaC in (tmp, coverage, ...): seed
+    reads only IaC there, so a draft taken as it is compares clean with check. Hidden folders neither reads."""
+    return {n for n in SKIP_DIRS if n not in _check().SKIP_DIRS and not n.startswith(".")}
+
+
+def _walk(root: Path, exclude: list[Path], d: Draft) -> list[tuple[str, bool]]:
+    """(rel, iac_only) for each file: iac_only when it is under a folder seed reads only IaC in."""
+    out: list[tuple[str, bool]] = []
     seen = 0
     ex = {str(p.resolve()) for p in exclude}
+    iac_only_dirs = _iac_only_dirs()
+    iac_only_at: dict[str, bool] = {str(root): False}
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         if str(Path(dirpath).resolve()) in ex:
             dirnames[:] = []
             continue
-        dirnames[:] = sorted(n for n in dirnames if n not in SKIP_DIRS and (not n.startswith(".") or n in KEEP_HIDDEN_DIRS)
-                             and str((Path(dirpath) / n).resolve()) not in ex)
+        here = iac_only_at.get(dirpath, False)
+        keep = []
+        for n in sorted(dirnames):
+            if n.startswith(".") and n not in KEEP_HIDDEN_DIRS or str((Path(dirpath) / n).resolve()) in ex:
+                continue
+            if n in SKIP_DIRS and n not in iac_only_dirs:
+                continue
+            iac_only_at[os.path.join(dirpath, n)] = here or n in iac_only_dirs
+            keep.append(n)
+        dirnames[:] = keep
         for fn in sorted(filenames):
             seen += 1
             if seen > WALK_CAP:
                 d.notes.append(f"more than {WALK_CAP} files: the rest of the project was not looked at")
                 return out
-            out.append(Path(dirpath, fn).relative_to(root).as_posix())
+            out.append((Path(dirpath, fn).relative_to(root).as_posix(), here))
     return out
 
 
 TFSTATE = re.compile(r"\.tfstate(\.backup|\.\d+\.backup)?$|\.tfplan$")
-ENV_VALUES = re.compile(r"^\.env(\.[\w-]+)?$")
+ENV_VALUES = re.compile(r"^\.env(\.[\w.-]+)?$|^\.envrc$|\.env$")       # .env, .env.production.local, secrets.env
+PULUMI_STACK = re.compile(r"^pulumi\.[\w.-]+\.ya?ml$")                      # Pulumi.<stack>.yaml: the stack's config
+HELM_VALUES = re.compile(r"^values([.-][\w.-]+)?\.ya?ml$")
+SECRET_NAMES = re.compile(r"^(secrets?|credentials)([.-][\w.-]+)?\.(json|ya?ml|toml)$|service[-_]?account.*\.json$|"
+                          r"adminsdk.*\.json$")
+IAC_ONLY_KINDS = {"terraform", "terraform_json", "compose", "bicep", "wrangler", "cfn", "yaml", "json"}
 COMPOSE = re.compile(r"^(docker-)?compose(\.[\w-]+)?\.ya?ml$")
 
 
@@ -348,13 +439,19 @@ def classify(rel: str) -> str | None:
         return "never:terraform variable values"
     if C.ENV_NAME_FILES.match(low):
         return "env_names"
-    if ENV_VALUES.match(low):
+    if ENV_VALUES.search(low):
         return "never:environment values (.env)"
+    if PULUMI_STACK.match(low):
+        return "never:Pulumi stack settings (may hold values)"
+    if HELM_VALUES.match(low):
+        return "never:Helm values (may hold values)"
+    if SECRET_NAMES.search(low):
+        return "never:a secrets or credentials file"
     if COMPOSE.match(low):
         return "compose"
     if low.endswith(".tf.json"):
         return "terraform_json"
-    if low.endswith(".tf"):
+    if low.endswith((".tf", ".tofu")):
         return "terraform"
     if low.endswith(".bicep"):
         return "bicep"
@@ -373,6 +470,8 @@ def classify(rel: str) -> str | None:
         return "workflow"
     if low.endswith((".yml", ".yaml")):
         return "yaml"
+    if low.endswith(".json"):
+        return "json"                                # a CloudFormation template or a Kubernetes manifest, by its text
     ext = os.path.splitext(low)[1]
     if ext in C.CODE_EXT and not low.endswith((".d.ts", ".min.js")):
         return "code"
@@ -600,7 +699,7 @@ def seed_terraform(d: Draft, files: list[tuple[str, str, str]]) -> None:
             gkind = cat[6:]
             vis = "public" if re.search(r"map_public_ip_on_launch\s*=\s*true", r.body) else None
             gid = d.add_group(("tf",) + key, f"{svc}-{r.name}", gkind, prov, f"{r.name} ({svc} {gkind})",
-                              parent or place(prov, r.body), visibility=vis)
+                              parent or place(prov, r.body), where=(r.file, r.line), visibility=vis)
         else:
             engine = _literal(r.body, "engine") or _literal(r.body, "database_version")
             ver = _literal(r.body, "engine_version")
@@ -660,7 +759,7 @@ def seed_compose(d: Draft, rel: str, text: str) -> None:
     if not isinstance(services, dict):
         d.miss("docker", rel, rel, "services is not a mapping")
         return
-    grp = d.add_group(("compose",), "compose", "host", "docker", "Docker Compose", None, origin="local")
+    grp = d.add_group(("compose",), "compose", "host", "docker", "Docker Compose", None, origin="local", where=(rel,))
     ids = {}
     for name, svc in services.items():
         svc = svc if isinstance(svc, dict) else {}
@@ -703,9 +802,9 @@ def seed_k8s(d: Draft, items: list[tuple[str, dict, str]]) -> None:
         ns = str(meta.get("namespace") or "default")
         spec = doc.get("spec") or {}
         if kind == "Namespace":
-            d.add_group(("k8s-ns", name), f"ns-{name}", "namespace", None, name, cluster)
+            d.add_group(("k8s-ns", name), f"ns-{name}", "namespace", None, name, cluster, where=(rel,))
             continue
-        nsg = d.add_group(("k8s-ns", ns), f"ns-{ns}", "namespace", None, ns, cluster)
+        nsg = d.add_group(("k8s-ns", ns), f"ns-{ns}", "namespace", None, ns, cluster, where=(rel,))
         line = _line_of(text, f"name: {name}")
         mapped = T.k8s_mapping(kind, spec)
         if kind == "Service":
@@ -803,7 +902,8 @@ def seed_cfn(d: Draft, rel: str, resources: dict, text: str, source: str = "clou
         pg = ids[parent] if parent else top
         line = _line_of(text, f"{lid}:") or _line_of(text, f'"{lid}"')
         if cat.startswith("group:"):
-            gid = d.add_group(("cfn", rel, lid), f"{svc}-{lid}", cat[6:], "aws", f"{label} ({svc})", pg)
+            gid = d.add_group(("cfn", rel, lid), f"{svc}-{lid}", cat[6:], "aws", f"{label} ({svc})", pg,
+                              where=(rel, line))
         else:
             gid = d.add_node(("cfn", rel, lid), f"{svc.split('.')[0]}-{lid}", cat, "aws", svc, f"{label} ({svc})", pg,
                              rel, lid, line, iac=T.cfn_address(lid))
@@ -1007,7 +1107,7 @@ def seed_bicep(d: Draft, rel: str, text: str) -> None:
         body = text[m.end():end]
         cat, svc = mapped
         if cat.startswith("group:"):
-            d.add_group(("bicep", rel, sym), f"{svc}-{sym}", cat[6:], "azure", f"{sym} ({svc})", top)
+            d.add_group(("bicep", rel, sym), f"{svc}-{sym}", cat[6:], "azure", f"{sym} ({svc})", top, where=(rel, line))
             continue
         nid = d.add_node(("bicep", rel, sym), f"{svc}-{sym}", cat, "azure", svc, f"{sym} ({svc})", top, rel,
                          f"resource {sym}", line, iac=T.bicep_address(sym))
@@ -1103,9 +1203,10 @@ def draft(root: Path, exclude: list[Path] | None = None) -> tuple[dict, dict]:
     code = _Code(d)
     code_n = 0
     workflow_hits: dict[str, list[tuple[str, int]]] = {}
-    for rel in files:
+    IC = _check()
+    for rel, iac_only in files:
         kind = classify(rel)
-        if kind is None:
+        if kind is None or iac_only and not (kind in IAC_ONLY_KINDS or kind.startswith("never:")):
             continue
         if kind.startswith("never:"):
             d.skipped.append({"file": rel, "why": f"{kind[6:]}: never read"})
@@ -1122,11 +1223,21 @@ def draft(root: Path, exclude: list[Path] | None = None) -> tuple[dict, dict]:
             d.skipped.append({"file": rel, "why": "a symlink, not a regular file, unreadable, or over "
                                                   f"{FILE_CAP} bytes"})
             continue
+        if kind == "json":
+            # as check reads a .json: a CloudFormation template (check's own test), else a Kubernetes manifest or List
+            if IC._is_cfn(text):
+                kind = "cfn"
+            elif '"apiVersion"' in text and '"kind"' in text:
+                kind = "k8s_json"
+            else:
+                continue
         if kind == "yaml":
-            if "AWSTemplateFormatVersion" in text or re.search(r"^Resources:\s*$", text, re.M) and "AWS::" in text:
+            if IC._is_cfn(text):
                 kind = "cfn"
             elif re.search(r"^apiVersion:", text, re.M) and re.search(r"^kind:", text, re.M):
                 kind = "k8s"
+            elif iac_only:
+                continue
             elif T.PAAS_FILES.get(rel.rsplit("/", 1)[-1], (None, ""))[1] == "appengine" and \
                     re.search(r"^runtime:", text, re.M) and not re.search(r"^apiVersion:", text, re.M):
                 kind = "appengine"
@@ -1150,6 +1261,14 @@ def draft(root: Path, exclude: list[Path] | None = None) -> tuple[dict, dict]:
                 d.miss("kubernetes", rel, rel, "not readable YAML" if _yaml() else "PyYAML is not installed")
                 continue
             k8s.extend((rel, doc, text) for doc in docs if isinstance(doc, dict) and doc.get("kind"))
+        elif kind == "k8s_json":
+            try:
+                data = json.loads(text)
+            except (ValueError, RecursionError):
+                d.miss("kubernetes", rel, rel, "not JSON")
+                continue
+            docs = data.get("items", [data]) if isinstance(data, dict) and data.get("kind") == "List" else [data]
+            k8s.extend((rel, doc, text) for doc in docs or [] if isinstance(doc, dict) and doc.get("kind"))
         elif kind == "cfn":
             doc = None
             if rel.endswith(".json"):
@@ -1246,6 +1365,76 @@ def check_draft(doc: dict) -> list[dict]:
     return out
 
 
+class NotWritten(Exception):
+    pass
+
+
+def _out_dir_fd(root: Path, out_dir: Path) -> int:
+    """An fd of the output folder, opened one part at a time with O_NOFOLLOW from the room's real root (or, for an
+    --out outside the room, from the real path of its nearest existing ancestor above it), a missing part made with
+    mkdir at that fd. A symlink
+    anywhere on the way, or a part that is not a folder: NotWritten (seed never writes through a link, which could
+    point out of the room)."""
+    out_abs = Path(os.path.normpath(Path(out_dir).absolute()))
+    try:
+        rel_parts = out_abs.relative_to(root).parts
+        base = root
+    except ValueError:
+        anc = out_abs.parent
+        while not anc.exists() and anc != anc.parent:
+            anc = anc.parent
+        base, rel_parts = anc.resolve(), out_abs.relative_to(anc).parts
+    if any(p in ("", ".", "..") for p in rel_parts):
+        raise NotWritten(f"{out_dir}: not a plain folder path")
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    fd = os.open(str(base), os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for part in rel_parts:
+            try:
+                nxt = os.open(part, flags, dir_fd=fd)
+            except FileNotFoundError:
+                try:
+                    os.mkdir(part, 0o777, dir_fd=fd)
+                    nxt = os.open(part, flags, dir_fd=fd)
+                except OSError as exc:
+                    raise NotWritten(f"{out_dir}: {part} could not be made ({exc.strerror or exc})") from exc
+            except OSError as exc:
+                raise NotWritten(f"{out_dir}: {part} is a symlink or not a folder") from exc
+            os.close(fd)
+            fd = nxt
+        out, fd = fd, None
+        return out
+    finally:
+        if fd is not None:
+            os.close(fd)
+
+
+def _write_files(root: Path, out_dir: Path, files: dict[str, str], force: bool) -> None:
+    """Write each file into the output folder, never through a symlink: the folder is opened as _out_dir_fd says, and
+    each file O_NOFOLLOW (an existing symlink, or anything not a regular file, is refused even with --force)."""
+    fd = _out_dir_fd(root, out_dir)
+    try:
+        for name in files:
+            try:
+                st = os.stat(name, dir_fd=fd, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            if not stat.S_ISREG(st.st_mode):
+                raise NotWritten(f"{out_dir / name} is a symlink or not a regular file")
+            if not force:
+                raise NotWritten(f"{out_dir} already holds a draft; pass --force to replace it")
+        for name, text in files.items():
+            flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | (os.O_TRUNC if force else os.O_EXCL)
+            try:
+                f = os.open(name, flags, 0o666, dir_fd=fd)
+            except OSError as exc:
+                raise NotWritten(f"{out_dir / name}: not written ({exc.strerror or exc})") from exc
+            with os.fdopen(f, "w", encoding="utf-8") as fh:
+                fh.write(text)
+    finally:
+        os.close(fd)
+
+
 def run(root: Path, out_dir: Path | None = None, to_stdout: bool = False, force: bool = False,
         echo=print, err=None) -> int:
     """The command: 0 written (or printed), 2 not (the room's config is bad, the draft failed its own check, or the
@@ -1274,13 +1463,13 @@ def run(root: Path, out_dir: Path | None = None, to_stdout: bool = False, force:
     if to_stdout:
         echo(text.rstrip("\n"))
     else:
-        targets = [out_dir / DRAFT_NAME, out_dir / REPORT_NAME]
-        if not force and any(t.exists() for t in targets):
-            err(f"seed infra: {out_dir} already holds a draft; pass --force to replace it")
+        try:
+            _write_files(root, out_dir, {DRAFT_NAME: text,
+                                         REPORT_NAME: json.dumps(rep, ensure_ascii=False, indent=1) + "\n"}, force)
+        except (NotWritten, OSError) as exc:
+            err(f"seed infra: {exc}; nothing written" if isinstance(exc, NotWritten) else
+                f"seed infra: {out_dir}: {exc.strerror or exc}; nothing written")
             return 2
-        out_dir.mkdir(parents=True, exist_ok=True)
-        targets[0].write_text(text, encoding="utf-8")
-        targets[1].write_text(json.dumps(rep, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     um = sum(v["count"] for v in rep["unmatched"].values())
     by_p: dict[str, int] = {}
     for n in doc["nodes"]:
