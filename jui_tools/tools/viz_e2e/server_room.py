@@ -644,6 +644,9 @@ async def run_server_room(pw, out, failures):
         def on_page(xy, rect):
             return xy is not None and rect[0] <= xy[0] <= rect[2] and rect[1] <= xy[1] <= rect[3]
 
+        def same_cam(a, b, tol=0.05):   # the controls' damping still drifts a pan's last thousandths
+            return all(abs(x - y) <= tol for x, y in zip(a["target"] + a["pos"] + [a["dist"]], b["target"] + b["pos"] + [b["dist"]]))
+
         await page.click("#sr-fit")
         await frames_settled()
         fit_cam = await page.evaluate("() => window.__dbg.srCam()")
@@ -667,7 +670,7 @@ async def run_server_room(pw, out, failures):
         mid = await drag(cx, cy, cx + 120, cy + 10)
         c1 = await page.evaluate("() => window.__dbg.srCam()")
         box_res["turn"] = {"mid": mid, "target": [c0["target"], c1["target"]], "moved": c0["pos"] != c1["pos"]}
-        check(failures, not mid["shown"] and c0["target"] == c1["target"] and c0["pos"] != c1["pos"], f"a plain drag still turns, no box: {box_res['turn']}")
+        check(failures, not mid["shown"] and all(abs(x - y) <= 0.05 for x, y in zip(c0["target"], c1["target"])) and not same_cam(c0, c1), f"a plain drag still turns, no box: {box_res['turn']}")
         mid = await drag(cx, cy, cx + 120, cy + 60, ("Shift",))
         c2 = await page.evaluate("() => window.__dbg.srCam()")
         box_res["pan"] = {"mid": mid, "target": [c1["target"], c2["target"]], "last": (await page.evaluate("() => window.__dbg.srBox()"))["last"]}
@@ -695,7 +698,7 @@ async def run_server_room(pw, out, failures):
         await frames_settled()
         c3 = await page.evaluate("() => window.__dbg.srCam()")
         box_res["fit"] = [fit_cam, c3]
-        check(failures, c3["target"] == fit_cam["target"] and abs(c3["dist"] - fit_cam["dist"]) < 0.01, f"全体を見る goes back: {box_res['fit']}")
+        check(failures, same_cam(c3, fit_cam), f"全体を見る goes back: {box_res['fit']}")
         await page.click("#sr-boxzoom")
         armed = await page.evaluate("() => window.__dbg.srBox()")
         await page.mouse.move(cx - 80, cy - 60)
@@ -709,7 +712,7 @@ async def run_server_room(pw, out, failures):
         c4 = await page.evaluate("() => window.__dbg.srCam()")
         box_res["esc"] = {"armed": armed, "drawing": drawing, "after": esc, "open": (await page.evaluate(SR))["open"], "cam": [c3, c4]}
         check(failures, armed["armed"] and drawing["drawing"] and drawing["shown"] and not esc["drawing"] and not esc["shown"] and not esc["armed"]
-              and box_res["esc"]["open"] and c4 == c3, f"Esc while drawing stops the box only: {box_res['esc']}")
+              and box_res["esc"]["open"] and same_cam(c4, c3), f"Esc while drawing stops the box only: {box_res['esc']}")
         # 範囲で寄る: one plain drag draws the box, then the button is off again
         await page.click("#sr-boxzoom")
         mid = await drag(cx - cw * 0.1, cy - ch * 0.1, cx + cw * 0.1, cy + ch * 0.1)
