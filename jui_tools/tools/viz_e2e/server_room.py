@@ -34,6 +34,7 @@ from waits import until
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
 SR = "() => window.__dbg.sr()"
 SPEC_SECRET = "postgres://orders@db-prod.internal:5432/orders"
+MARKUP = '<b>x</b><img src=x onerror="window.__srMarkup=1">' 
 #: a frame of the large model must come within this (ms; the slowest tenth of the frames, software GL)
 FRAME_P90_MAX_MS = 250
 
@@ -102,6 +103,10 @@ async def run_server_room(pw, out, failures):
     (home / ".local" / "state" / "jui-viz").mkdir(parents=True, exist_ok=True)
     jt = pathlib.Path(__file__).resolve().parents[2]
     ex = _examples(jt)
+    # a spec value with markup in it (the schema takes it: only a page's esc keeps it text — the independent check's SE1)
+    for n in ex["aws-three-tier/docs/infra/main.json"]["nodes"]:
+        if n["id"] == "db-prod":
+            n["spec"] = n["spec"] + [{"key": "note", "value": MARKUP}]
     work = home / "work"
     rooms = {
         "three": _write(work, ex, "aws-three-tier", "sr-three"),
@@ -299,7 +304,8 @@ async def run_server_room(pw, out, failures):
         await page.select_option("#sr-env", envs[0])
         await until(page, "(e) => window.__dbg.sr().env === e", "production again", arg=envs[0])
         await page.evaluate("() => window.__dbg.srSelect('db-prod')")
-        rows = await page.evaluate("() => [...document.querySelectorAll('#sr-board [data-sr-spec] tr')].map((tr) => [tr.querySelector('th').textContent, tr.querySelector('td').textContent])")
+        rows = await page.evaluate("() => [...document.querySelectorAll('#sr-board [data-sr-spec] tr')].map((tr) => [tr.querySelector('th').textContent, tr.querySelector('td').textContent, tr.querySelector('td').children.length])")
+        ran = await page.evaluate("() => !!window.__srMarkup")
         await page.click("#sr-board [data-sr-act='focus']")
         dt = await until(page, "() => { const d = window.__dbg.srDetail(); return d && d.detail && d.tags.some((t) => t.startsWith('db-prod · ')) ? d : null; }",
                          "db-prod up close: its tag in detail", timeout=10000, why="() => window.__dbg.srDetail()")
@@ -307,8 +313,9 @@ async def run_server_room(pw, out, failures):
                        "sizeTag": await page.evaluate("() => window.__dbg.srTagOf('api-prod')")}
         check(failures, res["spec"]["sizeTag"] == "api-prod · ECS Fargate · memory 2048 ×3",
               f"a size (no instance type) says which it is, and the count stays: {res['spec']['sizeTag']}")
-        check(failures, rows == [["インスタンスの種類 instance_class", "db.r6g.large"], ["ストレージ（GB） storage_gb", "200"], ["マルチ AZ multi_az", "true"]],
-              f"the chosen node's spec on the board, the known keys in words: {rows}")
+        check(failures, rows == [["インスタンスの種類 instance_class", "db.r6g.large", 0], ["ストレージ（GB） storage_gb", "200", 0], ["マルチ AZ multi_az", "true", 0],
+                                 ["note", MARKUP, 0]] and not ran,
+              f"the chosen node's spec on the board, the known keys in words, a value with markup shown as its text (no element, nothing run): {rows} {ran}")
         check(failures, res["spec"]["tag"] == ["db-prod · RDS MySQL · db.r6g.large"], f"up close a tag says the service and the main spec: {res['spec']}")
         await page.screenshot(path=str(out / "spec-light.png"))
         await page.keyboard.press("Escape")
@@ -581,8 +588,9 @@ async def run_server_room(pw, out, failures):
                          timeout=10000, why="() => { const d = window.__dbg.srDetail(); return d && [d.detail, d.inView]; }")
         await page.screenshot(path=str(out / "large-detail-light.png"))
         k = d1["inView"]
-        stay = await until(page, f"() => {{ const d = window.__dbg.srDetail({{ enter: {k - 1}, leave: {k + 5} }}); return d.inView === {k} ? d : null; }}",
-                           "past enter, within leave", timeout=5000)
+        # in: as many in view as leave is still in (<=, the independent check's SE3: each boundary at its exact count)
+        await until(page, f"() => {{ const d = window.__dbg.srDetail({{ enter: {k - 1}, leave: {k} }}); return d.inView === {k} ? d : null; }}",
+                    "past enter, at leave", timeout=5000)
         await page.evaluate("() => new Promise((r) => setTimeout(r, 300))")
         stay = await page.evaluate(f"() => window.__dbg.srDetail()")
         await page.evaluate(f"() => window.__dbg.srDetail({{ enter: {k - 1}, leave: {k - 1} }})")
@@ -590,6 +598,10 @@ async def run_server_room(pw, out, failures):
         await page.evaluate(f"() => window.__dbg.srDetail({{ enter: {k - 1}, leave: {k + 5} }})")
         await page.evaluate("() => new Promise((r) => setTimeout(r, 300))")
         still_off = await page.evaluate("() => window.__dbg.srDetail()")
+        # out: as many in view as enter goes in (<=)
+        await page.evaluate(f"() => window.__dbg.srDetail({{ enter: {k}, leave: {k + 5} }})")
+        at_enter = await until(page, "() => { const d = window.__dbg.srDetail(); return d.detail ? d : null; }", "at enter: in", timeout=5000,
+                               why="() => { const d = window.__dbg.srDetail(); return [d.detail, d.inView, d.enter]; }")
         await page.evaluate("() => window.__dbg.srDetail({ enter: 30, leave: 40 })")
         await until(page, "() => window.__dbg.srDetail().detail", "back in detail", timeout=5000)
         await page.click("#sr-fit")
@@ -598,13 +610,13 @@ async def run_server_room(pw, out, failures):
         def svc_tags(d):
             return [t for t in d["tags"] if " · " in t]
         res["detail"] = {"many": [d0["detail"], d0["inView"]], "fn": fn, "close": [d1["detail"], d1["inView"], d1["byService"][fn], d1["simple"][fn],
-                         sorted(set(d1["picks"])), svc_tags(d1)[:6]], "gap": [stay["detail"], off["detail"], still_off["detail"], k],
+                         sorted(set(d1["picks"])), svc_tags(d1)[:6]], "gap": [stay["detail"], off["detail"], still_off["detail"], at_enter["detail"], k],
                          "whole": [d2["detail"], d2["inView"], d2["shown"], sorted(set(d2["picks"])), svc_tags(d2)[:3]]}
         check(failures, not d0["detail"] and d0["inView"] > 40, f"many nodes in view: the simple shapes: {res['detail']['many']}")
         check(failures, d1["detail"] and k <= 30 and d1["shown"] == {"simple": False, "detail": True} and "pillar" in d1["picks"] and "rack" not in [d1["byService"][fn]]
               and any(t.startswith(f"{fn} · Lambda") for t in d1["tags"]), f"moved in on a Lambda: its own shape, a tag with the service: {res['detail']['close']}")
-        check(failures, stay["detail"] and not off["detail"] and not still_off["detail"],
-              f"between entering and leaving the look stays as it was: (stays in, out past leave, stays out) {res['detail']['gap']}")
+        check(failures, stay["detail"] and not off["detail"] and not still_off["detail"] and at_enter["detail"],
+              f"between entering and leaving the look stays as it was: (in at leave, out past leave, stays out, in at enter) {res['detail']['gap']}")
         check(failures, not d2["detail"] and d2["shown"] == {"simple": True, "detail": False} and not svc_tags(d2) and "pillar" not in d2["picks"],
               f"the whole view: the simple shapes and names only: {res['detail']['whole']}")
         res["lod"] = {"far": [px_far, far["labels"]], "near": [px_near, near["labels"]]}
