@@ -17,6 +17,7 @@ Routes (design: dev-guide, 05 §3):
   POST /api/attach-image  one attached image for the history's thumbnail and large view, by session and id (the same checks)
   POST /api/history-image  one picture of a robot's 応答の履歴, named by the robot and its place (the same checks)
   POST /api/history-file  one picture a session sent with SendUserFile, named by the robot, the call and the file (the same checks)
+  POST /api/reveal-file  show one file of the history in Finder (open -R): a SendUserFile file or an attachment, named as above (the same checks)
   POST /api/data-docs  a JsonUI room's API and DB specifications for its data server, named by the room (the same checks)
   POST /api/session/end  退勤: SIGTERM to one terminal session's claude (prompt_checks, then clockout.py's checks)
 """
@@ -740,6 +741,50 @@ def make_app(ctx: ServerContext) -> web.Application:
         return web.Response(body=data, content_type=media,
                             headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Content-Disposition": "inline"})
 
+    async def api_reveal_file(request: web.Request) -> web.Response:
+        """A file of the 応答の履歴 shown in Finder, selected in its folder's window (2.3.12, requester 10-21: 「画像以外は
+        ファイル名出してリンクっぽくして、押したらfinderでそのファイル選択してウィンドウ開く」; ticket 2026-10-21-jui-viz-hist-
+        tool-row-shows-no-image-when-closed). {"sent": {"agentId", "off", "n"}} — a file a SendUserFile call sent, the
+        path that call holds (sources/history.sent_reveal_at) — or {"attach": {"sessionId", "id", "ext"}} — a file sent
+        from this page (attachments.reveal_path); never a path. The checks of /api/prompt. `open -R <path>` (no shell,
+        an absolute path). A file no longer there is {"gone": true} with 200; not on macOS, 501."""
+        refused = prompt_checks(request, ctx)
+        if refused is not None:
+            log(f"拒否: /api/reveal-file（{refused.text.strip()}）")
+            return refused
+        body = await _capped_json(request, PROMPT_MAX_BODY)
+        if isinstance(body, web.Response):
+            return body
+        if ctx.world is None:
+            return web.Response(status=503, text="no world\n")
+        loop = asyncio.get_running_loop()
+        sent, att = body.get("sent"), body.get("attach")
+        if isinstance(sent, dict):
+            agent_id, off, n = sent.get("agentId"), sent.get("off"), sent.get("n")
+            if not isinstance(agent_id, str) or not agent_id or type(off) is not int or type(n) is not int:
+                return web.Response(status=400, text="agentId, off and n are required\n")
+            status, path = await loop.run_in_executor(None, ctx.world.history_reveal, agent_id, off, n)
+        elif isinstance(att, dict):
+            sid, fid, ext = att.get("sessionId"), att.get("id"), att.get("ext")
+            if not isinstance(sid, str) or not isinstance(fid, str) or not isinstance(ext, str):
+                return web.Response(status=400, text="sessionId, id and ext are required\n")
+            try:
+                status, path = 200, await loop.run_in_executor(None, ctx.world.attachments.reveal_path, sid, fid, ext)
+            except attachments.Refused as exc:
+                status, path = exc.status, ("gone" if exc.status == 404 else str(exc))
+        else:
+            return web.Response(status=400, text="sent or attach is required\n")
+        if status == 404 and path == "gone":
+            return web.json_response({"gone": True}, headers={"Cache-Control": "no-store"})
+        if status != 200:
+            return web.Response(status=status, text=f"{path}\n")
+        if sys.platform != "darwin":
+            return web.Response(status=501, text="Finder is macOS's\n")
+        if not os.path.isabs(path):
+            return web.Response(status=403, text="not this path\n")
+        ok = await _reveal(path)
+        return web.json_response({"ok": ok}, headers={"Cache-Control": "no-store"})
+
     async def api_history_image(request: web.Request) -> web.Response:
         """One picture of the 応答の履歴 (2.3.4): {"agentId", "off", "n"} names the robot (so its transcript) and the
         picture in it (sources/history.image_at). The same checks as /api/prompt (prompt_checks: POST, the page's own
@@ -927,6 +972,7 @@ def make_app(ctx: ServerContext) -> web.Application:
     app.router.add_route("*", "/api/attach-image", api_attach_image)
     app.router.add_route("*", "/api/history-image", api_history_image)
     app.router.add_route("*", "/api/history-file", api_history_file)
+    app.router.add_route("*", "/api/reveal-file", api_reveal_file)
     app.router.add_route("*", "/api/data-docs", api_data_docs)
     app.router.add_route("*", "/api/infra-docs", api_infra_docs)
     app.router.add_route("*", "/api/infra-icon", api_infra_icon)
@@ -1043,6 +1089,31 @@ def _clock_log(ctx: ServerContext, record: dict, response: web.Response, world=N
         if ctx.publish:
             ctx.publish()
     return response
+
+
+async def _reveal(path: str) -> bool:
+    """`open -R path`: Finder shows the file selected in its folder's window. The path is an argument (no shell) and
+    absolute (never read as an option). Our own child, waited for up to 10 s. Under the e2e (JUI_VIZ_E2E=1, a server
+    of tools/viz_e2e in a throwaway HOME) nothing is opened: the path goes to <viz home>/reveal.log for the arm to read,
+    so no Finder window comes up on the screen of whoever runs it."""
+    if os.environ.get("JUI_VIZ_E2E") == "1":
+        with open(os.path.join(paths.viz_home(), "reveal.log"), "a", encoding="utf-8") as f:
+            f.write(path + "\n")
+        return True
+    try:
+        proc = await asyncio.create_subprocess_exec(*REVEAL, path, stdin=asyncio.subprocess.DEVNULL,
+                                                    stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+    except OSError:
+        return False
+    try:
+        return await asyncio.wait_for(proc.wait(), 10) == 0
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        return False
+
+
+REVEAL = ("open", "-R")   # a test puts a stand-in here
 
 
 def _dispatch_hook(ctx: ServerContext, payload: dict) -> None:

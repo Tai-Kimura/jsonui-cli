@@ -962,6 +962,16 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .h-peer summary > .h-at { align-self: flex-end; margin-top: 4px; }   /* the time at the right end, a little apart from the body (issue #37) */
 .h-err { color: var(--warn); font-weight: 700; }
 .h-run { color: var(--info); }
+/* pictures in a tool's row, seen closed (55-history.js, 2.3.12): the first one's small thumbnail and 画像 N */
+.h-tool summary > .h-thumb-mini { flex: none; width: 36px; height: 24px; min-height: 0; padding: 0; overflow: hidden; }
+.h-tool summary > .h-thumb-mini img { width: 100%; height: 100%; max-height: none; object-fit: cover; }
+.h-tool summary > .h-thumb-mini .h-thumb-note { display: none; }
+/* a file that is no picture: its name as a link, a press shows it in Finder (55-history.js histFileLink) */
+.h-filelink { padding: 0; border: 0; background: none; color: var(--info); font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; text-align: left; }
+.h-filelink:hover { color: var(--ink); }
+.h-filelink:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.h-filelink.h-file-gone { color: var(--ink-soft); text-decoration: line-through; cursor: default; }
+.h-imgmark { flex: none; padding: 0 6px; border: 1px solid var(--info); border-radius: 3px; color: var(--info); font-size: 11px; line-height: 1.5; white-space: nowrap; }
 .h-io { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 8px; padding: 0 8px 8px; }
 .h-io-k { color: var(--ink-soft); font: 700 11px/1.9 var(--font-mono); }
 .h-peer { border-left: 3px solid var(--info); }

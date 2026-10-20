@@ -11,6 +11,7 @@ picture would log one), nothing requested outside the server. Screenshots (light
 
 from __future__ import annotations
 
+import base64
 import pathlib
 import time
 
@@ -111,7 +112,7 @@ async def run_hist_images(pw, out, failures):
         sent_dir.mkdir(exist_ok=True)
         (sent_dir / "sample.png").write_bytes(png(240, 160, (60, 160, 90)))
         (sent_dir / "notes.md").write_text("# notes\n")
-        files = [str(sent_dir / "sample.png"), str(sent_dir / "notes.md"), str(sent_dir / "gone.png")]
+        files = [str(sent_dir / "sample.png"), str(sent_dir / "notes.md"), str(sent_dir / "gone.png"), str(sent_dir / "gone.md")]
         with open(st.paths[A], "a") as f:
             f.write(json.dumps({"type": "assistant", "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "message": {
                 "id": "m-sent", "role": "assistant", "content": [{"type": "tool_use", "id": "tu-sent", "name": "SendUserFile",
@@ -127,7 +128,7 @@ async def run_hist_images(pw, out, failures):
         await page.evaluate("() => document.querySelector('[data-rb-hist] .h-sent').scrollIntoView({ block: 'center' })")
         await wait(page, f"() => {{ const g = ({SENT})(); return g && g.thumbs.length === 2 && g.thumbs[0].w > 0 && g.thumbs[1].bad; }}", timeout=15000, label="the sent thumbnails")
         sent = res["sent"] = await page.evaluate(SENT)
-        check(failures, sent["thumbs"][0]["w"] == 240 and sent["caption"] == "送った見本" and sent["files"] == ["📎 notes.md"],
+        check(failures, sent["thumbs"][0]["w"] == 240 and sent["caption"] == "送った見本" and sent["files"] == ["📎 notes.md", "📎 gone.md"],
               f"the sent picture is a thumbnail of its file, the caption under it, a file no picture by its name: {sent}")
         check(failures, sent["thumbs"][1] == {"w": 0, "src": False, "bad": True, "note": "消えました"}, f"a sent file no longer there: 消えました, no picture: {sent['thumbs'][1]}")
         await page.click("[data-rb-hist] .h-sent .h-thumb >> nth=0")
@@ -135,6 +136,65 @@ async def run_hist_images(pw, out, failures):
         res["sentLarge"] = await page.evaluate(LIGHT)
         await page.screenshot(path=str(out / "sent-large.png"))
         await page.keyboard.press("Escape")
+        await wait(page, "() => !document.querySelector('.h-light')", label="the sent picture closed")
+
+        # ---- a closed tool row with a picture in its OUT (2.3.12, requester 10-21: 「閉じてる時でも画像があるってわかるように」;
+        # ticket 2026-10-21-jui-viz-hist-tool-row-shows-no-image-when-closed): its head shows the first picture's small
+        # thumbnail and 画像 N, read while the row stays closed; a press on it opens the large view, the row stays closed;
+        # a press on the row's name opens the row; each picture once in the large view's count; a row with no picture
+        # shows nothing; SendUserFile's row closed shows its pictures' count too
+        pic3 = png(180, 120, (200, 160, 40))
+        with open(st.paths[A], "a") as f:
+            f.write(json.dumps({"type": "assistant", "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "message": {
+                "id": "m-read", "role": "assistant", "content": [{"type": "tool_use", "id": "tu-read", "name": "Read", "input": {"file_path": "/work/shot.png"}}]}}) + "\n")
+            f.write(json.dumps({"type": "user", "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "message": {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "tu-read", "content": [{"type": "image", "source": {"type": "base64", "media_type": "image/png",
+                                                                                                        "data": base64.b64encode(pic3).decode()}}]}]}}) + "\n")
+        ROW = """(name) => { const d = [...document.querySelectorAll('[data-rb-hist] .h-tool')].find((x) => x.querySelector('summary .h-tname').textContent === name);
+          if (!d) return null; const s = d.querySelector('summary'), mini = s.querySelector('.h-thumb-mini'), img = mini && mini.querySelector('img');
+          return { open: d.open, mark: (s.querySelector('.h-imgmark') || {}).textContent || null, mini: !!mini, w: img ? img.naturalWidth : 0 }; }"""
+        await wait(page, f"() => !!({ROW})('Read')", timeout=20000, label="the Read row")
+        await page.evaluate("() => [...document.querySelectorAll('[data-rb-hist] .h-tool')].find((x) => x.querySelector('summary .h-tname').textContent === 'Read').scrollIntoView({ block: 'center' })")
+        await wait(page, f"() => {{ const r = ({ROW})('Read'); return r && r.w > 0; }}", timeout=15000, label="the closed row's small thumbnail read")
+        r = res["readClosed"] = await page.evaluate(ROW, "Read")
+        check(failures, r == {"open": False, "mark": "画像 1", "mini": True, "w": 180}, f"a closed Read row with a picture: its thumbnail and 画像 1, still closed: {r}")
+        plain = res["bashClosed"] = await page.evaluate(ROW, "Bash")
+        check(failures, plain and plain["mark"] is None and not plain["mini"], f"a row with no picture shows no mark: {plain}")
+        await page.click("[data-rb-hist] .h-tool summary .h-thumb-mini >> nth=-1")
+        await wait(page, "() => { const d = document.querySelector('.h-light'); return !!d && d.querySelector('img').naturalWidth === 180; }", label="the closed row's picture large")
+        lv = res["readLarge"] = await page.evaluate(LIGHT)
+        keys = await page.evaluate("() => new Set([...document.querySelectorAll('[data-rb-hist] .h-thumb')].map((b) => b.dataset.hImg)).size")
+        after = await page.evaluate(ROW, "Read")
+        check(failures, lv and lv["w"] == 180 and lv["count"].endswith(f"/ {keys}") and not after["open"],
+              f"the thumbnail opens the large view (each picture once: {keys}), the row stays closed: {lv} {after}")
+        await page.keyboard.press("Escape")
+        await wait(page, "() => !document.querySelector('.h-light')", label="closed")
+        await page.evaluate("() => [...document.querySelectorAll('[data-rb-hist] .h-tool')].find((x) => x.querySelector('summary .h-tname').textContent === 'Read').querySelector('summary .h-tname').click()")
+        await wait(page, f"() => {{ const r = ({ROW})('Read'); return r && r.open; }}", label="the row opens from its name")
+        opened = await page.evaluate("() => [...document.querySelectorAll('[data-rb-hist] .h-tool')].find((x) => x.querySelector('summary .h-tname').textContent === 'Read').querySelectorAll('.h-io .h-thumb').length")
+        check(failures, opened == 1, f"opened, the row shows its picture in the OUT: {opened}")
+        await page.evaluate("() => { const d = [...document.querySelectorAll('[data-rb-hist] .h-tool')].find((x) => x.querySelector('summary .h-tname').textContent === 'SendUserFile'); d.open = false; }")
+        sent_closed = res["sentClosed"] = await page.evaluate(ROW, "SendUserFile")
+        file_mark = await page.evaluate("() => { const d = [...document.querySelectorAll('[data-rb-hist] .h-tool')].find((x) => x.querySelector('summary .h-tname').textContent === 'SendUserFile'); return (d.querySelector('summary .h-filemark') || {}).textContent || null; }")
+        check(failures, sent_closed and sent_closed["mark"] == "画像 2" and sent_closed["mini"] and file_mark == "ファイル 2",
+              f"SendUserFile's row closed: its thumbnail, 画像 2 and ファイル 2: {sent_closed} {file_mark!r}")
+        # ---- a file that is no picture: its name a link, a press shows it in Finder (2.3.12, requester 10-21: 「画像以外はファイル名出して
+        # リンクっぽくして、押したらfinderでそのファイル選択してウィンドウ開く」). The e2e's server writes the path it would show to
+        # <viz home>/reveal.log instead of running open -R (no Finder on the screen); a file that is gone says so
+        await page.evaluate("() => { const d = [...document.querySelectorAll('[data-rb-hist] .h-tool')].find((x) => x.querySelector('summary .h-tname').textContent === 'SendUserFile'); d.open = true; d.scrollIntoView({ block: 'center' }); }")
+        reveal_log = pathlib.Path(st.home) / ".local" / "state" / "jui-viz" / "reveal.log"
+        await page.click("[data-rb-hist] .h-sent .h-filelink >> text=notes.md")
+        for _ in range(50):
+            if reveal_log.exists() and reveal_log.read_text().strip():
+                break
+            await page.wait_for_timeout(100)
+        shown = res["revealed"] = reveal_log.read_text().splitlines() if reveal_log.exists() else []
+        check(failures, shown == [str(sent_dir / "notes.md")], f"a press on notes.md shows that file (the path the call holds): {shown}")
+        await page.click("[data-rb-hist] .h-sent .h-filelink >> text=gone.md")
+        await wait(page, "() => [...document.querySelectorAll('[data-rb-hist] .h-sent .h-filelink')].some((b) => b.disabled && b.textContent === '📎 gone.md（もう無い）')", label="gone.md says it is gone")
+        check(failures, (reveal_log.read_text().splitlines() if reveal_log.exists() else []) == shown, "a file that is gone shows nothing in Finder")
+        await page.evaluate("() => [...document.querySelectorAll('[data-rb-hist] .h-tool')].find((x) => x.querySelector('summary .h-tname').textContent === 'Read').scrollIntoView({ block: 'center' })")
+        await page.screenshot(path=str(out / "closed-row-mark.png"))
         await page.close()
         for scheme in ("light", "dark"):
             ph = await st.page(f"hist-images-phone-{scheme}", **dict(PHONE, color_scheme=scheme))

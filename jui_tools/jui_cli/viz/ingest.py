@@ -1648,6 +1648,19 @@ class World:
             return sent_file(sid, cwd, given, agent_id, self._agent_paths.get(agent_id), off, n)
         return sent_file(sid, cwd, given, None, None, off, n)
 
+    def history_reveal(self, agent_id, off, n) -> tuple[int, str]:
+        """The path of one file a SendUserFile call of this robot's transcript sent, to show in Finder
+        (sources/history.sent_reveal_at): (200, path), (404, "gone"), or (status, reason)."""
+        agent = self.agents.get(agent_id) if isinstance(agent_id, str) else None
+        sent_reveal = getattr(self.history_reader, "sent_reveal", None)
+        if agent is None or sent_reveal is None:
+            return 404, "no such file"
+        sid = agent["sessionId"]
+        cwd, given = self._paths.get(sid, (None, None))
+        if agent["kind"] == "sub":
+            return sent_reveal(sid, cwd, given, agent_id, self._agent_paths.get(agent_id), off, n)
+        return sent_reveal(sid, cwd, given, None, None, off, n)
+
     # ---------------------------------------------------------------- heavy work (10-18)
 
     def poll_usage(self, at: int) -> dict:

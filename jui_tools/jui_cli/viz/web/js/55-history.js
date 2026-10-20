@@ -253,6 +253,23 @@ function histItem(item) {
     }
     if (item.error) title.push(hNode('span', 'h-err', 'エラー'));
     if (item.out === undefined) title.push(hNode('span', 'h-run', '結果待ち'));
+    // Pictures inside, seen with the row closed (2.3.12, requester 10-21: 「閉じてる時でも画像があるってわかるように」,
+    // ticket 2026-10-21-jui-viz-hist-tool-row-shows-no-image-when-closed): as the requester's own attachments show (a
+    // thumbnail that opens large), the first picture's small thumbnail and 画像 N. The thumbnail is a button: a press on
+    // it opens the large view (a button's press is its own, the row does not toggle); a press elsewhere on the row's
+    // head opens the row. It is read only when it comes into view, as every thumbnail. The other rows that hold
+    // pictures (the requester's, a channel's attachments) are never folded; a peer's message and the harness's text
+    // hold none.
+    const refs = [...(Array.isArray(item.imgs) ? item.imgs : []), ...(Array.isArray(item.sent) ? item.sent.filter((f) => f.image).map((f) => ({ sent: { off: f.off, n: f.n } })) : [])];
+    if (refs.length) {
+      const mini = histThumb(refs[0]);
+      mini.classList.add('h-thumb-mini');
+      const m = hNode('span', 'h-imgmark', `画像 ${refs.length}`); m.title = `画像 ${refs.length} 枚（行を開くと全部見える）`;
+      title.push(mini, m);
+    }
+    // and the files that are no picture (SendUserFile's), counted the same way: open the row for their names (2.3.12)
+    const files = Array.isArray(item.sent) ? item.sent.filter((f) => !f.image).length : 0;
+    if (files) { const m = hNode('span', 'h-imgmark h-filemark', `ファイル ${files}`); m.title = `ファイル ${files} 個（行を開くと名前が見えて、押すと Finder で開く）`; title.push(m); }
     // The time the tool was called (its tool_use record's), at the right end after the marks (2.3.7, requester 10-20:
     // 「このBashとかのタイトルの右端にその時の時刻表示できる？」); the description narrows first (.h-head), never the time.
     title.push(at);
@@ -273,7 +290,7 @@ function histItem(item) {
       const pics = sent.filter((f) => f.image), others = sent.filter((f) => !f.image);
       if (pics.length) { const row = hNode('div', 'h-imgs'); for (const f of pics) row.appendChild(histThumb({ sent: { off: f.off, n: f.n } })); box.appendChild(row); }
       if (typeof item.caption === 'string' && item.caption) box.appendChild(hNode('p', 'h-sent-caption', item.caption));
-      for (const f of others) box.appendChild(hNode('p', 'h-sent-file', `📎 ${f.name}`));
+      for (const f of others) { const p = hNode('p', 'h-sent-file'); p.appendChild(histFileLink({ sent: { off: f.off, n: f.n } }, f.name)); box.appendChild(p); }
       io.appendChild(box);
     }
     return histFolded('h-item h-tool', title, [io], sent.length > 0);
@@ -451,7 +468,8 @@ function histAttachMarks(lines) {
     const m = HIST_ATTACH_LINE.exec(line), li = hNode('li', 'h-attach-item');
     li.title = m[1];
     if (/^image\/(png|jpeg|gif|webp)$/.test(m[6])) li.appendChild(histThumb({ attach: { sessionId: m[2], id: m[3], ext: m[4] } }));
-    li.appendChild(hNode('span', 'h-attach-name', `📎 ${m[5]}`));
+    if (/^image\//.test(m[6])) li.appendChild(hNode('span', 'h-attach-name', `📎 ${m[5]}`));
+    else li.appendChild(histFileLink({ attach: { sessionId: m[2], id: m[3], ext: m[4] } }, m[5], 'h-attach-name'));
     li.appendChild(hNode('span', 'h-attach-meta', m[7]));
     ul.appendChild(li);
   }
@@ -795,6 +813,22 @@ function histThumbLoad(btn) {
     else { btn.classList.add('h-thumb-bad'); btn.querySelector('.h-thumb-note').textContent = g.error; }
   });
 }
+/* A file that is no picture, by its name, as a link: a press shows it in Finder, selected in its folder's window (2.3.12,
+   requester 10-21: 「画像以外はファイル名出してリンクっぽくして、押したらfinderでそのファイル選択してウィンドウ開く」). The
+   server finds the path by the same reference as a picture (a SendUserFile call's file, an attachment), never one from
+   the page (SOURCE.revealFile, POST /api/reveal-file). Gone: it says so and stays pressable no more. */
+function histFileLink(ref, name, cls = '') {
+  const b = hNode('button', `h-filelink${cls ? ` ${cls}` : ''}`, `📎 ${name}`);
+  b.type = 'button';
+  b.title = 'Finder で表示';
+  b.addEventListener('click', () => {
+    SOURCE.revealFile(HIST.id, ref).then((got) => {
+      if (got.gone) { b.disabled = true; b.classList.add('h-file-gone'); b.textContent = `📎 ${name}（もう無い）`; b.title = 'このファイルはもう無い'; }
+      else if (!got.ok) b.title = `Finder で開けなかった（${got.error || got.status}）`;
+    });
+  });
+  return b;
+}
 function histThumb(ref) {
   const b = hNode('button', 'h-thumb h-thumb-wait');
   b.type = 'button';
@@ -823,9 +857,10 @@ function histLightShow() {
 }
 function histLightOpen(btn) {
   histLightClose(false);
-  const all = HIST.node ? [...HIST.node.querySelectorAll('.h-thumb')] : [btn];
+  // each picture once: a closed tool row's head shows its first picture's thumbnail as well as the body (2.3.12)
+  const seen = new Set(), all = (HIST.node ? [...HIST.node.querySelectorAll('.h-thumb')] : [btn]).filter((b) => !seen.has(b.dataset.hImg) && seen.add(b.dataset.hImg));
   LIGHT.list = all.map((b) => b._ref);
-  LIGHT.k = Math.max(0, all.indexOf(btn));
+  LIGHT.k = Math.max(0, all.findIndex((b) => b.dataset.hImg === btn.dataset.hImg));
   LIGHT.opener = btn.dataset.hImg;
   const el = hNode('div', 'h-light');
   const box = hNode('div', 'h-light-box');

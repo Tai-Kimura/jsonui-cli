@@ -391,12 +391,10 @@ def _sent_media(path: str) -> str | None:
     return SENT_IMAGE_EXT.get(ext)
 
 
-def sent_file_at(fd: int, off, n) -> tuple[int, object]:
-    """The n-th file a SendUserFile call in the assistant record at byte off sent (ticket 2026-10-20-jui-viz-history-
-    senduserfile-image-no-thumb; the transcript holds only its path: measured 10-20, 11 of 11 files). Read from disk,
-    only that path: none with a ".." part, the last part no symlink (O_NOFOLLOW), a relative one from the record's cwd;
-    a regular file of at most SENT_FILE_MAX whose name and first bytes are both a picture's (no SVG).
-    (200, (media, bytes)); (404, "gone") when it is no longer there; else (status, reason)."""
+def _sent_path(fd: int, off, n) -> tuple[int, str]:
+    """The n-th path a SendUserFile call in the assistant record at byte off names, resolved as it is read: none with a
+    ".." part, a relative one from the record's cwd. (200, path), else (status, reason). The one place this rule is
+    (sent_file_at reads the picture, sent_reveal_at shows the file in Finder)."""
     if not isinstance(n, int) or isinstance(n, bool) or n < 0:
         return 404, "no such file"
     status, rec = _line_at(fd, off, SENT_LINE_MAX)
@@ -411,9 +409,6 @@ def sent_file_at(fd: int, off, n) -> tuple[int, object]:
     if n >= len(files):
         return 404, "no such file"
     path = files[n]
-    media = _sent_media(path)
-    if media is None:
-        return 415, "not a picture"
     if ".." in Path(path).parts:
         return 403, "not this path"
     if not os.path.isabs(path):
@@ -421,6 +416,39 @@ def sent_file_at(fd: int, off, n) -> tuple[int, object]:
         if not isinstance(cwd, str) or not os.path.isabs(cwd):
             return 404, "no such file"
         path = os.path.join(cwd, path)
+    return 200, path
+
+
+def sent_reveal_at(fd: int, off, n) -> tuple[int, str]:
+    """The path of the n-th file a SendUserFile call sent, to show in Finder (2.3.12, requester 10-21: 「画像以外はファイル
+    名出してリンクっぽくして、押したらfinderでそのファイル選択してウィンドウ開く」): the same path as sent_file_at reads,
+    any kind of file, a regular file only and not a symlink last (lstat). (200, path), (404, "gone"), or (status, reason)."""
+    status, path = _sent_path(fd, off, n)
+    if status != 200:
+        return status, path
+    try:
+        st = os.lstat(path)
+    except FileNotFoundError:
+        return 404, "gone"
+    except OSError:
+        return 403, "not a file to show"
+    if not stat.S_ISREG(st.st_mode):
+        return 403, "not a file to show"           # a symlink, a folder, a device
+    return 200, path
+
+
+def sent_file_at(fd: int, off, n) -> tuple[int, object]:
+    """The n-th file a SendUserFile call in the assistant record at byte off sent (ticket 2026-10-20-jui-viz-history-
+    senduserfile-image-no-thumb; the transcript holds only its path: measured 10-20, 11 of 11 files). Read from disk,
+    only that path: none with a ".." part, the last part no symlink (O_NOFOLLOW), a relative one from the record's cwd;
+    a regular file of at most SENT_FILE_MAX whose name and first bytes are both a picture's (no SVG).
+    (200, (media, bytes)); (404, "gone") when it is no longer there; else (status, reason)."""
+    status, path = _sent_path(fd, off, n)
+    if status != 200:
+        return status, path
+    media = _sent_media(path)
+    if media is None:
+        return 415, "not a picture"
     try:
         out = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except FileNotFoundError:
@@ -639,6 +667,20 @@ def reader(projects: Path) -> Callable[..., dict | None]:
                 os.close(fd)
         return 404, "no transcript"
 
+    def sent_reveal(session_id: str, cwd: str | None, given: str | None, agent_id: str | None, agent_given: str | None,
+                    off, n) -> tuple[int, str]:
+        """The path of one file a SendUserFile call of the same transcript sent, to show in Finder (sent_reveal_at)."""
+        for path in paths(session_id, cwd, given, agent_id, agent_given):
+            fd = safe_open(projects, path)
+            if fd is None:
+                continue
+            try:
+                return sent_reveal_at(fd, off, n)
+            finally:
+                os.close(fd)
+        return 404, "no transcript"
+
     read.image = image
     read.sent_file = sent_file
+    read.sent_reveal = sent_reveal
     return read

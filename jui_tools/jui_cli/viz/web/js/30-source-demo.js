@@ -715,6 +715,7 @@ const SOURCE = {
   historyImage() { return Promise.resolve({ ok: false, status: 0, error: 'demo' }); },
   historyFile() { return Promise.resolve({ ok: false, status: 0, error: 'demo' }); },
   attachImage() { return Promise.resolve({ ok: false, status: 0, error: 'demo' }); },
+  revealFile() { return Promise.resolve({ ok: false, status: 0, error: 'デモでは開かない' }); },
   attachFile() { return Promise.resolve({ ok: false, status: 0, error: 'demo' }); },
   attachRemove() {},
   denial() { return Promise.resolve({ ok: false, status: 0, error: 'demo' }); },

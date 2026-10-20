@@ -242,6 +242,27 @@ class Attachments:
             raise Refused(415, "not an image")
         return _MEDIA_BY_IMAGE_EXT[ext], data
 
+    def reveal_path(self, sid: str, fid: str, ext: str) -> str:
+        """The path of one kept file, to show in Finder (2.3.12, requester 10-21): <viz home>/uploads/<sid>/<fid>.<ext>,
+        the session and the id from the prompt's line (never a path), an extension of EXTENSIONS or bin, a plain file
+        and not a symlink (lstat through the folder's descriptor). Refused 404 when it is gone, 400 for a malformed id."""
+        if not isinstance(fid, str) or not _ID.fullmatch(fid) or not isinstance(ext, str) or (ext not in EXTENSIONS and ext != "bin"):
+            raise Refused(400, "not an attachment")
+        try:
+            fd = self._open(sid, create=False)
+        except (OSError, Refused):
+            raise Refused(404, "gone") from None
+        try:
+            st = os.stat(f"{fid}.{ext}", dir_fd=fd, follow_symlinks=False)
+        except OSError:
+            raise Refused(404, "gone") from None
+        finally:
+            os.close(fd)
+        if not stat.S_ISREG(st.st_mode):
+            raise Refused(404, "gone")
+        base, parts = self.folder(sid)
+        return str(Path(base, *parts, f"{fid}.{ext}"))
+
     def remove(self, sid: str, fid: str) -> bool:
         """One file the person took off before sending (× on the page)."""
         record = self.files.get(sid, {}).pop(fid, None) if isinstance(fid, str) else None
