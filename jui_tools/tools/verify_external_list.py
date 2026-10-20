@@ -14,11 +14,14 @@ import re
 import sys
 from pathlib import Path
 
-KINDS = {"binding": "binding", "data": "data", "cellData": "cellData にしか無い"}
+KINDS = {"binding": "binding", "data": "data", "cellData": "cellData にしか無い", "elsewhere": "data に入らない欄にしか無い"}
+_ELSEWHERE = re.compile(r"declared only in (\S+), which never goes into the data section")
 
 
 def kind_of(finding: dict) -> str:
-    return "cellData" if "stateManagement.cellData" in finding["why"] else finding["kind"]
+    if "stateManagement.cellData" in finding["why"]:
+        return "cellData"
+    return "elsewhere" if _ELSEWHERE.search(finding["why"]) else finding["kind"]
 
 
 def is_handler(finding: dict) -> bool:
@@ -32,7 +35,9 @@ def where_to(finding: dict) -> str:
     section `jui g project` writes from them (layout_generator), and a screen's eventHandlers are view-local — never
     in that data, and doc validate wants them named ^on[A-Z], which an include's prefixed handler is not. A handler
     takes a callback type."""
-    moved = "（cellData から移す）" if kind_of(finding) == "cellData" else ""
+    m = _ELSEWHERE.search(finding["why"])
+    moved = ("（cellData から移す）" if kind_of(finding) == "cellData"
+             else f"（{m.group(1)} の宣言は残してよい）" if m else "")
     if is_handler(finding):
         return f'stateManagement.uiVariables（型 "(() -> Void)?"）{moved}'
     return f"stateManagement.uiVariables{moved}"
@@ -87,8 +92,9 @@ def render(lane: str, summary: dict, items: list[dict], sc: dict | None = None, 
              "- 直し方: 各行の名前を「足す先」の欄に宣言する（型と説明を付ける）。Layout はそのまま。"
              "使っていない名前なら、Layout から消してもよい。",
              "- 足す先が stateManagement.uiVariables なのは、Layout の束縛が jui g project の作る data 節（uiVariables から作る）"
-             "に解決するため。画面の stateManagement.eventHandlers は data 節に入らず、名前も ^on[A-Z] でないと doc validate が"
-             " ERROR にする（include の接頭つきの手続きは当たらない）。vars・methods・eventHandlers に既に書いた名前も、照合は宣言と数える。", ""]
+             "に解決するため。依頼者の決め（10-21 02:53「ビューで使わない値はdataに入っちゃダメよ」）で、data 節に入らない欄"
+             "（dataFlow.viewModel の vars・methods、stateManagement.eventHandlers）にしか無い名前は宣言と数えない。そこにある宣言は"
+             "残したまま、uiVariables にも宣言すればよい。", ""]
     if sc is not None:
         t = sc["types"]
         lines += ["## 数えた範囲", "",

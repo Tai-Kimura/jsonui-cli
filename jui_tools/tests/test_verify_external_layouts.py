@@ -81,7 +81,7 @@ TREE = {"type": "View", "id": "root", "child": [
 
 
 def test_a_layout_its_spec_declares_has_no_finding(project):
-    _screen(project, TREE, vars_=["titleText"], handlers=["onSaveTap"])
+    _screen(project, TREE, ui=["titleText", "onSaveTap"])
     rc, out, s = _verify(project, "--fail-on-diff")
     assert rc == 0, out
     assert "verified 0 of 1 screen(s)" in out and "checked against the spec's declarations: 1 of 1" in out
@@ -89,7 +89,7 @@ def test_a_layout_its_spec_declares_has_no_finding(project):
 
 
 def test_a_binding_and_a_data_entry_the_spec_does_not_declare(project):
-    _screen(project, TREE, vars_=[], handlers=["onSaveTap"])
+    _screen(project, TREE, ui=["onSaveTap"])
     rc, out, s = _verify(project)
     assert rc == 0, out                                          # a WARNING by default
     assert "1 finding(s)" in out and "binding `titleText`" in out and "not declared by the spec" in out
@@ -107,23 +107,32 @@ def test_a_data_entry_alone(project):
         {"kind": "data", "name": "unusedFlag", "why": "in its data section (Bool), not declared by the spec"}]
 
 
-def test_each_way_of_declaring_counts(project):
+def test_only_what_goes_into_the_data_section_declares(project):
+    """The requester's ruling (「ビューで使わない値はdataに入っちゃダメよ」): the ui variables and what displayLogic
+    generates declare; a view model's vars and methods and the event handlers never go into data and do not."""
     tree = {"type": "View", "id": "root", "child": [
-        {"type": "Label", "id": "a", "text": "@{fromVar}"}, {"type": "Label", "id": "b", "text": "@{fromUi}"},
-        {"type": "Button", "id": "c", "onClick": "@{fromMethod}"}, {"type": "Button", "id": "d", "onClick": "@{fromHandler}"}]}
-    _screen(project, tree, vars_=["fromVar"], ui=["fromUi"], methods=["fromMethod"], handlers=["fromHandler"])
+        {"type": "Label", "id": "a", "text": "@{fromUi}"}, {"type": "Label", "id": "shown", "visibility": "@{shownVisibility}"},
+        {"type": "Label", "id": "b", "text": "@{fromVar}"}, {"type": "Button", "id": "c", "onClick": "@{fromMethod}"},
+        {"type": "Button", "id": "d", "onClick": "@{onFromHandler}"}]}
+    _screen(project, tree, vars_=["fromVar"], ui=["fromUi"], methods=["fromMethod"], handlers=["onFromHandler"],
+            displayLogic=[{"condition": "x", "effects": [{"element": "shown", "state": "hidden"}]}])
     rc, out, s = _verify(project, "--fail-on-diff", config={"verify": {"external": "gate"}})
-    assert rc == 0 and s["externalFindings"] == {}, out
+    got = {f["name"]: f["why"] for f in s["externalFindings"]["home.spec"]}
+    assert set(got) == {"fromVar", "fromMethod", "onFromHandler"} and rc == 1, out
+    assert "declared only in dataFlow.viewModel.vars, which never goes into the data section" in got["fromVar"]
+    assert "declared only in dataFlow.viewModel.methods" in got["fromMethod"]
+    assert "declared only in stateManagement.eventHandlers" in got["onFromHandler"]
+    assert all(w.endswith("declare it in stateManagement.uiVariables") for w in got.values())
 
 
 def test_an_include_with_an_id_is_the_including_screens_to_declare(project):
     _layout(project, "common/pager", {"type": "View", "id": "pager_root", "partial": True, "child": [
         {"type": "Label", "id": "summary", "text": "@{summaryText}"}]})
     tree = {"type": "View", "id": "root", "child": [{"id": "pager", "include": "common/pager"}]}
-    _screen(project, tree, vars_=["summaryText"])               # the partial's own spelling: not the including one
+    _screen(project, tree, ui=["summaryText"])               # the partial's own spelling: not the including one
     rc, out, s = _verify(project)
     assert [f["name"] for f in s["externalFindings"]["home.spec"]] == ["pagerSummaryText"], out
-    _screen(project, tree, vars_=["pagerSummaryText"])
+    _screen(project, tree, ui=["pagerSummaryText"])
     rc, out, s = _verify(project)
     assert s["externalFindings"] == {}, out
 
@@ -154,7 +163,7 @@ def test_an_unresolved_include_is_said_not_checked(project):
 
 
 def test_the_gate_is_the_configs(project):
-    _screen(project, TREE, vars_=[], handlers=["onSaveTap"])
+    _screen(project, TREE, ui=["onSaveTap"])
     rc, out, _ = _verify(project, "--fail-on-diff")
     assert rc == 0 and "reported only" in out                    # warn by default, even with --fail-on-diff
     rc, out, _ = _verify(project, "--fail-on-diff", config={"verify": {"external": "gate"}})
@@ -170,7 +179,7 @@ def test_an_include_cycle_is_said_not_checked_and_verify_goes_on(project):
     _layout(project, "parts/loop_b", {"type": "View", "id": "b", "partial": True, "child": [{"include": "parts/loop_a"}]})
     _screen(project, {"type": "View", "id": "root", "child": [{"include": "parts/loop_a"}]})
     _layout(project, "other", TREE)
-    _write(project / "docs" / "screens" / "json" / "other.spec.json", _spec("Other", "other", vars_=["titleText"], handlers=["onSaveTap"]))
+    _write(project / "docs" / "screens" / "json" / "other.spec.json", _spec("Other", "other", ui=["titleText", "onSaveTap"]))
     rc, out, s = _verify(project)
     assert rc == 0 and s is not None, out
     assert "include cycle" in s["externalNotChecked"]["home.spec"] and s["externalChecked"] == 1 and s["externalTotal"] == 2
@@ -236,3 +245,24 @@ def test_a_spec_written_as_the_list_says_passes_doc_validate_and_verify(project)
     _write(spec_path, spec)
     errors = [e.message for e in validator.SpecValidator().validate_file(spec_path).errors]
     assert any("Handler name must start with 'on'" in e for e in errors), errors
+
+
+def test_a_name_in_ui_variables_may_also_stay_in_vars_and_methods(project):
+    """Declared in uiVariables, it is declared — also kept in the view model's vars or methods (a lane keeps both)."""
+    tree = {"type": "View", "id": "root", "child": [
+        {"type": "Label", "id": "a", "text": "@{titleText}"}, {"type": "Button", "id": "b", "onClick": "@{onSaveTap}"}]}
+    _screen(project, tree, ui=["titleText", "onSaveTap"], vars_=["titleText"], methods=["onSaveTap"], handlers=["onSaveTap"])
+    rc, out, s = _verify(project, "--fail-on-diff", config={"verify": {"external": "gate"}})
+    assert rc == 0 and s["externalFindings"] == {}, out
+
+
+def test_the_list_says_where_a_name_outside_the_data_section_sits(project):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    import verify_external_list as L
+    tree = {"type": "View", "id": "root", "child": [
+        {"type": "Label", "id": "a", "text": "@{fromVar}"}, {"type": "Button", "id": "b", "onClick": "@{onSaveTap}"}]}
+    _screen(project, tree, vars_=["fromVar"], methods=["onSaveTap"])
+    rc, out, s = _verify(project)
+    by = {r["name"]: r for r in L.rows(s, project)}
+    assert by["fromVar"]["kind"] == "elsewhere" and by["fromVar"]["where"] == "stateManagement.uiVariables（dataFlow.viewModel.vars の宣言は残してよい）"
+    assert by["onSaveTap"]["where"] == 'stateManagement.uiVariables（型 "(() -> Void)?"）（dataFlow.viewModel.methods の宣言は残してよい）'

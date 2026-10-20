@@ -453,6 +453,11 @@ def cmd_verify(args: argparse.Namespace) -> int:
 # Decided with the plan: an include's bindings are the INCLUDING screen's to declare (its view model receives them,
 # and `jui build` writes that view model's protocol from its spec); `stateManagement.cellData`, which no part of jui
 # reads, does not declare — a name found only there is named as such.
+# The requester's ruling (ticket 2026-10-21-names-declared-outside-uivariables-are-not-in-the-generated-data,
+# 「ビューで使わない値はdataに入っちゃダメよ」): only what goes into the data section declares — the ui variables and
+# what displayLogic, a collection and a tab view generate, the data section `jui g project` writes. A view model's
+# vars and methods and the screen's event handlers are the view model's and the view's own and never go into data;
+# a name the layout binds that is only there is named with its field.
 EXTERNAL_MODES = ("warn", "gate")
 
 
@@ -461,14 +466,25 @@ def _named(group) -> set[str]:
 
 
 def _declared_names(spec_data: dict, generated: dict) -> set[str]:
-    """What a screen's spec declares a binding may name: the data section regenerating it would write, and the view
-    model's vars and methods, the ui variables and the event handlers."""
-    vm = (spec_data.get("dataFlow") or {}).get("viewModel") or {}
-    sm = spec_data.get("stateManagement") or {}
-    names = {e["name"] for e in layout_data_entries(generated) if e.get("name")}
-    for group in (vm.get("vars"), vm.get("methods"), sm.get("uiVariables"), sm.get("eventHandlers")):
-        names |= _named(group)
-    return names
+    """What a screen's spec declares a binding may name: the data section regenerating it would write (the ui
+    variables, and what displayLogic, a collection and a tab view generate)."""
+    return {e["name"] for e in layout_data_entries(generated) if e.get("name")}
+
+
+#: The spec's fields that hold names which never go into the data section, in the order a message names them.
+NOT_DATA_FIELDS = (("dataFlow", "viewModel", "vars"), ("dataFlow", "viewModel", "methods"), ("stateManagement", "eventHandlers"))
+
+
+def _declared_elsewhere(spec_data: dict) -> dict[str, str]:
+    """name -> the first field outside the data section that has it (`dataFlow.viewModel.vars` ...)."""
+    out: dict[str, str] = {}
+    for path in NOT_DATA_FIELDS:
+        node = spec_data
+        for key in path:
+            node = node.get(key) if isinstance(node, dict) else None
+        for name in sorted(_named(node)):
+            out.setdefault(name, ".".join(path))
+    return out
 
 
 def _cell_data_names(spec_data: dict) -> set[str]:
@@ -513,10 +529,9 @@ def _external_check(stem: str, spec_data: dict, screen_spec, layout_gen, layouts
         return out
     out["checked"] = True
     declared, cell_names = _declared_names(spec_data, generated), _cell_data_names(spec_data)
+    elsewhere = _declared_elsewhere(spec_data)
     # The file's own data section (includes not opened, as _diff_data_section reads it) against the same declared
-    # names as the bindings: for a hand-written layout a data entry declares a name the view model gives, so one the
-    # spec has as a view-model var or an event handler is declared (the generator writes only the ui variables' —
-    # comparing against it alone reported a consumer's declared vars and handlers, measured 10-21).
+    # names as the bindings: the data section the spec generates.
     data = {}
     for e in layout_data_entries(actual):
         if e.get("name") and e["name"] not in declared:
@@ -524,8 +539,14 @@ def _external_check(stem: str, spec_data: dict, screen_spec, layout_gen, layouts
     for name in sorted((facts.binding_roots - declared) | set(data)):
         where = " and ".join(w for w, on in (("bound in the layout", name in facts.binding_roots),
                                              (f"in its data section ({data.get(name)})", name in data)) if on)
-        why = (f"{where}; declared only under stateManagement.cellData, which jui does not read: declare it in "
-               "stateManagement.uiVariables" if _only_in_cell_data(name, cell_names) else f"{where}, not declared by the spec")
+        if name in elsewhere:
+            why = (f"{where}; declared only in {elsewhere[name]}, which never goes into the data section: declare it "
+                   "in stateManagement.uiVariables")
+        elif _only_in_cell_data(name, cell_names):
+            why = (f"{where}; declared only under stateManagement.cellData, which jui does not read: declare it in "
+                   "stateManagement.uiVariables")
+        else:
+            why = f"{where}, not declared by the spec"
         kind = "binding" if name in facts.binding_roots else "data"
         out["findings"].append({"kind": kind, "name": name, "why": why})
     return out
