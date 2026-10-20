@@ -93,3 +93,24 @@ function keyed(el, sig, build) { shown = JSON.parse(sig); }
     before, after = got
     assert before[4:] == [["qa", "qp", "qs"], ["da", "dp"]], "the control: all of them before"
     assert after[4:] == [["qp"], ["dp"]], "off: the answered ones; a waiting card is never left out"
+
+
+def test_a_cross_takes_off_its_own_card_only_not_the_others_of_its_kind():
+    stubs = """
+const HIST = { tab: 'history', compose: { _for: 'm1' } };
+const SESSION_OF = { m1: 's' };
+const NAMES = { rev: 0 }, DEN = { asking: null };
+const Q_SHOW_MS = 30000, DEN_SHOW_MS = 60000, NOW = Date.now();
+const latestModel = { pending: [] };
+const QUESTIONS = [{ id: 'q1', who: 'm1', status: 'answered', doneAt: NOW }, { id: 'q2', who: 'm1', status: 'answered', doneAt: NOW }];
+const DENIALS = [{ id: 'd1', who: 'm1', status: 'dismissed', doneAt: NOW }, { id: 'd2', who: 'm1', status: 'sent', doneAt: NOW }];
+let shown = null;
+function histCardsBox() { return { hidden: false }; }
+const permSig = () => '', questionsSig = (x) => x.map((q) => q.id), denialsSig = (x) => x.map((d) => d.id);
+function keyed(el, sig, build) { shown = JSON.parse(sig); }
+"""
+    parts = _pref_parts() + [stubs, _cut("55-history.js", "HIST_OFF_PREF"), _cut("55-history.js", "HIST_OFF"),
+                             _cut("55-history.js", "histOff"), _cut("55-history.js", "histCardsPaint")]
+    got = _node(parts, "(() => { histCardsPaint(); const before = shown; histOff('q:q1'); histOff('d:d2'); return [before, shown]; })()")
+    assert got[0][4:] == [["q1", "q2"], ["d1", "d2"]], "the control: both of each kind before"
+    assert got[1][4:] == [["q2"], ["d1"]], "one × takes off that card only; the other answered card of its kind stays"

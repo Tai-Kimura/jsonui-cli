@@ -12,9 +12,9 @@ are its main robot's, the question and a second permission are a subagent's (the
   * the 今の様子 tab shows no cards box;
   * the stopped call's 実行してよいと伝える… opens its confirmation in the history's card only, not the panel's;
   * そのまま closes it everywhere.
-  * × (ticket 2026-10-21-jui-viz-hist-answered-card-dismiss-and-expand): no card waiting on an answer has it, the answered
-    question and the closed stopped call have it in the history's cards only; pressed, the card leaves the history's
-    cards while the panel still shows it, and a reload keeps it gone (the panel's card still there: the control);
+  * × (ticket 2026-10-21-jui-viz-hist-answered-card-dismiss-and-expand): no card waiting on an answer has it, the two
+    answered questions and the two closed stopped calls have it in the history's cards only; one pressed per kind, that
+    card leaves the history's cards, the other of its kind stays, the panel still shows both, and a reload keeps it gone;
   * the history keeps its 120 px above the cards, not under them;
   * 下を広げる, on the history tab only: with the four cards (more than the card's height) the cards box grows, the
     prompt box's 送信 stays inside the card and a strip of the history above them; with the two answered cards (the
@@ -39,6 +39,9 @@ CWD = "/work/hist-cards"
 SUB = "agent-hc-sub-1"
 Q = {"questions": [{"question": "どちらにしますか", "header": "選択", "multiSelect": False,
                     "options": [{"label": "左", "description": "左にする"}, {"label": "右", "description": "右にする"}]}]}
+# a second question and a second stopped call: one × takes off its own card, not the other of its kind
+Q2 = {"questions": [{"question": "どれにしますか", "header": "向き", "multiSelect": False,
+                     "options": [{"label": "上", "description": "上にする"}, {"label": "下", "description": "下にする"}]}]}
 CARDS = """() => { const c = document.querySelector('#rb [data-h-cards]'); if (!c) return null;
   const hist = document.querySelector('[data-rb-hist]'), box = document.querySelector('[data-h-compose]');
   return { shown: !c.hidden, histHeight: Math.round(hist.getBoundingClientRect().height), perm: c.querySelectorAll('.tbd-perm').length, question: c.querySelectorAll('[data-qcard]').length,
@@ -57,6 +60,7 @@ LOW = """() => { const rb = document.getElementById('rb').getBoundingClientRect(
 OFF = """() => ({ hist: [...document.querySelectorAll('#rb [data-h-cards] [data-h-off]')].map((b) => b.dataset.hOff),
   elsewhere: document.querySelectorAll('[data-h-off]').length - document.querySelectorAll('#rb [data-h-cards] [data-h-off]').length,
   histQ: document.querySelectorAll('#rb [data-h-cards] [data-qcard]').length, histD: document.querySelectorAll('#rb [data-h-cards] [data-dcard]').length,
+  histText: [...document.querySelectorAll('#rb [data-h-cards] [data-qcard] .qtext, #rb [data-h-cards] [data-dcard] .dwhat code')].map((e) => e.textContent),
   panelQ: document.querySelectorAll('#questions [data-qcard]').length, panelD: document.querySelectorAll('#denied [data-dcard]').length })"""
 DUP_IDS = "() => { const ids = [...document.querySelectorAll('[id]')].map((e) => e.id); return ids.filter((x, i) => ids.indexOf(x) !== i); }"
 # a radio group's name in the history's cards that the panel's (or the board's) cards also use: the two would be one group
@@ -158,10 +162,12 @@ async def run_hist_cards(pw, out, failures):
         qc = hook(ask_pre, "--ask")
         hook(body(hook_event_name="PermissionDenied", permission_mode="auto", tool_name="Bash", tool_input={"command": "git push --force"},
                   tool_use_id="den-1", reason="[Irreversible Remote Destruction]"))
+        hook(body(hook_event_name="PermissionDenied", permission_mode="auto", tool_name="Bash", tool_input={"command": "rm -rf build"},
+                  tool_use_id="den-2", reason="[Destructive Delete]"))
         await page.evaluate("(id) => window.__dbg.openRobot(id)", main)
         await wait(page, "() => !document.getElementById('rb').hidden", label="the card")
         await page.click('#rb [data-rb-tab="history"]')
-        await wait(page, f"() => {{ const c = ({CARDS})(); return c && c.perm === 2 && c.question === 1 && c.denied === 1 && !!c.left.trim(); }}", label="the three cards on the history tab, the question's time left")
+        await wait(page, f"() => {{ const c = ({CARDS})(); return c && c.perm === 2 && c.question === 1 && c.denied === 2 && !!c.left.trim(); }}", label="the cards on the history tab, the question's time left")
         await wait(page, "() => !!document.querySelector('#rb [data-h-cards] [data-dask]')", label="the stopped call's button (its session has a channel)")
         c = res["cards"] = await page.evaluate(CARDS)
         check(failures, c["shown"] and c["outside"] and c["beforeBox"] and c["histHeight"] >= 100,
@@ -198,12 +204,25 @@ async def run_hist_cards(pw, out, failures):
         await page.click('#rb [data-rb-tab="history"]')
         await wait(page, f"() => {{ const c = ({CARDS})(); return c && c.shown && c.perm === 2; }}", label="the cards again on the history tab")
         # the question, answered in the history
-        await page.click("#rb [data-h-cards] [data-qcard] label.qopt >> nth=1")
-        await page.click("#rb [data-h-cards] [data-qsend]")
+        q1 = "#rb [data-h-cards] [data-qcard]:has-text('どちらにしますか')"
+        await page.click(f"{q1} label.qopt >> nth=1")
+        await page.click(f"{q1} [data-qsend]")
         o, _ = qc.communicate(timeout=30)
         got = res["askHook"] = json.loads(o) if o else None
         ans = (((got or {}).get("hookSpecificOutput") or {}).get("updatedInput") or {}).get("answers")
         check(failures, ans == {"どちらにしますか": "右"}, f"--ask got the history's answer: {got}")
+        # the second question only now: a session's next question ends its open ones (questions.session_stopped)
+        ask_pre2 = body(hook_event_name="PreToolUse", tool_name="AskUserQuestion", tool_use_id="ask-2", tool_input=Q2)
+        hook(ask_pre2)
+        qc2 = hook(ask_pre2, "--ask")
+        q2 = "#rb [data-h-cards] [data-qcard]:has-text('どれにしますか')"
+        await wait(page, "() => !!document.querySelector('#rb [data-h-cards] [data-qcard].q-open [data-qsend]')", label="the second question, open")
+        await page.click(f"{q2} label.qopt >> nth=0")
+        await page.click(f"{q2} [data-qsend]")
+        o, _ = qc2.communicate(timeout=30)
+        got = res["askHook2"] = json.loads(o) if o else None
+        ans = (((got or {}).get("hookSpecificOutput") or {}).get("updatedInput") or {}).get("answers")
+        check(failures, ans == {"どれにしますか": "上"}, f"the second --ask got its answer: {got}")
         # the subagent's permission first, denied with its own reason in the second card: the reason is the pressed
         # card's, not the first reason box on the page (the independent check's X3)
         sub = "#rb [data-h-cards] .tbd-perm:has-text('echo sub-perm')"
@@ -226,17 +245,26 @@ async def run_hist_cards(pw, out, failures):
         await wait(page, "() => !document.querySelector('#tasks [data-do]') && !document.querySelector('#questions [data-qsend]:not([disabled])')", timeout=15000,
                    label="no button left in the panel to answer twice")
         # the stopped call: its confirmation opens in the history's card only
-        await page.click("#rb [data-h-cards] [data-dask]")
+        d1 = "#rb [data-h-cards] [data-dcard]:has-text('git push')"
+        await page.click(f"{d1} [data-dask]")
         conf = res["deniedConfirm"] = await page.evaluate("() => ({ here: !!document.querySelector('#rb [data-h-cards] [data-dgo]'), panel: !!document.querySelector('#denied [data-dgo]') })")
         check(failures, conf == {"here": True, "panel": False}, f"the stopped call's confirmation in the history's card only: {conf}")
-        await page.click("#rb [data-h-cards] [data-dback]")
-        await page.click("#rb [data-h-cards] [data-ddismiss]")
-        await wait(page, "() => { const d = document.querySelector('#denied [data-dcard]'); return !d || d.textContent.includes('そのままにした'); }", label="そのまま everywhere")
+        await page.click(f"{d1} [data-dback]")
+        await page.click(f"{d1} [data-ddismiss]")
+        await page.click("#rb [data-h-cards] [data-dcard]:has-text('rm -rf build') [data-ddismiss]")
+        await wait(page, "() => { const d = [...document.querySelectorAll('#denied [data-dcard]')]; return d.every((x) => x.textContent.includes('そのままにした')); }", label="そのまま everywhere")
         await page.screenshot(path=str(out / "answered.png"))
-        # × on the two answered cards, in the history's cards only; pressed: off there, still in the panel
-        await wait(page, "() => document.querySelectorAll('#rb [data-h-cards] [data-h-off]').length === 2", label="× on the answered question and the closed stopped call")
+        # × on the four answered cards, in the history's cards only; one pressed per kind: that card off there, the other
+        # of its kind still there, the panel keeping all
+        await wait(page, "() => document.querySelectorAll('#rb [data-h-cards] [data-h-off]').length === 4", label="× on the answered questions and the closed stopped calls")
         off = res["offAnswered"] = await page.evaluate(OFF)
-        check(failures, sorted(k[0] for k in off["hist"]) == ["d", "q"] and off["elsewhere"] == 0, f"× on the two answered cards, the history's only: {off}")
+        check(failures, sorted(k[0] for k in off["hist"]) == ["d", "d", "q", "q"] and off["elsewhere"] == 0, f"× on the four answered cards, the history's only: {off}")
+        await page.click(f"{q1} [data-h-off]")
+        await page.click(f"{d1} [data-h-off]")
+        off = res["offPressed"] = await page.evaluate(OFF)
+        check(failures, off["histQ"] == 1 and off["histD"] == 1 and sorted(off["histText"]) == ["rm -rf build", "どれにしますか"]
+              and off["panelQ"] == 2 and off["panelD"] == 2,
+              f"× takes its own card off the history's cards, the other of its kind stays, the panel keeps both: {off}")
         # 下を広げる with the two answered cards (the requester's case): all of them and 送信 at once
         lo = res["lowAnsweredBefore"] = await page.evaluate(LOW)
         await page.click("#rb [data-rb-low]")
@@ -245,20 +273,16 @@ async def run_hist_cards(pw, out, failures):
         check(failures, lo2["on"] and lo2["answeredIn"] and lo2["sendIn"] and lo2["cardsBelowHist"],
               f"下を広げる with the two answered cards: both whole and 送信 at once, the history above: {lo2}")
         await page.screenshot(path=str(out / "low-answered.png"))
-        await page.click("#rb [data-h-cards] [data-qcard] [data-h-off]")
-        await page.click("#rb [data-h-cards] [data-dcard] [data-h-off]")
-        off = res["offPressed"] = await page.evaluate(OFF)
-        check(failures, off["histQ"] == 0 and off["histD"] == 0 and off["panelQ"] == 1 and off["panelD"] == 1,
-              f"× takes the card off the history's cards, the panel keeps it: {off}")
         await page.reload()
         await ready(page)
-        await wait(page, "() => document.querySelectorAll('#denied [data-dcard]').length === 1", label="the panel's stopped call after the reload")
+        await wait(page, "() => document.querySelectorAll('#denied [data-dcard]').length === 2", label="the panel's stopped calls after the reload")
         await page.evaluate("(id) => window.__dbg.openRobot(id)", main)
         await wait(page, "() => !document.getElementById('rb').hidden", label="the card after the reload")
         await page.click('#rb [data-rb-tab="history"]')
         await page.wait_for_timeout(800)
         off = res["offReloaded"] = await page.evaluate(OFF)
-        check(failures, off["histD"] == 0 and off["panelD"] == 1, f"after a reload the stopped call stays off the history's cards (the panel's still there): {off}")
+        check(failures, off["histD"] == 1 and "rm -rf build" in off["histText"] and off["panelD"] == 2,
+              f"after a reload the stopped call taken off stays off the history's cards, the other one stays (the panel has both): {off}")
         lo = res["lowReloaded"] = await page.evaluate(LOW)
         check(failures, lo["on"] and lo["pressed"] == "true", f"下を広げる is kept over a reload: {lo}")
         await page.close()
