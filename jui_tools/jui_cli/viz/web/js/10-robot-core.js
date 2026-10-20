@@ -649,6 +649,8 @@ function heavyCauses(r) {
   return LOOK_ORDER.filter((look) => h.some((c) => HEAVY_LOOK[c] === look) && (look !== 'whistle' || r.role === 'main'));
 }
 function heavyLook(r, t) {
+  // background work: only the whistle (3+ subagents) shows, over the headset (requester 10-20: 「笛を優先」); red and blue not
+  if (r.state === 'background') return heavyCauses(r).includes('whistle') ? 'whistle' : null;
   if (!HEAVY_OK.has(r.state)) return null;
   const looks = heavyCauses(r);
   if (!looks.length) return null;
@@ -710,10 +712,12 @@ function lookUpdate(r, t, dt) {
 }
 /* The browser tests' hook (80-dbg.js, force) sets a robot's causes or its tiredness; the page never does. */
 const forced = (r, key, value) => (r.force && key in r.force ? r.force[key] : value);
-/* Background work and heavy work never show at once: the heavy looks (lookUpdate, sweat) hold only in HEAVY_OK's
-   states (typing, reading, a command), and a robot working in the background is in its own state, 'background', so the
-   headset, the notes and the loose typing win while it waits on background work; its heavy causes show again when it is
-   back at work in the foreground (2.3.5 integration, 10-20). */
+/* Background work and heavy work: the heavy looks (lookUpdate, sweat) hold in HEAVY_OK's states (typing, reading, a
+   command); a robot working in the background is in its own state, 'background', where the headset, the notes and the
+   loose typing win over the red and the blue face (2.3.5 integration, 10-20). The whistle wins over the headset
+   (requester 10-20: 「サブエージェント7対いるけど笛のアクションにならないね」, then 「笛を優先」): with 3 or more
+   subagents a main robot in the background whistles, waves and sweats, its headset and notes off; when the cause goes,
+   the headset is back. The launch whistle (2.5 s, 「ピーッ！」) shows over the headset as before, with no change. */
 /* Background work (requester, 10-19: "バックグラウンドで作業の場合はヘッドセットつけて、音符出してる状態で机の上でパソコンを
    ゆるめにいじってほしい"): a headset on the head (cups in the 裏で作業中 colour, LAMP.bg, as on the tag, the card and the
    legend), NOTE_MAX notes rising over it (still under reduced motion), and the laptop typed on loosely (poseFor
@@ -1381,7 +1385,7 @@ function updateRobot(r, t, dt) {
   soloProps(r, onCall ? null : r.solo, t);
   brkProps(r, onCall ? null : r.brk, t);
   playBubble(r, onCall ? null : r.play, t);
-  bgUpdate(r, t, r.state === 'background' && !onCall && !r.play && !r.solo && !r.brk);
+  bgUpdate(r, t, r.state === 'background' && look !== 'whistle' && !onCall && !r.play && !r.solo && !r.brk);   // the whistle takes the headset off
   r.antenna.rotation.x += ((r.tired ? 1.0 : 0) - r.antenna.rotation.x) * Math.min(1, dt * 3);
   r.root.position.y = p.rootY;
   r.hips.position.y = HIPS_Y + p.hipsY;

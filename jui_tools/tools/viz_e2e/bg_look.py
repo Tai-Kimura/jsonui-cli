@@ -13,7 +13,13 @@ wait is checked each frame and named; a value that animates is read once the rob
   - on a call (it phones the idle session, then waits on background work while it rings): no headset, no notes, the
     handset instead; the call over and still in the background: the headset and the notes back;
   - when the background work ends (a Stop without it), the headset and the notes are gone;
-  - under reduced motion the notes stand still (their places at two pose times are the same; still shown).
+  - under reduced motion the notes stand still (their places at two pose times are the same; still shown);
+  - 3 or more subagents while in the background (requester 10-20: 「笛を優先」): the whistle, its face and sweat, the
+    headset and the notes off, the card's legend says so; 2 subagents: the headset, no whistle; every cause forced:
+    the whistle on every frame for two periods, never red or blue; red and blue alone: no look, the headset; the
+    subagents gone: the headset back; back in the foreground: the heavy looks as before (the blue face);
+  - with the launch whistle (2.3.6, 2.5 s): 3 subagents in the background, 「ピーッ！」 with no headset, then 「ピッ！」;
+    fewer, 「ピーッ！」 over the headset, then the headset alone.
 
 Screenshots (light and dark): the room up close with the three side by side, and the background robot's own view.
 """
@@ -218,11 +224,91 @@ async def run_bg_look(pw, out, failures):
         c = res["afterCall"] = of(await page.evaluate(LOOK), ids[BACK])
         check(failures, c["headset"] and c["notes"] and not c["handset"], f"the call over, still in the background: the headset and the notes back: {c}")
 
+        # 3 or more subagents while in the background (requester 10-20: 「笛を優先」): the whistle, the headset and the notes
+        # off; 2: the headset as before; the cause gone: the headset back. Read from the robot (looks / bgLook).
+        LOOKS = "(i) => ({ bg: window.__dbg.bgLook().find((x) => x.id === i), look: window.__dbg.looks([i])[0] })"
+        for k in range(2):
+            hook(BACK, hook_event_name="SubagentStart", agent_id=f"agent-bg-sub-{k}", agent_type="general-purpose")
+        await wait(page, "() => window.__dbg.robots.filter((R) => R.def.kind === 'sub').length >= 2", "two subagents")
+        await settled(page, "two subagents at their desks", timeout=60000)
+        two = res["twoSubs"] = await page.evaluate(LOOKS, ids[BACK])
+        check(failures, two["bg"]["state"] == "background" and two["bg"]["headset"] and two["bg"]["notes"] and not two["look"]["whistle"] and two["look"]["look"] is None,
+              f"background, 2 subagents: the headset and the notes, no whistle: {two}")
+        hook(BACK, hook_event_name="SubagentStart", agent_id="agent-bg-sub-2", agent_type="general-purpose")
+        await wait(page, "(i) => { const L = window.__dbg.looks([i])[0], B = window.__dbg.bgLook().find((x) => x.id === i); "
+                   "return B.state === 'background' && L.look === 'whistle' && L.whistle && L.pipi && !B.headset && !B.notes.length; }",
+                   "background, 3 subagents: the whistle, the headset off", arg=ids[BACK], timeout=30000)
+        three = res["threeSubs"] = await page.evaluate(LOOKS, ids[BACK])
+        tint = three["look"]["tint"]
+        check(failures, three["look"]["sweat"] and three["look"]["face"] == "whistle" and (not tint or tint[3] < 0.02),
+              f"background, 3 subagents: the whistle's face and sweat, no red or blue: {three}")
+        # the card says so
+        await page.evaluate("(i) => window.__dbg.openRobot(i)", ids[BACK])
+        await wait(page, "() => { const el = document.querySelector('[data-rb-looks]'); return el && !el.hidden; }", "the card's legend")
+        res["legend"] = legend = await page.evaluate("() => document.querySelector('[data-rb-looks]').textContent")
+        check(failures, "裏で作業中でも、サブエージェント 3 体以上なら笛" in legend, f"the card's legend says the whistle shows in background work: {legend!r}")
+        await page.keyboard.press("Escape")
+        await wait(page, "() => !window.__dbg.focus().zoomed && !window.__dbg.focus().tween", "back from the card")
+        # with the launch whistle (2.3.6): a background Agent called, then the turn ends with background work, within its
+        # 2.5 s: 「ピーッ！」 for the launch, the headset off (3 subagents), then 「ピッ！」 goes on
+        LAUNCH = ("(i) => { const L = window.__dbg.launchLook().robots.find((x) => x.id === i), B = window.__dbg.bgLook().find((x) => x.id === i); "
+                  "return { state: B.state, headset: B.headset, launch: L.launch, whistle: L.whistle, pipi: L.pipi, pipiLong: L.pipiLong }; }")
+        call = {"description": "裏で調べる", "prompt": "調べて", "subagent_type": "general-purpose", "run_in_background": True}
+        hook(BACK, hook_event_name="UserPromptSubmit", prompt="もう一体")
+        hook(BACK, hook_event_name="PreToolUse", tool_name="Agent", tool_use_id="toolu_bg_launch1", tool_input=call)
+        hook(BACK, hook_event_name="PostToolUse", tool_name="Agent", tool_use_id="toolu_bg_launch1", tool_input=call, tool_response="ok")
+        hook(BACK, hook_event_name="Stop", background_tasks=BG_TASKS)
+        both = res["launch3"] = await until(page, f"(i) => {{ const x = ({LAUNCH})(i); return x.state === 'background' && x.launch && x.pipiLong && !x.pipi && x.whistle && !x.headset && x; }}",
+                                            "background, 3 subagents, a launch: 「ピーッ！」, no headset", arg=ids[BACK], timeout=20000, why=WHY)
+        after = res["launch3After"] = await until(page, f"(i) => {{ const x = ({LAUNCH})(i); return x.state === 'background' && !x.launch && !x.pipiLong && x.pipi && x.whistle && !x.headset && x; }}",
+                                                  "background, 3 subagents, the launch over: 「ピッ！」 goes on", arg=ids[BACK], timeout=20000, why=WHY)
+        check(failures, both and after, f"launch over the background whistle: {both} then {after}")
+
+        # red and blue never show in the background: with every cause forced, only the whistle on every frame for two
+        # periods; with red and blue alone, no look at all and the headset on
+        await page.evaluate("(i) => window.__dbg.force(i, { heavy: ['tokens', 'tool', 'subagents'] })", ids[BACK])
+        await page.evaluate("""(i) => { const W = window.__bgWhistle = { frames: 0, other: [], t0: performance.now(), done: false };
+          window.__dbg.afterFrame(() => { const L = window.__dbg.looks([i])[0]; W.frames += 1;
+            if (L.look !== 'whistle' && W.other.length < 5) W.other.push(L.look);
+            if (performance.now() - W.t0 > 2 * L.period * 1000 + 500) { W.done = true; window.__dbg.afterFrame(null); } }); }""", ids[BACK])
+        await wait(page, "() => window.__bgWhistle.done", "two periods watched", timeout=60000)
+        allw = res["allCauses"] = await page.evaluate("() => { const W = window.__bgWhistle; return { frames: W.frames, other: W.other }; }")
+        check(failures, allw["frames"] > 0 and not allw["other"], f"background with every cause: the whistle on every frame, never red or blue: {allw}")
+        await page.evaluate("(i) => window.__dbg.force(i, { heavy: ['tokens', 'tool'] })", ids[BACK])
+        await wait(page, "(i) => { const L = window.__dbg.looks([i])[0], B = window.__dbg.bgLook().find((x) => x.id === i); return L.look === null && !L.whistle && B.headset && L.eased; }",
+                   "background with red and blue causes: no look, the headset", arg=ids[BACK])
+        rb = res["redBlue"] = await page.evaluate(LOOKS, ids[BACK])
+        check(failures, rb["look"]["screen"] and abs(rb["look"]["screen"][0] - rb["look"]["screen"][2]) < 60 and rb["bg"]["headset"],
+              f"background with red and blue causes: the plain screen, the headset: {rb}")
+        await page.evaluate("(i) => window.__dbg.force(i, null)", ids[BACK])
+        # the cause gone (two subagents leave): the headset back
+        for k in range(2):
+            hook(BACK, hook_event_name="SubagentStop", agent_id=f"agent-bg-sub-{k}", agent_type="general-purpose")
+        await wait(page, "(i) => { const L = window.__dbg.looks([i])[0], B = window.__dbg.bgLook().find((x) => x.id === i); return B.state === 'background' && !L.whistle && B.headset && B.notes.length > 0; }",
+                   "two subagents gone: the headset back", arg=ids[BACK], timeout=30000)
+        hook(BACK, hook_event_name="SubagentStop", agent_id="agent-bg-sub-2", agent_type="general-purpose")
+        # 2 subagents or fewer and a launch: the headset stays, the whistle and 「ピーッ！」 over it for the 2.5 s (2.3.6 as it was)
+        hook(BACK, hook_event_name="UserPromptSubmit", prompt="もう一体")
+        hook(BACK, hook_event_name="PreToolUse", tool_name="Agent", tool_use_id="toolu_bg_launch2", tool_input=call)
+        hook(BACK, hook_event_name="PostToolUse", tool_name="Agent", tool_use_id="toolu_bg_launch2", tool_input=call, tool_response="ok")
+        hook(BACK, hook_event_name="Stop", background_tasks=BG_TASKS)
+        res["launch1"] = await until(page, f"(i) => {{ const x = ({LAUNCH})(i); return x.state === 'background' && x.launch && x.pipiLong && x.whistle && x.headset && x; }}",
+                                     "background, a launch: the headset and 「ピーッ！」", arg=ids[BACK], timeout=20000, why=WHY)
+        res["launch1After"] = await until(page, f"(i) => {{ const x = ({LAUNCH})(i); return x.state === 'background' && !x.launch && !x.whistle && !x.pipiLong && x.headset && x; }}",
+                                          "background, the launch over: the headset alone", arg=ids[BACK], timeout=20000, why=WHY)
+
         # the background work ends: off with the headset and the notes
         hook(BACK, hook_event_name="Stop")
         await wait(page, "(i) => window.__dbg.bgLook().find((x) => x.id === i).state !== 'background'", "the background work over", arg=ids[BACK])
         off = res["off"] = of(await page.evaluate(LOOK), ids[BACK])
         check(failures, not off["headset"] and not off["notes"], f"after the background work: no headset, no notes: {off}")
+        # back in the foreground: the heavy looks as before (a long tool: the blue face)
+        hook(BACK, hook_event_name="UserPromptSubmit", prompt="直して")
+        hook(BACK, hook_event_name="PreToolUse", tool_name="Edit", tool_use_id="toolu_bg_edit2", tool_input={"file_path": f"{CWD}/b.py", "old_string": "a", "new_string": "b"})
+        await page.evaluate("(i) => window.__dbg.force(i, { heavy: ['tool'] })", ids[BACK])
+        await wait(page, "(i) => { const L = window.__dbg.looks([i])[0]; return L.state === 'typing' && L.look === 'drained'; }", "foreground: the blue face again", arg=ids[BACK])
+        await page.evaluate("(i) => window.__dbg.force(i, null)", ids[BACK])
+        hook(BACK, hook_event_name="PostToolUse", tool_name="Edit", tool_use_id="toolu_bg_edit2", tool_input={"file_path": f"{CWD}/b.py"}, tool_response="ok")
 
         # reduced motion: the notes stand still (and are shown)
         quiet = await new_page(browser, watch, "bg-look-reduced", reduced_motion="reduce", **DESKTOP)

@@ -161,6 +161,7 @@ async def run_heavy_looks(pw, out, failures, Server):
                         f"{scheme}: the card's legend shows", why="() => document.querySelector('[data-rb-looks]') && document.querySelector('[data-rb-looks]').outerHTML")
             legend = r["legend"] = await page.evaluate("() => document.querySelector('[data-rb-looks]').textContent")
             check(failures, all(w_ in legend for w_ in ("赤い顔", "青い顔", "笛")), f"{scheme}: the legend names the three looks: {legend!r}")
+            check(failures, "裏で作業中でも、サブエージェント 3 体以上なら笛" in legend, f"{scheme}: the legend says the whistle shows in background work too: {legend!r}")
             await page.screenshot(path=str(out / f"card-{scheme}.png"))
 
             # the look clears when the cause ends

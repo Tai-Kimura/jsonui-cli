@@ -4,7 +4,7 @@ const $ = (id) => document.getElementById(id);
 const setHTML = (el, html) => { if (el._html !== html) { el.innerHTML = html; el._html = html; } };
 const setText = (el, text) => { if (el && el.textContent !== text) el.textContent = text; };
 /* The legend of heavy work's three looks (2.3.6), under the card's 重い作業 line. */
-const HEAVY_LEGEND = '見た目: 赤い顔＝出力が多い · 青い顔＝ツールが長く走っている · 笛＝サブエージェント 3 体以上（重なると交互）';
+const HEAVY_LEGEND = '見た目: 赤い顔＝出力が多い · 青い顔＝ツールが長く走っている · 笛＝サブエージェント 3 体以上（重なると交互） · 裏で作業中でも、サブエージェント 3 体以上なら笛（ヘッドセットを外す）';
 const STATUS_CLASS = { idle: 'st-idle', write: 'st-write', written: 'st-idle', impl: 'st-impl', verify: 'st-verify', 'impl-done': 'st-idle', paused: 'st-paused', test: 'st-test', done: 'st-complete' };
 function robotBadge(id) {
   const s = robotState[id].state;
