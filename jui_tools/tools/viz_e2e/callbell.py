@@ -225,8 +225,17 @@ async def run_callbell(pw, out, failures):
         await page.keyboard.press("Escape")
         await until(page, "() => document.getElementById('call').hidden && document.activeElement.id === 'room-call'", "the focus back on 呼び出し", timeout=20000)
 
-        res["kids"] = [kids0, kids()]
-        check(failures, kids() == kids0, f"the server started no process: {res['kids']}")
+        # One sample for the message and the verdict alike (2.3.9's whole e2e: the message showed [[], []] while a
+        # second sample, the verdict's, caught a child). A child counts as started only when it is new since kids0 and
+        # still there 1 s later: a passing child of the server's own (like the pollers) is gone by then, and one the
+        # dialog left running is not. The message names each one by pid and command.
+        after = kids()
+        await asyncio.sleep(1)
+        later = kids()
+        started = sorted((set(after) & set(later)) - set(kids0))
+        passing = sorted(set(after) ^ set(later))
+        res["kids"] = {"before": kids0, "after": after, "1s later": later}
+        check(failures, not started, f"the server started no process: started {started} (passing, not counted: {passing}; before: {kids0})")
 
         # the robot's desk in front of the bell (a fresh page, its own desk memory): the press still opens the dialog
         await page.close()
