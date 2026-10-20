@@ -79,7 +79,7 @@ def test_paths_follow_home_at_call_time(home):
 
 def test_status_when_nothing_runs(home, capsys):
     assert main(["viz", "status"]) == 0
-    assert "停止中" in capsys.readouterr().out
+    assert "jui viz: stopped" in capsys.readouterr().out
     assert main(["viz", "status", "--json"]) == 0
     info = json.loads(capsys.readouterr().out)
     # hooks: the installer's state, so `status --json` alone tells a caller (the MCP viz_status) what is missing.
@@ -112,7 +112,7 @@ def test_a_pid_that_now_belongs_to_another_process_is_never_signalled(home, caps
                 old = time.time() - 3600  # a leftover, not a serve still starting
                 os.utime(paths.pid_file(), (old, old))
             assert main(["viz", "stop"]) == 0
-            assert "起動していません" in capsys.readouterr().out
+            assert "not running" in capsys.readouterr().out
             assert other.poll() is None, "stop signalled a process that is not viz"
             assert not paths.pid_file().exists() and not paths.server_json().exists()
     finally:
@@ -138,18 +138,18 @@ def test_stop_waits_out_a_serve_that_is_still_starting(home, capsys):
     paths.viz_home().mkdir(parents=True, exist_ok=True)
     paths.pid_file().write_text(str(os.getpid()))  # alive: this test process
     assert main(["viz", "stop"]) == 1
-    assert "起動の途中" in capsys.readouterr().err
+    assert "still starting" in capsys.readouterr().err
     assert paths.pid_file().exists()  # nothing was signalled or removed
 
 
 def test_open_without_a_server_is_a_usage_error(home, capsys):
     assert main(["viz", "open"]) == 1
-    assert "起動していません" in capsys.readouterr().err
+    assert "not running" in capsys.readouterr().err
 
 
 def test_relay_without_an_action_prints_usage(home, capsys):
     assert main(["viz", "relay"]) == 1
-    assert "使い方" in capsys.readouterr().err
+    assert "usage: jui viz" in capsys.readouterr().err
 
 
 def test_relay_install_shows_the_command_and_asks_first(home, capsys, monkeypatch, tmp_path):
@@ -175,14 +175,14 @@ def test_relay_install_shows_the_command_and_asks_first(home, capsys, monkeypatc
 
 def test_hooks_without_an_action_prints_usage(home, capsys):
     assert main(["viz", "hooks"]) == 1
-    assert "使い方" in capsys.readouterr().err
+    assert "usage: jui viz" in capsys.readouterr().err
 
 
 def test_hooks_install_status_uninstall_through_the_cli(home, capsys):
     assert main(["viz", "hooks", "install", "--dry-run"]) == 0
     assert not paths.claude_settings().exists()
     assert main(["viz", "hooks", "install"]) == 0
-    assert "18 イベント" in capsys.readouterr().out
+    assert "(18 events:" in capsys.readouterr().out
     assert main(["viz", "hooks", "status", "--json"]) == 0
     info = json.loads(capsys.readouterr().out)
     assert info["installed"] == 18 and info["broken"] == []
@@ -190,7 +190,7 @@ def test_hooks_install_status_uninstall_through_the_cli(home, capsys):
     assert json.loads(paths.claude_settings().read_text()) == {}
     paths.claude_settings().write_text("{broken")
     assert main(["viz", "hooks", "install"]) == 1
-    assert "JSON として読めません" in capsys.readouterr().err
+    assert "cannot be read as JSON" in capsys.readouterr().err
 
 
 def test_broken_config_warns_and_falls_back_to_defaults(home, capsys):
@@ -199,7 +199,7 @@ def test_broken_config_warns_and_falls_back_to_defaults(home, capsys):
     paths.viz_home().mkdir(parents=True, exist_ok=True)
     paths.config_json().write_text("{broken")
     assert load_config().port == 7788
-    assert "既定値" in capsys.readouterr().err
+    assert "the defaults are used" in capsys.readouterr().err
     paths.config_json().write_text(json.dumps({"port": 9100, "pushIntervalMs": True, "x": 1}))
     config = load_config()
     assert config.port == 9100
@@ -214,7 +214,7 @@ def test_serve_stays_off_a_port_in_use_and_leaves_its_owner_alone(home, capsys):
     port = holder.getsockname()[1]
     try:
         assert main(["viz", "serve", "--port", str(port)]) == 1
-        assert f"ポート {port} は使用中です" in capsys.readouterr().err
+        assert f"port {port} is in use" in capsys.readouterr().err
         assert holder.fileno() != -1
         holder.getsockname()  # still open and listening
         assert not paths.pid_file().exists() and not paths.server_json().exists()
@@ -243,7 +243,7 @@ def test_serve_end_to_end(home):
             env=dict(os.environ, HOME=str(home)), capture_output=True, text=True, timeout=30,
         )
         assert second.returncode == 1
-        assert "起動中です（jui viz stop で止める）" in second.stderr
+        assert "it is running (jui viz stop stops it)" in second.stderr
         assert proc.poll() is None
 
         status = subprocess.run(
@@ -271,7 +271,7 @@ def test_serve_end_to_end(home):
             proc.terminate()  # our own child
             proc.wait(timeout=10)
     out, err = proc.communicate()
-    assert f"http://127.0.0.1:{port}/ で待ち受けています" in out
+    assert f"listening on http://127.0.0.1:{port}/" in out
     for text in (out, err, second.stdout, second.stderr, status.stdout, stop.stdout, stop.stderr):
         assert token not in text
 
@@ -320,7 +320,7 @@ def test_serve_refuses_a_port_another_process_listens_on_all_addresses(home):
         except subprocess.TimeoutExpired:
             raise AssertionError("serve bound beside a 0.0.0.0 listener and kept running")
         assert done.returncode == 1
-        assert f"ポート {port} は使用中です" in done.stderr
+        assert f"port {port} is in use" in done.stderr
     finally:
         holder.close()
 
@@ -338,7 +338,7 @@ def test_two_serves_started_together_leave_exactly_one_running(home):
         running = [p for p in procs if p.poll() is None]
         assert len(running) == 1, [p.poll() for p in procs]
         refused = next(p for p in procs if p.poll() is not None)
-        assert refused.returncode == 1 and "起動中です" in refused.communicate()[1]
+        assert refused.returncode == 1 and "it is running" in refused.communicate()[1]
         assert json.loads(paths.server_json().read_text())["pid"] == running[0].pid
     finally:
         for p in procs:
@@ -401,7 +401,7 @@ def test_a_server_that_does_not_answer_is_neither_signalled_nor_forgotten(home, 
         paths.pid_file().write_text(str(other.pid))
         paths.server_json().write_text(json.dumps({"pid": other.pid, "port": mute.getsockname()[1], "token": "t"}))
         assert main(["viz", "stop"]) == 1
-        assert "応答しない" in capsys.readouterr().err
+        assert "does not answer /health" in capsys.readouterr().err
         assert other.poll() is None
         assert paths.pid_file().exists() and paths.server_json().exists()
     finally:

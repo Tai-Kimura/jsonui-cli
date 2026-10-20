@@ -118,18 +118,18 @@ def cmd_viz(args: argparse.Namespace) -> int:
     }
     handler = handlers.get(getattr(args, "viz_cmd", None))
     if handler is None:
-        _err("使い方: jui viz {serve,start,status,stop,open,doctor,hooks,statusline,relay,export-demo,prices,cloud-prices}")
+        _err("usage: jui viz {serve,start,status,stop,open,doctor,hooks,statusline,relay,export-demo,prices,cloud-prices}")
         return 1
     try:
         # Every command that reads or writes the runtime folder moves the old one first; export-demo uses none.
         moved = paths.migrate_legacy() if args.viz_cmd != "export-demo" else []
         if moved:
-            _err(f"状態を {paths.legacy_viz_home()} から {paths.viz_home()} へ移しました（{', '.join(moved)}）")
+            _err(f"moved the state from {paths.legacy_viz_home()} to {paths.viz_home()} ({', '.join(moved)})")
         return handler(args)
     except KeyboardInterrupt:
         return 0
     except Exception as exc:  # noqa: BLE001 - report, don't dump a traceback
-        _err(f"内部エラー: {type(exc).__name__}: {exc}")
+        _err(f"internal error: {type(exc).__name__}: {exc}")
         return 2
 
 
@@ -143,11 +143,11 @@ def _cmd_cloud_prices(args: argparse.Namespace) -> int:
     action = args.cloud_prices_action
     if action in ("on", "off"):
         C.save_on(action == "on")
-        print(f"クラウドの単価の日に 1 回の取得: {'オン' if action == 'on' else 'オフ'}（動いている viz は次の起動から）")
+        print(f"the daily cloud price fetch: {'on' if action == 'on' else 'off'} (a running viz takes it from its next start)")
         return 0
     mod = C.fetch_module()
     if mod is None:
-        _err("document_tools が見つからないため、クラウドの単価を取れません")
+        _err("document_tools was not found: the cloud prices cannot be fetched")
         return 1
     cache = C.cache_dir()
     if action == "status":
@@ -157,7 +157,7 @@ def _cmd_cloud_prices(args: argparse.Namespace) -> int:
         extra = [x.strip() for x in (args.large or "").split(",") if x.strip()]
         bad = [x for x in extra if x not in mod.LARGE]
         if bad:
-            _err(f"--large に使えるのは {', '.join(mod.LARGE)} だけです: {', '.join(bad)}")
+            _err(f"--large takes only {', '.join(mod.LARGE)}: {', '.join(bad)}")
             return 1
         setting = {**setting, "large": sorted(set(setting["large"]) | set(extra))}
         index = mod.run(setting, cache, int(time.time() * 1000), provider=args.provider, region=args.region)
@@ -165,11 +165,11 @@ def _cmd_cloud_prices(args: argparse.Namespace) -> int:
         print(json.dumps(mod.summary(index), ensure_ascii=False, indent=1))
         return 0
     s = mod.summary(index)
-    print(f"クラウドの単価のキャッシュ: {cache}")
+    print(f"cloud price cache: {cache}")
     for f in s["files"]:
-        when = time.strftime("%m-%d %H:%M", time.localtime(f["fetchedAt"] / 1000)) if f.get("fetchedAt") else "まだ取れていない"
-        tail = f"  失敗: {f['lastError']}" if f.get("lastError") else ""
-        print(f"  {f['path']:<44} {f.get('rows') or 0:>4} 行  {when}  effective {f.get('effective') or '-'}{tail}")
+        when = time.strftime("%m-%d %H:%M", time.localtime(f["fetchedAt"] / 1000)) if f.get("fetchedAt") else "not fetched yet"
+        tail = f"  failed: {f['lastError']}" if f.get("lastError") else ""
+        print(f"  {f['path']:<44} {f.get('rows') or 0:>4} rows  {when}  effective {f.get('effective') or '-'}{tail}")
     return 1 if action == "fetch" and s["failing"] == len(s["files"]) and s["files"] else 0
 
 
@@ -188,33 +188,33 @@ def _cmd_prices(args: argparse.Namespace) -> int:
             print(json.dumps({"rows": rows, "errors": book.errors, "source": book.default["source"],
                               "checked": book.default["checked"], "userPath": str(path)}, ensure_ascii=False, indent=1))
             return 0
-        print(f"単価（USD / 100 万トークン）。出典: {book.default['source']}（{book.default['checked']} に確認）")
-        print(f"利用者の表: {path}")
-        names = {"default": "既定", "user": "追加", "changed": "変更", "removed": "削除"}
+        print(f"prices (USD per million tokens). source: {book.default['source']} (checked {book.default['checked']})")
+        print(f"your table: {path}")
+        names = {"default": "default", "user": "added", "changed": "changed", "removed": "removed"}
         for r in rows:
             if r["origin"] == "removed":
-                print(f"  {r['model']:<30} 削除（金額を出さない）")
+                print(f"  {r['model']:<30} removed (no amount shown)")
                 continue
-            print(f"  {r['model']:<30} 入力 {r['input']:g} / 書込5分 {r['cache_write_5m']:g} / 書込1時間 {r['cache_write_1h']:g}"
-                  f" / 読込 {r['cache_read']:g} / 出力 {r['output']:g}  [{names[r['origin']]}]")
+            print(f"  {r['model']:<30} input {r['input']:g} / cache write 5m {r['cache_write_5m']:g} / cache write 1h {r['cache_write_1h']:g}"
+                  f" / cache read {r['cache_read']:g} / output {r['output']:g}  [{names[r['origin']]}]")
         for e in book.errors:
-            print(f"  使わない行: {e}")
+            print(f"  row not used: {e}")
         return 0
     if not args.model:
-        _err(f"jui viz prices {action} にはモデル名が要ります")
+        _err(f"jui viz prices {action} needs a model name")
         return 1
     row = None
     if action == "set":
         row = {k: getattr(args, k) for k in prices.KINDS}
         missing = [k for k, v in row.items() if v is None]
         if missing:
-            _err("set には 5 つの単価が要ります: " + ", ".join("--" + k.replace("_", "-") for k in missing))
+            _err("set needs all five prices: " + ", ".join("--" + k.replace("_", "-") for k in missing))
             return 1
     ok, msg = prices.apply_op(path, action, args.model, row)
     if not ok:
         _err(msg)
         return 1
-    print(f"{msg}（{path}）")
+    print(f"{msg} ({path})")
     return 0
 
 
@@ -226,7 +226,7 @@ def _err(message: str) -> None:
 
 
 def _not_yet(name: str, phase: str) -> int:
-    _err(f"{name} はまだありません（{phase} で実装予定）")
+    _err(f"{name} is not there yet (planned for {phase})")
     return 1
 
 
@@ -593,16 +593,16 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     if getattr(args, "port", None):
         config.port = int(args.port)
     if not 1 <= config.port <= 65535:
-        _err(f"ポート {config.port} は使えません（1〜65535）")
+        _err(f"port {config.port} cannot be used (1-65535)")
         return 1
     if getattr(args, "replay", None) and not os.path.isfile(args.replay):
-        _err(f"{args.replay} がありません")
+        _err(f"{args.replay} does not exist")
         return 1
     if getattr(args, "replay", None) and getattr(args, "record", None):
-        _err("--record と --replay は同時に使えません")
+        _err("--record and --replay cannot be used together")
         return 1
     if not _take_lock():
-        _err("起動中です（jui viz stop で止める）")
+        _err("it is running (jui viz stop stops it)")
         return 1
     _leave_the_launch_folder()
     try:
@@ -656,7 +656,7 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     from ..viz.attachments import Attachments
     world.attachments = Attachments()
     for gone in world.attachments.sweep_private(time.time()):   # left by a server that stopped before its hour was up
-        log(f"添付の掃除: uploads/{gone}")
+        log(f"attachments cleaned up: uploads/{gone}")
     world._dirty.add("prices")
     started_at = now_ms()
     sources: dict[str, dict] = {}
@@ -747,7 +747,7 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
 
     ctx.on_usage = None if replay else on_usage
 
-    in_use = f"ポート {port} は使用中です。--port で変えるか、使っているプロセスを止めてください"
+    in_use = f"port {port} is in use: pick another with --port, or stop the process using it"
     # SO_REUSEADDR stays on so a restart is not refused for a minute by the
     # last run's TIME_WAIT connections. On macOS it would also let us bind
     # 127.0.0.1:<port> beside another process listening on 0.0.0.0:<port>
@@ -825,7 +825,7 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                     world.publish()
 
                 count = await recorder.replay(Path(replay), apply, speed, tick)
-                log(f"再生が終わりました（{count} 件）")
+                log(f"replay finished ({count} records)")
 
             tasks.append(asyncio.create_task(run_replay()))
         else:
@@ -985,9 +985,9 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                             world.apply_progress(rec, "web", None, at)
                     usage_ticks["n"] += 1
                     if world.poll_prices():
-                        log(f"単価の表を読み直しました（{world.prices.path()}）")
+                        log(f"price table read again ({world.prices.path()})")
                         for e in world.prices.errors:
-                            log(f"単価の表: 使わない行: {e}")
+                            log(f"price table: row not used: {e}")
                     if usage_ticks["n"] % 4 == 0:
                         poll_usage(at)
                     if usage_ticks["n"] % 10 == 0:  # every 5 s: new files from iOS / Web runs
@@ -1071,24 +1071,24 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, stop.set)
         hook_state = hooks_installer.status()
-        print(f"jui viz: {_url(port)} で待ち受けています（Ctrl+C で終了）", flush=True)
+        print(f"jui viz: listening on {_url(port)} (Ctrl+C to quit)", flush=True)
         if replay:
-            print(f"  再生: {replay}（{speed} 倍速）。フックの受信とセッション一覧の取得は止めています", flush=True)
+            print(f"  replay: {replay} (x{speed}). hooks and the session list are not read", flush=True)
         elif hook_state.get("plugin"):
-            print(f"  フック: プラグイン {hook_state['plugin']} で入っています", flush=True)
+            print(f"  hooks: installed by the plugin {hook_state['plugin']}", flush=True)
         elif hook_state.get("installed"):
-            print(f"  フック: 入っています（{hook_state['installed']} イベント）", flush=True)
+            print(f"  hooks: installed ({hook_state['installed']} events)", flush=True)
         else:
-            print("  フック: 入っていません（/plugin install jui-viz@jsonui、または jui viz hooks install）", flush=True)
+            print("  hooks: not installed (/plugin install jui-viz@jsonui, or jui viz hooks install)", flush=True)
         if not replay:
-            print(f"  セッション一覧: {'claude agents --json を ' + format(config.agentsPollSec, 'g') + ' 秒ごとに取得' if agents_poll else '取得しません'}", flush=True)
+            print(f"  session list: {'claude agents --json every ' + format(config.agentsPollSec, 'g') + ' s' if agents_poll else 'not read'}", flush=True)
         if rec is not None:
             print(f"  {recorder.WARNING}: {record}", flush=True)
-        log(f"起動しました（pid {pid}）")
+        log(f"started (pid {pid})")
         if open_browser:
             webbrowser.open(_url(port))
         await stop.wait()
-        log("停止します")
+        log("stopping")
     finally:
         for cleanup in reader_cleanup:
             await cleanup()
@@ -1130,8 +1130,8 @@ def _cmd_export_demo(args: argparse.Namespace) -> int:
     except ExportError as exc:
         _err(str(exc))
         return 1
-    print(f"jui viz: デモを書き出しました: {result['out']}（{result['files']} ファイル、{result['bytes'] / 1_000_000:.1f} MB）")
-    print("  静的なサーバーやサイトの中で index.html を開いてください（file:// ではモジュールが読み込めません）")
+    print(f"jui viz: demo written: {result['out']} ({result['files']} files, {result['bytes'] / 1_000_000:.1f} MB)")
+    print("  open index.html from a static server or site (modules do not load from file://)")
     return 0
 
 
@@ -1161,48 +1161,48 @@ def _cmd_relay(args: argparse.Namespace) -> int:
 
     action = getattr(args, "relay_action", None)
     if action is None:
-        _err("使い方: jui viz relay {install,uninstall,status} [--dry-run] [--yes]")
+        _err("usage: jui viz relay {install,uninstall,status} [--dry-run] [--yes]")
         return 1
     claude = shutil.which("claude")
     if claude is None:
-        _err("claude が PATH にありません")
+        _err("claude is not on PATH")
         return 1
     if action == "status":
         registered = _relay_registered(claude)
-        print(f"jui viz: 許可の中継は{'登録済み' if registered else '未登録' if registered is False else '確かめられません'}")
+        print(f"jui viz: the permission relay is {'registered' if registered else 'not registered' if registered is False else 'unknown (could not check)'}")
         return 0
     argv = _relay_argv(action, claude)
-    print("実行するコマンド:")
+    print("the command to run:")
     print("  " + shlex.join(argv))
     if getattr(args, "dry_run", False):
         return 0
     if not getattr(args, "yes", False):
         try:
-            answer = input("実行しますか？ [y/N] ")
+            answer = input("run it? [y/N] ")
         except EOFError:
             answer = ""
         if answer.strip().lower() not in ("y", "yes"):
-            print("jui viz: 中止しました")
+            print("jui viz: cancelled")
             return 1
     done = subprocess.run(argv, capture_output=True, text=True, timeout=60)
     if done.returncode != 0:
-        _err(f"claude mcp が失敗しました（{done.returncode}）: {(done.stderr or done.stdout).strip()[:300]}")
+        _err(f"claude mcp failed ({done.returncode}): {(done.stderr or done.stdout).strip()[:300]}")
         return 1
     if action == "install":
-        print("jui viz: 許可の中継を登録しました。ブラウザから答えるセッションは、次のように起動してください:")
+        print("jui viz: the permission relay is registered. Start a session the browser answers like this:")
         print("  claude --dangerously-load-development-channels server:jui-viz")
-        print("  （起動時の警告では「I am using this for local development」を選びます。対話モードだけで有効です）")
-        print(f"  エイリアスの例: {RELAY_ALIAS}")
+        print("  (at the start-up warning, choose \"I am using this for local development\"; interactive mode only)")
+        print(f"  an alias, for example: {RELAY_ALIAS}")
     else:
-        print("jui viz: 許可の中継の登録を外しました")
+        print("jui viz: the permission relay is unregistered")
     return 0
 
 
 # ---------------------------------------------------------------- hooks
 
 
-STATUSLINE_NOTE = ("上限の値は、ターミナルの claude（の statusLine）からだけ届きます。VS Code 拡張とデスクトップアプリのセッションからは更新されません。"
-                   "ターミナルの claude が 1 つ動いていれば更新されます")
+STATUSLINE_NOTE = ("the usage limits come only from a terminal claude (its statusLine); sessions in the VS Code extension and the desktop app do not update them. "
+                   "One terminal claude running keeps them up to date")
 
 
 def _cmd_statusline(args: argparse.Namespace) -> int:
@@ -1211,7 +1211,7 @@ def _cmd_statusline(args: argparse.Namespace) -> int:
 
     action = getattr(args, "statusline_action", None)
     if action is None:
-        _err("使い方: jui viz statusline {install,uninstall,status} [--dry-run]")
+        _err("usage: jui viz statusline {install,uninstall,status} [--dry-run]")
         return 1
     if action == "status":
         info = sl.status()
@@ -1219,12 +1219,12 @@ def _cmd_statusline(args: argparse.Namespace) -> int:
             print(json.dumps(info, ensure_ascii=False))
             return 0
         if not info.get("readable"):
-            _err(info.get("error", "settings.json を読めません"))
+            _err(info.get("error", "settings.json cannot be read"))
             return 1
         if info["installed"]:
-            print(f"jui viz: statusLine を入れています（{info['path']}）" + (f"。元の statusLine を包んでいます: {info['wraps']}" if info["wraps"] else ""))
+            print(f"jui viz: statusLine installed ({info['path']})" + (f"; it wraps the statusLine that was there: {info['wraps']}" if info["wraps"] else ""))
         else:
-            print("jui viz: statusLine は入っていません" + ("（別の statusLine があります。install すると包みます）" if info["other"] else ""))
+            print("jui viz: statusLine not installed" + (" (another statusLine is there; install wraps it)" if info["other"] else ""))
         print(f"  {STATUSLINE_NOTE}")
         return 0
     try:
@@ -1233,14 +1233,14 @@ def _cmd_statusline(args: argparse.Namespace) -> int:
         _err(str(exc))
         return 1
     if args.dry_run:
-        print(result.diff or "変更はありません")
+        print(result.diff or "no change")
         return 0
     if not result.changed:
-        print("jui viz: 変更はありません")
+        print("jui viz: no change")
         return 0
-    print("jui viz: statusLine を入れました" if action == "install" else "jui viz: statusLine を外しました（包んでいたものは元に戻しました）")
+    print("jui viz: statusLine installed" if action == "install" else "jui viz: statusLine removed (the one it wrapped is back)")
     if result.backup is not None:
-        print(f"  元の settings.json の控え: {result.backup}")
+        print(f"  a copy of the settings.json before: {result.backup}")
     if action == "install":
         print(f"  {STATUSLINE_NOTE}")
     return 0
@@ -1256,23 +1256,23 @@ def _ask_timeout_problems(info: dict) -> list:
     out = []
 
     def cut(timeout) -> str:
-        return "・".join(ask_choice_text(c) for c in ask_choices_cut_short(timeout, config))
+        return ", ".join(ask_choice_text(c) for c in ask_choices_cut_short(timeout, config))
 
     if info.get("askTimeout") is not None and ask_choices_cut_short(info["askTimeout"], config):
-        out.append(("askTimeout", f"質問のフック（settings.json）の timeout が {info['askTimeout']:g} 秒のままです。"
-                    f"{cut(info['askTimeout'])}を選ぶと途中で切れます。jui viz hooks install を撃ち直してください"
-                    "（Claude Code のセッションの再起動が要ります）"))
+        out.append(("askTimeout", f"the question hook (settings.json) still has a timeout of {info['askTimeout']:g} s: "
+                    f"choosing {cut(info['askTimeout'])} is cut short. Run jui viz hooks install again"
+                    " (the Claude Code sessions need a restart)"))
     plugin = info.get("pluginAsk") or {}
     if plugin.get("state") == "found" and ask_choices_cut_short(plugin["askTimeout"], config):
-        out.append(("pluginAskTimeout", f"プラグイン {plugin['plugin']}（{plugin['version']}）の質問のフックの timeout が "
-                    f"{plugin['askTimeout']:g} 秒です。{cut(plugin['askTimeout'])}を選ぶと途中で切れます。"
-                    "/plugin で jui-viz を更新し、Claude Code のセッションを起動し直してください"))
+        out.append(("pluginAskTimeout", f"the plugin {plugin['plugin']} ({plugin['version']}) has a question hook timeout of "
+                    f"{plugin['askTimeout']:g} s: choosing {cut(plugin['askTimeout'])} is cut short. "
+                    "Update jui-viz with /plugin and restart the Claude Code sessions"))
     elif plugin.get("state") == "not-found":
-        out.append(("pluginAskTimeout", f"プラグイン {plugin['plugin']} は有効ですが、入っている場所が {plugin['record']} に"
-                    "見つかりません（質問のフックの timeout を確かめられません）。/plugin で入れ直してください"))
+        out.append(("pluginAskTimeout", f"the plugin {plugin['plugin']} is enabled, but where it is installed is not in {plugin['record']}"
+                    " (the question hook's timeout cannot be checked). Install it again with /plugin"))
     elif plugin.get("state") == "unreadable":
-        out.append(("pluginAskTimeout", f"プラグイン {plugin['plugin']}（{plugin['version']}）の hooks.json に質問のフックが"
-                    f"読めません（{plugin['installPath']}）。/plugin で jui-viz を更新してください"))
+        out.append(("pluginAskTimeout", f"the plugin {plugin['plugin']} ({plugin['version']}): its hooks.json has no readable question hook"
+                    f" ({plugin['installPath']}). Update jui-viz with /plugin"))
     return out
 
 
@@ -1281,7 +1281,7 @@ def _cmd_hooks(args: argparse.Namespace) -> int:
 
     action = getattr(args, "hooks_action", None)
     if action is None:
-        _err("使い方: jui viz hooks {install,uninstall,status} [--dry-run]")
+        _err("usage: jui viz hooks {install,uninstall,status} [--dry-run]")
         return 1
     if action == "status":
         info = hi.status()
@@ -1289,22 +1289,22 @@ def _cmd_hooks(args: argparse.Namespace) -> int:
             print(json.dumps(info, ensure_ascii=False))
             return 0
         if not info.get("readable"):
-            _err(info.get("error", "settings.json を読めません"))
+            _err(info.get("error", "settings.json cannot be read"))
             return 1
         if info.get("plugin"):
-            print(f"jui viz: プラグイン {info['plugin']} で入っています")
-        print(f"jui viz: フック {info['installed']}/{len(hi.EVENTS)} イベント（{info['path']}）")
+            print(f"jui viz: installed by the plugin {info['plugin']}")
+        print(f"jui viz: hooks {info['installed']}/{len(hi.EVENTS)} events ({info['path']})")
         missing = [e for e, ok in info["events"].items() if not ok]
         if missing and info["installed"]:
-            print(f"  入っていないイベント: {', '.join(missing)}")
+            print(f"  events not installed: {', '.join(missing)}")
         for command in info["broken"]:
-            print(f"  NG  python か forward.py が見つかりません: {command}（jui viz hooks install で入れ直す）")
+            print(f"  NG  python or forward.py not found: {command} (jui viz hooks install installs them again)")
         for _, text in _ask_timeout_problems(info):
             print(f"  NG  {text}")
         if info["disableAllHooks"]:
-            print("  NG  フックが全体で無効になっています（disableAllHooks: true）")
+            print("  NG  hooks are turned off everywhere (disableAllHooks: true)")
         if info["otherHooks"]:
-            print("  ほかのフックもあります")
+            print("  other hooks are there too")
         return 0
     try:
         result = hi.install(dry_run=args.dry_run) if action == "install" else hi.uninstall(dry_run=args.dry_run)
@@ -1314,17 +1314,17 @@ def _cmd_hooks(args: argparse.Namespace) -> int:
     for warning in result.warnings:
         _err(warning)
     if args.dry_run:
-        print(result.diff or "変更はありません")
+        print(result.diff or "no change")
         return 0
     if not result.changed:
-        print("jui viz: 変更はありません")
+        print("jui viz: no change")
         return 0
     if action == "install":
-        print(f"jui viz: フックを入れました（{len(result.events)} イベント: {', '.join(result.events)}）")
+        print(f"jui viz: hooks installed ({len(result.events)} events: {', '.join(result.events)})")
     else:
-        print("jui viz: フックを外しました")
+        print("jui viz: hooks removed")
     if result.backup is not None:
-        print(f"  バックアップ: {result.backup}")
+        print(f"  backup: {result.backup}")
     return 0
 
 
@@ -1353,15 +1353,15 @@ def _cmd_status(args: argparse.Namespace) -> int:
     if getattr(args, "json", False):
         print(json.dumps(info, ensure_ascii=False))
     elif info.get("orphan"):
-        print(f"jui viz: 状態ファイルの無い viz サーバーが動いています（pid {info['pid']}） {info['url']}（jui viz stop で止められます）")
+        print(f"jui viz: a viz server with no state file is running (pid {info['pid']}) {info['url']} (jui viz stop stops it)")
     elif info.get("unresponsive"):
-        print(f"jui viz: 起動中ですが /health に応答しません（pid {info['pid']}）")
+        print(f"jui viz: running but not answering /health (pid {info['pid']})")
     elif info.get("starting"):
-        print(f"jui viz: 起動の途中（pid {info['pid']}）")
+        print(f"jui viz: starting (pid {info['pid']})")
     elif info["running"]:
-        print(f"jui viz: 起動中（pid {info['pid']}） {info['url'] or 'URL 不明（server.json が読めません）'}")
+        print(f"jui viz: running (pid {info['pid']}) {info['url'] or 'URL unknown (server.json cannot be read)'}")
     else:
-        print("jui viz: 停止中")
+        print("jui viz: stopped")
     return 0
 
 
@@ -1386,9 +1386,9 @@ def _relay_summary() -> dict:
     """Whether the permission relay is registered: asks `claude mcp get`, so only with --with-relay."""
     claude = shutil.which("claude")
     if claude is None:
-        return {"registered": None, "reason": "claude が PATH にありません"}
+        return {"registered": None, "reason": "claude is not on PATH"}
     registered = _relay_registered(claude)
-    return {"registered": registered} if registered is not None else {"registered": None, "reason": "claude mcp get が答えませんでした"}
+    return {"registered": registered} if registered is not None else {"registered": None, "reason": "claude mcp get did not answer"}
 
 
 # ---------------------------------------------------------------- start
@@ -1420,12 +1420,12 @@ def _start_report(args, info: dict, code: int) -> int:
     if getattr(args, "json", False):
         print(json.dumps(info, ensure_ascii=False))
     elif code == 0:
-        verb = "起動済みです" if info.get("alreadyRunning") else "起動しました"
-        print(f"jui viz: {verb}（pid {info['pid']}） {info['url']}")
+        verb = "already running" if info.get("alreadyRunning") else "started"
+        print(f"jui viz: {verb} (pid {info['pid']}) {info['url']}")
         if not info.get("alreadyRunning"):
-            print(f"  ログ: {info['log']}（止めるときは jui viz stop）")
+            print(f"  log: {info['log']} (jui viz stop stops it)")
     else:
-        _err(info.get("error", "起動できませんでした"))
+        _err(info.get("error", "could not start"))
         if info.get("logTail"):
             print(info["logTail"], file=sys.stderr)
     return code
@@ -1441,7 +1441,7 @@ def _cmd_start(args: argparse.Namespace) -> int:
     config = load_config()
     port = int(args.port) if getattr(args, "port", None) else config.port
     if not 1 <= port <= 65535:
-        return _start_report(args, {"running": False, "error": f"ポート {port} は使えません（1〜65535）"}, 1)
+        return _start_report(args, {"running": False, "error": f"port {port} cannot be used (1-65535)"}, 1)
 
     def already(found) -> int:
         _, pid, data = found
@@ -1458,13 +1458,13 @@ def _cmd_start(args: argparse.Namespace) -> int:
         if found[0] == "running":
             return already(found)
         return _start_report(args, {"running": False, "pid": found[1], "error":
-                                    f"pid {found[1]} が起動中ですが /health に応答しません（jui viz status で確かめてください）"}, 1)
+                                    f"pid {found[1]} is running but not answering /health (check with jui viz status)"}, 1)
 
     orphan = _orphan(port)
     if orphan is not None:
         return _start_report(args, {"running": False, "orphan": True, "pid": orphan, "error":
-                                    f"ポート {port} では viz サーバー（pid {orphan}）が状態ファイル無しで動いています。"
-                                    f"jui viz stop{'' if port == config.port else f' --port {port}'} で止めてから起動してください"}, 1)
+                                    f"a viz server (pid {orphan}) runs on port {port} with no state file: "
+                                    f"stop it with jui viz stop{'' if port == config.port else f' --port {port}'}, then start"}, 1)
 
     log = serve_log()
     log.parent.mkdir(parents=True, exist_ok=True)
@@ -1491,21 +1491,21 @@ def _cmd_start(args: argparse.Namespace) -> int:
             if found is not None and found[0] == "starting" and found[1] != child.pid:
                 time.sleep(0.1)      # ours lost the pid lock to a serve still binding: report that one once it answers
                 continue
-            return _start_report(args, {"running": False, "error": f"jui viz serve が終了しました（終了コード {child.returncode}）",
+            return _start_report(args, {"running": False, "error": f"jui viz serve exited (exit code {child.returncode})",
                                         "log": str(log), "logTail": _log_tail()}, 1)
         time.sleep(0.1)
 
     # Not up in time: stop the child this call launched, and nothing else. terminate() does nothing once the
     # child has been reaped, so a pid reused after it exited is never signalled.
     if child.poll() is not None:
-        return _start_report(args, {"running": False, "error": f"{int(START_WAIT_SEC)} 秒で /health に応答するサーバーがありませんでした",
+        return _start_report(args, {"running": False, "error": f"no server answered /health within {int(START_WAIT_SEC)} s",
                                     "log": str(log), "logTail": _log_tail()}, 1)
     try:
         child.terminate()
         child.wait(5)
     except subprocess.TimeoutExpired:
         pass
-    return _start_report(args, {"running": False, "error": f"{int(START_WAIT_SEC)} 秒で /health に応答しませんでした。起動した pid {child.pid} を止めました",
+    return _start_report(args, {"running": False, "error": f"no answer on /health within {int(START_WAIT_SEC)} s; the pid {child.pid} started was stopped",
                                 "log": str(log), "logTail": _log_tail()}, 1)
 
 
@@ -1515,25 +1515,25 @@ def _cmd_stop(args: argparse.Namespace) -> int:
         return _stop_orphan(args)
     state, pid, _ = found
     if state == "starting":
-        _err("起動の途中です。少し待ってから jui viz stop を再実行してください")
+        _err("it is still starting: wait a moment and run jui viz stop again")
         return 1
     if state == "unresponsive" and not _our_viz_serve(pid):
         # No /health answer, and the pid is not our `viz serve` (its command line or its HOME): not ours to signal.
-        _err(f"pid {pid} が /health に応答しないうえ、この HOME の viz サーバーとも確かめられないため止めません")
+        _err(f"pid {pid} does not answer /health and cannot be confirmed as this HOME's viz server: not stopped")
         return 1
     # the pid this tool wrote to its own pid file; when it does not answer /health, also its command line and HOME
     how = _terminate(pid)
     if how is None:
         _clear_runtime_files(pid)
-        print("jui viz: 起動していません")
+        print("jui viz: not running")
         return 0
     if how == "alive":
-        _err(f"pid {pid} を止められませんでした（TERM の {STOP_TERM_SEC} 秒後に KILL しても残っています）")
+        _err(f"could not stop pid {pid} (still there after KILL, {STOP_TERM_SEC} s after TERM)")
         return 1
     _clear_runtime_files(pid)
-    note = "（/health に応答しないため、pid とコマンド行で確かめて止めました）" if state == "unresponsive" else ""
-    note += f"（TERM の {STOP_TERM_SEC} 秒後に KILL しました）" if how == "killed" else ""
-    print(f"jui viz: 停止しました（pid {pid}）{note}")
+    note = " (not answering /health: confirmed by its pid and command line, then stopped)" if state == "unresponsive" else ""
+    note += f" (killed {STOP_TERM_SEC} s after TERM)" if how == "killed" else ""
+    print(f"jui viz: stopped (pid {pid}){note}")
     return 0
 
 
@@ -1583,17 +1583,17 @@ def _stop_orphan(args: argparse.Namespace) -> int:
     port = int(args.port) if getattr(args, "port", None) else load_config().port
     pid = _orphan(port)
     if pid is None:
-        print("jui viz: 起動していません")
+        print("jui viz: not running")
         return 0
     how = _terminate(pid)   # /health on the port named it AND its command line is `viz serve` AND it is ours
     if how is None:
-        print("jui viz: 起動していません")
+        print("jui viz: not running")
         return 0
     if how == "alive":
-        _err(f"pid {pid} を止められませんでした（TERM の {STOP_TERM_SEC} 秒後に KILL しても残っています）")
+        _err(f"could not stop pid {pid} (still there after KILL, {STOP_TERM_SEC} s after TERM)")
         return 1
-    note = f"（TERM の {STOP_TERM_SEC} 秒後に KILL しました）" if how == "killed" else ""
-    print(f"jui viz: 状態ファイルの無い viz サーバーを停止しました（pid {pid}、ポート {port}）{note}")
+    note = f" (killed {STOP_TERM_SEC} s after TERM)" if how == "killed" else ""
+    print(f"jui viz: stopped a viz server with no state file (pid {pid}, port {port}){note}")
     return 0
 
 
@@ -1601,10 +1601,10 @@ def _cmd_open(args: argparse.Namespace) -> int:
     running = _running()
     port = (running[1] or {}).get("port") if running else None
     if not isinstance(port, int):
-        _err("起動していません（jui viz start で裏で起動、または jui viz serve で前面で起動）")
+        _err("not running (jui viz start runs it in the background, jui viz serve in the foreground)")
         return 1
     webbrowser.open(_url(port))
-    print(f"jui viz: {_url(port)} を開きました")
+    print(f"jui viz: opened {_url(port)}")
     return 0
 
 
@@ -1618,31 +1618,31 @@ def _doctor_checks() -> list[dict]:
         checks.append({"name": name, "ok": ok, "detail": detail})
 
     version = sys.version_info
-    add("python", version >= (3, 11), f"{version.major}.{version.minor}.{version.micro}（3.11 以上が必要）")
+    add("python", version >= (3, 11), f"{version.major}.{version.minor}.{version.micro} (3.11 or later needed)")
     for module in ("aiohttp", "watchdog"):
         try:
             __import__(module)
-            add(module, True, "import できます")
+            add(module, True, "importable")
         except ImportError:
-            add(module, False, f"import できません（pip install {module}）")
+            add(module, False, f"not importable (pip install {module})")
 
     claude = shutil.which("claude")
     if claude is None:
-        add("claude", False, "PATH にありません（セッション一覧の取得は無効になります）")
+        add("claude", False, "not on PATH (the session list is not read)")
     else:
         try:
             out = subprocess.run([claude, "--version"], capture_output=True, text=True, timeout=5)
-            add("claude", out.returncode == 0, (out.stdout or out.stderr).strip().splitlines()[0] if (out.stdout or out.stderr).strip() else "版を読めません")
+            add("claude", out.returncode == 0, (out.stdout or out.stderr).strip().splitlines()[0] if (out.stdout or out.stderr).strip() else "its version cannot be read")
         except (OSError, subprocess.TimeoutExpired) as exc:
-            add("claude", False, f"起動できません（{type(exc).__name__}）")
+            add("claude", False, f"cannot be started ({type(exc).__name__})")
 
     settings = paths.claude_settings()
     try:
         data = json.loads(settings.read_text(encoding="utf-8")) if settings.exists() else {}
         disabled = isinstance(data, dict) and data.get("disableAllHooks") is True
-        add("disableAllHooks", not disabled, "有効（フックは動きません）" if disabled else "設定されていません")
+        add("disableAllHooks", not disabled, "set (no hook runs)" if disabled else "not set")
     except (OSError, ValueError):
-        add("settings.json", False, f"{settings} を JSON として読めません")
+        add("settings.json", False, f"{settings} cannot be read as JSON")
 
     from ..viz import hooks_installer
 
@@ -1650,83 +1650,83 @@ def _doctor_checks() -> list[dict]:
     if hooks.get("readable"):
         total = len(hooks_installer.EVENTS)
         if hooks.get("plugin"):
-            add("hooks", hooks["installed"] == 0, f"プラグイン {hooks['plugin']}" +
-                ("" if hooks["installed"] == 0 else f"、加えて settings.json にも {hooks['installed']} イベント（二重。jui viz hooks uninstall で外す）"))
+            add("hooks", hooks["installed"] == 0, f"the plugin {hooks['plugin']}" +
+                ("" if hooks["installed"] == 0 else f", and {hooks['installed']} events in settings.json too (twice: jui viz hooks uninstall removes those)"))
         else:
             ok = hooks["installed"] == total and not hooks["broken"]
-            add("hooks", ok, f"{hooks['installed']}/{total} イベント" + ("" if ok else "（/plugin install jui-viz@jsonui、または jui viz hooks install）"))
+            add("hooks", ok, f"{hooks['installed']}/{total} events" + ("" if ok else " (/plugin install jui-viz@jsonui, or jui viz hooks install)"))
         problems = _ask_timeout_problems(hooks)
         for name, text in problems:
             add(name, False, text)
         plugin_ask = hooks.get("pluginAsk") or {}
         if plugin_ask.get("state") == "found" and not any(n == "pluginAskTimeout" for n, _ in problems):
-            add("pluginAskTimeout", True, f"プラグイン {plugin_ask['plugin']}（{plugin_ask['version']}）の質問のフック "
-                f"{plugin_ask['askTimeout']:g} 秒")
+            add("pluginAskTimeout", True, f"the plugin {plugin_ask['plugin']} ({plugin_ask['version']}): question hook "
+                f"{plugin_ask['askTimeout']:g} s")
         if hooks.get("progressEnv") in hooks_installer.legacy_progress_values():
-            add("progressEnv", False, f"settings.json の {hooks_installer.PROGRESS_ENV} が古い場所（{hooks['progressEnv']}）のままです。"
-                "jui viz hooks install を撃ち直すと新しい場所に書き換わります")
+            add("progressEnv", False, f"settings.json's {hooks_installer.PROGRESS_ENV} still names the old place ({hooks['progressEnv']}): "
+                "running jui viz hooks install again writes the new one")
     legacy, in_use = paths.legacy_viz_home(), _legacy_in_use()
     add("state", not in_use, f"{paths.viz_home()}" + ("" if not in_use else
-        f"（古い場所 {legacy} がまだ使われています: {', '.join(in_use)}。プラグインなら /plugin で jui-viz を更新し、"
-        "settings.json のフックなら jui viz hooks install を撃ち直してください。どちらも Claude Code のセッションの再起動が要ります）"))
+        f" (the old place {legacy} is still used: {', '.join(in_use)}. With the plugin, update jui-viz with /plugin; "
+        "with settings.json's hooks, run jui viz hooks install again. Either way the Claude Code sessions need a restart)"))
 
     from ..viz.sources import devices as devices_src
     from ..viz.sources import test_results
 
     base = test_results.results_base()
     override = os.environ.get(test_results.BASE_ENV, "")
-    add("results", True, f"テストの結果を読む場所: {base}"
-        + (f"（{test_results.BASE_ENV} で指定。driver 側にも同じ値が要ります）" if os.path.isabs(override) else "")
-        + ("" if devices_src.find_adb() else "。adb が無いので Android の結果は取りません"))
+    add("results", True, f"where test results are read: {base}"
+        + (f" (set by {test_results.BASE_ENV}; the drivers need the same value)" if os.path.isabs(override) else "")
+        + ("" if devices_src.find_adb() else "; no adb, so no Android results are read"))
 
     from ..viz.sources import weather as weather_src
 
     w_on, w_status = weather_src.load_setting()["on"], weather_src.read_status()
     if not w_on:
-        add("weather", True, "近所の天気: オフ（外への通信はしません。ビルの全景のスイッチでオンにできます）")
+        add("weather", True, "nearby weather: off (no connection out; the building view's switch turns it on)")
     else:
         ok_at, err = w_status.get("lastOkAt"), w_status.get("lastError")
-        when = time.strftime("%m-%d %H:%M", time.localtime(ok_at / 1000)) if isinstance(ok_at, (int, float)) else "まだ取れていない"
-        add("weather", not err, f"近所の天気: オン（最後に取れた時刻 {when}）" + (f"。失敗: {err}" if err else ""))
+        when = time.strftime("%m-%d %H:%M", time.localtime(ok_at / 1000)) if isinstance(ok_at, (int, float)) else "not fetched yet"
+        add("weather", not err, f"nearby weather: on (fetched: {when})" + (f"; failed: {err}" if err else ""))
 
     from ..viz.sources import cloud_prices as cloud_prices_src
 
     cp_setting, cp_status = cloud_prices_src.load_setting(), weather_src.read_status(cloud_prices_src.status_json())
     if cp_setting.get("unavailable"):
-        add("cloud-prices", True, "クラウドの単価の取得: document_tools が見つからないため、取りません（同梱の表で数えます）")
+        add("cloud-prices", True, "cloud price fetch: document_tools was not found, so none (the bundled table is used)")
     elif not cp_setting["on"]:
-        add("cloud-prices", True, "クラウドの単価の取得: オフ（外への通信はしません。jui viz cloud-prices on でオン）")
+        add("cloud-prices", True, "cloud price fetch: off (no connection out; jui viz cloud-prices on turns it on)")
     else:
         ok_at, err, failing = cp_status.get("lastOkAt"), cp_status.get("lastError"), cp_status.get("failing") or 0
-        when = time.strftime("%m-%d %H:%M", time.localtime(ok_at / 1000)) if isinstance(ok_at, (int, float)) else "まだ取れていない"
-        add("cloud-prices", not err and not failing, f"クラウドの単価の取得: オン（日に 1 回。最後に取れた時刻 {when}）"
-            + (f"。取れなかったファイル {failing} 件（前に取れた値を使う）" if failing else "") + (f"。失敗: {err}" if err else ""))
+        when = time.strftime("%m-%d %H:%M", time.localtime(ok_at / 1000)) if isinstance(ok_at, (int, float)) else "not fetched yet"
+        add("cloud-prices", not err and not failing, f"cloud price fetch: on (once a day; fetched: {when})"
+            + (f"; {failing} file(s) not fetched (the last values are used)" if failing else "") + (f"; failed: {err}" if err else ""))
 
     # the box (2.3.4): what it can see — nothing to check, so always ok; it says where the line is
-    add("git-box", True, "git の箱: Claude のセッションが Bash で撃った git push / pull だけが見えます"
-                         "（自分のターミナル、エディタの git、GitHub での merge は見えません）")
+    add("git-box", True, "git box: only the git push / pull a Claude session ran in Bash is seen"
+                         " (not your own terminal's, an editor's git, nor a merge on GitHub)")
     from ..viz import statusline_installer as sl
     from ..viz import usage as usage_mod
 
     line = sl.status()
     last = usage_mod.load()
     when = time.strftime("%m-%d %H:%M", time.localtime(last["receivedAt"] / 1000)) if last else None
-    add("usage", True, ("statusLine: 入っています" if line.get("installed") else "statusLine: 入っていません（jui viz statusline install）")
-        + (f"。最後の値 {when}" if when else "。値はまだありません") + f"。{STATUSLINE_NOTE}")
+    add("usage", True, ("statusLine: installed" if line.get("installed") else "statusLine: not installed (jui viz statusline install)")
+        + (f"; last value {when}" if when else "; no value yet") + f". {STATUSLINE_NOTE}")
 
-    add("shredder", True, "削除の見分け: Bash の rm・rmdir・unlink・trash・git rm・git worktree remove・find -delete / -exec rm だけ。"
-        "スクリプトの中の削除（Python の os.remove など）と、利用者自身の削除は見えません")
+    add("shredder", True, "deletions seen: only Bash rm, rmdir, unlink, trash, git rm, git worktree remove, find -delete / -exec rm. "
+        "A deletion inside a script (Python's os.remove and the like) and your own deletions are not seen")
 
     add("language", True, _language_detail())
 
     if claude is not None:
         registered = _relay_registered(claude)
-        add("relay", True, "許可の中継: " + ("登録済み" if registered else "未登録（jui viz relay install）" if registered is False else "確かめられません"))
+        add("relay", True, "permission relay: " + ("registered" if registered else "not registered (jui viz relay install)" if registered is False else "unknown (could not check)"))
 
     running = _running()
     if running is not None:
         port = (running[1] or {}).get("port")
-        add("server", True, f"起動中（pid {running[0]}、{_url(port) if isinstance(port, int) else 'URL 不明'}）")
+        add("server", True, f"running (pid {running[0]}, {_url(port) if isinstance(port, int) else 'URL unknown'})")
         sessions = _server_sessions(port, (running[1] or {}).get("token")) if isinstance(port, int) else None
         if sessions is not None:
             add("prompt", True, _prompt_reach(sessions))
@@ -1734,8 +1734,8 @@ def _doctor_checks() -> list[dict]:
         from ..viz.config import load_config
 
         port = load_config().port
-        add("server", True, "停止中")
-        add("port", _port_free(port), f"{port} は{'空いています' if _port_free(port) else '使用中です'}")
+        add("server", True, "stopped")
+        add("port", _port_free(port), f"{port} is {'free' if _port_free(port) else 'in use'}")
     return checks
 
 
@@ -1777,7 +1777,7 @@ def _server_sessions(port: int, token) -> list | None:
 
 
 def _prompt_reach(sessions: list) -> str:
-    """Which sessions a prompt typed in the page reaches (the robot card's 応答の履歴 tab): jui-viz 1.2.0+ connected,
+    """Which sessions a prompt typed in the page reaches (the robot card's history tab): jui-viz 1.2.0+ connected,
     and the session started naming the channel (2.3.4: the CLI drops a channel's text otherwise; sources/launch.py)."""
     from ..viz.sources import launch
 
@@ -1785,20 +1785,20 @@ def _prompt_reach(sessions: list) -> str:
     relay = [s for s in live if s.get("relay")]
     able = [s for s in relay if s.get("prompt") and launch.REASONS.get(s.get("launch"), (False,))[0]]
     old = [s for s in relay if not s.get("prompt")]
-    text = f"ページからのプロンプト送信: 届くセッション {len(able)}（中継あり {len(relay)} / 全 {len(live)}）"
+    text = f"prompts sent from the page: {len(able)} session(s) reached ({len(relay)} with the relay / {len(live)} in all)"
     blocked: dict[str, list[str]] = {}
     for s in relay:
         if s.get("prompt") and s not in able:
             blocked.setdefault(str(s.get("launch") or "unreadable"), []).append(str(s.get("label") or s.get("id")))
     for key, names in blocked.items():
-        text += f"。届かない {len(names)}（{', '.join(names)}）: {launch.REASONS.get(key, launch.REASONS['unreadable'])[1]}"
+        text += f"; {len(names)} not reached ({', '.join(names)}): {launch.REASONS.get(key, launch.REASONS['unreadable'])[1]}"
     if old:
         names = ", ".join(str(s.get("label") or s.get("id")) for s in old)
-        text += (f"。jui-viz プラグインが 1.2.0 より古いセッション {len(old)}（{names}）には送れません"
-                 "（/plugin で jui-viz を更新し、そのセッションを起動し直す）")
+        text += (f"; {len(old)} session(s) with a jui-viz plugin older than 1.2.0 ({names}) cannot be sent to"
+                 " (update jui-viz with /plugin and restart that session)")
     if any(s.get("launch") == "channels" for s in able):
-        text += "。--channels で起動したセッションは、managed settings の allowedChannelPlugins に jui-viz が無ければ届きません"
-    text += f"。届く起動: {launch.HOW_TO_START}"
+        text += "; a session started with --channels is not reached unless the managed settings' allowedChannelPlugins has jui-viz"
+    text += f"; to be reached, start it so: {launch.HOW_TO_START}"
     return text
 
 

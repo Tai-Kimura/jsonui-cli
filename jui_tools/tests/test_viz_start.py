@@ -154,7 +154,7 @@ def test_a_start_on_a_busy_port_fails_and_leaves_the_holder_alone(home):
         # The child's exit is the answer: start does not sit out the whole wait before reporting it.
         assert elapsed < viz_cmd.START_WAIT_SEC, f"{elapsed:.1f}s"
         info = json.loads(res.stdout)
-        assert info["running"] is False and "使用中" in info["logTail"], info
+        assert info["running"] is False and "is in use" in info["logTail"], info
         assert not (home / ".local" / "state" / "jui-viz" / "viz.pid").exists()
         assert holder.fileno() != -1   # still ours, still listening
         assert _listening(port)
@@ -182,7 +182,7 @@ def test_a_start_that_never_answers_stops_only_its_own_child(home, monkeypatch, 
     try:
         code = viz_cmd._cmd_start(type("A", (), {"port": _free_port(), "json": True})())
         info = json.loads(capsys.readouterr().out)
-        assert code == 1 and info["running"] is False and "応答しませんでした" in info["error"], info
+        assert code == 1 and info["running"] is False and "no answer on /health" in info["error"], info
         assert len(launched) == 1 and launched[0].poll() is not None, "its own child was not stopped"
         assert bystander.poll() is None, "a process it did not launch was signalled"
     finally:

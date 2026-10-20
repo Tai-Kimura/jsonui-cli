@@ -117,7 +117,7 @@ def test_an_empty_env_present_before_install_is_gone_after_uninstall(home):
 def test_a_different_progress_env_is_kept_and_warned(home):
     _write({"env": {hi.PROGRESS_ENV: "/elsewhere"}})
     result = hi.install(python=PY)
-    assert any("上書きしません" in w for w in result.warnings)
+    assert any("is not overwritten" in w for w in result.warnings)
     assert _read()["env"][hi.PROGRESS_ENV] == "/elsewhere"
     hi.uninstall()
     assert _read() == {"env": {hi.PROGRESS_ENV: "/elsewhere"}}
@@ -267,7 +267,7 @@ def test_status_and_doctor_name_an_ask_hook_left_at_the_old_timeout(home, capsys
     checks = {c["name"]: c for c in json.loads(capsys.readouterr().out)["checks"]}
     assert checks["askTimeout"]["ok"] is False and "600" in checks["askTimeout"]["detail"]
     # 600 s cuts 10 min too (600 + forward.py's 5 s), named from the rule, not a list (ticket doctor-misses-old-plugin)
-    assert "10 分・30 分・答えるまで" in checks["askTimeout"]["detail"] and "3 分" not in checks["askTimeout"]["detail"]
+    assert "10 min, 30 min, until answered" in checks["askTimeout"]["detail"] and "3 min" not in checks["askTimeout"]["detail"]
     hi.install(python=PY)
     assert hi.status()["askTimeout"] == hi.ASK_TIMEOUT_SEC
     main(["viz", "doctor", "--json"])
@@ -318,12 +318,12 @@ def test_a_plugin_left_at_600_seconds_is_named_with_the_choices_it_cuts(plain_ho
     _fake_plugin(plain_home, "1.2.1", 600)
     assert hi.status()["pluginAsk"] == {"state": "found", "plugin": "jui-viz@jsonui", "version": "1.2.1", "askTimeout": 600}
     check = _doctor(capsys, monkeypatch)["pluginAskTimeout"]
-    assert check["ok"] is False and "1.2.1" in check["detail"] and "/plugin で jui-viz を更新" in check["detail"]
-    assert "10 分・30 分・答えるまで" in check["detail"] and "3 分" not in check["detail"]
+    assert check["ok"] is False and "1.2.1" in check["detail"] and "Update jui-viz with /plugin" in check["detail"]
+    assert "10 min, 30 min, until answered" in check["detail"] and "3 min" not in check["detail"]
     from jui_cli.cli import main
     main(["viz", "hooks", "status"])
     out = capsys.readouterr().out
-    assert "NG" in out and "10 分・30 分・答えるまで" in out
+    assert "NG" in out and "10 min, 30 min, until answered" in out
 
 
 def test_a_plugin_hook_without_a_timeout_is_claude_codes_default_600(plain_home, capsys, monkeypatch):
@@ -354,7 +354,7 @@ def test_no_plugin_installed_is_a_clear_state_not_a_crash(plain_home, capsys, mo
     got = hi.status()["pluginAsk"]
     assert got["state"] == "not-found" and got["record"].endswith("installed_plugins.json")
     check = _doctor(capsys, monkeypatch)["pluginAskTimeout"]
-    assert check["ok"] is False and "見つかりません" in check["detail"]
+    assert check["ok"] is False and "is not in" in check["detail"]
 
 
 def test_a_plugin_whose_hooks_json_is_broken_is_unreadable(plain_home):

@@ -175,7 +175,7 @@ def test_stop_ends_our_server_that_no_longer_answers_health(home):
     try:
         r = _jui(home, "viz", "stop", timeout=60)
         assert r.returncode == 0, r.stderr
-        assert "/health に応答しない" in r.stdout and "KILL" in r.stdout, r.stdout   # a stopped process takes no TERM
+        assert "not answering /health" in r.stdout and "killed" in r.stdout, r.stdout   # a stopped process takes no TERM
         for _ in range(40):
             if not _alive(pid):
                 break
@@ -200,7 +200,7 @@ def test_stop_never_signals_a_pid_that_is_not_our_viz_serve(home):
         (state / "viz.pid").write_text(str(other.pid))
         (state / "server.json").write_text(json.dumps({"pid": other.pid, "port": port, "token": "x"}))
         r = _jui(home, "viz", "stop", timeout=60)
-        assert r.returncode == 1 and "止めません" in r.stderr, (r.stdout, r.stderr)
+        assert r.returncode == 1 and "not stopped" in r.stderr, (r.stdout, r.stderr)
         assert other.poll() is None                               # still alive: never signalled
     finally:
         other.kill()

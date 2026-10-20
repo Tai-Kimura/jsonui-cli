@@ -310,7 +310,7 @@ def test_a_restarted_server_still_shows_the_runs_from_before_it_started(tmp_path
     _put(home / ".local/state/jsonui-test/results/web/app", time.time(),
          _results("web", RUN_A, "app", "screens/login.test.json", {"ok": "passed", "ng": "passed"}))
     doctor = _jui(home, "viz", "doctor")
-    assert f"テストの結果を読む場所: {home}/.local/state/jsonui-test/results" in doctor.stdout
+    assert f"where test results are read: {home}/.local/state/jsonui-test/results" in doctor.stdout
 
     def login_passed() -> int:
         info = json.loads((state_dir / "server.json").read_text())

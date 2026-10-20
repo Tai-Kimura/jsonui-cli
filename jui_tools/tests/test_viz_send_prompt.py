@@ -435,10 +435,10 @@ def test_doctor_names_the_sessions_whose_plugin_cannot_receive_and_those_started
     out = subprocess.run([sys.executable, str(JUI), "viz", "doctor", "--json"], env=_env(viz.home), capture_output=True, text=True, timeout=60).stdout
     (check,) = [c for c in json.loads(out)["checks"] if c["name"] == "prompt"]
     s = viz.sessions()
-    assert "届くセッション 1（中継あり 4 / 全 5）" in check["detail"], check
-    assert "1.2.0 より古いセッション 1" in check["detail"] and s[S_OLD]["label"] in check["detail"]
-    assert f"届かない 1（{s[S_PLAIN]['label']}）: 起動に channel の指定が無い" in check["detail"]
-    assert f"届かない 1（{s[S_IDE]['label']}）: VS Code 拡張" in check["detail"]
+    assert "1 session(s) reached (4 with the relay / 5 in all)" in check["detail"], check
+    assert "1 session(s) with a jui-viz plugin older than 1.2.0" in check["detail"] and s[S_OLD]["label"] in check["detail"]
+    assert f"1 not reached ({s[S_PLAIN]['label']}): 起動に channel の指定が無い" in check["detail"]
+    assert f"1 not reached ({s[S_IDE]['label']}): VS Code 拡張" in check["detail"]
     assert "claude --dangerously-load-development-channels plugin:jui-viz@jsonui" in check["detail"]
     assert "claude --channels plugin:jui-viz@jsonui（警告なし）" in check["detail"]
     assert '"allowedChannelPlugins": [{"plugin": "jui-viz", "marketplace": "jsonui"}]' in check["detail"] and "channelsEnabled" in check["detail"]

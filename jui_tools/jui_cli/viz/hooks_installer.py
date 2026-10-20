@@ -185,13 +185,13 @@ def add_ours(settings: dict, handler: dict, decide_handler: dict | None = None, 
     if hooks is None:
         hooks = out["hooks"] = {}
     if not isinstance(hooks, dict):
-        raise SettingsError("settings.json の hooks がオブジェクトではありません。直してから再実行してください")
+        raise SettingsError("settings.json's hooks is not an object: fix it and run again")
     for event in EVENTS:
         groups = hooks.get(event)
         if groups is None:
             groups = hooks[event] = []
         if not isinstance(groups, list):
-            raise SettingsError(f"settings.json の hooks.{event} が配列ではありません。直してから再実行してください")
+            raise SettingsError(f"settings.json's hooks.{event} is not an array: fix it and run again")
         group = {"matcher": "*", "hooks": [handler]} if event in TOOL_EVENTS else {"hooks": [handler]}
         groups.append(group)
         if event == "PermissionRequest" and decide_handler is not None:
@@ -206,10 +206,10 @@ def add_env(settings: dict, value: str) -> tuple[dict, str | None]:
     out = copy.deepcopy(settings)
     env = out.get("env")
     if env is not None and not isinstance(env, dict):
-        return out, "settings.json の env がオブジェクトではないため、テストの進捗の場所を入れませんでした"
+        return out, "settings.json's env is not an object, so the test progress folder was not set"
     current = (env or {}).get(PROGRESS_ENV)
     if current is not None and current != value and current not in legacy_progress_values():
-        return out, f"env の {PROGRESS_ENV} に別の値が入っているため上書きしません（テストの進捗は取れません）"
+        return out, f"env's {PROGRESS_ENV} holds another value, so it is not overwritten (no test progress is read)"
     out.setdefault("env", {})[PROGRESS_ENV] = value
     return out, None
 
@@ -245,13 +245,13 @@ def _read(path: Path) -> tuple[bytes | None, dict, tuple | None]:
         if (st.st_mtime_ns, st.st_size) == before:
             break
     else:
-        raise SettingsError("settings.json が読んでいる間に変わり続けたため中止しました。少し待って再実行してください")
+        raise SettingsError("settings.json kept changing while it was read: stopped. Wait a moment and run again")
     try:
         data = json.loads(raw.decode("utf-8")) if raw.strip() else {}
     except (UnicodeDecodeError, ValueError):
-        raise SettingsError("settings.json が JSON として読めません。直してから再実行してください")
+        raise SettingsError("settings.json cannot be read as JSON: fix it and run again")
     if not isinstance(data, dict):
-        raise SettingsError("settings.json の中身がオブジェクトではありません。直してから再実行してください")
+        raise SettingsError("settings.json does not hold an object: fix it and run again")
     return raw, data, before
 
 
@@ -298,7 +298,7 @@ def _apply(transform, dry_run: bool) -> Result:
         diff = "".join(difflib.unified_diff(
             _dump(data).splitlines(keepends=True) if raw is not None else [],
             _dump(new).splitlines(keepends=True),
-            fromfile=str(path), tofile=str(path) + "（変更後）",
+            fromfile=str(path), tofile=str(path) + " (after)",
         ))
         result = Result(changed=changed, diff=diff, warnings=warnings)
         if dry_run or not changed:
@@ -311,7 +311,7 @@ def _apply(transform, dry_run: bool) -> Result:
             result.backup = _backup(raw)
         _write(path, _dump(new), mode)
         return result
-    raise SettingsError("settings.json が書き込みの直前に別の手で変わり続けたため中止しました。少し待って再実行してください")
+    raise SettingsError("settings.json kept being changed by someone else just before the write: stopped. Wait a moment and run again")
 
 
 PLUGIN_PREFIX = "jui-viz@"
@@ -395,8 +395,8 @@ def install(dry_run: bool = False, python: str | None = None) -> Result:
     def transform(data: dict):
         plugin = plugin_enabled(data)
         if plugin:
-            raise SettingsError(f"プラグイン {plugin} が有効なので、フックは入れません（二重に転送されます）。"
-                                "プラグインを使わない場合は /plugin で無効にしてから再実行してください")
+            raise SettingsError(f"the plugin {plugin} is enabled, so no hooks are installed (events would be forwarded twice). "
+                                "Not using the plugin? Turn it off with /plugin and run again")
         new = add_ours(data, handler, decide_handler, ask_handler)
         new, warning = add_env(new, value)
         return new, [w for w in (warning,) if w] + _disabled_warning(new)
@@ -417,7 +417,7 @@ def uninstall(dry_run: bool = False) -> Result:
 
 
 def _disabled_warning(data: dict) -> list[str]:
-    return ["フックが全体で無効になっています（disableAllHooks: true）"] if data.get("disableAllHooks") is True else []
+    return ["hooks are turned off everywhere (disableAllHooks: true)"] if data.get("disableAllHooks") is True else []
 
 
 def status() -> dict:

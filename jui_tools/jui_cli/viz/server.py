@@ -76,7 +76,7 @@ class _OneLine(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         exc = record.exc_info[1] if record.exc_info else None
         reason = type(exc).__name__ if exc else record.getMessage().splitlines()[0][:120]
-        log(f"拒否: 不正なリクエスト（{reason}）")
+        log(f"refused: a bad request ({reason})")
 
 
 def quiet_aiohttp_logs() -> None:
@@ -324,7 +324,7 @@ def make_app(ctx: ServerContext) -> web.Application:
 
     async def ws(request: web.Request) -> web.StreamResponse:
         if not security.origin_ok(request.headers.get("Origin"), ctx.port):
-            log("拒否: WebSocket の Origin が違います")
+            log("refused: the WebSocket's Origin is not this page's")
             return web.Response(status=403, text="forbidden\n")
         sock = web.WebSocketResponse(heartbeat=20)
         await sock.prepare(request)
@@ -336,7 +336,7 @@ def make_app(ctx: ServerContext) -> web.Application:
             return sock
         message = _parse(first)
         if message is None or message.get("type") != "auth" or not security.token_ok(message.get("token"), ctx.token):
-            log("拒否: WebSocket の認証に失敗しました")
+            log("refused: the WebSocket's authentication failed")
             await sock.close(code=4401, message=b"auth failed")
             return sock
         snapshot = ctx.state.snapshot()
@@ -517,7 +517,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         prompt from the page (World.approve_denial → send_prompt); the page only names the card, never the words."""
         refused = prompt_checks(request, ctx)
         if refused is not None:
-            log(f"拒否: /api/denial（{refused.text.strip()}）")
+            log(f"refused: /api/denial ({refused.text.strip()})")
             return refused
         body = await _capped_json(request, PROMPT_MAX_BODY)
         if isinstance(body, web.Response):
@@ -540,7 +540,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         いいよ"). Every check in prompt_checks must pass; then World.send_prompt queues it for that session's channel."""
         refused = prompt_checks(request, ctx)
         if refused is not None:
-            log(f"拒否: /api/prompt（{refused.text.strip()}）")
+            log(f"refused: /api/prompt ({refused.text.strip()})")
             return refused
         body = await _capped_json(request, PROMPT_MAX_BODY)
         if isinstance(body, web.Response):
@@ -573,7 +573,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         the private folder off the event loop. Answers {id, name, media, size}; the path goes only into the prompt."""
         refused = prompt_checks(request, ctx, attachments.FILE_MAX, "application/octet-stream")
         if refused is not None:
-            log(f"拒否: /api/attach（{refused.text.strip()}）")
+            log(f"refused: /api/attach ({refused.text.strip()})")
             return refused
         sid = request.headers.get("X-Jui-Viz-Session", "")
         name = urllib.parse.unquote(request.headers.get("X-Jui-Viz-Name", ""), errors="replace")
@@ -597,7 +597,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         except attachments.Refused as exc:
             return web.Response(status=exc.status, text=f"{exc}\n")
         except OSError as exc:
-            log(f"添付を保存できません: {type(exc).__name__}")
+            log(f"an attachment cannot be saved: {type(exc).__name__}")
             return web.Response(status=409, text="the attachment could not be kept\n")
         return web.json_response({k: record[k] for k in ("id", "name", "media", "size")})
 
@@ -609,7 +609,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         go back with their own media type, nosniff and no-store, as /api/history-image's."""
         refused = prompt_checks(request, ctx)
         if refused is not None:
-            log(f"拒否: /api/attach-image（{refused.text.strip()}）")
+            log(f"refused: /api/attach-image ({refused.text.strip()})")
             return refused
         body = await _capped_json(request, PROMPT_MAX_BODY)
         if isinstance(body, web.Response):
@@ -652,7 +652,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         project (rooms.root_of), never a path from the client; the channels flag is read from the managed settings."""
         refused = prompt_checks(request, ctx, CALL_MAX_BODY)
         if refused is not None:
-            log(f"拒否: /api/call-command（{refused.text.strip()}）")
+            log(f"refused: /api/call-command ({refused.text.strip()})")
             return refused
         body = await _capped_json(request, CALL_MAX_BODY)
         if isinstance(body, web.Response):
@@ -678,7 +678,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         notifyPresenceSec; {"ask": false} ends it at once. The checks of /api/prompt (prompt_checks)."""
         refused = prompt_checks(request, ctx, NOTIFY_MAX_BODY)
         if refused is not None:
-            log(f"拒否: /api/notify-presence（{refused.text.strip()}）")
+            log(f"refused: /api/notify-presence ({refused.text.strip()})")
             return refused
         body = await _capped_json(request, NOTIFY_MAX_BODY)
         if isinstance(body, web.Response):
@@ -694,7 +694,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         /api/prompt (prompt_checks)."""
         refused = prompt_checks(request, ctx, NOTIFY_MAX_BODY)
         if refused is not None:
-            log(f"拒否: /api/ask-wait（{refused.text.strip()}）")
+            log(f"refused: /api/ask-wait ({refused.text.strip()})")
             return refused
         body = await _capped_json(request, NOTIFY_MAX_BODY)
         if isinstance(body, web.Response):
@@ -712,7 +712,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         ctx.state.set_slice("settings", settings_slice(ctx.config))
         if ctx.publish:
             ctx.publish()
-        log(f"質問の待ち時間: {ask_wait_text(ctx.config.askWaitSec)}")
+        log(f"question wait: {'until answered' if ctx.config.askWaitSec <= 0 else f'{ctx.config.askWaitSec} s'}")
         return web.json_response({"ok": True, "askWaitSec": ctx.config.askWaitSec})
 
     async def api_history_file(request: web.Request) -> web.Response:
@@ -722,7 +722,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         /api/prompt. A file no longer there is {"gone": true} with 200 (a 404 is a console error on every look)."""
         refused = prompt_checks(request, ctx)
         if refused is not None:
-            log(f"拒否: /api/history-file（{refused.text.strip()}）")
+            log(f"refused: /api/history-file ({refused.text.strip()})")
             return refused
         body = await _capped_json(request, PROMPT_MAX_BODY)
         if isinstance(body, web.Response):
@@ -751,7 +751,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         an absolute path). A file no longer there is {"gone": true} with 200; not on macOS, 501."""
         refused = prompt_checks(request, ctx)
         if refused is not None:
-            log(f"拒否: /api/reveal-file（{refused.text.strip()}）")
+            log(f"refused: /api/reveal-file ({refused.text.strip()})")
             return refused
         body = await _capped_json(request, PROMPT_MAX_BODY)
         if isinstance(body, web.Response):
@@ -800,7 +800,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         no-store; a refusal carries no picture."""
         refused = prompt_checks(request, ctx)
         if refused is not None:
-            log(f"拒否: /api/history-image（{refused.text.strip()}）")
+            log(f"refused: /api/history-image ({refused.text.strip()})")
             return refused
         raw = b""
         while len(raw) <= PROMPT_MAX_BODY:   # a chunked body has no Content-Length: stop reading past the cap
@@ -836,7 +836,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         asked only when the rack is pressed, nothing kept; JSON, no-store."""
         refused = prompt_checks(request, ctx)
         if refused is not None:
-            log(f"拒否: /api/data-docs（{refused.text.strip()}）")
+            log(f"refused: /api/data-docs ({refused.text.strip()})")
             return refused
         body = await _capped_json(request, PROMPT_MAX_BODY)
         if isinstance(body, web.Response):
@@ -861,7 +861,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         """The checks of /api/prompt, then {"projectId", …}: (body, the room's root) or a refusal."""
         refused = prompt_checks(request, ctx)
         if refused is not None:
-            log(f"拒否: {route}（{refused.text.strip()}）")
+            log(f"refused: {route} ({refused.text.strip()})")
             return refused, None
         body = await _capped_json(request, PROMPT_MAX_BODY)
         if isinstance(body, web.Response):
@@ -912,7 +912,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         worker (never on the event loop), then read again at once: the next response is priced by it."""
         refused = prompt_checks(request, ctx)
         if refused is not None:
-            log(f"拒否: /api/prices（{refused.text.strip()}）")
+            log(f"refused: /api/prices ({refused.text.strip()})")
             return refused
         body = await _capped_json(request, PROMPT_MAX_BODY)
         if isinstance(body, web.Response):
@@ -929,7 +929,7 @@ def make_app(ctx: ServerContext) -> web.Application:
             world._prices_pool, lambda: prices.apply_op(book.path(), op, model, row, book.default))
         if not ok:
             return web.json_response({"ok": False, "error": msg}, status=400, headers={"Cache-Control": "no-store"})
-        log(f"単価: {msg}")
+        log(f"prices: {msg}")
         book.recheck()
         return web.json_response({"ok": True, "message": msg}, headers={"Cache-Control": "no-store"})
 
@@ -1090,7 +1090,7 @@ def _clock_log(ctx: ServerContext, record: dict, response: web.Response, world=N
     result = outcome.result if outcome is not None else "refused"
     record.update(status=response.status, result=result, reason=text)
     clockout.write_log(paths.viz_home() / "clock-out.log", record)
-    log(f"退勤: {record.get('sessionId') or '?'} pid={record.get('pid')} → {result} {response.status}（{text}）")
+    log(f"clock-out: {record.get('sessionId') or '?'} pid={record.get('pid')} -> {result} {response.status} ({text})")
     if world is not None and sid is not None:
         world.clock_out_event(sid, now_ms(), record)
         if ctx.publish:
@@ -1127,7 +1127,7 @@ def _dispatch_hook(ctx: ServerContext, payload: dict) -> None:
         if asyncio.iscoroutine(result):
             asyncio.ensure_future(result)
     except Exception as exc:  # noqa: BLE001 - one bad payload must not stop the server
-        log(f"フックの処理に失敗しました（{type(exc).__name__}）")
+        log(f"a hook could not be handled ({type(exc).__name__})")
 
 
 def _parse(msg) -> dict | None:

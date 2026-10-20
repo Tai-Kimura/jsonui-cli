@@ -64,7 +64,7 @@ def test_hooks_install_refuses_when_the_plugin_is_enabled(tmp_path, monkeypatch)
     monkeypatch.setenv("HOME", str(tmp_path))
     paths.claude_settings().parent.mkdir(parents=True)
     paths.claude_settings().write_text(json.dumps({"enabledPlugins": {"jui-viz@jsonui": True}}))
-    with pytest.raises(hi.SettingsError, match="二重"):
+    with pytest.raises(hi.SettingsError, match="twice"):
         hi.install(python="/work/py")
     assert json.loads(paths.claude_settings().read_text()) == {"enabledPlugins": {"jui-viz@jsonui": True}}
     assert hi.status()["plugin"] == "jui-viz@jsonui"

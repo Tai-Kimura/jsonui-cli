@@ -84,10 +84,10 @@ def ask_choices_cut_short(timeout: float, config: "VizConfig") -> list:
 
 
 def ask_choice_text(sec: float) -> str:
-    """A choice as the page names it: 20 秒, 10 分, 答えるまで."""
+    """A choice as the terminal names it (jui viz doctor): 20 s, 10 min, until answered."""
     if sec <= 0:
-        return "答えるまで"
-    return f"{int(sec)} 秒" if sec < 60 else f"{sec / 60:g} 分"
+        return "until answered"
+    return f"{int(sec)} s" if sec < 60 else f"{sec / 60:g} min"
 
 
 def ask_server_info(config: "VizConfig") -> dict:
@@ -121,9 +121,9 @@ def load_config() -> VizConfig:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
-            raise ValueError("JSON のオブジェクトではありません")
+            raise ValueError("not a JSON object")
     except (OSError, ValueError) as exc:
-        print(f"jui viz: {path} を読めないため既定値で続けます（{exc}）", file=sys.stderr)
+        print(f"jui viz: {path} cannot be read, so the defaults are used ({exc})", file=sys.stderr)
         return config
     known = {f.name: f.type for f in fields(VizConfig)}
     for key, value in data.items():
@@ -138,7 +138,7 @@ def load_config() -> VizConfig:
         else:
             ok = isinstance(value, type(default))
         if not ok:
-            print(f"jui viz: config.json の {key} の型が違うため既定値 {default!r} を使います", file=sys.stderr)
+            print(f"jui viz: config.json's {key} has another type, so the default {default!r} is used", file=sys.stderr)
             continue
         setattr(config, key, type(default)(value))
     return config

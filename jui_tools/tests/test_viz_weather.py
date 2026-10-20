@@ -489,8 +489,8 @@ def test_doctor_says_whether_it_is_on_and_when_it_last_worked(tmp_path, monkeypa
     monkeypatch.setenv("HOME", str(tmp_path))
     from jui_cli.commands import viz_cmd
     line = next(c for c in viz_cmd._doctor_checks() if c["name"] == "weather")
-    assert line["ok"] is True and "オフ" in line["detail"]
+    assert line["ok"] is True and "nearby weather: off" in line["detail"]
     W.save_setting(True, LAT, LON)
     W._write_json(W.status_json(), {"on": True, "lastOkAt": None, "lastTryAt": 1, "lastError": "天気を取れません（OSError: x）"})
     line = next(c for c in viz_cmd._doctor_checks() if c["name"] == "weather")
-    assert line["ok"] is False and "オン" in line["detail"] and "OSError" in line["detail"] and "35.6" not in line["detail"]
+    assert line["ok"] is False and "nearby weather: on" in line["detail"] and "OSError" in line["detail"] and "35.6" not in line["detail"]

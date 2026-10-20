@@ -180,7 +180,7 @@ def test_a_running_server_is_still_reachable_after_the_install_folder_is_replace
         again = _jui(home, "viz", "start", "--json")
         assert again.returncode == 0 and json.loads(again.stdout)["alreadyRunning"] is True
         stopped = _jui(home, "viz", "stop")
-        assert stopped.returncode == 0 and "停止しました" in stopped.stdout
+        assert stopped.returncode == 0 and "stopped (pid" in stopped.stdout
         assert not _alive(pid)
         restarted = _jui(home, "viz", "start", "--json")
         assert restarted.returncode == 0, restarted.stderr
@@ -239,7 +239,7 @@ def test_the_first_viz_command_moves_the_old_folder(home, capsys):
     assert (new / "test-progress" / "run.jsonl").exists()
     assert (new / "config.json").read_text() == kept
     assert (old / "config.json").exists()
-    assert "移しました" in capsys.readouterr().err
+    assert "moved the state from" in capsys.readouterr().err
 
 
 def test_hooks_install_rewrites_the_old_progress_folder_and_uninstall_removes_it(home):
@@ -290,7 +290,7 @@ def test_a_server_of_another_home_is_not_stopped(home, tmp_path):
     pid = json.loads(started.stdout)["pid"]
     try:
         stopped = _jui(home, "viz", "stop", "--port", str(port))
-        assert stopped.returncode == 0 and "起動していません" in stopped.stdout
+        assert stopped.returncode == 0 and "not running" in stopped.stdout
         assert _alive(pid)
         assert json.loads(_jui(home, "viz", "status", "--json").stdout)["running"] is False
     finally:
