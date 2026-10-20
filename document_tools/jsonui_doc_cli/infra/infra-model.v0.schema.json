@@ -452,7 +452,7 @@
     "step": {
       "type": "object",
       "additionalProperties": false,
-      "description": "One step: a move along an edge (edge, or from and to), a step at a node (node), a branch where a person chooses (branch), or lanes that run side by side (parallel). Exactly one of these.",
+      "description": "One step: a move along an edge (edge, or from and to), a step at a node (node), a branch where a person chooses (branch), or lanes that run side by side (parallel). Exactly one of these. A move leaves the node the flow is at, and the flow is then at its other end (async too): a call and its reply are two steps, the request and then the response back along the same edge.",
       "properties": {
         "id": {
           "$ref": "#/$defs/id",
@@ -478,7 +478,7 @@
         },
         "async": {
           "type": "boolean",
-          "description": "Called without waiting for it."
+          "description": "Called without waiting for it; the flow still moves on to the node called."
         },
         "branch": {
           "$ref": "#/$defs/branch"
@@ -490,7 +490,7 @@
           "items": {
             "$ref": "#/$defs/steps"
           },
-          "description": "Lanes that run at once from where the flow is; the next step waits for all of them."
+          "description": "Lanes that run at once, each leaving from the node the flow is at; the flow stays at that node and the next step waits for all of them."
         }
       }
     },
@@ -526,7 +526,7 @@
         "id",
         "label"
       ],
-      "description": "One way on: its steps, then the flow goes on after the branch; or goto another flow; or join a later step of this flow.",
+      "description": "One way on: its steps, then the flow goes on with the steps after the branch, from the node its steps end at; or goto another flow; or join a later step of this flow. A choice that ends the flow another way (an error sent back) joins the step that ends it, unless the branch is the flow's last step.",
       "properties": {
         "id": {
           "$ref": "#/$defs/id"
@@ -579,7 +579,8 @@
           "$ref": "#/$defs/envRefs"
         },
         "steps": {
-          "$ref": "#/$defs/steps"
+          "$ref": "#/$defs/steps",
+          "description": "In order, each from where the one before left the flow; the first from start."
         }
       }
     }

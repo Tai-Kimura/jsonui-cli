@@ -32,9 +32,9 @@ SECRET_JA = {"arn": "ARN", "account_id": "アカウント ID", "ip_address": "IP
 #: one per problem code flows.py gives (test_infra_flows: a code with no words is red)
 FLOW_JA = {"flow.node.missing": "が、この flow と一緒に描かれない node を指しています",
            "flow.edge.missing": "が通る辺がありません",
-           "flow.discontinuous": "が、今いる node から出ていません",
+           "flow.discontinuous": "が、今いる node から出ていません（往復は request と response の 2 歩・エラーで終わる選択肢は join・並びは今いる node から）",
            "flow.step.kind": "の step の書き方が 1 つに決まりません（辺・node・分かれ道・並びのどれか 1 つ）",
-           "flow.paths_disagree": "の step に、道によって違う node から着きます",
+           "flow.paths_disagree": "の step に、道によって違う node から着きます（エラーで終わる選択肢は join で終わりの step へ）",
            "flow.too_deep": "の分かれ道と並びの入れ子が深すぎます",
            "flow.choice.duplicate": "の分かれ道に、同じ id の選択肢があります",
            "flow.choice.kind": "の選択肢の進み方が 1 つに決まりません（steps・goto・join のどれか）",

@@ -54,6 +54,23 @@ class _Flow:
         self.top_ids = {s["id"]: i for i, s in enumerate(f["steps"]) if s.get("id")}
         self.gotos: list[tuple[str, bool, str, str]] = []   # (flow id, taken by default, the choice's path, where it leaves)
         self.wrong = False
+        # why the flow is where it is, for flow.discontinuous's hint: the node before the last move, and whether the step
+        # walked is a lane's first ("lane") or the first after a choice's steps ("choice")
+        self.prev: str | None = None
+        self.came: str | None = None
+
+    def off(self, path: str, message: str, wanted: str, pos: str) -> None:
+        """flow.discontinuous, with the rule a writer most likely missed when it can be told from where the flow is."""
+        if self.came == "lane":
+            hint = "each lane leaves from the node the flow is at"
+        elif self.came == "choice":
+            hint = ("a choice's steps go on into the steps after the branch from where they end: a choice that ends the "
+                    "flow another way joins the step that ends it (join)")
+        elif wanted == self.prev:
+            hint = f"a call and its reply are two steps: the response from {pos!r} back to {wanted!r} first"
+        else:
+            hint = "a move leaves the node the flow is at"
+        self.err(path, "flow.discontinuous", f"{message} ({hint})")
 
     def err(self, path: str, code: str, message: str, severity: str = "error") -> None:
         p = _problem(self.name, path, code, message, severity)
@@ -94,7 +111,7 @@ class _Flow:
                 return e["to"]
             if pos == e["to"] and (d in ("in", "both") or back):
                 return e["from"]
-            self.err(path, "flow.discontinuous", f"the edge does not leave the node the flow is at ({pos!r})")
+            self.off(path, f"the edge does not leave the node the flow is at ({pos!r})", e["from"] if d != "in" else e["to"], pos)
             return None
         if "from" not in step or "to" not in step:
             self.err(path, "flow.step.kind", "a move names both from and to")
@@ -102,7 +119,7 @@ class _Flow:
         if not (self.node_ok(step["from"], f"{path}/from") and self.node_ok(step["to"], f"{path}/to")):
             return None
         if step["from"] != pos:
-            self.err(f"{path}/from", "flow.discontinuous", f"leaves {step['from']!r}, but the flow is at {pos!r}")
+            self.off(f"{path}/from", f"leaves {step['from']!r}, but the flow is at {pos!r}", step["from"], pos)
             return None
         if self.edge_between(step["from"], step["to"], back) is None:
             self.err(path, "flow.edge.missing", f"no edge takes the flow from {step['from']!r} to {step['to']!r}")
@@ -118,6 +135,7 @@ class _Flow:
                     return
                 steps, i, path, top, depth = cont[0]
                 cont = cont[1:]
+                self.came = "choice"
                 continue
             if depth == 0:
                 top = i
@@ -128,7 +146,9 @@ class _Flow:
             self.seen.add(key)
             prior = self.at.get(id(step))
             if prior is not None and prior[0] != pos:
-                self.err(here, "flow.paths_disagree", "reached by two paths at two different nodes")
+                self.err(here, "flow.paths_disagree", "reached by two paths at two different nodes" + (
+                    " (a choice's steps go on into the steps after the branch from where they end: a choice that ends the flow"
+                    " another way joins the step that ends it (join))" if self.came == "choice" else ""))
                 return
             kinds = _kinds(step)
             if len(kinds) != 1:
@@ -141,15 +161,17 @@ class _Flow:
                 if nxt is None:
                     return
                 self.at[id(step)] = (pos, nxt)
+                self.prev, self.came = pos, None
                 pos, i = nxt, i + 1
                 continue
             if kind == "node":
                 if not self.node_ok(step["node"], f"{here}/node"):
                     return
                 if step["node"] != pos:
-                    self.err(f"{here}/node", "flow.discontinuous", f"at {step['node']!r}, but the flow is at {pos!r}")
+                    self.off(f"{here}/node", f"at {step['node']!r}, but the flow is at {pos!r}", step["node"], pos)
                     return
                 self.at[id(step)] = (pos, None)
+                self.came = None
                 i += 1
                 continue
             if depth >= MAX_DEPTH:
@@ -158,7 +180,9 @@ class _Flow:
             self.at[id(step)] = (pos, None)
             if kind == "parallel":
                 for k, lane in enumerate(step["parallel"]):
+                    self.prev, self.came = None, "lane"
                     self.walk(lane, 0, pos, f"{here}/parallel/{k}", [], depth + 1, by_default, top)
+                self.prev, self.came = None, None
                 i += 1
                 continue
             # a branch
@@ -192,6 +216,7 @@ class _Flow:
                     after = [(self.f["steps"], j, f"{self.path}/steps", j, 0)]
                 else:
                     after = rest
+                self.prev, self.came = None, None
                 self.walk(sub, 0, pos, f"{cp}/steps", after, depth + 1, taken, top)
             return
 

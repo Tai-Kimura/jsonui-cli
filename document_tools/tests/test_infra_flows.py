@@ -271,6 +271,28 @@ def test_a_flow_naming_no_environment_is_drawn_where_its_whole_way_is():
     assert _codes(_merge({**BUY, "steps": [{"from": "browser", "to": "db"}]}, base=base)[1]) == [("flow.edge.missing", "/flows/0/steps/0")]
 
 
+@pytest.mark.parametrize("steps, code, path, hint", [
+    # a call and its reply written as one step: the flow is at db, the next step leaves api
+    ([{"edge": "e-browser-api"}, {"from": "api", "to": "db", "action": "read"}, {"from": "api", "to": "browser", "action": "response"}],
+     "flow.discontinuous", "/flows/0/steps/2/from", "a call and its reply are two steps: the response from 'db' back to 'api' first"),
+    # a choice that sends an error back and does not join the end: the steps after the branch are reached from api and from
+    # browser
+    ([{"edge": "e-browser-api"}, {"branch": {"label": "?", "choices": [
+        {"id": "ok", "label": "通る", "steps": [{"node": "api"}]},
+        {"id": "ng", "label": "通らない", "steps": [{"from": "api", "to": "browser", "action": "response"}]}]}},
+      {"from": "api", "to": "db", "action": "write"}],
+     "flow.paths_disagree", "/flows/0/steps/2", "a choice that ends the flow another way joins the step that ends it (join)"),
+    # a lane written as if it went on from the lane before
+    ([{"edge": "e-browser-api"}, {"parallel": [[{"from": "api", "to": "queue"}], [{"from": "queue", "to": "worker"}]]}],
+     "flow.discontinuous", "/flows/0/steps/1/parallel/1/0/from", "each lane leaves from the node the flow is at"),
+])
+def test_a_step_off_the_way_says_the_rule_its_writer_most_likely_missed(steps, code, path, hint):
+    """Asked by a backend's first flows (three, all refused): the message says which rule."""
+    problems = _merge({"id": "f", "start": "browser", "steps": steps})[1]
+    off = [p for p in problems if p["code"] == code]
+    assert [p["path"] for p in off] == [path] and hint in off[0]["message"], off
+
+
 def test_a_loop_whose_flows_also_go_to_a_flow_that_ends_is_refused_and_that_flow_kept():
     """The independent check's H2: r goes by default to s; s's two lanes go by default to r and to c (no goto). Only r
     and s are on the loop: c, reached from it and done first, stays."""
