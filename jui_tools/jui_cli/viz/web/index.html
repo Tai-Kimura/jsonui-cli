@@ -38,6 +38,7 @@
     <div class="controls">
       <button type="button" id="btn-play" aria-pressed="false">一時停止</button>
       <button type="button" id="btn-speed">速度 ×1</button>
+      <button type="button" class="dev-btn" id="btn-devices" hidden aria-haspopup="dialog" aria-expanded="false" aria-controls="dev-pane">デバイス</button>
       <button type="button" id="btn-notify" hidden aria-haspopup="dialog" aria-expanded="false" aria-controls="notify-pop">通知</button>
       <button type="button" id="btn-side" aria-controls="side" aria-expanded="true">パネルを閉じる</button>
     </div>
@@ -225,6 +226,10 @@
 <div class="sr-bubble" id="sr-bubble" hidden role="status" aria-live="polite"><span class="sr-short"></span><div class="sr-full"></div></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="pop" id="pop" hidden role="dialog" aria-modal="false"></div>
+<aside class="dev-pane" id="dev-pane" hidden role="dialog" aria-modal="false" aria-labelledby="dev-title">
+  <header class="dev-head"><h2 id="dev-title">マシンの負荷と機器</h2><button type="button" class="fn-btn" id="dev-close" aria-label="閉じる">×</button></header>
+  <div id="dev-body"></div>
+</aside>
 <div class="notify-pop" id="notify-pop" hidden role="dialog" aria-modal="false" aria-labelledby="notify-title">
   <h2 id="notify-title">通知と、質問の待ち時間</h2>
   <p id="notify-perm-state"></p>
