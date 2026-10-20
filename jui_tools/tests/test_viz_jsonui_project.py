@@ -207,7 +207,7 @@ def test_sheet_doc_has_the_renderers_shape(tmp_path):
     assert doc["layoutChildren"] == ["login_root", "title", "email", "submit"]
     assert doc["uiVariables"] == [["email", "String", ""]] and doc["vmMethods"] == ["onSubmit"]
     assert doc["repositories"] == ["AuthRepository"] and doc["apis"][0][1:] == ["POST", "/login"]
-    assert doc["branches"] == [["onSubmit", '{"email": "empty"}', '{"error": "@required"}'], ["onSubmit", "note", "network down"]]
+    assert doc["branches"] == [["onSubmit", {"email": "empty"}, {"error": "@required"}], ["onSubmit", "note", "network down"]]
     assert doc["related"] == [["ViewModel", "app/LoginViewModel.swift", False]]
     assert sheet_for(project, "p:nope") is None
     long = build_doc({"userActions": [{"action": "a" * 1000, "processing": "p"}]}, [], [], {"total": 0, "done": 0})

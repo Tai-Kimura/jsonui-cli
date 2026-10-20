@@ -177,6 +177,7 @@ BUILDERS = {
         "permSubject", "permSubjectLive", "sentWhat", "livePermHow", "rawDetails", "suggestionHTML", "recentHTML",
         "liveTestsHTML", "questionHTML", "robotTestsHTML", "robotRunHTML",
         "transitionTag", "typeCell",   # 2.3.5: a transition's tag and a type's cell (their templates are checked here too)
+        "bjCell",   # 2.3.7: a branch's JSON cell, an empty placeholder (ticket 2026-10-20-jui-viz-spec-branch-json-formatted)
         "nameTable", "nameCells",   # 2.3.7: イベント・操作 as one table (ticket 2026-10-20-jui-viz-spec-events-as-table)
         "rowText", "wfTree", "levelHTML",   # 2.3.7: the 構造's row text and its nested boxes (ticket 2026-10-20-jui-viz-spec-structure-shows-no-nesting)
     },

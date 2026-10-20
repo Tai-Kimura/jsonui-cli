@@ -638,6 +638,19 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .vt th { padding: 4px 6px; border-bottom: 1px solid var(--wb-line); color: var(--wb-soft); font: 700 11px/1.5 var(--font-body); text-align: left; }
 .vt td { padding: 5px 6px; border-bottom: 1px dashed var(--wb-line); color: var(--wb-ink); vertical-align: baseline; }
 .vt td.mk { width: 1.8em; }
+/* 分岐: the table's columns fixed, so a formatted value scrolls inside its own block (ticket 2026-10-20-jui-viz-spec-branch-json-formatted) */
+.vt.bt { table-layout: fixed; }
+.bt th:first-child { width: 1.8em; }
+.bt th:nth-child(2) { width: 22%; }
+.bt td { vertical-align: top; }
+.bj { display: grid; gap: 4px; min-width: 0; }
+.bj-pre { margin: 0; padding: 6px 8px; overflow-x: auto; border: 1px solid var(--wb-line); border-radius: 6px; color: var(--wb-ink); font: 500 12px/1.5 var(--font-mono); white-space: pre; overflow-wrap: normal; tab-size: 2; }
+.bj.bj-fold:not(.bj-open) .bj-pre { max-height: calc(12 * 1.5em + 12px); overflow-y: hidden; }
+.bj-more { justify-self: start; padding: 1px 8px; border: 1px solid var(--wb-line); border-radius: 6px; background: var(--wb-chip); color: var(--wb-ink); font: 700 11px/1.5 var(--font-body); cursor: pointer; }
+.bj-key { color: var(--ty-array); }
+.bj-str { color: var(--ty-string); }
+.bj-num { color: var(--ty-number); }
+.bj-lit { color: var(--ty-bool); }
 /* イベント・操作 (one table, ticket 2026-10-20-jui-viz-spec-events-as-table): the name in one line, the rest wraps */
 .nt td.nt-name { font-weight: 700; white-space: nowrap; }
 .nt td.nt-desc { overflow-wrap: anywhere; }

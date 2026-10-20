@@ -16,7 +16,9 @@ object; this builds it from a real spec so the renderer ports unchanged:
   apis            [[operation, method, path]]
   userActions     [[action, processing, destination]]
   transitions     [[trigger or condition, destination, type or method]]
-  branches        [[method, when, then]]      ("note" entries: [method, "note", text])
+  branches        [[method, when, then]]      ("note" entries: [method, "note", text]; when / then: the spec's
+                                               object or array as it is, for the page's formatted block, or
+                                               text — _json_or_text)
   related         [[type, path, exists]]
   impl            {total, done}
   flowMermaid     the data flow diagram document_tools' spec page draws ("" when there is none; 2.3.5)
@@ -30,6 +32,8 @@ from pathlib import Path
 
 MAX_ITEMS = 300
 MAX_TEXT = 300
+#: A branch's when / then larger than this (as JSON) goes as text, cut like any other (ticket 2026-10-20-jui-viz-spec-branch-json-formatted).
+MAX_JSON = 20_000
 #: Mermaid's own default maxTextSize: a longer diagram is not drawn (the page shows the boxes instead).
 MERMAID_MAX = 50_000
 _DOC_HTML: list = []
@@ -67,6 +71,18 @@ def _t(value) -> str:
     text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
     text = " ".join(text.split())
     return text if len(text) <= MAX_TEXT else text[: MAX_TEXT - 1] + "…"
+
+
+def _json_or_text(value):
+    """A branch's when / then: an object or an array as the spec wrote it (the page formats it, every string in it
+    put in as text), anything else — or one over MAX_JSON as JSON — the one line it always was."""
+    if isinstance(value, (dict, list)):
+        try:
+            if len(json.dumps(value, ensure_ascii=False)) <= MAX_JSON:
+                return value
+        except (TypeError, ValueError):
+            pass
+    return _t(value)
 
 
 def _list(value) -> list:
@@ -156,7 +172,7 @@ def build_doc(spec: dict, layout_nodes: list[dict], related_exists: list[bool], 
             if "note" in entry:
                 branches.append([_t(method), "note", _t(entry.get("note"))])
             else:
-                branches.append([_t(method), _t(entry.get("when")), _t(entry.get("then"))])
+                branches.append([_t(method), _json_or_text(entry.get("when")), _json_or_text(entry.get("then"))])
 
     related = []
     for item, exists in zip(_list(spec.get("relatedFiles")), related_exists):

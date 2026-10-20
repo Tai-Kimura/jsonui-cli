@@ -968,6 +968,51 @@ function wfTree(nodes) {
   };
   return levelHTML(0);
 }
+/* 分岐's condition and result as formatted JSON (ticket 2026-10-20-jui-viz-spec-branch-json-formatted; requester 10-20:
+   「json formatterでフォーマットした感じに」). The server sends a when / then the spec wrote as an object or an array as
+   it is (sheet._json_or_text); its cell is an empty placeholder in the sheet's HTML, filled after it is set with
+   JSON.stringify(v, null, 2) built from text nodes and spans — keys, strings, numbers and true / false / null each
+   coloured — with createElement and textContent only: no value of the spec ever goes through HTML. The block scrolls
+   sideways inside itself; over BJ_FOLD lines it is folded, 「全部を見る」 opens it (kept open across redraws). Anything
+   else stays the one line of text it was. */
+const BJ_FOLD = 12;
+const bjCell = (v, i, j) => (v !== null && typeof v === 'object' ? `<td class="bj-cell" data-bj="${esc(i)}:${esc(j)}"></td>` : `<td>${esc(v)}</td>`);
+const BJ_OPEN = new Set();
+function jsonBlock(v, key) {
+  const text = JSON.stringify(v, null, 2), lines = text.split('\n').length;
+  const box = document.createElement('div'), pre = document.createElement('pre');
+  box.className = 'bj'; pre.className = 'bj-pre';
+  const put = (t, cls) => {
+    if (!t) return;
+    if (!cls) { pre.append(document.createTextNode(t)); return; }
+    const sp = document.createElement('span'); sp.className = cls; sp.textContent = t; pre.append(sp);
+  };
+  const re = /("(?:[^"\\]|\\.)*")(\s*:)?|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|\b(true|false|null)\b/g;
+  let at = 0, m;
+  while ((m = re.exec(text))) {
+    put(text.slice(at, m.index));
+    if (m[1]) { put(m[1], m[2] ? 'bj-key' : 'bj-str'); put(m[2]); } else if (m[3]) put(m[3], 'bj-num'); else put(m[4], 'bj-lit');
+    at = re.lastIndex;
+  }
+  put(text.slice(at));
+  box.append(pre);
+  if (lines > BJ_FOLD) {
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'bj-more';
+    const show = (open) => { box.classList.toggle('bj-open', open); btn.setAttribute('aria-expanded', String(open)); btn.textContent = open ? '畳む' : `全部を見る（${lines} 行）`; };
+    btn.addEventListener('click', () => { const open = !box.classList.contains('bj-open'); if (open) BJ_OPEN.add(key); else BJ_OPEN.delete(key); show(open); });
+    box.classList.add('bj-fold'); show(BJ_OPEN.has(key));
+    box.append(btn);
+  }
+  return box;
+}
+function fillBranchJSON(root, branches, specId) {
+  for (const td of root.querySelectorAll('td[data-bj]')) {
+    if (td.firstChild) continue;   // filled before, the sheet's HTML unchanged
+    const [i, j] = td.dataset.bj.split(':').map(Number), row = branches[i];
+    if (row && row[j] !== null && typeof row[j] === 'object') td.append(jsonBlock(row[j], `${specId}:${i}:${j}`));
+  }
+}
 function renderNav(s) {
   if (wbNav._idx !== wb.idx) { wbNav.innerHTML = SECTIONS.map((label, k) => `<button type="button" data-sec="${k}"><span>${esc(label)}</span><small></small></button>`).join(''); wbNav._idx = wb.idx; }
   [...wbNav.children].forEach((b, k) => { const g = secState(s, k); const cls = chipCls(g); if (b.className !== cls) b.className = cls; setText(b.lastElementChild, g.text); });
@@ -1061,9 +1106,9 @@ function renderSheet(model, force) {
     },
     (w, writing) => `<ul class="rows">${pick(5, d.transitions, reveal(d.transitions.length, w), writing).map(([[trig, dest, how], i, m]) => li(m, `t${i}`, `${esc(trig)}<span class="to">→</span>${transitionTag(dest, how)}`)).join('')}</ul>`,
     (w, writing) => {
-      const rowsHTML = pick(6, d.branches, reveal(d.branches.length, w), writing).map(([[method, when, then], i, m]) => tr(m, `b${i}`, `<td class="mono">${esc(method)}</td><td>${esc(when)}</td><td>${esc(then)}</td>`)).join('');
+      const rowsHTML = pick(6, d.branches, reveal(d.branches.length, w), writing).map(([[method, when, then], i, m]) => tr(m, `b${i}`, `<td class="mono">${esc(method)}</td>${bjCell(when, i, 1)}${bjCell(then, i, 2)}`)).join('');
       const sheetNoteHTML = s.id === 'cart' && model.t >= 18 ? `<p class="sc-note">tests/screens/cart.test.json の 8 ケースと 1 対 1（${T.passed}/8 通過）</p>` : '';
-      return `<table class="vt"><thead><tr><th><span class="sr">状態</span></th><th>メソッド</th><th>条件</th><th>結果</th></tr></thead><tbody>${rowsHTML}</tbody></table>${sheetNoteHTML}`;
+      return `<table class="vt bt"><thead><tr><th><span class="sr">状態</span></th><th>メソッド</th><th>条件</th><th>結果</th></tr></thead><tbody>${rowsHTML}</tbody></table>${sheetNoteHTML}`;
     },
     () => `<ul class="files">${s.related.map(([type, path, exists], i) => {
       const now = i === s.relatedNow && s.by;
@@ -1086,6 +1131,7 @@ function renderSheet(model, force) {
     return `<section class="${esc(cls)}" id="wb-sec-${k}"${esc(act)}>${headHTML}${bodies[k](w, writing)}${tailHTML}</section>`;
   }).join('');
   setHTML(wbCode, sheetHTML);
+  fillBranchJSON(wbCode, d.branches, s.id);
   const mmd = wbCode.querySelector('[data-flow-mmd]');
   if (mmd) drawMermaid(mmd, d.flowMermaid).then((svg) => flowZoomApply(svg));
 
