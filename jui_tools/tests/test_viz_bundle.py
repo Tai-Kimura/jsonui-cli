@@ -178,6 +178,7 @@ BUILDERS = {
         "permButtons", "permButtonsLive", "permButtonsDemo", "permBox", "permDetail", "permDetailLive", "permDetailDemo",
         "permSubject", "permSubjectLive", "sentWhat", "livePermHow", "rawDetails", "suggestionHTML", "recentHTML",
         "liveTestsHTML", "questionHTML", "robotTestsHTML", "robotRunHTML",
+        "histOffHTML",   # 2.3.12: × on an answered card under the history (ticket 2026-10-21-jui-viz-hist-answered-card-dismiss-and-expand)
         "transitionTag", "typeCell",   # 2.3.5: a transition's tag and a type's cell (their templates are checked here too)
         "bjCell",   # 2.3.7: a branch's JSON cell, an empty placeholder (ticket 2026-10-20-jui-viz-spec-branch-json-formatted)
         "nameTable", "nameCells",   # 2.3.7: イベント・操作 as one table (ticket 2026-10-20-jui-viz-spec-events-as-table)
@@ -188,7 +189,7 @@ BUILDERS = {
     "52-data-docs.js": {"dsContentHTML", "dsEndpointHTML", "dsEpHTML", "dsApiHTML", "dsTableHTML", "dsDbHTML"},
 }
 # Builders a part may call that another part defines (each checked where it is defined).
-SHARED_BUILDERS = {"pill"}
+SHARED_BUILDERS = {"pill", "histOffHTML"}
 BUILDER_TABLES = {"bodies": "the sheet's section renderers, each a template checked here"}
 # Lookups into tables the page defines as literals (class names, labels, colours, icons).
 CONST_TABLES = {"ROLES", "ROLE_INK", "CASE_ICON", "COL_HINT", "COL_STATE", "EXACT_LABEL", "PLATFORM_JA",

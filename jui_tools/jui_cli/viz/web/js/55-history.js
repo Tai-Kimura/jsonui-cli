@@ -477,6 +477,7 @@ function histSync() {
   if (pane) pane.hidden = HIST.tab !== 'history';
   composePlace(pane, id);
   histWideSync(id);
+  histLowPaint();
   if (!id || HIST.tab !== 'history') { histStop(); return; }
   histShow();
   if (!HIST.timer) { histFetch(); HIST.timer = setInterval(() => { if (document.visibilityState === 'visible') { histFetch(); composePaint(); } }, HIST_POLL_MS); }
@@ -734,6 +735,19 @@ function composePlace(pane, id) {
    board's (permDetail, questionHTML, denialHTML) under their own `where` (ids and radio names apart; a permission's per card, the session may have two), answered the
    same way: a permission and a question through the hook's decision, a stopped call through its words (it says so,
    DEN_MAY). Answered in one place, every place shows it answered (one state). */
+/* An answered card off the history's cards (ticket 2026-10-21-jui-viz-hist-answered-card-dismiss-and-expand, requester:
+   「この答えた札邪魔だからxでこっちから消せるようにしたい」): × on a card nobody waits on any more (a question not pending, a
+   stopped call not pending; a permission card is always waiting, so never). It leaves this box only: the panel, the board
+   and the history's rows keep it (the × is histOffHTML, 50-panel.js). Kept per card id in this browser (readPref / writePref), the newest HIST_OFF_MAX. */
+const HIST_OFF_PREF = 'hist-cards-off', HIST_OFF_MAX = 300;
+const HIST_OFF = (() => { try { const v = JSON.parse(readPref(HIST_OFF_PREF, '[]')); return Array.isArray(v) ? v.filter((k) => typeof k === 'string') : []; } catch (err) { return []; } })();
+function histOff(key) {
+  if (HIST_OFF.includes(key)) return;
+  HIST_OFF.push(key);
+  HIST_OFF.splice(0, Math.max(0, HIST_OFF.length - HIST_OFF_MAX));
+  writePref(HIST_OFF_PREF, JSON.stringify(HIST_OFF));
+  histCardsPaint();
+}
 function histCardsBox() {
   if (!HIST.cards) {
     const el = hNode('div', 'h-cards');
@@ -743,6 +757,7 @@ function histCardsBox() {
     el.addEventListener('input', onQuestionInput);
     el.addEventListener('click', onQuestionClick);
     el.addEventListener('click', onDenialClick);
+    el.addEventListener('click', (e) => { const b = e.target.closest('[data-h-off]'); if (b) histOff(b.dataset.hOff); });
     HIST.cards = el;
   }
   return HIST.cards;
@@ -751,8 +766,9 @@ function histCardsPaint(id = HIST.compose && HIST.compose._for, off = HIST.tab !
   const el = histCardsBox(), sess = id ? SESSION_OF[id] : null, now = Date.now();
   const mine = (who) => !!sess && SESSION_OF[who] === sess;
   const perms = !off && latestModel ? latestModel.pending.filter((p) => mine(p.who)) : [];
-  const qs = !off ? QUESTIONS.filter((q) => mine(q.who) && (q.status === 'pending' || q.status === 'sent' || now - (q.doneAt || 0) < Q_SHOW_MS)) : [];
-  const ds = !off && typeof DENIALS !== 'undefined' ? DENIALS.filter((d) => mine(d.who) && (d.status === 'pending' || now - (d.doneAt || 0) < DEN_SHOW_MS)) : [];
+  const kept = (kind, x) => x.status === 'pending' || !HIST_OFF.includes(`${kind}:${x.id}`);
+  const qs = !off ? QUESTIONS.filter((q) => mine(q.who) && kept('q', q) && (q.status === 'pending' || q.status === 'sent' || now - (q.doneAt || 0) < Q_SHOW_MS)) : [];
+  const ds = !off && typeof DENIALS !== 'undefined' ? DENIALS.filter((d) => mine(d.who) && kept('d', d) && (d.status === 'pending' || now - (d.doneAt || 0) < DEN_SHOW_MS)) : [];
   el.hidden = !(perms.length || qs.length || ds.length);
   keyed(el, JSON.stringify([id, NAMES.rev, DEN.asking, perms.map(permSig), questionsSig(qs), denialsSig(ds)]),
     () => `${perms.map((p) => permDetail(p, `hb-${p.id}`)).join('')}${qs.map((q) => questionHTML(q, 'h')).join('')}${ds.map((d) => denialHTML(d, 'h')).join('')}`);
@@ -1013,6 +1029,33 @@ function histWideSync(id) {
   else histWidePaint();
 }
 rbEl.addEventListener('click', (e) => { if (e.target.closest('[data-rb-wide]')) histSetWide(!HIST.wide); });
+
+/* 下を広げる (ticket 2026-10-21-jui-viz-hist-answered-card-dismiss-and-expand, requester: 「スクロールしないと質問と送信ボタン
+   全部見えないから見え流用に広げるボタンが欲しい」): on the 応答の履歴 tab, the cards and the prompt box take the height they
+   need and the history keeps what is left (its own scroll); 元の高さに戻す: the history first again. Next to 広げる, kept
+   in this browser as that is. */
+const HIST_LOW_PREF = 'hist-low';
+let histLow = readPref(HIST_LOW_PREF, 'off') === 'on';
+function histLowPaint() {
+  const tab = HIST.tab === 'history' && !!rbState.id, on = histLow && tab;
+  rbEl.classList.toggle('rb-histtab', tab);   // the tab's rows (app.css)
+  rbEl.classList.toggle('rb-low', on);
+  const b = rbEl.querySelector('[data-rb-low]');
+  if (b) {
+    b.hidden = HIST.tab !== 'history';
+    b.setAttribute('aria-pressed', String(on));
+    b.textContent = on ? '元の高さに戻す' : '下を広げる';
+    b.title = on ? '履歴の高さを元に戻す' : '質問の札・プロンプトの欄・送信のボタンが一度に見えるよう、履歴を縮めて下を広げる';
+  }
+}
+rbEl.addEventListener('click', (e) => {
+  if (!e.target.closest('[data-rb-low]')) return;
+  histLow = !histLow;
+  writePref(HIST_LOW_PREF, histLow ? 'on' : 'off');
+  histLowPaint();
+  const pane = histPane();
+  if (pane && HIST.atEnd) histToEnd(pane);   // the newest stays in view across the change of height
+});
 window.addEventListener('resize', () => { if (HIST.wide) { histWidePaint(); histWideFly(); } });
 
 

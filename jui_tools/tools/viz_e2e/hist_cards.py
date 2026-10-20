@@ -12,6 +12,14 @@ are its main robot's, the question and a second permission are a subagent's (the
   * the 今の様子 tab shows no cards box;
   * the stopped call's 実行してよいと伝える… opens its confirmation in the history's card only, not the panel's;
   * そのまま closes it everywhere.
+  * × (ticket 2026-10-21-jui-viz-hist-answered-card-dismiss-and-expand): no card waiting on an answer has it, the answered
+    question and the closed stopped call have it in the history's cards only; pressed, the card leaves the history's
+    cards while the panel still shows it, and a reload keeps it gone (the panel's card still there: the control);
+  * the history keeps its 120 px above the cards, not under them;
+  * 下を広げる, on the history tab only: with the four cards (more than the card's height) the cards box grows, the
+    prompt box's 送信 stays inside the card and a strip of the history above them; with the two answered cards (the
+    requester's case) both show whole (they did not before: the control); the choice
+    is kept over a reload; 元の高さに戻す: the history's height back.
 No console error; nothing outside the server.
 """
 
@@ -36,6 +44,20 @@ CARDS = """() => { const c = document.querySelector('#rb [data-h-cards]'); if (!
   return { shown: !c.hidden, histHeight: Math.round(hist.getBoundingClientRect().height), perm: c.querySelectorAll('.tbd-perm').length, question: c.querySelectorAll('[data-qcard]').length,
     denied: c.querySelectorAll('[data-dcard]').length, outside: !hist.contains(c), beforeBox: !!box && c.nextElementSibling === box,
     left: (c.querySelector('[data-quntil]') || {}).textContent || '' }; }"""
+LOW = """() => { const rb = document.getElementById('rb').getBoundingClientRect(), c = document.querySelector('#rb [data-h-cards]');
+  const send = document.querySelector('#rb [data-h-send]').getBoundingClientRect(), b = document.querySelector('#rb [data-rb-low]');
+  return { on: document.getElementById('rb').classList.contains('rb-low'), pressed: b.getAttribute('aria-pressed'), label: b.textContent,
+    cardsScroll: c.scrollHeight - c.clientHeight, cardsHeight: c.clientHeight, sendIn: send.height > 0 && send.top >= rb.top && send.bottom <= rb.bottom + 0.5,
+    cardsBelowHist: c.getBoundingClientRect().top >= document.querySelector('[data-rb-hist]').getBoundingClientRect().bottom - 0.5,
+    histHeight: Math.round(document.querySelector('[data-rb-hist]').getBoundingClientRect().height),
+    answeredIn: (() => { const r = c.getBoundingClientRect(), xs = [...c.querySelectorAll('[data-qcard]:not(.q-open), [data-dcard]:not(.q-open)')];
+      return xs.length > 0 && xs.every((x) => { const b = x.getBoundingClientRect(); return b.top >= r.top - 0.5 && b.bottom <= r.bottom + 0.5; }); })(),
+    rows: getComputedStyle(document.getElementById('rb')).gridTemplateRows,
+    kids: [...document.getElementById('rb').children].filter((k) => k.getClientRects().length).map((k) => `${k.className.split(' ')[0]}:${Math.round(k.getBoundingClientRect().height)}`) }; }"""
+OFF = """() => ({ hist: [...document.querySelectorAll('#rb [data-h-cards] [data-h-off]')].map((b) => b.dataset.hOff),
+  elsewhere: document.querySelectorAll('[data-h-off]').length - document.querySelectorAll('#rb [data-h-cards] [data-h-off]').length,
+  histQ: document.querySelectorAll('#rb [data-h-cards] [data-qcard]').length, histD: document.querySelectorAll('#rb [data-h-cards] [data-dcard]').length,
+  panelQ: document.querySelectorAll('#questions [data-qcard]').length, panelD: document.querySelectorAll('#denied [data-dcard]').length })"""
 DUP_IDS = "() => { const ids = [...document.querySelectorAll('[id]')].map((e) => e.id); return ids.filter((x, i) => ids.indexOf(x) !== i); }"
 # a radio group's name in the history's cards that the panel's (or the board's) cards also use: the two would be one group
 SHARED_NAMES = """() => { const here = new Set([...document.querySelectorAll('#rb [data-h-cards] input[type=radio]')].map((i) => i.name));
@@ -149,11 +171,30 @@ async def run_hist_cards(pw, out, failures):
         shared = res["sharedNames"] = await page.evaluate(SHARED_NAMES)
         check(failures, shared == [], f"no radio group shared with the panel's cards: {shared}")
         await page.screenshot(path=str(out / "cards.png"))
+        off = res["offWhileWaiting"] = await page.evaluate(OFF)
+        check(failures, off["hist"] == [] and off["elsewhere"] == 0, f"no × on a card that waits on an answer: {off}")
+        # 下を広げる: the four cards scroll in their box at first (the control), then all show with 送信 inside the card
+        lo = res["lowBefore"] = await page.evaluate(LOW)
+        check(failures, not lo["on"] and lo["pressed"] == "false" and lo["label"] == "下を広げる" and lo["cardsScroll"] > 0,
+              f"before 下を広げる the cards box scrolls (the control): {lo}")
+        check(failures, lo["cardsBelowHist"] and lo["histHeight"] >= 119, f"the history keeps 120 px and does not run under the cards: {lo}")
+        await page.click("#rb [data-rb-low]")
+        lo = res["lowOn"] = await page.evaluate(LOW)
+        check(failures, lo["on"] and lo["pressed"] == "true" and lo["label"] == "元の高さに戻す" and lo["sendIn"] and lo["cardsBelowHist"]
+              and lo["cardsHeight"] > res["lowBefore"]["cardsHeight"] and lo["histHeight"] >= 50,
+              f"下を広げる with four cards: the cards box grows, 送信 inside the card, a strip of the history above: {lo}")
+        await page.screenshot(path=str(out / "low.png"))
+        await page.click("#rb [data-rb-low]")
+        lo = res["lowOff"] = await page.evaluate(LOW)
+        check(failures, not lo["on"] and lo["pressed"] == "false" and lo["histHeight"] >= res["lowBefore"]["histHeight"] - 1,
+              f"元の高さに戻す: the history's height back: {lo}")
         # the 今の様子 tab: no cards box there (the box is the history tab's; the independent check's X4)
         await page.click('#rb [data-rb-tab="now"]')
         await page.wait_for_timeout(400)
         res["cardsOnNowTab"] = await page.evaluate("() => { const c = document.querySelector('#rb [data-h-cards]'); return !!c && !c.hidden && c.getClientRects().length > 0; }")
         check(failures, res["cardsOnNowTab"] is False, "the cards box is not shown on the 今の様子 tab")
+        res["lowOnNowTab"] = await page.evaluate("() => { const b = document.querySelector('#rb [data-rb-low]'); return !!b && !b.hidden; }")
+        check(failures, res["lowOnNowTab"] is False, "no 下を広げる on the 今の様子 tab")
         await page.click('#rb [data-rb-tab="history"]')
         await wait(page, f"() => {{ const c = ({CARDS})(); return c && c.shown && c.perm === 2; }}", label="the cards again on the history tab")
         # the question, answered in the history
@@ -192,6 +233,34 @@ async def run_hist_cards(pw, out, failures):
         await page.click("#rb [data-h-cards] [data-ddismiss]")
         await wait(page, "() => { const d = document.querySelector('#denied [data-dcard]'); return !d || d.textContent.includes('そのままにした'); }", label="そのまま everywhere")
         await page.screenshot(path=str(out / "answered.png"))
+        # × on the two answered cards, in the history's cards only; pressed: off there, still in the panel
+        await wait(page, "() => document.querySelectorAll('#rb [data-h-cards] [data-h-off]').length === 2", label="× on the answered question and the closed stopped call")
+        off = res["offAnswered"] = await page.evaluate(OFF)
+        check(failures, sorted(k[0] for k in off["hist"]) == ["d", "q"] and off["elsewhere"] == 0, f"× on the two answered cards, the history's only: {off}")
+        # 下を広げる with the two answered cards (the requester's case): all of them and 送信 at once
+        lo = res["lowAnsweredBefore"] = await page.evaluate(LOW)
+        await page.click("#rb [data-rb-low]")
+        lo2 = res["lowAnswered"] = await page.evaluate(LOW)
+        check(failures, not lo["answeredIn"], f"before 下を広げる the two answered cards do not show whole (the control): {lo}")
+        check(failures, lo2["on"] and lo2["answeredIn"] and lo2["sendIn"] and lo2["cardsBelowHist"],
+              f"下を広げる with the two answered cards: both whole and 送信 at once, the history above: {lo2}")
+        await page.screenshot(path=str(out / "low-answered.png"))
+        await page.click("#rb [data-h-cards] [data-qcard] [data-h-off]")
+        await page.click("#rb [data-h-cards] [data-dcard] [data-h-off]")
+        off = res["offPressed"] = await page.evaluate(OFF)
+        check(failures, off["histQ"] == 0 and off["histD"] == 0 and off["panelQ"] == 1 and off["panelD"] == 1,
+              f"× takes the card off the history's cards, the panel keeps it: {off}")
+        await page.reload()
+        await ready(page)
+        await wait(page, "() => document.querySelectorAll('#denied [data-dcard]').length === 1", label="the panel's stopped call after the reload")
+        await page.evaluate("(id) => window.__dbg.openRobot(id)", main)
+        await wait(page, "() => !document.getElementById('rb').hidden", label="the card after the reload")
+        await page.click('#rb [data-rb-tab="history"]')
+        await page.wait_for_timeout(800)
+        off = res["offReloaded"] = await page.evaluate(OFF)
+        check(failures, off["histD"] == 0 and off["panelD"] == 1, f"after a reload the stopped call stays off the history's cards (the panel's still there): {off}")
+        lo = res["lowReloaded"] = await page.evaluate(LOW)
+        check(failures, lo["on"] and lo["pressed"] == "true", f"下を広げる is kept over a reload: {lo}")
         await page.close()
         for line in watch.console:
             failures.append(f"hist-cards: console: {line}")

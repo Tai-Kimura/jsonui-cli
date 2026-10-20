@@ -880,6 +880,19 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 /* the session's cards on the 応答の履歴 tab (55-history.js histCardsPaint): over the prompt box, a scroll of their own */
 .h-cards { display: grid; gap: 8px; max-height: min(30vh, 260px); overflow-y: auto; padding: 8px 14px; border-top: 1px solid var(--line); background: var(--panel); }
 .h-cards[hidden] { display: none; }
+/* × on an answered card there (55-history.js histOffHTML): off this box only */
+.h-card-x { flex: none; width: 24px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink-soft); font: 700 14px/1 var(--font-body); cursor: pointer; }
+.h-card-x:hover, .h-card-x:focus-visible { border-color: var(--info); color: var(--ink); }
+/* The 応答の履歴 tab (55-history.js histLowPaint): the history, the cards, the prompt box, each in its own row. The
+   history's least height is its row's: a min-height on the pane alone left the row shorter and the pane ran 41 px
+   under the cards, the newest rows hidden there (measured 10-21, a 900 px window). Short of room the cards give way
+   first (their own scroll). 下を広げる: the cards their full height, the history a strip (its padding and a line). */
+.rb.rb-histtab:not(.rb-talking) { grid-template-rows: auto auto minmax(120px, 1fr) minmax(0, max-content) auto; }
+.rb.rb-histtab:not(.rb-talking) > .rb-hist { grid-row: 3; min-height: 0; }
+.rb.rb-histtab:not(.rb-talking) > .h-cards { grid-row: 4; }
+.rb.rb-histtab:not(.rb-talking) > .h-compose { grid-row: 5; }
+.rb.rb-histtab.rb-low:not(.rb-talking) { grid-template-rows: auto auto minmax(56px, 1fr) minmax(0, max-content) auto; }
+.rb.rb-low .h-cards { max-height: none; }
 .h-compose { display: grid; gap: 6px; padding: 8px 14px 12px; border-top: 1px solid var(--line); background: var(--panel); }
 .h-compose[hidden], .h-confirm[hidden], .h-compose-why[hidden] { display: none; }
 .h-compose-why { margin: 0; padding: 6px 10px; border-radius: 8px; background: var(--warn-bg); color: var(--warn); font: 700 12px/1.5 var(--font-body); overflow-wrap: anywhere; }
@@ -1226,12 +1239,14 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
    whole screen at 900 px or narrower. Pictures in the history: thumbnails and a large view. */
 .rb.rb-wide { position: fixed; top: 14px; left: var(--wide-left, 0px); right: 14px; bottom: 14px; z-index: 30; width: auto; max-height: none; }
 .rb.rb-wide-full { inset: 0; border-radius: 0; }
-.rb-wide-btn[hidden] { display: none; }
+.rb-wide-btn[hidden], .rb-low-btn[hidden] { display: none; }
 /* the tab row holds the tabs (the tablist) and, on its right, 広げる: the card's head keeps its width for the title.
    広げる comes first in the DOM (Tab: 広げる, 今の様子, 応答の履歴, then the panel) and is drawn on the right. */
 .rb-tablist { display: flex; gap: 4px; order: 1; }
 .rb-tabs .rb-wide-btn { order: 2; margin: 0 0 4px auto; align-self: center; padding: 3px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: 700 12px/1.5 var(--font-body); }
 .rb-tabs .rb-wide-btn[aria-pressed="true"] { border-color: var(--info); background: var(--info-bg); color: var(--info); }
+.rb-tabs .rb-low-btn { order: 3; margin: 0 0 4px 6px; align-self: center; padding: 3px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: 700 12px/1.5 var(--font-body); }
+.rb-tabs .rb-low-btn[aria-pressed="true"] { border-color: var(--info); background: var(--info-bg); color: var(--info); }
 /* Wide, the head is one row (requester 10-19, issue #36): the mark and the name on the left, ‹ › 「← 3D に戻る」 and 退勤
    on the right; the name takes what the buttons leave. At the card's width it stays stacked, and so does the wide card
    at 900 px or narrower (.rb-wide-full), where one row would leave the name a few characters. */
