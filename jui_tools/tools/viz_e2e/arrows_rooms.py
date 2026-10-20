@@ -15,6 +15,9 @@ and ← from the first room is the last (wrapped, the floor unchanged), ↑ ↓ 
 room; with the card open ← → switch robots and the
 room stays, ↑ ↓ do nothing; a focused input / textarea / contenteditable, an IME composing, a modifier and the spec
 help dialog take the keys from neither.
+Also (ticket 2026-10-21-jui-viz-3d-zoom-lost-after-project-switch): with no card, on 1F's whole floor, a robot of a 2F room
+picked from outside the view (selectRobot: a talk's ロボットへ移る, a notification) — its room shown on 2F, its card open,
+the camera on it once the scene has put it there, and closing goes back to that room, not to 1F's whole floor.
 """
 
 from __future__ import annotations
@@ -240,6 +243,28 @@ async def run_arrows_rooms(pw, out, failures):
         await key(page, "ArrowUp")
         s = await state(page)
         check(failures, s["floor"] == 0 and s["card"], f"card open on the whole floor: ↑ does nothing: {s}")
+        # no card, 1F's whole floor: a robot of a 2F room picked from outside the view
+        await page.click("#rb-close")
+        await wait(page, "() => document.getElementById('rb').hidden", label="the card closed (2)")
+        await wait(page, SETTLED, label="the camera back on the whole floor")
+        far = await page.evaluate("""() => { const f = window.__dbg.floors(), up = f.floors[1] || [];
+          return Object.keys(window.__dbg.robotState()).find((l) => up.includes(window.__dbg.robotProject(l))) || null; }""")
+        check(failures, bool(far), f"a robot in a 2F room: {far}")
+        if far:
+            await page.evaluate("(l) => window.__dbg.selectRobot(l)", far)
+            await wait(page, "(l) => window.__dbg.board().robot === l && !document.getElementById('rb').hidden", arg=far, label="the 2F robot's card")
+            await wait(page, "() => { const c = window.__dbg.camOn(); return !c.tween && !c.waitFor && c.zoomed; }", label="the camera at the 2F robot")
+            got = res["far"] = {"floor": (await page.evaluate("() => window.__dbg.floors()"))["floor"], "project": await page.evaluate("() => window.__dbg.project()"),
+                                "robotProject": await page.evaluate("(l) => window.__dbg.robotProject(l)", far), "cam": await page.evaluate("() => window.__dbg.camOn()")}
+            cam = got["cam"]
+            check(failures, got["floor"] == 1 and got["project"] == got["robotProject"] and cam["inScene"] and cam["toRobot"] is not None and cam["toRobot"] < 1.5,
+                  f"no card, 1F: a 2F robot picked: 2F, its room, the camera on it: {got}")
+            check(failures, cam["returnToRoom"] is not None and cam["returnToRoom"] < 0.5, f"no card, 1F: closing goes back to the 2F room, not 1F's floor: {got}")
+            await page.click("#rb-close")
+            await wait(page, "() => document.getElementById('rb').hidden", label="the 2F robot's card closed")
+            await wait(page, "() => { const c = window.__dbg.camOn(); return !c.tween && !c.zoomed; }", label="the camera back from the 2F robot")
+            back = res["farBack"] = await page.evaluate("() => window.__dbg.camOn()")
+            check(failures, back["toRoom"] < 0.5, f"the 2F robot's card closed: the camera on its room: {back}")
         await page.close()
         for line in watch.console:
             failures.append(f"arrows-rooms: console: {line}")
