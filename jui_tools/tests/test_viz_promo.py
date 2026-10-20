@@ -249,7 +249,7 @@ def test_the_home_has_the_settings_the_stand_ins_and_the_sessions(tmp_path):
     from viz_promo import rooms
     paths = rooms.make_home(tmp_path / "home")
     cfg = json.loads((paths["viz"] / "config.json").read_text())
-    assert cfg["askWaitSec"] >= 600 and cfg["notifyPresenceSec"] >= 600
+    assert "askWaitSec" not in cfg and cfg["notifyPresenceSec"] >= 600, "the top bar shows the question window: the default"
     out = subprocess.run([str(paths["bin"] / "xcrun"), "simctl", "list", "devices", "booted", "-j"], capture_output=True, text=True)
     assert json.loads(out.stdout) == {"devices": {}}
     work = {n: (tmp_path / "work" / n) for n in T.ROOMS}

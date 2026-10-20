@@ -50,6 +50,7 @@ from viz_promo.timeline import FPS, SESSIONS, SUBAGENT, WORDS, frame_count, fram
 
 VIEWPORT = {"width": 1920, "height": 1080}
 GLIDE_SEC = 0.7
+TARGET_LATE_SEC = 3.0      # how late a press may come while its target is not on the page yet
 MIN_GAP_SEC = 0.6          # a press never follows the one before sooner (a `ready` that comes late does not bunch them)
 PRESENCE_EVERY_SEC = 3.0
 WAIT_SEC = 20.0            # the longest a frame waits for the page to take an event in
@@ -135,11 +136,13 @@ class Stage:
 
     def __init__(self, lang: str, jui_root: Path, demo_shop: Path, keep: bool = False):
         self.lang, self.keep = lang, keep
-        # under /tmp: the rooms' paths show in the page (a file a robot reads); no user name in them
+        # under /tmp: no user name in any path the page could show
         self.base = Path(tempfile.mkdtemp(prefix="jui-promo-", dir="/tmp")).resolve()
         self.home = self.base / "home"
         self.paths = make_home(self.home)
-        self.rooms = {k: v.resolve() for k, v in make_rooms(self.base / "work", lang, demo_shop).items()}
+        # the rooms under the server's HOME: the page writes a path there as ~/work/<room> (viz/rooms.py tilde),
+        # never the temporary folder's
+        self.rooms = {k: v.resolve() for k, v in make_rooms(self.home / "work", lang, demo_shop).items()}
         self.transcripts = write_sessions(self.paths, self.rooms, lang)
         self.jt = Path(jui_root).resolve() / "jui_tools"
         self.forward = self.jt / "jui_cli" / "viz" / "forward.py"
@@ -461,7 +464,10 @@ class Driver:
             arg = await self.label(arg)
         await self.until(js, arg or None, spec, advance)
 
-    async def point(self, target: dict, advance: bool):
+    async def resolved(self, target: dict):
+        """A target as POINT_JS takes it, or a point already ([x, y]) for a robot."""
+        if "robot" in target:
+            return {"css": "#scene-canvas"}
         t = dict(target)
         if "room_tag" in t:
             t = {"css": f".tag.room[data-set-project='{self.project(t['room_tag'])}']"}
@@ -471,10 +477,13 @@ class Driver:
             t = {"css": f"#sessions [data-robot-open='{await self.label(t['session_row'])}']"}
         elif "talk_row" in t:
             t = {"css": "#rb .talk-row", "text": self.w["names"][t["talk_row"]]}
-        elif "robot" in t:
-            lab = await self.label(t["robot"])
+        return t
+
+    async def point(self, target: dict, advance: bool):
+        if "robot" in target:
+            lab = await self.label(target["robot"])
             return [round(v) for v in await robot_point(self.page, lab)]
-        return await self.until(POINT_JS, t, f"the target {target}", advance)
+        return await self.until(POINT_JS, await self.resolved(target), f"the target {target}", advance)
 
     async def move(self, at):
         self.cursor = [float(at[0]), float(at[1])]
@@ -512,6 +521,9 @@ class Driver:
         wheels: list = []      # [t0, t1, dy per frame, point]
         stop = asyncio.Event()
         keeper = asyncio.create_task(self.keep_present(stop))
+        # the prelude let the page's clock fall behind the server's: Date set to now (no timer fires), so the times
+        # the server sends (a question's deadline, an event's time) read as they would in a browser
+        await self.page.clock.set_system_time(time.time())
         try:
             for i in range(n):
                 t = frame_time(start, i)
@@ -540,6 +552,11 @@ class Driver:
                     if page_event and t < self.last_press + MIN_GAP_SEC:
                         continue
                     if ev.args.get("ready") and not await self.page.evaluate(ev.args["ready"], ev.args.get("arg")):
+                        continue
+                    # a press waits for its target to be on the page (a card opens after the camera's flight), up to
+                    # TARGET_LATE_SEC of video; past that it fires and fails with the target's name
+                    if ev.kind in ("click", "hover", "select") and t < ev.at + TARGET_LATE_SEC \
+                            and not await self.page.evaluate(POINT_JS, await self.resolved(ev.args["target"])):
                         continue
                     if page_event:
                         self.last_press = t
@@ -601,10 +618,12 @@ async def capture_chapter(pw, chapter, bounds: tuple, out_root: Path, lang: str,
         page = await ctx.new_page()
         watch = Watch(origin=stage.url)
         watch.attach(page, chapter.id)
-        # install() alone keeps time flowing at the wall clock's pace; paused, it moves only when run_for() moves it
-        t0 = int(time.time() * 1000)
+        # install() alone keeps time flowing at the wall clock's pace; paused, it moves only when run_for() moves it.
+        # The Python API takes seconds (a number in ms put the page's Date ~1000x into the future: a question's
+        # countdown read 0 s at once)
+        t0 = time.time()
         await page.clock.install(time=t0)
-        await page.clock.pause_at(t0 + 1000)
+        await page.clock.pause_at(t0 + 1)
         drv = Driver(page, stage, lang, watch, sky_time)
         await drv.boot(chapter.needs)
         await drv.prelude(chapter.prelude)
@@ -635,6 +654,11 @@ async def capture_chapter(pw, chapter, bounds: tuple, out_root: Path, lang: str,
 FRAME_TIMES_JS = """() => { window.__promoFrames = []; window.__dbg.afterFrame(() => { window.__promoFrames.push(performance.now()); }); return true; }"""
 FRAME_STOP_JS = """() => { window.__dbg.afterFrame(null); const t = window.__promoFrames || []; return t.slice(1).map((v, i) => v - t[i]); }"""
 MEASURE_SEC = 10.0
+# --gpu: a headed Chromium drawing through the machine's GPU (ANGLE on Metal), not the e2e's software GL
+GPU_ARGS = ["--use-gl=angle", "--use-angle=metal", "--ignore-gpu-blocklist", "--enable-gpu-rasterization"]
+RENDERER_JS = """() => { const gl = document.createElement('canvas').getContext('webgl'); if (!gl) return null;
+  const x = gl.getExtension('WEBGL_debug_renderer_info');
+  return x ? { vendor: gl.getParameter(x.UNMASKED_VENDOR_WEBGL), renderer: gl.getParameter(x.UNMASKED_RENDERER_WEBGL) } : null; }"""
 
 
 def percentiles(gaps: list) -> dict:
@@ -646,21 +670,27 @@ def percentiles(gaps: list) -> dict:
     return {"frames": len(s) + 1, "p50": round(rank(0.5), 1), "p90": round(rank(0.9), 1), "max": round(s[-1], 1)}
 
 
-async def measure_fps(pw, lang: str, jui_root: Path, demo_shop: Path, out: Path, theme: str = "dark", sec: float = MEASURE_SEC) -> dict:
-    """The floor with all SESSIONS in real time (no fake clock), at 1920x1080 under the e2e's software GL: frame
-    intervals for `sec` seconds far (the whole floor) and near (demo-shop up close). Written to out/fps-<lang>.json."""
+async def measure_fps(pw, lang: str, jui_root: Path, demo_shop: Path, out: Path, theme: str = "dark", sec: float = MEASURE_SEC,
+                      gpu: bool = False) -> dict:
+    """The floor with all SESSIONS in real time (no fake clock), at 1920x1080: frame intervals for `sec` seconds far
+    (the whole floor) and near (demo-shop up close). Headless under the e2e's software GL, or with gpu a headed window
+    through the GPU (the renderer WebGL reports is kept; a software one stops the measurement). Written to
+    out/fps-<lang>[-gpu].json."""
     from viz_promo.timeline import chapters, up_close
     script = chapters(lang)["hook"]
-    res = {"lang": lang, "jui_root": str(jui_root), "robots": len(SESSIONS), "sec": sec, "viewport": VIEWPORT}
+    res = {"lang": lang, "jui_root": str(jui_root), "robots": len(SESSIONS), "sec": sec, "viewport": VIEWPORT, "gpu": gpu}
     stage = browser = None
     try:
         stage = Stage(lang, jui_root, demo_shop)
         stage.start()
-        browser = await pw.chromium.launch(args=LAUNCH_ARGS)
+        browser = await (pw.chromium.launch(headless=False, args=GPU_ARGS) if gpu else pw.chromium.launch(args=LAUNCH_ARGS))
         ctx = await browser.new_context(viewport=VIEWPORT, device_scale_factor=1, color_scheme=theme, reduced_motion="no-preference")
         page = await ctx.new_page()
         watch = Watch(origin=stage.url)
         watch.attach(page, "fps")
+        res["webgl"] = await page.evaluate(RENDERER_JS)
+        if gpu and not (res["webgl"] and "swiftshader" not in str(res["webgl"]).lower() and "llvmpipe" not in str(res["webgl"]).lower()):
+            raise PromoError(f"no GPU rendering: WebGL reports {res['webgl']}")
         drv = Driver(page, stage, lang, watch, None, fake_clock=False)
         await drv.boot(())
         await drv.prelude(script.prelude)
@@ -683,5 +713,5 @@ async def measure_fps(pw, lang: str, jui_root: Path, demo_shop: Path, out: Path,
         if stage:
             stage.stop()
     Path(out).mkdir(parents=True, exist_ok=True)
-    (Path(out) / f"fps-{lang}.json").write_text(json.dumps(res, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    (Path(out) / f"fps-{lang}{'-gpu' if gpu else ''}.json").write_text(json.dumps(res, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     return res

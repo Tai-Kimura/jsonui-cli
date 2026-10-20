@@ -6,8 +6,7 @@
                  tools/make_infra.py --lang en and tools/make_load.py --lang en, and committed, so the tree is clean.
     demo-admin   a near-empty git workdir (a README of WORDS[lang]), as is demo-docs: rooms for the floor's bustle.
 
-The HOME holds the viz's folder (config.json: the question window long enough for a capture that runs slower than
-the video), the agent CLI's session entries (the names on the robots' tags) and the transcripts. bin/ holds stand-ins for
+The HOME holds the viz's folder (config.json, the question window left at its default), the agent CLI's session entries (the names on the robots' tags) and the transcripts. bin/ holds stand-ins for
 xcrun and adb that list no device, put first on the server's PATH: the device pane must not show this machine's
 simulators. Nothing here reads or writes the real HOME.
 """
@@ -30,8 +29,9 @@ DEMO_SHOP = Path(os.environ.get("JUI_PROMO_DEMO_SHOP", Path.home() / "resource" 
 # the author of every commit in the rooms: neutral, never the machine's git identity
 GIT_ENV = {"GIT_AUTHOR_NAME": "demo", "GIT_AUTHOR_EMAIL": "demo@example.invalid", "GIT_COMMITTER_NAME": "demo",
            "GIT_COMMITTER_EMAIL": "demo@example.invalid", "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
-# the viz's settings for a capture: a question waits as long as the capture of its chapter can take
-CONFIG = {"askWaitSec": 600, "askMaxSec": 1800, "decideWaitSec": 600, "notifyPresenceSec": 3600, "talkGraceSec": 3600}
+# the viz's settings for a capture. The question window stays the default (the top bar says it: 3 min); a page's
+# notification presence and a talk's grace are long, neither is drawn
+CONFIG = {"notifyPresenceSec": 3600, "talkGraceSec": 3600}
 XCRUN = """#!/bin/sh
 # a stand-in: no simulator is booted (the capture's server must not list this machine's)
 if [ "$1" = simctl ]; then echo '{"devices": {}}'; exit 0; fi

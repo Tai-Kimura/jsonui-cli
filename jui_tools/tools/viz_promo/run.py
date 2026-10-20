@@ -41,6 +41,7 @@ def parse(argv=None):
                     "a chapter brings its window segments: 5 captures 5-json too)")
     ap.add_argument("--measure-fps", action="store_true", help="instead of capturing: the floor with every robot in real time, "
                     "frame intervals far and near (p50 / p90 / max ms) into <out>/fps-<lang>.json")
+    ap.add_argument("--gpu", action="store_true", help="with --measure-fps: a headed window drawing through the GPU (opens on the screen)")
     ap.add_argument("--jui-root", required=True, type=Path, help="the jsonui-cli checkout to serve and forward with")
     ap.add_argument("--promo", type=Path, default=PROMO, help=f"the jsonui-promo project (default {PROMO})")
     ap.add_argument("--out", type=Path, default=None, help="where the frames go (default <promo>/public/captures)")
@@ -69,7 +70,8 @@ async def main_async(a) -> int:
 
     if a.measure_fps:
         async with async_playwright() as pw:
-            r = await measure_fps(pw, a.lang, a.jui_root, a.demo_shop, a.out, theme=a.theme)
+            r = await measure_fps(pw, a.lang, a.jui_root, a.demo_shop, a.out, theme=a.theme, gpu=a.gpu)
+        print(f"WebGL: {r.get('webgl')}")
         for view in ("far", "near"):
             v = r.get(view) or {}
             print(f"{a.lang} {view}: {r.get('robotsShown')} robots, {v.get('frames')} frames, p50 {v.get('p50')} ms, p90 {v.get('p90')} ms, max {v.get('max')} ms")

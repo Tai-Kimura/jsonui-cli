@@ -248,7 +248,7 @@ def chapters(lang: str) -> dict:
     # hook (0–4): the whole floor, busy; the camera comes in slowly (the wheel, as a person would)
     out["hook"] = Chapter("hook", 0, 4, floor(w) + waits(w), [
         E(0.4, "tool_end", key="s09"),
-        E(0.5, "wheel", target={"css": "#scene-canvas"}, dy=-240, dur=3.2),
+        E(0.5, "wheel", target={"css": "#scene-canvas"}, dy=-480, dur=3.2),
         E(1.2, "tool", key="s02", tool="Bash", input={"command": "cd web && npx vitest run tests/unit/generated", "description": "tests"}),
         E(2.0, "sub_start", key="s02"),
         E(2.8, "tool_end", key="s01"),
