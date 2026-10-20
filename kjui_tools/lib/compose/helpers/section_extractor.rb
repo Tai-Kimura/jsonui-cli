@@ -99,6 +99,82 @@ module KjuiTools
         # Brace nesting peak with string literals and // comments stripped.
         # Kotlin template braces (`${...}`) sit inside the string literal, so
         # the quote scan drops them along with the rest of the string.
+        # ``code`` with everything inside a brace pair blanked out (the braces
+        # and newlines kept): what is left is what sits at the code's own
+        # level. A string literal is passed over whole, so a "{" in text does
+        # not open a level; a template's `${...}` inside it is balanced anyway.
+        def self.top_level_text(code)
+          depth = 0
+          in_string = false
+          out = +''
+          i = 0
+          while i < code.length
+            ch = code[i]
+            if in_string
+              if ch == '\\'
+                out << (depth.zero? ? code[i, 2] : code[i, 2].gsub(/[^\n]/, ' '))
+                i += 2
+                next
+              end
+              in_string = false if ch == '"'
+              out << (depth.zero? || ch == "\n" ? ch : ' ')
+            elsif ch == '"'
+              in_string = true
+              out << (depth.zero? ? ch : ' ')
+            elsif ch == '{'
+              out << ch
+              depth += 1
+            elsif ch == '}'
+              depth -= 1 if depth.positive?
+              out << ch
+            else
+              out << (depth.zero? || ch == "\n" ? ch : ' ')
+            end
+            i += 1
+          end
+          out
+        end
+
+        # The names declared in ``lines`` that are still in scope after the
+        # last of them: `val`/`var` and lambda parameters (`{ a, b ->`) whose
+        # brace has not closed. A declaration inside a sibling's lambda that
+        # closed above (another items lambda's `val cellId`) is not visible
+        # below it; counting it made a lifted section take `cellId` as a
+        # parameter its call site cannot pass (Unresolved reference)
+        # (lint-generated-size-ratchet-held-a-consumers-android-red, 2026-10-21).
+        def self.visible_declarations(lines)
+          scopes = [[]]
+          lines.each do |raw|
+            line = raw.to_s
+            in_string = false
+            i = 0
+            while i < line.length
+              ch = line[i]
+              if in_string
+                if ch == '\\'
+                  i += 2
+                  next
+                end
+                in_string = false if ch == '"'
+              elsif ch == '"'
+                in_string = true
+              elsif ch == '{'
+                scopes << []
+                m = line[(i + 1)..].match(/\A\s*(\w+(?:\s*,\s*\w+)*)\s*->/)
+                m[1].split(',').each { |n| scopes.last << n.strip } if m
+              elsif ch == '}'
+                scopes.pop if scopes.size > 1
+              elsif (m = line[i..].match(/\A\b(?:val|var)\s+(\w+)\b/)) && (i.zero? || line[i - 1] !~ /\w/)
+                scopes.last << m[1]
+                i += m[0].length
+                next
+              end
+              i += 1
+            end
+          end
+          scopes.flatten
+        end
+
         def self.body_depth(code)
           depth = 0
           peak = 0
@@ -925,14 +1001,7 @@ module KjuiTools
               params.split(',').each { |p| declared_inside << p.strip }
             end
 
-            declared_above = []
-            lines[0...seg_start].each do |raw|
-              l = raw.strip
-              l.scan(/\b(?:val|var)\s+(\w+)\b/).flatten.each { |n| declared_above << n }
-              l.scan(/\{\s*(\w+(?:\s*,\s*\w+)*)\s*->/).flatten.each do |params|
-                params.split(',').each { |p| declared_above << p.strip }
-              end
-            end
+            declared_above = SectionExtractor.visible_declarations(lines[0...seg_start])
             # Names available as the CURRENT function's own parameters
             # (`modifier` on the wrapper; a lifted section's extra params).
             declared_above.concat(env.keys)
@@ -964,17 +1033,8 @@ module KjuiTools
           # `enrichedData0` references and emitted non-compiling code.
           def visible_decl_env(lines, upto_idx, env)
             merged = env.dup
-            lines[0...upto_idx].each do |raw|
-              l = raw.strip
-              l.scan(/\b(?:val|var)\s+(\w+)\b/).flatten.each do |n|
-                merged[n] = SectionExtractor.known_cell_param_type(n) unless merged.key?(n)
-              end
-              l.scan(/\{\s*(\w+(?:\s*,\s*\w+)*)\s*->/).flatten.each do |params|
-                params.split(',').each do |raw_p|
-                  n = raw_p.strip
-                  merged[n] = SectionExtractor.known_cell_param_type(n) unless merged.key?(n)
-                end
-              end
+            SectionExtractor.visible_declarations(lines[0...upto_idx]).each do |n|
+              merged[n] = SectionExtractor.known_cell_param_type(n) unless merged.key?(n)
             end
             merged
           end
@@ -1355,9 +1415,18 @@ module KjuiTools
             result
           end
 
+          # The vals a chunk declares at its own sibling level: a `val` inside
+          # one of its lambdas (`LaunchedEffect(...) { val newValue = ... }`,
+          # `onValueChange = { val index = ... }`) is that lambda's local, and
+          # another sibling's own `newValue` / `index` is not a reference to
+          # it. Counting them chained a form's every field into one chunk (a
+          # field's text-sync LaunchedEffect declares `newValue`, and so does
+          # the next field's): 30 siblings, 832 lines, 39% of the JVM method
+          # limit, and no container left inside it to cut
+          # (lint-generated-size-ratchet-held-a-consumers-android-red, 2026-10-21).
           def scan_declared_vals(lines, chunk)
             body = lines[chunk[:start]..chunk[:end_idx]].join("\n")
-            body.scan(/\b(?:val|var)\s+(\w+)\b/).flatten
+            SectionExtractor.top_level_text(body).scan(/\b(?:val|var)\s+(\w+)\b/).flatten
           end
 
           def val_name_of(lines, child)
