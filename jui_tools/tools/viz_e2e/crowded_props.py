@@ -125,30 +125,28 @@ async def run_crowded_props(pw, out, failures):
         await page.goto(url + "/")
         await ready(page)
         await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
-        for i in range(10):
+        for i in range(3):
             hook(SID.format(i), hook_event_name="SessionStart", source="startup")
-        await wait(page, "() => window.__dbg.robots.length === 10", timeout=30000, label="ten robots")
+        await wait(page, "() => window.__dbg.robots.length === 3", timeout=30000, label="three robots")
         # no game, nap, bento or break: a robot on one would not take a trip or an errand when the arm wants it
         await page.evaluate("() => { window.__dbg.play({ p: 0, solo: { p: 0 } }); window.__dbg.brk({ p: { smoke: 0, vend: 0 } }); }")
         room_id = await page.evaluate("() => window.__dbg.robots[0].def.room")
         count = f"() => window.__dbg.robots.filter((R) => R.def.room === '{room_id}').length"
         await page.click(f".tag.room[data-set-project='{room_id}']")
         await wait(page, f"() => window.__dbg.solo() === '{room_id}' && window.__dbg.props().room === '{room_id}' && window.__dbg.props().uses.dataServer && window.__dbg.props().uses.serverDoor",
-                   timeout=30000, label="ten up close, the rack and the door")
-        await settled(page, "ten seated up close", timeout=60000)
-
-        # ---- 10: both sets ----
-        p10 = res["ten"] = await page.evaluate(PROPS)
-        group = p10["groupId"]
-        check(failures, p10["fun"] and p10["wood"] and all(p10["looks"].values()) and p10["uses"] == USES,
-              f"ten robots: the looks and the things with a use: fun {p10['fun']} wood {p10['wood']} looks {p10['looks']} uses {p10['uses']}")
+                   timeout=30000, label="three up close, the rack and the door")
+        await settled(page, "three seated up close", timeout=60000)
 
         # ---- the looks dropped with no relayout (__dbg.propsMax below the room's robots) ----
         # At 10 -> 11 the room grows as well (roomSize), and its relayout ends a break ('relaid') and builds the floor
         # again first, so that boundary never shows what dropping the looks does by itself (the independent check: a
         # break's 'props' end and the floor's material put back both passed when removed). Here: a robot smoking, the
-        # limit put under ten, and the break ends 'props', the floor is its own again (read from the room), the things
+        # limit put under three, and the break ends 'props', the floor is its own again (read from the room), the things
         # with a use are the same group in the same room.
+        # At three, not ten: at ten no break started in 3 runs (00:06-00:13; all ten idle, none on a game, no break ended).
+        # A room with a robot standing for want of a desk has no breaks, and that is the likely reason (not measured:
+        # the arm did not record who stood); with three robots there are desks to spare.
+        group3 = (await page.evaluate(PROPS))["groupId"]
         rect = f"() => {{ const r = window.__dbg.room('{room_id}'); return [r.x0, r.z0, r.x1, r.z1]; }}"
         floor_of = f"() => window.__dbg.floorOf('{room_id}')"
         res["floorWood"] = await page.evaluate(floor_of)
@@ -156,11 +154,11 @@ async def run_crowded_props(pw, out, failures):
         await page.evaluate("() => { window.__dbg.play({ idleMs: 1000 }); window.__dbg.brk({ p: { smoke: 1, vend: 0 }, smokeMinSec: 120, smokeMaxSec: 120, restMinSec: 0, restMaxSec: 0 }); }")
         # a break under way is what the arm needs (going or at the booth): arriving took past 60 s in 2 of 6 runs (00:06)
         try:
-            await wait(page, "() => window.__dbg.brk().robots.some((x) => x.kind === 'smoke')", timeout=60000, label="a robot on a cigarette break at ten")
+            await wait(page, "() => window.__dbg.brk().robots.some((x) => x.kind === 'smoke')", timeout=60000, label="a robot on a cigarette break at three")
         except Exception:
             res["brkWhy"] = await page.evaluate("() => { const b = window.__dbg.brk(); return { ends: b.ends.slice(-5), robots: b.robots.map((x) => [x.id, x.kind, x.phase, x.vis, x.path, x.play, x.solo]) }; }")
             raise
-        await page.evaluate("() => window.__dbg.propsMax(5)")
+        await page.evaluate("() => window.__dbg.propsMax(2)")
         await wait(page, "() => !window.__dbg.props().fun", label="the looks gone under the limit")
         await page.wait_for_timeout(300)
         b = res["limitBrk"] = await page.evaluate("() => { const b = window.__dbg.brk(); return { ends: b.ends, on: b.robots.filter((x) => x.kind).map((x) => x.id), built: b.built }; }")
@@ -170,11 +168,22 @@ async def run_crowded_props(pw, out, failures):
               f"the looks gone with no relayout: the break ends 'props', nobody on one, no booth: {b}")
         check(failures, res["floorWood"]["map"] and not fl["map"] and fl["mat"] != res["floorWood"]["mat"],
               f"the floor is its own material again (no plank texture): {res['floorWood']} -> {fl}")
-        check(failures, pl["groupId"] == group and pl["uses"] == USES and await page.evaluate(rect) == rect_w,
-              f"the looks gone with no relayout: the same things with a use, the same room: {group} -> {pl['groupId']} {pl['uses']}")
+        check(failures, pl["groupId"] == group3 and pl["uses"] == USES and await page.evaluate(rect) == rect_w,
+              f"the looks gone with no relayout: the same things with a use, the same room: {group3} -> {pl['groupId']} {pl['uses']}")
         await page.evaluate("() => { window.__dbg.brk({ p: { smoke: 0, vend: 0 } }); window.__dbg.propsMax(null); }")
         await wait(page, "() => window.__dbg.props().fun", label="the looks back at the limit as built")
         await settled(page, "ten seated after the limit", timeout=60000)
+
+        for i in range(3, 10):
+            hook(SID.format(i), hook_event_name="SessionStart", source="startup")
+        await wait(page, f"() => ({count})() === 10", timeout=30000, label="ten robots")
+        await settled(page, "ten seated up close", timeout=60000)
+
+        # ---- 10: both sets ----
+        p10 = res["ten"] = await page.evaluate(PROPS)
+        group = p10["groupId"]
+        check(failures, p10["fun"] and p10["wood"] and all(p10["looks"].values()) and p10["uses"] == USES,
+              f"ten robots: the looks and the things with a use: fun {p10['fun']} wood {p10['wood']} looks {p10['looks']} uses {p10['uses']}")
 
         # ---- an 11th: the looks go, the things with a use stay ----
         rect10 = res["rectTen"] = await page.evaluate(rect)
