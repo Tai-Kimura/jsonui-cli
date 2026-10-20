@@ -310,3 +310,25 @@ def test_a_folder_with_only_non_regular_json_keeps_its_warnings(tmp_path):
     got = R.read(root)
     assert got["reason"] == "no_infra" and [p["code"] for p in got["problems"]] == ["read.not_regular"]
     assert "普通のファイルでない" in got["short"]
+
+
+# ---------------------------------------------------------------- the secret kinds in words (ticket 2026-10-20-jsonui-doc-validate-infra-password-short-line-untranslated)
+
+def test_every_secret_kind_the_model_finds_has_its_words():
+    """The table is checked against what the model can return, not against a list of its own: a kind added to the model
+    with no words in SECRET_JA is red here (password had none: its short line showed the raw kind)."""
+    from jsonui_doc_cli.infra import model as M
+    assert set(R.SECRET_JA) == set(M.SECRET_KINDS)
+    for kind in M.SECRET_KINDS:
+        line = R.short({"file": "a.json", "path": "/nodes/0/label", "code": f"secret.{kind}", "message": ""}, "docs/infra")
+        assert f"（{R.SECRET_JA[kind]}）" in line and f"（{kind}）" not in line, line
+
+
+def test_a_password_with_its_value_reads_in_words(tmp_path):
+    """The ticket's reproduction: a label "password: hunter2" — refused, its short line in words, no value."""
+    root = _room(tmp_path, files={"a.json": json.dumps({"version": 0, "nodes": [{"id": "db", "category": "database.relational",
+                                                                                  "label": "password: hunter2"}]})})
+    got = R.read(root)
+    shorts = [p["short"] for p in got["problems"]]
+    assert not got["ok"] and shorts == ["docs/infra/a.json: /nodes/0/label に秘密の形（パスワード）があります。値は書けません"]
+    assert "hunter2" not in json.dumps(got, ensure_ascii=False)

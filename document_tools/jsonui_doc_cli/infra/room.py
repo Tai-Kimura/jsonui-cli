@@ -26,7 +26,8 @@ ICON_TYPES = {".svg": "image/svg+xml", ".png": "image/png", ".webp": "image/webp
 REASONS = {"not_a_room": 404, "no_infra": 404, "bad_config": 400, "too_many_files": 413, "too_large": 413,
            "invalid": 422, "unreadable": 500}
 SECRET_JA = {"arn": "ARN", "account_id": "アカウント ID", "ip_address": "IP アドレス", "connection_string": "接続文字列",
-             "url_credentials": "URL の中の資格情報", "private_key": "秘密鍵", "access_key": "アクセスキー", "token": "トークン"}
+             "url_credentials": "URL の中の資格情報", "private_key": "秘密鍵", "access_key": "アクセスキー", "token": "トークン",
+             "password": "パスワード"}   # one per model.SECRET_KINDS (test_infra_room: a kind with no words is red)
 
 
 def short(p: dict, folder: str) -> str:

@@ -112,6 +112,9 @@ SECRET_SHAPES: tuple[tuple[str, object], ...] = (   # each has .search (a re.Pat
     ("password", _Password()),
     ("account_id", re.compile(r"(?<![\d-])(?:\d{12}|\d{4}-\d{4}-\d{4})(?![\d-])")),
 )
+IP_KIND = "ip_address"    # found by _ip_found, not by a pattern of SECRET_SHAPES
+#: every kind secret_findings can return (a problem's code is secret.<kind>; room.SECRET_JA names each in words)
+SECRET_KINDS: tuple[str, ...] = tuple(kind for kind, _rx in SECRET_SHAPES) + (IP_KIND,)
 # an IPv4 address. A version is not one: four numbers right after a letter (v1.25.3.1), or after a letter and "-" or
 # "@" when the first number is under 10 (release-1.2.3.4, pkg@1.2.3.4; bastion-10.0.0.5 and ec2-user@10.0.0.5 are
 # addresses). After ".", "_", ":", "=" or a space it is an address (db.10.0.0.5, db_10.0.0.5, host:10.0.0.1). Not
@@ -168,7 +171,7 @@ def secret_findings(text: str) -> list[str]:
     text = _INVISIBLE.sub("", text)
     out = [kind for kind, rx in SECRET_SHAPES if rx.search(text)]
     if _ip_found(text):
-        out.append("ip_address")
+        out.append(IP_KIND)
     return out
 
 
