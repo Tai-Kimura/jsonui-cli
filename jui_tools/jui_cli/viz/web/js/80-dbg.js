@@ -167,6 +167,11 @@ window.__dbg = {
   fixRects: () => { const r = canvas.getBoundingClientRect(); return tagFixtureRects(canvas.clientWidth, canvas.clientHeight).map(([x0, x1, y0, y1]) => [x0 + r.left, x1 + r.left, y0 + r.top, y1 + r.top]); },
   overFixture: (label) => { const R = robots.find((x) => x.def.id === label); if (!R) return null; const box = (e) => { if (!e || e.hidden) return null; const b = e.getBoundingClientRect(); return [b.left, b.right, b.top, b.bottom]; };
     return { tag: R.tag.classList.contains('over-fixture'), bill: !!(R.bill && R.bill.classList.contains('over-fixture')), wait: !!(R.waitEl && R.waitEl.classList.contains('over-fixture')), waitBox: box(R.waitEl), tagBox: box(R.tag), realId: R.def.realId || null }; },
+  // the looks' limit (PROPS.max) for an arm: below the room's robots, the looks go with no relayout (the room grows at the
+  // same count, roomSize, so the boundary alone never shows what dropping the looks does by itself); null puts it back
+  propsMax: (n) => { if (PROPS.maxAsBuilt === undefined) PROPS.maxAsBuilt = PROPS.max; PROPS.max = n == null ? PROPS.maxAsBuilt : n; return PROPS.max; },
+  // the floor of a room as drawn, read from the room (not PROPS): its material's id and whether it has a texture
+  floorOf: (id) => { const R = LIVE3D.rooms[id]; return R ? { mat: R.floor.material.uuid, map: !!R.floor.material.map } : null; },
   tagPinsOver: (pt) => {
     if (SOURCE.mode !== 'live') return null;   // the seats are the live source's (30-source-live.js)
     const room = PROJECT[liveSolo()], t = robots.find((R) => R.tag.style.visibility !== 'hidden' && !R.tag.hidden);
@@ -176,9 +181,10 @@ window.__dbg = {
       const p = seatPos(room, { dx, dz, standing: false }).pos;
       v.set(p[0], 0, p[1]).add(TAG_UP).project(camera);
       const x = r.left + (v.x + 1) / 2 * r.width, y = r.top + (1 - v.y) / 2 * r.height;
-      if (pt[0] > x - w / 2 + 6 && pt[0] < x + w / 2 - 6 && pt[1] > y - h + 4 && pt[1] < y - 4) out.push([+dx.toFixed(2), +dz.toFixed(2), Math.hypot(x - pt[0], y - h / 2 - pt[1])]);
+      const pts = Array.isArray(pt[0]) ? pt : [pt];   // one point, or several the one tag must hold (the bell and the rack)
+      if (pts.every((q) => q[0] > x - w / 2 + 6 && q[0] < x + w / 2 - 6 && q[1] > y - h + 4 && q[1] < y - 4)) out.push([+dx.toFixed(2), +dz.toFixed(2), Math.max(...pts.map((q) => Math.hypot(x - q[0], y - h / 2 - q[1])))]);
     }
-    // best: the spot whose tag's middle is nearest the point (the most room on every side)
+    // best: the spot whose tag's middle is nearest the point(s) (the most room on every side)
     const best = out.slice().sort((p, q) => p[2] - q[2])[0];
     return { n: out.length, best: best ? best.slice(0, 2) : null, bestOff: best ? +best[2].toFixed(1) : null, tag: [w, h] };
   },
