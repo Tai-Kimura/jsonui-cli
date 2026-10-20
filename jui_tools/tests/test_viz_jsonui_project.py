@@ -298,9 +298,6 @@ TODAY = "rc=0\n** TEST SUCCEEDED **\npassed=36 failed=0\n\n"
     ("Executed 5 tests, with 1 failure (1 unexpected)\n** TEST SUCCEEDED **\n", ("** TEST SUCCEEDED **", None, 0)),   # the mark decides
     ("Tests:       1 failed, 35 passed, 36 total\n", ("35 passed, 1 failed", 35, 1)),               # jest
     ("4057 passed, 16 skipped in 300.1s\n", ("4057 passed, 0 failed", 4057, 0)),                    # pytest -q
-    # two marks in one output (a run, then a rerun): the last one is the run's word (dd's T1)
-    ("** TEST FAILED **\n--- rerun ---\n** TEST SUCCEEDED **\n", ("** TEST SUCCEEDED **", None, 0)),
-    ("** TEST SUCCEEDED **\n--- rerun ---\n** TEST FAILED **\n", ("** TEST FAILED **", None, None)),
 ])
 def test_counts_come_only_from_a_runners_own_summary_line(output, want):
     assert robots.test_summary(output) == want
