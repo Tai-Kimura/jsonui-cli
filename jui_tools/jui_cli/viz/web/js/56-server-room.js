@@ -276,6 +276,8 @@ function srBuild() {
   srDispose();
   const model = SR.model, env = $('sr-env').value || '', fold = $('sr-fold').checked;
   const L = srLayout(model, env, fold, SR.closed, SR.only);
+  // a chosen or pointed node not drawn now (another environment, a cloud not chosen, folded) is let go (dd's verification)
+  for (const k of ['selected', 'hover']) if (SR[k] && !(L.pos.has(SR[k]) && !L.pos.get(SR[k]).hiddenIn)) SR[k] = null;
   const cv = $('sr-canvas'), box = cv.parentElement;
   const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -374,7 +376,10 @@ function srBuild() {
     (B.cross ? bc : bp).push(B.a.x + B.a.w / 2, ya, B.a.z + B.a.d / 2, B.b.x + B.b.w / 2, yb, B.b.z + B.b.d / 2);
   }
   V.bundles = [...bundles.values()];
-  V.far.add(lines(bp, new THREE.LineBasicMaterial({ color: 0x5c6b7f })), lines(bc, new THREE.LineDashedMaterial({ color: 0xd63fb0, dashSize: 1.2, gapSize: 0.7 })));
+  // the far view's bundles: as faint as the near cables, and the lines switch holds there too (dd's verification of item 1)
+  V.farPlain = lines(bp, new THREE.LineBasicMaterial({ color: PAL.plain, transparent: true, opacity: SR.plainOpacity }));
+  V.farCross = lines(bc, new THREE.LineDashedMaterial({ color: 0xd63fb0, dashSize: 1.2, gapSize: 0.7, transparent: true, opacity: SR.crossOpacity }));
+  V.far.add(V.farPlain, V.farCross);
   // the external strip's sign
   if (L.ext.length) {
     const strip = new THREE.Mesh(new THREE.BoxGeometry(L.ext.length * SR_CELL * 1.3, 0.04, SR_CELL * 1.6), new THREE.MeshLambertMaterial({ color: PAL.strip }));
@@ -543,8 +548,8 @@ function srFocusLines(V) {
 }
 /* The lines switch: all (faint) / crossing ones only / the chosen node's only. */
 function srLinesMode(V) {
-  V.plainLines.visible = SR.lines === 'all';
-  V.crossLines.visible = SR.lines !== 'focus';
+  V.plainLines.visible = V.farPlain.visible = SR.lines === 'all';
+  V.crossLines.visible = V.farCross.visible = SR.lines !== 'focus';
 }
 /* Moves in on a node or a group (its floor's middle, near enough to see what it holds). */
 function srFocus(x, z, r) {

@@ -432,12 +432,22 @@ async def run_server_room(pw, out, failures):
         res["lines"] = ln
         # filter by cloud (2.3.10 item 3): the legend's clouds toggle; only their nodes, no empty floor, 全部 back
         pv = {"all": await page.evaluate("() => window.__dbg.srProviders()")}
+        prov_all = {i: p for i, p in pv["all"]["drawn"]}
+        gcp_node = next(i for i, p in pv["all"]["drawn"] if p == "gcp")
+        await page.evaluate("(id) => window.__dbg.srSelect(id)", gcp_node)   # chosen, then filtered out (dd's verification 4)
         await page.click("#sr-board [data-sr-prov='aws']")
         await until(page, "() => window.__dbg.srProviders().only.join() === 'aws'", "only aws")
         pv["aws"] = await page.evaluate("() => window.__dbg.srProviders()")
+        sel_after = await page.evaluate("() => window.__dbg.srLines()")
+        res["filterDropsChoice"] = {"node": gcp_node, "selected": sel_after["selected"], "board": sel_after["boardSelected"]}
+        await page.click("#sr-board [data-sr-prov='aws']")   # pressed again: off (X2)
+        await until(page, "() => window.__dbg.srProviders().only.length === 0", "aws pressed again")
+        pv["awsOff"] = await page.evaluate("() => window.__dbg.srProviders()")
+        # two clouds with cables between them (cloudflare's api to gcp's search and queue; X1)
+        await page.click("#sr-board [data-sr-prov='cloudflare']")
         await page.click("#sr-board [data-sr-prov='gcp']")
-        await until(page, "() => window.__dbg.srProviders().only.length === 2", "aws and gcp")
-        pv["awsGcp"] = await page.evaluate("() => window.__dbg.srProviders()")
+        await until(page, "() => window.__dbg.srProviders().only.length === 2", "cloudflare and gcp")
+        pv["cfGcp"] = await page.evaluate("() => window.__dbg.srProviders()")
         await page.screenshot(path=str(out / "filter-light.png"))
         await page.click("#sr-board [data-sr-prov='']")
         await until(page, "() => window.__dbg.srProviders().only.length === 0", "all clouds again")
@@ -445,12 +455,32 @@ async def run_server_room(pw, out, failures):
         res["filter"] = {k: {"only": v["only"], "nodes": len(v["drawn"]), "providers": sorted({p for _, p in v["drawn"]}), "cross": len(v["cross"]), "groups": v["groups"],
                              "emptyFloors": v["emptyFloors"]} for k, v in pv.items()}
         f = res["filter"]
-        prov_of = {i: p for i, p in pv["awsGcp"]["drawn"]}
-        check(failures, f["aws"]["providers"] == ["aws"] and f["aws"]["nodes"] > 0 and f["aws"]["cross"] == 0 and not f["aws"]["emptyFloors"] and not f["awsGcp"]["emptyFloors"],
+        prov_of = {i: p for i, p in pv["cfGcp"]["drawn"]}
+        want_cross = [(a_, b_) for a_, b_ in pv["all"]["cross"] if {prov_all.get(a_), prov_all.get(b_)} <= {"cloudflare", "gcp"}]
+        check(failures, f["aws"]["providers"] == ["aws"] and f["aws"]["nodes"] > 0 and f["aws"]["cross"] == 0 and not f["aws"]["emptyFloors"] and not f["cfGcp"]["emptyFloors"],
               f"one cloud chosen: its nodes only, no crossing cable, no empty floor: {f['aws']} (all {f['all']})")
-        check(failures, set(f["awsGcp"]["providers"]) == {"aws", "gcp"} and all(prov_of.get(a) in ("aws", "gcp") and prov_of.get(b) in ("aws", "gcp") for a, b in pv["awsGcp"]["cross"]),
-              f"two clouds chosen: both, and only crossings between them: {f['awsGcp']}")
+        check(failures, res["filterDropsChoice"]["selected"] is None and not res["filterDropsChoice"]["board"], f"a choice filtered out is let go: {res['filterDropsChoice']}")
+        check(failures, f["awsOff"]["only"] == [] and f["awsOff"]["nodes"] == f["all"]["nodes"], f"a chosen cloud pressed again is off: {f['awsOff']}")
+        check(failures, set(f["cfGcp"]["providers"]) == {"cloudflare", "gcp"} and want_cross and len(pv["cfGcp"]["cross"]) == len(want_cross)
+              and all({prov_of.get(a_), prov_of.get(b_)} <= {"cloudflare", "gcp"} for a_, b_ in pv["cfGcp"]["cross"]),
+              f"two clouds chosen: both, and every crossing between them: {f['cfGcp']} (want {len(want_cross)})")
         check(failures, f["back"]["nodes"] == f["all"]["nodes"] and f["back"]["groups"] == f["all"]["groups"], f"全部 brings every node back: {f['back']} vs {f['all']}")
+        # the lines switch holds through a rebuild (X3), and the far view's bundles follow it, faint (dd's verification 5)
+        await page.select_option("#sr-lines", "cross")
+        await page.check("#sr-fold")
+        await until(page, "() => window.__dbg.srLines() && window.__dbg.srLines().mode === 'cross'", "rebuilt with crossing lines only")
+        res["linesRebuilt"] = await page.evaluate("() => window.__dbg.srLines()")
+        await page.evaluate("() => window.__dbg.srZoom(10)")
+        await until(page, "() => window.__dbg.sr().lod === 'far'", "far, crossing lines only", timeout=5000)
+        res["linesFar"] = (await page.evaluate("() => window.__dbg.srLines()"))["far"]
+        await page.select_option("#sr-lines", "all")
+        res["linesFarAll"] = (await page.evaluate("() => window.__dbg.srLines()"))["far"]
+        await page.uncheck("#sr-fold")
+        await page.click("#sr-fit")
+        lr, lf, la = res["linesRebuilt"], res["linesFar"], res["linesFarAll"]
+        check(failures, not lr["plainVisible"] and lr["crossVisible"], f"the lines switch holds through a rebuild: {lr}")
+        check(failures, not lf["plainVisible"] and lf["crossVisible"] and la["plainVisible"] and la["plainOpacity"] <= 0.3 and la["crossOpacity"] <= 0.6,
+              f"far, the bundles are faint and follow the switch: {lf} / {la}")
         d, c = ln["default"], ln["chosen"]
         check(failures, d["plainOpacity"] <= 0.3 and d["focus"] == 0 and d["plainVisible"] and d["crossVisible"], f"lines faint by default, none strong: {d}")
         check(failures, want > 0 and c["focus"] == want, f"a chosen node's cables drawn strong, all of them: {c}")

@@ -29,7 +29,9 @@ window.__dbg = {
   srTheme: () => { const V = SR.view; if (!V) return null; const lab = document.querySelector('#sr-labels .sr-label:not([hidden])'), cs = lab ? getComputedStyle(lab) : null;
     return { dark: V.dark, bg: `#${V.scene.background.getHexString()}`, floors: [...new Set(V.floorColors)], label: cs ? [cs.color, cs.backgroundColor] : null }; },
   srLines: () => { const V = SR.view; return V ? { mode: SR.lines, plainOpacity: V.plainLines.material.opacity, crossOpacity: V.crossLines.material.opacity,
-    plainVisible: V.plainLines.visible, crossVisible: V.crossLines.visible, focus: V.focusCount || 0, selected: SR.selected } : null; },
+    plainVisible: V.plainLines.visible, crossVisible: V.crossLines.visible,
+    far: { plainOpacity: V.farPlain.material.opacity, crossOpacity: V.farCross.material.opacity, plainVisible: V.farPlain.visible, crossVisible: V.farCross.visible },
+    boardSelected: !!document.querySelector('#sr-board .sr-sel'), focus: V.focusCount || 0, selected: SR.selected } : null; },
   srSelect: (id) => { srSelect(id); return SR.view ? SR.view.focusCount || 0 : null; },
   srEdgesOf: (id) => (SR.view ? SR.view.L.edges.filter((e) => e.from === id || e.to === id).length : null),
   srLabelRects: () => [...document.querySelectorAll('#sr-labels .sr-label:not([hidden])')].map((s) => { const r = s.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom].map(Math.round); }),
