@@ -55,6 +55,39 @@ def _write(base: pathlib.Path, examples: dict, name: str, dest: str) -> pathlib.
     return base / dest
 
 
+def _lin(c):
+    c = c / 255
+    return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def _rgb(v):
+    """'#rrggbb' or 'rgb(r, g, b)' → (r, g, b)."""
+    if v.startswith("#"):
+        return tuple(int(v[i:i + 2], 16) for i in (1, 3, 5))
+    return tuple(float(x) for x in v[v.index("(") + 1:v.index(")")].split(",")[:3])
+
+
+def _rgba(v):
+    nums = [float(x) for x in v[v.index("(") + 1:v.index(")")].replace("/", ",").split(",")]
+    return (*nums[:3], nums[3] if len(nums) > 3 else 1.0)
+
+
+def _over(rgba, ground):
+    g = _rgb(ground)
+    a = rgba[3]
+    return tuple(rgba[i] * a + g[i] * (1 - a) for i in range(3))
+
+
+def _lum(v):
+    r, g, b = _rgb(v) if isinstance(v, str) else v
+    return 0.2126 * _lin(r) + 0.7152 * _lin(g) + 0.0722 * _lin(b)
+
+
+def _contrast(a, b):
+    la, lb = sorted((_lum(a), _lum(b)), reverse=True)
+    return (la + 0.05) / (lb + 0.05)
+
+
 def check(failures, cond, text):
     if not cond:
         failures.append(f"server-room: {text}")
@@ -190,10 +223,25 @@ async def run_server_room(pw, out, failures):
         s = res["opened"] = await page.evaluate(SR)
         check(failures, s["bubble"] is None and (s["shown"] or {}).get("nodes", 0) > 0 and s["stats"]["edges"] > 0, f"open: the model drawn, the bubble gone: {s['shown']}")
         check(failures, s["lod"] == "near" and s["layers"] == {"near": True, "far": False}, f"open up close: the floors and shapes, not the far boxes over them: {s['lod']} {s['layers']}")
+        # the theme changing while it is open (D3) follows; dark is a dark ground with floors and labels that read (2.3.10 item 2)
+        res["theme"] = {}
         for scheme in ("light", "dark"):
             await page.emulate_media(color_scheme=scheme)
+            await until(page, "(d) => window.__dbg.srTheme() && window.__dbg.srTheme().dark === d", f"the 3D in {scheme}", arg=scheme == "dark", timeout=10000)
+            await page.evaluate("() => new Promise((r) => setTimeout(r, 300))")   # the labels given out again
+            res["theme"][scheme] = await page.evaluate("() => window.__dbg.srTheme()")
             await page.screenshot(path=str(out / f"room-{scheme}.png"))
         await page.emulate_media(color_scheme="light")
+        await until(page, "() => window.__dbg.srTheme().dark === false", "the 3D back in light", timeout=10000)
+        th = res["theme"]["dark"]
+        bg_l = _lum(th["bg"])
+        low = [(f, round(_contrast(f, th["bg"]), 2)) for f in th["floors"] if _contrast(f, th["bg"]) < 3]
+        ink, ground = th["label"] or [None, None]
+        label_cr = round(_contrast(_rgb(ink), _over(_rgba(ground), th["bg"])), 2) if ink else None
+        res["theme"]["measured"] = {"bgLum": round(bg_l, 4), "floorsUnder3": low, "label": label_cr}
+        check(failures, res["theme"]["light"]["dark"] is False and th["dark"] is True and bg_l <= 0.03,
+              f"opened in light, turned dark while open: the 3D's ground is dark: {res['theme']['measured']} {th['bg']}")
+        check(failures, not low and label_cr is not None and label_cr >= 4.5, f"dark: every floor 3:1 on the ground, labels 4.5:1: {res['theme']['measured']}")
 
         # the environments switch, the folded ones come and go
         envs = await page.evaluate("() => [...document.querySelectorAll('#sr-env option')].map((o) => o.value)")

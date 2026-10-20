@@ -146,6 +146,12 @@ function srShape(category) {
   return 'small';
 }
 const SR_PALETTE = ['#f29a38', '#4f8ef7', '#3fb26b', '#e2574c', '#a26bd6', '#26a5b8', '#d4a72c', '#7d8a99', '#e06fa8', '#5c6bc0'];
+/* The 3D's colours (2.3.10 item 2, requester 10-20: 「ダークでも背景が白なの嫌だね 背景は暗めにして欲しい」): in dark the
+   background is near-black and every floor at least 3:1 against it; the light set is as before. */
+const SR_PAL = {
+  light: { bg: '#eef2f7', logical: '#c9b8e8', public: '#dfe7f2', private: '#9fb0c4', neutral: '#cfd6df', strip: 0xe9e2f5, plain: 0x5c6b7f, focus: 0x1d4ed8 },
+  dark: { bg: '#10161f', logical: '#6b5b99', public: '#5d7088', private: '#566a83', neutral: '#5f6b7a', strip: 0x66588a, plain: 0x8193a8, focus: 0x7cb4ff },
+};
 function srProviderColor(p) {
   if (!p) return '#9aa4b2';
   let h = 0;
@@ -268,14 +274,15 @@ function srBuild() {
   const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(isDark() ? '#141a22' : '#eef2f7');
+  const dark = isDark(), PAL = dark ? SR_PAL.dark : SR_PAL.light;
+  scene.background = new THREE.Color(PAL.bg);
   scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.6));
   const sun = new THREE.DirectionalLight(0xffffff, 1.2); sun.position.set(30, 60, 40); scene.add(sun);
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 5000);
   const controls = new OrbitControls(camera, cv);
   Object.assign(controls, { enableDamping: !reduceMotion, dampingFactor: 0.12, screenSpacePanning: true, minDistance: 3, maxDistance: 4000, maxPolarAngle: Math.PI * 0.48 });
   const V = { renderer, scene, camera, controls, L, near: new THREE.Group(), far: new THREE.Group(), lod: 'near', pick: [], iconUrls: [], raf: 0,
-    frames: [], labelAt: 0, labels: [], ro: null, env, fold };
+    frames: [], labelAt: 0, labels: [], ro: null, env, fold, dark, floorColors: [] };
   V.far.visible = false;   // srLod only switches on a change: a view that opens near never showed the far boxes' level
   scene.add(V.near, V.far);
   // floors: one instanced box for all of them
@@ -285,9 +292,12 @@ function srBuild() {
     const h = 0.05, y = 0.06 * G.level + h / 2;
     m4.compose(at.set(G.x + G.w / 2, y, G.z + G.d / 2), q, sc.set(G.w, h, G.d));
     floorMesh.setMatrixAt(i, m4);
-    const g = G.g, base = g.kind === 'logical' ? '#c9b8e8' : g.visibility === 'public' ? '#dfe7f2' : g.visibility === 'private' ? '#9fb0c4' : g.provider ? srProviderColor(g.provider) : '#cfd6df';
-    col.set(base); if (g.provider && g.kind !== 'logical') col.lerp(new THREE.Color(isDark() ? '#1d2430' : '#ffffff'), 0.55 - Math.min(G.level, 4) * 0.08);
+    const g = G.g, base = g.kind === 'logical' ? PAL.logical : g.visibility === 'public' ? PAL.public : g.visibility === 'private' ? PAL.private : g.provider ? srProviderColor(g.provider) : PAL.neutral;
+    col.set(base);
+    if (!dark && g.provider && g.kind !== 'logical') col.lerp(new THREE.Color('#ffffff'), 0.55 - Math.min(G.level, 4) * 0.08);
+    else if (dark && g.provider && g.kind !== 'logical' && !g.visibility) col.lerp(new THREE.Color(PAL.bg), 0.25);   // a provider's own floor, a little toward the ground
     floorMesh.setColorAt(i, col);
+    V.floorColors.push(`#${col.getHexString()}`);
   });
   floorMesh.count = L.floors.length;
   floorMesh.userData.groups = L.floors.map((G) => G.g.id);
@@ -324,10 +334,10 @@ function srBuild() {
     (crossing ? cross : plain).push(a.x, y, a.z, b.x, y, b.z);
   }
   const lines = (arr, mat) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3)); const l = new THREE.LineSegments(g, mat); if (mat.isLineDashedMaterial) l.computeLineDistances(); return l; };
-  V.plainLines = lines(plain, new THREE.LineBasicMaterial({ color: isDark() ? 0x7f8ea3 : 0x5c6b7f, transparent: true, opacity: SR.plainOpacity }));
+  V.plainLines = lines(plain, new THREE.LineBasicMaterial({ color: PAL.plain, transparent: true, opacity: SR.plainOpacity }));
   V.crossLines = lines(cross, new THREE.LineDashedMaterial({ color: 0xd63fb0, dashSize: 0.5, gapSize: 0.3, transparent: true, opacity: SR.crossOpacity }));
   // the strong layer: the pressed and the pointed node's cables (srFocusLines fills it)
-  V.focusLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: isDark() ? 0x7cb4ff : 0x1d4ed8 }));
+  V.focusLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: PAL.focus }));
   V.focusCross = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xd63fb0 }));
   V.focusLines.renderOrder = V.focusCross.renderOrder = 2;
   V.near.add(V.plainLines, V.crossLines, V.focusLines, V.focusCross);
@@ -361,7 +371,7 @@ function srBuild() {
   V.far.add(lines(bp, new THREE.LineBasicMaterial({ color: 0x5c6b7f })), lines(bc, new THREE.LineDashedMaterial({ color: 0xd63fb0, dashSize: 1.2, gapSize: 0.7 })));
   // the external strip's sign
   if (L.ext.length) {
-    const strip = new THREE.Mesh(new THREE.BoxGeometry(L.ext.length * SR_CELL * 1.3, 0.04, SR_CELL * 1.6), new THREE.MeshLambertMaterial({ color: isDark() ? 0x3a3248 : 0xe9e2f5 }));
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(L.ext.length * SR_CELL * 1.3, 0.04, SR_CELL * 1.6), new THREE.MeshLambertMaterial({ color: PAL.strip }));
     strip.position.set(L.ext.length * SR_CELL * 1.3 / 2, 0.02, L.pos.get(L.ext[0].id).z);
     V.near.add(strip);
   }
@@ -594,6 +604,19 @@ ${probs.length ? `<h3>問題 ${probs.length} 件</h3><ul class="sr-problems">${p
 function srRenderLog() {
   setHTML($('sr-log'), `<ol>${SR.log.map((l) => `<li><time>${esc(new Date(l.at).toTimeString().slice(0, 8))}</time> ${esc(l.text)}</li>`).join('')}</ol>`);
 }
+/* The theme changing while the server room is open (the OS's light and dark, or the page's own switch; dd's verification
+   D3): the 3D is made again in the new colours, the camera where it was. */
+function srRetheme() {
+  const V = SR.view;
+  if (SR.phase !== 'open' || !V || V.dark === isDark()) return;
+  const pos = V.camera.position.clone(), target = V.controls.target.clone();
+  srBuild();
+  const W = SR.view;
+  W.camera.position.copy(pos); W.controls.target.copy(target); W.controls.update();
+  srLog(`色を${W.dark ? 'ダーク' : 'ライト'}に合わせた`);
+}
+if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', srRetheme);
+new MutationObserver(srRetheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 $('sr-back').addEventListener('click', srClose);
 $('sr-fit').addEventListener('click', () => srFit(false));
 $('sr-zin').addEventListener('click', () => srZoomBy(1 / SR.zoomStep));

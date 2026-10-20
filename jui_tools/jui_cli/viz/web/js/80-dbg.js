@@ -25,6 +25,8 @@ window.__dbg = {
   srIconKeys: () => (SR.view ? { ...(SR.view.iconKeys || {}) } : {}),
   srNodeEnvs: () => (SR.view ? SR.view.L.nodes.map((n) => [n.id, Array.isArray(n.environments) ? n.environments : []]) : []),
   srAlive: () => !!SR.view,
+  srTheme: () => { const V = SR.view; if (!V) return null; const lab = document.querySelector('#sr-labels .sr-label:not([hidden])'), cs = lab ? getComputedStyle(lab) : null;
+    return { dark: V.dark, bg: `#${V.scene.background.getHexString()}`, floors: [...new Set(V.floorColors)], label: cs ? [cs.color, cs.backgroundColor] : null }; },
   srLines: () => { const V = SR.view; return V ? { mode: SR.lines, plainOpacity: V.plainLines.material.opacity, crossOpacity: V.crossLines.material.opacity,
     plainVisible: V.plainLines.visible, crossVisible: V.crossLines.visible, focus: V.focusCount || 0, selected: SR.selected } : null; },
   srSelect: (id) => { srSelect(id); return SR.view ? SR.view.focusCount || 0 : null; },
