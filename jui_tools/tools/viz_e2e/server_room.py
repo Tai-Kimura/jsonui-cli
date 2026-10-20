@@ -223,6 +223,21 @@ async def run_flows(page, out, failures, res):
           f"a rebuild while it waits at a branch takes its choices away: {fl['rebuiltAtBranch']}")
     await page.emulate_media(color_scheme="dark" if dark else "light")
     await until(page, f"(d) => window.__dbg.sr().built && window.__dbg.srTheme().dark === d", "the theme back again", arg=dark)
+    # コスト while a flow waits at its branch (ticket 2026-10-21-jui-viz-cost-view-box-zoom-takes-the-clicks): the flow is
+    # the 3D's, so it stops, and the cost page is over the flow's layers (this room has no load definition: its words)
+    await page.evaluate("() => window.__dbg.srSelect('browser')")
+    await page.click("#sr-board [data-sr-flow='search']")
+    await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'branch' && f.choices.length ? f : null; }}", "search: at its branch for コスト",
+                timeout=30000, why=FLOW)
+    await page.click("#sr-mode-cost")
+    await until(page, "() => window.__dbg.srCost().mode === 'cost'", "コスト over the flow")
+    f = await page.evaluate(FLOW)
+    fl["cost"] = {"playing": f["playing"], "choicesHidden": await page.evaluate("() => document.getElementById('sr-choices').hidden"),
+                  "z": await page.evaluate("() => ['sr-cost', 'sr-player', 'sr-choices', 'sr-toasts'].map((id) => Number(getComputedStyle(document.getElementById(id)).zIndex) || 0)")}
+    check(failures, f["playing"] is None and fl["cost"]["choicesHidden"] and fl["cost"]["z"][0] > max(fl["cost"]["z"][1:]),
+          f"コスト stops the flow and is drawn over its player, choices and toasts: {fl['cost']}")
+    await page.click("#sr-mode-3d")
+    await until(page, "() => { const c = window.__dbg.srCost(); return c.mode === '3d' && !c.paused; }", "the 3D after コスト")
 
 
 async def run_server_room(pw, out, failures):

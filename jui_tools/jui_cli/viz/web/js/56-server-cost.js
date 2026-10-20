@@ -38,7 +38,7 @@ function srcSetMode(mode) {
   srcEl.hidden = mode !== 'cost';
   SR.paused = mode === 'cost';
   $('sr-boxzoom').disabled = mode === 'cost';   // the box is the 3D's (56-server-room.js); the cost page takes its own presses
-  if (mode === 'cost') { srBoxEnd(); srBoxArm(false); }
+  if (mode === 'cost') { srBoxEnd(); srBoxArm(false); srFlowStop(); }   // a flow playing (59-sr-flows.js) is the 3D's too
   if (mode === '3d') {
     srcStop();
     if (SR.view && !SR.view.raf && SR.view.loop) SR.view.loop();
