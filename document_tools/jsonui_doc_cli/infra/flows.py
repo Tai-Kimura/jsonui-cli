@@ -260,38 +260,48 @@ def resolve(flows: list[tuple[str, int, dict]], nodes: dict[str, dict], edges: l
 
 def _on_cycles(graph: dict[str, set[str]]) -> set[str]:
     """The flows on a cycle of graph (id -> the ids it goes to): Tarjan's strongly connected components, a component of
-    two or more, or one that goes to itself."""
+    two or more, or one that goes to itself. Walked with a stack of its own, not by recursion: the room's flows from
+    all its files together may be many more than one file's limit."""
     index: dict[str, int] = {}
     low: dict[str, int] = {}
     stack: list[str] = []
     on: set[str] = set()
     out: set[str] = set()
-
-    def visit(v: str) -> None:              # the flows are at most 200: recursion stays shallow
-        index[v] = low[v] = len(index)
-        stack.append(v)
-        on.add(v)
-        for w in graph.get(v, ()):
-            if w not in graph:
-                continue
-            if w not in index:
-                visit(w)
-                low[v] = min(low[v], low[w])
-            elif w in on:
-                low[v] = min(low[v], index[w])
-        if low[v] == index[v]:
-            comp = []
-            while True:
-                w = stack.pop()
-                on.discard(w)
-                comp.append(w)
-                if w == v:
+    for root in graph:
+        if root in index:
+            continue
+        work = [(root, iter(sorted(graph.get(root, ()))))]
+        index[root] = low[root] = len(index)
+        stack.append(root)
+        on.add(root)
+        while work:
+            v, it = work[-1]
+            for w in it:
+                if w not in graph:
+                    continue
+                if w not in index:
+                    index[w] = low[w] = len(index)
+                    stack.append(w)
+                    on.add(w)
+                    work.append((w, iter(sorted(graph.get(w, ())))))
                     break
-            if len(comp) > 1 or v in graph.get(v, ()):
-                out.update(comp)
-    for v in graph:
-        if v not in index:
-            visit(v)
+                if w in on:                 # an edge back into the component being built (not to one already done)
+                    low[v] = min(low[v], index[w])
+            else:
+                work.pop()
+                if work:
+                    u = work[-1][0]
+                    low[u] = min(low[u], low[v])
+                if low[v] == index[v]:
+                    comp = []
+                    while True:
+                        w = stack.pop()
+                        on.discard(w)
+                        comp.append(w)
+                        if w == v:
+                            break
+                    if len(comp) > 1 or v in graph.get(v, ()):
+                        out.update(comp)
     return out
 
 

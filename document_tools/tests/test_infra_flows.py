@@ -229,3 +229,28 @@ def test_an_edge_only_in_another_environment_does_not_carry_the_flow():
     assert model["flows"] == [] and ("flow.edge.missing", "/flows/0/steps/1") in _codes(problems)
     f["environments"] = ["stg"]
     assert _merge(f, base=base)[1] == []
+
+
+def test_a_loop_whose_flows_also_go_to_a_flow_that_ends_is_refused_and_that_flow_kept():
+    """The independent check's H2: r goes by default to s; s's two lanes go by default to r and to c (no goto). Only r
+    and s are on the loop: c, reached from it and done first, stays."""
+    def to(goto):
+        return {"branch": {"label": "?", "default": "go", "choices": [{"id": "go", "label": "進む", "goto": goto},
+                                                                       {"id": "stop", "label": "やめる", "steps": [{"node": "browser"}]}]}}
+    c = {"id": "c", "start": "browser", "steps": [{"node": "browser"}]}
+    r = {"id": "r", "start": "browser", "steps": [to("s")]}
+    s = {"id": "s", "start": "browser", "steps": [{"parallel": [[to("r")], [to("c")]]}]}
+    model, problems = _merge(c, r, s)
+    assert [f["id"] for f in model["flows"]] == ["c"]
+    assert sorted(_codes(problems)) == [("flow.default_cycle", "/flows/1"), ("flow.default_cycle", "/flows/2")]
+
+
+def test_a_long_chain_of_defaults_needs_no_deep_recursion():
+    """Flows from all of a room's files together may be more than one file's 200: the loop finder walks with a stack of
+    its own (a chain of 3,000 flows, each going by default to the next, ends without a loop and without an error)."""
+    from jsonui_doc_cli.infra import flows as FL
+    graph = {f"f{i}": {f"f{i + 1}"} for i in range(3000)}
+    graph["f3000"] = set()
+    assert FL._on_cycles(graph) == set()
+    graph["f3000"] = {"f0"}
+    assert len(FL._on_cycles(graph)) == 3001
