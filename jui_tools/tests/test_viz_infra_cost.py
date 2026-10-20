@@ -68,6 +68,34 @@ def test_two_months_are_kept_and_a_changed_file_simulates_again(tmp_path, monkey
     assert calls == ["ordinary", "sale", "ordinary", "sale"] and len(C._KEPT) == C.KEEP
 
 
+@pytest.mark.parametrize("change", ["price", "cache", "config"])
+def test_a_price_file_the_cache_or_the_config_changed_simulates_again(tmp_path, monkeypatch, change):
+    """The kept month's key covers what the price book reads: the room's price files, the fetched prices' cache
+    (<viz home>/cloud-prices) and jui.config.json — not the load definitions only."""
+    root = _room(tmp_path, "aws-three-tier")
+    home = tmp_path / "vizhome"
+    monkeypatch.setenv("JUI_VIZ_HOME", str(home))
+    (home / "cloud-prices" / "aws").mkdir(parents=True)
+    cached = home / "cloud-prices" / "aws" / "s3.json"
+    cached.write_text(json.dumps({"version": 0, "prices": []}))
+    calls = []
+    mods = C._mods()
+    real = mods["engine"].simulate
+    monkeypatch.setattr(mods["engine"], "simulate", lambda *a: calls.append(a[0]["id"]) or real(*a))
+    C.read(root)
+    C.read(root)
+    assert calls == ["ordinary"]
+    if change == "price":
+        f = root / "docs" / "infra" / "prices" / "example.json"
+        f.write_text(f.read_text().replace('"見本の値"', '"見本の値（改）"', 1))
+    elif change == "cache":
+        cached.write_text(json.dumps({"version": 0, "prices": [], "label": "refetched"}))
+    else:
+        (root / "jui.config.json").write_text(json.dumps({"infra": {"dir": "docs/infra"}}))
+    C.read(root)
+    assert calls == ["ordinary", "ordinary"]
+
+
 def test_the_route_takes_the_page_checks(tmp_path):
     root = _room(tmp_path, "aws-three-tier")
     world, pid = _world(root)

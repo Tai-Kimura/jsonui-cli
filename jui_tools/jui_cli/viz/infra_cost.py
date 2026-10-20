@@ -31,16 +31,26 @@ def _mods():
     return None if any(m is None for m in mods) else dict(zip(("load", "room", "engine", "pricebook", "view"), mods))
 
 
-def _signature(root: Path, room, folders: list[str]) -> tuple:
-    """The files the month depends on, by name, size and time (no content read): a change simulates again."""
-    out = []
+def _stamp(path: str) -> tuple | None:
+    try:
+        st = os.stat(path, follow_symlinks=False)
+    except OSError:
+        return None
+    return (st.st_size, st.st_mtime_ns)
+
+
+def _signature(root: Path, room, folders: list[str], cache: Path) -> tuple:
+    """Every file the month depends on, by name, size and time (no content read): the room's jui.config.json (where the
+    folders are), the model's, the load definitions' and the price files' folders, and the fetched prices' cache
+    (<viz home>/cloud-prices, read by the price book too). A change to any of them simulates again."""
+    out = [("config", _stamp(os.path.join(root, room.CONFIG_NAME)))]
     for folder in folders:
         for name, size in room._list_dir(root, folder) or []:
-            try:
-                st = os.stat(os.path.join(root, folder, name), follow_symlinks=False)
-            except OSError:
-                continue
-            out.append((folder, name, size, st.st_mtime_ns))
+            out.append((folder, name, size, _stamp(os.path.join(root, folder, name))))
+    if cache.is_dir():
+        for f in sorted(cache.rglob("*.json")):
+            if not f.is_symlink():
+                out.append(("cache", str(f.relative_to(cache)), _stamp(str(f))))
     return tuple(out)
 
 
@@ -61,7 +71,7 @@ def _simulate(m: dict, root: Path, scenario_id: str | None):
         return 404, {"ok": False, "reason": "no_scenario", "message": "no such scenario"}
     model = m["room"].read(root)
     folders = [model["dir"], loads["dir"], m["room"].side_dir(root, "prices_dir")]
-    key = (str(root), chosen["id"], _signature(root, m["room"], folders))
+    key = (str(root), chosen["id"], _signature(root, m["room"], folders, m["pricebook"].cache_dir()))
     with _LOCK:
         kept = _KEPT.get(key)
         if kept is not None:
