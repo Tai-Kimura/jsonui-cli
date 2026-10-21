@@ -30,7 +30,7 @@ function denialsNotify() {
   if (!DEN.based) { DEN.based = true; for (const d of waiting) NOTIFY.seen.add(`${notifyServer()}:denied:${d.id}`); return; }
   for (const d of waiting) {
     notifyEvent('perm', `${notifyServer()}:denied:${d.id}`, { id: `denied:${d.id}`, who: d.who },
-      `${notifyName(d.who)} の操作が自動モードで止められました: ${String(d.tool || '').slice(0, 40)}`);
+      tl('deny.notify', { name: notifyName(d.who), tool: String(d.tool || '').slice(0, 40) }));
   }
 }
 const denialsShown = (now = Date.now()) => DENIALS.filter((d) => inScope(projectOfRobot(d.who)) && (d.status === 'pending' || now - (d.doneAt || 0) < DEN_SHOW_MS));
@@ -38,36 +38,36 @@ const denialsWaiting = () => DENIALS.filter((d) => d.status === 'pending');
 /* Whether a prompt can reach the card's session (the box under the history says the same: composeTarget). */
 function denialTarget(d) {
   const main = SESSION_OF[d.who];
-  return main && DEF[main] ? composeTarget(main) : { why: 'このセッションは見えていない' };
+  return main && DEF[main] ? composeTarget(main) : { why: tl('deny.why.unseen') };
 }
-const DEN_DONE = { sent: '伝えた', dismissed: 'そのままにした', ended: 'セッションが終わった' };
-const DEN_MAY = '受け手は続けることも、端末での確認を求めることもある（求められたら端末で答える）';
+const DEN_DONE = { sent: tl('deny.done.sent'), dismissed: tl('deny.done.dismissed'), ended: tl('deny.done.ended') };
+const DEN_MAY = tl('deny.may');
 function denialHTML(d, where = '') {
   const t = d.status === 'pending' ? denialTarget(d) : { why: '' };
   const asking = DEN.asking === `${d.id}|${where}`;
-  const whatHTML = `<p class="dwhat"><b>${esc(d.tool)}</b>${d.input ? ` <code>${esc(d.input)}</code>` : ''}</p>${d.reason ? `<p class="dwhy">理由 ${esc(d.reason)}</p>` : ''}`;
+  const whatHTML = `<p class="dwhat"><b>${esc(d.tool)}</b>${d.input ? ` <code>${esc(d.input)}</code>` : ''}</p>${d.reason ? `<p class="dwhy">${esc(tl('deny.reason', { reason: d.reason }))}</p>` : ''}`;
   let footHTML;
   if (d.status === 'sent') {
     footHTML = `<p class="qnote qdone">${esc(DEN_DONE.sent)}</p>` + (d.reply
-      ? `<p class="dreply" data-dreply="${esc(d.id)}"><b>受け手の次の応答</b> ${esc(d.reply)}</p>`
-      : `<p class="qnote" data-dreply-wait="${esc(d.id)}">受け手の応答を待っている。${esc(DEN_MAY)}</p>`);
+      ? `<p class="dreply" data-dreply="${esc(d.id)}"><b>${esc(tl('deny.reply'))}</b> ${esc(d.reply)}</p>`
+      : `<p class="qnote" data-dreply-wait="${esc(d.id)}">${esc(tl('deny.reply.wait', { may: DEN_MAY }))}</p>`);
   } else if (d.status !== 'pending') footHTML = `<p class="qnote qdone">${esc(DEN_DONE[d.status] || d.status)}</p>`;
-  else if (t.why) footHTML = `<p class="qnote qwhy" role="note">${esc(t.why)}。端末で許可を伝えてください</p><div class="qfoot"><button type="button" class="pa pa-deny" data-ddismiss="${esc(d.id)}" data-fk="${esc(where)}dd-${esc(d.id)}">そのまま</button></div>`;
+  else if (t.why) footHTML = `<p class="qnote qwhy" role="note">${esc(tl('deny.why.terminal', { why: t.why }))}</p><div class="qfoot"><button type="button" class="pa pa-deny" data-ddismiss="${esc(d.id)}" data-fk="${esc(where)}dd-${esc(d.id)}">${esc(tl('deny.dismiss'))}</button></div>`;
   else if (asking) {
-    footHTML = `<div class="dconfirm" role="group" aria-label="送信の確認"><p class="dconfirm-to">このセッションへ次の文を伝える（${esc(t.name || '')}）</p><blockquote class="dprompt" data-dprompt="${esc(d.id)}">${esc(d.prompt)}</blockquote><p class="qnote" data-dmay>${esc(DEN_MAY)}</p>`
-      + `<div class="qfoot"><button type="button" class="pa pa-allow" data-dgo="${esc(d.id)}" data-fk="${esc(where)}dg-${esc(d.id)}">送る</button><button type="button" class="pa pa-deny" data-dback="${esc(d.id)}" data-fk="${esc(where)}db-${esc(d.id)}">やめる</button></div></div>`;
+    footHTML = `<div class="dconfirm" role="group" aria-label="${esc(tl('deny.confirm.aria'))}"><p class="dconfirm-to">${esc(tl('deny.confirm.to', { name: t.name || '' }))}</p><blockquote class="dprompt" data-dprompt="${esc(d.id)}">${esc(d.prompt)}</blockquote><p class="qnote" data-dmay>${esc(DEN_MAY)}</p>`
+      + `<div class="qfoot"><button type="button" class="pa pa-allow" data-dgo="${esc(d.id)}" data-fk="${esc(where)}dg-${esc(d.id)}">${esc(tl('deny.confirm.go'))}</button><button type="button" class="pa pa-deny" data-dback="${esc(d.id)}" data-fk="${esc(where)}db-${esc(d.id)}">${esc(tl('deny.confirm.back'))}</button></div></div>`;
   } else {
-    footHTML = `<div class="qfoot"><button type="button" class="pa pa-allow" data-dask="${esc(d.id)}" data-fk="${esc(where)}da-${esc(d.id)}">実行してよいと伝える…</button><button type="button" class="pa pa-deny" data-ddismiss="${esc(d.id)}" data-fk="${esc(where)}dd-${esc(d.id)}">そのまま</button></div>`
-      + `<p class="qnote">押すと、確認の後に、止められた操作と理由と「実行してよいと判断した」をこのセッションへ伝える。${esc(DEN_MAY)}。許可の規則や設定は変えない</p>`;
+    footHTML = `<div class="qfoot"><button type="button" class="pa pa-allow" data-dask="${esc(d.id)}" data-fk="${esc(where)}da-${esc(d.id)}">${esc(tl('deny.ask'))}</button><button type="button" class="pa pa-deny" data-ddismiss="${esc(d.id)}" data-fk="${esc(where)}dd-${esc(d.id)}">${esc(tl('deny.dismiss'))}</button></div>`
+      + `<p class="qnote">${esc(tl('deny.ask.note', { may: DEN_MAY }))}</p>`;
   }
-  return `<article class="qcard dcard${d.status === 'pending' ? ' q-open' : ''}" data-dcard="${esc(d.id)}"><header class="qwho">${pill(d.who, DEF[d.who].role)}<span>${esc(DEF[d.who].agent)}</span><span class="dtag">自動モードが止めた</span><span class="pc-wait" data-since="${d.at}"></span>${histOffHTML(where, 'd', d.id, d.status !== 'pending')}</header>${whatHTML}${footHTML}</article>`;
+  return `<article class="qcard dcard${d.status === 'pending' ? ' q-open' : ''}" data-dcard="${esc(d.id)}"><header class="qwho">${pill(d.who, DEF[d.who].role)}<span>${esc(DEF[d.who].agent)}</span><span class="dtag">${esc(tl('deny.tag'))}</span><span class="pc-wait" data-since="${d.at}"></span>${histOffHTML(where, 'd', d.id, d.status !== 'pending')}</header>${whatHTML}${footHTML}</article>`;
 }
 const denialsSig = (shown) => JSON.stringify([NAMES.rev, DEN.asking, ...shown.map((d) => [d.id, d.status, d.reason, d.input, d.reply, denialTarget(d).why])]);
 function renderDenials() {
   const shown = denialsShown(), waiting = denialsWaiting().length;
   const chip = $('chip-denied');
   chip.hidden = waiting === 0;
-  setText(chip, `止められた ${waiting}`);
+  setText(chip, tl('deny.chip', { n: waiting }));
   $('denied-sec').hidden = shown.length === 0;
   keyed($('denied'), denialsSig(shown), () => shown.map((d) => denialHTML(d)).join(''));
 }
@@ -75,8 +75,8 @@ function renderDenialStrip() {
   const el = $('denied-strip'), shown = denialsShown(), elsewhere = denialsWaiting().filter((d) => !inScope(projectOfRobot(d.who))).length;
   el.hidden = !shown.length && !elsewhere;
   keyed(el, `${elsewhere}|${denialsSig(shown)}`, () => {
-    const otherHTML = elsewhere ? `<p class="ps-rules">ほかのプロジェクトでも ${elsewhere} 件 <button type="button" class="link-btn" data-set-all data-fk="ds-all">すべてのプロジェクトを表示</button></p>` : '';
-    return `<h3 class="ps-title">自動モードが止めた操作<b>${shown.filter((d) => d.status === 'pending').length}</b><small>古い順</small></h3>${otherHTML}${shown.map((d) => denialHTML(d, 'b')).join('')}`;
+    const otherHTML = elsewhere ? `<p class="ps-rules">${esc(tl('deny.elsewhere', { n: elsewhere }))} <button type="button" class="link-btn" data-set-all data-fk="ds-all">${esc(tl('deny.show.all'))}</button></p>` : '';
+    return `<h3 class="ps-title">${esc(tl('deny.strip.title'))}<b>${shown.filter((d) => d.status === 'pending').length}</b><small>${esc(tl('deny.strip.order'))}</small></h3>${otherHTML}${shown.map((d) => denialHTML(d, 'b')).join('')}`;
   });
 }
 function onDenialClick(e) {
@@ -95,14 +95,14 @@ function onDenialClick(e) {
     go.disabled = true;
     SOURCE.denial(go.dataset.dgo, 'approve').then((got) => {
       DEN.asking = null;
-      showToast(got.ok ? 'このセッションへ伝えた（受け手の次の応答が札の下に出る）' : `送れなかった（${got.error || `HTTP ${got.status}`}）`);
+      showToast(got.ok ? tl('deny.sent') : tl('deny.send.failed') + (got.error || `HTTP ${got.status}`) + tl('deny.paren.end'));
       repaint();
     });
     return;
   }
   if (dismiss) {
     dismiss.disabled = true;
-    SOURCE.denial(dismiss.dataset.ddismiss, 'dismiss').then((got) => { if (!got.ok) showToast(`閉じられなかった（${got.error || `HTTP ${got.status}`}）`); repaint(); });
+    SOURCE.denial(dismiss.dataset.ddismiss, 'dismiss').then((got) => { if (!got.ok) showToast(tl('deny.close.failed') + (got.error || `HTTP ${got.status}`) + tl('deny.paren.end')); repaint(); });
   }
 }
 for (const id of ['denied', 'denied-strip']) $(id).addEventListener('click', onDenialClick);
