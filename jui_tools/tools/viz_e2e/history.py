@@ -18,7 +18,7 @@ import subprocess
 import sys
 import time
 
-from common import ISOLATE, DESKTOP, LAUNCH_ARGS, PHONE, Watch, dump, new_page, ready, stamp
+from common import ISOLATE, DESKTOP, LAUNCH_ARGS, PHONE, T, Watch, dump, new_page, ready, stamp
 
 SID = "e2e00000-0000-4000-8000-0000000000b7"
 CWD = "/work/hist-app"
@@ -171,11 +171,11 @@ async def run_history(pw, out, failures):
               f"the answer is Markdown: {r['heading']!r} {r['strong']} {r['cells']}")
         check(failures, r["codeBlock"] == "**太字** <b>コードの中</b>" and r["codeChildren"] == 0, f"a code block is left as written: {r['codeBlock']!r} children {r['codeChildren']}")
         check(failures, "インライン <b>コード</b>" in r["inline"], f"inline code is left as written: {r['inline']}")
-        check(failures, r["peer"].startswith("jsonui-5b から") and not r["peerOpen"], f"another session's message is apart and folded: {r['peer']!r}")
-        check(failures, r["harness"].startswith("システムの注記") and not r["harnessOpen"], f"the harness's text is folded: {r['harness']!r}")
+        check(failures, r["peer"].startswith(T("hist.peer.from.pre") + "jsonui-5b" + T("hist.peer.from")) and not r["peerOpen"], f"another session's message is apart and folded: {r['peer']!r}")
+        check(failures, r["harness"].startswith(T("srv.harness.reminder")) and not r["harnessOpen"], f"the harness's text is folded: {r['harness']!r}")
         check(failures, r["tool"].startswith("Bash一覧を見る") and r["io"][0].startswith("ls -la ") and r["io"][1].startswith("total 0"),
               f"a tool call: its description folded, IN and OUT inside: {r['tool']!r} {r['io']}")
-        check(failures, r["marks"] == ["考えた", "画像 1 枚（表示できない形式）"] and "THINK-SECRET" not in r["text"], f"thinking and a picture that is not one are marks: {r['marks']}")
+        check(failures, r["marks"] == [T("hist.thought"), T("hist.img.unshown")] and "THINK-SECRET" not in r["text"], f"thinking and a picture that is not one are marks: {r['marks']}")
         # what must not be there
         check(failures, r["handlers"] == [] and r["pwned"] == 0, f"no handler from the transcript: {r['handlers']} pwned {r['pwned']}")
         check(failures, not ({"img", "script", "iframe"} & set(r["tags"])) and r["fromText"] == [], f"no element from the transcript: {r['tags']} {r['fromText']}")
@@ -183,7 +183,7 @@ async def run_history(pw, out, failures):
               f"only the http(s) link has an href: {r['hrefs']} {r['linkAttrs']}")
         for sample in HOSTILE[2:5]:
             check(failures, sample in r["text"], f"a link that is not http(s) stays text: {sample}")
-        check(failures, "画像: 画像の説明" in r["text"], "an image in Markdown is a mark (not fetched)")
+        check(failures, T("hist.img.alt", alt="画像の説明") in r["text"], "an image in Markdown is a mark (not fetched)")
         await page.screenshot(path=str(out / "history.png"))
         # the tool call opens to IN and OUT
         await page.click("[data-rb-hist] .h-tool summary")
