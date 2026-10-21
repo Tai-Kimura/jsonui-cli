@@ -14,6 +14,8 @@ import shutil
 import signal
 from typing import Callable
 
+from .. import i18n
+
 TIMEOUT_SEC = 2.0
 
 
@@ -65,7 +67,7 @@ async def run(interval: float, on_rows: Callable[[list[dict]], None], on_status:
               which: Callable[[str], str | None] = shutil.which) -> None:
     claude = which("claude")
     if claude is None:
-        on_status("stopped", "claude が PATH にありません（セッション一覧の取得を止めました）")
+        on_status("stopped", i18n.tl("srv.agents.no_claude"))
         return
     on_status("running", None)
     failures = 0
@@ -74,7 +76,7 @@ async def run(interval: float, on_rows: Callable[[list[dict]], None], on_status:
         if rows is None:
             failures += 1
             if failures == 1:
-                on_status("degraded", "claude agents --json を読めませんでした（続けて試します）")
+                on_status("degraded", i18n.tl("srv.agents.unreadable"))
         else:
             if failures:
                 on_status("running", None)

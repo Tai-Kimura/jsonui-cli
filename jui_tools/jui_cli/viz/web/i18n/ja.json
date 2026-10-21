@@ -1976,5 +1976,7 @@
   "srv.prices.no_tools": "document_tools が見つからないため、単価を取りません",
   "srv.prices.failing": {
     "other": "{n} 件のファイルが取れなかった（前に取れた値を使う）"
-  }
+  },
+  "srv.agents.no_claude": "claude が PATH にありません（セッション一覧の取得を止めました）",
+  "srv.agents.unreadable": "claude agents --json を読めませんでした（続けて試します）"
 }

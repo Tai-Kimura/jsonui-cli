@@ -2024,5 +2024,7 @@
   "srv.prices.failing": {
     "one": "{n} file could not be fetched (the last fetched prices are used)",
     "other": "{n} files could not be fetched (the last fetched prices are used)"
-  }
+  },
+  "srv.agents.no_claude": "claude is not on PATH (the session list is not read)",
+  "srv.agents.unreadable": "Could not read claude agents --json (trying again)"
 }
