@@ -5,20 +5,37 @@
 const I18N = (() => {
   try {
     const data = JSON.parse(document.getElementById('jui-viz-strings').textContent);
-    if (data && typeof data.strings === 'object') return data;
+    if (data && typeof data.strings === 'object') return { ...data, served: true };
   } catch (err) { /* a page without the server's words (debug.html): English keys as they are */ }
   return { language: 'en', locale: 'en-US', strings: {} };
 })();
 const LOCALE = I18N.locale || 'en-US';
 const PLURAL = new Intl.PluralRules(LOCALE);
+/* A key the table lacks, or a slot a call leaves unfilled, would read on the page as the key or as {name}, silently:
+   each is said once on the console as a warning (ticket 2026-10-21-viz-english-screen-checks). The browser tests fail
+   on any console warning, in Japanese and in English. Only with the server's table: debug.html has none. */
+const TL_SAID = new Set();
+function tlSay(what, key) {
+  if (!I18N.served || TL_SAID.has(`${what} ${key}`)) return;
+  TL_SAID.add(`${what} ${key}`);
+  console.warn(`[viz i18n] ${what}: ${key}`);
+}
 function tlWords(key, p) {
   const v = I18N.strings[key];
-  if (v === undefined) return key;
-  return typeof v === 'object' ? v[PLURAL.select(Number(p.n))] ?? v.other ?? key : v;
+  if (v === undefined) { tlSay('no words for the key', key); return key; }
+  if (typeof v !== 'object') return v;
+  const form = v[PLURAL.select(Number(p.n))] ?? v.other;
+  if (form === undefined) { tlSay('no plural form for the key', key); return key; }
+  return form;
+}
+function tlSlot(key, p, name) {
+  if (name in p) return true;
+  tlSay(`slot {${name}} not filled`, key);
+  return false;
 }
 function tl(key, params) {
   const p = params || {};
-  return tlWords(key, p).replace(/\{(\w+)\}/g, (m, name) => (name in p ? String(p[name]) : m));
+  return tlWords(key, p).replace(/\{(\w+)\}/g, (m, name) => (tlSlot(key, p, name) ? String(p[name]) : m));
 }
 /* tl() as HTML, for words that hold markup: the words and every slot escaped, then `…` in the words drawn as
    <code>…</code> — the only markup a table's words can make (a slot's backtick is escaped first, so it makes none). */
@@ -29,7 +46,7 @@ function tlHTML(key, params) {
   const p = params || {};
   return tlWords(key, p).split(/(\{\w+\})/).map((part) => {
     const slot = /^\{(\w+)\}$/.exec(part);
-    if (slot && slot[1] in p) return tlEsc(p[slot[1]]);
+    if (slot && tlSlot(key, p, slot[1])) return tlEsc(p[slot[1]]);
     return tlEsc(part).replace(/&#96;/g, '\x60');
   }).join('').replace(TL_CODE, '<code>$1</code>');
 }
