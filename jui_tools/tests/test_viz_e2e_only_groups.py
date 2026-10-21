@@ -25,7 +25,8 @@ def test_a_group_alone_is_said_and_stops():
     assert lines[0] == f"--only live = {len(live)} suites: {', '.join(live)}"
     assert lines[-1].startswith("stopped: a group runs most of the e2e") and "--group-ok" in lines[-1]
     lines, stop = G.check(["gitbox", "demo"], group_ok=False)   # one group among names is enough to stop
-    assert stop and lines[0].startswith("--only demo = 5 suites: demo, ")
+    demo = G.suites_of("demo")   # counted, not written: a suite added to the group keeps this true
+    assert stop and len(demo) >= 2 and demo[0] == "demo" and lines[0] == f"--only demo = {len(demo)} suites: {', '.join(demo)}"
 
 
 def test_a_group_with_group_ok_is_said_and_runs():
