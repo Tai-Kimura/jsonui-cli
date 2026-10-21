@@ -414,6 +414,10 @@ window.__dbg = {
     return { skill: st.skill ? st.skill.name : null, model: S && S.model ? S.model.id : null, phase: S ? S.phase : null,
       figure: !!(S && S.figure), holders: S ? S.holders.length : 0, error: S ? S.error || null : null,
       band: R.robot.band.visible, cheek: !!(S && S.tagCheek),
+      ghost: !!(S && S.ghost), eyes: R.robot.spiritEyes ? R.robot.spiritEyes.shape : null, face: R.robot.faceMode || null,
+      pose: R.robot.spiritPose || null,
+      fx: S && S.fx ? { aura: !!S.fx.aura, glow: !!S.fx.glow, bolt: !!S.fx.bolt, clones: S.fx.clones.length,
+        sparks: S.fx.sparks.filter((x) => x.sp.visible).length, shouts: S.fx.shouts.filter((x) => x.sp.visible).length } : null,
       textures: (() => { let maps = 0, loaded = 0; if (S && S.figure) S.figure.traverse((o) => { if (!o.isMesh) return;
         for (const m of [].concat(o.material)) if (m.map) { maps++; const im = m.map.image; if (im && (im.width || im.naturalWidth)) loaded++; } });
         return { maps, loaded }; })(),

@@ -222,7 +222,7 @@ function drawCover(c) {
 }
 
 /* ---------- per-robot drawings ---------- */
-function drawFace(ctx, mode, tint = null) {
+function drawFace(ctx, mode, tint = null, eyes = null) {   // eyes: a skill spirit's {shape, color} (mode 'spirit', 45-spirits.js)
   const W = ctx.canvas.width, H = ctx.canvas.height;
   ctx.clearRect(0, 0, W, H);
   rr(ctx, 3, 3, W - 6, H - 6, 34); ctx.fillStyle = COL.screen; ctx.fill();
@@ -233,10 +233,15 @@ function drawFace(ctx, mode, tint = null) {
   const cx = W / 2, ey = 56, dx = 54;
   ctx.save();
   ctx.shadowColor = 'rgba(94, 242, 255, 0.9)'; ctx.shadowBlur = 16;
-  ctx.fillStyle = COL.eye; ctx.strokeStyle = COL.eye; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const eyeCol = mode === 'spirit' && eyes && eyes.color ? eyes.color : COL.eye;
+  if (eyeCol !== COL.eye) ctx.shadowColor = eyeCol;
+  ctx.fillStyle = eyeCol; ctx.strokeStyle = eyeCol; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   for (const side of [-1, 1]) {
     const x = cx + side * dx;
-    if (mode === 'normal') { rr(ctx, x - 15, ey - 24, 30, 48, 15); ctx.fill(); }
+    if (mode === 'normal' || (mode === 'spirit' && (!eyes || !eyes.shape || eyes.shape === 'normal'))) { rr(ctx, x - 15, ey - 24, 30, 48, 15); ctx.fill(); }
+    else if (mode === 'spirit' && eyes.shape === 'sharp') {   // slanted to the middle, as under a frown
+      ctx.beginPath(); ctx.moveTo(x - side * 20, ey - 14); ctx.lineTo(x + side * 18, ey - 2); ctx.lineTo(x + side * 16, ey + 12); ctx.lineTo(x - side * 18, ey + 8); ctx.closePath(); ctx.fill();
+    } else if (mode === 'spirit' && eyes.shape === 'narrow') { rr(ctx, x - 20, ey - 4, 40, 10, 5); ctx.fill(); }
     else if (mode === 'blink') { rr(ctx, x - 18, ey - 3, 36, 7, 3.5); ctx.fill(); }
     else if (mode === 'focus') { rr(ctx, x - 19, ey - 8, 38, 17, 8); ctx.fill(); }
     else if (mode === 'happy') { ctx.lineWidth = 10; ctx.beginPath(); ctx.arc(x, ey + 12, 17, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke(); }
@@ -1412,6 +1417,7 @@ function updateRobot(r, t, dt) {
   playBubble(r, onCall ? null : r.play, t);
   bgUpdate(r, t, r.state === 'background' && look !== 'whistle' && !onCall && !r.play && !r.solo && !r.brk);   // the whistle takes the headset off
   r.antenna.rotation.x += ((r.tired ? 1.0 : 0) - r.antenna.rotation.x) * Math.min(1, dt * 3);
+  if (r.spiritPose && !onCall && !r.play && !r.solo && !r.brk && !r.gesture) spiritPose(r, p, t);   // a skill spirit's pose (45-spirits.js)
   r.root.position.y = p.rootY;
   r.hips.position.y = HIPS_Y + p.hipsY;
   r.torso.rotation.set(p.torsoX, p.torsoY, 0);
@@ -1433,13 +1439,14 @@ function updateRobot(r, t, dt) {
   if (r.tired && mode === 'normal') mode = 'tired';
   if (look) mode = look;                                     // heavy work's face over the state's and the tired one
   if (r.launch) mode = 'whistle';                            // calling a subagent: the whistle's face for its moment
+  if (r.spiritEyes && (mode === 'normal' || mode === 'focus' || mode === 'fired')) mode = 'spirit';   // a skill spirit's eyes
   if (mode === 'normal' || mode === 'focus' || mode === 'tired' || mode === 'fired') {
     if (s > r.nextBlink) { r.blinkEnd = s + 0.12; r.nextBlink = s + 2.4 + Math.random() * 3.2; }
     if (s < r.blinkEnd) mode = 'blink';
   }
   const tint = r.tint && r.tint[3] > 0.01 ? r.tint.map((v, i) => (i < 3 ? Math.round(v / 8) * 8 : Math.round(v * 40) / 40)) : null;
-  const faceKey = `${mode}|${tint ? tint.join(',') : ''}`;   // the colour in steps: redrawn a few times while it eases
-  if (faceKey !== r.faceMode) { drawFace(r.faceCtx, mode, tint); r.faceTex.needsUpdate = true; r.faceMode = faceKey; }
+  const faceKey = `${mode}|${tint ? tint.join(',') : ''}|${mode === 'spirit' ? `${r.spiritEyes.shape || ''}${r.spiritEyes.color || ''}` : ''}`;   // the colour in steps: redrawn a few times while it eases
+  if (faceKey !== r.faceMode) { drawFace(r.faceCtx, mode, tint, mode === 'spirit' ? r.spiritEyes : null); r.faceTex.needsUpdate = true; r.faceMode = faceKey; }
 
   let dictK = 0;
   for (const key in r.props) {

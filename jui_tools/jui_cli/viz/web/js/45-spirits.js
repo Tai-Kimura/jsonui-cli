@@ -98,15 +98,26 @@ function spiritGhost(object, spec) {
   });
 }
 function spiritFade(object, k) {
-  object.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) m.opacity = m.userData.base * k; });
+  object.traverse((o) => {
+    if (!o.isMesh) return;
+    for (const m of [].concat(o.material)) {
+      if (m.uniforms && m.uniforms.uFade) m.uniforms.uFade.value = k;   // the ghost's shader
+      else if (m.userData.base !== undefined) m.opacity = m.userData.base * k;
+    }
+  });
 }
 /* What the robot wears for the skill comes off: the parts are taken down and disposed (the model's geometry is the
    loaded copy's, shared, and kept), the hidden parts shown again. */
 function spiritDrop(R) {
   const S = R.spirit;
   if (!S) return;
-  for (const h of S.holders) { h.parent && h.parent.remove(h); h.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) if (m.userData.base !== undefined) m.dispose(); }); }
+  for (const h of S.holders) {
+    if (h.parent) h.parent.remove(h);
+    h.traverse((o) => { if (o.isMesh || o.isSprite || o.isLine) for (const m of [].concat(o.material)) if (m.userData.base !== undefined || m.userData.ghost || o.isSprite || o.isLine) m.dispose(); });
+  }
   for (const [part, was] of S.hidden) part.visible = was;
+  const r = R.robot;
+  if (r.spiritEyes || r.spiritPose) { r.spiritEyes = null; r.spiritPose = null; r.faceMode = null; }   // its own face again
   if (S.bubbleEl) S.bubbleEl.remove();
   R.spirit = null;
 }
@@ -137,6 +148,8 @@ function spiritTick(R, st, nowSec, dt) {
     : T.phase === 'leave' ? Math.max(0, 1 - (vizNow() - T.phaseAt) / SPIRIT.fadeMs) : 1;
   if (T.phase === 'appear' && k >= 1) { T.phase = 'shown'; spiritClip(T, 'loop'); }
   if (T.figure) { spiritFade(T.figure, reduceMotion ? 1 : k); T.figure.visible = !TOWER.on; }
+  if (T.ghost) T.ghost.uniforms.uY0.value = R.robot.root.position.y;   // the downward fade from the robot's floor
+  if (T.fx) { T.fx.group.visible = !TOWER.on; spiritFxTick(R, T, dt, reduceMotion ? 1 : k); }
   spiritBubble(R, T);
 }
 async function spiritWear(R, S) {
@@ -149,7 +162,9 @@ async function spiritWear(R, S) {
   if (gltfs[figureFile] && spiritRoom()) {
     const figure = SkeletonUtils.clone(gltfs[figureFile].scene);
     if (sp.scale) figure.scale.multiplyScalar(sp.scale);
-    spiritGhost(figure, sp);
+    if (sp.material && sp.material.kind === 'ghost') S.ghost = spiritGhostShader(figure, sp);
+    else spiritGhost(figure, sp);
+    spiritOutline(figure, sp);
     S.holders.push(spiritPut(r, figure, sp.at || 'back'));
     S.figure = figure;
     S.clips = gltfs[figureFile].animations || [];
@@ -173,6 +188,10 @@ async function spiritWear(R, S) {
     || Object.keys(gltfs).some((f) => f.startsWith('robot-'));
   S.tagCheek = tag === 'cheek' || (tag === 'auto' && onHead);
   S.bubble = spec.bubble || null;
+  const robotSpec = spec.robot || {};
+  r.spiritEyes = robotSpec.eyes ? { shape: robotSpec.eyes.shape || 'normal', color: robotSpec.eyes.color || null } : null;
+  r.spiritPose = robotSpec.pose && robotSpec.pose !== 'none' ? robotSpec.pose : null;
+  spiritFxStart(R, S, gltfs);
   S.phase = 'appear'; S.phaseAt = vizNow();
   spiritClip(S, 'appear');
 }
@@ -245,4 +264,210 @@ function spiritTagPoint(R, out) {
   out.copy(SPIRIT_CHEEK);
   R.robot.head.localToWorld(out);
   return true;
+}
+
+/* ---------- the spirit's look (spirit.json spirit.material / outline) ----------
+   glTF cannot carry a shader, so the page holds the "ghost" look (the prototype's): a rim of light over a shade,
+   fading downward from yFade over yFadeLen, at spirit.json's opacity and the fade's k. A skinned mesh is skinned here
+   too. "plain" (or no material) keeps the model's own colours, transparent and tinted (spiritGhost). */
+const SPIRIT_GHOST_VS = `#include <common>
+#include <skinning_pars_vertex>
+varying vec3 vN; varying vec3 vV; varying float vY;
+void main() {
+  #include <skinbase_vertex>
+  #include <beginnormal_vertex>
+  #include <skinnormal_vertex>
+  #include <begin_vertex>
+  #include <skinning_vertex>
+  vec4 mv = modelViewMatrix * vec4(transformed, 1.0);
+  vN = normalize(normalMatrix * objectNormal); vV = normalize(-mv.xyz);
+  vY = (modelMatrix * vec4(transformed, 1.0)).y;
+  gl_Position = projectionMatrix * mv;
+}`;
+const SPIRIT_GHOST_FS = `uniform vec3 uRim; uniform vec3 uShade; uniform vec3 uBase;
+uniform float uRimK; uniform float uPow; uniform float uYFade; uniform float uYFadeLen; uniform float uY0;
+uniform float uOpacity; uniform float uFade;
+varying vec3 vN; varying vec3 vV; varying float vY;
+void main() {
+  float rim = clamp(pow(1.0 - abs(dot(normalize(vN), normalize(vV))), uPow) * uRimK, 0.0, 1.0);
+  vec3 col = mix(mix(uShade, uBase, 0.6), uRim, rim);
+  float down = uYFade == 0.0 ? 1.0 : clamp((vY - uY0) / uYFadeLen, 0.0, 1.0);
+  float a = uOpacity * uFade * clamp(0.35 + rim, 0.0, 1.0) * mix(1.0 - abs(uYFade) * 0.25, 1.0, down);
+  gl_FragColor = vec4(col, a);
+}`;
+function spiritGhostShader(object, spec) {
+  const m = spec.material || {};
+  const base = new THREE.Color(m.base || spec.tint || '#ffffff');
+  const mat = new THREE.ShaderMaterial({
+    vertexShader: SPIRIT_GHOST_VS, fragmentShader: SPIRIT_GHOST_FS, transparent: true, depthWrite: false,
+    uniforms: { uRim: { value: new THREE.Color(m.rim || '#ffffff') }, uShade: { value: new THREE.Color(m.shade || '#202830') },
+      uBase: { value: base }, uRimK: { value: m.rimK ?? 1.2 }, uPow: { value: m.pow ?? 2 }, uYFade: { value: m.yFade ?? 0 },
+      uYFadeLen: { value: m.yFadeLen ?? 1 }, uY0: { value: 0 }, uOpacity: { value: spec.opacity ?? 0.55 }, uFade: { value: 0 } },
+  });
+  mat.userData.ghost = true;
+  object.traverse((o) => { if (o.isMesh) { o.material = mat; o.renderOrder = 2; } });
+  return mat;
+}
+/* The outline: each mesh again, pushed out along its normals by width and drawn from behind, in the outline's colour. */
+function spiritOutline(object, spec) {
+  const o = spec.outline;
+  if (!o || !o.width) return;
+  const mat = new THREE.MeshBasicMaterial({ color: o.color || '#000000', side: THREE.BackSide, transparent: true, depthWrite: false });
+  mat.onBeforeCompile = (sh) => {   // the width as a uniform: pushed out before skinning, so a skinned mesh's shell bends with it
+    sh.uniforms.uWidth = { value: Number(o.width) };
+    sh.vertexShader = 'uniform float uWidth;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  transformed += normal * uWidth;');
+  };
+  mat.userData.base = 1;
+  const meshes = []; object.traverse((x) => { if (x.isMesh) meshes.push(x); });
+  for (const mesh of meshes) {
+    const shell = mesh.clone(false); shell.material = mat; shell.renderOrder = 1;
+    mesh.parent.add(shell);
+  }
+}
+
+/* ---------- what spirit.json's robot says: its eyes and its pose ---------- */
+/* At the desk only (the robot's own pose elsewhere): book — the left hand holds the model's book up, the right types;
+   arms-crossed — no typing; type — the usual typing; none — as the state poses it. */
+const SPIRIT_DESK = new Set(['typing', 'command', 'reading', 'thinking', 'idle', 'done']);
+function spiritPose(r, p, t) {
+  if (!SPIRIT_DESK.has(r.state) || r.spiritPose === 'none') return;
+  const tap = (ph) => (reduceMotion ? 0 : Math.max(0, Math.sin(t * 15 + ph)) * 0.13);
+  if (r.spiritPose === 'book') { p.aLx = -1.55; p.aLz = -0.55; p.aRx = -1.05 + tap(1.9); p.aRz = 0.32; p.headX = 0.12; }
+  else if (r.spiritPose === 'arms-crossed') { p.aLx = -1.35; p.aLz = -1.05; p.aRx = -1.35; p.aRz = 1.05; p.headX = -0.05; }
+  else if (r.spiritPose === 'type') { p.aLx = -1.05 + tap(0); p.aLz = -0.32; p.aRx = -1.05 + tap(1.9); p.aRz = 0.32; }
+}
+
+/* ---------- the effects the page draws (spirit.json effects, shouts) ----------
+   Each in a group of its own on the robot's root (it moves and scales with the robot), at most SPIRIT_FX.pool sprites
+   for the sparks and shouts (made once, never more). With reduced motion: the aura and the glow stand still, and no
+   sparks, lightning, afterimages or shouts. */
+const SPIRIT_FX = { pool: 24, sparkLife: 1.6, shoutLife: 1.1 };
+let spiritDot = null;
+function spiritDotTex() {
+  if (spiritDot) return spiritDot;
+  const c = document.createElement('canvas'); c.width = c.height = 32;
+  const g = c.getContext('2d'), grad = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+  grad.addColorStop(0, 'rgba(255,255,255,1)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad; g.fillRect(0, 0, 32, 32);
+  spiritDot = new THREE.CanvasTexture(c);
+  return spiritDot;
+}
+function spiritShoutTex(text, style = {}) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 96;
+  const g = c.getContext('2d');
+  g.setTransform(1, 0, Math.tan(THREE.MathUtils.degToRad(style.skew || 0)), 1, 0, 0);
+  g.font = '900 56px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineWidth = 8; g.strokeStyle = style.stroke || '#1a1a1a'; g.strokeText(text, 128, 50);
+  g.fillStyle = style.fill || '#ffffff'; g.fillText(text, 128, 50);
+  return new THREE.CanvasTexture(c);
+}
+function spiritFxStart(R, S, gltfs) {
+  const spec = S.model.spec || {}, fx = spec.effects || {}, r = R.robot;
+  const group = new THREE.Group(); r.root.add(group); S.holders.push(group);
+  const F = S.fx = { group, sparks: [], shouts: [], clones: [], next: 0, nextShout: 0, nextBolt: 0, t: 0 };
+  if (fx.aura) {
+    const a = fx.aura, h = a.height || 1.6;
+    const mat = new THREE.MeshBasicMaterial({ color: a.color || '#ffd23a', transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide });
+    mat.userData.base = a.opacity ?? 0.35;
+    const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.85, h, 20, 1, true), mat);
+    cone.position.y = h / 2; group.add(cone); F.aura = { mesh: cone, flicker: a.flicker ?? 1 };
+  }
+  if (fx.glow && S.figure) {
+    const g = fx.glow;
+    const shell = SkeletonUtils.clone(S.figure);
+    const mat = new THREE.MeshBasicMaterial({ color: g.color || '#ffffff', transparent: true, opacity: 0, depthWrite: false, side: THREE.BackSide });
+    mat.userData.base = g.opacity ?? 0.25;
+    shell.traverse((o) => { if (o.isMesh) o.material = mat; });
+    shell.scale.multiplyScalar(g.scale || 1.06);
+    S.figure.parent.add(shell); F.glow = shell;
+  }
+  if (fx.sparks) {
+    const mat = new THREE.SpriteMaterial({ map: spiritDotTex(), color: fx.sparks.color || '#ffffff', transparent: true, depthWrite: false });
+    for (let i = 0; i < SPIRIT_FX.pool; i++) { const sp = new THREE.Sprite(mat.clone()); sp.visible = false; sp.scale.setScalar(0.12); group.add(sp); F.sparks.push({ sp, age: 99 }); }
+  }
+  if (fx.lightning) {
+    const mat = new THREE.LineBasicMaterial({ color: fx.lightning.color || '#bfefff', transparent: true, opacity: 0 });
+    F.bolt = new THREE.Line(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 7 }, () => new THREE.Vector3())), mat);
+    group.add(F.bolt);
+  }
+  if (fx.afterimage && S.figure && S.clips && S.clips.length && !reduceMotion) {
+    const n = fx.afterimage.count || 2, spread = fx.afterimage.spreadDeg ?? 12;
+    for (let i = 1; i <= n; i++) {
+      const c = SkeletonUtils.clone(S.figure);
+      c.traverse((o) => { if (o.isMesh) o.material = [].concat(o.material).map((m) => { const x = m.clone(); if (x.uniforms) x.uniforms = THREE.UniformsUtils.clone(m.uniforms); return x; })[0]; });
+      c.rotation.y = THREE.MathUtils.degToRad(spread * (i % 2 ? i : -i) / 2);
+      S.figure.parent.add(c);
+      const mixer = new THREE.AnimationMixer(c);
+      F.clones.push({ c, mixer, lag: i * 0.06, k: 0.5 / i });
+    }
+  }
+  if (spec.shouts && !reduceMotion) {
+    const texts = spiritWords(spec.shouts.texts) || [];
+    F.shoutTex = (Array.isArray(texts) ? texts : [texts]).map((t) => spiritShoutTex(String(t), spec.shouts.style));
+    F.shoutEvery = spec.shouts.everySec || 0.6;
+    for (let i = 0; i < 6 && F.shoutTex.length; i++) {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false })); sp.visible = false; sp.scale.set(0.9, 0.34, 1); group.add(sp);
+      F.shouts.push({ sp, age: 99 });
+    }
+  }
+}
+function spiritFxTick(R, S, dt, k) {
+  const F = S.fx;
+  if (!F) return;
+  F.t += dt;
+  const fx = (S.model.spec || {}).effects || {};
+  if (F.aura) {
+    const m = F.aura.mesh.material; m.opacity = m.userData.base * k * (reduceMotion ? 1 : 0.85 + Math.sin(F.t * 7 * F.aura.flicker) * 0.15);
+    if (!reduceMotion) F.aura.mesh.scale.set(1 + Math.sin(F.t * 5) * 0.04, 1 + Math.sin(F.t * 3.3) * 0.06, 1 + Math.sin(F.t * 4.1) * 0.04);
+  }
+  if (F.glow) F.glow.traverse((o) => { if (o.isMesh) o.material.opacity = o.material.userData.base * k; });
+  if (reduceMotion) return;
+  if (F.sparks.length && fx.sparks.rate) {
+    F.next -= dt;
+    while (F.next <= 0) {
+      F.next += 1 / fx.sparks.rate;
+      const s = F.sparks.find((x) => x.age >= SPIRIT_FX.sparkLife);
+      if (!s) break;
+      s.age = 0; s.sp.position.set((Math.random() - 0.5) * 1.2, 0.2 + Math.random() * 0.6, -0.4 + (Math.random() - 0.5) * 0.8);
+    }
+    for (const s of F.sparks) {
+      s.age += dt;
+      const live = s.age < SPIRIT_FX.sparkLife;
+      s.sp.visible = live && k > 0.05;
+      if (live) { s.sp.position.y += dt * (fx.sparks.rise || 0.8); s.sp.material.opacity = k * (1 - s.age / SPIRIT_FX.sparkLife); }
+    }
+  }
+  if (F.bolt) {
+    F.nextBolt -= dt;
+    const m = F.bolt.material;
+    if (F.nextBolt <= 0) {
+      F.nextBolt = fx.lightning.everySec || 2.5;
+      const pts = []; for (let i = 0; i < 7; i++) pts.push(new THREE.Vector3((Math.random() - 0.5) * 0.7 + (i % 2 ? 0.25 : -0.25), 2.6 - i * 0.36, -0.5));
+      F.bolt.geometry.setFromPoints(pts); F.boltAt = F.t;
+    }
+    m.opacity = F.boltAt !== undefined && F.t - F.boltAt < 0.15 ? k : 0;
+  }
+  for (const cl of F.clones) {   // the afterimages: the loop a little behind, fainter
+    if (!cl.action && S.mixer) {
+      const clip = (S.clips || []).find((c) => c.name === (S.names.loop || 'loop'));
+      if (clip) { cl.action = cl.mixer.clipAction(clip); cl.action.setLoop(THREE.LoopRepeat, Infinity).play(); cl.mixer.setTime(Math.max(0, (S.mixer.time || 0) - cl.lag)); }
+    }
+    cl.mixer.update(dt);
+    spiritFade(cl.c, k * cl.k);
+  }
+  if (F.shouts.length) {
+    F.nextShout -= dt;
+    if (F.nextShout <= 0 && k > 0.5) {
+      F.nextShout = F.shoutEvery;
+      const s = F.shouts.find((x) => x.age >= SPIRIT_FX.shoutLife);
+      if (s) { s.age = 0; s.sp.material.map = F.shoutTex[Math.floor(Math.random() * F.shoutTex.length)]; s.sp.material.needsUpdate = true;
+        s.sp.position.set((Math.random() - 0.5) * 1.6, 2.2 + Math.random() * 0.5, -0.6); }
+    }
+    for (const s of F.shouts) {
+      s.age += dt;
+      const live = s.age < SPIRIT_FX.shoutLife;
+      s.sp.visible = live;
+      if (live) { s.sp.position.y += dt * 0.6; s.sp.material.opacity = k * (1 - s.age / SPIRIT_FX.shoutLife); }
+    }
+  }
 }

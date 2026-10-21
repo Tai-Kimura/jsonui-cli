@@ -6,8 +6,10 @@ code-review (a bubble with ruby, glasses on the head), "gears" for band-test (it
 tex-test (a quad with an embedded PNG). Checked:
   * a Skill call: the robot's spirit loads, appears and stands (the figure and its parts on the robot), the badge says
     the skill, the bubble shows the model's words and ruby aimed at the spirit, the tag moves to the cheek
-  * another session's skill hides its robot's band; the turn's Stop takes the spirit, the parts and the badge off and
-    gives the band back
+  * the scholar's ghost look, narrow eyes and the book's pose, its sparks; the gears' three afterimages, shouts and
+    sparks, sharp eyes, typing
+  * another session's skill hides its robot's band; the turn's Stop takes the spirit, the parts, the effects and the
+    badge off and gives the band, the eyes and the pose back
   * an embedded texture is read (GLTFLoader's blob: URL under the page's CSP) and its picture loaded
   * five robots with a skill: four spirits stand at most
   * no console error (the .glb are read through POST /api/spirit-file and GLTFLoader.parse, under the page's CSP)
@@ -138,8 +140,8 @@ async def run_spirits(pw, out, failures):
         await wait(page, "(l) => { const s = window.__dbg.spirit(l); return s && s.bubble; }", arg=who["r1"], label="r1's bubble")
         s1 = await page.evaluate(state, who["r1"])
         res["steps"].append({"step": "r1 code-review", **s1})
-        check(s1["model"] == "own/scholar" and s1["figure"] and s1["holders"] == 3 and not s1["error"],
-              f"r1 wears the scholar: its figure, the glasses and the scroll: {s1}")
+        check(s1["model"] == "own/scholar" and s1["figure"] and s1["holders"] == 4 and not s1["error"],
+              f"r1 wears the scholar: its figure, the glasses, the scroll and its effects: {s1}")
         # the page's language (run.py pins ja unless JUI_VIZ_LANGUAGE says otherwise): the badge is the table's, the
         # bubble the model's own words in that language
         ja = (await page.evaluate("() => document.documentElement.lang")) == "ja"
@@ -149,6 +151,12 @@ async def run_spirits(pw, out, failures):
         check(s1["bubble"] and s1["bubble"]["text"] == words + ruby and s1["bubble"]["ruby"] == ruby
               and s1["bubble"]["target"] == "spirit", f"the bubble is the model's, its ruby, at the spirit: {s1['bubble']}")
         check(s1["cheek"], "a part on the head moves the tag to the cheek")
+        # the look and what the robot does: the ghost and its outline, the eyes and pose spirit.json names, the sparks
+        await wait(page, "(l) => { const s = window.__dbg.spirit(l); return s.fx && s.fx.sparks > 0; }", arg=who["r1"],
+                   timeout=10000, label="r1's sparks rising")
+        s1 = await page.evaluate(state, who["r1"])
+        check(s1["ghost"] and s1["eyes"] == "narrow" and (s1["face"] or "").startswith("spirit") and s1["pose"] == "book",
+              f"the scholar: the ghost look, narrow eyes on the face, the book's pose: {s1}")
         await page.screenshot(path=str(out / "scholar.png"))
 
         # another session's skill hides its band; the turn's Stop takes everything off
@@ -158,13 +166,19 @@ async def run_spirits(pw, out, failures):
         s2 = await page.evaluate(state, who["r2"])
         res["steps"].append({"step": "r2 band-test", **s2})
         check(s2["model"] == "own/gears" and s2["band"] is False, f"the gears hide r2's band: {s2}")
+        await wait(page, "(l) => { const s = window.__dbg.spirit(l); return s.fx && s.fx.shouts > 0 && s.fx.sparks > 0; }",
+                   arg=who["r2"], timeout=10000, label="r2's shouts and sparks")
+        s2 = await page.evaluate(state, who["r2"])
+        check(s2["fx"]["clones"] == 3 and s2["eyes"] == "sharp" and s2["pose"] == "type",
+              f"the gears: three afterimages, sharp eyes, typing: {s2}")
         hook("r1", hook_event_name="Stop")
         hook("r2", hook_event_name="Stop")
         await wait(page, "(ls) => ls.every((l) => { const s = window.__dbg.spirit(l); return s && !s.phase && !s.badge && !s.skill; })",
                    arg=[who["r1"], who["r2"]], label="r1 and r2 back to themselves")
         after = [await page.evaluate(state, who[k]) for k in ("r1", "r2")]
         res["steps"].append({"step": "after Stop", "r1": after[0], "r2": after[1]})
-        check(after[1]["band"] is True and after[0]["holders"] == 0, f"the band is back and nothing is worn: {after}")
+        check(after[1]["band"] is True and after[0]["holders"] == 0 and not after[0]["eyes"] and not after[1]["pose"]
+              and not (after[0]["face"] or "").startswith("spirit"), f"the band, the eyes and the pose are back; nothing is worn: {after}")
 
         # an embedded texture: GLTFLoader reads it through a blob: URL, under the page's CSP
         skill("r3", "tex-test", "u3")
