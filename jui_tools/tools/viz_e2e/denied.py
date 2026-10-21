@@ -23,7 +23,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, ISOLATE, LAUNCH_ARGS, PHONE, Watch, dump, new_page, ready, stamp
+from common import DESKTOP, ISOLATE, LAUNCH_ARGS, PHONE, T, T_pattern, Watch, dump, new_page, ready, stamp
 from notify import CHIMES, SHOWN, STUB
 
 S_OK = "e2e00000-0000-4000-8000-0000000000f1"
@@ -33,13 +33,16 @@ DEV = "--dangerously-load-development-channels"
 CMD1 = "gh pr merge 242 --squash --delete-branch"
 CMD2 = "git push --force origin main"
 PREFIX = "Permission for this action was denied by the Claude Code auto mode classifier."
-SOURCE = "[jui viz の「止められた操作」の札から、依頼者がボタンで送った文です]"
-TAIL = ("この操作は、私が内容を見て、実行してよいと判断しました。もう一度試してください。\n"
-        "判定がまた止めるとき、またはあなたが端末での確認が要ると判断するときは、そう返してください。端末で答えます。")
+WHY1, WHY2 = "[Unrequested Commit in a Connected App]", "[Irreversible Remote Destruction]"
+
+
 # The orchestrator's ruling (10-20 15:30): what is claimed is the words reaching the receiver with the card's call and reason as
 # they are — not that it goes on (that is the requester's one real check)
-WORDS1 = f"{SOURCE}\n止められた操作: Bash: {CMD1}\n止めた理由（自動モードの判定）: [Unrequested Commit in a Connected App]\n{TAIL}"
-WORDS2 = f"{SOURCE}\n止められた操作: Bash: {CMD2}\n止めた理由（自動モードの判定）: [Irreversible Remote Destruction]\n{TAIL}"
+def words(cmd: str, why: str) -> str:
+    """The words a card sends, as viz/denials.py words them in the run's language: where they come from, the call,
+    the reason, then the two lines that say it was judged fine and how to answer if not."""
+    return "\n".join([T("srv.denial.source"), T("srv.denial.what", what=f"Bash: {cmd}"), T("srv.denial.why", why=why),
+                      T("srv.denial.judged"), T("srv.denial.again")])
 REPLY = "チャンネルから来た破壊的な依頼なので、端末で直接確認してください。"
 CARDS = """(where) => [...document.querySelectorAll(`${where} [data-dcard]`)].map((c) => ({ id: c.dataset.dcard, text: c.textContent,
   ask: !!c.querySelector('[data-dask]'), go: !!c.querySelector('[data-dgo]'), dismiss: !!c.querySelector('[data-ddismiss]'),
@@ -180,13 +183,13 @@ async def run_denied(pw, out, failures):
         append(S_OK, use("toolu_d2", CMD2, "m-d2"), denial("toolu_d2", "[Irreversible Remote Destruction]"))
         until(lambda: len(snap().get("denials") or []) == 2, "the transcript-only card")
         cards = res["slice"] = snap()["denials"]
-        check(len(cards) == 2 and [c["prompt"] for c in cards] == [WORDS1, WORDS2], f"two cards, one per call, with the words: {cards}")
-        await wait(page, "() => document.getElementById('chip-denied').textContent === '止められた 2' && !document.getElementById('chip-denied').hidden", label="the chip")
+        check(len(cards) == 2 and [c["prompt"] for c in cards] == [words(CMD1, WHY1), words(CMD2, WHY2)], f"two cards, one per call, with the words: {cards}")
+        await wait(page, f"() => document.getElementById('chip-denied').textContent === {json.dumps(T('deny.chip', n=2))} && !document.getElementById('chip-denied').hidden", label="the chip")
         await wait(page, "() => document.querySelectorAll('#denied [data-dcard]').length === 2", label="the panel's cards")
         await wait(page, "() => JSON.parse(localStorage.getItem('e2e-shown') || '[]').length >= 2", label="two notifications")
         await page.wait_for_timeout(1500)   # a third would come within this
         shown = res["shown"] = await page.evaluate(SHOWN)
-        check(len(shown) == 2 and all("自動モードで止められました" in s["body"] for s in shown), f"one notification per card: {shown}")
+        check(len(shown) == 2 and all(T_pattern("deny.notify", tool="Bash").search(s["body"]) for s in shown), f"one notification per card: {shown}")
         res["chimes"] = await page.evaluate(CHIMES)
         check(res["chimes"] == 2, f"one chime per card: {res['chimes']}")
         await page.screenshot(path=str(out / "cards.png"))
@@ -216,7 +219,7 @@ async def run_denied(pw, out, failures):
         # 実行してよいと伝える… → the confirmation shows the words and the note; やめる sends nothing
         await page.click(f"#denied-strip [data-dask='{d1}']")
         got = res["confirm"] = next(c for c in await page.evaluate(CARDS, "#denied-strip") if c["id"] == d1)
-        check(got["go"] and got["prompt"] == WORDS1 and "端末での確認を求めることもある" in got["text"],
+        check(got["go"] and got["prompt"] == words(CMD1, WHY1) and T("deny.may") in got["text"],
               f"the confirmation shows the exact words and that the receiver may ask in the terminal: {got}")
         await page.screenshot(path=str(out / "confirm.png"))
         await page.wait_for_timeout(400)
@@ -231,12 +234,12 @@ async def run_denied(pw, out, failures):
         until(lambda: next(c for c in snap()["denials"] if c["id"] == d1)["status"] == "sent", "the card sent")
         _, polled = local("GET", f"/channel/poll?channelId={channel}", timeout=30)
         res["inbox"] = polled["prompts"]
-        check(polled["prompts"] == [{"text": WORDS1}], f"the channel got the card's words, once: {polled['prompts']}")
+        check(polled["prompts"] == [{"text": words(CMD1, WHY1)}], f"the channel got the card's words, once: {polled['prompts']}")
         got_text = polled["prompts"][0]["text"] if polled["prompts"] else ""
-        check(got_text.startswith(SOURCE + "\n") and f"止められた操作: Bash: {CMD1}\n" in got_text
-              and "止めた理由（自動モードの判定）: [Unrequested Commit in a Connected App]\n" in got_text,
+        check(got_text.startswith(T("srv.denial.source") + "\n") and T("srv.denial.what", what=f"Bash: {CMD1}") + "\n" in got_text
+              and T("srv.denial.why", why=WHY1) + "\n" in got_text,
               f"the words start with where they come from and hold the card's call and reason as they are: {got_text!r}")
-        await wait(page, f"() => [...document.querySelectorAll('#denied-strip [data-dcard=\"{d1}\"]')].some((c) => c.textContent.includes('伝えた') && c.querySelector('[data-dreply-wait]'))", label="the card says 伝えた and waits for the response")
+        await wait(page, f"() => [...document.querySelectorAll('#denied-strip [data-dcard=\"{d1}\"]')].some((c) => c.textContent.includes({json.dumps(T('deny.done.sent'))}) && c.querySelector('[data-dreply-wait]'))", label="the card says 伝えた and waits for the response")
         # the receiver's next response (here: it asks for the terminal — a right answer too) shows under the card
         append(S_OK, {"type": "assistant", "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + 2)),
                       "message": {"id": "m-reply", "model": "claude-sonnet-5-5", "role": "assistant", "usage": {"input_tokens": 1, "output_tokens": 1},
@@ -251,7 +254,7 @@ async def run_denied(pw, out, failures):
         await wait(page, "() => document.querySelectorAll('#denied-strip [data-dcard]').length === 3", label="the third card")
         n1 = next(c["id"] for c in snap()["denials"] if c["toolUseId"] == "toolu_n1")
         got = res["noChannel"] = next(c for c in await page.evaluate(CARDS, "#denied-strip") if c["id"] == n1)
-        check(not got["ask"] and got["dismiss"] and "端末で許可を伝えてください" in got["text"], f"no channel: the reason, no button: {got}")
+        check(not got["ask"] and got["dismiss"] and T_pattern("deny.why.terminal").search(got["text"]), f"no channel: the reason, no button: {got}")
         await page.screenshot(path=str(out / "no-channel.png"))
         await page.click(f"#denied-strip [data-ddismiss='{n1}']")
         until(lambda: next(c for c in snap()["denials"] if c["id"] == n1)["status"] == "dismissed", "そのまま")
