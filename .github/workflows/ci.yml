@@ -268,6 +268,15 @@ jobs:
           key: kotlinc-jars-${{ hashFiles('.github/scripts/fetch_kotlin_compiler_jars.sh') }}
       - name: Fetch the Kotlin compiler jars (pinned, sha256-checked)
         run: bash .github/scripts/fetch_kotlin_compiler_jars.sh
+      # tests/test_viz_spirits_export.py draws an exported model in a real
+      # Chromium and compares it with the source (two arms). Without Playwright
+      # and its Chromium they skip, and the collection gate below stops the run
+      # on the undeclared skip; they are not declared there, so they run here.
+      # 1.64.0: the version the viz e2e's venv runs (no other pin in the repo).
+      - name: Install Playwright and Chromium (exercises the model export arms)
+        run: |
+          python -m pip install "playwright==1.64.0"
+          python -m playwright install --with-deps chromium
       # pytest, not `unittest discover`: the two runners disagree by 26 tests
       # here. Some modules are written pytest-style (bare asserts, `tmp_path`
       # fixtures) and `unittest discover` collects nothing from them — it walks
