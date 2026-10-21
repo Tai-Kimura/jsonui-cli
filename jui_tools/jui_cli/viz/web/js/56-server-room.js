@@ -60,10 +60,10 @@ async function srEnter(project, opener) {
   const seq = ++SR.seq;
   clearTimeout(SR.failTimer);
   Object.assign(SR, { phase: 'loading', project, t0: srNow(), why: '', full: '', opener: opener || null });
-  srBubble('サーバー構成を読み込んでいます', 'info');
-  srLog(`${(PROJECT[project] && PROJECT[project].name) || project}: 構成を読み込み始めた`);
+  srBubble(tl('sr.loading'), 'info');
+  srLog(tl('sr.log.loading', { room: (PROJECT[project] && PROJECT[project].name) || project }));
   const got = typeof SOURCE.infraDocs === 'function' ? await SOURCE.infraDocs(project, seq)
-    : { ok: false, seq, reason: 'unreadable', message: 'このページでは読めない', short: 'このページでは読めない' };
+    : { ok: false, seq, reason: 'unreadable', message: tl('sr.unreadable'), short: tl('sr.unreadable') };
   if (seq !== SR.seq || SR.phase !== 'loading') return;   // Esc, or a newer press: this reply changes nothing
   if (!got || got.ok !== true) { srFail(got || {}); return; }
   const took = srNow() - SR.t0;
@@ -71,11 +71,12 @@ async function srEnter(project, opener) {
   SR.until = srNow() + (took < SR.fastMs ? 120 : SR.okMs);
   SR.took = Math.round(took); SR.waitMs = Math.round(SR.until - srNow());   // read under SR.fastMs: a flash, not the whole 解錠
   srBubble(null);
-  srLog(`読み込んだ: ${got.files.length} ファイル、node ${got.nodes.length}・edge ${got.edges.length}（${got.readMs} ms）${got.problems && got.problems.length ? `、問題 ${got.problems.length} 件` : ''}`);
+  srLog(tl('sr.log.read', { files: got.files.length, nodes: got.nodes.length, edges: got.edges.length, ms: got.readMs })
+    + (got.problems && got.problems.length ? tl('sr.log.read.problems', { n: got.problems.length }) : ''));
   setTimeout(() => { if (seq === SR.seq && SR.phase === 'ok') srShow(got); }, Math.max(0, SR.until - srNow()));
 }
 function srFail(got) {
-  const short = String(got.short || got.message || '読めなかった');
+  const short = String(got.short || got.message || tl('sr.failed'));
   const lines = [String(got.message || '')];
   for (const p of (got.problems || []).slice(0, 30)) lines.push(`${p.file || ''}${p.line ? `:${p.line}` : ''} ${p.short || p.message || ''}`.trim());
   Object.assign(SR, { phase: 'failed', why: short, full: lines.filter(Boolean).join('\n'), until: srNow() + SR.failMs });
@@ -85,7 +86,7 @@ function srFail(got) {
   clearTimeout(SR.failTimer);
   const seq = SR.seq;
   SR.failTimer = setTimeout(() => { if (SR.phase === 'failed' && SR.seq === seq) srIdle(); }, SR.failMs);
-  srLog(`読めなかった: ${short}`);
+  srLog(tl('sr.log.failed', { why: short }));
 }
 function srIdle() {
   clearTimeout(SR.failTimer);
@@ -96,7 +97,7 @@ function srCancel() {
   if (SR.phase !== 'loading') return false;
   SR.seq += 1; SR.phase = 'idle';
   srBubble(null);
-  srLog('読み込みをやめた（Esc）');
+  srLog(tl('sr.log.cancel'));
   return true;
 }
 /* What the keypad shows now (40-scene.js serverDoorTick, and the e2e hook): it only reads, it changes nothing. */
@@ -188,10 +189,10 @@ const SR_SERVICE_NAME = { ec2: 'EC2', 'ec2.asg': 'EC2 Auto Scaling', ecs: 'ECS',
   containerapps: 'Container Apps', servicebus: 'Service Bus', cosmosdb: 'Cosmos DB', blob: 'Blob Storage', sql: 'Azure SQL',
   'cache.redis': 'Azure Cache for Redis' };
 // a spec's keys the IaC tables give (document_tools iac_tables.TF_SPEC / CFN_SPEC), in words; any other key as written
-const SR_SPEC_NAME = { instance_type: 'インスタンスの種類', instance_class: 'インスタンスの種類', node_type: 'ノードの種類',
-  machine_type: 'マシンの種類', tier: 'ティア', version: '版', storage_gb: 'ストレージ（GB）', storage_type: 'ストレージの種類',
-  memory_mb: 'メモリ（MB）', memory: 'メモリ', cpu: 'CPU', timeout_s: 'タイムアウト（秒）', runtime: 'ランタイム',
-  multi_az: 'マルチ AZ', nodes: 'ノード数', tasks: 'タスク数' };
+const SR_SPEC_NAME = { instance_type: tl('sr.spec.instance'), instance_class: tl('sr.spec.instance'), node_type: tl('sr.spec.node_type'),
+  machine_type: tl('sr.spec.machine_type'), tier: tl('sr.spec.tier'), version: tl('sr.spec.version'), storage_gb: tl('sr.spec.storage_gb'), storage_type: tl('sr.spec.storage_type'),
+  memory_mb: tl('sr.spec.memory_mb'), memory: tl('sr.spec.memory'), cpu: 'CPU', timeout_s: tl('sr.spec.timeout_s'), runtime: tl('sr.spec.runtime'),
+  multi_az: tl('sr.spec.multi_az'), nodes: tl('sr.spec.nodes'), tasks: tl('sr.spec.tasks') };
 // the one value a tag up close shows: what the instance is, else its size
 const SR_SPEC_MAIN = ['instance_type', 'instance_class', 'node_type', 'machine_type', 'tier', 'memory_mb', 'memory', 'cpu'];
 const SR_SPEC_KIND = SR_SPEC_MAIN.slice(0, 5);
@@ -226,7 +227,7 @@ function srLayout(model, env, showFold, closed = new Set(), only = new Set()) {
   for (const g of model.groups || []) if (srVisible(g, env)) groups.set(g.id, { g, kids: [], nodes: [], level: 0 });
   const roots = [];
   for (const G of groups.values()) { const p = G.g.parent && groups.get(G.g.parent); (p ? p.kids : roots).push(G); }
-  const loose = { g: { id: '', kind: 'logical', label: 'グループなし' }, kids: [], nodes: [], level: 0 }, ext = [];
+  const loose = { g: { id: '', kind: 'logical', label: tl('sr.group.none') }, kids: [], nodes: [], level: 0 }, ext = [];
   // clouds chosen on the board (2.3.9, item 3): only their nodes; one with no provider is out while any is chosen
   const nodes = (model.nodes || []).filter((n) => srVisible(n, env) && (showFold || !n.fold) && (!only.size || only.has(n.providerResolved || n.provider)));
   for (const n of nodes) {
@@ -300,7 +301,7 @@ function srShow(model) {
   showOverlay(srEl);
   setText($('sr-room'), (PROJECT[SR.project] && PROJECT[SR.project].name) || '');
   const envs = srEnvs(model);
-  $('sr-env').innerHTML = envs.length ? envs.map((e) => `<option value="${esc(e.id)}">${esc(e.label)}</option>`).join('') : '<option value="">（環境の指定なし）</option>';
+  $('sr-env').innerHTML = envs.length ? envs.map((e) => `<option value="${esc(e.id)}">${esc(e.label)}</option>`).join('') : `<option value="">${esc(tl('sr.env.none'))}</option>`;
   $('sr-env').disabled = envs.length < 2;
   $('sr-fold').checked = false;
   SR.closed = new Set(); SR.selected = null; SR.selectedGroup = null; SR.hover = null; SR.only = new Set();
@@ -317,7 +318,7 @@ function srClose() {
   srDispose();
   hideOverlay(srEl);
   SR.seq += 1;
-  srLog('部屋に戻った');
+  srLog(tl('sr.log.back'));
   if (SR.opener && SR.opener.focus) SR.opener.focus({ preventScroll: true });
 }
 function srDispose() {
@@ -496,7 +497,8 @@ function srBuild() {
   V.loop = loop;
   loop();
   SR.stats = { firstMs: Math.round(srNow() - t0), nodes: L.nodes.length, edges: L.edges.length, floors: L.floors.length };
-  srLog(`描いた: node ${L.nodes.length}・edge ${L.edges.length}・床 ${L.floors.length}（${SR.stats.firstMs} ms）${env ? `、環境 ${env}` : ''}`);
+  srLog(tl('sr.log.drawn', { nodes: L.nodes.length, edges: L.edges.length, floors: L.floors.length, ms: SR.stats.firstMs })
+    + (env ? tl('sr.log.drawn.env', { env }) : ''));
 }
 function srCountNodes(G) { return G.nodes.length + G.kids.reduce((a, k) => a + srCountNodes(k), 0); }
 function srResize(V) {
@@ -662,7 +664,7 @@ function srToggleGroup(id) {
   const open = SR.closed.has(id);
   if (open) SR.closed.delete(id); else SR.closed.add(id);
   const G = SR.view.L.floors.find((F) => F.g.id === id);
-  srLog(`${(G && (G.g.label || G.g.id)) || id} を${open ? '開いた' : '閉じた'}`);
+  srLog(tl('sr.log.toggle', { name: (G && (G.g.label || G.g.id)) || id, done: open ? tl('sr.log.opened') : tl('sr.log.closed') }));
   srBuild();
 }
 function srZoomBy(factor) {
@@ -736,7 +738,7 @@ function srZoomToBox(x0, y0, x1, y1) {
   V.camera.updateProjectionMatrix();
   V.controls.update();
   V.lastBox = { held: held.map(([id]) => id), lod: V.lod };
-  srLog(`範囲に寄った: ${V.lastBox.lod === 'far' ? 'group' : 'node'} ${held.length}`);
+  srLog(tl('sr.box.log', { kind: V.lastBox.lod === 'far' ? 'group' : 'node', n: held.length }));
 }
 
 /* ---- the board and the log ---- */
@@ -754,21 +756,21 @@ function srRenderBoard() {
   const inGroup = grp && SR.view ? SR.view.L.floors.find((F) => F.g.id === grp.id) : null;
   const edgesOf = sel ? (M.edges || []).filter((e) => e.from === sel.id || e.to === sel.id).slice(0, 20) : [];
   const probs = (M.problems || []).slice(0, 50);
-  setHTML($('sr-board'), `<h3>構成</h3>
-<p class="sr-meta">${esc(M.dir || '')} · ${esc(String((M.files || []).length))} ファイル</p>
-<dl class="sr-counts"><dt>node</dt><dd data-sr-count="nodes">${esc(String(S.nodes ?? 0))}</dd><dt>edge</dt><dd data-sr-count="edges">${esc(String(S.edges ?? 0))}</dd><dt>provider を跨ぐ edge</dt><dd data-sr-count="cross">${esc(String(S.cross ?? 0))}</dd><dt>畳んだもの</dt><dd>${esc(String(S.folded ?? 0))}${$('sr-fold').checked ? '（出している）' : ''}</dd><dt>外部</dt><dd>${esc(String(S.external ?? 0))}</dd></dl>
-<h3>凡例</h3><p class="sr-hint">クラウドを押すと、そのクラウドだけを表示します（複数を選べます）。${SR.only.size ? ` 絞り: ${esc([...SR.only].join(', '))}` : ''}</p>
+  setHTML($('sr-board'), `<h3>${esc(tl('sr.board.title'))}</h3>
+<p class="sr-meta">${esc(M.dir || '')} · ${esc(tl('sr.board.files', { n: (M.files || []).length }))}</p>
+<dl class="sr-counts"><dt>node</dt><dd data-sr-count="nodes">${esc(String(S.nodes ?? 0))}</dd><dt>edge</dt><dd data-sr-count="edges">${esc(String(S.edges ?? 0))}</dd><dt>${esc(tl('sr.board.cross'))}</dt><dd data-sr-count="cross">${esc(String(S.cross ?? 0))}</dd><dt>${esc(tl('sr.board.folded'))}</dt><dd>${esc(String(S.folded ?? 0))}${$('sr-fold').checked ? esc(tl('sr.board.folded.shown')) : ''}</dd><dt>${esc(tl('sr.board.external'))}</dt><dd>${esc(String(S.external ?? 0))}</dd></dl>
+<h3>${esc(tl('sr.board.legend'))}</h3><p class="sr-hint">${esc(tl('sr.board.legend.hint'))}${SR.only.size ? ` ${esc(tl('sr.only', { clouds: [...SR.only].join(', ') }))}` : ''}</p>
 <ul class="sr-legend">${provs.map((p) => `<li><button type="button" class="sr-prov" data-sr-prov="${esc(p)}" aria-pressed="${SR.only.has(p) ? 'true' : 'false'}"><span class="sr-chip" style="background:${esc(srProviderColor(p))}"></span>${esc(p)}</button></li>`).join('')}
-<li><button type="button" class="sr-prov" data-sr-prov="" aria-pressed="${SR.only.size ? 'false' : 'true'}">全部</button></li>
-<li><span class="sr-line"></span>同じ provider の中のつながり</li><li><span class="sr-line sr-line-cross"></span>provider を跨ぐつながり（破線・マゼンタ）</li></ul>
-${sel ? `<h3>選んだもの</h3><dl class="sr-sel"><dt>id</dt><dd>${esc(sel.id)}</dd><dt>名前</dt><dd>${esc(sel.label || '')}</dd><dt>種類</dt><dd>${esc(sel.category)}</dd><dt>provider</dt><dd>${esc(sel.providerResolved || sel.provider || '')}${sel.service ? ` · ${esc(sel.service)}` : ''}</dd>${sel.count > 1 ? `<dt>台数</dt><dd>${esc(String(sel.count))}</dd>` : ''}${sel.engine ? `<dt>エンジン</dt><dd>${esc(sel.engine)}</dd>` : ''}</dl>
-${Array.isArray(sel.spec) && sel.spec.length ? `<h3>スペック</h3><table class="sr-spec" data-sr-spec><tbody>${sel.spec.map((x) => `<tr><th scope="row">${SR_SPEC_NAME[x.key] ? `${esc(SR_SPEC_NAME[x.key])} <small>${esc(x.key)}</small>` : esc(x.key)}</th><td>${esc(x.value)}</td></tr>`).join('')}</tbody></table>` : ''}
-<p class="sr-acts"><button type="button" class="wb-btn" data-sr-act="focus">これに寄る</button></p>
-<ul class="sr-edges">${edgesOf.map((e) => `<li>${esc(e.from)} → ${esc(e.to)}${e.protocol ? ` <small>${esc(e.protocol)}</small>` : ''}${e.crossProvider ? ' <b>跨ぐ</b>' : ''}</li>`).join('')}</ul>${srFlowBoardHTML(sel.id)}`
-    : grp ? `<h3>選んだ group</h3><dl class="sr-sel"><dt>id</dt><dd>${esc(grp.id)}</dd><dt>名前</dt><dd>${esc(grp.label || '')}</dd><dt>種類</dt><dd>${esc(grp.kind || '')}</dd><dt>provider</dt><dd>${esc(grp.providerResolved || grp.provider || '')}</dd><dt>中の node</dt><dd>${esc(String(inGroup ? srCountNodes(inGroup) : 0))}</dd></dl>
-<p class="sr-acts"><button type="button" class="wb-btn" data-sr-act="focus">これに寄る</button> <button type="button" class="wb-btn" data-sr-act="toggle" data-sr-group="${esc(grp.id)}">${SR.closed.has(grp.id) ? '開く' : '閉じる（箱 1 つに）'}</button></p>`
-    : '<p class="sr-hint">形や床を押すと、ここに詳しく出ます（床なら、その group を閉じる・開く）</p>'}
-${probs.length ? `<h3>問題 ${probs.length} 件</h3><ul class="sr-problems">${probs.map((p) => `<li title="${esc(p.message || '')}">${esc(p.short || p.message || '')}</li>`).join('')}</ul>` : ''}`);
+<li><button type="button" class="sr-prov" data-sr-prov="" aria-pressed="${SR.only.size ? 'false' : 'true'}">${esc(tl('sr.board.all'))}</button></li>
+<li><span class="sr-line"></span>${esc(tl('sr.board.line.same'))}</li><li><span class="sr-line sr-line-cross"></span>${esc(tl('sr.board.line.cross'))}</li></ul>
+${sel ? `<h3>${esc(tl('sr.sel.title'))}</h3><dl class="sr-sel"><dt>id</dt><dd>${esc(sel.id)}</dd><dt>${esc(tl('sr.sel.name'))}</dt><dd>${esc(sel.label || '')}</dd><dt>${esc(tl('sr.sel.kind'))}</dt><dd>${esc(sel.category)}</dd><dt>provider</dt><dd>${esc(sel.providerResolved || sel.provider || '')}${sel.service ? ` · ${esc(sel.service)}` : ''}</dd>${sel.count > 1 ? `<dt>${esc(tl('sr.sel.count'))}</dt><dd>${esc(String(sel.count))}</dd>` : ''}${sel.engine ? `<dt>${esc(tl('sr.sel.engine'))}</dt><dd>${esc(sel.engine)}</dd>` : ''}</dl>
+${Array.isArray(sel.spec) && sel.spec.length ? `<h3>${esc(tl('sr.sel.spec'))}</h3><table class="sr-spec" data-sr-spec><tbody>${sel.spec.map((x) => `<tr><th scope="row">${SR_SPEC_NAME[x.key] ? `${esc(SR_SPEC_NAME[x.key])} <small>${esc(x.key)}</small>` : esc(x.key)}</th><td>${esc(x.value)}</td></tr>`).join('')}</tbody></table>` : ''}
+<p class="sr-acts"><button type="button" class="wb-btn" data-sr-act="focus">${esc(tl('sr.act.focus'))}</button></p>
+<ul class="sr-edges">${edgesOf.map((e) => `<li>${esc(e.from)} → ${esc(e.to)}${e.protocol ? ` <small>${esc(e.protocol)}</small>` : ''}${e.crossProvider ? ` <b>${esc(tl('sr.edge.cross'))}</b>` : ''}</li>`).join('')}</ul>${srFlowBoardHTML(sel.id)}`
+    : grp ? `<h3>${esc(tl('sr.grp.title'))}</h3><dl class="sr-sel"><dt>id</dt><dd>${esc(grp.id)}</dd><dt>${esc(tl('sr.sel.name'))}</dt><dd>${esc(grp.label || '')}</dd><dt>${esc(tl('sr.sel.kind'))}</dt><dd>${esc(grp.kind || '')}</dd><dt>provider</dt><dd>${esc(grp.providerResolved || grp.provider || '')}</dd><dt>${esc(tl('sr.grp.nodes'))}</dt><dd>${esc(String(inGroup ? srCountNodes(inGroup) : 0))}</dd></dl>
+<p class="sr-acts"><button type="button" class="wb-btn" data-sr-act="focus">${esc(tl('sr.act.focus'))}</button> <button type="button" class="wb-btn" data-sr-act="toggle" data-sr-group="${esc(grp.id)}">${esc(SR.closed.has(grp.id) ? tl('sr.grp.open') : tl('sr.grp.close'))}</button></p>`
+    : `<p class="sr-hint">${esc(tl('sr.board.hint'))}</p>`}
+${probs.length ? `<h3>${esc(tl('sr.board.problems', { n: probs.length }))}</h3><ul class="sr-problems">${probs.map((p) => `<li title="${esc(p.message || '')}">${esc(p.short || p.message || '')}</li>`).join('')}</ul>` : ''}`);
 }
 function srRenderLog() {
   setHTML($('sr-log'), `<ol>${SR.log.map((l) => `<li><time>${esc(new Date(l.at).toTimeString().slice(0, 8))}</time> ${esc(l.text)}</li>`).join('')}</ol>`);
@@ -782,7 +784,7 @@ function srRetheme() {
   srBuild();
   const W = SR.view;
   W.camera.position.copy(pos); W.controls.target.copy(target); W.controls.update();
-  srLog(`色を${W.dark ? 'ダーク' : 'ライト'}に合わせた`);
+  srLog(tl('sr.log.theme', { theme: W.dark ? tl('sr.theme.dark') : tl('sr.theme.light') }));
 }
 if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', srRetheme);
 new MutationObserver(srRetheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
@@ -822,7 +824,7 @@ $('sr-boxzoom').addEventListener('click', () => { srBoxEnd(); srBoxArm(!SR.box.a
 $('sr-zin').addEventListener('click', () => srZoomBy(1 / SR.zoomStep));
 $('sr-lines').addEventListener('change', () => {
   SR.lines = $('sr-lines').value;
-  srLog(`線: ${$('sr-lines').selectedOptions[0].textContent}`);
+  srLog(tl('sr.log.lines', { lines: $('sr-lines').selectedOptions[0].textContent }));
   if (SR.view) srLinesMode(SR.view);
 });
 $('sr-zout').addEventListener('click', () => srZoomBy(SR.zoomStep));
@@ -831,7 +833,7 @@ $('sr-board').addEventListener('click', (e) => {
   if (pv) {   // a cloud on the legend: toggled; 全部 clears the choice
     const p = pv.dataset.srProv;
     if (!p) SR.only = new Set(); else if (SR.only.has(p)) SR.only.delete(p); else SR.only.add(p);
-    srLog(SR.only.size ? `絞り: ${[...SR.only].join(', ')}` : '絞り: 全部');
+    srLog(SR.only.size ? tl('sr.only', { clouds: [...SR.only].join(', ') }) : tl('sr.only.all'));
     srBuild();
     return;
   }
@@ -842,8 +844,8 @@ $('sr-board').addEventListener('click', (e) => {
   if (b.dataset.srAct === 'focus') srFocusSelected();
   else if (b.dataset.srAct === 'toggle') srToggleGroup(b.dataset.srGroup);
 });
-$('sr-env').addEventListener('change', () => { srLog(`環境を ${$('sr-env').value || '（なし）'} にした`); srBuild(); });
-$('sr-fold').addEventListener('change', () => { srLog($('sr-fold').checked ? '細かいものを出した' : '細かいものを畳んだ'); srBuild(); });
+$('sr-env').addEventListener('change', () => { srLog(tl('sr.log.env', { env: $('sr-env').value || tl('sr.env.unset') })); srBuild(); });
+$('sr-fold').addEventListener('change', () => { srLog($('sr-fold').checked ? tl('sr.log.fold.shown') : tl('sr.log.fold.folded')); srBuild(); });
 for (const [btn, el] of [['sr-board-btn', 'sr-board'], ['sr-log-btn', 'sr-log']]) {
   $(btn).addEventListener('click', () => {
     const show = $(el).hidden;
