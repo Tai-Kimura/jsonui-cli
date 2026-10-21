@@ -14,6 +14,8 @@ import re
 import shutil
 from typing import Callable
 
+from .. import i18n
+
 TIMEOUT_SEC = 3.0
 INTERVAL_SEC = 10.0
 
@@ -41,7 +43,8 @@ def parse_simctl(stdout: bytes) -> list[dict]:
         version = runtime.rsplit(".", 1)[-1].replace("iOS-", "iOS ").replace("-", ".")
         for dev in devices if isinstance(devices, list) else []:
             if isinstance(dev, dict) and dev.get("state") == "Booted" and isinstance(dev.get("udid"), str):
-                out.append({"id": dev["udid"], "platform": "ios", "name": f"{dev.get('name', '?')}（{version}）",
+                out.append({"id": dev["udid"], "platform": "ios", "baseName": dev.get("name", "?"),
+                            "name": i18n.tl("srv.device.name", name=dev.get('name', '?'), version=version),
                             "state": "booted"})
     return out
 
@@ -88,10 +91,10 @@ async def run(on_devices: Callable[[list[dict]], None], on_status: Callable[[str
     xcrun = which("xcrun")
     adb = adb or find_adb()
     if xcrun is None and adb is None:
-        on_status("stopped", "xcrun も adb も見つかりません（端末の取得を止めました）")
+        on_status("stopped", i18n.tl("srv.device.none"))
         return
     missing = [name for name, path in (("xcrun", xcrun), ("adb", adb)) if path is None]
-    on_status("running", f"{' と '.join(missing)} が無いため、その分は取りません" if missing else None)
+    on_status("running", i18n.tl("srv.device.missing", tools=i18n.tl("srv.and").join(missing)) if missing else None)
     while True:
         devices: list[dict] = []
         if xcrun:
@@ -124,7 +127,7 @@ def device_for_command(command: str, devices: list[dict]) -> str | None:
     m = _DEST_NAME.search(command)
     if m:
         name = m.group(1).strip()
-        hits = [d["id"] for d in devices if d["platform"] == "ios" and d["name"].split("（")[0] == name]
+        hits = [d["id"] for d in devices if d["platform"] == "ios" and (d.get("baseName") or re.split(r"[\uff08(]", d["name"])[0].strip()) == name]
         if len(hits) == 1:
             return hits[0]
     return None

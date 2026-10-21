@@ -2010,5 +2010,9 @@
   "srv.ask.min": "{n} min",
   "srv.config.not_saved": "Could not save to config.json ({error})",
   "srv.talk.unavailable": "Talk is not available on this server",
-  "srv.weather.unavailable": "Weather is not available on this server"
+  "srv.weather.unavailable": "Weather is not available on this server",
+  "srv.device.name": "{name} ({version})",
+  "srv.device.none": "Neither xcrun nor adb found (devices are not read)",
+  "srv.device.missing": "{tools} not found: those devices are not read",
+  "srv.and": " and "
 }

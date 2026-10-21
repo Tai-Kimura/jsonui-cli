@@ -1963,5 +1963,9 @@
   "srv.ask.min": "{n} 分",
   "srv.config.not_saved": "config.json に保存できなかった（{error}）",
   "srv.talk.unavailable": "トークはこのサーバーでは使えません",
-  "srv.weather.unavailable": "天気はこのサーバーでは使えません"
+  "srv.weather.unavailable": "天気はこのサーバーでは使えません",
+  "srv.device.name": "{name}（{version}）",
+  "srv.device.none": "xcrun も adb も見つかりません（端末の取得を止めました）",
+  "srv.device.missing": "{tools} が無いため、その分は取りません",
+  "srv.and": " と "
 }
