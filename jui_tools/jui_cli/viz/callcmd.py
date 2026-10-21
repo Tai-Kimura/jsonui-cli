@@ -27,11 +27,14 @@ import json
 import os
 import re
 
+from . import i18n
+
 PLUGIN = "jui-viz@jsonui"
 MANAGED_SETTINGS = "/Library/Application Support/ClaudeCode/managed-settings.json"
 NAME_MAX = 64
 ROLE_MAX = 4000
-PREFACE = "このセッションの担当は次のとおりです（jui viz の呼び出しボタンより）。"
+def preface() -> str:
+    return i18n.tl("srv.call.preface")
 _BARE = re.compile(r"[A-Za-z0-9_./:@%+=,-]+")
 
 
@@ -79,24 +82,24 @@ def channels_flag(path: str | None = None) -> str:
 
 
 def check(name, role) -> str | None:
-    """Why the inputs cannot make a command (Japanese, for the dialog), or None."""
+    """Why the inputs cannot make a command (in the page's language, for the dialog), or None."""
     if not isinstance(name, str) or not isinstance(role, str):
-        return "担当名と役割の文は文字列で"
+        return i18n.tl("srv.call.strings")
     if "\0" in name or "\0" in role:
-        return "NUL 文字は使えません"
+        return i18n.tl("srv.call.nul")
     if not name.strip():
-        return "担当名を入れてください"
+        return i18n.tl("srv.call.name.empty")
     if len(name) > NAME_MAX:
-        return f"担当名は {NAME_MAX} 文字まで"
+        return i18n.tl("srv.call.name.max", max=NAME_MAX)
     if any(_control(ch) for ch in name):
-        return "担当名は 1 行で（改行・タブなどの制御文字は使えません）"
+        return i18n.tl("srv.call.name.line")
     if len(role) > ROLE_MAX:
-        return f"役割の文は {ROLE_MAX} 文字まで"
+        return i18n.tl("srv.call.role.max", max=ROLE_MAX)
     return None
 
 
 def prompt_of(name: str, role: str) -> str:
-    return f"{PREFACE}\nセッション名: {name}" + (f"\n{role}" if role.strip() else "")
+    return f"{preface()}\n{i18n.tl('srv.call.session', name=name)}" + (f"\n{role}" if role.strip() else "")
 
 
 def argv_of(name: str, role: str, flag: str) -> list[str]:

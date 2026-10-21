@@ -1990,5 +1990,13 @@
   "srv.list.more": {
     "one": "{head} and {n} more",
     "other": "{head} and {n} more"
-  }
+  },
+  "srv.call.preface": "This session's role is as follows (from jui viz's call button).",
+  "srv.call.session": "Session name: {name}",
+  "srv.call.strings": "The name and the role must be text",
+  "srv.call.nul": "NUL characters are not allowed",
+  "srv.call.name.empty": "Enter a name",
+  "srv.call.name.max": "The name is up to {max} characters",
+  "srv.call.name.line": "The name is one line (no line breaks, tabs or other control characters)",
+  "srv.call.role.max": "The role is up to {max} characters"
 }

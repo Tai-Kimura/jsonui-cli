@@ -1943,5 +1943,13 @@
   "srv.list.sep": "、",
   "srv.list.more": {
     "other": "{head} ほか {n} 件"
-  }
+  },
+  "srv.call.preface": "このセッションの担当は次のとおりです（jui viz の呼び出しボタンより）。",
+  "srv.call.session": "セッション名: {name}",
+  "srv.call.strings": "担当名と役割の文は文字列で",
+  "srv.call.nul": "NUL 文字は使えません",
+  "srv.call.name.empty": "担当名を入れてください",
+  "srv.call.name.max": "担当名は {max} 文字まで",
+  "srv.call.name.line": "担当名は 1 行で（改行・タブなどの制御文字は使えません）",
+  "srv.call.role.max": "役割の文は {max} 文字まで"
 }
