@@ -131,7 +131,14 @@ async def run_flows(page, out, failures, res):
       const e = B.querySelector('.sr-edges'), r = b.getBoundingClientRect(), R = B.getBoundingClientRect();
       return { overflows: B.scrollHeight > B.clientHeight, inView: r.top >= R.top && r.bottom <= R.bottom,
                beforeEdges: !!(e && (b.compareDocumentPosition(e) & Node.DOCUMENT_POSITION_FOLLOWING)) }; }""")
+    # and only then: the board read back up to its top with the same node chosen, a board drawn again (the same node chosen
+    # again, as a slice's push draws it) stays where it was read to — its heading is below, so a turn would move it
+    fl["boardKept"] = await page.evaluate("""() => { const B = document.getElementById('sr-board'); B.scrollTop = 0;
+      const below = B.querySelector('[data-sr-sel-head]').getBoundingClientRect().top - B.getBoundingClientRect().top > 20;
+      window.__dbg.srSelect('browser'); return { below, top: Math.round(B.scrollTop) }; }""")
     await page.set_viewport_size(size)
+    check(failures, fl["boardKept"] == {"below": True, "top": 0},
+          f"a board drawn again with the same node chosen is left where it was read to (its top, the heading below): {fl['boardKept']}")
     check(failures, fl["boardInView"] == {"overflows": True, "inView": True, "beforeEdges": True},
           f"a chosen node's flows sit under its rows and the board turns to them: pressable without a scroll: {fl['boardInView']}")
 
