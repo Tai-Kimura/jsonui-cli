@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="jui-viz-token" content="__JUI_VIZ_TOKEN__">
 <script type="application/json" id="jui-viz-strings">__JUI_VIZ_STRINGS__</script>
-<title>JsonUI エージェントビュー</title>
+<title>{{tl:page.title}}JsonUI エージェントビュー{{/tl}}</title>
 <link rel="stylesheet" href="/app.css">
 <script type="importmap">
 {
@@ -19,92 +19,92 @@
 <body>
 <div class="app">
   <header class="topbar">
-    <h1 class="brand"><span class="cloth">JsonUI</span>エージェントビュー</h1>
+    <h1 class="brand"><span class="cloth">JsonUI</span>{{tl:page.brand}}エージェントビュー{{/tl}}</h1>
     <button type="button" class="scope-btn scope-top" id="scope-top" data-scope-btn aria-haspopup="dialog" aria-expanded="false"></button>
     <div class="chips">
-      <span class="chip demo">デモ（実データではない）</span>
-      <span class="chip" id="chip-sessions">セッション 4</span>
-      <span class="chip" id="chip-robots">ロボット 10</span>
-      <span class="chip" title="フックの受け口">127.0.0.1:7788</span>
+      <span class="chip demo">{{tl:page.chip.demo}}デモ（実データではない）{{/tl}}</span>
+      <span class="chip" id="chip-sessions">{{tl:page.chip.sessions}}セッション 4{{/tl}}</span>
+      <span class="chip" id="chip-robots">{{tl:page.chip.robots}}ロボット 10{{/tl}}</span>
+      <span class="chip" data-hook-chip title="{{tl:page.chip.hook}}フックの受け口{{/tl}}">127.0.0.1:7788</span>
       <span class="chip" id="chip-clock">14:20:24</span>
       <span class="usage" id="usage" hidden></span>
-      <button type="button" class="chip perm-chip" id="chip-perm" hidden aria-haspopup="dialog">許可待ち 0</button>
-      <button type="button" class="chip perm-chip" id="chip-ask" hidden aria-controls="questions-sec">質問 0</button>
-      <button type="button" class="chip" id="chip-input" hidden title="返事を待っているセッション（押すとそのセッションのトークを開く）">… 入力待ち 0</button>
-      <button type="button" class="chip perm-chip" id="chip-denied" hidden aria-haspopup="dialog" title="自動モードが止めた操作（押すとボードで見られる）">止められた 0</button>
-      <button type="button" class="chip" id="chip-askwait" hidden aria-haspopup="dialog" title="質問が viz で待つ間、ターミナルや VS Code には質問が出ない（押すと変えられる）"></button>
-      <button type="button" class="chip perm-chip price-chip" id="chip-price" hidden aria-haspopup="dialog">単価の無いモデル 0</button>
+      <button type="button" class="chip perm-chip" id="chip-perm" hidden aria-haspopup="dialog">{{tl:page.chip.perm}}許可待ち 0{{/tl}}</button>
+      <button type="button" class="chip perm-chip" id="chip-ask" hidden aria-controls="questions-sec">{{tl:page.chip.ask}}質問 0{{/tl}}</button>
+      <button type="button" class="chip" id="chip-input" hidden title="{{tl:page.chip.input.title}}返事を待っているセッション（押すとそのセッションのトークを開く）{{/tl}}">{{tl:page.chip.input}}… 入力待ち 0{{/tl}}</button>
+      <button type="button" class="chip perm-chip" id="chip-denied" hidden aria-haspopup="dialog" title="{{tl:page.chip.denied.title}}自動モードが止めた操作（押すとボードで見られる）{{/tl}}">{{tl:page.chip.denied}}止められた 0{{/tl}}</button>
+      <button type="button" class="chip" id="chip-askwait" hidden aria-haspopup="dialog" title="{{tl:page.chip.askwait.title}}質問が viz で待つ間、ターミナルや VS Code には質問が出ない（押すと変えられる）{{/tl}}"></button>
+      <button type="button" class="chip perm-chip price-chip" id="chip-price" hidden aria-haspopup="dialog">{{tl:page.chip.price}}単価の無いモデル 0{{/tl}}</button>
     </div>
     <div class="controls">
-      <button type="button" id="btn-play" aria-pressed="false">一時停止</button>
-      <button type="button" id="btn-speed">速度 ×1</button>
-      <button type="button" class="dev-btn" id="btn-devices" hidden aria-haspopup="dialog" aria-expanded="false" aria-controls="dev-pane">デバイス</button>
-      <button type="button" id="btn-notify" hidden aria-haspopup="dialog" aria-expanded="false" aria-controls="notify-pop">通知</button>
-      <button type="button" id="btn-side" aria-controls="side" aria-expanded="true">パネルを閉じる</button>
+      <button type="button" id="btn-play" aria-pressed="false">{{tl:demo.pause}}一時停止{{/tl}}</button>
+      <button type="button" id="btn-speed">{{tl:page.speed}}速度 ×1{{/tl}}</button>
+      <button type="button" class="dev-btn" id="btn-devices" hidden aria-haspopup="dialog" aria-expanded="false" aria-controls="dev-pane">{{tl:page.devices}}デバイス{{/tl}}</button>
+      <button type="button" id="btn-notify" hidden aria-haspopup="dialog" aria-expanded="false" aria-controls="notify-pop">{{tl:page.notify}}通知{{/tl}}</button>
+      <button type="button" id="btn-side" aria-controls="side" aria-expanded="true">{{tl:page.side.close}}パネルを閉じる{{/tl}}</button>
     </div>
   </header>
   <div class="main">
     <div class="scene" id="scene">
-      <canvas id="scene-canvas" role="img" aria-label="プロジェクトフォルダごとの部屋で、ハチマキのロボットが spec の記述・実装・テストをしている 3D 表示"></canvas>
+      <canvas id="scene-canvas" role="img" aria-label="{{tl:page.scene.aria}}プロジェクトフォルダごとの部屋で、ハチマキのロボットが spec の記述・実装・テストをしている 3D 表示{{/tl}}"></canvas>
       <div class="tags" id="tags" aria-hidden="true"></div>
-      <div class="floor-nav" id="floor-nav" role="group" aria-label="階" hidden>
-        <button type="button" class="fn-btn" id="floor-up" aria-label="上の階へ">▲</button>
+      <div class="floor-nav" id="floor-nav" role="group" aria-label="{{tl:page.floor.aria}}階{{/tl}}" hidden>
+        <button type="button" class="fn-btn" id="floor-up" aria-label="{{tl:page.floor.up}}上の階へ{{/tl}}">▲</button>
         <span class="fn-label" id="floor-label" aria-live="polite">1F</span>
-        <button type="button" class="fn-btn" id="floor-down" aria-label="下の階へ">▼</button>
-        <button type="button" class="fn-btn fn-building" id="floor-building" aria-pressed="false">ビル全体</button>
+        <button type="button" class="fn-btn" id="floor-down" aria-label="{{tl:page.floor.down}}下の階へ{{/tl}}">▼</button>
+        <button type="button" class="fn-btn fn-building" id="floor-building" aria-pressed="false">{{tl:page.floor.building}}ビル全体{{/tl}}</button>
       </div>
       <div class="room-solo" id="room-solo" hidden>
-        <button type="button" class="fn-btn" id="room-back">← フロア全体に戻る</button>
+        <button type="button" class="fn-btn" id="room-back">{{tl:page.room.back}}← フロア全体に戻る{{/tl}}</button>
         <span class="rs-name" id="room-solo-name" aria-live="polite"></span>
-        <button type="button" class="fn-btn" id="room-call" hidden aria-haspopup="dialog">呼び出し</button>
+        <button type="button" class="fn-btn" id="room-call" hidden aria-haspopup="dialog">{{tl:page.room.call}}呼び出し{{/tl}}</button>
       </div>
-      <ul class="tower-legend" id="tower-legend" aria-label="窓の見方" hidden>
-        <li><span class="tl-win tl-work" aria-hidden="true">▶</span>作業中 — 明かりがつき、ロボットが動く</li>
-        <li><span class="tl-win tl-work" aria-hidden="true">…</span>考え中 — 明かりがつき、あごに手を当てている</li>
-        <li><span class="tl-win tl-wait" aria-hidden="true">!</span>許可待ち — 黄色の枠、手を挙げている</li>
-        <li><span class="tl-win tl-work" aria-hidden="true">◷</span>裏で作業中 — 明かりはついたまま、座って画面を見ている</li>
-        <li><span class="tl-win tl-idle" aria-hidden="true"></span>待機 — 電気が消え、影だけ</li>
-        <li><span class="tl-win tl-empty" aria-hidden="true"></span>空き — 部屋が無い（真っ暗）</li>
+      <ul class="tower-legend" id="tower-legend" aria-label="{{tl:page.legend.aria}}窓の見方{{/tl}}" hidden>
+        <li><span class="tl-win tl-work" aria-hidden="true">▶</span>{{tl:page.legend.busy}}作業中 — 明かりがつき、ロボットが動く{{/tl}}</li>
+        <li><span class="tl-win tl-work" aria-hidden="true">…</span>{{tl:page.legend.thinking}}考え中 — 明かりがつき、あごに手を当てている{{/tl}}</li>
+        <li><span class="tl-win tl-wait" aria-hidden="true">!</span>{{tl:page.legend.waiting}}許可待ち — 黄色の枠、手を挙げている{{/tl}}</li>
+        <li><span class="tl-win tl-work" aria-hidden="true">◷</span>{{tl:page.legend.background}}裏で作業中 — 明かりはついたまま、座って画面を見ている{{/tl}}</li>
+        <li><span class="tl-win tl-idle" aria-hidden="true"></span>{{tl:page.legend.idle}}待機 — 電気が消え、影だけ{{/tl}}</li>
+        <li><span class="tl-win tl-empty" aria-hidden="true"></span>{{tl:page.legend.empty}}空き — 部屋が無い（真っ暗）{{/tl}}</li>
       </ul>
       <div class="tower-weather" id="tower-weather" hidden>
-        <button type="button" class="tw-switch" id="weather-switch" role="switch" aria-checked="false">近所の天気</button>
-        <p class="tw-note" id="weather-note">オフ — 外への通信はしません</p>
+        <button type="button" class="tw-switch" id="weather-switch" role="switch" aria-checked="false">{{tl:page.weather.switch}}近所の天気{{/tl}}</button>
+        <p class="tw-note" id="weather-note">{{tl:page.weather.off}}オフ — 外への通信はしません{{/tl}}</p>
       </div>
       <div class="live-empty" id="live-empty" hidden>
-        <p class="le-title">Claude Code のセッションがまだ見えません</p>
-        <p>確かめること</p>
+        <p class="le-title">{{tl:page.empty.title}}Claude Code のセッションがまだ見えません{{/tl}}</p>
+        <p>{{tl:page.empty.check}}確かめること{{/tl}}</p>
         <ul>
-          <li>このサーバーが動いている（<code>jui viz status</code>）</li>
-          <li>フックが入っている（<code>jui viz hooks status</code>）</li>
-          <li>セッションが見えている（<code>claude agents --json</code>）</li>
+          <li>{{tlhtml:page.empty.server}}このサーバーが動いている（<code>jui viz status</code>）{{/tl}}</li>
+          <li>{{tlhtml:page.empty.hooks}}フックが入っている（<code>jui viz hooks status</code>）{{/tl}}</li>
+          <li>{{tlhtml:page.empty.sessions}}セッションが見えている（<code>claude agents --json</code>）{{/tl}}</li>
         </ul>
       </div>
       <p class="live-error" id="live-error" role="status" hidden></p>
       <p class="demo-clock" id="demo-clock" hidden></p>
-      <p class="scene-hint">ドラッグで回転 ／ ホイールで拡大 ／ ボードやロボットを押すと詳しく表示</p>
+      <p class="scene-hint">{{tl:page.scene.hint}}ドラッグで回転 ／ ホイールで拡大 ／ ボードやロボットを押すと詳しく表示{{/tl}}</p>
       <div class="wb" id="wb" hidden role="dialog" aria-modal="false" aria-labelledby="wb-title">
         <div class="wb-frame">
           <div class="wb-head">
-            <button type="button" class="wb-btn" id="wb-close">← 3D に戻る</button>
-            <button type="button" class="wb-btn" id="wb-side-btn" aria-controls="wb-side" aria-expanded="true">一覧を閉じる</button>
-            <h2 id="wb-title">spec ボード</h2>
-            <button type="button" class="help-btn" id="spec-help-board" data-spec-help hidden aria-label="spec の進み具合の説明" aria-haspopup="dialog">?</button>
+            <button type="button" class="wb-btn" id="wb-close">{{tl:page.back.3d}}← 3D に戻る{{/tl}}</button>
+            <button type="button" class="wb-btn" id="wb-side-btn" aria-controls="wb-side" aria-expanded="true">{{tl:page.wb.list.close}}一覧を閉じる{{/tl}}</button>
+            <h2 id="wb-title">{{tl:page.wb.title}}spec ボード{{/tl}}</h2>
+            <button type="button" class="help-btn" id="spec-help-board" data-spec-help hidden aria-label="{{tl:page.spec.help}}spec の進み具合の説明{{/tl}}" aria-haspopup="dialog">?</button>
             <button type="button" class="scope-btn" data-scope-btn aria-haspopup="dialog" aria-expanded="false"></button>
             <code id="wb-file">docs/screens/json/</code>
             <span class="state" id="wb-status"></span>
             <span id="wb-who"></span>
             <span class="grow"></span>
-            <label for="wb-follow" id="wb-follow-label"><input type="checkbox" id="wb-follow" checked> 進んでいる箇所に追従</label>
+            <label for="wb-follow" id="wb-follow-label"><input type="checkbox" id="wb-follow" checked> {{tl:page.wb.follow}}進んでいる箇所に追従{{/tl}}</label>
           </div>
           <div class="wb-body" id="wb-body">
-            <nav class="wb-side" id="wb-side" aria-label="spec の一覧">
-              <input type="search" class="wb-search" id="wb-search" placeholder="画面名で絞り込む" aria-label="画面名で絞り込む">
+            <nav class="wb-side" id="wb-side" aria-label="{{tl:page.wb.side.aria}}spec の一覧{{/tl}}">
+              <input type="search" class="wb-search" id="wb-search" placeholder="{{tl:page.wb.search}}画面名で絞り込む{{/tl}}" aria-label="{{tl:page.wb.search}}画面名で絞り込む{{/tl}}">
               <div class="wb-side-list" id="wb-side-list"></div>
             </nav>
             <div class="wb-main">
-              <div class="wb-nav" id="wb-nav" aria-label="セクションへ移動"></div>
+              <div class="wb-nav" id="wb-nav" aria-label="{{tl:page.wb.nav.aria}}セクションへ移動{{/tl}}"></div>
               <p class="wb-legend" id="wb-legend"></p>
-              <div class="wb-sheet" id="wb-code" tabindex="0" aria-label="spec の内容"></div>
+              <div class="wb-sheet" id="wb-code" tabindex="0" aria-label="{{tl:page.wb.code.aria}}spec の内容{{/tl}}"></div>
             </div>
           </div>
         </div>
@@ -112,18 +112,18 @@
       <div class="wb" id="tb" hidden role="dialog" aria-modal="false" aria-labelledby="tb-title">
         <div class="wb-frame kb-frame">
           <div class="wb-head">
-            <button type="button" class="wb-btn" id="tb-close">← 3D に戻る</button>
-            <h2 id="tb-title">タスクボード</h2>
+            <button type="button" class="wb-btn" id="tb-close">{{tl:page.back.3d}}← 3D に戻る{{/tl}}</button>
+            <h2 id="tb-title">{{tl:page.tb.title}}タスクボード{{/tl}}</h2>
             <span class="chip" id="tb-count"></span>
             <span class="grow"></span>
             <button type="button" class="scope-btn" data-scope-btn aria-haspopup="dialog" aria-expanded="false"></button>
             <button type="button" class="scope-btn" id="tb-sess" data-picker="lists" aria-haspopup="dialog" aria-expanded="false"></button>
-            <label class="lane-toggle" for="tb-lanes"><input type="checkbox" id="tb-lanes"> セッションごとに分ける</label>
+            <label class="lane-toggle" for="tb-lanes"><input type="checkbox" id="tb-lanes"> {{tl:page.tb.lanes}}セッションごとに分ける{{/tl}}</label>
           </div>
           <div class="kb-body">
-            <section class="perm-strip q-strip d-strip" id="denied-strip" hidden aria-label="自動モードが止めた操作"></section>
-            <section class="perm-strip q-strip" id="q-strip" hidden aria-label="答えを待っている質問"></section>
-            <section class="perm-strip" id="perm-strip" hidden aria-label="許可を求めているもの"></section>
+            <section class="perm-strip q-strip d-strip" id="denied-strip" hidden aria-label="{{tl:page.denied.aria}}自動モードが止めた操作{{/tl}}"></section>
+            <section class="perm-strip q-strip" id="q-strip" hidden aria-label="{{tl:page.questions.aria}}答えを待っている質問{{/tl}}"></section>
+            <section class="perm-strip" id="perm-strip" hidden aria-label="{{tl:page.perm.aria}}許可を求めているもの{{/tl}}"></section>
             <div class="kanban" id="kanban"></div>
             <aside class="tb-detail" id="tb-detail" hidden aria-labelledby="tbd-title"></aside>
           </div>
@@ -131,162 +131,162 @@
       </div>
       <section class="srm" id="sr" hidden role="dialog" aria-modal="true" aria-labelledby="sr-title">
         <header class="sr-head">
-          <button type="button" class="wb-btn" id="sr-back">← 部屋に戻る（Esc）</button>
-          <h2 id="sr-title">サーバールーム</h2>
+          <button type="button" class="wb-btn" id="sr-back">{{tl:page.sr.back}}← 部屋に戻る（Esc）{{/tl}}</button>
+          <h2 id="sr-title">{{tl:page.sr.title}}サーバールーム{{/tl}}</h2>
           <span class="sr-room" id="sr-room"></span>
-          <span class="sr-ctl sr-mode" role="group" aria-label="表示"><button type="button" class="wb-btn" id="sr-mode-3d" aria-pressed="true">3D</button><button type="button" class="wb-btn" id="sr-mode-cost" aria-pressed="false">コスト</button></span>
-          <label class="sr-ctl" id="sr-scn-ctl" hidden>負荷 <select id="sr-scn"></select></label>
-          <label class="sr-ctl">環境 <select id="sr-env"></select></label>
-          <label class="sr-ctl"><input type="checkbox" id="sr-fold"> 細かいもの（IAM・アラームなど）</label>
+          <span class="sr-ctl sr-mode" role="group" aria-label="{{tl:page.sr.mode.aria}}表示{{/tl}}"><button type="button" class="wb-btn" id="sr-mode-3d" aria-pressed="true">3D</button><button type="button" class="wb-btn" id="sr-mode-cost" aria-pressed="false">{{tl:page.sr.mode.cost}}コスト{{/tl}}</button></span>
+          <label class="sr-ctl" id="sr-scn-ctl" hidden>{{tl:page.sr.scn}}負荷{{/tl}} <select id="sr-scn"></select></label>
+          <label class="sr-ctl">{{tl:page.sr.env}}環境{{/tl}} <select id="sr-env"></select></label>
+          <label class="sr-ctl"><input type="checkbox" id="sr-fold"> {{tl:page.sr.fold}}細かいもの（IAM・アラームなど）{{/tl}}</label>
           <span class="grow"></span>
-          <label class="sr-ctl">線 <select id="sr-lines"><option value="all">すべて（薄く）</option><option value="cross">跨ぐ線だけ</option><option value="focus">選んだものだけ</option></select></label>
-          <button type="button" class="wb-btn" id="sr-zin" aria-label="寄る">＋</button>
-          <button type="button" class="wb-btn" id="sr-zout" aria-label="引く">−</button>
-          <button type="button" class="wb-btn" id="sr-boxzoom" aria-pressed="false" title="次のドラッグで四角を描き、そこへ寄ります（Option を押しながらのドラッグでも描けます。Esc でやめる）">範囲で寄る</button>
-          <button type="button" class="wb-btn" id="sr-fit">全体を見る</button>
-          <button type="button" class="wb-btn" id="sr-board-btn" aria-pressed="true" aria-controls="sr-board">ボード</button>
-          <button type="button" class="wb-btn" id="sr-log-btn" aria-pressed="false" aria-controls="sr-log">ログ</button>
+          <label class="sr-ctl">{{tl:page.sr.lines}}線{{/tl}} <select id="sr-lines"><option value="all">{{tl:page.sr.lines.all}}すべて（薄く）{{/tl}}</option><option value="cross">{{tl:page.sr.lines.cross}}跨ぐ線だけ{{/tl}}</option><option value="focus">{{tl:page.sr.lines.focus}}選んだものだけ{{/tl}}</option></select></label>
+          <button type="button" class="wb-btn" id="sr-zin" aria-label="{{tl:page.sr.zoom.in}}寄る{{/tl}}">{{tl:page.sr.zoom.in.mark}}＋{{/tl}}</button>
+          <button type="button" class="wb-btn" id="sr-zout" aria-label="{{tl:page.sr.zoom.out}}引く{{/tl}}">−</button>
+          <button type="button" class="wb-btn" id="sr-boxzoom" aria-pressed="false" title="{{tl:page.sr.boxzoom.title}}次のドラッグで四角を描き、そこへ寄ります（Option を押しながらのドラッグでも描けます。Esc でやめる）{{/tl}}">{{tl:page.sr.boxzoom}}範囲で寄る{{/tl}}</button>
+          <button type="button" class="wb-btn" id="sr-fit">{{tl:page.sr.fit}}全体を見る{{/tl}}</button>
+          <button type="button" class="wb-btn" id="sr-board-btn" aria-pressed="true" aria-controls="sr-board">{{tl:page.sr.board}}ボード{{/tl}}</button>
+          <button type="button" class="wb-btn" id="sr-log-btn" aria-pressed="false" aria-controls="sr-log">{{tl:page.sr.log}}ログ{{/tl}}</button>
         </header>
         <div class="sr-main">
-          <div class="sr-stage"><canvas id="sr-canvas" aria-label="インフラの構成の 3D（ドラッグで回す、ホイールで寄る・引く、右ドラッグで動かす、Option＋ドラッグで範囲に寄る）"></canvas><div class="sr-box" id="sr-box" hidden></div><div class="sr-toasts" id="sr-toasts" aria-live="polite"></div><div class="sr-choices" id="sr-choices" hidden role="group" aria-label="分かれ道"></div><div class="sr-player" id="sr-player" hidden role="toolbar" aria-label="流れの再生"></div><div class="sr-labels" id="sr-labels" aria-hidden="true"></div><div class="sr-cost" id="sr-cost" hidden aria-label="コストのシミュレーション"></div></div>
-          <aside class="sr-board" id="sr-board" aria-label="構成のボード"></aside>
+          <div class="sr-stage"><canvas id="sr-canvas" aria-label="{{tl:page.sr.canvas.aria}}インフラの構成の 3D（ドラッグで回す、ホイールで寄る・引く、右ドラッグで動かす、Option＋ドラッグで範囲に寄る）{{/tl}}"></canvas><div class="sr-box" id="sr-box" hidden></div><div class="sr-toasts" id="sr-toasts" aria-live="polite"></div><div class="sr-choices" id="sr-choices" hidden role="group" aria-label="{{tl:page.sr.choices.aria}}分かれ道{{/tl}}"></div><div class="sr-player" id="sr-player" hidden role="toolbar" aria-label="{{tl:page.sr.player.aria}}流れの再生{{/tl}}"></div><div class="sr-labels" id="sr-labels" aria-hidden="true"></div><div class="sr-cost" id="sr-cost" hidden aria-label="{{tl:page.sr.cost.aria}}コストのシミュレーション{{/tl}}"></div></div>
+          <aside class="sr-board" id="sr-board" aria-label="{{tl:page.sr.board.aria}}構成のボード{{/tl}}"></aside>
         </div>
-        <div class="sr-log" id="sr-log" hidden aria-label="サーバールームのログ"></div>
+        <div class="sr-log" id="sr-log" hidden aria-label="{{tl:page.sr.log.aria}}サーバールームのログ{{/tl}}"></div>
       </section>
       <div class="wb" id="ds" hidden role="dialog" aria-modal="false" aria-labelledby="ds-title">
         <div class="wb-frame ds-frame">
           <div class="wb-head">
-            <button type="button" class="wb-btn" id="ds-close">← 3D に戻る</button>
-            <h2 id="ds-title">データサーバー</h2>
+            <button type="button" class="wb-btn" id="ds-close">{{tl:page.back.3d}}← 3D に戻る{{/tl}}</button>
+            <h2 id="ds-title">{{tl:page.ds.title}}データサーバー{{/tl}}</h2>
             <span class="chip" id="ds-room"></span>
           </div>
-          <div class="ds-tabs" id="ds-tabs" role="tablist" aria-label="仕様書"></div>
-          <div class="ds-body" id="ds-body" tabindex="0" aria-label="仕様書の内容"></div>
+          <div class="ds-tabs" id="ds-tabs" role="tablist" aria-label="{{tl:page.ds.tabs.aria}}仕様書{{/tl}}"></div>
+          <div class="ds-body" id="ds-body" tabindex="0" aria-label="{{tl:page.ds.body.aria}}仕様書の内容{{/tl}}"></div>
         </div>
       </div>
       <div class="wb" id="pr" hidden role="dialog" aria-modal="false" aria-labelledby="pr-title">
         <div class="wb-frame pr-frame">
           <div class="wb-head">
-            <button type="button" class="wb-btn" id="pr-close">← 3D に戻る</button>
-            <h2 id="pr-title">単価の表（お札の概算）</h2>
+            <button type="button" class="wb-btn" id="pr-close">{{tl:page.back.3d}}← 3D に戻る{{/tl}}</button>
+            <h2 id="pr-title">{{tl:page.pr.title}}単価の表（お札の概算）{{/tl}}</h2>
           </div>
-          <div class="ds-body pr-body" id="pr-body" tabindex="0" aria-label="単価の表"></div>
+          <div class="ds-body pr-body" id="pr-body" tabindex="0" aria-label="{{tl:page.pr.table}}単価の表{{/tl}}"></div>
         </div>
       </div>
       <section class="rb" id="rb" hidden role="dialog" aria-modal="false" aria-labelledby="rb-title"></section>
     </div>
-    <aside class="side" id="side" aria-label="セッション、spec、テスト、タスク">
+    <aside class="side" id="side" aria-label="{{tl:page.side.aria}}セッション、spec、テスト、タスク{{/tl}}">
       <section aria-labelledby="h-denied" id="denied-sec" hidden>
-        <h2 id="h-denied">自動モードが止めた操作</h2>
+        <h2 id="h-denied">{{tl:page.denied.aria}}自動モードが止めた操作{{/tl}}</h2>
         <div class="questions" id="denied"></div>
       </section>
       <section aria-labelledby="h-questions" id="questions-sec" hidden>
-        <h2 id="h-questions">質問に答える</h2>
+        <h2 id="h-questions">{{tl:page.h.questions}}質問に答える{{/tl}}</h2>
         <div class="questions" id="questions"></div>
       </section>
       <section aria-labelledby="h-sessions">
-        <h2 id="h-sessions">セッション</h2>
-        <div class="seg-filter" id="sess-filter" role="group" aria-label="セッションを状態で絞り込む"></div>
+        <h2 id="h-sessions">{{tl:page.h.sessions}}セッション{{/tl}}</h2>
+        <div class="seg-filter" id="sess-filter" role="group" aria-label="{{tl:page.sess.filter.aria}}セッションを状態で絞り込む{{/tl}}"></div>
         <div class="sess-groups" id="sessions"></div>
       </section>
       <section aria-labelledby="h-spec">
-        <div class="sec-head"><div class="head-help"><h2 id="h-spec">spec の進み具合</h2><button type="button" class="help-btn" id="spec-help-panel" data-spec-help aria-label="spec の進み具合の説明" aria-haspopup="dialog">?</button></div><button type="button" class="mini-btn" id="btn-specboard" aria-haspopup="dialog">ボードで全部見る</button></div>
-        <div class="seg-filter" id="spec-filter" role="group" aria-label="spec を状態で絞り込む"></div>
+        <div class="sec-head"><div class="head-help"><h2 id="h-spec">{{tl:page.h.spec}}spec の進み具合{{/tl}}</h2><button type="button" class="help-btn" id="spec-help-panel" data-spec-help aria-label="{{tl:page.spec.help}}spec の進み具合の説明{{/tl}}" aria-haspopup="dialog">?</button></div><button type="button" class="mini-btn" id="btn-specboard" aria-haspopup="dialog">{{tl:page.spec.board}}ボードで全部見る{{/tl}}</button></div>
+        <div class="seg-filter" id="spec-filter" role="group" aria-label="{{tl:page.spec.filter.aria}}spec を状態で絞り込む{{/tl}}"></div>
         <ul class="spec-list" id="spec-list"></ul>
       </section>
       <section aria-labelledby="h-tests">
-        <h2 id="h-tests">テスト実行</h2>
+        <h2 id="h-tests">{{tl:page.h.tests}}テスト実行{{/tl}}</h2>
         <div id="tests"></div>
       </section>
       <section aria-labelledby="h-tasks">
-        <div class="sec-head"><h2 id="h-tasks">タスク</h2><button type="button" class="mini-btn" id="btn-taskboard" aria-haspopup="dialog">ボードで見る</button></div>
+        <div class="sec-head"><h2 id="h-tasks">{{tl:page.h.tasks}}タスク{{/tl}}</h2><button type="button" class="mini-btn" id="btn-taskboard" aria-haspopup="dialog">{{tl:page.task.board}}ボードで見る{{/tl}}</button></div>
         <p class="task-sum" id="task-sum"></p>
         <ul class="tasks" id="tasks"></ul>
       </section>
       <section aria-labelledby="h-settings" id="sec-settings" hidden>
-        <h2 id="h-settings">設定</h2>
+        <h2 id="h-settings">{{tl:page.h.settings}}設定{{/tl}}</h2>
         <div class="set-weather">
-          <button type="button" class="tw-switch" id="weather-switch-panel" role="switch" aria-checked="false">近所の天気</button>
-          <p class="tw-note" id="weather-note-panel">オフ — 外への通信はしません</p>
-          <p class="set-hint">オンにすると位置の許可を求め、約 1 km に丸めた位置でサーバーが 30 分に 1 回天気を問い合わせます。見た目に出るのは、ビルの全景（部屋が 7 つ以上）です。</p>
+          <button type="button" class="tw-switch" id="weather-switch-panel" role="switch" aria-checked="false">{{tl:page.weather.switch}}近所の天気{{/tl}}</button>
+          <p class="tw-note" id="weather-note-panel">{{tl:page.weather.off}}オフ — 外への通信はしません{{/tl}}</p>
+          <p class="set-hint">{{tl:page.weather.hint}}オンにすると位置の許可を求め、約 1 km に丸めた位置でサーバーが 30 分に 1 回天気を問い合わせます。見た目に出るのは、ビルの全景（部屋が 7 つ以上）です。{{/tl}}</p>
         </div>
         <div class="set-bills">
-          <button type="button" class="tw-switch" id="bill-switch" role="switch" aria-checked="true">お札（概算の金額）</button>
-          <p class="tw-note" id="bill-note">オン — 応答ごとの概算の金額をロボットの頭上に出します</p>
-          <p class="set-hint">金額は公式の単価 × 応答のトークン数の概算です。サブスクリプションでの利用では、実際の請求とは一致しません。<button type="button" class="mini-btn" id="prices-open" aria-haspopup="dialog">単価の表</button></p>
+          <button type="button" class="tw-switch" id="bill-switch" role="switch" aria-checked="true">{{tl:page.bill.switch}}お札（概算の金額）{{/tl}}</button>
+          <p class="tw-note" id="bill-note">{{tl:bill.switch.on}}オン — 応答ごとの概算の金額をロボットの頭上に出します{{/tl}}</p>
+          <p class="set-hint">{{tl:page.bill.hint}}金額は公式の単価 × 応答のトークン数の概算です。サブスクリプションでの利用では、実際の請求とは一致しません。{{/tl}}<button type="button" class="mini-btn" id="prices-open" aria-haspopup="dialog">{{tl:page.pr.table}}単価の表{{/tl}}</button></p>
         </div>
         <div class="set-cardnote">
-          <button type="button" class="mini-btn" id="card-note-back">カードの説明をまた出す</button>
-          <p class="set-hint" id="card-note-state">出している</p>
+          <button type="button" class="mini-btn" id="card-note-back">{{tl:page.cardnote.back}}カードの説明をまた出す{{/tl}}</button>
+          <p class="set-hint" id="card-note-state">{{tl:page.cardnote.shown}}出している{{/tl}}</p>
         </div>
       </section>
-      <div class="side-foot" id="side-foot" hidden><button type="button" class="log-open" id="btn-strip-open" aria-controls="ticker-strip" aria-expanded="false" aria-label="ログの帯を開く">ログを開く</button></div>
+      <div class="side-foot" id="side-foot" hidden><button type="button" class="log-open" id="btn-strip-open" aria-controls="ticker-strip" aria-expanded="false" aria-label="{{tl:page.strip.open.aria}}ログの帯を開く{{/tl}}">{{tl:page.strip.open}}ログを開く{{/tl}}</button></div>
     </aside>
   </div>
-  <footer class="ticker" id="ticker-strip" aria-label="最新のイベント"><ol id="ticker"></ol><div class="ticker-btns"><button type="button" class="ticker-btn" id="btn-log" aria-haspopup="dialog">ログを全画面で見る</button><button type="button" class="ticker-btn" id="btn-strip-close" aria-controls="ticker-strip" aria-expanded="true" aria-label="ログの帯を閉じる">閉じる</button></div></footer>
+  <footer class="ticker" id="ticker-strip" aria-label="{{tl:page.ticker.aria}}最新のイベント{{/tl}}"><ol id="ticker"></ol><div class="ticker-btns"><button type="button" class="ticker-btn" id="btn-log" aria-haspopup="dialog">{{tl:page.log.full}}ログを全画面で見る{{/tl}}</button><button type="button" class="ticker-btn" id="btn-strip-close" aria-controls="ticker-strip" aria-expanded="true" aria-label="{{tl:page.strip.close.aria}}ログの帯を閉じる{{/tl}}">{{tl:page.close}}閉じる{{/tl}}</button></div></footer>
 </div>
-<button type="button" class="log-open log-open-float" id="btn-strip-open-float" hidden aria-controls="ticker-strip" aria-expanded="false" aria-label="ログの帯を開く">ログを開く</button>
+<button type="button" class="log-open log-open-float" id="btn-strip-open-float" hidden aria-controls="ticker-strip" aria-expanded="false" aria-label="{{tl:page.strip.open.aria}}ログの帯を開く{{/tl}}">{{tl:page.strip.open}}ログを開く{{/tl}}</button>
 <div class="sr-bubble" id="sr-bubble" hidden role="status" aria-live="polite"><span class="sr-short"></span><div class="sr-full"></div></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <div class="pop" id="pop" hidden role="dialog" aria-modal="false"></div>
 <aside class="dev-pane" id="dev-pane" hidden role="dialog" aria-modal="false" aria-labelledby="dev-title">
-  <header class="dev-head"><h2 id="dev-title">マシンの負荷と機器</h2><button type="button" class="fn-btn" id="dev-close" aria-label="閉じる">×</button></header>
+  <header class="dev-head"><h2 id="dev-title">{{tl:page.dev.title}}マシンの負荷と機器{{/tl}}</h2><button type="button" class="fn-btn" id="dev-close" aria-label="{{tl:page.close}}閉じる{{/tl}}">×</button></header>
   <div id="dev-body"></div>
 </aside>
 <div class="notify-pop" id="notify-pop" hidden role="dialog" aria-modal="false" aria-labelledby="notify-title">
-  <h2 id="notify-title">通知と、質問の待ち時間</h2>
+  <h2 id="notify-title">{{tl:page.notify.title}}通知と、質問の待ち時間{{/tl}}</h2>
   <p id="notify-perm-state"></p>
-  <button type="button" class="fn-btn" id="notify-ask-perm" hidden>ブラウザの通知を許可する</button>
-  <p class="notify-note" id="notify-os-note">Mac のシステム設定 → 通知 → Google Chrome をオンにしてください（オフだと通知が出ないまま、質問は viz で待ちます）。</p>
+  <button type="button" class="fn-btn" id="notify-ask-perm" hidden>{{tl:page.notify.ask.perm}}ブラウザの通知を許可する{{/tl}}</button>
+  <p class="notify-note" id="notify-os-note">{{tl:page.notify.os.note}}Mac のシステム設定 → 通知 → Google Chrome をオンにしてください（オフだと通知が出ないまま、質問は viz で待ちます）。{{/tl}}</p>
   <fieldset class="notify-kinds">
-    <legend>通知する出来事（このブラウザに覚える）</legend>
-    <label><input type="checkbox" data-notify-kind="done"> 完了（メインのセッションのターンの終わり）</label>
-    <label><input type="checkbox" data-notify-kind="perm"> 許可の待ち</label>
-    <label><input type="checkbox" data-notify-kind="ask"> 質問の待ち</label>
-    <label><input type="checkbox" data-notify-kind="idle"> 入力待ち（ターンの終わりから 1 分、返事が無いまま）</label>
-    <label><input type="checkbox" data-notify-kind="chime"> 音を鳴らす（通知を出したタブで、短いチャイム）</label>
-    <label class="notify-volume">音量 <select id="notify-volume"><option value="low">小</option><option value="mid">中</option><option value="high">大</option></select></label>
+    <legend>{{tl:page.notify.kinds}}通知する出来事（このブラウザに覚える）{{/tl}}</legend>
+    <label><input type="checkbox" data-notify-kind="done"> {{tl:page.notify.done}}完了（メインのセッションのターンの終わり）{{/tl}}</label>
+    <label><input type="checkbox" data-notify-kind="perm"> {{tl:page.notify.perm}}許可の待ち{{/tl}}</label>
+    <label><input type="checkbox" data-notify-kind="ask"> {{tl:page.notify.ask}}質問の待ち{{/tl}}</label>
+    <label><input type="checkbox" data-notify-kind="idle"> {{tl:page.notify.idle}}入力待ち（ターンの終わりから 1 分、返事が無いまま）{{/tl}}</label>
+    <label><input type="checkbox" data-notify-kind="chime"> {{tl:page.notify.chime}}音を鳴らす（通知を出したタブで、短いチャイム）{{/tl}}</label>
+    <label class="notify-volume">{{tl:page.notify.volume}}音量{{/tl}} <select id="notify-volume"><option value="low">{{tl:page.notify.volume.low}}小{{/tl}}</option><option value="mid">{{tl:page.notify.volume.mid}}中{{/tl}}</option><option value="high">{{tl:page.notify.volume.high}}大{{/tl}}</option></select></label>
     <span class="notify-note" id="notify-chime-note" role="status"></span>
   </fieldset>
-  <label for="ask-wait">質問を viz で待つ時間（サーバーに保存）</label>
+  <label for="ask-wait">{{tl:page.askwait.label}}質問を viz で待つ時間（サーバーに保存）{{/tl}}</label>
   <select id="ask-wait"></select>
-  <p class="notify-note" id="ask-wait-note">待っている間、ターミナルや VS Code には質問が出ません。カードの「ターミナルで答える」でいつでも戻せます。viz のページを全部閉じると、12 秒ほどで戻ります。ページが見えていないときは、質問の通知がオンで許可済みの間だけ待ちます。</p>
-  <button type="button" class="fn-btn" id="notify-close">閉じる（Esc）</button>
+  <p class="notify-note" id="ask-wait-note">{{tl:page.askwait.note}}待っている間、ターミナルや VS Code には質問が出ません。カードの「ターミナルで答える」でいつでも戻せます。viz のページを全部閉じると、12 秒ほどで戻ります。ページが見えていないときは、質問の通知がオンで許可済みの間だけ待ちます。{{/tl}}</p>
+  <button type="button" class="fn-btn" id="notify-close">{{tl:page.close.esc}}閉じる（Esc）{{/tl}}</button>
 </div>
 <div class="call-overlay" id="call" hidden role="dialog" aria-modal="true" aria-labelledby="call-title">
   <div class="call-card">
-    <h2 id="call-title">ロボットを呼ぶ</h2>
+    <h2 id="call-title">{{tl:page.call.title}}ロボットを呼ぶ{{/tl}}</h2>
     <p class="call-lead" id="call-lead"></p>
-    <label for="call-name">担当名（必須、1 行）</label>
+    <label for="call-name">{{tl:page.call.name}}担当名（必須、1 行）{{/tl}}</label>
     <input type="text" id="call-name" maxlength="64" autocomplete="off" spellcheck="false">
-    <label for="call-role">役割の文（任意）</label>
+    <label for="call-role">{{tl:page.call.role}}役割の文（任意）{{/tl}}</label>
     <textarea id="call-role" rows="3" maxlength="4000" spellcheck="false"></textarea>
-    <label for="call-cmd">ターミナルに貼るコマンド</label>
+    <label for="call-cmd">{{tl:page.call.cmd}}ターミナルに貼るコマンド{{/tl}}</label>
     <textarea id="call-cmd" rows="4" readonly spellcheck="false"></textarea>
     <p class="call-why" id="call-why" role="status" aria-live="polite"></p>
     <div class="call-actions">
-      <button type="button" class="fn-btn call-copy" id="call-copy" disabled>コピー</button>
-      <button type="button" class="fn-btn" id="call-close">閉じる（Esc）</button>
+      <button type="button" class="fn-btn call-copy" id="call-copy" disabled>{{tl:page.call.copy}}コピー{{/tl}}</button>
+      <button type="button" class="fn-btn" id="call-close">{{tl:page.close.esc}}閉じる（Esc）{{/tl}}</button>
     </div>
-    <p class="call-note">viz はこのコマンドを実行しません。ターミナルに貼って、自分で実行してください。担当名と役割の文は、それぞれ 1 つの引数として渡ります。</p>
+    <p class="call-note">{{tl:page.call.note}}viz はこのコマンドを実行しません。ターミナルに貼って、自分で実行してください。担当名と役割の文は、それぞれ 1 つの引数として渡ります。{{/tl}}</p>
   </div>
 </div>
 <div class="log-overlay" id="log-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="log-title">
   <div class="log-head">
-    <h2 id="log-title">イベントログ</h2>
-    <span class="chip" id="log-count">0 件</span>
-    <div class="filters" id="log-cats" aria-label="種類で絞り込む"></div>
+    <h2 id="log-title">{{tl:log.title}}イベントログ{{/tl}}</h2>
+    <span class="chip" id="log-count">{{tl:page.log.count}}0 件{{/tl}}</span>
+    <div class="filters" id="log-cats" aria-label="{{tl:page.log.cats.aria}}種類で絞り込む{{/tl}}"></div>
     <button type="button" class="scope-btn" data-scope-btn aria-haspopup="dialog" aria-expanded="false"></button>
     <button type="button" class="scope-btn" id="log-who" data-picker="robots" aria-haspopup="dialog" aria-expanded="false"></button>
-    <input type="search" class="log-search" id="log-search" placeholder="文字で絞り込む" aria-label="文字で絞り込む">
-    <label class="toggle" for="log-follow"><input type="checkbox" id="log-follow" checked> 最新に追従</label>
-    <button type="button" class="log-more" id="log-more" hidden>新着を表示</button>
+    <input type="search" class="log-search" id="log-search" placeholder="{{tl:page.log.search}}文字で絞り込む{{/tl}}" aria-label="{{tl:page.log.search}}文字で絞り込む{{/tl}}">
+    <label class="toggle" for="log-follow"><input type="checkbox" id="log-follow" checked> {{tl:page.log.follow}}最新に追従{{/tl}}</label>
+    <button type="button" class="log-more" id="log-more" hidden>{{tl:page.log.more}}新着を表示{{/tl}}</button>
     <span class="grow"></span>
-    <button type="button" class="log-close" id="log-close">閉じる（Esc）</button>
+    <button type="button" class="log-close" id="log-close">{{tl:page.close.esc}}閉じる（Esc）{{/tl}}</button>
   </div>
   <div class="log-body" id="log-body">
     <table class="log-table">
-      <thead><tr><th scope="col">時刻</th><th scope="col">ロボット</th><th scope="col">種類</th><th scope="col">内容（行を押すとフック入力の例）</th></tr></thead>
+      <thead><tr><th scope="col">{{tl:page.log.col.time}}時刻{{/tl}}</th><th scope="col">{{tl:page.log.col.robot}}ロボット{{/tl}}</th><th scope="col">{{tl:page.log.col.kind}}種類{{/tl}}</th><th scope="col">{{tl:page.log.col.content}}内容（行を押すとフック入力の例）{{/tl}}</th></tr></thead>
       <tbody id="log-rows"></tbody>
     </table>
   </div>
