@@ -441,7 +441,10 @@ class Driver:
         before = await self.seq() if k in hook_kinds else 0
         now = int(time.time() * 1000)
         if k == "start":
-            st.append(a["key"], {"type": "system", "subtype": "init", "timestamp": iso(now - 1_800_000), "sessionId": session_id(a["key"]),
+            # a session began half an hour before the page's clock (the sky's hour when --sky-time sets it: the page
+            # counts a session's hours on that clock, and one begun at 3 am showed tired under a 14:00 sky)
+            began = (self.sky_ms if self.sky_ms is not None else now) - 1_800_000
+            st.append(a["key"], {"type": "system", "subtype": "init", "timestamp": iso(began), "sessionId": session_id(a["key"]),
                                  "cwd": str(st.rooms[room_of(a["key"])]), "uuid": str(uuid.uuid4())})
             st.send(st.body(a["key"], "SessionStart", source="startup"))
         elif k == "prompt":
