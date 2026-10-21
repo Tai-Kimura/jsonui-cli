@@ -1972,5 +1972,9 @@
   "srv.weather.no_current": "応答に current がありません",
   "srv.weather.unknown_code": "知らない天気のコード {code}",
   "srv.weather.failed": "天気を取れません（{kind}: {error}）",
-  "srv.task.untitled": "（題のない指示）"
+  "srv.task.untitled": "（題のない指示）",
+  "srv.prices.no_tools": "document_tools が見つからないため、単価を取りません",
+  "srv.prices.failing": {
+    "other": "{n} 件のファイルが取れなかった（前に取れた値を使う）"
+  }
 }

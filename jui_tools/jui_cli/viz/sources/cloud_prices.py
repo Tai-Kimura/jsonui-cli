@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from .. import paths
+from .. import i18n, paths
 from . import weather as W   # config.json's reading and writing (one place for the file's form)
 
 KEY = "cloudPrices"
@@ -120,14 +120,14 @@ class CloudPricesBook:
     def source(self) -> tuple[str, str | None]:
         """(status, error) for the server slice's sources."""
         if self.mod is None:
-            return "stopped", "document_tools が見つからないため、単価を取りません"
+            return "stopped", i18n.tl("srv.prices.no_tools")
         if not self.on:
             return "off", None
         failing = self.mod.summary(self.index)["failing"]
         if self.error:
             return "degraded", self.error
         if failing:
-            return "degraded", f"{failing} 件のファイルが取れなかった（前に取れた値を使う）"
+            return "degraded", i18n.tl("srv.prices.failing", n=failing)
         return "running", None
 
     def _write_status(self) -> None:
