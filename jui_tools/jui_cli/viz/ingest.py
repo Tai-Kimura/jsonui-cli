@@ -14,7 +14,7 @@ from typing import Any
 
 from pathlib import Path
 
-from . import clockout, data_docs, gitbox, infra_docs, prices, robots
+from . import clockout, data_docs, gitbox, i18n, infra_docs, prices, robots
 from .rooms import Rooms, tilde
 from .sources.jsonui_project import JsonUIProject, test_dirs
 from .attachments import Attachments
@@ -42,8 +42,12 @@ PROMPT_MAX = 200
 #: page and its floating tag shows the rest; until then the server cut it at 200 and the tail was nowhere).
 TEST_COMMAND_MAX = 2000
 #: How a robot's act says it waits for the person (a permission / a question); _settled_act takes it off when the wait ends.
-PERM_WAIT = "許可待ち "
-QUESTION_WAIT = "質問に回答待ち"
+def perm_wait() -> str:
+    return i18n.tl("status.waiting") + " "
+
+
+def question_wait() -> str:
+    return i18n.tl("status.asking")
 #: How much of a prompt sent from the page goes into the event log (the rest is never stored).
 PROMPT_HEAD = 40
 #: A session process whose argv could not be read is tried again after 1 s, then 2, 4 … up to 30 s apart.
@@ -130,10 +134,10 @@ def _file_key(project: JsonUIProject, file: str | None) -> str:
 def _settled_act(act: str, failed: bool) -> str:
     """The act once the wait it names is over: a permission's act loses its 許可待ち (the call itself is what it did),
     a question's says it got its answer — or none, when the call failed (declined, interrupted). Any other act stays."""
-    if act.startswith(PERM_WAIT):
-        return act[len(PERM_WAIT):]
-    if act.startswith(QUESTION_WAIT):
-        return "質問に回答なし" if failed else "質問の回答を受けた"
+    if act.startswith(perm_wait()):
+        return act[len(perm_wait()):]
+    if act.startswith(question_wait()):
+        return i18n.tl("act.question.none") if failed else i18n.tl("act.question.answered")
     return act
 
 #: The data server's counts (2.3.5) are never taken on the event loop (the independent review, 10-19: counted for each watcher
@@ -332,7 +336,7 @@ class World:
         if agent is None:
             agent = {
                 "id": sid, "label": self.sessions[sid]["label"], "sessionId": sid, "kind": "main",
-                "role": "main", "state": "idle", "act": "待機", "startedAt": at, "updatedAt": at,
+                "role": "main", "state": "idle", "act": i18n.tl("status.idle"), "startedAt": at, "updatedAt": at,
             }
             self.agents[sid] = agent
             self._dirty.add("agents")
@@ -344,7 +348,7 @@ class World:
             agent = {
                 "id": aid, "label": self._label(aid), "sessionId": sid, "kind": "sub",
                 "agentType": agent_type, "role": robots.role_for(agent_type, False),
-                "state": "idle", "act": "起動", "startedAt": at, "updatedAt": at,
+                "state": "idle", "act": i18n.tl("act.start"), "startedAt": at, "updatedAt": at,
             }
             self.agents[aid] = agent
             self._dirty.add("agents")
@@ -385,7 +389,7 @@ class World:
         if self.denials.session_ended(sid, at):
             self._dirty.add("denials")
         self._status(session, "ended", at)
-        self._set(agent, at, "idle", "退勤", leftAt=at)
+        self._set(agent, at, "idle", i18n.tl("act.clock_out"), leftAt=at)
 
     def clock_out(self, sid: str, at: int) -> None:
         """退勤 from the page ended this session's process (clockout.end_session saw it go): the same as its SessionEnd,
@@ -402,11 +406,12 @@ class World:
         """The event log's line for one 退勤 attempt: when (the event's time), to whom, and the outcome."""
         session = self.sessions.get(sid)
         label = session["label"] if session else sid[:8]
-        how = {"ended": "終わった", "not-ended": "終わらなかった", "refused": "断った"}.get(record.get("result"), "?")
-        pid = f"（pid {record['pid']}）" if record.get("pid") else ""
+        how = {"ended": i18n.tl("ev.clockout.ended"), "not-ended": i18n.tl("ev.clockout.not_ended"),
+               "refused": i18n.tl("ev.clockout.refused")}.get(record.get("result"), "?")
+        pid = i18n.tl("ev.clockout.pid", pid=record["pid"]) if record.get("pid") else ""
         why = "" if record.get("result") == "ended" else f": {record.get('reason', '')}"
         self.state.add_event({"at": at, "sessionId": sid, "agentId": sid, "kind": "ClockOut", "cat": "session",
-                              "text": f"退勤の合図 → {label}{pid} {how}{why}"})
+                              "text": i18n.tl("ev.clockout", label=label, pid=pid, how=how, why=why)})
 
     def _status(self, session: dict, status: str, at: int, waiting_for: str | None = None) -> None:
         if session["status"] != status or session.get("waitingFor") != waiting_for:
@@ -581,7 +586,7 @@ class World:
             self.file_changed(session["projectId"], path, at, by=agent["id"])
             if use_id in self._new_files and target.exists():
                 # A new artifact: the robot carries the paper to the shelf (P7 §A4).
-                self._set(agent, at, "carry", robots._clip(f"運ぶ {robots._rel(path, str(project.root))}"))
+                self._set(agent, at, "carry", robots._clip(i18n.tl("act.carry", path=robots._rel(path, str(project.root)))))
                 self._until[agent["id"]] = (at + CARRY_MS, "idle")
             self._new_files.discard(use_id or "")
         else:
@@ -627,11 +632,11 @@ class World:
                 session["title"] = _head(payload["session_title"], 120)
             self._status(session, "idle", at)
             self._clear_open(agent["id"])
-            self._set(agent, at, "idle", "待機")
-            text = f"出勤 {payload.get('source') or ''}".strip()
+            self._set(agent, at, "idle", i18n.tl("status.idle"))
+            text = i18n.tl("ev.clock_in", source=payload.get('source') or '').strip()
         elif kind == "SessionEnd":
             self._end(session, agent, at)
-            text = f"退勤 {payload.get('reason') or ''}".strip()
+            text = i18n.tl("ev.clock_out", reason=payload.get('reason') or '').strip()
         elif kind == "UserPromptSubmit":
             session["lastPrompt"] = _head(payload.get("prompt"), PROMPT_MAX)
             if self.questions.session_stopped(sid, at):   # a question left open: the person moved on
@@ -644,8 +649,8 @@ class World:
             self._clear_open(agent["id"])
             agent["promptAt"] = at   # the page ends an errand (the shredder, 10-19) that a new instruction overtakes
             # an instruction: no trip to the box any more — the trip stays, marked stopped, for the card's 最近の git
-            self._set(agent, at, "idle", "指示を受けた", git={**agent["git"], "stopped": True} if agent.get("git") else None)
-            text = f"指示 {session['lastPrompt'] or ''}".strip()
+            self._set(agent, at, "idle", i18n.tl("act.prompted"), git={**agent["git"], "stopped": True} if agent.get("git") else None)
+            text = i18n.tl("ev.prompt", prompt=session['lastPrompt'] or '').strip()
         elif kind == "PreToolUse" and tool:
             if tool == QUESTION_TOOL:   # a question for the person (both the async forward and --ask bring it)
                 self.questions.from_hook(sid, agent["id"], tool_input, use_id, at)
@@ -657,7 +662,7 @@ class World:
             if tool == QUESTION_TOOL:   # it waits for the person: a raised hand, the room lit as waiting
                 card = self.questions.cards.get(self.questions._by_use.get(use_id or "", ""))
                 heads = [q.get("header") or q["question"] for q in (card or {}).get("questions", [])]
-                state, act = "waiting", _head(f"{QUESTION_WAIT} {' / '.join(heads)}", 120) or QUESTION_WAIT
+                state, act = "waiting", _head(f"{question_wait()} {' / '.join(heads)}", 120) or question_wait()
             if use_id:
                 self._open.setdefault(agent["id"], []).append(use_id)
                 self._open_tool[use_id] = tool
@@ -701,7 +706,7 @@ class World:
                 if device_id:
                     self.tests[use_id]["deviceId"] = device_id
                     name = next((d["name"] for d in self.devices if d["id"] == device_id), device_id)
-                    self._set(agent, at, act=robots._clip(f"{act}（{name}）"))
+                    self._set(agent, at, act=robots._clip(i18n.tl("act.on_device", act=act, name=name)))
                     self._dirty.add("devices")
                 for old in sorted(self.tests, key=lambda k: self.tests[k]["startedAt"])[:-TEST_RUNS_KEPT]:
                     del self.tests[old]
@@ -716,7 +721,7 @@ class World:
                     self._dirty.add("questions")
                     if card["status"] == "answered_in_terminal":
                         self.state.add_event({"at": at, "sessionId": sid, "agentId": agent["id"], "kind": "QuestionAnswered",
-                                              "cat": "perm", "text": f"ターミナルで質問に回答 {_question_summary(card)}"})
+                                              "cat": "perm", "text": i18n.tl("ev.answered_in_terminal", summary=_question_summary(card))})
             opened = self._open.get(agent["id"], [])
             if use_id in opened:
                 opened.remove(use_id)
@@ -756,7 +761,7 @@ class World:
                 run["endedAt"] = at
                 self._test_decide(run)
                 self._dirty |= {"tests", "devices", "specs"}
-            text = f"{'失敗' if failed else '完了'} {robots.act_for_tool(tool, tool_input, root)}"
+            text = f"{i18n.tl('ev.failed') if failed else i18n.tl('status.done')} {robots.act_for_tool(tool, tool_input, root)}"
             gone = self._deleting.pop(use_id, None) if use_id else None
             if gone is not None:
                 text = self._shred(agent, gone, failed, payload.get("tool_response"), at)
@@ -764,7 +769,7 @@ class World:
             # A question, not a permission (permissions.NOT_PERMISSIONS): the robot stays "質問に回答待ち" from its
             # PreToolUse, and nothing goes on the permission board.
             cat = "perm"
-            text = "質問の許可の要求（許可の板には出さない。答えはターミナル）"
+            text = i18n.tl("ev.question_permission")
         elif kind == "PermissionRequest":
             # No tool_use_id here: take the newest open call of the same tool
             # (parallel calls are real: Bash and ToolSearch overlapped in P0).
@@ -776,7 +781,7 @@ class World:
                                  payload.get("permission_suggestions"), at)
             self._dirty.add("perms")
             self._status(session, "waiting", at, "permission prompt")
-            self._set(agent, at, "waiting", f"{PERM_WAIT}{robots.act_for_tool(tool or '?', tool_input, root)}")
+            self._set(agent, at, "waiting", f"{perm_wait()}{robots.act_for_tool(tool or '?', tool_input, root)}")
             cat = "perm"
             text = agent["act"]
         elif kind == "PermissionDenied":
@@ -788,7 +793,7 @@ class World:
                 self._dirty.add("perms")
             self._settle_asking(agent["id"])
             self._status(session, "busy", at)
-            self._set(agent, at, "idle", f"拒否 {tool or ''}".strip())
+            self._set(agent, at, "idle", i18n.tl("act.denied", tool=tool or '').strip())
             cat = "perm"
             text = agent["act"]
         elif kind == "Notification":
@@ -799,22 +804,22 @@ class World:
             elif ntype == "idle_prompt":
                 self._status(session, "idle", at)
                 if agent["state"] == "waiting":
-                    self._set(agent, at, "idle", "待機")
+                    self._set(agent, at, "idle", i18n.tl("status.idle"))
                 # 入力待ち (ticket 2026-10-20-jui-viz-3d-waiting-kinds-question-permission-input): a mark over the main
                 # robot, not a state; from this until the session moves again (INPUT_WAIT_ENDS). A subagent's does not
                 # (the page does not ring it either, notifyIdle)
                 if not aid:
                     session["inputWaitAt"] = at
                     self._dirty.add("sessions")
-            text = f"通知 {ntype} {_head(payload.get('message'), 120) or ''}".strip()
+            text = i18n.tl("ev.notification", kind=ntype, message=_head(payload.get('message'), 120) or '').strip()
         elif kind == "SubagentStart":
-            self._set(agent, at, "idle", f"起動 {agent_type or ''}".strip())
-            text = f"登場 {agent_type or aid}"
+            self._set(agent, at, "idle", i18n.tl("act.start_as", agent=agent_type or '').strip())
+            text = i18n.tl("ev.subagent.in", agent=agent_type or aid)
         elif kind == "SubagentStop":
             message = _head(payload.get("last_assistant_message"), MESSAGE_MAX)
-            self._set(agent, at, "done", "完了", lastMessage=message, leftAt=at)
+            self._set(agent, at, "done", i18n.tl("status.done"), lastMessage=message, leftAt=at)
             self._until[agent["id"]] = (at + SUBAGENT_LINGER_MS, "gone")
-            text = f"退場 {agent_type or aid}"
+            text = i18n.tl("ev.subagent.out", agent=agent_type or aid)
         elif kind in ("TaskCreated", "TaskCompleted"):
             if kind == "TaskCreated":
                 self.tasks.created(sid, payload, agent["id"], at)
@@ -823,13 +828,13 @@ class World:
             self._dirty.add("tasks")
             subject = _head(payload.get("task_subject"), 120) or ""
             if kind == "TaskCreated":
-                self._set(agent, at, "carry", f"タスク {subject}")
+                self._set(agent, at, "carry", i18n.tl("act.task", subject=subject))
                 self._until[agent["id"]] = (at + CARRY_MS, "idle")
             else:
-                self._set(agent, at, "done", f"完了 {subject}")
+                self._set(agent, at, "done", i18n.tl("act.task.done", subject=subject))
                 self._until[agent["id"]] = (at + DONE_TO_IDLE_MS, "idle")
             cat = "task"
-            text = f"{'タスク作成' if kind == 'TaskCreated' else 'タスク完了'} {subject}"
+            text = f"{i18n.tl('ev.task.created') if kind == 'TaskCreated' else i18n.tl('ev.task.done')} {subject}"
         elif kind in ("Stop", "StopFailure"):
             if agent["kind"] == "main":
                 self.perms.session_stopped(sid, at)
@@ -849,27 +854,27 @@ class World:
                 # the background, none of this session's subagents is still working.
                 for sub in [a for a in self.agents.values() if a["sessionId"] == sid and a["kind"] == "sub" and "leftAt" not in a]:
                     self._clear_open(sub["id"])
-                    self._set(sub, at, "done", "完了", leftAt=at)
+                    self._set(sub, at, "done", i18n.tl("status.done"), leftAt=at)
                     self._until[sub["id"]] = (at + SUBAGENT_LINGER_MS, "gone")
             if busy and agent["kind"] == "main":
                 # waiting on background work: lit, at its desk watching the screen, until the work ends
                 session["background"] = {"since": at}
                 self._dirty.add("sessions")
-                self._set(agent, at, "background", "バックグラウンド作業中", lastMessage=message)
+                self._set(agent, at, "background", i18n.tl("act.background"), lastMessage=message)
             else:
                 if agent["kind"] == "main":
                     self._background_off(session, at, touch_agent=False)
-                self._set(agent, at, "done", "バックグラウンド作業中" if busy else "完了", lastMessage=message)
+                self._set(agent, at, "done", i18n.tl("act.background") if busy else i18n.tl("status.done"), lastMessage=message)
                 self._until[agent["id"]] = (at + DONE_TO_IDLE_MS, "idle")
-            text = "停止（失敗）" if kind == "StopFailure" else "停止"
+            text = i18n.tl("ev.stop.failed") if kind == "StopFailure" else i18n.tl("ev.stop")
         elif kind == "CwdChanged" and cwd:
             self._move(session, cwd, at)
-            self._set(agent, at, "carry", f"移動 {tilde(cwd)}")
+            self._set(agent, at, "carry", i18n.tl("act.move", path=tilde(cwd)))
             self._until[agent["id"]] = (at + CARRY_MS, "idle")
-            text = f"移動 {tilde(cwd)}"
+            text = i18n.tl("act.move", path=tilde(cwd))
         elif kind in ("PreCompact", "PostCompact"):
-            self._set(agent, at, act="整理中" if kind == "PreCompact" else agent["act"])
-            text = "整理中" if kind == "PreCompact" else "整理完了"
+            self._set(agent, at, act=i18n.tl("act.compacting") if kind == "PreCompact" else agent["act"])
+            text = i18n.tl("act.compacting") if kind == "PreCompact" else i18n.tl("ev.compacted")
 
         event = {
             "at": at, "sessionId": sid, "agentId": agent["id"], "kind": kind, "cat": cat,
@@ -981,7 +986,7 @@ class World:
         self._dirty.add("tasks")
         agent = self.agents.get(session["id"])
         if touch_agent and agent and agent["state"] == "background":
-            self._set(agent, at, "idle", "待機")
+            self._set(agent, at, "idle", i18n.tl("status.idle"))
 
     def background_pids(self) -> dict[str, int]:
         """Sessions waiting on background work whose process is known: session id -> pid (the newest)."""
@@ -1078,11 +1083,11 @@ class World:
         lines = [attachment_line(a) for a in attached or []]
         full = "\n".join([text.rstrip(), *lines]).strip() if lines else text
         channel.inbox.append({"text": full, "at": at})
-        head = " ".join(text.split()) or f"添付 {len(lines)} 個"
+        head = " ".join(text.split()) or i18n.tl("ev.attachments", n=len(lines))
         head = head if len(head) <= PROMPT_HEAD else head[: PROMPT_HEAD - 1] + "…"
-        extra = f"（添付 {len(lines)} 個）" if lines and text.strip() else ""
+        extra = i18n.tl("ev.attachments.paren", n=len(lines)) if lines and text.strip() else ""
         self.state.add_event({"at": at, "sessionId": sid, "agentId": sid, "kind": "PromptSent", "cat": "perm",
-                              "text": f"ブラウザからプロンプトを送信 → {session['label']}「{head}」{extra}"})
+                              "text": i18n.tl("ev.prompt.sent", label=session['label'], head=head, extra=extra)})
         return None
 
     def prompt_refusal(self, sid: str) -> tuple[int, str] | None:
@@ -1165,7 +1170,7 @@ class World:
         if error is None:
             card = self.questions.cards[card_id]
             self.state.add_event({"at": at, "sessionId": card["sessionId"], "agentId": card["agentId"], "kind": "QuestionReleased",
-                                  "cat": "perm", "text": "質問をターミナルに返した（ブラウザでは答えない）"})
+                                  "cat": "perm", "text": i18n.tl("ev.question.released")})
             self._dirty.add("questions")
         return error
 
@@ -1178,7 +1183,7 @@ class World:
         if error is None:
             card = self.questions.cards[card_id]
             self.state.add_event({"at": at, "sessionId": card["sessionId"], "agentId": card["agentId"], "kind": "QuestionAnswered",
-                                  "cat": "perm", "text": f"ブラウザで質問に回答 {_question_summary(card)}"})
+                                  "cat": "perm", "text": i18n.tl("ev.question.answered", summary=_question_summary(card))})
             self._dirty.add("questions")
         return error
 
@@ -1186,10 +1191,10 @@ class World:
         error = self.perms.decide(perm_id, behavior, at, always, reason)
         if error is None:
             card = self.perms.perms[perm_id]
-            extra = "（今後も許可）" if card.get("sentRules") else "（理由つき）" if card.get("sentReason") else ""
+            extra = i18n.tl("ev.sent.always") if card.get("sentRules") else i18n.tl("ev.sent.reason") if card.get("sentReason") else ""
             self.state.add_event({
                 "at": at, "sessionId": card["sessionId"], "agentId": card["agentId"], "kind": "PermissionAnswered",
-                "cat": "perm", "text": f"ブラウザで{'許可' if behavior == 'allow' else '拒否'}を送信{extra} {card['summary']}",
+                "cat": "perm", "text": i18n.tl("ev.sent.allow" if behavior == "allow" else "ev.sent.deny", extra=extra, summary=card['summary']),
             })
             self._dirty.add("perms")
         return error
@@ -1350,9 +1355,9 @@ class World:
         ok = not failed and not robots.deletion_failed(output[-20_000:])
         label = robots.deletion_label(gone)
         agent["shred"] = {"at": at, "ok": ok, "label": label, "count": len(gone["targets"]), "folder": gone["folder"], "how": gone["how"]}
-        self._set(agent, at, act=robots._clip(f"シュレッダー {label}" if ok else f"削除できず {label}"))
+        self._set(agent, at, act=robots._clip(i18n.tl("act.shred", label=label) if ok else i18n.tl("act.shred.failed", label=label)))
         self._dirty.add("agents")
-        return f"{'削除' if ok else '削除できず'} {label}（{gone['how']}）"
+        return f"{i18n.tl('ev.deleted') if ok else i18n.tl('ev.not_deleted')} {i18n.tl('ev.deleted.how', label=label, how=gone['how'])}"
 
     def apply_saved_results(self, rows: list[dict]) -> None:
         """The rows of every saved result file (sources/test_results.py), replacing the previous scan.
@@ -1537,13 +1542,13 @@ class World:
                 # page drew it as idle (10-18 live check: every hookless session that worked looked asleep).
                 agent = self.agents.get(sid)
                 if agent and agent["state"] == "idle" and at - agent["updatedAt"] >= THINKING_AFTER_MS:
-                    agent["state"], agent["act"] = "thinking", "考え中"
+                    agent["state"], agent["act"] = "thinking", i18n.tl("status.thinking")
                     self._dirty.add("agents")
             else:
                 # No longer busy (a hookless session's status comes from `claude agents --json` only): stop thinking.
                 agent = self.agents.get(sid)
                 if agent and agent["state"] == "thinking":
-                    self._set(agent, at, "idle", "待機")
+                    self._set(agent, at, "idle", i18n.tl("status.idle"))
         self._background_cap(at)
         self._heavy(at)
 
