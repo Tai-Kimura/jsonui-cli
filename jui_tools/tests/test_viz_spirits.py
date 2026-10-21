@@ -175,3 +175,23 @@ def test_the_command_checks_a_model_folder_and_exits_1_when_it_is_broken(tmp_pat
     assert spirits.main([str(bad)]) == 1
     out = capsys.readouterr().out
     assert "OK  good" in out and "NG  bad" in out and "error: spirit.json spirit.at: 'tail' is not one of" in out
+
+
+@pytest.mark.parametrize("name", ["robot-a.glb/../x", "robot-a.glb\\x", "robot-a.glb.txt", "robot-a.glbx", "../robot-a.glb",
+                                  "/tmp/robot-a.glb"])
+def test_a_part_file_is_a_whole_name_in_the_folder_never_a_path(tmp_path, name):
+    """The page will fetch a part by this name: only robot-*.glb / prop-*.glb as a whole name, and a file whose name
+    merely starts like one is not a model file."""
+    folder = model(tmp_path, {"version": 1, "parts": [{"file": name}]},
+                   {"spirit.glb": glb(mesh_doc()), "robot-a.glb.txt": b"x", "robot-a.glbx": b"x"})
+    m = spirits.check_model(folder)
+    assert not m["ok"]
+    assert any(p.startswith("spirit.json parts[0].file: ") and "is not a robot-*.glb or prop-*.glb" in p for p in m["problems"]), m["problems"]
+    assert set(m["files"]) == {"spirit.glb"}
+    assert sorted(n.split(":")[0] for n in m["notes"]) == ["robot-a.glb.txt", "robot-a.glbx"]
+
+
+def test_the_triangle_limit_lets_exactly_the_limit_through(tmp_path):
+    assert spirits.summarize_glb(glb(mesh_doc(triangles=spirits.MAX_TRIANGLES)))["problems"] == []
+    m = spirits.check_model(model(tmp_path, None, {"spirit.glb": glb(mesh_doc(triangles=spirits.MAX_TRIANGLES))}))
+    assert m["ok"], m["problems"]
