@@ -1038,6 +1038,12 @@ def make_app(ctx: ServerContext) -> web.Application:
 _DATA_DOCS_POOL: list = []
 
 
+def close_pools() -> None:
+    """The server stopping: the data reads' pool lets its idle threads go, a read still running is not waited for."""
+    for pool in _DATA_DOCS_POOL:
+        pool.shutdown(wait=False, cancel_futures=True)
+
+
 def _data_docs_pool():
     """The data server's reads' own executor (2 threads), made on first use."""
     if not _DATA_DOCS_POOL:

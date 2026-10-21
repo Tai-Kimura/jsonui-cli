@@ -302,6 +302,106 @@ def test_serve_restarts_on_the_same_port_right_after_stop(home):
         again.communicate()
 
 
+# ---- TERM ends the server within 3 s, with code 0 (ticket 2026-10-21-jui-viz-serve-does-not-exit-on-term) ----------
+# A stop that waited for the slowest thing in the process: aiohttp's 60 s for a request still being handled, asyncio.run's
+# join of every executor job, a pool's job at the interpreter's exit, the talk index's step. Each case below holds one.
+
+TERM_WITHIN_SEC = 3
+#: nothing busy in the process: it ends without the helpers' grace (measured 0.05 s; the grace is 1 s)
+IDLE_WITHIN_SEC = 0.9
+#: a job that takes 20 s, put on one pool before serve starts (the code under test is not changed)
+SLOW_JOB = {
+    "the loop's executor (a shelf rescan)": (
+        "import time; from jui_cli.viz.sources import test_results as T; o = T.ResultShelf.scan; n = [0]\n"
+        "def slow(self):\n    n[0] += 1\n    if n[0] > 1: time.sleep(20)\n    return o(self)\nT.ResultShelf.scan = slow", 6),
+    "the talk index's step": (
+        "import time; from jui_cli.viz import talk as T; o = T.TalkHub._step\n"
+        "def slow(self, now):\n    time.sleep(20); return o(self, now)\nT.TalkHub._step = slow", 4),
+    "the price table's read": (
+        "import time; from jui_cli.viz import prices as P; o = P.PriceBook._load\n"
+        "def slow(self):\n    time.sleep(20); return o(self)\nP.PriceBook._load = slow", 2),
+}
+
+
+def _serve_as(home: Path, port: int, patch: str = "", claude_sleep: float = 0) -> subprocess.Popen:
+    """serve in a child with a stand-in `claude` first on PATH (its `agents --json` answers after claude_sleep s) and
+    patch run first; started once server.json is there."""
+    bin_dir = home / "stand-in-bin"
+    bin_dir.mkdir(exist_ok=True)
+    (bin_dir / "claude").write_text(f"#!/bin/sh\nsleep {claude_sleep}\necho '[]'\n")
+    (bin_dir / "claude").chmod(0o755)
+    code = (f"import sys; sys.argv = ['jui', 'viz', 'serve', '--port', '{port}']; sys.path.insert(0, {str(JUI.parents[1])!r}); "
+            + (f"exec({patch!r}); " if patch else "") + "from jui_cli.cli import main; sys.exit(main())")
+    env = dict(os.environ, HOME=str(home), PYTHONUNBUFFERED="1", PATH=f"{bin_dir}:{os.environ['PATH']}")
+    proc = subprocess.Popen([sys.executable, "-c", code], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        if paths.server_json().exists():
+            return proc
+        if proc.poll() is not None:
+            break
+        time.sleep(0.05)
+    proc.kill()
+    out, err = proc.communicate()
+    raise AssertionError(f"serve did not start: rc={proc.returncode}\n{out}\n{err}")
+
+
+def _term_ends_it(proc: subprocess.Popen) -> float:
+    """TERM; it must end with 0 within TERM_WITHIN_SEC, its files cleared. How long it took."""
+    start = time.monotonic()
+    proc.terminate()  # our own child
+    try:
+        rc = proc.wait(timeout=TERM_WITHIN_SEC)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.communicate()
+        raise AssertionError(f"TERM did not end serve within {TERM_WITHIN_SEC} s")
+    took = time.monotonic() - start
+    out, err = proc.communicate()
+    assert rc == 0, err
+    assert not paths.server_json().exists() and not paths.pid_file().exists()
+    return took
+
+
+def test_term_right_after_closed_connections_ends_it(home):
+    port = _free_port()
+    proc = _serve_as(home, port)
+    token = json.loads(paths.server_json().read_text())["token"]
+    for _ in range(3):
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/hook", data=b"{}", method="POST",
+                                     headers={"X-Jui-Viz-Token": token, "Connection": "close"})
+        with urllib.request.urlopen(req, timeout=5) as res:
+            assert res.status == 204
+    assert _term_ends_it(proc) < IDLE_WITHIN_SEC   # nothing busy: nothing waited for (the pools' idle threads go at once)
+
+
+def test_term_while_the_session_list_is_being_read_ends_it(home):
+    """`claude agents --json` still running (the stand-in answers after 30 s)."""
+    proc = _serve_as(home, _free_port(), claude_sleep=30)
+    time.sleep(1.5)
+    assert _term_ends_it(proc) < IDLE_WITHIN_SEC
+
+
+def test_term_while_a_hook_is_being_read_ends_it(home):
+    """A hook whose body is promised and not all sent: the request is still being handled."""
+    port = _free_port()
+    proc = _serve_as(home, port)
+    token = json.loads(paths.server_json().read_text())["token"]
+    with socket.create_connection(("127.0.0.1", port)) as held:
+        held.sendall((f"POST /hook HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nX-Jui-Viz-Token: {token}\r\n"
+                      "Content-Type: application/json\r\nContent-Length: 1000\r\n\r\n{").encode())
+        time.sleep(0.5)
+        _term_ends_it(proc)
+
+
+@pytest.mark.parametrize("where", list(SLOW_JOB))
+def test_term_while_a_pool_job_runs_ends_it(home, where):
+    patch, settle = SLOW_JOB[where]
+    proc = _serve_as(home, _free_port(), patch=patch)
+    time.sleep(settle)   # the slow job is under way
+    _term_ends_it(proc)
+
+
 def test_serve_refuses_a_port_another_process_listens_on_all_addresses(home):
     """0.0.0.0:<port> held elsewhere: with SO_REUSEADDR macOS would let us
     bind 127.0.0.1:<port> beside it, so serve must notice and stop."""

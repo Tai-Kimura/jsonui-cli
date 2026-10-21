@@ -1819,6 +1819,13 @@ class World:
             self._bills = kept
             self._dirty.add("bills")
 
+    def close_pools(self) -> None:
+        """The server stopping: each pool's idle thread goes now, a job still running is not waited for (the server
+        does not wait for it either; ticket 2026-10-21-jui-viz-serve-does-not-exit-on-term)."""
+        for pool in (self._prices_pool, self._data_docs_pool, self._infra_pool):
+            if pool is not None:
+                pool.shutdown(wait=False, cancel_futures=True)
+
     def poll_prices(self) -> bool:
         """The user's price table read again when it changed (in a worker thread of its own: never on the loop), and
         a model that is priced now no longer listed as unpriced. True when the table changed (serve logs the rows

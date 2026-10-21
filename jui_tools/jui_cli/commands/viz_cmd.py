@@ -29,6 +29,7 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 import webbrowser
 
@@ -606,7 +607,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
         return 1
     _leave_the_launch_folder()
     try:
-        return asyncio.run(_serve(
+        rc = _run_serve(_serve(
             config,
         open_browser=bool(getattr(args, "open", False)) or config.openBrowser,
         record=getattr(args, "record", None),
@@ -617,6 +618,60 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     finally:
         _clear_runtime_files(os.getpid())
         _legacy_mirror_clear(os.getpid())
+    _leave_without_the_helpers(rc)
+    return rc
+
+
+#: How long a stopped server waits for its helper threads (a pool's job still running) before it ends without them.
+HELPERS_GRACE_SEC = 1.0
+#: How long the server's own stop waits for a request still being handled (aiohttp waits 60 s by default).
+REQUEST_GRACE_SEC = 1.0
+
+
+def _run_serve(main) -> int:
+    """asyncio.run, but the loop's executor is not waited for when it closes: asyncio.run joins every job still
+    running there (a ps, a shelf scan, a git count), so one slow job held a TERM (ticket
+    2026-10-21-jui-viz-serve-does-not-exit-on-term). The tasks still pending are cancelled as asyncio.run does."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    loop = asyncio.new_event_loop()
+    pool = ThreadPoolExecutor(thread_name_prefix="jui-viz-serve")
+    loop.set_default_executor(pool)
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(main)
+    finally:
+        try:
+            pending = [t for t in asyncio.all_tasks(loop) if not t.done()]
+            for task in pending:
+                task.cancel()
+            if pending:
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+            asyncio.set_event_loop(None)
+            loop.close()
+
+
+def _leave_without_the_helpers(rc: int) -> None:
+    """The server is stopped and its files are cleared: a helper thread still busy (a pool's job: the prices' read,
+    the talk index's step, a data or infra read) gets HELPERS_GRACE_SEC, then the process ends without it, since the
+    interpreter's exit would join every pool's thread and hold a TERM for as long as the job runs. Each such job only
+    reads, or writes SQLite (which a stop mid-write leaves whole)."""
+    main = threading.main_thread()
+    deadline = time.monotonic() + HELPERS_GRACE_SEC
+    for thread in threading.enumerate():
+        if thread is not main and not thread.daemon:
+            thread.join(max(0.0, deadline - time.monotonic()))
+    busy = [t.name for t in threading.enumerate() if t is not main and not t.daemon and t.is_alive()]
+    if busy:
+        from ..viz.server import log
+
+        log(f"stopped; not waited for: {', '.join(sorted(busy))}")
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(rc)
 
 
 async def _serve(config, open_browser: bool, record: str | None = None, replay: str | None = None,
@@ -626,7 +681,7 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     from ..version import version_label
     from ..viz import hooks_installer, recorder, security
     from ..viz.ingest import World
-    from ..viz.server import ServerContext, log, make_app, quiet_aiohttp_logs, server_slice
+    from ..viz.server import ServerContext, close_pools, log, make_app, quiet_aiohttp_logs, server_slice
     from ..viz.sources import agents_cli, session_files
     from ..viz.state import VizState, now_ms
 
@@ -755,7 +810,7 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     if _someone_listens(port):
         _err(in_use)
         return 1
-    runner = web.AppRunner(make_app(ctx), access_log=None, handle_signals=False)
+    runner = web.AppRunner(make_app(ctx), access_log=None, handle_signals=False, shutdown_timeout=REQUEST_GRACE_SEC)
     await runner.setup()
     site = web.TCPSite(runner, "127.0.0.1", port, reuse_address=True)
     try:
@@ -803,7 +858,7 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
             lambda: talk_mod.TalkIndex(paths.viz_home() / "talk.db", claude_home() / "projects", paths.claude_sessions_dir(),
                                        int(config.talkGraceSec * 1000)),
             agents=lambda: world.agents, sessions=lambda: world.sessions)
-        reader_cleanup.append(lambda: loop.run_in_executor(None, ctx.talk.close))
+        reader_cleanup.append(lambda: loop.run_in_executor(None, ctx.talk.close, False))
 
         async def talk_loop() -> None:
             while True:
@@ -1106,6 +1161,8 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
         if rec is not None:
             rec.close()
         await runner.cleanup()
+        world.close_pools()
+        close_pools()
         _clear_runtime_files(pid)
     return 0
 

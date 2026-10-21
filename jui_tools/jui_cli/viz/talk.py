@@ -975,9 +975,11 @@ class TalkHub:
                     self.frames.append((other, {"type": "talk.update", "agentId": owner, "ops": [{"op": "conv", "conv": conv}]}))
             self._set_badges(badges)          # sent by the push loop to every socket
 
-    def close(self) -> None:
+    def close(self, wait: bool = True) -> None:
+        """The index closed after the step under way. wait=False (the server stopping): queued, not waited for — a
+        step still running must not hold a TERM (ticket 2026-10-21-jui-viz-serve-does-not-exit-on-term)."""
         self.closed = True
         index = self.index
         if index is not None:
             self.pool.submit(index.close)
-        self.pool.shutdown(wait=True, cancel_futures=False)
+        self.pool.shutdown(wait=wait, cancel_futures=False)
