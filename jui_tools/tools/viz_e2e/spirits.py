@@ -258,16 +258,36 @@ async def run_spirits(pw, out, failures):
         await wait(frames, "(ls) => ls.every((l) => { const s = window.__dbg.spirit(l); return s && !s.phase; })",
                    arg=list(who.values()), label="no spirit before the frames are measured")
         cost = {}
+        # the fair base: four robots busy with an ordinary tool, no skill (a Skill call is a tool call: its robot works)
+        for i in range(1, 5):
+            hook(f"r{i}", hook_event_name="PreToolUse", tool_name="Read", tool_input={"file_path": f"{CWD}/a.py"},
+                 tool_use_id=f"busy{i}")
+        await frames.wait_for_timeout(1500)
+        cost["0, four busy"] = {**await frames.evaluate("() => window.__frameCost.sample(3000)"),
+                                **await frames.evaluate("() => window.__dbg.mainDraw()")}
+        for i in range(1, 5):
+            hook(f"r{i}", hook_event_name="Stop")
+        await frames.wait_for_timeout(1500)
         for n in range(0, 5):
             if n:
                 skill(f"r{n}", "code-review", f"f{n}")
                 await wait(frames, "(l) => { const s = window.__dbg.spirit(l); return s && s.phase === 'shown'; }",
                            arg=who[f"r{n}"], timeout=30000, label=f"{n} spirits standing")
             await frames.wait_for_timeout(500)
-            cost[n] = await frames.evaluate("() => window.__frameCost.sample(3000)")
+            cost[str(n)] = {**await frames.evaluate("() => window.__frameCost.sample(3000)"),
+                       **await frames.evaluate("() => window.__dbg.mainDraw()")}
+        # what the four cost: their figures hidden (parts and effects kept), then their effects hidden too
+        for label, js in (("4, figures hidden", "() => window.__dbg.spiritHide('figure')"),
+                          ("4, figures and effects hidden", "() => window.__dbg.spiritHide('all')"),
+                          ("4, and the badges and bubbles hidden", "() => window.__dbg.spiritHide('dom')")):
+            await frames.evaluate(js)
+            await frames.wait_for_timeout(300)
+            cost[label] = {**await frames.evaluate("() => window.__frameCost.sample(3000)"),
+                           **await frames.evaluate("() => window.__dbg.mainDraw()")}
+        await frames.evaluate("() => window.__dbg.spiritHide(null)")
         res["frameCost"] = cost
-        print(f"  spirits frame cost (ms: work mean / p95, interval mean): "
-              + ", ".join(f"{n}: {c['workMean']} / {c['workP95']}, {c['gapMean']}" for n, c in cost.items()), flush=True)
+        print(f"  spirits frame cost (ms: work mean / p95, interval mean; draw calls): "
+              + ", ".join(f"{n}: {c['workMean']} / {c['workP95']}, {c['gapMean']}; {c['calls']}" for n, c in cost.items()), flush=True)
         await frames.close()
         for k in ("r1", "r2", "r3", "r4"):
             hook(k, hook_event_name="Stop")

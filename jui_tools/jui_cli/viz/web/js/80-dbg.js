@@ -429,6 +429,8 @@ window.__dbg = {
         target: S.bubbleEl.dataset.target } : null };
   },
   spiritsStanding: () => robots.filter((x) => x.spirit && x.spirit.figure).length,
+  mainDraw: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles }),   // the last frame's
+  spiritHide: (what) => { SPIRIT.hide = what || null; },   // the frame-cost samples: what to leave out (45-spirits.js)
   projectName: (id) => (PROJECT[id] ? PROJECT[id].name : null),
   // where a robot stands in the 3D (the room under it) and whether it is still walking
   robotAt: (id) => { const R = robots.find((x) => x.def.id === id); if (!R) return null; const q = R.robot.root.position;

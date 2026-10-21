@@ -8,7 +8,11 @@
    SPIRIT.maxShown spirits stand at once; a robot past them still wears the parts. With reduced motion the spirit
    stands still. The badge "スキル使用中: <名>" shows by the tag with or without a model. */
 // minPx: a robot drawn shorter than this on screen (a floor seen from far) shows no spirit or effects, only its parts
-const SPIRIT = { maxShown: 4, fadeMs: 700, listMs: 60_000, bubbleSec: 4, back: [0, 0, -0.9], minPx: 48, gap: 4 };
+// fullFx: the spirits nearest the camera that also draw their outline, afterimages and glow (measured 10-22 in the e2e's
+// software GL: four spirits made the frames 57 % longer, about 54 draws a spirit, each mesh drawn twice — the figure
+// and its outline — and each afterimage a whole figure again); the rest keep the figure, the aura and the sparks
+// hide: null; the e2e's frame-cost samples set it (80-dbg.js spiritHide) to 'figure', 'all' or 'dom' to see what each costs
+const SPIRIT = { maxShown: 4, fadeMs: 700, listMs: 60_000, bubbleSec: 4, back: [0, 0, -0.9], minPx: 48, gap: 4, fullFx: 2, hide: null };
 const SPIRITS = { list: null, listedAt: 0, asking: null, models: new Map() };
 /* The anchors spirit.json names (spirits.ANCHORS), as points of the robot's parts (10-robot-core.js createRobot). */
 const SPIRIT_ANCHORS = {
@@ -129,6 +133,7 @@ function spiritTick(R, st, nowSec, dt) {
   const skill = SOURCE.mode === 'live' && has3D && st.skill ? st.skill : null;
   const key = skill ? `${skill.name}@${skill.since}` : null;
   spiritBadge(R, skill);
+  if (SPIRIT.hide === 'dom' && R.skillEl) R.skillEl.hidden = true;
   const S = R.spirit;
   if (S && S.key !== key) {   // the skill ended (or another began): leave, then come off
     if (S.phase !== 'leave') { S.phase = 'leave'; S.phaseAt = vizNow(); spiritClip(S, 'leave'); }
@@ -150,9 +155,10 @@ function spiritTick(R, st, nowSec, dt) {
   if (T.phase === 'appear' && k >= 1) { T.phase = 'shown'; spiritClip(T, 'loop'); }
   const near = !TOWER.on && spiritNear(R);   // the building, or a floor seen from far: the spirit and its effects rest
   T.near = near;
-  if (T.figure) { spiritFade(T.figure, reduceMotion ? 1 : k); T.figure.visible = near; }
+  const hide = SPIRIT.hide;   // the e2e's frame-cost samples only: 'figure' the figures out, 'all' the effects too, 'dom' the DOM too
+  if (T.figure) { spiritFade(T.figure, reduceMotion ? 1 : k); T.figure.visible = near && !hide; }
   if (T.ghost) T.ghost.uniforms.uY0.value = R.robot.root.position.y;   // the downward fade from the robot's floor
-  if (T.fx) { T.fx.group.visible = near; if (near) spiritFxTick(R, T, dt, reduceMotion ? 1 : k); }
+  if (T.fx) { T.fx.group.visible = near && !hide; if (near) spiritFxTick(R, T, dt, reduceMotion ? 1 : k); }
   spiritBubble(R, T);
 }
 async function spiritWear(R, S) {
@@ -248,7 +254,7 @@ function spiritBubble(R, S) {
     tagsEl.appendChild(el);
     S.bubbleEl = el;
   }
-  S.bubbleEl.hidden = !S.near;   // placed with the others after the tags (spiritPlaceBubbles)
+  S.bubbleEl.hidden = !S.near || SPIRIT.hide === 'dom';   // placed with the others after the tags (spiritPlaceBubbles)
 }
 /* The point a bubble aimed at the spirit points at: its "bubbleAnchor" node, else the top middle of the figure. */
 function spiritHead(R, S) {
@@ -319,10 +325,10 @@ function spiritOutline(object, spec) {
     sh.uniforms.uWidth = { value: Number(o.width) };
     sh.vertexShader = 'uniform float uWidth;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  transformed += normal * uWidth;');
   };
-  mat.userData.base = 1;
+  mat.userData.base = 1; mat.userData.outline = true;
   const meshes = []; object.traverse((x) => { if (x.isMesh) meshes.push(x); });
   for (const mesh of meshes) {
-    const shell = mesh.clone(false); shell.material = mat; shell.renderOrder = 1;
+    const shell = mesh.clone(false); shell.material = mat; shell.renderOrder = 1; shell.userData.spiritOutline = true;
     mesh.parent.add(shell);
   }
 }
@@ -396,6 +402,8 @@ function spiritFxStart(R, S, gltfs) {
     const n = fx.afterimage.count || 2, spread = fx.afterimage.spreadDeg ?? 12;
     for (let i = 1; i <= n; i++) {
       const c = SkeletonUtils.clone(S.figure);
+      const shells = []; c.traverse((o) => { if (o.isMesh && o.material.userData && o.material.userData.outline) shells.push(o); });
+      for (const o of shells) o.parent.remove(o);   // a faint copy draws no outline
       c.traverse((o) => { if (o.isMesh) o.material = [].concat(o.material).map((m) => { const x = m.clone(); if (x.uniforms) x.uniforms = THREE.UniformsUtils.clone(m.uniforms); return x; })[0]; });
       c.rotation.y = THREE.MathUtils.degToRad(spread * (i % 2 ? i : -i) / 2);
       S.figure.parent.add(c);
@@ -507,4 +515,20 @@ function spiritPlaceBubbles() {
     it.el.style.visibility = 'visible';
     it.el.style.transform = `translate(${it.x.toFixed(1)}px, ${bottom.toFixed(1)}px) translate(-50%, -100%)`;
   }
+}
+
+/* Which spirits draw everything: the SPIRIT.fullFx nearest the camera keep their outline, afterimages and glow, the
+   others leave them off (once a frame, after the tags: 40-scene.js). */
+const spiritCam = new THREE.Vector3();
+function spiritLod() {
+  const standing = robots.filter((R) => R.spirit && R.spirit.fx && R.spirit.figure);
+  standing.sort((a, b) => camera.position.distanceToSquared(a.robot.root.getWorldPosition(spiritCam))
+    - camera.position.distanceToSquared(b.robot.root.getWorldPosition(spiritCam)));
+  standing.forEach((R, i) => {
+    const full = i < SPIRIT.fullFx, F = R.spirit.fx;
+    for (const cl of F.clones) cl.c.visible = full;
+    if (F.glow) F.glow.visible = full;
+    if (R.spirit.full !== full) R.spirit.figure.traverse((o) => { if (o.userData.spiritOutline) o.visible = full; });   // the outline too
+    R.spirit.full = full;
+  });
 }

@@ -3067,6 +3067,7 @@ function update3D(model, nowSec, dt) {
   tagsEl.hidden = zoom.zoomed || TOWER.on;
   placeRobotTags(dt);
   spiritPlaceBubbles();   // 45-spirits.js: the bubbles aimed at spirits, kept off the tags and each other
+  spiritLod();           // 45-spirits.js: the nearest spirits draw their afterimages and glow, the rest leave them off
   for (const rt of roomTags) { placeTag(rt.el, rt.p); rt.el.classList.toggle('on', UI.project === rt.id); }
   if (trayTag) placeTag(trayTag.el, trayTag.p);   // the demo's document tray
 }
