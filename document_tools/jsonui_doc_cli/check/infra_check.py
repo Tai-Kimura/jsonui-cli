@@ -188,6 +188,15 @@ def _node(found, address, provider, mapping, source, type_, spec=None):
                       "type": type_, "spec": spec or []})
 
 
+def _quiet(found, address, provider, type_, source, mapping=None, spec=None):
+    """A part of another resource, or a type with no mapping: no node of its own and never asked for, but there — a
+    declared node that names it is found, not said missing (ticket doc-infra-iac-runtask-task-definition-is-a-part).
+    mapping: a STANDALONE_PARTS type's (an ECS task definition), whose category is then compared; else none is."""
+    cat, svc = mapping or (None, None)
+    found.append({"address": address, "provider": provider, "category": cat, "service": svc, "source": source,
+                  "type": type_, "spec": spec or [], "quiet": True})
+
+
 def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
     """Resources the project's IaC declares: {address, provider, category, service, source}, and what could not be
     read, per provider ("*" when the provider cannot be told)."""
@@ -254,11 +263,13 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
                 if provider is None:
                     continue
                 file_providers.add(provider)
-                if m == "part":
-                    part(provider)
-                    continue
-                if m is None:
-                    unmapped.setdefault(provider, set()).add(t)
+                if m == "part" or m is None:
+                    if m == "part":
+                        part(provider)
+                    else:
+                        unmapped.setdefault(provider, set()).add(t)
+                    sm = T.standalone(t)
+                    _quiet(found, T.tf_address(t, n), provider, t, rel, sm, T.tf_spec(body) if sm else None)
                     continue
                 _node(found, T.tf_address(t, n), provider, m, rel, t, T.tf_spec(body))
             if kind == "terraform_json":
@@ -279,11 +290,12 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
         elif kind == "bicep":
             for sym, t in re.findall(r"^\s*resource\s+([A-Za-z_][A-Za-z0-9_]*)\s+'([^'@]+)@", text, re.M):
                 m = T.bicep_mapping(t)
-                if m == "part":
-                    part("azure")
-                    continue
-                if m is None:
-                    unmapped.setdefault("azure", set()).add(t)
+                if m == "part" or m is None:
+                    if m == "part":
+                        part("azure")
+                    else:
+                        unmapped.setdefault("azure", set()).add(t)
+                    _quiet(found, T.bicep_address(sym), "azure", t, rel)
                     continue
                 _node(found, T.bicep_address(sym), "azure", m, rel, t)
         elif kind == "wrangler":
@@ -332,11 +344,13 @@ def _cfn(p, rel, text, y, found, note, unmapped, part):
         if not isinstance(t, str):
             continue
         m = T.cfn_mapping(t)
-        if m == "part":
-            part("aws")
-            continue
-        if m is None:
-            unmapped.setdefault("aws", set()).add(t)
+        if m == "part" or m is None:
+            if m == "part":
+                part("aws")
+            else:
+                unmapped.setdefault("aws", set()).add(t)
+            sm = T.standalone(t)
+            _quiet(found, T.cfn_address(logical), "aws", t, rel, sm, T.cfn_spec(res.get("Properties")) if sm else None)
             continue
         _node(found, T.cfn_address(logical), "aws", m, rel, t, T.cfn_spec(res.get("Properties")))
 
@@ -361,11 +375,12 @@ def _k8s(rel, text, y, found, note, unmapped, part):
         if not isinstance(kind, str) or not isinstance(name, str):
             continue
         m = T.k8s_mapping(kind, d.get("spec") if isinstance(d.get("spec"), dict) else None)
-        if m == "part":
-            part("kubernetes")
-            continue
-        if m is None:
-            unmapped.setdefault("kubernetes", set()).add(kind)
+        if m == "part" or m is None:
+            if m == "part":
+                part("kubernetes")
+            else:
+                unmapped.setdefault("kubernetes", set()).add(kind)
+            _quiet(found, T.k8s_address(kind, name), "kubernetes", kind, rel)
             continue
         _node(found, T.k8s_address(kind, name), "kubernetes", m, rel, kind)
     if "{{" in text:
@@ -515,9 +530,20 @@ def run_infra_iac(decl, project_root: Path) -> CheckReport:
             results.append(ResultItem(target, "skipped", "metadata", message=f"no IaC read for {provider}"))
             continue
         hit = [f for f in by_provider[provider] for a in n["iac"] if T.matches(a, f["address"])]
-        if hit:
+        cats = {f["category"] for f in hit if f["category"]}
+        if hit and not cats:
+            # only parts or types with no mapping: there, which is all that is compared
             claimed.update(f["address"] for f in hit)
-            cats = {f["category"] for f in hit}
+            types = ", ".join(sorted({f["type"] for f in hit}))
+            results.append(ResultItem(target, "ok", "metadata", actual=types,
+                                      message=f"found as {types} (a part of another resource, or a type with no "
+                                              "category): its category is not compared"))
+            why = "nodes found as a part or an unmapped type: there, their category not compared"
+            if why not in unverified.setdefault(provider, []):
+                unverified[provider].append(why)
+            spec_uncompared += len(n.get("spec") or [])
+        elif hit:
+            claimed.update(f["address"] for f in hit)
             if n["category"] in cats:
                 results.append(ResultItem(target, "ok", "metadata"))
             else:
@@ -538,7 +564,7 @@ def run_infra_iac(decl, project_root: Path) -> CheckReport:
             "reference, or a key iac_tables.TF_SPEC / CFN_SPEC does not know)")
     folded_quiet = 0
     for f in found:
-        if f["address"] in claimed:
+        if f["address"] in claimed or f.get("quiet"):     # a part, an unmapped type: never asked for
             continue
         if T.optional(f["category"]):          # IAM, policy, alarm: compared when declared, not asked for
             folded_quiet += 1

@@ -820,3 +820,103 @@ def test_an_ignored_folder_not_in_the_list_is_not_read(tmp_path, folder):
     from jsonui_doc_cli.infra import seed as S
     model, _report = S.draft(root)
     assert "OutQueue" not in json.dumps(model["nodes"])
+
+
+# ---------------------------------------------------------------- a resource seen only as a part (ticket doc-infra-iac-runtask-task-definition-is-a-part)
+
+BATCH_TF = '''resource "aws_ecs_cluster" "main" {}
+resource "aws_ecs_task_definition" "batch" {
+  family = "batch"
+  cpu    = "256"
+}
+resource "aws_cloudwatch_event_rule" "nightly" {
+  schedule_expression = "cron(0 3 * * ? *)"
+}
+resource "aws_cloudwatch_event_target" "run_batch" {
+  rule = aws_cloudwatch_event_rule.nightly.name
+  ecs_target {
+    task_definition_arn = aws_ecs_task_definition.batch.arn
+  }
+}
+'''
+BATCH_NODES = [
+    {"id": "batch-dev", "category": "compute.container", "provider": "aws", "iac": ["module.ecs.aws_ecs_task_definition.batch"]},
+    {"id": "batch-prod", "category": "compute.container", "provider": "aws", "iac": ["module.ecs.aws_ecs_task_definition.batch"]},
+    {"id": "nightly", "category": "scheduler", "provider": "aws", "iac": ["module.ecs.aws_cloudwatch_event_rule.nightly"]},
+]
+
+
+def test_a_batch_run_by_runtask_is_found_by_its_task_definition(tmp_path):
+    """No ECS service: the task definition is the batch's only IaC. v2.3.16 dropped it as a part and said batch-dev
+    and batch-prod "declared, but no such resource" (a false red with gate); it is compared now, category and all."""
+    _r, rep = _mini(tmp_path, {"infrastructure/terraform/modules/ecs/main.tf": BATCH_TF}, BATCH_NODES)
+    got = _by_target(rep)
+    assert got["aws/batch-dev"].status == "ok" and got["aws/batch-prod"].status == "ok"
+    assert got["aws/nightly"].status == "ok"
+    wrong = [dict(BATCH_NODES[0], id="batch-db", category="database.relational")]
+    _r, rep = _mini(tmp_path / "w", {"m/main.tf": BATCH_TF}, wrong)
+    assert _by_target(rep)["aws/batch-db"].status == "mismatch"          # its category is compared
+
+
+def test_a_task_definition_nothing_declares_is_still_a_quiet_part(tmp_path):
+    """Not asked for: an undeclared task definition, event target, unmapped type or ConfigMap is no missing_in_doc."""
+    files = {"m/main.tf": BATCH_TF + 'resource "aws_batch_job_definition" "j" {}\n',
+             "k8s/cm.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cfg\n"}
+    _r, rep = _mini(tmp_path, files, [BATCH_NODES[2]])
+    assert [r.target for r in rep.results if r.status == "missing_in_doc"] == []
+
+
+@pytest.mark.parametrize("address, typ", [
+    ("aws_cloudwatch_event_target.run_batch", "aws_cloudwatch_event_target"),     # a target with no Lambda
+    ("aws_batch_job_definition.j", "aws_batch_job_definition"),                   # a type with no mapping
+    ("ConfigMap/cfg", "ConfigMap"),                                                # a Kubernetes part
+    ("Def", "AWS::IAM::Policy"),                                                   # mapped: not this path
+])
+def test_a_node_naming_a_part_or_an_unmapped_type_is_found_its_category_not_compared(tmp_path, address, typ):
+    """The family: whatever the IaC has is there. A declared node naming a part or an unmapped type is found, not
+    "no such resource"; its category, which the IaC does not give, is said not compared."""
+    files = {"m/main.tf": BATCH_TF + 'resource "aws_batch_job_definition" "j" {}\n',
+             "k8s/cm.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cfg\n",
+             "template.yaml": "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  Def:\n    Type: AWS::IAM::Policy\n"}
+    provider = "kubernetes" if typ == "ConfigMap" else "aws"
+    _r, rep = _mini(tmp_path, files, [{"id": "n", "category": "queue", "provider": provider, "iac": [address]}])
+    item = _by_target(rep)[f"{provider}/n"]
+    if typ == "AWS::IAM::Policy":
+        assert item.status == "mismatch"                    # a mapped type's category is still compared
+        return
+    assert item.status == "ok" and "category is not compared" in item.message and typ in item.message
+    assert any("category not compared" in w for w in rep.target_extra["unverified"][provider])
+
+
+CFN_BATCH = json.dumps({"AWSTemplateFormatVersion": "2010-09-09", "Resources": {
+    "BatchTask": {"Type": "AWS::ECS::TaskDefinition", "Properties": {"Cpu": "256"}},
+    "WebTask": {"Type": "AWS::ECS::TaskDefinition", "Properties": {"Cpu": "512"}},
+    "Web": {"Type": "AWS::ECS::Service", "Properties": {"TaskDefinition": {"Ref": "WebTask"}}}}})
+TF_WEB = '''resource "aws_ecs_task_definition" "web" {}
+resource "aws_ecs_service" "web" {
+  task_definition = aws_ecs_task_definition.web.arn
+}
+'''
+
+
+@pytest.mark.parametrize("files, batch, web_task", [
+    ({"infra/main.tf": BATCH_TF + TF_WEB}, "aws_ecs_task_definition.batch", "aws_ecs_task_definition.web"),
+    ({"stack.template.json": CFN_BATCH}, "BatchTask", "WebTask"),
+])
+def test_seed_draws_a_task_definition_no_service_names_and_check_reads_the_draft_clean(tmp_path, files, batch, web_task):
+    """Seed draws the batch's task definition (no service names it) as compute.container and leaves a service's own
+    task definition a part; the draft taken as it is compares clean with check."""
+    root = tmp_path / "room"
+    for rel, text in files.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text)
+    from jsonui_doc_cli.infra import seed as S
+    doc, _report = S.draft(root)
+    by_iac = {a: n for n in doc["nodes"] for a in n.get("iac", [])}
+    assert by_iac[batch]["category"] == "compute.container"
+    assert web_task not in by_iac
+    (root / "docs" / "infra").mkdir(parents=True)
+    (root / "docs" / "infra" / "draft.json").write_text(json.dumps(doc))
+    from types import SimpleNamespace
+    results = C.run_infra_iac(SimpleNamespace(gate=False, ignore_types=[]), root).results
+    assert [(r.target, r.status, r.message) for r in results if r.status not in ("ok", "skipped")] == []

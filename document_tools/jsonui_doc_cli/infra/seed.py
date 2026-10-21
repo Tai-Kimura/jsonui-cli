@@ -622,6 +622,8 @@ def seed_terraform(d: Draft, files: list[tuple[str, str, str]]) -> None:
     kinds: dict[tuple, str] = {}
     # groups first (their parents are groups), then nodes
     ordered = sorted(resources, key=lambda r: _group_order(T.tf_mapping(r.type)))
+    # the STANDALONE_PARTS a drawn resource of this folder takes (a service's task definition): those stay parts
+    taken = {(r.dir, rt, rn) for r in resources for rt, rn in r.refs if rt in T.takes_as_part(r.type)}
     for r in ordered:
         prov = T.tf_provider(r.type)
         if prov is None:
@@ -631,6 +633,8 @@ def seed_terraform(d: Draft, files: list[tuple[str, str, str]]) -> None:
             prov = "(unknown)"
         addr = T.tf_address(r.type, r.name)
         mapped = T.tf_mapping(r.type)
+        if mapped == "part" and T.standalone(r.type) and (r.dir, r.type, r.name) not in taken:
+            mapped = T.standalone(r.type)     # a task definition no service names: a batch, its only IaC
         if mapped == "part":
             d.part(prov, r.type)
             continue
@@ -864,6 +868,10 @@ def seed_cfn(d: Draft, rel: str, resources: dict, text: str, source: str = "clou
     order = sorted(resources.items(),
                    key=lambda kv: _group_order(T.cfn_mapping(str((kv[1] if isinstance(kv[1], dict) else {}).get("Type") or ""))))
     refs_of = {}
+    taken: set = set()      # the STANDALONE_PARTS a drawn resource takes (a service's task definition): parts
+    for _lid, res in resources.items():
+        if isinstance(res, dict) and T.takes_as_part(str(res.get("Type") or "")):
+            _cfn_refs(res.get("Properties"), taken)
     for lid, res in order:
         res = res if isinstance(res, dict) else {}
         typ = str(res.get("Type") or "")
@@ -873,6 +881,8 @@ def seed_cfn(d: Draft, rel: str, resources: dict, text: str, source: str = "clou
         refs.update([dep] if isinstance(dep, str) else [x for x in (dep or []) if isinstance(x, str)])
         refs_of[lid] = refs
         mapped = T.cfn_mapping(typ)
+        if mapped == "part" and T.standalone(typ) and lid not in taken:
+            mapped = T.standalone(typ)        # a task definition no service names: a batch, its only IaC
         if mapped == "part":
             d.part("aws", typ)
             continue

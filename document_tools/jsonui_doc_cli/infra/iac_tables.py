@@ -325,6 +325,29 @@ def tf_provider(type_: str) -> str | None:
     return TF_PROVIDER.get(prefix, prefix)
 
 
+# A part that is a resource of its own when nothing drawn takes it (ticket doc-infra-iac-runtask-task-definition-is-a-part):
+# a closed list, each with the mapping it then has and the types that take it as their part. An ECS task definition no
+# service names is a batch run by RunTask, an EventBridge or Scheduler target, a Step Functions ecs:runTask state: the
+# only IaC that batch has. (An EventBridge target is a link, not a body: what it points at has its own type. A Step
+# Functions task lives in the state machine, which is mapped. A Batch / Glue / Container Apps job has no mapping yet:
+# unmapped, not a part; a node naming one is still found by check, its category not compared.)
+STANDALONE_PARTS: dict[str, tuple[tuple[str, str], frozenset[str]]] = {
+    "aws_ecs_task_definition": (("compute.container", "ecs"), frozenset({"aws_ecs_service"})),
+    "AWS::ECS::TaskDefinition": (("compute.container", "ecs"), frozenset({"AWS::ECS::Service"})),
+}
+
+
+def standalone(type_: str) -> tuple[str, str] | None:
+    """The mapping a STANDALONE_PARTS type has when nothing drawn takes it, else None."""
+    got = STANDALONE_PARTS.get(type_)
+    return got[0] if got else None
+
+
+def takes_as_part(type_: str) -> frozenset[str]:
+    """The STANDALONE_PARTS types a resource of this type takes as its part (an ECS service: its task definition)."""
+    return frozenset(t for t, (_m, owners) in STANDALONE_PARTS.items() if type_ in owners)
+
+
 def tf_mapping(type_: str):
     """(category, service), "part", or None (no mapping)."""
     if type_ in TF_TYPES:
