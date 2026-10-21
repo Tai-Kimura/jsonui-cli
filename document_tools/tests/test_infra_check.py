@@ -870,6 +870,8 @@ def test_a_task_definition_nothing_declares_is_still_a_quiet_part(tmp_path):
     ("aws_cloudwatch_event_target.run_batch", "aws_cloudwatch_event_target"),     # a target with no Lambda
     ("aws_batch_job_definition.j", "aws_batch_job_definition"),                   # a type with no mapping
     ("ConfigMap/cfg", "ConfigMap"),                                                # a Kubernetes part
+    ("plan", "Microsoft.Web/serverfarms"),                                         # a Bicep part
+    ("job", "Microsoft.App/jobs"),                                                 # a Bicep type with no mapping
     ("Def", "AWS::IAM::Policy"),                                                   # mapped: not this path
 ])
 def test_a_node_naming_a_part_or_an_unmapped_type_is_found_its_category_not_compared(tmp_path, address, typ):
@@ -877,8 +879,10 @@ def test_a_node_naming_a_part_or_an_unmapped_type_is_found_its_category_not_comp
     "no such resource"; its category, which the IaC does not give, is said not compared."""
     files = {"m/main.tf": BATCH_TF + 'resource "aws_batch_job_definition" "j" {}\n',
              "k8s/cm.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cfg\n",
-             "template.yaml": "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  Def:\n    Type: AWS::IAM::Policy\n"}
-    provider = "kubernetes" if typ == "ConfigMap" else "aws"
+             "template.yaml": "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  Def:\n    Type: AWS::IAM::Policy\n",
+             "azure/main.bicep": "resource plan 'Microsoft.Web/serverfarms@2022-03-01' = {\n}\n"
+                                 "resource job 'Microsoft.App/jobs@2023-05-01' = {\n}\n"}
+    provider = {"ConfigMap": "kubernetes", "Microsoft.Web/serverfarms": "azure", "Microsoft.App/jobs": "azure"}.get(typ, "aws")
     _r, rep = _mini(tmp_path, files, [{"id": "n", "category": "queue", "provider": provider, "iac": [address]}])
     item = _by_target(rep)[f"{provider}/n"]
     if typ == "AWS::IAM::Policy":
@@ -920,3 +924,14 @@ def test_seed_draws_a_task_definition_no_service_names_and_check_reads_the_draft
     from types import SimpleNamespace
     results = C.run_infra_iac(SimpleNamespace(gate=False, ignore_types=[]), root).results
     assert [(r.target, r.status, r.message) for r in results if r.status not in ("ok", "skipped")] == []
+
+
+def test_a_part_found_by_name_leaves_its_declared_spec_counted_as_not_compared(tmp_path):
+    """The IaC gives a part no value check reads: a node naming one with two spec values has both counted as not
+    compared, not dropped from the count."""
+    spec = [{"key": "cpu", "value": "256"}, {"key": "memory", "value": "512"}]
+    _r, rep = _mini(tmp_path, {"m/main.tf": BATCH_TF},
+                    [{"id": "t", "category": "queue", "provider": "aws", "iac": ["aws_cloudwatch_event_target.run_batch"],
+                      "spec": spec}])
+    assert _by_target(rep)["aws/t"].status == "ok"
+    assert any(w.startswith("2 declared spec value(s) not compared") for w in rep.target_extra["unverified"]["*"])
