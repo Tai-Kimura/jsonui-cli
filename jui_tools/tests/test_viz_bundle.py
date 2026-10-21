@@ -178,7 +178,7 @@ BUILDERS = {
     "50-panel.js": {
         "roleVar", "robotWho", "actAttr", "chipCls", "wfElement", "li", "tr", "projectTag", "rowHTML", "noteHTML",
         "permButtons", "permButtonsLive", "permButtonsDemo", "permBox", "permDetail", "permDetailLive", "permDetailDemo",
-        "permSubject", "permSubjectLive", "sentWhat", "livePermHow", "rawDetails", "suggestionHTML", "recentHTML",
+        "permSubject", "permSubjectLive", "livePermHow", "rawDetails", "suggestionHTML", "recentHTML",
         "liveTestsHTML", "questionHTML", "robotTestsHTML", "robotRunHTML",
         "histOffHTML",   # 2.3.12: × on an answered card under the history (ticket 2026-10-21-jui-viz-hist-answered-card-dismiss-and-expand)
         "transitionTag", "typeCell",   # 2.3.5: a transition's tag and a type's cell (their templates are checked here too)
@@ -996,14 +996,21 @@ def test_every_once_a_second_roll_goes_through_rolls_due():
 
 
 def test_the_flow_player_s_words_and_marks_are_the_schema_s():
-    """59-sr-flows.js shows each action's and each trigger's mark and verb; they are the infra model schema's x-icon and
-    x-label (document_tools' infra-model.v0.schema.json), so a word added or changed there is red here until the page
-    says it too."""
+    """59-sr-flows.js shows each action's and each trigger's mark and verb: the mark is the infra model schema's x-icon
+    (document_tools' infra-model.v0.schema.json) as written, the verb a key of the words' table whose Japanese is the
+    schema's x-label letter for letter, and English has the key too. So a word added or changed there is red here
+    until the page and the table say it too."""
     schema = json.loads((Path(__file__).resolve().parents[2] / "document_tools" / "jsonui_doc_cli" / "infra"
                          / "infra-model.v0.schema.json").read_text(encoding="utf-8"))
     page = web_text("js", "59-sr-flows.js")
+    ja, en = (json.loads(web_text("i18n", f"{lang}.json")) for lang in ("ja", "en"))
     for const, name in (("SR_ACTIONS", "action"), ("SR_TRIGGERS", "trigger")):
-        table = json.loads(re.search(rf"^const {const} = (\{{.*\}});$", page, re.M).group(1))
+        line = re.search(rf"^const {const} = \{{ (.*) \}};$", page, re.M).group(1)
+        rows = re.findall(r"(\w+): \['([^']*)', tl\('([\w.]+)'\)\]", line)
+        assert len(rows) == line.count("tl("), const                                  # every entry read
+        table = {k: (mark, key) for k, mark, key in rows}
         d = schema["$defs"][name]
         assert set(table) == set(d["enum"]), const
-        assert {k: v for k, v in table.items()} == {k: [d["x-icon"][k], d["x-label"][k]] for k in d["enum"]}, const
+        assert {k: mark for k, (mark, _) in table.items()} == {k: d["x-icon"][k] for k in d["enum"]}, const
+        assert {k: ja.get(key) for k, (_, key) in table.items()} == {k: d["x-label"][k] for k in d["enum"]}, const
+        assert [key for _, key in table.values() if key not in en] == [], const

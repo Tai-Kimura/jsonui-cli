@@ -28,7 +28,9 @@ def test_the_export_is_a_relative_static_demo_without_live_parts(tmp_path):
         for live in export_demo.LIVE_ONLY:
             assert live not in text, (name, live)
         assert not re.search(r'(?:src|href)="/(?!/)|url\("/|"/vendor/', text), name
-        assert not re.search(r'https?://(?!www\.w3\.org)', text) or name == "app.js", name
+        # the words' table (a JSON block, never run) holds the words' URLs: links shown, not fetched
+        page = re.sub(r'<script type="application/json" id="jui-viz-strings">.*?</script>', '', text, flags=re.S)
+        assert not re.search(r'https?://(?!www\.w3\.org)', page) or name == "app.js", name
     html = (out / "index.html").read_text()
     assert '<script type="module" src="app.js"></script>' in html and "boot.js" not in html
 

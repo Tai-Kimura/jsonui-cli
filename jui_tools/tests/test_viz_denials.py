@@ -114,7 +114,7 @@ def test_the_words_say_where_they_come_from_quote_the_card_and_leave_the_termina
     reason as the card has them (a clipped input keeps its "…"); no reason recorded is said so."""
     card = {"tool": "Write", "input": "/w/.claude/settings.json", "reason": ""}
     lines = prompt_text(card).split("\n")
-    assert lines[0] == den.SOURCE_LINE and lines[1] == "止められた操作: Write: /w/.claude/settings.json"
+    assert lines[0] == den.source_line() and lines[1] == "止められた操作: Write: /w/.claude/settings.json"
     assert lines[2] == "止めた理由（自動モードの判定）: （記録に理由が無い）" and "端末での確認が要る" in lines[4]
     words = prompt_text({"tool": "Bash", "input": den._clip("x" * 500), "reason": "[R]"})
     assert "x" * 199 + "…" in words

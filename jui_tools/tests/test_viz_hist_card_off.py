@@ -45,7 +45,7 @@ def _pref_parts():
 
 
 def test_the_cross_is_on_a_history_card_nobody_waits_on_and_nowhere_else():
-    got = _node([_cut("20-core.js", "esc"), _cut("50-panel.js", "histOffHTML")],
+    got = _node(["const tl = (k) => k;", _cut("20-core.js", "esc"), _cut("50-panel.js", "histOffHTML")],
                 "[histOffHTML('h', 'q', 'a1', true), histOffHTML('h', 'q', 'a1', false), histOffHTML('', 'q', 'a1', true),"
                 " histOffHTML('b', 'd', 'a1', true), histOffHTML('h', 'd', '<x\"', true)]")
     assert 'data-h-off="q:a1"' in got[0] and ">×</button>" in got[0]

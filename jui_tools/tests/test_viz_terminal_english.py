@@ -13,22 +13,10 @@ ROOT = Path(__file__).resolve().parent.parent
 JA = re.compile(r"[぀-ヿ㐀-鿿＀-￯]")
 
 #: module -> each literal with Japanese that the page shows (whole, an f-string with {} for its values) -> where it goes
-PAGE_TEXT = {
-    "jui_cli/commands/viz_cmd.py": {
-        "~/.claude/sessions がありません": "set_source: the sessions source's reason on the page",
-        "記録の usage が読めない（形が変わった可能性）": "set_source: the transcripts source's error on the page",
-    },
-    "jui_cli/viz/config.py": {
-        "config.json が JSON のオブジェクトではありません": "save_setting: the settings dialog's error",
-    },
-    "jui_cli/viz/server.py": {
-        "答えるまで": "ask_wait_text: the settings slice's askWaitText",
-        "{} 秒": "ask_wait_text",
-        "{} 分": "ask_wait_text",
-        "config.json に保存できなかった（{}）": "POST /api/settings: the why the page shows",
-        "トークはこのサーバーでは使えません": "a WebSocket ack's error the page shows",
-        "天気はこのサーバーでは使えません": "a WebSocket ack's error the page shows",
-    },
+PAGE_TEXT = {   # the page's words are in the table now (web/i18n: the language switch's move); none is left here
+    "jui_cli/commands/viz_cmd.py": {},
+    "jui_cli/viz/config.py": {},
+    "jui_cli/viz/server.py": {},
     "jui_cli/viz/hooks_installer.py": {},
 }
 

@@ -133,7 +133,8 @@ def _js(expr: str) -> object:
 
     parts = [cut(core, "pct"), cut(core, "sumImpl"), cut(core, "secState"), cut(live, "SPEC_KEYS"), cut(live, "labelOf"),
              cut(live, "liveSpecRow"), cut(panel, "markOf"),
-             "const LIVE = { labelOfReal: {}, specRows: {} };"]
+             "const LIVE = { labelOfReal: {}, specRows: {} };",
+             "const tl = (k) => k;"]   # the words: the table's keys (05-i18n.js is not loaded here)
     out = subprocess.run([node, "-e", "\n".join(parts) + f"\nprocess.stdout.write(JSON.stringify({expr}));"],
                          capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr

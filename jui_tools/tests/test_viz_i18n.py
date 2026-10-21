@@ -29,18 +29,27 @@ VIZ = Path(resources.files("jui_cli.viz"))
 WEB_JS = VIZ / "web" / "js"
 JA = re.compile(r"[぀-ヿ㐀-鿿！-｠]")
 
-#: Files whose words are all in the table: no Japanese outside their comments. Closed: a file joins when it is moved.
-MOVED = {"05-i18n.js", "10-robot-core.js", "25-net.js", "52-data-docs.js", "53-waits.js", "54-bills.js", "57-fulltext.js",
-         "58-talk.js", "80-dbg.js"}
+#: Files whose words are all in the table: no Japanese outside their comments but what KEPT names. Closed: a new part
+#: joins a list or the gate is red (the ruling 10-21: from stage 2 on, no new Japanese in the page's code).
+MOVED = {"05-i18n.js", "10-robot-core.js", "20-core.js", "25-net.js", "30-source-demo.js", "30-source-live.js",
+         "40-scene.js", "50-panel.js", "51-denials.js", "52-data-docs.js", "53-devices.js", "53-waits.js", "54-bills.js",
+         "55-history.js", "56-server-cost.js", "56-server-room.js", "57-fulltext.js", "58-talk.js", "59-sr-flows.js",
+         "60-log.js", "70-main.js", "80-dbg.js"}
 #: Content written once per language (not words of the table): each set checked where it is made.
 PER_LANGUAGE = {"31-talk-demo-data.js": "the demo's talks, one set per language (tests/test_viz_talk_demo_data.py)"}
-#: Not moved yet (the ticket's stages 2–3). Each is counted, not held: the count is what is left to move. 60-log.js
-#: and 70-main.js keep one word each that another file says too: the demo's event kind 'spec 更新' (30-source-demo.js)
-#: and the hook chip's title (index.html); they move with those files.
-NOT_YET = {
-    "20-core.js", "30-source-demo.js", "30-source-live.js", "40-scene.js", "50-panel.js", "51-denials.js",
-    "53-devices.js", "55-history.js", "56-server-room.js", "56-server-cost.js", "59-sr-flows.js", "60-log.js", "70-main.js",
+#: Not moved yet: none.
+NOT_YET: set = set()
+#: Japanese a moved part keeps on purpose, run by run, with why (closed: a run no longer there is red too).
+_TRANSITIONS = "TRANSITION_KINDS / TRANSITION_PLACEHOLDER: regexes over the words people write in their specs"
+KEPT = {
+    "50-panel.js": {run: _TRANSITIONS for run in ("遷移なし", "画面内", "ダイアログ", "トースト", "外部", "ブラウザ", "地図アプリ",
+                                                  "マップアプリ", "戻る", "閉じる", "置き換", "入れ替", "シート", "モーダル",
+                                                  "遷移", "未定", "未設定", "不明", "？", "ー", "・")},
+    "55-history.js": {run: "HIST_ATTACH_LINES: an older transcript's attachment line (a wire format, read as written)"
+                      for run in ("添付", "（", "）")},
 }
+#: The server's parts (Python): their page words are in the table, their terminal words English (stage 4).
+SERVER = sorted(p for p in (VIZ).rglob("*.py") if "web" not in p.parts) + [VIZ.parent / "commands" / "viz_cmd.py"]
 
 
 @pytest.fixture()
@@ -81,6 +90,8 @@ def code_texts() -> dict[str, str]:
     """Every part of the page and every .py of the server, by name."""
     out = {f"web/js/{p.name}": p.read_text(encoding="utf-8") for p in sorted(WEB_JS.glob("*.js"))}
     out.update({str(p.relative_to(VIZ)): p.read_text(encoding="utf-8") for p in sorted(VIZ.rglob("*.py"))})
+    viz_cmd = VIZ.parent / "commands" / "viz_cmd.py"   # the page words a command sets (set_source)
+    out["commands/viz_cmd.py"] = viz_cmd.read_text(encoding="utf-8")
     return out
 
 
@@ -118,7 +129,22 @@ def js_code_japanese(text: str) -> list[str]:
 
 
 def test_a_moved_file_has_no_japanese_in_its_code():
-    left = {name: "".join(js_code_japanese((WEB_JS / name).read_text(encoding="utf-8")))[:40] for name in sorted(MOVED)}
+    left = {name: [r for r in finder.runs(name, (WEB_JS / name).read_text(encoding="utf-8")) if r not in KEPT.get(name, {})]
+            for name in sorted(MOVED)}
+    assert {k: v[:10] for k, v in left.items() if v} == {}
+
+
+def test_what_is_kept_is_still_there():
+    """A run kept with a why that is no longer in its part is taken off the list, so the list never hides a new one."""
+    for name, runs in KEPT.items():
+        assert set(runs) - set(finder.runs(name, (WEB_JS / name).read_text(encoding="utf-8"))) == set(), name
+
+
+def test_the_page_and_the_server_have_no_japanese_left():
+    """index.html and app.css (outside their marks), and every module of the server: none (docstrings and comments
+    aside)."""
+    parts = [(VIZ / "web" / n, n) for n in ("index.html", "app.css")] + [(p, p.name + ".py"[:0]) for p in SERVER]
+    left = {str(p): "".join(finder.chars(p.name, p.read_text(encoding="utf-8")))[:30] for p, _ in parts}
     assert {k: v for k, v in left.items() if v} == {}
 
 

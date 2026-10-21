@@ -75,9 +75,9 @@ def test_the_line_is_plain_printable_ascii():
 
 def test_the_prompt_never_begins_with_a_dash_and_carries_the_name():
     p = C.prompt_of("-x", "--help")
-    assert p.startswith(C.PREFACE) and "セッション名: -x" in p and p.endswith("\n--help")
+    assert p.startswith(C.preface()) and "セッション名: -x" in p and p.endswith("\n--help")
     assert C.argv_of("-x", "", "--channels")[2] == "--name=-x"
-    assert C.prompt_of("n", "   ") == f"{C.PREFACE}\nセッション名: n"
+    assert C.prompt_of("n", "   ") == f"{C.preface()}\nセッション名: n"
 
 
 @pytest.mark.parametrize("name, role, why", [
