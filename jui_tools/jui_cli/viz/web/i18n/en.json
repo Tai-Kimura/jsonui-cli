@@ -336,5 +336,7 @@
   "page.log.col.time": "Time",
   "page.log.col.robot": "Robot",
   "page.log.col.kind": "Kind",
-  "page.log.col.content": "Content (press a row for an example of the hook input)"
+  "page.log.col.content": "Content (press a row for an example of the hook input)",
+  "css.flow.mmd.failed": "Could not draw the diagram (see the boxes below)",
+  "css.hist.thumb.loading": "Loading…"
 }

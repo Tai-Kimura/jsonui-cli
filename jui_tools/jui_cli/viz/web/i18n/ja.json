@@ -331,5 +331,7 @@
   "page.log.col.time": "時刻",
   "page.log.col.robot": "ロボット",
   "page.log.col.kind": "種類",
-  "page.log.col.content": "内容（行を押すとフック入力の例）"
+  "page.log.col.content": "内容（行を押すとフック入力の例）",
+  "css.flow.mmd.failed": "図を描けませんでした（下の箱を見てください）",
+  "css.hist.thumb.loading": "読み込み中…"
 }

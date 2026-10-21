@@ -689,7 +689,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .flow-mmd-bar { display: flex; justify-content: flex-end; padding: 6px 8px 0; }
 .flow-mmd { max-width: 100%; overflow-x: auto; padding: 6px 10px 10px; }
 .flow-mmd svg { display: block; margin: 0 auto; }
-.flow-mmd.mmd-failed::before { content: '図を描けませんでした（下の箱を見てください）'; color: var(--ink-soft); font-size: 12px; }
+.flow-mmd.mmd-failed::before { content: var(--tl-flow-mmd-failed, '図を描けませんでした（下の箱を見てください）'); color: var(--ink-soft); font-size: 12px; }
 .flow { display: grid; gap: 4px; }
 .fbox { display: grid; gap: 4px; padding: 8px 10px; border: 1.5px solid var(--wb-line); border-radius: 8px; }
 .fbox p { margin: 0; }
@@ -1274,7 +1274,7 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 .h-thumb:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .h-thumb-note:empty { display: none; }
 .h-thumb-wait .h-thumb-note:empty { display: block; }
-.h-thumb-wait .h-thumb-note:empty::after { content: '読み込み中…'; }
+.h-thumb-wait .h-thumb-note:empty::after { content: var(--tl-hist-thumb-loading, '読み込み中…'); }
 .h-gone { margin: 4px 0 0; color: var(--warn); font: 700 11.5px/1.5 var(--font-body); overflow-wrap: anywhere; }
 .h-light { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 16px; background: rgba(10, 20, 35, 0.7); }
 .h-light-box { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 8px; max-width: 100%; max-height: calc(100vh - 32px); padding: 10px 12px; border-radius: 12px; background: var(--panel); color: var(--ink); box-shadow: 0 12px 40px var(--shadow); }
