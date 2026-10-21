@@ -52,6 +52,8 @@ def findings(report: dict) -> dict[str, list[str]]:
     return {
         "keys": list(report.get("keys", [])),
         "overflow": [f"{o['at']} — “{o['text']}” ({o['over']}px over)" for o in report.get("overflow", [])],
+        "overlap": [f"{o['a']} and {o['b']} cover each other ({o['w']}×{o['h']}px): “{o['text'][0]}” / “{o['text'][1]}”"
+                    for o in report.get("overlap", [])],
         "canvas": [f"“{c['text']}” {'cut' if c['text'].endswith('…') else 'past the edge'} "
                    f"({c['left']}–{c['right']} of {c['canvas']}px, {c['font']})" for c in report.get("canvas", [])],
         "japanese": list(report.get("japanese", [])),
@@ -91,10 +93,11 @@ def build(ja_out: Path, en_out: Path) -> str:
         f = findings((en.get(name) or {}).get("report") or {})
         counts = {k: len(v) for k, v in f.items()}
         cells = "".join(f'<td class="n{" hot" if counts[k] else ""}">{counts[k]}</td>'
-                        for k in ("keys", "overflow", "canvas", "japanese"))
+                        for k in ("keys", "overflow", "overlap", "canvas", "japanese"))
         rows.append(f'<tr><td><a href="#s-{html.escape(name)}">{html.escape(name)}</a></td>{cells}</tr>')
         lists = (_list("Keys shown as themselves (a failure)", f["keys"]).replace("<details", '<details class="keys"', 1)
                  + _list("Words that do not fit their element", f["overflow"])
+                 + _list("Boxes of words covering each other", f["overlap"])
                  + _list("Canvas words past the canvas or cut with …", f["canvas"])
                  + _list("Japanese left on the English page", f["japanese"]))
         sections.append(
@@ -108,7 +111,7 @@ def build(ja_out: Path, en_out: Path) -> str:
             "<h1>viz English check</h1>"
             f"<p class=\"lede\">{len(names)} screens, Japanese beside English. Under each English screen: what the page "
             "reported there. Keys shown as themselves fail the browser tests; the rest is for the eye.</p>"
-            "<table class=\"sum\"><thead><tr><th>Screen</th><th>Keys</th><th>Overflow</th><th>Canvas</th>"
+            "<table class=\"sum\"><thead><tr><th>Screen</th><th>Keys</th><th>Overflow</th><th>Overlap</th><th>Canvas</th>"
             f"<th>Japanese left</th></tr></thead><tbody>{''.join(rows)}</tbody></table>{''.join(sections)}"
             "</main></body></html>")
 

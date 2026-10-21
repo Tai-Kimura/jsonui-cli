@@ -4,7 +4,8 @@ On the demo: the main view, a robot's card, its talk list, and the phone's main 
 picture and screen_check's report (<out>/lang-checks/shots/), and a key of the table drawn as itself is a failure — in
 Japanese and in English. Run it twice (JUI_VIZ_LANGUAGE=ja, then en) and lang_sheet.py lays the two side by side.
 A key the code asks for and the table lacks is a console warning (tl in 05-i18n.js), which this suite fails on too.
-Canvas words past their canvas or cut with "…" are failures as well, in either language: a sign or a board drawn in
+Two boxes of words in one parent covering each other, and canvas words past their canvas or cut with "…", are
+failures as well, in either language (the scene's hint ran into the demo clock on a phone in English): a sign or a board drawn in
 the 3D has no scrollbar, and what does not fit is lost (the English run once had 8: Server room, the spec board's
 statuses and names; the Japanese 1: サーバールーム).
 """
@@ -21,6 +22,8 @@ LABEL = "a0"   # the demo's main session (talk_ui opens it too)
 
 
 def cut(report: dict, where: str, failures: list) -> None:
+    for o in report["overlap"]:
+        failures.append(f"lang-checks: {where}: {o['a']} and {o['b']} cover each other ({o['w']}×{o['h']}px): {o['text']}")
     for c in report["canvas"]:
         how = "cut" if c["text"].endswith("…") else f"past the canvas ({c['left']}–{c['right']} of {c['canvas']}px)"
         failures.append(f"lang-checks: {where}: canvas words {how}: {c['text']!r} ({c['font']})")

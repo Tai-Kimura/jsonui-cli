@@ -229,7 +229,7 @@ CANVAS_TEXT_JS = """(() => {
 #: The page as read: keys drawn as themselves (a failure), Japanese on an English page, elements whose words do not
 #: fit, canvas words past the canvas or cut with "…" (reported, for eyes). Hidden elements are not read.
 SCREEN_REPORT_JS = r"""() => {
-  const out = { lang: document.documentElement.lang || '', keys: [], japanese: [], overflow: [], canvas: [] };
+  const out = { lang: document.documentElement.lang || '', keys: [], japanese: [], overflow: [], overlap: [], canvas: [] };
   let strings = {};
   try { strings = JSON.parse(document.getElementById('jui-viz-strings').textContent).strings || {}; } catch (err) { /* none */ }
   const KEY = /^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/, JA = /[぀-ヿ㐀-鿿！-｠]/;
@@ -258,6 +258,26 @@ SCREEN_REPORT_JS = r"""() => {
     if (away(el)) continue;
     const over = el.scrollWidth - el.clientWidth;
     if (over > 1) out.overflow.push({ at: where(el), text: el.textContent.trim().slice(0, 60), over });
+  }
+  // two boxes of words in one parent that cover each other (a line wrapped longer in one language runs into its
+  // neighbour: the scene's hint and the demo clock on a phone in English). A box of words holds words of its own (a
+  // text node of its own), is not inline (an inline's box spans its wrapped lines) and is not one of the 3D's tags
+  // (#tags: they follow their robots and may cross); a layer over the scene (the card, the tags' layer) has none.
+  const own = (el) => [...el.childNodes].some((n) => n.nodeType === 3 && n.nodeValue.trim());
+  const worded = (el) => !away(el) && own(el) && !el.closest('#tags') && getComputedStyle(el).display !== 'inline'
+    && getComputedStyle(el).visibility !== 'hidden';
+  for (const parent of document.querySelectorAll('body, body *')) {
+    const kids = [...parent.children].filter(worded);
+    for (let i = 0; i < kids.length; i++) {
+      const a = kids[i].getBoundingClientRect();
+      for (let j = i + 1; j < kids.length; j++) {
+        const b = kids[j].getBoundingClientRect();
+        const w = Math.min(a.right, b.right) - Math.max(a.left, b.left), h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+        if (w > 2 && h > 2 && out.overlap.length < 100) {
+          out.overlap.push({ a: where(kids[i]), b: where(kids[j]), text: [kids[i].textContent.trim().slice(0, 40), kids[j].textContent.trim().slice(0, 40)], w: Math.round(w), h: Math.round(h) });
+        }
+      }
+    }
   }
   const drawn = new Set();   // a texture is drawn again and again: one line for each words on each canvas width
   for (const c of window.__canvasText || []) {

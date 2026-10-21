@@ -15,6 +15,7 @@ import lang_sheet  # noqa: E402
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=")
 EN_REPORT = {"lang": "en", "keys": ["#rb-title: panel.rb.title"], "japanese": ["span.who: 太郎"],
              "overflow": [{"at": "button.wb-btn", "text": "Back to the room (Esc)", "over": 14}],
+             "overlap": [{"a": "p.scene-hint", "b": "#demo-clock", "text": ["Drag to rotate", "Demo clock 10:10"], "w": 40, "h": 12}],
              "canvas": [{"text": "Server ro…", "left": 10, "right": 240, "canvas": 256, "font": "36px x", "maxWidth": None},
                         {"text": "A very long sign", "left": 0, "right": 300, "canvas": 256, "font": "36px x", "maxWidth": None}]}
 
@@ -36,9 +37,9 @@ def test_the_sheet_pairs_each_shot_and_lists_what_the_english_page_had(tmp_path)
     assert page.count("data:image/png;base64,") == 3 and "no picture" in page        # board has no English shot
     assert "panel.rb.title" in page and "Back to the room (Esc)" in page and "(14px over)" in page
     assert "“Server ro…” cut" in page and "“A very long sign” past the edge (0–300 of 256px" in page
-    assert "span.who: 太郎" in page
+    assert "span.who: 太郎" in page and "p.scene-hint and #demo-clock cover each other (40×12px)" in page
     summary = re.search(r'<a href="#s-door">door</a></td>(.*?)</tr>', page).group(1)
-    assert re.findall(r">(\d+)<", summary) == ["1", "1", "2", "1"]
+    assert re.findall(r">(\d+)<", summary) == ["1", "1", "1", "2", "1"]                 # keys overflow overlap canvas japanese
     assert "Nothing found on the English page." in page                               # board: nothing reported
     assert "src=\"http" not in page and "<script" not in page                        # opens by itself
 
