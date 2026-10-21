@@ -1954,5 +1954,16 @@
   "ev.sent.deny": "Denied from the browser{extra} {summary}",
   "ev.deleted": "Deleted",
   "ev.not_deleted": "Could not delete",
-  "ev.deleted.how": "{label} ({how})"
+  "ev.deleted.how": "{label} ({how})",
+  "srv.harness.reminder": "System note",
+  "srv.harness.subagent": "Subagent's report",
+  "srv.harness.task": "Task notification",
+  "srv.harness.command": "Command",
+  "srv.harness.output": "Command output",
+  "srv.harness.interrupted": "Interrupted",
+  "srv.harness.hook": "Hook output",
+  "srv.harness.meta": "Harness text",
+  "srv.peer.unnamed": "another session",
+  "srv.history.image": "[image]",
+  "srv.denied.no_reason": "no reason written"
 }

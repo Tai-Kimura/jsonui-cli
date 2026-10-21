@@ -1909,5 +1909,16 @@
   "ev.sent.deny": "ブラウザで拒否を送信{extra} {summary}",
   "ev.deleted": "削除",
   "ev.not_deleted": "削除できず",
-  "ev.deleted.how": "{label}（{how}）"
+  "ev.deleted.how": "{label}（{how}）",
+  "srv.harness.reminder": "システムの注記",
+  "srv.harness.subagent": "サブエージェントの報告",
+  "srv.harness.task": "タスクの通知",
+  "srv.harness.command": "コマンド",
+  "srv.harness.output": "コマンドの出力",
+  "srv.harness.interrupted": "中断",
+  "srv.harness.hook": "フックの出力",
+  "srv.harness.meta": "ハーネスの文",
+  "srv.peer.unnamed": "別のセッション",
+  "srv.history.image": "[画像]",
+  "srv.denied.no_reason": "理由は書かれていない"
 }
