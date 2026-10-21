@@ -19,9 +19,9 @@
    belonged to the 3D that went.
    SR_ACTIONS and SR_TRIGGERS are the schema's x-label / x-icon (test_viz_bundle holds them to the schema). */
 const SR_FLOW_SPEEDS = [0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 10.0];
-const SR_ACTIONS = {"request": ["→", "を呼ぶ"], "response": ["←", "に返す"], "read": ["📖", "から読む"], "write": ["💾", "に保存"], "upload": ["⬆", "にアップロード"], "download": ["⬇", "からダウンロード"], "invoke": ["⚡", "を実行"], "enqueue": ["📥", "に積む"], "dequeue": ["📤", "から取り出す"], "publish": ["📣", "に通知"], "subscribe": ["📡", "で受け取る"], "auth": ["🔑", "で認証"], "schedule": ["⏰", "を予定どおり起こす"]};
-const SR_TRIGGERS = {"user": ["👤", "利用者の操作"], "device": ["📡", "機器"], "schedule": ["⏰", "定期実行"], "event": ["⚡", "出来事"]};
-const SR_FLOW_STATE = { play: '再生中', pause: '止めている', branch: '分かれ道で待っている', done: '終わり' };
+const SR_ACTIONS = { request: ['→', tl('sr.flow.action.request')], response: ['←', tl('sr.flow.action.response')], read: ['📖', tl('sr.flow.action.read')], write: ['💾', tl('sr.flow.action.write')], upload: ['⬆', tl('sr.flow.action.upload')], download: ['⬇', tl('sr.flow.action.download')], invoke: ['⚡', tl('sr.flow.action.invoke')], enqueue: ['📥', tl('sr.flow.action.enqueue')], dequeue: ['📤', tl('sr.flow.action.dequeue')], publish: ['📣', tl('sr.flow.action.publish')], subscribe: ['📡', tl('sr.flow.action.subscribe')], auth: ['🔑', tl('sr.flow.action.auth')], schedule: ['⏰', tl('sr.flow.action.schedule')] };
+const SR_TRIGGERS = { user: ['👤', tl('sr.flow.trigger.user')], device: ['📡', tl('sr.flow.trigger.device')], schedule: ['⏰', tl('sr.flow.trigger.schedule')], event: ['⚡', tl('sr.flow.trigger.event')] };
+const SR_FLOW_STATE = { play: tl('sr.flow.state.play'), pause: tl('sr.flow.state.pause'), branch: tl('sr.flow.state.branch'), done: tl('sr.flow.state.done') };
 const SR_FLOW = { speed: 1.0, auto: false, moveMs: 900, nodeMs: 450, toastMs: 2600, player: null };
 
 function srFlowsOf(V) {
@@ -57,7 +57,7 @@ function srFlowBoardHTML(nodeId) {
   if (!V || !nodeId) return '';
   const mine = srFlowsOf(V).filter((f) => f.start === nodeId);
   if (!mine.length) return '';
-  return `<h3>このノードから始まる流れ</h3><ul class="sr-flows">${mine.map((f) => { const t = SR_TRIGGERS[f.trigger] || SR_TRIGGERS.user;
+  return `<h3>${esc(tl('sr.flow.board.title'))}</h3><ul class="sr-flows">${mine.map((f) => { const t = SR_TRIGGERS[f.trigger] || SR_TRIGGERS.user;
     return `<li><button type="button" class="wb-btn" data-sr-flow="${esc(f.id)}">${esc(t[0])} ${esc(f.label || f.id)}</button>${f.schedule ? ` <small>${esc(f.schedule)}</small>` : ''}</li>`; }).join('')}</ul>`;
 }
 
@@ -92,7 +92,7 @@ function srFlowNext(P) {
   if (P.branch) return;
   for (;;) {
     const top = P.frames[P.frames.length - 1];
-    if (!top) { P.state = 'done'; srFlowToast(P, P.pos, '✓ 流れの終わり', ''); srFlowRenderBar(); return; }
+    if (!top) { P.state = 'done'; srFlowToast(P, P.pos, tl('sr.flow.end'), ''); srFlowRenderBar(); return; }
     if (top.i >= top.steps.length) { P.frames.pop(); continue; }
     P.history.push(srFlowSnapshot(P));
     const step = top.steps[top.i];
@@ -135,7 +135,7 @@ function srFlowMove(P, step) {
 }
 function srFlowSay(P, step, at) {
   const act = SR_ACTIONS[step.action];
-  const head = act ? `${act[0]} ${srFlowNodeName(at)} ${act[1]}` : `• ${srFlowNodeName(at)}`;
+  const head = act ? tl('sr.flow.say', { mark: act[0], node: srFlowNodeName(at), verb: act[1] }) : `• ${srFlowNodeName(at)}`;
   srFlowToast(P, at, head, step.label || '');
   srFlowGlow(P, at);
 }
@@ -145,7 +145,7 @@ function srFlowAtBranch(P, b) {
   P.stepOnce = false;        // a step taken to here ends here: the choice made plays on
   srFlowHints(P, b);
   const box = $('sr-choices');
-  setHTML(box, `<p class="sr-choice-q">${esc(b.label)}</p>${b.choices.map((c) => `<button type="button" class="wb-btn" data-sr-choice="${esc(c.id)}"${c.id === b.default ? ' data-default' : ''}>${esc(c.label)}${c.id === b.default ? ' <small>（既定）</small>' : ''}</button>`).join('')}`);
+  setHTML(box, `<p class="sr-choice-q">${esc(b.label)}</p>${b.choices.map((c) => `<button type="button" class="wb-btn" data-sr-choice="${esc(c.id)}"${c.id === b.default ? ' data-default' : ''}>${esc(c.label)}${c.id === b.default ? ` <small>${esc(tl('sr.flow.choice.default'))}</small>` : ''}</button>`).join('')}`);
   box.hidden = false;
   srFlowRenderBar();
 }
@@ -274,12 +274,12 @@ function srFlowRenderBar() {
   bar.hidden = false;
   const playing = P.state === 'play';
   setHTML(bar, `<b class="sr-fp-title">${esc((SR_TRIGGERS[P.flow.trigger] || SR_TRIGGERS.user)[0])} ${esc(P.flow.label || P.flow.id)}</b>
-<button type="button" class="wb-btn" data-sr-fp="toggle" aria-label="${playing ? '一時停止' : '再生'}">${playing ? '⏸' : '▶'}</button>
-<button type="button" class="wb-btn" data-sr-fp="step" aria-label="1 歩進む">⏭</button>
-<button type="button" class="wb-btn" data-sr-fp="back" aria-label="1 歩戻る"${P.history.length ? '' : ' disabled'}>⏮</button>
-<button type="button" class="wb-btn" data-sr-fp="stop" aria-label="やめる">■</button>
-<label>速さ <select data-sr-fp="speed">${SR_FLOW_SPEEDS.map((s) => `<option value="${esc(String(s))}"${s === SR_FLOW.speed ? ' selected' : ''}>${esc(s.toFixed(1))}×</option>`).join('')}</select></label>
-<label><input type="checkbox" data-sr-fp="auto"${SR_FLOW.auto ? ' checked' : ''}> 自動（既定の道へ）</label>
+<button type="button" class="wb-btn" data-sr-fp="toggle" aria-label="${esc(playing ? tl('sr.flow.pause') : tl('sr.flow.play'))}">${playing ? '⏸' : '▶'}</button>
+<button type="button" class="wb-btn" data-sr-fp="step" aria-label="${esc(tl('sr.flow.step'))}">⏭</button>
+<button type="button" class="wb-btn" data-sr-fp="back" aria-label="${esc(tl('sr.flow.back'))}"${P.history.length ? '' : ' disabled'}>⏮</button>
+<button type="button" class="wb-btn" data-sr-fp="stop" aria-label="${esc(tl('sr.flow.stop'))}">■</button>
+<label>${esc(tl('sr.flow.speed'))} <select data-sr-fp="speed">${SR_FLOW_SPEEDS.map((s) => `<option value="${esc(String(s))}"${s === SR_FLOW.speed ? ' selected' : ''}>${esc(s.toFixed(1))}×</option>`).join('')}</select></label>
+<label><input type="checkbox" data-sr-fp="auto"${SR_FLOW.auto ? ' checked' : ''}> ${esc(tl('sr.flow.auto'))}</label>
 <span class="sr-fp-state">${esc(SR_FLOW_STATE[P.state] || '')}</span>
 ${P.chosen.length ? `<ol class="sr-fp-chosen">${P.chosen.map((c) => `<li>${esc(c)}</li>`).join('')}</ol>` : ''}`);
 }
