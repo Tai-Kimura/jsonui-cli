@@ -37,7 +37,7 @@ from typing import Awaitable, Callable
 
 from aiohttp import WSMsgType, web
 
-from . import attachments, callcmd, clockout, i18n, infra_cost, infra_docs, paths, security
+from . import attachments, callcmd, clockout, i18n, infra_cost, infra_docs, paths, security, spirits
 from .config import ASK_UNTIL_ANSWERED_SEC, ASK_WAIT_CHOICES, VizConfig, ask_hook_wait_sec, save_setting
 from .state import VizState, now_ms
 
@@ -829,6 +829,52 @@ def make_app(ctx: ServerContext) -> web.Application:
                             headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
                                      "Content-Disposition": "inline"})
 
+    async def _checked_json(request: web.Request, route: str) -> tuple[web.Response | None, object]:
+        """The checks of /api/prompt (prompt_checks), then the small JSON body: (a refusal, None) or (None, the body)."""
+        refused = prompt_checks(request, ctx)
+        if refused is not None:
+            log(f"refused: {route} ({refused.text.strip()})")
+            return refused, None
+        raw = b""
+        while len(raw) <= PROMPT_MAX_BODY:   # a chunked body has no Content-Length: stop reading past the cap
+            chunk = await request.content.read(PROMPT_MAX_BODY + 1 - len(raw))
+            if not chunk:
+                break
+            raw += chunk
+        if len(raw) > PROMPT_MAX_BODY:
+            return web.Response(status=413, text="too large\n"), None
+        try:
+            return None, json.loads(raw or b"{}")
+        except (ValueError, UnicodeDecodeError):
+            return web.Response(status=400, text="not json\n"), None
+
+    async def api_spirits(request: web.Request) -> web.Response:
+        """The skill spirits the page may show (ticket 2026-10-21-jui-viz-skill-spirit): the bundled originals and the
+        person's own models (spirits.own_dir), read now, the broken ones left out (the doctor names them). The checks
+        of /api/prompt; JSON, no-store."""
+        refused, _body = await _checked_json(request, "/api/spirits")
+        if refused is not None:
+            return refused
+        listed = await asyncio.get_running_loop().run_in_executor(None, spirits.listing)
+        return web.json_response({"models": listed}, headers={"Cache-Control": "no-store"})
+
+    async def api_spirit_file(request: web.Request) -> web.Response:
+        """One .glb of a listed model: {"id": "<source>/<name>", "file"} matched against a scan made now
+        (spirits.model_file), never a path from the page. The checks of /api/prompt; the bytes as
+        model/gltf-binary, nosniff and no-store."""
+        refused, body = await _checked_json(request, "/api/spirit-file")
+        if refused is not None:
+            return refused
+        if not isinstance(body, dict):
+            return web.Response(status=400, text="id and file are required\n")
+        status, got = await asyncio.get_running_loop().run_in_executor(
+            None, spirits.model_file, body.get("id"), body.get("file"))
+        if status != 200:
+            return web.Response(status=status, text=f"{got}\n")
+        return web.Response(body=got, content_type="model/gltf-binary",
+                            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
+                                     "Content-Disposition": "inline"})
+
     async def api_data_docs(request: web.Request) -> web.Response:
         """The data server's documents (2.3.5): {"projectId"} names a JsonUI room; data_docs.read gives its API and DB
         specifications, read now from the room's docs/api and docs/db (data_docs.doc_dirs: inside the room, no
@@ -992,6 +1038,8 @@ def make_app(ctx: ServerContext) -> web.Application:
     app.router.add_route("*", "/api/denial", api_denial)
     app.router.add_route("*", "/api/attach-image", api_attach_image)
     app.router.add_route("*", "/api/history-image", api_history_image)
+    app.router.add_route("*", "/api/spirits", api_spirits)
+    app.router.add_route("*", "/api/spirit-file", api_spirit_file)
     app.router.add_route("*", "/api/history-file", api_history_file)
     app.router.add_route("*", "/api/reveal-file", api_reveal_file)
     app.router.add_route("*", "/api/data-docs", api_data_docs)

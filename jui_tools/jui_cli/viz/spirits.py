@@ -507,7 +507,7 @@ def check_model(folder: Path) -> dict:
     return {"name": folder.name, "dir": str(folder), "ok": not problems, "problems": problems, "notes": notes,
             "files": files, "skills": [s for s in skills if isinstance(s, str)],
             "weight": weight if isinstance(weight, (int, float)) and not isinstance(weight, bool) else 1,
-            "title": spec.get("name")}
+            "title": spec.get("name"), "spec": spec}
 
 
 def scan(base: Path) -> dict:
@@ -530,6 +530,49 @@ def scan(base: Path) -> dict:
         folders = folders[:MAX_MODELS]
     out["models"] = [check_model(f) for f in folders]
     return out
+
+
+#: The sources the page is given, in this order (a model of the person's may share a bundled one's name: both are kept).
+SOURCES = ("bundled", "own")
+
+
+def _scans() -> dict[str, dict]:
+    return {"bundled": scan(bundled_dir()), "own": scan(own_dir())}
+
+
+def listing() -> list[dict]:
+    """The models the page may show, read now: only those the checks pass. Each is {id: "<source>/<name>", source, name,
+    title, skills, weight, files: {file: {clips, nodes}}, spec: spirit.json as written}. A broken model is not listed
+    (the doctor names it)."""
+    out = []
+    for source, found in _scans().items():
+        for m in found["models"]:
+            if not m["ok"]:
+                continue
+            out.append({"id": f"{source}/{m['name']}", "source": source, "name": m["name"], "title": m["title"],
+                        "skills": m["skills"], "weight": m["weight"],
+                        "files": {n: {"clips": f["clips"], "nodes": f["nodes"]} for n, f in m["files"].items()},
+                        "spec": m["spec"]})
+    return out
+
+
+def model_file(model_id: str, file: str) -> tuple[int, bytes | str]:
+    """(200, the bytes) of one .glb of a model the page was listed, matched by id and file name against a scan made
+    now — never a path from the page; else (status, why)."""
+    if not isinstance(model_id, str) or not isinstance(file, str):
+        return 400, "id and file are required"
+    source, _, name = model_id.partition("/")
+    if source not in SOURCES or not NAME_RE.fullmatch(name):
+        return 404, "no such model"
+    model = next((m for m in _scans()[source]["models"] if m["name"] == name), None)
+    if model is None or not model["ok"]:
+        return 404, "no such model"
+    if file not in model["files"]:
+        return 404, "no such file in the model"
+    path = Path(model["dir"]) / file
+    if path.is_symlink() or not path.is_file():
+        return 404, "no such file in the model"
+    return 200, path.read_bytes()
 
 
 def doctor_check() -> dict:

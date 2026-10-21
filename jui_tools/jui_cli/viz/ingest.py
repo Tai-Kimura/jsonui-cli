@@ -99,6 +99,14 @@ def _s(value: Any) -> str | None:
 
 
 QUESTION_TOOL = "AskUserQuestion"
+#: A skill in use (ticket 2026-10-21-jui-viz-skill-spirit): Claude calling the Skill tool. Its robot carries ``skill`` until
+#: the turn ends (inline) or the skill's own subagent finishes (forked); never longer than SKILL_MAX_MS (the end is
+#: guessed: no hook says it). A forked skill runs in a subagent that starts within SKILL_FORK_MS of the call: the skill
+#: moves to it (the call names no agent; its agentId comes only with the result).
+SKILL_TOOL = "Skill"
+SKILL_MAX_MS = 30 * 60_000
+SKILL_FORK_MS = 5_000
+SKILL_NAME = re.compile(r"[A-Za-z0-9_.:-]{1,128}")
 
 
 def _question_summary(card: dict) -> str:
@@ -159,6 +167,14 @@ def attachment_line(record: dict) -> str:
     return f"attached: {record['path']} ({record['name']}, {record['media']}, {shown})"
 
 
+def _skill_forked(response) -> bool:
+    """A Skill call's result says it ran in a subagent: {"status": "forked", …} (measured in the transcripts of 10-21),
+    or the result's words 'completed (forked execution)'."""
+    if isinstance(response, dict):
+        return response.get("status") == "forked"
+    return isinstance(response, str) and "(forked execution)" in response
+
+
 class World:
     def __init__(self, state: VizState, tool_input_max: int = 2000, session_start=None) -> None:
         self.state = state
@@ -194,6 +210,7 @@ class World:
         self._open: dict[str, list[str]] = {}
         self._open_tool: dict[str, str] = {}  # tool_use_id -> tool_name
         self._deleting: dict[str, dict] = {}  # tool_use_id -> what its Bash command deletes (robots.deletions)
+        self._skill_called: dict[str, tuple[int, str]] = {}   # session id -> (when, the main agent) of its last Skill call
         self._until: dict[str, tuple[int, str]] = {}  # agent id -> (time, state to go to)
         # The tool_use_id an agent was asking permission for. PermissionRequest
         # carries no tool_use_id and a refusal may send no PostToolUse (nor
@@ -650,6 +667,7 @@ class World:
             agent["promptAt"] = at   # the page ends an errand (the shredder, 10-19) that a new instruction overtakes
             # an instruction: no trip to the box any more — the trip stays, marked stopped, for the card's 最近の git
             self._set(agent, at, "idle", i18n.tl("act.prompted"), git={**agent["git"], "stopped": True} if agent.get("git") else None)
+            self._skill_ended(sid, at)   # a new instruction: the skill the last turn used is over
             text = i18n.tl("ev.prompt", prompt=session['lastPrompt'] or '').strip()
         elif kind == "PreToolUse" and tool:
             if tool == QUESTION_TOOL:   # a question for the person (both the async forward and --ask bring it)
@@ -677,6 +695,8 @@ class World:
                       readKind=robots.read_kind(tool) if state == "reading" else None)
             if state == "carry":
                 self._until[agent["id"]] = (at + CARRY_MS, "idle")
+            if tool == SKILL_TOOL:
+                self._skill_started(session, agent, tool_input, use_id, at)
             if tool in robots.LAUNCH_TOOLS:   # the whistle: from now for its fixed length, whatever the call's length
                 self._set(agent, at, whistle={"at": at, "until": at + robots.LAUNCH_WHISTLE_MS})
             if tool in EDIT_TOOLS:
@@ -742,6 +762,8 @@ class World:
                 still = self._open_tool.get(opened[-1]) or ""   # the newest call still open: what the robot does now
                 back = robots.state_for_tool(still, {}) if still else "idle"
                 self._set(agent, at, back, _settled_act(agent["act"], failed), readKind=robots.read_kind(still) if back == "reading" else None)
+            if tool == SKILL_TOOL and _skill_forked(payload.get("tool_response")):
+                self._skill_ended(sid, at, use_id=use_id)   # a forked skill: its subagent's work is done
             if tool == "SendMessage":
                 self.calls.sent(use_id, failed, at)
                 self._dirty.add("calls")
@@ -814,10 +836,11 @@ class World:
             text = i18n.tl("ev.notification", kind=ntype, message=_head(payload.get('message'), 120) or '').strip()
         elif kind == "SubagentStart":
             self._set(agent, at, "idle", i18n.tl("act.start_as", agent=agent_type or '').strip())
+            self._skill_forked_to(sid, agent, at)
             text = i18n.tl("ev.subagent.in", agent=agent_type or aid)
         elif kind == "SubagentStop":
             message = _head(payload.get("last_assistant_message"), MESSAGE_MAX)
-            self._set(agent, at, "done", i18n.tl("status.done"), lastMessage=message, leftAt=at)
+            self._set(agent, at, "done", i18n.tl("status.done"), lastMessage=message, leftAt=at, skill=None)
             self._until[agent["id"]] = (at + SUBAGENT_LINGER_MS, "gone")
             text = i18n.tl("ev.subagent.out", agent=agent_type or aid)
         elif kind in ("TaskCreated", "TaskCompleted"):
@@ -866,6 +889,8 @@ class World:
                     self._background_off(session, at, touch_agent=False)
                 self._set(agent, at, "done", i18n.tl("act.background") if busy else i18n.tl("status.done"), lastMessage=message)
                 self._until[agent["id"]] = (at + DONE_TO_IDLE_MS, "idle")
+            if agent["kind"] == "main":
+                self._skill_ended(sid, at)   # the turn is over: an inline skill with it
             text = i18n.tl("ev.stop.failed") if kind == "StopFailure" else i18n.tl("ev.stop")
         elif kind == "CwdChanged" and cwd:
             self._move(session, cwd, at)
@@ -928,6 +953,39 @@ class World:
         for use_id in self._open.pop(aid, []):
             self._open_tool.pop(use_id, None)
         self._asking.pop(aid, None)
+
+    # ---------------------------------------------------------------- a skill in use (the spirit, 2.3.16)
+
+    def _skill_started(self, session: dict, agent: dict, tool_input: dict, use_id: str | None, at: int) -> None:
+        """Claude called the Skill tool: its robot carries the skill (a skill named otherwise than SKILL_NAME is
+        none). A skill started while another is held replaces it."""
+        name = tool_input.get("skill")
+        if not isinstance(name, str) or not SKILL_NAME.fullmatch(name):
+            return
+        self._skill_ended(session["id"], at)
+        self._set(agent, at, skill={"name": name, "since": at, **({"useId": use_id} if use_id else {})})
+        self._skill_called[session["id"]] = (at, agent["id"])
+
+    def _skill_forked_to(self, sid: str, sub: dict, at: int) -> None:
+        """A subagent started within SKILL_FORK_MS of the session's Skill call: the skill runs there (forked), so the
+        skill moves from the calling robot to it."""
+        called = self._skill_called.pop(sid, None)
+        if called is None or at - called[0] > SKILL_FORK_MS:
+            return
+        caller = self.agents.get(called[1])
+        if caller is None or not caller.get("skill") or caller["id"] == sub["id"]:
+            return
+        skill = caller["skill"]
+        self._set(caller, at, skill=None)
+        self._set(sub, at, skill={**skill, "forked": True})
+
+    def _skill_ended(self, sid: str, at: int, use_id: str | None = None) -> None:
+        """The skills held by the session's robots end (only the one its call started, given ``use_id``)."""
+        for agent in [a for a in self.agents.values() if a["sessionId"] == sid and a.get("skill")]:
+            if use_id is None or agent["skill"].get("useId") == use_id:
+                self._set(agent, at, skill=None)
+        if use_id is None:
+            self._skill_called.pop(sid, None)
 
     def _settle_asking(self, aid: str) -> None:
         use_id = self._asking.pop(aid, None)
@@ -1516,6 +1574,9 @@ class World:
         for agent in self.agents.values():   # the whistle of a subagent call, over at its fixed length
             if agent.get("whistle") and at >= agent["whistle"]["until"]:
                 agent.pop("whistle")
+                self._dirty.add("agents")
+            if agent.get("skill") and at - agent["skill"]["since"] >= SKILL_MAX_MS:   # an end that never came
+                agent.pop("skill")
                 self._dirty.add("agents")
         for aid, (due, to) in list(self._until.items()):
             if at < due:

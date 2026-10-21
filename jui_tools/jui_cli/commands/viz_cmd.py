@@ -1776,6 +1776,9 @@ def _doctor_checks() -> list[dict]:
 
     add("language", True, _language_detail())
 
+    from ..viz import spirits as spirits_mod   # the skill spirits: the bundled ones and yours, each checked
+    checks.append(spirits_mod.doctor_check())
+
     if claude is not None:
         registered = _relay_registered(claude)
         add("relay", True, "permission relay: " + ("registered" if registered else "not registered (jui viz relay install)" if registered is False else "unknown (could not check)"))
