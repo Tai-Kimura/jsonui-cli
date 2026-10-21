@@ -300,6 +300,7 @@
     "jui_tools/jui_cli/viz/web/js/53-waits.js": "返事待ちのロボットの 3D の印（吹き出し・ランプ・ポーズ）。サーバーの slice（state・asking・inputWaitAt）とページの札だけを読み、CLI の形は読まない。idle_prompt の形はサーバー（ingest.py、hooks の項目）の側",
     "jui_tools/jui_cli/viz/web/js/59-sr-flows.js": "サーバールームの flow の再生（光の粒・トースト・分かれ道・速さ）。サーバーの /api/infra-docs が返すモデルの flows だけを読み、CLI・フックの形は読まない",
     "jui_tools/jui_cli/viz/infra_cost.py": "コストのシミュレーター: 部屋の負荷定義・単価のファイル・モデルを document_tools の infra.load・infra.cost で読み、計算と画面の形を作らせるだけ。CLI・フック・transcript の形は読まない",
+    "jui_tools/jui_cli/viz/infra_words.py": "サーバールームとコストの画面の、document_tools が言う文言（部屋の読みの行・meter の名前）を viz の表（srv.room.*・srv.cost.*）で引くだけ。CLI・フック・transcript の形は読まない",
     "jui_tools/jui_cli/viz/web/js/57-fulltext.js": "カード・パネルの 1 行で切れた文の全文を浮き札で見せるだけ（ページの中の DOM だけ。CLI の形を読まない）",
     "jui_tools/jui_cli/viz/web/js/58-talk.js": "トークの画面（一覧と詳細）。サーバーの talk.* の frame（talk_contract.json）だけを読み、transcript や CLI の形は読まない。msg_id などの CLI の形はサーバー（データの層）の側の項目",
     "jui_tools/jui_cli/viz/export_demo.py": "デモのページを静的に書き出すだけ（サーバーも CLI も無し）",

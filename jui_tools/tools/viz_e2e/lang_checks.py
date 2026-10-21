@@ -8,10 +8,17 @@ Two boxes of words in one parent covering each other, and canvas words past thei
 failures as well, in either language (the scene's hint ran into the demo clock on a phone in English): a sign or a board drawn in
 the 3D has no scrollbar, and what does not fit is lost (the English run once had 8: Server room, the spec board's
 statuses and names; the Japanese 1: サーバールーム).
+
+The server room's words that come from document_tools (a room's problem lines, a cost meter's name) are its words on
+English too (ticket 2026-10-22-viz-en-document-tools-words-stay-japanese): server_room.py shoots the failure's bubble and
+the cost's day with doc_words_shot, and on the English page any of those words' Japanese is a failure. Japanese the
+room wrote itself (a node's label, a scenario's) is the room's, and is left for the sheet.
 """
 from __future__ import annotations
 
+import json
 import pathlib
+import re
 import time
 
 from common import DESKTOP, LAUNCH_ARGS, PHONE, Watch, new_page, ready, shot
@@ -19,6 +26,36 @@ from talk_ui import open_card, open_talk
 from waits import WaitTimeout
 
 LABEL = "a0"   # the demo's main session (talk_ui opens it too)
+JA_TABLE = pathlib.Path(__file__).resolve().parents[2] / "jui_cli" / "viz" / "web" / "i18n" / "ja.json"
+#: the keys of the words viz says for document_tools (jui_cli/viz/infra_words.py)
+DOC_WORDS = ("srv.cost.q.", "srv.cost.meter.", "srv.cost.model", "srv.room.")
+JA = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uff01-\uff60]")
+
+
+def doc_words() -> list[str]:
+    """The Japanese of document_tools' words, as they stand on a page: each value's parts between its slots that have
+    a Japanese letter, longest first."""
+    table = json.loads(JA_TABLE.read_text(encoding="utf-8"))
+    parts = {p.strip(" :、。（）") for k, v in table.items() if k.startswith(DOC_WORDS) and isinstance(v, str)
+             for p in re.split(r"\{\w+\}", v)}
+    return sorted((p for p in parts if JA.search(p)), key=len, reverse=True)
+
+
+def leftovers(report: dict, where: str, failures: list) -> None:
+    """document_tools' Japanese on the English page (screen_check reports Japanese on English pages only). A word is
+    found whole, not inside the room's own words (メール is a meter's name; メール配信 a node's label)."""
+    found = [(w, re.compile(rf"(?<![\u3040-\u30ff\u3400-\u9fff]){re.escape(w)}(?![\u3040-\u30ff\u3400-\u9fff])"))
+             for w in doc_words()]
+    for line in report["japanese"]:
+        hit = next((w for w, f in found if f.search(line)), None)
+        if hit:
+            failures.append(f"lang-checks: {where}: document_tools' Japanese on the English page ({hit!r}): {line}")
+
+
+async def doc_words_shot(page, name: str, out, failures: list) -> dict:
+    report = await shot(page, name, out, failures)
+    leftovers(report, name, failures)
+    return report
 
 
 def cut(report: dict, where: str, failures: list) -> None:

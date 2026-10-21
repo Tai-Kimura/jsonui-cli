@@ -1,0 +1,158 @@
+"""The server room's words that come from document_tools, in the page's language (ticket
+2026-10-22-viz-en-document-tools-words-stay-japanese).
+
+document_tools says them in Japanese by default: a room's problem and refusal lines (infra/room.py Words), a cost
+meter's name and the month's "others" (infra/cost/view.py Labels, from the load schema's x-label). jui viz passes
+these in their place, each word from its own table (web/i18n, keys srv.room.* and srv.cost.*): the shapes
+document_tools gives (and jsonui-doc prints) stay as they are, and the Japanese table's words are document_tools'
+own, letter for letter (tests/test_viz_infra_words.py).
+"""
+from __future__ import annotations
+
+from . import i18n
+
+CONFIG_NAME = "jui.config.json"
+
+# Each word's key, named as it is (the table's gate finds a key used by its name in the code).
+
+#: a quantity's name (the load schema's x-label)
+QUANTITY = {
+    "requests": "srv.cost.q.requests", "ecpu": "srv.cost.q.ecpu", "state_transitions": "srv.cost.q.state_transitions",
+    "read_units": "srv.cost.q.read_units", "write_units": "srv.cost.q.write_units",
+    "get_requests": "srv.cost.q.get_requests", "put_requests": "srv.cost.q.put_requests",
+    "rows_read": "srv.cost.q.rows_read", "rows_written": "srv.cost.q.rows_written", "messages": "srv.cost.q.messages",
+    "egress_gb": "srv.cost.q.egress_gb", "transfer_gb": "srv.cost.q.transfer_gb",
+    "cdn_egress_gb": "srv.cost.q.cdn_egress_gb", "processed_gb": "srv.cost.q.processed_gb",
+    "log_ingest_gb": "srv.cost.q.log_ingest_gb", "new_connections": "srv.cost.q.new_connections",
+    "rule_evaluations": "srv.cost.q.rule_evaluations", "emails": "srv.cost.q.emails",
+    "input_tokens": "srv.cost.q.input_tokens", "output_tokens": "srv.cost.q.output_tokens",
+    "build_minutes": "srv.cost.q.build_minutes", "lcu": "srv.cost.q.lcu",
+    "active_connections": "srv.cost.q.active_connections", "concurrency": "srv.cost.q.concurrency",
+    "capacity_units": "srv.cost.q.capacity_units", "read_capacity_units": "srv.cost.q.read_capacity_units",
+    "write_capacity_units": "srv.cost.q.write_capacity_units", "vcpu": "srv.cost.q.vcpu",
+    "memory_gb": "srv.cost.q.memory_gb", "storage_gb": "srv.cost.q.storage_gb",
+    "monthly_active_users": "srv.cost.q.monthly_active_users", "secrets": "srv.cost.q.secrets",
+    "metrics": "srv.cost.q.metrics", "rules": "srv.cost.q.rules", "duration_ms": "srv.cost.q.duration_ms",
+    "cpu_ms": "srv.cost.q.cpu_ms", "memory_mb": "srv.cost.q.memory_mb"
+}
+
+#: a meter no quantity names (view.METER_LABELS)
+METER = {
+    "instance": "srv.cost.meter.instance", "hour": "srv.cost.meter.hour", "cluster": "srv.cost.meter.cluster",
+    "storage": "srv.cost.meter.storage", "vcpu": "srv.cost.meter.vcpu", "memory": "srv.cost.meter.memory",
+    "lcu": "srv.cost.meter.lcu", "capacity": "srv.cost.meter.capacity", "shard": "srv.cost.meter.shard",
+    "plan": "srv.cost.meter.plan", "egress": "srv.cost.meter.egress",
+    "transfer-regional": "srv.cost.meter.transfer_regional",
+    "transfer-inter-region": "srv.cost.meter.transfer_inter_region"
+}
+
+#: a secret's kind (room.SECRET_JA)
+SECRET = {
+    "arn": "srv.room.secret.arn", "account_id": "srv.room.secret.account_id",
+    "ip_address": "srv.room.secret.ip_address", "connection_string": "srv.room.secret.connection_string",
+    "url_credentials": "srv.room.secret.url_credentials", "private_key": "srv.room.secret.private_key",
+    "access_key": "srv.room.secret.access_key", "token": "srv.room.secret.token",
+    "password": "srv.room.secret.password"
+}
+
+#: a flow problem (room.FLOW_JA)
+FLOW = {
+    "flow.node.missing": "srv.room.flow.node.missing", "flow.edge.missing": "srv.room.flow.edge.missing",
+    "flow.discontinuous": "srv.room.flow.discontinuous", "flow.step.kind": "srv.room.flow.step.kind",
+    "flow.paths_disagree": "srv.room.flow.paths_disagree", "flow.too_deep": "srv.room.flow.too_deep",
+    "flow.choice.duplicate": "srv.room.flow.choice.duplicate", "flow.choice.kind": "srv.room.flow.choice.kind",
+    "flow.default.missing": "srv.room.flow.default.missing", "flow.join.missing": "srv.room.flow.join.missing",
+    "flow.join.backward": "srv.room.flow.join.backward", "flow.goto.missing": "srv.room.flow.goto.missing",
+    "flow.goto.jump": "srv.room.flow.goto.jump", "flow.default_cycle": "srv.room.flow.default_cycle",
+    "flow.env.partial": "srv.room.flow.env.partial", "flow.id.duplicate": "srv.room.flow.id.duplicate",
+    "flow.schedule.trigger": "srv.room.flow.schedule.trigger"
+}
+
+#: a refusal's line
+REFUSED = {
+    "not_a_room": "srv.room.refused.not_a_room", "no_infra": "srv.room.refused.no_infra",
+    "bad_config": "srv.room.refused.bad_config", "too_many_files": "srv.room.refused.too_many_files",
+    "too_large": "srv.room.refused.too_large", "unreadable": "srv.room.refused.unreadable"
+}
+
+#: a refusal whose usual line would say the wrong thing (room's say=)
+SAID = {
+    "config_too_big": "srv.room.said.config_too_big", "config_json_line": "srv.room.said.config_json_line",
+    "config_json": "srv.room.said.config_json", "infra_object": "srv.room.said.infra_object",
+    "side_path": "srv.room.said.side_path", "symlink": "srv.room.said.symlink",
+    "no_infra_skipped": "srv.room.said.no_infra_skipped"
+}
+
+
+class RoomWords:
+    """infra/room.py Words, from the table."""
+
+    def __init__(self, limits: dict) -> None:
+        self.limits = limits
+
+    def json_line(self, where, line):
+        return i18n.tl("srv.room.json.line", where=where, line=line)
+
+    def json(self, where):
+        return i18n.tl("srv.room.json", where=where)
+
+    def secret(self, where, path, kind):
+        return i18n.tl("srv.room.secret", where=where, path=path, kind=i18n.tl(SECRET[kind]) if kind in SECRET else kind)
+
+    def schema(self, where, path):
+        return i18n.tl("srv.room.schema", where=where, path=path)
+
+    def reference(self, where, path, code):
+        return i18n.tl("srv.room.reference", where=where, path=path, code=code)
+
+    def spec_duplicate(self, where, path):
+        return i18n.tl("srv.room.spec.duplicate", where=where, path=path)
+
+    def flow(self, where, path, code):
+        return i18n.tl("srv.room.flow", where=where, path=path, why=i18n.tl(FLOW[code]), code=code)
+
+    def model_too_big(self, folder, what):
+        return i18n.tl("srv.room.model.too_big", folder=folder, what=what)
+
+    def file_too_large(self, where, mb):
+        return i18n.tl("srv.room.file.too_large", where=where, mb=mb)
+
+    def unreadable(self, where):
+        return i18n.tl("srv.room.unreadable", where=where)
+
+    def not_regular(self, where, what):
+        return i18n.tl("srv.room.not_regular", where=where, what=what)
+
+    def icon(self, path):
+        return i18n.tl("srv.room.icon", config=CONFIG_NAME, path=path)
+
+    def other(self, where, code):
+        return f"{where}: {code}"
+
+    def refused(self, reason, folder):
+        if reason not in REFUSED:
+            return reason
+        return i18n.tl(REFUSED[reason], folder=folder, config=CONFIG_NAME, n=self.limits["files"],
+                       mb=self.limits["total_bytes"] // 1_000_000)
+
+    def said(self, kind, **v):
+        if "key" in v:               # infra.<key>: tl's own first argument is key
+            v["name"] = v.pop("key")
+        return i18n.tl(SAID[kind], config=CONFIG_NAME, shape='{"dir": ..., "icons": {...}}', **v)
+
+
+class CostLabels:
+    """infra/cost/view.py Labels, from the table: a quantity's name (srv.cost.q.<quantity>, the load schema's
+    x-label in Japanese), a meter no quantity names (srv.cost.meter.<name>), one model's tokens, the others."""
+
+    def quantity(self, qid, label):
+        return i18n.tl(QUANTITY[qid]) if qid in QUANTITY else label
+
+    def meter(self, name):
+        return i18n.tl(METER[name]) if name in METER else name
+
+    def model(self, label, model):
+        return i18n.tl("srv.cost.model", label=label, model=model)
+
+    def others(self, n):
+        return i18n.tl("cost.others", n=n)

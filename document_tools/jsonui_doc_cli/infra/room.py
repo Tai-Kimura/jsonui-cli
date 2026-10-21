@@ -49,53 +49,121 @@ FLOW_JA = {"flow.node.missing": "が、この flow と一緒に描かれない n
            "flow.schedule.trigger": "の schedule は、trigger が schedule の時だけ書けます"}
 
 
-def short(p: dict, folder: str) -> str:
-    """One line the page can show as it is (boundary §5.2): the file (a path inside the room), the line when known, and
-    the kind — never the value found (a secret's shape is named by its kind only)."""
+class Words:
+    """The lines the page shows for what a room's read found (boundary §5.2): a problem's, a refusal's. These defaults
+    are jsonui-doc's (Japanese, as the page said them first); a page in another language passes its own to read()
+    (jui viz: its table's words, ticket 2026-10-22-viz-en-document-tools-words-stay-japanese) — the shapes stay the same.
+    Each line names the file (a path inside the room), the line when known, and the kind — never the value found (a
+    secret's shape is named by its kind only)."""
+
+    def json_line(self, where: str, line) -> str:
+        return f"{where}: {line} 行目の JSON が壊れています"
+
+    def json(self, where: str) -> str:
+        return f"{where}: JSON として読めません"
+
+    def secret(self, where: str, path: str, kind: str) -> str:
+        return f"{where}: {path} に秘密の形（{SECRET_JA.get(kind, kind)}）があります。値は書けません"
+
+    def schema(self, where: str, path: str) -> str:
+        return f"{where}: {path} がスキーマに合いません"
+
+    def reference(self, where: str, path: str, code: str) -> str:
+        return f"{where}: {path} の参照が合いません（{code}）"
+
+    def spec_duplicate(self, where: str, path: str) -> str:
+        return f"{where}: {path} の spec の key が 2 度あります（先の物を出します）"
+
+    def flow(self, where: str, path: str, code: str) -> str:
+        return f"{where}: {path} の flow {FLOW_JA[code]}（{code}）"
+
+    def model_too_big(self, folder: str, what: str) -> str:
+        return f"{folder}: 部屋のモデルが上限を超えています（{what}）"
+
+    def file_too_large(self, where: str, mb: int) -> str:
+        return f"{where}: 1 ファイルの上限（{mb} MB）を超えています"
+
+    def unreadable(self, where: str) -> str:
+        return f"{where}: 読めません"
+
+    def not_regular(self, where: str, what: str) -> str:
+        return f"{where}: 普通のファイルでないため読みません（{what}）"
+
+    def icon(self, path: str) -> str:
+        return f"{CONFIG_NAME}: {path} のアイコンが使えません"
+
+    def other(self, where: str, code: str) -> str:
+        return f"{where}: {code}"
+
+    def refused(self, reason: str, folder: str) -> str:
+        return {"not_a_room": "この部屋は読めません",
+                "no_infra": f"{folder} に infra のファイル（*.json）がありません",
+                "bad_config": f"{CONFIG_NAME}: infra の設定が正しくありません（dir は部屋の中の相対パス）",
+                "too_many_files": f"{folder}: ファイルが多すぎます（{LIMITS['files']} 個まで）",
+                "too_large": f"{folder}: ファイルの合計が上限（{LIMITS['total_bytes'] // 1_000_000} MB）を超えています",
+                "unreadable": f"{folder}: 読めません"}.get(reason, reason)
+
+    def said(self, kind: str, **v) -> str:
+        """A refusal whose usual line would say the wrong thing (Refused's say=)."""
+        return {"config_too_big": lambda: f"{CONFIG_NAME} が大きすぎます（{v.get('mb')} MB まで）",
+                "config_json_line": lambda: f"{CONFIG_NAME}: {v.get('line')} 行目の JSON が壊れています",
+                "config_json": lambda: f"{CONFIG_NAME} が JSON として読めません",
+                "infra_object": lambda: f'{CONFIG_NAME}: "infra" はオブジェクト（{{"dir": ..., "icons": {{...}}}}）で書いてください',
+                "side_path": lambda: f"{CONFIG_NAME}: infra.{v.get('key')} は部屋の中の相対パスで書いてください",
+                "symlink": lambda: f"{v.get('folder')} は symlink を通るため読みません（部屋の中の本物のフォルダに置いてください）",
+                "no_infra_skipped": lambda: f"{v.get('folder')} に読める infra のファイル（*.json）がありません（普通のファイルでない物は読みません）",
+                }[kind]()
+
+
+DEFAULT_WORDS = Words()
+
+
+def short(p: dict, folder: str, words: Words = DEFAULT_WORDS) -> str:
+    """One line the page can show as it is, in ``words``' language."""
     f = p.get("file") or ""
     where = f if f == CONFIG_NAME or not f else f"{folder}/{f}"
     code = p["code"]
     if code == "json":
-        return f"{where}: {p['line']} 行目の JSON が壊れています" if p.get("line") else f"{where}: JSON として読めません"
+        return words.json_line(where, p["line"]) if p.get("line") else words.json(where)
     if code.startswith("secret."):
-        return f"{where}: {p['path']} に秘密の形（{SECRET_JA.get(code[7:], code[7:])}）があります。値は書けません"
+        return words.secret(where, p["path"], code[7:])
     if code == "schema":
-        return f"{where}: {p['path']} がスキーマに合いません"
+        return words.schema(where, p["path"])
     if code in ("environment.conflict", "environment.missing", "id.duplicate", "group.missing", "group.cycle", "edge.missing"):
-        return f"{where}: {p['path']} の参照が合いません（{code}）"
+        return words.reference(where, p["path"], code)
     if code == "spec.duplicate":
-        return f"{where}: {p['path']} の spec の key が 2 度あります（先の物を出します）"
+        return words.spec_duplicate(where, p["path"])
     if code in FLOW_JA:
-        return f"{where}: {p['path']} の flow {FLOW_JA[code]}（{code}）"
+        return words.flow(where, p["path"], code)
     if code == "model.too_big":
-        return f"{folder}: 部屋のモデルが上限を超えています（{p['path'].lstrip('/')}）"
+        return words.model_too_big(folder, p["path"].lstrip("/"))
     if code == "read.too_large":
-        return f"{where}: 1 ファイルの上限（{LIMITS['file_bytes'] // 1_000_000} MB）を超えています"
+        return words.file_too_large(where, LIMITS["file_bytes"] // 1_000_000)
     if code == "read.unreadable":
-        return f"{where}: 読めません"
+        return words.unreadable(where)
     if code == "read.not_regular":
-        return f"{where}: 普通のファイルでないため読みません（{p['message'].split(',')[0]}）"
+        return words.not_regular(where, p["message"].split(",")[0])
     if code in ("config.icon", "read.icon"):
-        return f"{CONFIG_NAME}: {p['path']} のアイコンが使えません"
-    return f"{where}: {code}"
+        return words.icon(p["path"])
+    return words.other(where, code)
 
 
-def _short_refused(reason: str, folder: str) -> str:
-    return {"not_a_room": "この部屋は読めません",
-            "no_infra": f"{folder} に infra のファイル（*.json）がありません",
-            "bad_config": f"{CONFIG_NAME}: infra の設定が正しくありません（dir は部屋の中の相対パス）",
-            "too_many_files": f"{folder}: ファイルが多すぎます（{LIMITS['files']} 個まで）",
-            "too_large": f"{folder}: ファイルの合計が上限（{LIMITS['total_bytes'] // 1_000_000} MB）を超えています",
-            "unreadable": f"{folder}: 読めません"}.get(reason, reason)
+def _short_refused(reason: str, folder: str, words: Words = DEFAULT_WORDS) -> str:
+    return words.refused(reason, folder)
 
 
 class Refused(Exception):
     """The room cannot be read at all: ``reason`` is one of REASONS; ``short`` the line for the page, when the reason's
     usual one would say the wrong thing."""
 
-    def __init__(self, reason: str, message: str, short: str | None = None) -> None:
+    def __init__(self, reason: str, message: str, short: str | None = None, say: tuple | None = None) -> None:
         super().__init__(message)
-        self.reason, self.message, self.short = reason, message, short
+        self.reason, self.message, self.short, self.say = reason, message, short, say   # say: (kind, values) for Words.said
+
+    def line(self, folder: str, words: "Words") -> str:
+        if self.short:
+            return self.short
+        return words.said(self.say[0], **self.say[1]) if self.say else words.refused(self.reason, folder)
 
 
 # ---------------------------------------------------------------- opening inside the room
@@ -217,18 +285,18 @@ def _infra_section(root: Path) -> dict | None:
         return None
     if raw is TOO_BIG:
         raise Refused("bad_config", f"{CONFIG_NAME} is larger than {LIMITS['config_bytes']} bytes",
-                      f"{CONFIG_NAME} が大きすぎます（{LIMITS['config_bytes'] // 1_000_000} MB まで）")
+                      say=("config_too_big", {"mb": LIMITS["config_bytes"] // 1_000_000}))
     try:
         cfg = json.loads(raw.decode("utf-8-sig"))        # a BOM some editors write is not an error
     except json.JSONDecodeError as exc:
         raise Refused("bad_config", f"{CONFIG_NAME} is not JSON (line {exc.lineno})",
-                      f"{CONFIG_NAME}: {exc.lineno} 行目の JSON が壊れています") from None
+                      say=("config_json_line", {"line": exc.lineno})) from None
     except (ValueError, UnicodeDecodeError, RecursionError):
-        raise Refused("bad_config", f"{CONFIG_NAME} is not JSON", f"{CONFIG_NAME} が JSON として読めません") from None
+        raise Refused("bad_config", f"{CONFIG_NAME} is not JSON", say=("config_json", {})) from None
     infra = cfg.get("infra") if isinstance(cfg, dict) else None
     if infra is not None and not isinstance(infra, dict):
         raise Refused("bad_config", f'{CONFIG_NAME}: "infra" must be an object',
-                      f'{CONFIG_NAME}: "infra" はオブジェクト（{{"dir": ..., "icons": {{...}}}}）で書いてください')
+                      say=("infra_object", {}))
     return infra
 
 
@@ -285,7 +353,7 @@ def side_dir(root: Path, key: str) -> str:
     if not _rel_ok(side):
         raise Refused("bad_config", f'{CONFIG_NAME}: infra.{key} must be a relative path inside the room (no "..", '
                                     "no absolute path, no URL)",
-                      f"{CONFIG_NAME}: infra.{key} は部屋の中の相対パスで書いてください")
+                      say=("side_path", {"key": key}))
     return side
 
 
@@ -298,7 +366,7 @@ def read_json_folder(root: Path, folder: str) -> tuple[list[tuple[str, bytes]], 
     listed = _list_dir(root, folder, skipped)
     if listed is None and _symlink_on_the_way(root, folder):
         raise Refused("unreadable", f"{folder} is reached through a symlink: not read",
-                      f"{folder} は symlink を通るため読みません（部屋の中の本物のフォルダに置いてください）")
+                      say=("symlink", {"folder": folder}))
     problems = [M._problem(name, "/", "read.not_regular", f"{what}, not a regular file: not read", "warning")
                 for name, what in skipped]
     listed = listed or []
@@ -341,7 +409,7 @@ def counts(root: Path) -> dict:
     return {"files": len(listed), "dir": folder}
 
 
-def read(root: Path, is_room: bool = True) -> dict:
+def read(root: Path, is_room: bool = True, words: Words = DEFAULT_WORDS) -> dict:
     """The room's model as the page takes it (§5.2): {ok, version, dir, files, environments, groups, nodes, edges,
     problems, icons, readMs}, or {ok: False, reason, message} when nothing could be read. Blocking: call it off the
     event loop."""
@@ -355,13 +423,12 @@ def read(root: Path, is_room: bool = True) -> dict:
         listed = _list_dir(root, folder, skipped)
         if listed is None and _symlink_on_the_way(root, folder):
             raise Refused("unreadable", f"{folder} is reached through a symlink: not read",
-                          f"{folder} は symlink を通るため読みません（部屋の中の本物のフォルダに置いてください）")
+                          say=("symlink", {"folder": folder}))
         for name, what in skipped:
             problems.append(M._problem(name, "/", "read.not_regular", f"{what}, not a regular file: not read", "warning"))
         if not listed:
             refused = Refused("no_infra", f"no model files in {folder} (*.json)",
-                              f"{folder} に読める infra のファイル（*.json）がありません（普通のファイルでない物は読みません）"
-                              if skipped else None)
+                              say=("no_infra_skipped", {"folder": folder}) if skipped else None)
             refused.problems = problems                 # the warnings say why: they go with the refusal
             raise refused
         if len(listed) > LIMITS["files"]:
@@ -384,7 +451,7 @@ def read(root: Path, is_room: bool = True) -> dict:
         if not model["files"]:                 # every file was left out: nothing to show, the first error says why
             first = next((p for p in problems if p["severity"] == "error"), None)
             for p in problems:
-                p["short"] = short(p, folder)
+                p["short"] = short(p, folder, words)
             return {"ok": False, "reason": "invalid", "dir": folder,
                     "message": "no model file could be used", "short": first["short"] if first else folder,
                     "problems": problems}
@@ -395,18 +462,18 @@ def read(root: Path, is_room: bool = True) -> dict:
                 del icons[key]
     except Refused as r:
         folder = locals().get("folder") or DEFAULT_DIR
-        out = {"ok": False, "reason": r.reason, "message": r.message, "short": r.short or _short_refused(r.reason, folder)}
+        out = {"ok": False, "reason": r.reason, "message": r.message, "short": r.line(folder, words)}
         if getattr(r, "problems", None):
             for p in r.problems:
-                p["short"] = short(p, folder)
+                p["short"] = short(p, folder, words)
             out["problems"] = r.problems
         return out
     except OSError as exc:
         folder = locals().get("folder") or DEFAULT_DIR
         return {"ok": False, "reason": "unreadable", "message": f"reading failed ({exc.strerror or type(exc).__name__})",
-                "short": _short_refused("unreadable", folder)}
+                "short": words.refused("unreadable", folder)}
     for p in problems:
-        p["short"] = short(p, folder)
+        p["short"] = short(p, folder, words)
     out = {"ok": True, "dir": folder}
     out.update(model)
     out.update(problems=problems, icons=icons, readMs=int((time.monotonic() - t0) * 1000))

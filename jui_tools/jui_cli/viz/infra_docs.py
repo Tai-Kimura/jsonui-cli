@@ -16,6 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from . import i18n
+from . import infra_words
 
 DEFAULT_DIR = "docs/infra"
 
@@ -43,7 +44,7 @@ def read(root: Path | str, seq=None) -> tuple[int, dict]:
     if room is None:
         return 500, {"ok": False, "seq": seq, "reason": "unreadable",
                      "message": i18n.tl("srv.infra.no_tools")}
-    out = room.read(Path(root))
+    out = room.read(Path(root), words=infra_words.RoomWords(room.LIMITS))   # its lines in the page's language
     out["seq"] = seq
     return (200 if out.get("ok") else room.REASONS.get(out.get("reason"), 500)), out
 

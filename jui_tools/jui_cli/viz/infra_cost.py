@@ -24,6 +24,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 from . import i18n
+from . import infra_words
 
 ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 DATE = re.compile(r"^20[0-9]{2}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$")
@@ -151,13 +152,13 @@ def read(root: Path | str, seq=None, scenario: str | None = None, date: str | No
     if date is not None:
         if not date.startswith(chosen["month"] + "-") or not any(h["date"] == date for h in chosen["hours"]):
             return _refuse(400, seq, "bad_request", "the date is not in the scenario's month")
-        return 200, {"ok": True, "seq": seq, "scenario": chosen["id"], "day": m["view"].day_view(result, model, date)}
+        return 200, {"ok": True, "seq": seq, "scenario": chosen["id"], "day": m["view"].day_view(result, model, date, words=infra_words.CostLabels())}
     problems = [p for p in loads["problems"] if p["severity"] in ("error", "warning")]
     return 200, {"ok": True, "seq": seq, "scenario": chosen["id"],
                  "scenarios": [{"id": s["id"], "label": s["label"], "file": s["file"], "month": s["month"],
                                 "environment": s["environment"]} for s in loads["scenarios"]],
-                 "month": m["view"].account_view(list(zip(acct[0], acct[1])), model) if acct
-                 else m["view"].month_view(result, model, by),
+                 "month": m["view"].account_view(list(zip(acct[0], acct[1])), model, words=infra_words.CostLabels()) if acct
+                 else m["view"].month_view(result, model, by, words=infra_words.CostLabels()),
                  "account": {"available": account_scenarios(loads["scenarios"], model, chosen)[0], "on": bool(acct),
                              **({"scenarios": [s["id"] for s in acct[0]], "missing": acct[2]} if acct else {})},
                  "problems": {"count": len(problems), "first": [{k: p.get(k) for k in ("file", "path", "code", "message", "severity")}

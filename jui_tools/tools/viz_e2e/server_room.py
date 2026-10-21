@@ -28,7 +28,8 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, T, Watch, dump, new_page, ready
+from lang_checks import doc_words_shot
 from waits import until
 
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
@@ -475,9 +476,10 @@ async def run_server_room(pw, out, failures):
         await until(page, "() => { const c = window.__dbg.srCost(); return c.day && c.day.date === '2026-11-27' && c.day.rows > 0; }", "the day", timeout=20000)
         await page.evaluate("() => { const r = document.getElementById('src-hour'); r.value = '1'; r.dispatchEvent(new Event('input', { bubbles: true })); }")
         d = res["costDay"] = (await page.evaluate(COST))["day"]
+        await doc_words_shot(page, "sr-cost-day", out, failures)   # the meters' names (lang_checks.py)
         check(failures, d["hour"] == 1 and d["clock"] == "01:00" and d["red"] and "捌けた / 来た" in d["red"][0],
               f"over capacity in red as served / demand: {d['red']}")
-        check(failures, any("リクエスト" in x and "/sec" in x and "$" in x for x in d["segments"]), f"a meter says its rate and charge: {d['segments'][:6]}")
+        check(failures, any(T("srv.cost.q.requests") in x and "/sec" in x and "$" in x for x in d["segments"]), f"a meter says its rate and charge: {d['segments'][:6]}")
         await page.evaluate("() => window.__dbg.srCostPlayMs(120)")
         await page.click("#sr-cost [data-src-act='play']")
         await until(page, "() => window.__dbg.srCost().day.hour >= 5", "played on", timeout=10000)
@@ -724,12 +726,14 @@ async def run_server_room(pw, out, failures):
                   f"{name}: the keypad red, the bubble names the file, the room stays: {s['keypad']} {s['bubble']}")
             check(failures, (await page.evaluate("() => window.__dbg.solo()")) == pid["bad"], f"{name}: still in the room")
             check(failures, want in ((s["bubble"] or {}).get("text") or ""), f"{name}: the bubble's own line (the short one) names the file: {s['bubble']}")   # E2
+            if name in ("broken", "secret"):
+                await doc_words_shot(page, f"sr-fail-{name}", out, failures)   # the bubble's line (lang_checks.py)
             if name == "secret":
                 leaked = [v for v in secret_values if len(v) >= 6 and v in text]
                 check(failures, not leaked, f"no secret-shaped value in the bubble or its whole text: {leaked}")
             if name == "specSecret":
                 html = await page.content()
-                check(failures, "接続文字列" in text and "db-prod.internal" not in html and SPEC_SECRET not in html,
+                check(failures, T("srv.room.secret.connection_string") in text and "db-prod.internal" not in html and SPEC_SECRET not in html,
                       f"a spec value with a secret's shape: refused by its place and kind, the value nowhere on the page: {s['bubble']}")
             if name == "broken":
                 await page.hover("#sr-bubble")

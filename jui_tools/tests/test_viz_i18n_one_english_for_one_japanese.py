@@ -36,6 +36,8 @@ SPLIT = {
     "すべてのプロジェクトを表示": "the button (Show all projects) and the state it is in (Showing all projects)",
     "添付": "the list (Attachments) and one with no name (Attachment)",
     "操作": "a section (Actions) and a table's column (Action)",
+    "リクエスト": "a box of the diagram (Request) and the cost's count of them (Requests)",
+    "保存": "the button (Save) and the cost's meter for what is kept (Storage)",
 }
 
 
