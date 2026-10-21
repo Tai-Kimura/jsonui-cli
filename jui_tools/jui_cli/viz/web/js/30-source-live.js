@@ -217,6 +217,24 @@ const SOURCE = {
       return { ok: true, blob: await res.blob() };
     } catch (err) { return { ok: false, status: 0, error: tl('live.offline') }; }
   },
+  /* The skill spirits the page may show (POST /api/spirits, under the prompt's checks): the models the checks pass. */
+  async spirits() {
+    try {
+      const res = await fetch('/api/spirits', { method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token }, body: '{}' });
+      if (!res.ok) return { ok: false, status: res.status, error: (await res.text()).trim() };
+      return { ok: true, models: (await res.json()).models || [] };
+    } catch (err) { return { ok: false, status: 0, error: tl('live.offline') }; }
+  },
+  /* One .glb of a listed spirit (POST /api/spirit-file: its id and file name, never a path), as an ArrayBuffer. */
+  async spiritFile(id, file) {
+    try {
+      const res = await fetch('/api/spirit-file', { method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token }, body: JSON.stringify({ id, file }) });
+      if (!res.ok) return { ok: false, status: res.status, error: (await res.text()).trim() };
+      return { ok: true, buffer: await res.arrayBuffer() };
+    } catch (err) { return { ok: false, status: 0, error: tl('live.offline') }; }
+  },
   /* One attached image of a prompt from this page (POST /api/attach-image: the session and the id from the prompt's
      line, under the prompt's checks). The bytes come back as a Blob; { gone: true } when the kept file is gone. */
   async attachImage(ref) {
@@ -938,6 +956,8 @@ function rebuildRobots(initial) {
     const st = { state: STATES[a.state] ? a.state : 'idle', act: String(a.act || ''), asking: a.state === 'waiting' && a.waitingOn === 'question', since: Number(a.updatedAt) || 0,
       promptAt: Number(a.promptAt) || 0, whistle: a.whistle && Number(a.whistle.until) > 0 ? { at: Number(a.whistle.at) || 0, until: Number(a.whistle.until) } : null,   // a subagent called (10-20)
       readKind: a.state === 'reading' && a.readKind === 'web' ? 'web' : null,   // the dictionary (10-20)
+      // a skill in use (the spirit, 45-spirits.js): its name and when it began (the key of one skill's spirit)
+      skill: a.skill && typeof a.skill.name === 'string' && Number(a.skill.since) > 0 ? { name: a.skill.name, since: Number(a.skill.since), forked: a.skill.forked === true } : null,
       git: a.git && typeof a.git === 'object' && a.git.id ? a.git : null };   // the box (2.3.4): its last push / pull
     // a deletion it ran (10-19): the page walks it to the shredder once per new at
     if (a.shred && typeof a.shred === 'object' && Number(a.shred.at) > 0) {

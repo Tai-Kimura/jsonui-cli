@@ -114,3 +114,31 @@ def test_a_skill_call_without_a_skill_name_is_no_skill(tool_input):
                                               ("Launching skill: code-review", False), (None, False)])
 def test_what_says_a_skill_ran_in_a_subagent(response, forked):
     assert I._skill_forked(response) is forked
+
+
+def test_the_ledger_s_probe_sees_the_two_result_forms_and_flags_another(tmp_path):
+    """cc_watch's skill_tool_shape (the ledger's "skill"): a Skill call's input names the skill; its result is inline
+    {success, commandName} or forked {status: "forked", agentId}. Any other form makes result_known some."""
+    import json
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    from cc_watch import probes as P
+    proj = tmp_path / "projects" / "-w"
+    proj.mkdir(parents=True)
+
+    def use(i):
+        return {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": f"u{i}", "name": "Skill",
+                                                               "input": {"skill": "code-review", "args": ""}}]}}
+
+    def result(i, r):
+        return {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": f"u{i}", "content": "ok"}]},
+                "toolUseResult": r}
+    recs = [use(1), result(1, {"success": True, "commandName": "code-review"}),
+            use(2), result(2, {"status": "forked", "agentId": "a1", "result": "…"})]
+    (proj / "s.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs))
+    assert P.skill_tool_shape(P.Context(run=lambda a: (0, ""), transcripts=tmp_path / "projects")) == {
+        "input_skill": "all", "result_known": "all", "forked": "seen"}
+    (proj / "s.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs + [use(3), result(3, {"done": 1})]))
+    assert P.skill_tool_shape(P.Context(run=lambda a: (0, ""), transcripts=tmp_path / "projects"))["result_known"] == "some"
+    assert P.skill_tool_shape(P.Context(run=lambda a: (0, "")))["skipped"]

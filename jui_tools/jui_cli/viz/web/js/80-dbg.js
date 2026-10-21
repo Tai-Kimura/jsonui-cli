@@ -405,6 +405,23 @@ window.__dbg = {
   // looks at is from the open robot, and how far the camera is from the room's (or the floor's) own view
   // rbFollow (50-panel.js): the card's mark when its robot moved and the view did not follow, and the last switch by hand
   follow: () => ({ moved: rbState.moved, seen: rbState.seen, handAt: FOLLOW.handAt, toast: document.getElementById('toast').textContent }),
+  // a skill in use (45-spirits.js): the robot's skill, its spirit's model and phase, what it wears and hides, its badge
+  // and bubble; and the page's whole count of standing spirits
+  spirit: (id) => {
+    const R = robots.find((x) => x.def.id === id); if (!R) return null;
+    const S = R.spirit, st = robotState[id] || {};
+    const shown = (el) => !!el && !el.hidden && el.style.visibility !== 'hidden';
+    return { skill: st.skill ? st.skill.name : null, model: S && S.model ? S.model.id : null, phase: S ? S.phase : null,
+      figure: !!(S && S.figure), holders: S ? S.holders.length : 0, error: S ? S.error || null : null,
+      band: R.robot.band.visible, cheek: !!(S && S.tagCheek),
+      textures: (() => { let maps = 0, loaded = 0; if (S && S.figure) S.figure.traverse((o) => { if (!o.isMesh) return;
+        for (const m of [].concat(o.material)) if (m.map) { maps++; const im = m.map.image; if (im && (im.width || im.naturalWidth)) loaded++; } });
+        return { maps, loaded }; })(),
+      badge: shown(R.skillEl) ? R.skillEl.textContent : null,
+      bubble: S && shown(S.bubbleEl) ? { text: S.bubbleEl.textContent, ruby: (S.bubbleEl.querySelector('rt') || {}).textContent || null,
+        target: S.bubbleEl.dataset.target } : null };
+  },
+  spiritsStanding: () => robots.filter((x) => x.spirit && x.spirit.figure).length,
   projectName: (id) => (PROJECT[id] ? PROJECT[id].name : null),
   // where a robot stands in the 3D (the room under it) and whether it is still walking
   robotAt: (id) => { const R = robots.find((x) => x.def.id === id); if (!R) return null; const q = R.robot.root.position;

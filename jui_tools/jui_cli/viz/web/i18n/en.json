@@ -2143,5 +2143,6 @@
   "srv.room.said.infra_object": "{config}: write \"infra\" as an object ({shape})",
   "srv.room.said.side_path": "{config}: write infra.{name} as a relative path inside the room",
   "srv.room.said.symlink": "{folder} is reached through a symlink, so it is not read (put it in a real folder inside the room)",
-  "srv.room.said.no_infra_skipped": "No readable infra files (*.json) in {folder} (what is not a regular file is not read)"
+  "srv.room.said.no_infra_skipped": "No readable infra files (*.json) in {folder} (what is not a regular file is not read)",
+  "spirit.badge": "Using skill: {name}"
 }

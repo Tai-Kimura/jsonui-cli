@@ -32,7 +32,7 @@ JA = re.compile(r"[぀-ヿ㐀-鿿！-｠]")
 #: Files whose words are all in the table: no Japanese outside their comments but what KEPT names. Closed: a new part
 #: joins a list or the gate is red (the ruling 10-21: from stage 2 on, no new Japanese in the page's code).
 MOVED = {"05-i18n.js", "10-robot-core.js", "20-core.js", "25-net.js", "30-source-demo.js", "30-source-live.js",
-         "40-scene.js", "50-panel.js", "51-denials.js", "52-data-docs.js", "53-devices.js", "53-waits.js", "54-bills.js",
+         "40-scene.js", "45-spirits.js", "50-panel.js", "51-denials.js", "52-data-docs.js", "53-devices.js", "53-waits.js", "54-bills.js",
          "55-history.js", "56-server-cost.js", "56-server-room.js", "57-fulltext.js", "58-talk.js", "59-sr-flows.js",
          "60-log.js", "70-main.js", "80-dbg.js"}
 #: Content written once per language (not words of the table): each set checked where it is made.

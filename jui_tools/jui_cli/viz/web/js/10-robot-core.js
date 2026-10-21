@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';   // the skill spirits' models (45-spirits.js)
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const SPEED = reduceMotion ? 0.35 : 1;
@@ -524,6 +526,7 @@ function createRobot({ label = 'a0', role = 'main', state = 'idle', seed = 0, fu
   r.bandCanvas = makeCanvas(2048, Math.round((2048 * BAND.h) / g.bandWall.userData.perimeter));
   r.bandTex = texFrom(r.bandCanvas);
   const band = new THREE.Group(); band.position.y = BAND.y; r.head.add(band);
+  r.band = band;   // a skill spirit's model may hide it (45-spirits.js)
   band.add(new THREE.Mesh(g.bandWall, toon('#ffffff', { map: r.bandTex })));
   band.add(new THREE.Mesh(g.bandCap, m.band));
   const knotZ = -(HEAD.d / 2 + BAND.t + 0.025);

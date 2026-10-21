@@ -747,6 +747,7 @@ function liveAddRobot(d, i) {
   return R;
 }
 function liveDropRobot(R) {
+  spiritDrop(R); if (R.skillEl) R.skillEl.remove();   // 45-spirits.js: what it wore for a skill comes off with it
   scene.remove(R.robot.root); focusRelease(R.robot.root); disposeTree(R.robot.root);   // focusRelease: 50-panel.js (10-18)
   const k = fontRedraws.indexOf(R.robot.fontRedraw); if (k >= 0) fontRedraws.splice(k, 1);
   R.tag.remove();
@@ -1179,6 +1180,7 @@ function liveUpdateRobots(nowSec, dt) {
     // a subagent called: the whistle from the call's start until its fixed end, only at the desk (10-20)
     R.robot.launch = forced(R.robot, 'launch', !!(st.whistle && vizNow() < st.whistle.until) && !playing && !R.git && how !== 'walking' && !R.path.length);
     if (vis === 'reading') R.robot.readKind = st.readKind || null;   // kept after it: the dictionary fades out as it came (10-20)
+    spiritTick(R, st, nowSec, dt);   // a skill in use: its spirit, what it wears, its badge (45-spirits.js)
     // over its head: the errand under way says its own line (one robot never runs both, gitTick / shredTick); else, of
     // what it deleted (SHRED.labelMs after) and the box's line (GITBOX.showMs after), the newer one; else what it does
     const shredLine = st.shred && (R.shred || vizNow() - st.shred.at < SHRED.labelMs) ? `${st.shred.ok ? tl('scene.shred.ok') : tl('scene.shred.failed')} ${st.shred.label}` : '';
@@ -2905,7 +2907,7 @@ function placeRobotTags(dt = 1 / 60) {
   billsExpire();   // 54-bills.js
   for (const R of robots) {
     const size = R.robot.size || 1;   // a subagent is smaller (2.3.5): its tag just above its own head
-    tagNdc.copy(R.robot.root.position).addScaledVector(TAG_UP, size);
+    if (!spiritTagPoint(R, tagNdc)) tagNdc.copy(R.robot.root.position).addScaledVector(TAG_UP, size);   // a head part: the cheek (45-spirits.js)
     if (R.robot.rps && R.robot.rps.visible) tagNdc.y += TAGS.rpsLift * size;
     tagNdc.project(camera);
     const hidden = tagNdc.z > 1 || tagNdc.z < -1 || !R.robot.root.visible || R.tag.hidden;
@@ -2917,12 +2919,17 @@ function placeRobotTags(dt = 1 / 60) {
     // the wait's bubble (53-waits.js) sits over the bill, or over the tag: kept on the tag's box as the bill is
     const wait = !hidden && R.waitEl && !R.waitEl.hidden ? R.waitEl : null, wtext = wait ? `${wait.dataset.waitKind}|${wait.textContent}` : '';
     if (wait && (!R.waitSize || R.waitSize.text !== wtext)) R.waitSize = { text: wtext, w: wait.offsetWidth, h: wait.offsetHeight };
-    list.push({ R, hidden, bill, wait, x: ((tagNdc.x + 1) / 2) * W, y: ((1 - tagNdc.y) / 2) * H, z: tagNdc.z });
+    // over the wait: the skill's badge, and a spirit's bubble aimed at the robot (45-spirits.js), lowest first
+    const extras = hidden ? [] : [R.skillEl, R.spirit && R.spirit.bubbleEl && R.spirit.bubbleEl.dataset.target === 'robot' ? R.spirit.bubbleEl : null]
+      .filter((e) => e && !e.hidden);
+    for (const e of extras) if (!e._size || e._size.text !== e.textContent) e._size = { text: e.textContent, w: e.offsetWidth, h: e.offsetHeight };
+    list.push({ R, hidden, bill, wait, extras, x: ((tagNdc.x + 1) / 2) * W, y: ((1 - tagNdc.y) / 2) * H, z: tagNdc.z });
   }
   const placed = [];
   for (const it of list.filter((q) => !q.hidden).sort((a, b) => a.z - b.z)) {   // nearest first: it keeps its spot
     const b = it.bill ? it.R.billSize : null, wb = it.wait ? it.R.waitSize : null;
-    const w = Math.max(it.R.tagSize.w, b ? b.w : 0, wb ? wb.w : 0), h = it.R.tagSize.h + (b ? b.h + BILL.gap + BILL.rise : 0) + (wb ? wb.h + BILL.gap : 0);
+    const w = Math.max(it.R.tagSize.w, b ? b.w : 0, wb ? wb.w : 0, ...it.extras.map((e) => e._size.w)),
+      h = it.R.tagSize.h + (b ? b.h + BILL.gap + BILL.rise : 0) + (wb ? wb.h + BILL.gap : 0) + it.extras.reduce((n, e) => n + e._size.h + BILL.gap, 0);
     const x0 = it.x - w / 2, x1 = it.x + w / 2;
     let bottom = it.y;
     for (let pass = 0; pass < TAGS.maxPasses; pass++) {
@@ -2937,7 +2944,12 @@ function placeRobotTags(dt = 1 / 60) {
   const fix = tagFixtureRects(W, H);
   for (const it of list) {   // the writes
     const el = it.R.tag;
-    if (it.hidden) { el.style.visibility = 'hidden'; it.R.tagDy = 0; if (it.R.bill) it.R.bill.style.visibility = 'hidden'; if (it.R.waitEl) it.R.waitEl.style.visibility = 'hidden'; continue; }
+    if (it.hidden) {
+      el.style.visibility = 'hidden'; it.R.tagDy = 0; if (it.R.bill) it.R.bill.style.visibility = 'hidden'; if (it.R.waitEl) it.R.waitEl.style.visibility = 'hidden';
+      if (it.R.skillEl) it.R.skillEl.style.visibility = 'hidden';
+      if (it.R.spirit && it.R.spirit.bubbleEl && it.R.spirit.bubbleEl.dataset.target === 'robot') it.R.spirit.bubbleEl.style.visibility = 'hidden';
+      continue;
+    }
     el.style.visibility = 'visible';
     const zi = String(-it.front);   // negative: under the rooms' signs (z-index 1), inside .tags (isolation: isolate)
     if (el.style.zIndex !== zi) el.style.zIndex = zi;
@@ -2969,6 +2981,14 @@ function placeRobotTags(dt = 1 / 60) {
       const wover = fix.some((f) => it.x - ww / 2 < f[1] && f[0] < it.x + ww / 2 && wy0 < f[3] && f[2] < wy1);
       if (it.wait.classList.contains('over-fixture') !== wover) it.wait.classList.toggle('over-fixture', wover);
     } else if (it.R.waitEl) it.R.waitEl.style.visibility = 'hidden';
+    let above = it.R.tagSize.h + (it.bill ? it.R.billSize.h + BILL.gap + BILL.rise : 0) + (it.wait ? it.R.waitSize.h + BILL.gap : 0);
+    for (const e of it.extras) {   // the badge, then a bubble aimed at the robot: each just above the one under it
+      above += BILL.gap;
+      e.style.visibility = 'visible';
+      e.style.zIndex = zi;
+      e.style.transform = `translate(${it.x.toFixed(1)}px, ${(it.y - it.R.tagDy - above).toFixed(1)}px) translate(-50%, -100%)`;
+      above += e._size.h;
+    }
   }
   const ms = performance.now() - t0, S0 = TAGS.stats;
   S0.n = list.length; S0.frames++; S0.sumMs += ms; S0.maxMs = Math.max(S0.maxMs, ms);

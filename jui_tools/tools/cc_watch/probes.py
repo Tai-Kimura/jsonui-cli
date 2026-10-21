@@ -225,8 +225,9 @@ def _talk_scan(ctx: Context) -> dict | None:
             if not f.is_symlink() and st.st_mtime >= since:
                 files.append((st.st_mtime, f))
     got = {"sends": [], "results": [], "peer": [], "queued": [], "child": [], "coordinator": [], "enqueue": [], "agent_msg": [],
-           "denied": []}
+           "denied": [], "skills": [], "skill_results": []}
     sends: set = set()
+    skills: set = set()   # the Skill calls' ids (viz/ingest.py: a skill in use, the spirit)
     read = 0
     for _m, f in sorted(files, reverse=True)[:TALK_FILES]:
         if read >= TALK_BYTES:
@@ -245,8 +246,8 @@ def _talk_scan(ctx: Context) -> dict | None:
         if len(data) < size:
             lines = lines[1:]                           # the first line is cut
         for line in lines:
-            if not (b'"SendMessage"' in line or b'"origin"' in line or b'"enqueue"' in line or (sends and b'"tool_result"' in line)
-                    or b"uto mode" in line):
+            if not (b'"SendMessage"' in line or b'"origin"' in line or b'"enqueue"' in line
+                    or ((sends or skills) and b'"tool_result"' in line) or b"uto mode" in line or b'"Skill"' in line):
                 continue
             try:
                 r = json.loads(line)
@@ -258,11 +259,16 @@ def _talk_scan(ctx: Context) -> dict | None:
                     if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "SendMessage":
                         sends.add(b.get("id"))
                         got["sends"].append(b.get("input") if isinstance(b.get("input"), dict) else {})
+                    if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "Skill":
+                        skills.add(b.get("id"))
+                        got["skills"].append(b.get("input") if isinstance(b.get("input"), dict) else {})
             elif t == "user":
                 content = (r.get("message") or {}).get("content")
                 for b in content if isinstance(content, list) else []:
                     if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id") in sends:
                         got["results"].append(r.get("toolUseResult"))
+                    if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id") in skills:
+                        got["skill_results"].append(r.get("toolUseResult"))
                     if isinstance(b, dict) and b.get("type") == "tool_result":   # an auto mode denial (viz/denials.py)
                         text = b.get("content")
                         if isinstance(text, list):
@@ -414,6 +420,20 @@ def auto_mode_denial(ctx: Context):
             "no_verdict": "seen" if any(t.startswith(NO_VERDICT) for t in got) else "unseen"}
 
 
+def skill_tool_shape(ctx: Context):
+    """The Skill tool as viz/ingest.py reads it (a skill in use: the spirit): its input names the skill in "skill" (a
+    string), and its result is the inline form {success, commandName} or the forked one {status: "forked", agentId}.
+    What it cannot see: the hook's own payload (viz reads PreToolUse's tool_input, assumed to be the call's input)."""
+    if (s := _talk_skipped(ctx)) is not None:
+        return s
+    got = ctx._talk
+    inline = lambda r: isinstance(r, dict) and "commandName" in r                          # noqa: E731
+    forked = lambda r: isinstance(r, dict) and r.get("status") == "forked" and "agentId" in r  # noqa: E731
+    return {"input_skill": _all_any(got["skills"], lambda i: isinstance(i.get("skill"), str) and bool(i["skill"])),
+            "result_known": _all_any(got["skill_results"], lambda r: inline(r) or forked(r)),
+            "forked": "seen" if any(forked(r) for r in got["skill_results"]) else "unseen"}
+
+
 PROBES: dict[str, Callable[[Context], object]] = {
     "cli_flags": cli_flags, "plugin_cli": plugin_cli, "mcp_cli": mcp_cli, "channels_flags": channels_flags,
     "transcript_shape": transcript_shape, "hook_input_shape": hook_input_shape, "env_vars": env_vars,
@@ -421,5 +441,5 @@ PROBES: dict[str, Callable[[Context], object]] = {
     "session_ran": session_ran, "agents_cli": agents_cli, "tool_names": tool_names,
     "price_table_models": price_table_models,
     "talk_send_input": talk_send_input, "talk_msg_id": talk_msg_id, "talk_origin": talk_origin,
-    "talk_envelope": talk_envelope, "auto_mode_denial": auto_mode_denial,
+    "talk_envelope": talk_envelope, "auto_mode_denial": auto_mode_denial, "skill_tool_shape": skill_tool_shape,
 }
