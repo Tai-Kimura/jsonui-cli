@@ -258,6 +258,7 @@ def test_test_command_summaries():
     assert robots.test_platform("npx playwright test") == "web"
 
 
+@pytest.mark.viz_ja
 def test_a_new_artifact_is_carried_but_an_edit_is_not(tmp_path):
     root = make_project(tmp_path)
     state = VizState()

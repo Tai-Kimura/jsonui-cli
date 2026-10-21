@@ -59,6 +59,7 @@ NOT_DELETES = [
 
 
 @pytest.mark.parametrize("command,targets,folder,how", DELETES)
+@pytest.mark.viz_ja
 def test_a_deletion_is_read_with_its_targets(command, targets, folder, how):
     d = robots.deletions(command)
     assert d == {"targets": targets, "folder": folder, "how": how}
@@ -69,6 +70,7 @@ def test_a_command_that_only_mentions_deleting_deletes_nothing(command):
     assert robots.deletions(command) is None
 
 
+@pytest.mark.viz_ja
 def test_the_label_names_the_last_segment_and_counts_the_rest():
     assert robots.deletion_label(robots.deletions("rm src/a.txt")) == "a.txt"
     assert robots.deletion_label(robots.deletions("rm a b")) == "a、b"
@@ -102,6 +104,7 @@ def _bash(world, uid, command, at, stderr="", failed=False):
     world.publish()
 
 
+@pytest.mark.viz_ja
 def test_a_deletion_that_ran_gives_the_robot_a_shred_and_a_log_line():
     world, state = _world()
     _bash(world, "u1", "rm -rf build a.txt c.txt", 10)
@@ -112,6 +115,7 @@ def test_a_deletion_that_ran_gives_the_robot_a_shred_and_a_log_line():
 
 
 @pytest.mark.parametrize("stderr,failed", [("rm: nope.txt: No such file or directory", False), ("", True)])
+@pytest.mark.viz_ja
 def test_a_deletion_that_found_nothing_or_failed_is_not_ok(stderr, failed):
     world, state = _world()
     _bash(world, "u1", "rm nope.txt", 10, stderr, failed)

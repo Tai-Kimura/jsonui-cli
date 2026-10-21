@@ -126,6 +126,7 @@ def test_follow_ends_quietly_when_the_reader_group_answers_eperm(tmp_path, monke
     assert sent == [15]
 
 
+@pytest.mark.viz_ja
 def test_devices_parse_and_name_the_device_a_command_drives():
     simctl = json.dumps({"devices": {"com.apple.CoreSimulator.SimRuntime.iOS-26-2": [
         {"udid": "11111111-2222-3333-4444-555555555555", "name": "iPhone 16", "state": "Booted"},
@@ -145,6 +146,7 @@ def test_devices_parse_and_name_the_device_a_command_drives():
     assert devices.device_for_command("./gradlew connectedDebugAndroidTest", found) is None
 
 
+@pytest.mark.viz_ja
 def test_devices_run_says_why_when_no_command_exists(monkeypatch):
     monkeypatch.setattr(devices, "find_adb", lambda: None)
     statuses = []

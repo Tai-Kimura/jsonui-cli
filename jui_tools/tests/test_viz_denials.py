@@ -83,6 +83,7 @@ def test_the_reason_is_the_bracketed_rule():
 # ---------------------------------------------------------------- one card per call
 
 
+@pytest.mark.viz_ja
 def test_the_hook_makes_a_card_with_the_fixed_words():
     w = _world()
     _hook(w)
@@ -102,6 +103,7 @@ def test_the_hook_and_the_transcript_of_one_call_make_one_card():
     assert len(w.denials.items()) == 2
 
 
+@pytest.mark.viz_ja
 def test_the_transcript_alone_makes_the_card():
     w = _world()
     w._denied_records(SID, SID, [(USE, "Bash", {"command": CMD}, DENIED_TEXT, 1000)], 1001)
@@ -109,6 +111,7 @@ def test_the_transcript_alone_makes_the_card():
     assert card["prompt"] == WORDS and card["via"] == ["transcript"]
 
 
+@pytest.mark.viz_ja
 def test_the_words_say_where_they_come_from_quote_the_card_and_leave_the_terminal_open():
     """The orchestrator's ruling: never a claim that the sender was verified, nor that no confirmation is needed; the call and the
     reason as the card has them (a clipped input keeps its "…"); no reason recorded is said so."""
@@ -164,6 +167,7 @@ def test_the_transcripts_assistant_text_is_read_as_a_reply(tmp_path):
 # ---------------------------------------------------------------- approve and dismiss
 
 
+@pytest.mark.viz_ja
 def test_approve_sends_only_the_cards_words_through_send_prompt():
     w = _world()
     _hook(w)
@@ -243,6 +247,7 @@ def _denial(v, body: dict, **over):
     return v.raw("POST", "/api/denial", v.page_headers(**over), json.dumps(body).encode())
 
 
+@pytest.mark.viz_ja
 def test_the_hook_is_answered_with_nothing_and_the_card_is_in_the_slice(viz):
     status, body = _denied_hook(viz)
     assert status == 204 and body in ("", None)   # no hookSpecificOutput, no retry
@@ -266,6 +271,7 @@ def test_denial_has_the_checks_of_the_prompt(viz):
     assert _cards(viz)[0]["status"] == "pending"
 
 
+@pytest.mark.viz_ja
 def test_approve_puts_the_cards_words_on_that_sessions_channel_once(viz):
     _denied_hook(viz)
     viz.wait(lambda: len(_cards(viz)) == 1, "the card")

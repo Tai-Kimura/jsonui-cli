@@ -276,6 +276,7 @@ def test_a_subagents_idle_prompt_and_other_notifications_mark_no_input_wait():
     world.publish()
     assert _input_wait(state) is None
 
+@pytest.mark.viz_ja
 def test_a_busy_session_quiet_for_30_s_is_thinking_then_works_then_stops():
     """10-18 live check: thinking was idle with another act, so the page drew it asleep."""
     from jui_cli.viz.ingest import THINKING_AFTER_MS

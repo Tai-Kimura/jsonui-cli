@@ -73,6 +73,7 @@ def test_the_line_is_plain_printable_ascii():
         assert all(0x20 <= ord(ch) <= 0x7E for ch in line), repr(line)
 
 
+@pytest.mark.viz_ja
 def test_the_prompt_never_begins_with_a_dash_and_carries_the_name():
     p = C.prompt_of("-x", "--help")
     assert p.startswith(C.preface()) and "セッション名: -x" in p and p.endswith("\n--help")
@@ -85,6 +86,7 @@ def test_the_prompt_never_begins_with_a_dash_and_carries_the_name():
     ("two\nlines", "", "1 行で"), ("tab\there", "", "1 行で"), ("x" * 65, "", "64 文字まで"), ("a", "y" * 4001, "4000 文字まで"),
     (None, "", "文字列"), ("a", 3, "文字列"),
 ])
+@pytest.mark.viz_ja
 def test_what_cannot_make_a_command(name, role, why):
     assert why in (C.check(name, role) or "")
     with pytest.raises(ValueError):

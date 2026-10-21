@@ -149,6 +149,7 @@ def _bash(world, command, out, err="", use="b1", at=1):
                            tool_response={"stdout": out, "stderr": err}), at + 1)
 
 
+@pytest.mark.viz_ja
 def test_a_push_becomes_a_trip_and_its_amount_follows():
     world = World(VizState())
     _bash(world, "git push", "", PUSH_OK)
@@ -162,6 +163,7 @@ def test_a_push_becomes_a_trip_and_its_amount_follows():
     assert any(e.get("kind") == "GitPush" and e["text"] == "↑ push main 3 コミット +120 −8" for e in world.state.events)
 
 
+@pytest.mark.viz_ja
 def test_a_pull_reads_its_own_numbers_and_up_to_date_is_a_trip_with_nothing():
     world = World(VizState())
     _bash(world, "git pull", PULL_FF)
@@ -170,6 +172,17 @@ def test_a_pull_reads_its_own_numbers_and_up_to_date_is_a_trip_with_nothing():
     _bash(world, "git pull", "Already up to date.\n", use="b2", at=10)
     trip = world.agents["s1"]["git"]
     assert (trip["status"], trip["pending"], G.label(trip)) == ("uptodate", False, "↓ pull — 変更なし")
+
+
+def test_the_trips_words_are_english_by_default():
+    """No language set: the server's words are English (the requester's ruling) — the push's log line and the pull's
+    label, the same trips as the two Japanese arms above."""
+    world = World(VizState())
+    _bash(world, "git push", "", PUSH_OK)
+    world.git_counted("s1", "b1", {"commits": 3, "files": 2, "ins": 120, "dels": 8}, 5)
+    assert any(e.get("kind") == "GitPush" and e["text"] == "↑ push main 3 commits +120 −8" for e in world.state.events)
+    _bash(world, "git pull", "Already up to date.\n", use="b2", at=10)
+    assert G.label(world.agents["s1"]["git"]) == "↓ pull — up to date"
 
 
 def test_an_instruction_stops_the_trip_and_other_commands_make_none():
@@ -215,6 +228,7 @@ def test_a_late_count_for_a_replaced_trip_is_dropped():
 
 # ---------------------------------------------------------------- the real server counts the range off the event loop
 
+@pytest.mark.viz_ja
 def test_the_server_counts_a_push_and_publishes_its_amount(tmp_path, repo):
     import json
     import socket

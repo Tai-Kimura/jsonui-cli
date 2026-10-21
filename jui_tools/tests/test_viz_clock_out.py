@@ -256,6 +256,7 @@ def _refused_untouched(viz: Viz, standins: StandIns, p, sid: str, status: int, r
 # ---------------------------------------------------------------- the path that ends a session
 
 
+@pytest.mark.viz_ja
 def test_a_terminal_session_is_ended_with_one_sigterm_marked_logged_and_its_robot_leaves(viz, standins):
     sid, p = viz.session(standins, 1)
     other, q = viz.session(standins, 2)
@@ -383,6 +384,7 @@ def test_a_pid_whose_command_line_is_not_claude_is_refused(viz, standins):
     _refused_untouched(viz, standins, p, sid, 409, (status, text))
 
 
+@pytest.mark.viz_ja
 @pytest.mark.parametrize("entrypoint,client,words", [("claude-vscode", "vscode", "VS Code"), ("claude-desktop", "desktop", "デスクトップアプリ"),
                                                      ("sdk-py", "other", "ターミナル"), (None, "unknown", "起動元")])
 def test_a_session_not_started_in_a_terminal_is_refused(viz, standins, entrypoint, client, words):
@@ -567,6 +569,7 @@ def test_the_lock_is_the_one_common_sh_takes(tmp_path):
 # ---------------------------------------------------------------- small parts
 
 
+@pytest.mark.viz_ja
 def test_the_world_ends_a_clocked_out_session_and_logs_each_attempt():
     from jui_cli.viz.ingest import World
     from jui_cli.viz.state import VizState

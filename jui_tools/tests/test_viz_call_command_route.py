@@ -78,6 +78,7 @@ def test_the_flag_follows_the_managed_settings_read_each_time(viz, tmp_path):
     assert _call(viz, {"projectId": pid, "name": "n", "role": ""})[1]["flag"] == "--dangerously-load-development-channels"
 
 
+@pytest.mark.viz_ja
 def test_what_cannot_make_a_line_says_why(viz, tmp_path):
     pid = _project(viz, tmp_path / "work" / "app")
     for name, role, why in [("", "", "担当名"), ("a\0b", "", "NUL"), ("two\nlines", "", "1 行"), ("a", "r\0", "NUL")]:

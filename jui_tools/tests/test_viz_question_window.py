@@ -320,6 +320,7 @@ def test_only_the_choices_are_taken(bad, tmp_path, monkeypatch):
     assert status == 400 and now == 180
 
 
+@pytest.mark.viz_ja
 def test_the_choice_is_saved_kept_after_a_restart_and_used_by_the_next_question(tmp_path, monkeypatch):
     monkeypatch.setenv("JUI_VIZ_HOME", str(tmp_path / "home"))
     (tmp_path / "home").mkdir()

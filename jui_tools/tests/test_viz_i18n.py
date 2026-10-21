@@ -166,15 +166,33 @@ def test_the_finder_sees_japanese_in_code_and_not_in_comments():
 
 # ---- the person's words ------------------------------------------------------------------------------------------
 
-def test_japanese_when_no_language_is_set(home):
-    """2.3.12 ships Japanese by default: the page is not all in the table yet, and an English page with Japanese left in
-    it is not shipped. Turned to English (and this arm with it) once the rest has moved."""
-    assert i18n.DEFAULT_LANGUAGE == "ja" and load_config().language == ""
+def test_english_when_no_language_is_set(home):
+    """The requester's ruling: English by default (Japanese from 2.3.12 until the page's words were all in the table)."""
+    assert i18n.DEFAULT_LANGUAGE == "en" and load_config().language == ""
+    words = i18n.from_config(load_config())
+    assert (words.language, words.locale, words.problems) == ("en", "en-US", [])
+    assert i18n.lookup(words, "status.idle") == "Idle"
+    write_config({"askWaitSec": 60})
+    assert i18n.from_config(load_config()).language == "en"
+
+
+def test_the_page_is_filled_in_english_by_default():
+    """index.html with the default words: its lang is en and no Japanese is left in it outside the words' JSON (which
+    holds the person's table); with "ja" its marks say the Japanese words."""
+    html = (Path(i18n.__file__).resolve().parent / "web" / "index.html").read_text(encoding="utf-8")
+    page = i18n.page_html(html, i18n.load(use_env=False))
+    assert '<html lang="en"' in page
+    outside = re.sub(r"<script[^>]*>.*?</script>", "", page, flags=re.S)
+    assert re.findall(r"[\u3040-\u30ff\u3400-\u9fff]+", outside) == []
+    ja = i18n.page_html(html, i18n.load("ja", use_env=False))
+    assert '<html lang="ja"' in ja and re.findall(r"[\u3040-\u30ff\u3400-\u9fff]+", re.sub(r"<script[^>]*>.*?</script>", "", ja, flags=re.S))
+
+
+def test_japanese_when_set(home):
+    write_config({"language": "ja"})
     words = i18n.from_config(load_config())
     assert (words.language, words.locale, words.problems) == ("ja", "ja-JP", [])
     assert i18n.lookup(words, "status.idle") == "待機"
-    write_config({"askWaitSec": 60})
-    assert i18n.from_config(load_config()).language == "ja"
 
 
 def test_english_when_set(home):

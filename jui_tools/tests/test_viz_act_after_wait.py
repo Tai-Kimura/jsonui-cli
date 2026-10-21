@@ -96,6 +96,7 @@ ROWS = [
 ] + [(f"{what}, then {end}", start, END[end], None) for what, start in (("question", ask), ("permission", perm)) for end in END]
 
 
+@pytest.mark.viz_ja
 @pytest.mark.parametrize("row,start,end,after", ROWS, ids=[r[0] for r in ROWS])
 def test_the_act_says_it_waits_while_it_waits_and_not_after(row, start, end, after):
     w = _world()
@@ -121,6 +122,7 @@ def test_another_calls_end_does_not_end_the_wait(start):
     assert (a["state"], a["act"]) == (before["state"], before["act"]) and a["state"] == "waiting"
 
 
+@pytest.mark.viz_ja
 def test_a_question_answered_on_the_page_keeps_waiting_until_its_post_tool_use():
     """The page's answer goes to the session through the hook; until the session's PostToolUse the call is still open."""
     w = _world()

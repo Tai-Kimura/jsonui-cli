@@ -87,6 +87,7 @@ def test_a_run_that_cannot_start_is_the_sources_error_and_waits_an_hour(tmp_path
     assert b.due()
 
 
+@pytest.mark.viz_ja
 def test_failing_files_degrade_the_source(tmp_path, mod):
     def partly(setting, cache, at):
         return {"version": 1, "lastRunAt": at, "files": {"a.json": {"fetchedAt": 1, "lastError": "OSError: x"}}}

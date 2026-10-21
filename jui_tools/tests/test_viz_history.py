@@ -10,6 +10,7 @@ import json
 import os
 import socket
 
+import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
 from jui_cli.viz import export_demo
@@ -68,6 +69,7 @@ CONVERSATION = [
 ]
 
 
+@pytest.mark.viz_ja
 def test_the_conversation_as_the_tab_shows_it(tmp_path):
     path = _write(_main_path(tmp_path), CONVERSATION)
     got = H.reader(_projects(tmp_path))(SID, CWD, str(path))
@@ -188,6 +190,7 @@ def test_the_world_reads_the_robot_asked_for_and_nothing_goes_into_a_slice(tmp_p
     assert MARK not in json.dumps(world.state.snapshot(), ensure_ascii=False)
 
 
+@pytest.mark.viz_ja
 def test_a_turn_the_harness_wrote_is_tagged_with_the_same_predicate():
     world = World(VizState())
     world.apply_hook({"hook_event_name": "UserPromptSubmit", "session_id": SID, "cwd": CWD,

@@ -77,3 +77,30 @@ def _cwd_is_put_back():
         yield
     finally:
         os.chdir(before)
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "viz_ja: the test reads jui viz's Japanese words (the server's or the page's): "
+                                       "run it with the words in Japanese")
+
+
+@pytest.fixture(autouse=True)
+def _viz_words(request, monkeypatch):
+    """jui viz's words are English by default (the requester's ruling). A test marked viz_ja reads the Japanese words
+    letter for letter: it runs with JUI_VIZ_LANGUAGE=ja (a server it starts reads it) and the Japanese table active in
+    this process (what tl() says here). Only those: every other test runs in English, so a word the English table
+    lacks still shows. The table active before the test is put back after it, marked or not (a test that runs serve
+    in-process activates its own)."""
+    from jui_cli.viz import i18n
+
+    before = i18n._ACTIVE
+    if request.node.get_closest_marker("viz_ja"):
+        monkeypatch.setenv(i18n.LANGUAGE_ENV, "ja")
+        i18n.activate(i18n.load("ja"))
+    else:
+        monkeypatch.delenv(i18n.LANGUAGE_ENV, raising=False)
+        i18n.activate(i18n.Strings())   # empty: tl() loads the default the first time it is asked
+    try:
+        yield
+    finally:
+        i18n.activate(before)

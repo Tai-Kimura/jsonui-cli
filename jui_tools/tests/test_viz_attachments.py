@@ -61,6 +61,7 @@ def test_the_name_the_person_gave_never_becomes_part_of_a_path(store, tmp_path):
     assert sorted(p.name for p in (home / "uploads").iterdir()) == [SID]
 
 
+@pytest.mark.viz_ja
 def test_an_image_name_keeps_its_extension_only_when_its_bytes_are_that_image(store):
     a, _ = store
     assert a.save(SID, "photo.png", "image/png", PNG)["path"].endswith(".png")

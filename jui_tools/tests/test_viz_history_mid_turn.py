@@ -18,6 +18,8 @@ import os
 import time
 from datetime import datetime, timezone
 
+import pytest
+
 from jui_cli.viz.sources import history as H
 from jui_cli.viz.sources import talk_records as R
 
@@ -90,6 +92,7 @@ def test_a_subagents_message_to_main_while_working_is_one_peer_row(tmp_path):
     assert rows(items) == [{"kind": "peer", "from": "worker", "text": "調べ終わりました", "at": NOW - 2_000}]
 
 
+@pytest.mark.viz_ja
 def test_the_parents_message_to_a_subagent_is_one_harness_row_like_the_waiting_one(tmp_path):
     """The coordinator's queued_command has no time on the attachment (measured: 100 of 100): the record's time."""
     items = read(tmp_path, queued({"kind": "coordinator"}, "途中の指示です", NOW - 2_000, "q-co-1", ts_on_attachment=False))
@@ -99,6 +102,7 @@ def test_the_parents_message_to_a_subagent_is_one_harness_row_like_the_waiting_o
     assert items[0]["text"] == "途中の指示です" and items[0]["at"] == NOW - 2_000
 
 
+@pytest.mark.viz_ja
 def test_the_requesters_words_and_a_task_notification_while_working_show_as_they_would_waiting(tmp_path):
     items = read(tmp_path, queued({"kind": "human"}, [{"type": "text", "text": "それも直して"}], NOW - 3_000, "q-h-1", delivery_id="d-h-1"),
                  queued({"kind": "task-notification", "producer": "bash"}, "<task-notification>\n<status>completed</status>\n</task-notification>",

@@ -33,9 +33,9 @@ from pathlib import Path
 from . import paths
 
 LANGUAGES = ("en", "ja")
-#: The words when config.json names no language. Japanese until the page's words are all in the table (2.3.12: a page
-#: in English with Japanese left in it is not shipped); English from then on, as the requester ruled.
-DEFAULT_LANGUAGE = "ja"
+#: The words when config.json names no language: English, as the requester ruled (Japanese until the page's words were
+#: all in the table, 2.3.12 to the move window; "language": "ja" in config.json for Japanese).
+DEFAULT_LANGUAGE = "en"
 #: The table that holds every key: what a key missing from the others falls back to.
 FALLBACK_LANGUAGE = "en"
 LANGUAGE_ENV = "JUI_VIZ_LANGUAGE"

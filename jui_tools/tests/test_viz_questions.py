@@ -15,6 +15,7 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
 from jui_cli.viz import questions as qmod
@@ -116,6 +117,7 @@ def test_the_async_forward_and_the_waiting_hook_share_one_card():
     assert len(world.state.slices["questions"]) == 1 and world.state.slices["questions"][0]["id"] == card["id"]
 
 
+@pytest.mark.viz_ja
 def test_the_terminal_answering_first_releases_the_hook_and_refuses_the_browser():
     world = World(VizState())
     card, fut = _waiting_card(world)
@@ -126,6 +128,7 @@ def test_the_terminal_answering_first_releases_the_hook_and_refuses_the_browser(
     assert any("ターミナルで質問に回答" in e["text"] for e in world.state.events)
 
 
+@pytest.mark.viz_ja
 def test_the_browsers_answer_is_logged_and_confirmed_by_post_tool_use():
     world = World(VizState())
     card, _ = _waiting_card(world)
@@ -261,6 +264,7 @@ def test_the_terminal_answering_first_makes_the_waiting_hook_print_nothing(tmp_p
     assert out == "" and took < 5
 
 
+@pytest.mark.viz_ja
 def test_the_asking_robot_waits_with_its_hand_up_and_goes_back_after_the_answer():
     world = World(VizState())
     world.apply_hook(_pre(), now_ms())

@@ -20,6 +20,7 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
 from jui_cli.viz.config import VizConfig
@@ -61,6 +62,7 @@ class _Future:
 # ---------------------------------------------------------------- the async forward
 
 
+@pytest.mark.viz_ja
 def test_the_forwarded_permission_request_of_a_question_makes_no_card_and_the_robot_still_waits_for_an_answer():
     world = World(VizState())
     world.apply_hook(_hook("PreToolUse", tool_name="AskUserQuestion", tool_use_id="q1", tool_input=QUESTION), 1)
