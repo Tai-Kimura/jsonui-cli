@@ -46,3 +46,10 @@ def test_a_pattern_fills_what_it_is_given_and_matches_the_rest(monkeypatch):
     monkeypatch.setenv("JUI_VIZ_LANGUAGE", "ja")
     p = common.T_pattern("panel.nt.done")
     assert p.fullmatch("a0（Login 画面を実装） が完了") and not p.search("a0 is done")
+
+
+def test_a_pattern_takes_a_pattern_for_a_slot(monkeypatch):
+    import re
+    monkeypatch.setenv("JUI_VIZ_LANGUAGE", "en")
+    p = common.T_pattern("live.usage.left.time", h="2", m=re.compile(r"1\d"))
+    assert p.fullmatch("2:15 left") and not p.search("2:25 left")

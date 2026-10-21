@@ -338,13 +338,16 @@ def T(key: str, **params) -> str:
 
 
 def T_pattern(key: str, **params) -> "re.Pattern":
-    """T(key) as a regular expression: the slots given filled (escaped), every other slot any words — for a check
-    that knows part of what the page says (a notification's tool, not the session's name)."""
+    """T(key) as a regular expression: the slots given filled (escaped; a compiled pattern goes in as it is), every
+    other slot any words — for a check that knows part of what the page says (a notification's tool, not the
+    session's name; the time to a reset, not its last minute)."""
     import re as _re
     marker = "\x00"
-    words = T(key, **{**{s: marker + s + marker for s in _re.findall(r"\{(\w+)\}", _template(key))}, **params})
+    raw = {k: v.pattern for k, v in params.items() if isinstance(v, _re.Pattern)}
+    filled = {k: v for k, v in params.items() if k not in raw}
+    words = T(key, **{**{s: marker + s + marker for s in _re.findall(r"\{(\w+)\}", _template(key)) if s not in filled}, **filled})
     parts = words.split(marker)
-    return _re.compile("".join(_re.escape(p) if i % 2 == 0 else ".+?" for i, p in enumerate(parts)))
+    return _re.compile("".join(_re.escape(p) if i % 2 == 0 else raw.get(p, ".+?") for i, p in enumerate(parts)))
 
 
 def _template(key: str) -> str:

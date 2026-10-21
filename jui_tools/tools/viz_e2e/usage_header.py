@@ -18,7 +18,18 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, LAUNCH_ARGS, PHONE, Watch, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, PHONE, T, T_pattern, Watch, new_page, ready
+
+
+def five_words(rest: str) -> str:
+    """The five-hour window's words: its label, a space, then the share or the state (30-source-live.js renderUsage)."""
+    return f"{T('live.usage.five')} {rest}"
+
+
+def left_soon(h: int, minute_tens: str) -> re.Pattern:
+    """The time to the reset, h:<tens><any> left, as the page words it in the run's language."""
+    time_left = T_pattern("live.usage.left.time", h=str(h), m=re.compile(re.escape(minute_tens) + r"\d"))
+    return T_pattern("live.usage.left", left=re.compile(time_left.pattern))
 
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
 
@@ -169,19 +180,19 @@ async def run_usage(pw, out, failures):
         await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         await wait(page, "() => window.__dbg.usage().length === 1", label="the chip")
         r = res["none"] = await page.evaluate(usage)
-        check(failures, r[0]["text"] == "上限の値なし" and r[0]["window"] is None, f"no value yet: {r}")
-        check(failures, "VS Code 拡張とデスクトップアプリからは届きません" in r[0]["title"], f"where the value comes from: {r[0]['title']}")
+        check(failures, r[0]["text"] == T("live.usage.none") and r[0]["window"] is None, f"no value yet: {r}")
+        check(failures, r[0]["title"] == T("live.usage.none.title"), f"where the value comes from: {r[0]['title']}")
         ink = await page.evaluate("() => window.__dbg.inkSoft()")
 
         hues = {}
         for pct in (0, 50, 99):
             feed(pct, 18)
-            await wait(page, f"() => (window.__dbg.usage()[0] || {{}}).text.startsWith('5時間 {pct}%')", label=f"{pct}%")
+            await wait(page, f"() => (window.__dbg.usage()[0] || {{}}).text.startsWith({json.dumps(five_words(f'{pct}%'))})", label=f"{pct}%")
             r = await page.evaluate(usage)
             five = r[0]
             check(failures, five["num"] and five["num"] == five["pc"], f"{pct}%: the number and the % share one colour: {five}")
             hues[pct] = hue(five["num"])
-            check(failures, not five["limit"] and "（あと 2:1" in five["text"], f"{pct}%: the time to the reset: {five}")
+            check(failures, not five["limit"] and left_soon(2, "1").search(five["text"]), f"{pct}%: the time to the reset: {five}")
         res["hues"] = hues
         check(failures, hues[0] > hues[50] > hues[99] and 100 < hues[0] <= 125 and hues[99] < 8 and 45 < hues[50] < 75,
               f"the hue falls with the share, green to red, in between not a step: {hues}")
@@ -204,28 +215,28 @@ async def run_usage(pw, out, failures):
         shown = await page.evaluate("() => [window.__dbg.usage()[0].num, window.__dbg.usageColor(99)]")
         check(failures, shown[0] == shown[1], f"the chip shows the colour the sweep measured: {shown}")
         r = res["week"] = await page.evaluate(usage)
-        check(failures, r[1]["window"] == "sevenDay" and r[1]["text"].startswith("週 18%") and "あと 4日 6時間" in r[1]["text"], f"the week: {r}")
+        check(failures, r[1]["window"] == "sevenDay" and r[1]["text"].startswith(f"{T('live.usage.week')} 18%") and T("live.usage.left.days", d=4, h=6) in r[1]["text"], f"the week: {r}")
         await page.screenshot(path=str(out / "header-light.png"), clip={"x": 0, "y": 0, "width": 1440, "height": 60})
         for pct in (100, 120):
             feed(pct, 18)
             await wait(page, "() => window.__dbg.usage()[0].limit", label=f"{pct}%: limit")
             five = (await page.evaluate(usage))[0]
             res[f"limit{pct}"] = five
-            check(failures, five["num"] is None and five["pc"] is None and "100" not in five["text"] and five["text"].startswith("5時間 上限到達"),
+            check(failures, five["num"] is None and five["pc"] is None and "100" not in five["text"] and five["text"].startswith(five_words(T("live.usage.limit"))),
                   f"{pct}%: 上限到達 in place of the number: {five}")
-            check(failures, five["limitColor"] == ink and "（あと 2:1" in five["text"], f"{pct}%: inactive colour, the reset still shown: {five} vs {ink}")
+            check(failures, five["limitColor"] == ink and left_soon(2, "1").search(five["text"]), f"{pct}%: inactive colour, the reset still shown: {five} vs {ink}")
         await page.screenshot(path=str(out / "header-limit-light.png"), clip={"x": 0, "y": 0, "width": 1440, "height": 60})
         # 99.7 right after the limit (so the wait cannot pass on an older 99): floored, a number, not the limit
         feed(99.7, 18)
         await wait(page, "() => !window.__dbg.usage()[0].limit", label="99.7% arrived")
         five = res["99.7"] = (await page.evaluate(usage))[0]
-        check(failures, five["text"].startswith("5時間 99%") and five["num"], f"99.7%: 99%, not 100 and not the limit: {five}")
+        check(failures, five["text"].startswith(five_words("99%")) and five["num"], f"99.7%: 99%, not 100 and not the limit: {five}")
         # the time counts down; an old value says how old
         feed(42, 18)
-        await wait(page, "() => window.__dbg.usage()[0].text.startsWith('5時間 42%')", label="42%")
+        await wait(page, f"() => window.__dbg.usage()[0].text.startsWith({json.dumps(five_words('42%'))})", label="42%")
         later = await page.evaluate("() => { window.__dbg.setClock(Date.now() + 20 * 60 * 1000); return new Promise((ok) => setTimeout(() => ok(window.__dbg.usage()), 1500)); }")
         res["later"] = later
-        check(failures, "あと 1:5" in later[0]["text"] and later[0]["note"] == " · 20分前" and later[1]["note"] == " · 20分前",
+        check(failures, left_soon(1, "5").search(later[0]["text"]) and later[0]["note"] == f" · {T('live.usage.ago.min', n=20)}" and later[1]["note"] == f" · {T('live.usage.ago.min', n=20)}",
               f"20 minutes on: the time counts down and the value says its age: {later}")
         await page.evaluate("() => window.__dbg.setClock(null)")
         await wait(page, "() => window.__dbg.usage()[0].note === ''", label="fresh again")
@@ -236,13 +247,13 @@ async def run_usage(pw, out, failures):
         await page.set_viewport_size(DESKTOP["viewport"])
         # past a window's reset with no newer value: no share (it is not this window's any more)
         feed(42, 18, five_reset=int(time.time()) + 60)
-        await wait(page, "() => window.__dbg.usage()[0].text.startsWith('5時間 42%')", label="42%, resets in a minute")
+        await wait(page, f"() => window.__dbg.usage()[0].text.startsWith({json.dumps(five_words('42%'))})", label="42%, resets in a minute")
         gone = res["reset"] = await page.evaluate("() => { window.__dbg.setClock(Date.now() + 3 * 60 * 1000); return new Promise((ok) => setTimeout(() => ok(window.__dbg.usage()), 1500)); }")
-        check(failures, gone[0]["text"].startswith("5時間 リセット済み") and gone[0]["num"] is None and "あと" not in gone[0]["text"] and "42" not in gone[0]["text"],
+        check(failures, gone[0]["text"].startswith(five_words(T("live.usage.reset"))) and gone[0]["num"] is None and not T_pattern("live.usage.left").search(gone[0]["text"]) and "42" not in gone[0]["text"],
               f"past the reset: リセット済み, no old share: {gone[0]}")
         await page.evaluate("() => window.__dbg.setClock(null)")
         feed(42, 18)
-        await wait(page, "() => window.__dbg.usage()[0].text.startsWith('5時間 42%')", label="42% again")
+        await wait(page, f"() => window.__dbg.usage()[0].text.startsWith({json.dumps(five_words('42%'))})", label="42% again")
         await page.emulate_media(color_scheme="dark")
         await page.wait_for_timeout(1500)
         dark = res["dark"] = await page.evaluate(usage)
