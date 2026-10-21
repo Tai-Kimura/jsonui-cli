@@ -212,6 +212,43 @@ def test_a_relayed_permission_request_has_the_channels_shape(tmp_path):
     assert json.loads(body["input_preview"]) == {"command": "jui build --ios-only"}
 
 
+DEMO_SHOP = Path(os.environ.get("JUI_PROMO_DEMO_SHOP", Path.home() / "resource" / "jsonui-demo-shop"))
+
+
+def test_a_flows_time_counts_moves_nodes_and_the_longest_lane():
+    flow = {"id": "f", "steps": [
+        {"from": "a", "to": "b"}, {"at": "b", "label": "say"},
+        {"branch": {"label": "?", "default": "x", "choices": [
+            {"id": "x", "steps": [{"parallel": [[{"from": "b", "to": "c"}], [{"from": "b", "to": "d"}, {"from": "d", "to": "b"}]]}]},
+            {"id": "y", "steps": [{"from": "b", "to": "e"}]}]}},
+        {"from": "b", "to": "a"}]}
+    assert T.flow_segments(flow, ["x"]) == [T.MOVE_MS + T.NODE_MS, 2 * T.MOVE_MS + T.MOVE_MS]
+    assert T.flow_segments(flow, ["y"]) == [T.MOVE_MS + T.NODE_MS, 2 * T.MOVE_MS]
+    ch = T.Chapter("t", 0, 10, [T.P("dbg", call="srFlowSpeed", speed=2)], [
+        T.E(1.0, "click", target={"css": "#sr-board [data-sr-flow='f']"}),
+        T.E(1.2, "click", target={"css": "#sr-choices [data-sr-choice='x']"}, arg="x")])
+    got = T.flow_budget(ch, flow)
+    # to the branch 0.675 s at 2x: the press at 1.2 waits until 1.675, then 1.35 s more
+    assert got["speed"] == 2.0 and got["choices"] == [("x", 1.675)] and got["end"] == pytest.approx(3.025)
+
+
+@pytest.mark.skipif(not (DEMO_SHOP / "docs" / "infra" / "system.json").is_file(), reason="the demo-shop workdir is not on this machine")
+def test_chapter_4s_payment_flow_ends_inside_the_chapter():
+    """The payment flow as the script plays it (its speed, its presses) must reach its end with time to spare, and its
+    choices must not wait long on their branches (a press that waits runs into the next one)."""
+    flows = {f["id"]: f for f in json.loads((DEMO_SHOP / "docs" / "infra" / "system.json").read_text(encoding="utf-8"))["flows"]}
+    for lang in T.WORDS:
+        ch = T.chapters(lang)["4"]
+        pay = T.flow_budget(ch, flows["payment"])
+        assert [p for p, _ in pay["choices"]] == ["pass", "ok"], pay
+        assert pay["end"] <= ch.end - 1.0, f"{lang}: the payment flow ends at {pay['end']} s, the chapter at {ch.end} s: {pay}"
+        scheduled = {ev.args["arg"]: ev.at for ev in ch.events if ev.args.get("arg") in ("pass", "ok")}
+        for pick, fired in pay["choices"]:
+            assert fired - scheduled[pick] <= 0.5, f"{lang}: {pick} waits {fired - scheduled[pick]:.2f} s for its branch: {pay}"
+        order = T.flow_budget(ch, flows["order"])
+        assert order["choices"][0][1] - 59.4 <= 0.5 and order["press"] < pay["press"], order
+
+
 def test_frame_intervals_are_summed_as_percentiles():
     from viz_promo import capture
     got = capture.percentiles([16.0] * 8 + [50.0, 120.0])

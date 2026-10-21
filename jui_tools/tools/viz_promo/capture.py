@@ -95,6 +95,14 @@ POINT_JS = """(t) => {
   return centre(el);
 }"""
 
+# the target is where a press there lands on it: on the screen and not under something else (choices drawn over a
+# node off the screen took no press, 10-21)
+HIT_JS = """(t) => { const all = [...document.querySelectorAll(t.css)];
+  const el = t.text ? all.find((e) => e.textContent.includes(t.text)) : all[0]; if (!el) return false;
+  const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+  if (!r.width || !r.height || x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return false;
+  const at = document.elementFromPoint(x, y); return !!at && (at === el || el.contains(at)); }"""
+
 EXPECT = {
     "solo": "(pid) => window.__dbg.solo() === pid",
     "floor": "() => window.__dbg.solo() === null",
@@ -585,6 +593,11 @@ class Driver:
             t = {"css": "#rb .talk-row", "text": self.w["names"][t["talk_row"]]}
         return t
 
+    async def hittable(self, target: dict) -> bool:
+        if "robot" in target:
+            return True
+        return bool(await self.page.evaluate(HIT_JS, await self.resolved(target)))
+
     async def point(self, target: dict, advance: bool):
         if "robot" in target:
             lab = await self.label(target["robot"])
@@ -665,7 +678,7 @@ class Driver:
                     # a press waits for its target to be on the page (a card opens after the camera's flight), up to
                     # TARGET_LATE_SEC of video; past that it fires and fails with the target's name
                     if ev.kind in ("click", "hover", "select") and t < ev.at + TARGET_LATE_SEC \
-                            and not await self.page.evaluate(POINT_JS, await self.resolved(ev.args["target"])):
+                            and not await self.hittable(ev.args["target"]):
                         continue
                     if page_event:
                         self.last_press = t

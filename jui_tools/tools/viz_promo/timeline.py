@@ -311,12 +311,15 @@ def chapters(lang: str) -> dict:
         E(64.2, "click", target={"css": "#sr-player [data-sr-fp='back']"}, ready=BACK_READY, group="back", until=66.4),
         E(64.8, "click", target={"css": "#sr-player [data-sr-fp='back']"}, ready=BACK_READY, group="back", until=66.4),
         E(65.4, "click", target={"css": "#sr-choices [data-sr-choice='out']"}, ready=choice, arg="out", ends="back"),
-        E(67.2, "wheel", target={"css": "#sr-canvas"}, dy=900, dur=3.0),
-        E(69.6, "select", target={"css": "#sr-player [data-sr-fp='speed']"}, value="5"),
-        E(70.4, "dbg", call="srSelect", node="api", expect="flowlist:payment"),
-        E(70.9, "click", target={"css": "#sr-board [data-sr-flow='payment']"}, expect="flow:payment"),
-        E(72.3, "click", target={"css": "#sr-choices [data-sr-choice='pass']"}, ready=choice, arg="pass"),
-        E(73.2, "click", target={"css": "#sr-choices [data-sr-choice='ok']"}, ready=choice, arg="ok"),
+        # the camera pulls back to the whole model (全体を見る): every node of the payment flow, and its choices over
+        # payment-api, on the screen (after the wheel alone payment-api was off it and the press on 通る missed)
+        E(67.0, "click", target={"css": "#sr-fit"}),
+        E(68.2, "select", target={"css": "#sr-player [data-sr-fp='speed']"}, value="5"),
+        # at 5x a move takes 0.18 s: the payment flow's ten moves and two presses end by ~72 s (flow_budget, tested)
+        E(68.9, "dbg", call="srSelect", node="api", expect="flowlist:payment"),
+        E(69.5, "click", target={"css": "#sr-board [data-sr-flow='payment']"}, expect="flow:payment"),
+        E(70.5, "click", target={"css": "#sr-choices [data-sr-choice='pass']"}, ready=choice, arg="pass"),
+        E(71.3, "click", target={"css": "#sr-choices [data-sr-choice='ok']"}, ready=choice, arg="ok"),
     ], needs=("rooms", "server_room", "flows"))
 
     # 5 (74–88): the cost simulator. 74–77 is the load definition in the editor (term.py, captures/<lang>/5-json:
@@ -349,6 +352,80 @@ def promo_timeline(promo: Path) -> dict:
 def check_bounds(promo: dict) -> list:
     """The chapters whose bounds in the promo's timeline.json differ from the ones the script was written for."""
     return [f"{c}: promo {promo.get(c)} != script {BOUNDS[c]}" for c in ALL if promo.get(c) != tuple(float(x) for x in BOUNDS[c])]
+
+
+# ---- a flow's time (the server room's player, 59-sr-flows.js SR_FLOW) ----
+
+MOVE_MS = 900    # a light along one edge, at 1x
+NODE_MS = 450    # a step that only says something at a node, at 1x
+
+
+def flow_segments(flow: dict, picks: list) -> list:
+    """The ms of play (at 1x) between the flow's start, each branch it stops at and its end, taking `picks` (choice
+    ids) at the branches in order: [to branch 1, branch 1 to branch 2, …, last branch to the end]. Lanes side by side
+    take the longest lane's time; a lane's own branch takes its default (srFlowLane)."""
+    segs, picks = [0], list(picks)
+
+    def lane_ms(steps):
+        ms = 0
+        for s in steps:
+            if s.get("branch"):
+                b = s["branch"]
+                c = next((x for x in b["choices"] if x["id"] == b.get("default")), b["choices"][0])
+                ms += lane_ms(c.get("steps") or [])
+            elif s.get("parallel"):
+                ms += max(lane_ms(lane) for lane in s["parallel"])
+            else:
+                ms += MOVE_MS if s.get("from") and s.get("to") else NODE_MS
+        return ms
+
+    def walk(steps):
+        for s in steps:
+            if s.get("branch"):
+                pick = picks.pop(0)
+                c = next(x for x in s["branch"]["choices"] if x["id"] == pick)
+                if c.get("goto") or c.get("join"):
+                    raise ValueError(f"flow_segments: choice {pick} jumps (goto / join): not modelled")
+                segs.append(0)
+                walk(c.get("steps") or [])
+            elif s.get("parallel"):
+                segs[-1] += max(lane_ms(lane) for lane in s["parallel"])
+            else:
+                segs[-1] += MOVE_MS if s.get("from") and s.get("to") else NODE_MS
+    walk(flow["steps"])
+    return segs
+
+
+def flow_budget(chapter: Chapter, flow: dict, min_gap: float = 0.6) -> dict:
+    """When a flow pressed in `chapter` reaches its end, played as the script plays it: its press, the speed then in
+    effect (the prelude's srFlowSpeed, then any speed chosen on the bar before the press), each choice pressed at its
+    time or when its branch is reached, whichever is later (a press waits for its choices; never sooner than
+    `min_gap` after the last), and the segments between at that speed. Returns {press, speed, choices: [(id, at)],
+    end, seconds}."""
+    speed = 1.0
+    for ev in chapter.prelude:
+        if ev.kind == "dbg" and ev.args.get("call") == "srFlowSpeed":
+            speed = float(ev.args["speed"])
+    flow_css = f"[data-sr-flow='{flow['id']}']"
+    press = next(ev.at for ev in chapter.events if ev.kind == "click" and flow_css in ev.args["target"].get("css", ""))
+    for ev in chapter.events:
+        if ev.kind == "select" and "data-sr-fp='speed'" in ev.args["target"].get("css", "") and ev.at < press:
+            speed = float(ev.args["value"])
+    later = [ev for ev in chapter.events if ev.at > press]
+    picks = []
+    for ev in later:
+        if ev.kind == "click" and "[data-sr-choice=" in ev.args["target"].get("css", ""):
+            picks.append((ev.args["arg"], ev.at))
+        elif ev.kind == "click" and "[data-sr-flow=" in ev.args["target"].get("css", ""):
+            break   # another flow pressed: this one is over
+    segs = flow_segments(flow, [p for p, _ in picks])
+    t, last, chosen = press + segs[0] / 1000 / speed, press, []
+    for (pick, at), seg in zip(picks, segs[1:]):
+        fired = max(at, t, last + min_gap)
+        chosen.append((pick, round(fired, 3)))
+        last = fired
+        t = fired + seg / 1000 / speed
+    return {"press": press, "speed": speed, "choices": chosen, "end": round(t, 3), "seconds": round(t - press, 3)}
 
 
 def frame_count(start: float, end: float) -> int:
