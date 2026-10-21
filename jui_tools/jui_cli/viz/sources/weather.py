@@ -27,7 +27,7 @@ import urllib.request
 from pathlib import Path
 from typing import Callable
 
-from .. import paths
+from .. import i18n, paths
 
 URL = "https://api.open-meteo.com/v1/forecast"
 URL_ENV = "JUI_VIZ_WEATHER_URL"   # the e2e build only (JUI_VIZ_E2E=1): a stand-in for Open-Meteo on 127.0.0.1
@@ -106,7 +106,7 @@ def save_setting(on: bool, lat=None, lon=None, path: Path | None = None) -> dict
     if on:
         rlat, rlon = round_coord(lat, 90), round_coord(lon, 180)
         if rlat is None or rlon is None:
-            raise ValueError("緯度と経度が数ではありません")
+            raise ValueError(i18n.tl("srv.weather.not_numbers"))
         data["weather"] = {"on": True, "lat": rlat, "lon": rlon}
     else:
         data["weather"] = {"on": False}
@@ -145,10 +145,10 @@ def fetch(lat: float, lon: float, timeout: float = TIMEOUT_SEC) -> dict:
 def parse(body) -> dict:
     cur = body.get("current") if isinstance(body, dict) else None
     if not isinstance(cur, dict):
-        raise ValueError("応答に current がありません")
+        raise ValueError(i18n.tl("srv.weather.no_current"))
     kind = kind_of(cur.get("weather_code"))
     if kind is None:
-        raise ValueError(f"知らない天気のコード {cur.get('weather_code')!r}")
+        raise ValueError(i18n.tl("srv.weather.unknown_code", code=repr(cur.get('weather_code'))))
     num = lambda v: float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None  # noqa: E731
     return {"kind": kind, "isDay": cur.get("is_day") != 0, "tempC": num(cur.get("temperature_2m")),
             "precipitation": num(cur.get("precipitation")), "cloud": num(cur.get("cloud_cover"))}
@@ -195,7 +195,7 @@ class WeatherBook:
         try:
             got, error = self.fetcher(lat, lon), None
         except Exception as exc:  # noqa: BLE001 - any failure is the source's error, never the server's
-            got, error = None, f"天気を取れません（{type(exc).__name__}: {str(exc)[:120]}）"
+            got, error = None, i18n.tl("srv.weather.failed", kind=type(exc).__name__, error=str(exc)[:120])
         # The answer comes back on an executor thread: turned off (or moved) meanwhile, it answers nothing (a library lane, 10-18:
         # otherwise an off setting kept a lastOkAt in the status file).
         if not self.on or (self.setting["lat"], self.setting["lon"]) != (lat, lon):

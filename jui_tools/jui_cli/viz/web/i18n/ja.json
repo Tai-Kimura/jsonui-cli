@@ -1967,5 +1967,9 @@
   "srv.device.name": "{name}（{version}）",
   "srv.device.none": "xcrun も adb も見つかりません（端末の取得を止めました）",
   "srv.device.missing": "{tools} が無いため、その分は取りません",
-  "srv.and": " と "
+  "srv.and": " と ",
+  "srv.weather.not_numbers": "緯度と経度が数ではありません",
+  "srv.weather.no_current": "応答に current がありません",
+  "srv.weather.unknown_code": "知らない天気のコード {code}",
+  "srv.weather.failed": "天気を取れません（{kind}: {error}）"
 }

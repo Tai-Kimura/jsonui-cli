@@ -2014,5 +2014,9 @@
   "srv.device.name": "{name} ({version})",
   "srv.device.none": "Neither xcrun nor adb found (devices are not read)",
   "srv.device.missing": "{tools} not found: those devices are not read",
-  "srv.and": " and "
+  "srv.and": " and ",
+  "srv.weather.not_numbers": "The latitude and longitude are not numbers",
+  "srv.weather.no_current": "The answer has no current",
+  "srv.weather.unknown_code": "Unknown weather code {code}",
+  "srv.weather.failed": "Cannot get the weather ({kind}: {error})"
 }
