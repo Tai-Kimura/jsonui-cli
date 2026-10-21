@@ -606,3 +606,78 @@ def test_a_spec_value_read_from_iac_with_a_secret_shape_is_masked_in_every_field
     assert item.status == "mismatch" and item.expected == "python3.12" and item.actual.startswith("<masked")
     dumped = json.dumps(rep.to_dict()) + "\n".join(rep.warnings)
     assert SECRET_RUNTIME not in dumped and "hunter2pass" not in dumped and "db.internal" not in dumped
+
+
+# ---------------------------------------------------------------- the walk is seed's (ticket doc-infra-iac-scan-cap-reached-before-terraform)
+
+def _data_folder_before_terraform(root: Path, n: int) -> None:
+    """A gitignored folder of n JSON files that sorts before the Terraform, as a project's scraped data does."""
+    (root / ".gitignore").write_text("backend/scripts/data/\n")
+    data = root / "backend" / "scripts" / "data"
+    data.mkdir(parents=True)
+    for i in range(n):
+        (data / f"item_{i:05d}.json").write_text("{}")
+
+
+def test_a_data_folder_bigger_than_the_old_cap_does_not_hide_the_terraform(tmp_path):
+    """check stopped at its 5,000th candidate (every JSON counted) before infrastructure/: the aws node was skipped
+    with "no IaC read for aws" while seed, in the same project, read the Terraform."""
+    root = tmp_path / "mini"
+    root.mkdir()
+    _data_folder_before_terraform(root, 5001)
+    root2, rep = _mini(tmp_path, {"infrastructure/terraform/main.tf": 'resource "aws_db_instance" "main" {}\n'},
+                       [{"id": "db", "category": "database.relational", "provider": "aws", "iac": ["aws_db_instance.main"]}])
+    assert root2 == root
+    assert _by_target(rep)["aws/db"].status == "ok"
+    assert not rep.target_extra["unverified"].get("*")
+    from jsonui_doc_cli.infra import seed as S
+    model, _report = S.draft(root)
+    assert "aws_db_instance.main" in json.dumps(model["nodes"])
+
+
+def test_the_walk_cap_is_said_and_what_was_not_looked_at_is_not_said_missing(tmp_path, monkeypatch):
+    """Reaching the cap is named — how many, and the folder the walk stopped in — and the files not looked at are
+    unread: a node not found is skipped, not missing, and a provider with nothing read is not said to have none."""
+    from jsonui_doc_cli.infra import iac_tables as T
+    monkeypatch.setattr(T, "WALK_CAP", 50)
+    root = tmp_path / "mini"
+    root.mkdir()
+    _data_folder_before_terraform(root, 60)
+    _r, rep = _mini(tmp_path, {"infrastructure/terraform/main.tf": 'resource "aws_db_instance" "main" {}\n',
+                               "admin/compose.yaml": "services:\n  web:\n    image: nginx\n"},   # read: before the stop
+                    [{"id": "db", "category": "database.relational", "provider": "aws", "iac": ["aws_db_instance.main"]},
+                     {"id": "app", "category": "compute.container", "provider": "docker", "iac": ["compose.yaml#services.app"]}])
+    un = rep.target_extra["unverified"]
+    assert any("more than 50 files" in w and "backend/scripts/data/" in w for w in un["*"])
+    assert _by_target(rep)["aws/db"].status == "skipped"
+    # docker's compose was read and has no "app": the unseen files may hold it (not only a Terraform address)
+    assert _by_target(rep)["docker/app"].status == "skipped"
+    assert not any("no IaC found" in w for w in un.get("aws", []))
+
+
+def test_the_code_cap_is_seeds_and_is_said(tmp_path, monkeypatch):
+    monkeypatch.setattr(C, "MAX_CODE_FILES", 3)
+    assert C.MAX_CODE_FILES != 5000
+    root = tmp_path / "p"
+    for i in range(5):
+        (root / "src").mkdir(parents=True, exist_ok=True)
+        (root / "src" / f"m{i}.py").write_text("import os\n")
+    _hints, notes = C.scan_code(root)
+    assert any("more than 3 source files" in n and "src/m3.py" in n for n in notes)
+
+
+def test_check_reads_iac_where_seed_reads_it(tmp_path):
+    """One walk (iac_tables.walk_project): IaC under .github/ (the hidden folder seed keeps) and tmp/ (a folder seed
+    reads only IaC in) is read by both; a hidden folder neither reads."""
+    tpl = lambda n: f"AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  {n}:\n    Type: AWS::SQS::Queue\n"  # noqa: E731
+    files = {".github/cfn/q.yaml": tpl("GhQueue"), "tmp/q.yaml": tpl("TmpQueue"), ".hidden/q.yaml": tpl("HiddenQueue")}
+    root, rep = _mini(tmp_path, files, [
+        {"id": "gh", "category": "queue", "provider": "aws", "iac": ["GhQueue"]},
+        {"id": "tmp", "category": "queue", "provider": "aws", "iac": ["TmpQueue"]}])
+    assert _by_target(rep)["aws/gh"].status == "ok" and _by_target(rep)["aws/tmp"].status == "ok"
+    found, _un = C.scan_iac(root)
+    assert not any("HiddenQueue" in f["address"] for f in found)
+    from jsonui_doc_cli.infra import seed as S
+    model, _report = S.draft(root)
+    seen = json.dumps(model["nodes"])
+    assert "GhQueue" in seen and "TmpQueue" in seen and "HiddenQueue" not in seen

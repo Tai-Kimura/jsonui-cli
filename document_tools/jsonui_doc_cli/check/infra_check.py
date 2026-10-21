@@ -37,7 +37,7 @@ from ..infra import room as R
 from .report import CheckReport, ResultItem, compute_input_hashes
 
 SKIP_DIRS = T.SKIP_DIRS   # which file is what lives in iac_tables (one copy with seed); the name stays for seed until (C) imports T
-MAX_FILES = 5000
+MAX_CODE_FILES = 20_000   # code files scanned (seed reads as many: infra/seed.py CODE_FILES_CAP)
 MAX_BYTES = 1_000_000
 
 
@@ -47,19 +47,23 @@ class InfraCheckError(Exception):
 
 # ---------------------------------------------------------------- walking the project
 
-def _walk(root: Path, accept) -> tuple[list[Path], bool]:
-    """Files under root (no symlink followed, SKIP_DIRS and hidden folders left out) that accept(name) takes, at most
-    MAX_FILES; the bool says whether the cap was reached."""
+def _walk(root: Path, accept, code: bool = False) -> tuple[list[Path], str | None]:
+    """Files under root that accept(name) takes, walked as seed walks (iac_tables.walk_project: no symlink followed,
+    SKIP_DIRS and hidden folders but .github left out; code=True also leaves out the folders seed reads only IaC in);
+    and, when the walk stopped at iac_tables.WALK_CAP files, why the rest was not looked at, else None. The cap counts
+    every file looked at, not the candidates: a data folder of JSON files no longer uses it up before the Terraform
+    (ticket doc-infra-iac-scan-cap-reached-before-terraform)."""
+    rels, stopped = T.walk_project(root)
     out: list[Path] = []
-    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
-        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS and not d.startswith("."))
-        for name in sorted(filenames):
-            p = Path(dirpath) / name
-            if accept(name) and p.is_file() and not p.is_symlink():
-                out.append(p)
-                if len(out) >= MAX_FILES:
-                    return out, True
-    return out, False
+    for rel, iac_only in rels:
+        if code and iac_only:
+            continue
+        p = root / rel
+        if accept(p.name) and p.is_file() and not p.is_symlink():
+            out.append(p)
+    if stopped is None:
+        return out, None
+    return out, f"more than {T.WALK_CAP} files in the project: the walk stopped in {stopped}/ and the rest was not looked at"
 
 
 def _text(p: Path) -> str | None:
@@ -188,13 +192,16 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
             unverified[provider].append(why)
 
     names = lambda n: T.iac_kind(n) is not None or n in NOT_COMPARED  # noqa: E731 — IaC by the table, and the platform settings
-    files, capped = _walk(root, names)
-    if capped:
-        note("*", f"more than {MAX_FILES} candidate files: the rest were not read")
+    files, stopped = _walk(root, names)
     y = _yaml()
     unmapped: dict[str, set[str]] = {}
     parts: dict[str, int] = {}
     unread: set[str] = set()
+    if stopped:
+        # files not looked at may be anyone's IaC, of any kind ("**": every node, not only a Terraform address): no node
+        # is said missing and no provider "none found"
+        note("*", stopped)
+        unread.update({"*", "**"})
 
     def part(provider: str) -> None:
         parts[provider] = parts.get(provider, 0) + 1
@@ -389,9 +396,13 @@ def scan_code(root: Path) -> tuple[list[dict], list[str]]:
         if ext in OTHER_CODE:
             others[OTHER_CODE[ext]] = others.get(OTHER_CODE[ext], 0) + 1
         return ext in H.CODE_EXT or bool(H.ENV_NAME_FILES.match(name))
-    files, capped = _walk(root, take)
-    if capped:
-        notes.append(f"more than {MAX_FILES} source files: the rest were not scanned")
+    files, stopped = _walk(root, take, code=True)
+    if stopped:
+        notes.append(stopped)
+    if len(files) > MAX_CODE_FILES:
+        notes.append(f"more than {MAX_CODE_FILES} source files: the rest (from {_rel(files[MAX_CODE_FILES], root)}) "
+                     "were not scanned")
+        files = files[:MAX_CODE_FILES]
     for lang, n in sorted(others.items()):
         notes.append(f"{n} {lang} file(s): code in {lang} is not read for SDKs or environment names")
     for p in files:
@@ -502,7 +513,7 @@ def run_infra_iac(decl, project_root: Path) -> CheckReport:
                 results.append(ResultItem(target, _status(decl, "mismatch"), "metadata", expected=n["category"],
                                           actual=", ".join(sorted(cats)), message=f"category differs from {hit[0]['source']}"))
             spec_uncompared += _compare_spec(decl, n, hit, target, results)
-        elif provider in unread or ("*" in unread and any(T.is_terraform_address(a) for a in n["iac"])):
+        elif provider in unread or "**" in unread or ("*" in unread and any(T.is_terraform_address(a) for a in n["iac"])):
             # one of this provider's IaC files was not read, or a Terraform file (anyone's) and the node's address is
             # a Terraform one: not there is not known. A compose or wrangler address cannot be in a Terraform file.
             results.append(ResultItem(target, "skipped", "metadata", expected=", ".join(n["iac"]),

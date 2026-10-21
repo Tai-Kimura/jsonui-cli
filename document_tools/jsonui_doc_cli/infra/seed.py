@@ -56,20 +56,11 @@ from . import iac_tables as T
 from . import model as M
 
 FILE_CAP = 2_000_000          # one input file, bytes
-WALK_CAP = 200_000            # files looked at by name
 CODE_FILES_CAP = 20_000       # code files read
 LIST_CAP = 200                # items listed per provider in the report (the count is always whole)
 DRAFT_NAME = "draft.json"
 REPORT_NAME = "seed-report.json"
 
-# The folders seed leaves out beyond iac_tables.SKIP_DIRS (the ones check leaves out too): caches and scratch, where
-# seed reads no code; IaC in the ones that are not hidden is still read (check reads it), see _iac_only_dirs.
-SEED_ONLY_SKIP_DIRS = frozenset({
-    ".hg", ".svn", ".terragrunt-cache", ".nuxt", ".svelte-kit", "coverage", ".tox", ".mypy_cache", ".pytest_cache",
-    ".ruff_cache", "site-packages", ".idea", ".vscode", ".serverless", ".aws-sam", ".vercel", ".netlify", ".firebase",
-    "bower_components", ".cache", "tmp",
-})
-KEEP_HIDDEN_DIRS = {".github"}
 
 ENV_LOCAL = {"id": "local", "label": "local (Docker Compose)", "kind": "local"}
 ENV_DEPLOYED = {"id": "deployed", "label": "deployed (seed: split into the real environments)", "kind": "other"}
@@ -430,39 +421,12 @@ def _scrub(value):
 
 # ================================================================ walking the project
 
-def _iac_only_dirs() -> set[str]:
-    """Folders seed leaves out for code (caches, scratch) but check kind=infra reads IaC in (tmp, coverage, ...): seed
-    reads only IaC there, so a draft taken as it is compares clean with check. Hidden folders neither reads."""
-    return {n for n in SEED_ONLY_SKIP_DIRS if n not in T.SKIP_DIRS and not n.startswith(".")}
-
-
 def _walk(root: Path, exclude: list[Path], d: Draft) -> list[tuple[str, bool]]:
-    """(rel, iac_only) for each file: iac_only when it is under a folder seed reads only IaC in."""
-    out: list[tuple[str, bool]] = []
-    seen = 0
-    ex = {str(p.resolve()) for p in exclude}
-    iac_only_dirs = _iac_only_dirs()
-    iac_only_at: dict[str, bool] = {str(root): False}
-    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
-        if str(Path(dirpath).resolve()) in ex:
-            dirnames[:] = []
-            continue
-        here = iac_only_at.get(dirpath, False)
-        keep = []
-        for n in sorted(dirnames):
-            if n.startswith(".") and n not in KEEP_HIDDEN_DIRS or str((Path(dirpath) / n).resolve()) in ex:
-                continue
-            if (n in T.SKIP_DIRS or n in SEED_ONLY_SKIP_DIRS) and n not in iac_only_dirs:
-                continue
-            iac_only_at[os.path.join(dirpath, n)] = here or n in iac_only_dirs
-            keep.append(n)
-        dirnames[:] = keep
-        for fn in sorted(filenames):
-            seen += 1
-            if seen > WALK_CAP:
-                d.notes.append(f"more than {WALK_CAP} files: the rest of the project was not looked at")
-                return out
-            out.append((Path(dirpath, fn).relative_to(root).as_posix(), here))
+    """(rel, iac_only) for each file: iac_only when it is under a folder seed reads only IaC in (iac_tables.walk_project,
+    the walk check takes too)."""
+    out, stopped = T.walk_project(root, exclude)
+    if stopped is not None:
+        d.notes.append(f"more than {T.WALK_CAP} files: the rest of the project was not looked at")
     return out
 
 

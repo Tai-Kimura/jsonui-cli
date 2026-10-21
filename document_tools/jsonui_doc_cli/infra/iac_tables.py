@@ -532,6 +532,59 @@ def compose_address(rel: str, service: str) -> str:
 #: folders neither reads (no symlink is followed, and hidden folders are left out too)
 SKIP_DIRS = frozenset({".git", "node_modules", "vendor", "build", "dist", ".terraform", ".venv", "venv", "__pycache__",
                        "Pods", ".next", ".wrangler", "target", ".gradle", "DerivedData"})   # cdk.out is read: a synthesized CDK app
+# The folders seed leaves out beyond SKIP_DIRS: caches and scratch, where seed reads no code; IaC in the ones that are
+# not hidden is still read (check reads it too), see iac_only_dirs.
+SEED_ONLY_SKIP_DIRS = frozenset({
+    ".hg", ".svn", ".terragrunt-cache", ".nuxt", ".svelte-kit", "coverage", ".tox", ".mypy_cache", ".pytest_cache",
+    ".ruff_cache", "site-packages", ".idea", ".vscode", ".serverless", ".aws-sam", ".vercel", ".netlify", ".firebase",
+    "bower_components", ".cache", "tmp",
+})
+KEEP_HIDDEN_DIRS = {".github"}
+#: files looked at by name, seed and check alike (ticket doc-infra-iac-scan-cap-reached-before-terraform: check stopped
+#: at its 5,000th candidate — every JSON and YAML counted — and a project whose data folder held 34,000 JSON files had
+#: its Terraform, later in name order, never read, while seed, walking to here, read it)
+WALK_CAP = 200_000
+
+
+def iac_only_dirs() -> set[str]:
+    """Folders seed leaves out for code (caches, scratch) but reads IaC in (tmp, coverage, ...), as check does."""
+    return {n for n in SEED_ONLY_SKIP_DIRS if n not in SKIP_DIRS and not n.startswith(".")}
+
+
+def walk_project(root, exclude=()) -> tuple[list[tuple[str, bool]], str | None]:
+    """The project's files as seed and check both walk it: (rel, iac_only) in name order — iac_only when under a folder
+    only IaC is read in — no symlink followed, SKIP_DIRS and hidden folders (but .github) left out; and, when WALK_CAP
+    files were looked at, where the walk stopped (the rest not looked at), else None."""
+    import os  # noqa: PLC0415
+    from pathlib import Path  # noqa: PLC0415
+    root = Path(root)
+    out: list[tuple[str, bool]] = []
+    seen = 0
+    ex = {str(Path(p).resolve()) for p in exclude}
+    only = iac_only_dirs()
+    iac_only_at: dict[str, bool] = {str(root): False}
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        if str(Path(dirpath).resolve()) in ex:
+            dirnames[:] = []
+            continue
+        here = iac_only_at.get(dirpath, False)
+        keep = []
+        for n in sorted(dirnames):
+            if n.startswith(".") and n not in KEEP_HIDDEN_DIRS or str((Path(dirpath) / n).resolve()) in ex:
+                continue
+            if (n in SKIP_DIRS or n in SEED_ONLY_SKIP_DIRS) and n not in only:
+                continue
+            iac_only_at[os.path.join(dirpath, n)] = here or n in only
+            keep.append(n)
+        dirnames[:] = keep
+        for fn in sorted(filenames):
+            seen += 1
+            if seen > WALK_CAP:
+                return out, Path(dirpath).relative_to(root).as_posix() or "."
+            out.append((Path(dirpath, fn).relative_to(root).as_posix(), here))
+    return out, None
+
+
 COMPOSE_NAMES = re.compile(r"^(?:docker-)?compose(?:\.[\w-]+)?\.ya?ml$")
 WRANGLER_NAMES = re.compile(r"^wrangler\.(?:toml|json|jsonc)$")
 _CFN_NAMED = re.compile(r"^(?:template|.+\.template|.+\.cfn)\.(?:json|ya?ml)$")
