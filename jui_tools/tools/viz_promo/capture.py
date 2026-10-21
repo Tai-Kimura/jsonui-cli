@@ -654,6 +654,9 @@ class Driver:
                 for ev in pending:
                     if ev.at > t + 1e-9:
                         break
+                    if ev.args.get("until") is not None and t > ev.args["until"]:
+                        fired.append(ev)   # a press that was only needed if the page still asked for it by then
+                        continue
                     page_event = ev.kind in ("click", "hover", "select", "dbg")
                     if page_event and t < self.last_press + MIN_GAP_SEC:
                         continue
@@ -677,7 +680,10 @@ class Driver:
                         self.log[-1]["frame"] = i
                     fired.append(ev)
                 for ev in fired:
-                    pending.remove(ev)
+                    if ev in pending:
+                        pending.remove(ev)
+                    if ev.args.get("ends"):   # the presses of that group are no longer wanted
+                        pending = [p for p in pending if p.args.get("group") != ev.args["ends"]]
                 await self.place_cursor()
                 for wh in wheels:
                     if wh[0] <= t < wh[1]:

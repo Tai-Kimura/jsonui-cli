@@ -236,8 +236,10 @@ def waits(w: dict) -> list:
 
 # ---- the chapters ----
 
-#: the flow player's 1 歩戻る can be pressed (a step was taken after the last branch)
-BACK_READY = "() => { const b = document.querySelector(\"#sr-player [data-sr-fp='back']\"); return !!b && !b.disabled; }"
+#: the flow player's 1 歩戻る can be pressed and the branch's choices are not back yet (one press undoes one step and
+#: pauses: it takes a press per step taken since the branch)
+BACK_READY = ("() => { const b = document.querySelector(\"#sr-player [data-sr-fp='back']\"); "
+              "return !!b && !b.disabled && !!document.querySelector('#sr-choices[hidden]'); }")
 
 
 def chapters(lang: str) -> dict:
@@ -304,8 +306,11 @@ def chapters(lang: str) -> dict:
         E(57.4, "click", target={"css": "#sr-board [data-sr-flow='order']"}, expect="flow:order"),
         E(59.4, "click", target={"css": "#sr-choices [data-sr-choice='hit']"}, ready=choice, arg="hit"),
         E(62.6, "click", target={"css": "#sr-choices [data-sr-choice='in']"}, ready=choice, arg="in"),
-        E(64.4, "click", target={"css": "#sr-player [data-sr-fp='back']"}, ready=BACK_READY),
-        E(65.4, "click", target={"css": "#sr-choices [data-sr-choice='out']"}, ready=choice, arg="out"),
+        # back to the branch: a press per step taken since 'in' (each at most once, the rest dropped when 'out' is chosen)
+        E(63.6, "click", target={"css": "#sr-player [data-sr-fp='back']"}, ready=BACK_READY, group="back", until=66.4),
+        E(64.2, "click", target={"css": "#sr-player [data-sr-fp='back']"}, ready=BACK_READY, group="back", until=66.4),
+        E(64.8, "click", target={"css": "#sr-player [data-sr-fp='back']"}, ready=BACK_READY, group="back", until=66.4),
+        E(65.4, "click", target={"css": "#sr-choices [data-sr-choice='out']"}, ready=choice, arg="out", ends="back"),
         E(67.2, "wheel", target={"css": "#sr-canvas"}, dy=900, dur=3.0),
         E(69.6, "select", target={"css": "#sr-player [data-sr-fp='speed']"}, value="5"),
         E(70.4, "dbg", call="srSelect", node="api", expect="flowlist:payment"),
