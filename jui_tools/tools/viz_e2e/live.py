@@ -58,7 +58,7 @@ async def scenario_two_projects(browser, srv, out, failures, res):
     await page.goto(srv.url + "/")
     await ready(page)
     await page.evaluate("() => { window.__marker = 'same page'; }")
-    await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'")
+    await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'")
     await wait(page, "() => document.querySelectorAll('.tag.room').length === 2 && window.__dbg.robots.length === 3")
     await page.wait_for_timeout(1500)
     res["rooms"] = await rooms(page)
@@ -165,11 +165,11 @@ async def scenario_two_projects(browser, srv, out, failures, res):
     # a new token: "reconnecting", then back, same page.
     await page.click("#room-back")
     srv.stop()
-    await wait(page, "() => document.querySelector('.chip.demo').textContent === '再接続中…'", timeout=15000)
+    await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'reconnecting'", timeout=15000)
     res["reconnecting"] = True
     srv.restart()   # same port, a new token, the scenario from the start
     step(srv, "start")
-    await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", timeout=30000)
+    await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", timeout=30000)
     res["sameAfterReconnect"] = await page.evaluate("() => window.__marker")
     await wait(page, "() => window.__dbg.robots.length === 3")
     check(failures, res["sameAfterReconnect"] == "same page", "reconnected without reloading the page")
@@ -748,7 +748,7 @@ async def run_real(pw, out, failures, RealServer):
         page = await new_page(browser, watch, "real", **DESKTOP)
         await page.goto(srv.url + "/")
         await ready(page)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         await wait(page, "() => document.querySelectorAll('.tag.room').length === 2 && window.__dbg.robots.length >= 3", label="two rooms, three robots")
         res["rooms"] = await rooms(page)
         await wait(page, "() => { const s = window.__dbg.robotState().a0; return s && s.state === 'typing'; }", polling=50, label="a0 typing")
@@ -766,8 +766,8 @@ async def run_real(pw, out, failures, RealServer):
         before = srv.token()
         srv.restart()
         res["restart"] = {"newToken": bool(before) and srv.token() != before}
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '再接続中…'", polling=50, label="reconnecting after the restart")
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", timeout=40000, label="connected again")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'reconnecting'", polling=50, label="reconnecting after the restart")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", timeout=40000, label="connected again")
         await wait(page, "() => document.querySelectorAll('.tag.room').length === 2", label="the rooms after the restart")
         res["restart"]["sameTab"] = await page.evaluate("() => window.__notReloaded === true")
         res["restart"]["metaKeptOld"] = await page.evaluate("(t) => document.querySelector('meta[name=\"jui-viz-token\"]').content === t", before)
@@ -842,7 +842,7 @@ async def run_real_decide(pw, out, failures):
         page = await new_page(browser, watch, "real-decide", **DESKTOP)
         await page.goto(url + "/")
         await ready(page)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         hook(dict(base, hook_event_name="SessionStart", source="startup"))
         await wait(page, "() => window.__dbg.robots.length === 1", label="the session's robot")
         await page.wait_for_timeout(5500)   # one presence report after the page is up

@@ -111,7 +111,7 @@ async def run_weather(pw, out, failures):
         page.on("websocket", lambda ws: ws.on("framesent", lambda payload: sent.append(payload if isinstance(payload, str) else "")))
         await page.goto(url + "/")
         await ready(page)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         await wait(page, "() => window.__dbg.floors().floors.length >= 2", label="two floors")
         await page.evaluate("() => window.__dbg.tower(true)")
         await page.wait_for_timeout(2500)
@@ -194,7 +194,7 @@ async def run_weather(pw, out, failures):
         watch.attach(page2, "weather-denied")
         await page2.goto(url + "/")
         await ready(page2)
-        await wait(page2, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected (2)")
+        await wait(page2, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected (2)")
         await wait(page2, "() => window.__dbg.floors().floors.length >= 2", label="two floors (2)")
         await page2.evaluate("() => window.__dbg.tower(true)")
         await page2.wait_for_timeout(800)
@@ -270,7 +270,7 @@ async def run_weather_few(pw, out, failures):
         await page.add_init_script(GEO_COUNT)
         await page.goto(url + "/")
         await ready(page)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         await page.wait_for_timeout(1500)
         r = res["opened"] = await page.evaluate("""() => ({ floors: window.__dbg.floors().floors.length, geo: window.__geoCalls,
           tower: !document.getElementById('tower-weather').hidden, panel: !document.getElementById('sec-settings').hidden,

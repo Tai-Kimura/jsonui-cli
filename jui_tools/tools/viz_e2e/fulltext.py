@@ -220,7 +220,7 @@ async def run_fulltext(pw, out, failures, jt=None, shots_only=False):
         await page.emulate_media(color_scheme="light")
         await page.goto(url + "/")
         await ready(page)
-        await until(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", "connected")
+        await until(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", "connected")
         hook(SID_A, hook_event_name="SessionStart", source="startup", session_title=TITLE)
         hook(SID_B, hook_event_name="SessionStart", source="startup")
         hook(SID_A, hook_event_name="UserPromptSubmit", prompt=PEER_PROMPT)   # before the tools: A's act stays the long one

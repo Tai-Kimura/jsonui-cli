@@ -247,7 +247,7 @@ async def run_spec_nest(pw, out, failures, jt=None, shots_only=False):
         await page.emulate_media(color_scheme="light")
         await page.goto(url + "/")
         await ready(page)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         hook(hook_event_name="SessionStart", source="startup")
         await page.click("#spec-filter [data-f='all']")
         await wait(page, "() => document.querySelectorAll('#spec-list .spec-row').length >= 3", timeout=30000, label="the three specs listed")

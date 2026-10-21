@@ -111,7 +111,7 @@ async def run_main_color(pw, out, failures):
         page = await new_page(browser, watch, "main-color", **DESKTOP)
         await page.goto(url + "/")
         await ready(page)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         hook(S1, "/work/sky-one", hook_event_name="SessionStart", source="startup")
         hook(S1, "/work/sky-one", hook_event_name="UserPromptSubmit", prompt="頼む")
         hook(S1, "/work/sky-one", hook_event_name="SubagentStart", agent_id=SUB[0], agent_type=SUB[1])

@@ -103,7 +103,7 @@ async def run_name_tag_role(pw, out, failures, jt=None, shots_only=False):
         await page.emulate_media(color_scheme="light", reduced_motion="no-preference")
         await page.goto(url + "/")
         await ready(page)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         for i in range(4):
             hook(SID.format(i), hook_event_name="SessionStart", source="startup")
             hook(SID.format(i), hook_event_name="PreToolUse", tool_name="Read", tool_use_id=f"r{i}",

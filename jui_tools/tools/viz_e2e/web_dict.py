@@ -125,7 +125,7 @@ async def run_web_dict(pw, out, failures):
         page = await new_page(browser, watch, "web-dict", **DESKTOP)
         await page.goto(url + "/")
         await until(page, READY, "the page is up", timeout=30000)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", "connected")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", "connected")
         for sid in (FETCH, SEARCH, READ):
             hook(sid, hook_event_name="SessionStart", source="startup")
         await wait(page, "() => window.__dbg.play().robots.length >= 3", "three robots")

@@ -93,7 +93,7 @@ async def run_ask(pw, out, failures):
         page = await new_page(browser, watch, "ask", **DESKTOP)
         await page.goto(url + "/")
         await ready(page)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         hook(dict(base, hook_event_name="SessionStart", source="startup"))
         await wait(page, "() => window.__dbg.robots.length === 1", label="the session's robot")
         await page.wait_for_timeout(5500)   # one presence report after the page is up

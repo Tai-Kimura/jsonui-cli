@@ -115,7 +115,7 @@ async def run_play(pw, out, failures):
         page = await new_page(browser, watch, "play", **DESKTOP)
         await page.goto(url + "/")
         await ready(page)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         await page.evaluate(SEG_JS)                      # every robot's step against the walls (rooms.py)
         for sid in (A, B):
             hook(sid, hook_event_name="SessionStart", source="startup")

@@ -129,7 +129,7 @@ async def run_workwear(pw, out, failures):
         page = await new_page(browser, watch, "workwear", **DESKTOP)
         await page.goto(url + "/")
         await until(page, "() => !!(window.__dbg && window.__dbg.robots && document.body.dataset.mode === 'live')", "the page is up", timeout=30000)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         hook(hook_event_name="SessionStart", source="startup")
         hook(hook_event_name="UserPromptSubmit", prompt="二人に頼む")
         for aid, atype in SUBS:

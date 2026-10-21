@@ -104,7 +104,7 @@ async def run_tag_click(pw, out, failures, jt=None):
         await page.emulate_media(color_scheme="light", reduced_motion="no-preference")
         await page.goto(url + "/")
         await ready(page)
-        await until(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", "connected")
+        await until(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", "connected")
         for i in range(4):
             hook(SID.format(i), hook_event_name="SessionStart", source="startup")
             hook(SID.format(i), hook_event_name="PreToolUse", tool_name="Read", tool_use_id=f"r{i}",

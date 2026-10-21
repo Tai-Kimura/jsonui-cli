@@ -85,7 +85,7 @@ async def run_card_screens(pw, out, failures):
             await page.emulate_media(color_scheme="light", reduced_motion="no-preference")
             await page.goto(url + "/")
             await ready(page)
-            await until(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", "connected")
+            await until(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", "connected")
             if not started:
                 hook(DS.SID_A, room_a, hook_event_name="SessionStart", source="startup")
                 hook(DS.SID_B, room_b, hook_event_name="SessionStart", source="startup")

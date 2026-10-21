@@ -110,7 +110,7 @@ async def run_wait_kinds(pw, out, failures, jt=None):
         await page.emulate_media(color_scheme="light", reduced_motion="no-preference")
         await page.goto(url + "/")
         await ready(page)
-        await until(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", "connected")
+        await until(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", "connected")
         for k in SID:
             hook(k, hook_event_name="SessionStart", source="startup")
         await until(page, "() => window.__dbg.robots.length >= 4", "four robots", timeout=40000, why="() => window.__dbg.settleInfo()")

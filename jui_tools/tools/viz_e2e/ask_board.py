@@ -124,7 +124,7 @@ async def run_ask_board(pw, out, failures):
         page = await new_page(browser, watch, "ask-board", **DESKTOP)
         await page.goto(url + "/")
         await ready(page)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         for k in SIDS:
             hook(body(k, hook_event_name="SessionStart", source="startup"))
         await wait(page, "() => window.__dbg.robots.length === 3", label="three robots")

@@ -64,8 +64,10 @@ function liveChrome() {
   const chip = document.querySelector('.chip.demo');
   if (chip) {
     const ok = NET.state === 'connected';
-    setText(chip, ok ? tl('net.connected') : NET.state === 'connecting' && !LIVE.connectedOnce ? tl('net.connecting') : tl('net.reconnecting'));
+    const net = ok ? 'connected' : NET.state === 'connecting' && !LIVE.connectedOnce ? 'connecting' : 'reconnecting';
+    setText(chip, tl({ connected: 'net.connected', connecting: 'net.connecting', reconnecting: 'net.reconnecting' }[net]));
     chip.dataset.conn = ok ? 'ok' : 'wait';
+    chip.dataset.net = net;   // what the words say, in any language (the browser tests wait on it)
   }
   const empty = $('live-empty');
   if (empty) empty.hidden = !SOURCE.connected || SESSIONS.length > 0;

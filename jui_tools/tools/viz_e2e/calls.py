@@ -100,7 +100,7 @@ async def run_calls(pw, out, failures):
         page = await new_page(browser, watch, "calls", **DESKTOP)
         await page.goto(url + "/")
         await ready(page)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         for sid in (A, B):
             hook(sid, hook_event_name="SessionStart", source="startup")
         await wait(page, "() => window.__dbg.calls().length >= 2", label="two robots")

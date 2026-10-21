@@ -134,7 +134,7 @@ async def run_bg_look(pw, out, failures):
         page = await new_page(browser, watch, "bg-look", **DESKTOP)
         await page.goto(url + "/")
         await until(page, READY, "the page is up", timeout=30000)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", "connected")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", "connected")
         for sid in (IDLE, WORK, BACK):
             hook(sid, hook_event_name="SessionStart", source="startup")
         await wait(page, "() => window.__dbg.play().robots.length >= 3", "three robots")

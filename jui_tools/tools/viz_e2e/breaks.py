@@ -234,7 +234,7 @@ async def run_breaks(pw, out, failures, jt=None, shots_only=False):
         await page.emulate_media(color_scheme="light", reduced_motion="no-preference")
         await page.goto(url + "/")
         await ready(page)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         hook(ONE, CWD_ONE, hook_event_name="SessionStart", source="startup")
         await wait(page, "() => window.__dbg.robots.length >= 1", label="one robot")
         for sid in MANY:

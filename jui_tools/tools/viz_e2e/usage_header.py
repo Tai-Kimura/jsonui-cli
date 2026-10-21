@@ -166,7 +166,7 @@ async def run_usage(pw, out, failures):
         await page.emulate_media(color_scheme="light")
         await page.goto(url + "/")
         await ready(page)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         await wait(page, "() => window.__dbg.usage().length === 1", label="the chip")
         r = res["none"] = await page.evaluate(usage)
         check(failures, r[0]["text"] == "上限の値なし" and r[0]["window"] is None, f"no value yet: {r}")

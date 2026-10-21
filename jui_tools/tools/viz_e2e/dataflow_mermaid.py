@@ -103,7 +103,7 @@ async def run_dataflow_mermaid(pw, out, failures, jt=None, shots_only=False):
         await page.emulate_media(color_scheme="light")
         await page.goto(url + "/")
         await ready(page)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         hook(hook_event_name="SessionStart", source="startup")
         await page.click("#spec-filter [data-f='all']")   # the list shows the specs being worked on by default
         await wait(page, "() => document.querySelectorAll('#spec-list .spec-row').length >= 2", timeout=30000, label="the two specs listed")

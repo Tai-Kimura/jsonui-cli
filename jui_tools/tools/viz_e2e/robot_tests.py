@@ -120,7 +120,7 @@ async def run_robot_tests(pw, out, failures):
         page = await new_page(browser, watch, "robot-tests", **DESKTOP)
         await page.goto(url + "/")
         await ready(page)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         for sid in (SID_A, SID_B):
             hook(dict(base(sid), hook_event_name="SessionStart", source="startup"))
         await wait(page, "() => document.querySelectorAll('#sessions [data-robot-open]').length >= 2", label="two robots")
@@ -179,7 +179,7 @@ async def run_robot_tests(pw, out, failures):
         page = await new_page(browser, watch, "robot-tests-restart", **DESKTOP)
         await page.goto(url + "/")
         await ready(page)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected again")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected again")
         hook(dict(base(SID_A), hook_event_name="SessionStart", source="resume"))
         await wait(page, "() => !!document.querySelector('#sessions [data-robot-open]')", label="robot A again")
         run_c = str(uuid.uuid4())

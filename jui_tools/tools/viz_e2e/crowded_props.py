@@ -124,7 +124,7 @@ async def run_crowded_props(pw, out, failures):
         await page.emulate_media(color_scheme="light", reduced_motion="no-preference")
         await page.goto(url + "/")
         await ready(page)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         for i in range(3):
             hook(SID.format(i), hook_event_name="SessionStart", source="startup")
         await wait(page, "() => window.__dbg.robots.length === 3", timeout=30000, label="three robots")

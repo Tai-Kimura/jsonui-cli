@@ -132,7 +132,7 @@ async def run_data_server(pw, out, failures, jt=None, shots_only=False):
         await page.add_init_script(desk_pins_js([(room_a, SID_A, DESK_A)]))
         await page.goto(url + "/")
         await ready(page)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         hook(SID_A, room_a, hook_event_name="SessionStart", source="startup")
         hook(SID_B, room_b, hook_event_name="SessionStart", source="startup")
         await wait(page, "() => window.__dbg.robots.length >= 2 && window.__dbg.robots.every((R) => !R.path.length)", timeout=30000, label="seated")

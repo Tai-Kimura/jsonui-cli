@@ -155,7 +155,7 @@ async def run_play_look(pw, out, failures):
         page = await new_page(browser, watch, "play-look", **DESKTOP)
         await page.goto(url + "/")
         await ready(page)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         for sid in (A, B):
             hook(sid, hook_event_name="SessionStart", source="startup")
         await wait(page, "() => window.__dbg.play().robots.length >= 2", label="two robots")
@@ -280,7 +280,7 @@ async def run_play_look(pw, out, failures):
         await page.evaluate("() => window.__dbg.play({ p: 0, endAll: true, solo: { p: 0 } })")
         await page.reload()
         await ready(page)
-        await wait(page, "() => document.querySelector('.chip.demo').textContent === '接続中'", label="connected again")
+        await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected again")
         await wait(page, "() => window.__dbg.floors().floors.length >= 2 && window.__dbg.floors().floors.flat().length >= 7", timeout=30000, label="two floors")
         room = res["ball"].get("room")
         fl = await page.evaluate("() => window.__dbg.floors()")
