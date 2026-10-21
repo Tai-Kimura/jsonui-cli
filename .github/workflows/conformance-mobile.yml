@@ -1229,6 +1229,33 @@ jobs:
   #
   # Every other job of this workflow is off when tap_repro is true, and this
   # one is off otherwise — the normal conformance path is unchanged.
+  weekly-red:
+    # A red weekly run says so (ticket 2026-10-21-conformance-weekly-ios-interaction-gate-red): GitHub mails a
+    # scheduled run's failure only to whoever last edited the cron line, and the 10-18 run sat red for three days
+    # before anyone saw it. On a scheduled run whose jobs did not all pass, one issue a week (labelled
+    # conformance-weekly-red, the run in its title); a second red run that week comments on it. A run dispatched by
+    # hand never opens one: whoever dispatched it is watching.
+    if: ${{ always() && github.event_name == 'schedule' }}
+    needs: [web, ios, ios-merge, android, ios-codegen, ios-codegen-merge, android-codegen, android-library-tests, report]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - name: Open (or add to) this week's issue when a job is red
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEEDS: ${{ toJSON(needs) }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # the run's own start, not this job's: a run that crosses midnight on Sunday stays in its week
+          started="$(gh run view "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --json createdAt --jq .createdAt)"
+          python3 .github/scripts/weekly_red_issue.py "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$RUN_URL" "$NEEDS" "$started"
+
   tap-repro:
     # Only when dispatched with tap_repro=true; every other job is then off.
     if: ${{ inputs.tap_repro && !inputs.android_library_only }}

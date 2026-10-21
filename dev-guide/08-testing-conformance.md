@@ -186,6 +186,11 @@
   最長 35 秒で出た）の間やり直す。一度も出なければ状態を `device-evidence/ime-never-shown` に残し、テストを走らせずに
   「the IME never showed before the tests」で落とす（環境の赤。run 37650134866 はこれを library のキーボードの 10 件として出していた）。
   画面がその image に無ければ WARNING（IME は確かめていない）を出してテストへ進む
+- weekly-red（schedule の run のときだけ。予算 5 分）: ほかのどの job（report を含む）かが failure か cancelled なら、
+  その週の issue を 1 本開く。題は「conformance weekly red: <ISO の週> (run <番号>)」、ラベルは `conformance-weekly-red`。
+  同じ週の 2 本目の赤は、その issue にコメントを足す（`.github/scripts/weekly_red_issue.py`。週は run の作られた時刻で数える）。
+  手で撃った run では開かない（撃った人が見ている）。2026-10-18 の週次は 3 日間赤のまま誰も気づかなかった。
+  GitHub は、定期の run の失敗を cron を最後に書き換えた人にしかメールしない（票 conformance-weekly-ios-interaction-gate-red）
 - dispatch の入力: `swiftjsonui_ref`（iOS 2 job）/ `ios_probes` / `image_probes` / `kotlinjsonui_ref`（Android 3 job）/
   `android_probes`（テストが `getArguments().getString("x") == "1"` と比べる旗をすべて立てる。旗の一覧は
   テストから導出）。`ios_probes`（jsonui-cli 1.9.23 から）は ConformanceHost の UI テストが `["X"] == "1"` と比べる
