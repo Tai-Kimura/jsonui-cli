@@ -1926,5 +1926,16 @@
   "srv.denial.what": "止められた操作: {what}",
   "srv.denial.why": "止めた理由（自動モードの判定）: {why}",
   "srv.denial.judged": "この操作は、私が内容を見て、実行してよいと判断しました。もう一度試してください。",
-  "srv.denial.again": "判定がまた止めるとき、またはあなたが端末での確認が要ると判断するときは、そう返してください。端末で答えます。"
+  "srv.denial.again": "判定がまた止めるとき、またはあなたが端末での確認が要ると判断するときは、そう返してください。端末で答えます。",
+  "srv.git.uptodate": "変更なし",
+  "srv.git.rejected": "突き返された",
+  "srv.git.conflict": "衝突",
+  "srv.git.failed": "失敗",
+  "srv.git.deleted": "削除",
+  "srv.git.tag": "タグ {branch}",
+  "srv.git.new": "（新しいブランチ）",
+  "srv.git.forced": "（強制）",
+  "srv.git.commits": {
+    "other": "{n} コミット"
+  }
 }

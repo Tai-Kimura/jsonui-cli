@@ -1971,5 +1971,17 @@
   "srv.denial.what": "Stopped call: {what}",
   "srv.denial.why": "Why it was stopped (auto mode's judgement): {why}",
   "srv.denial.judged": "I have looked at this call and judged it fine to run. Please try it again.",
-  "srv.denial.again": "If the judgement stops it again, or you judge it needs a confirmation in the terminal, say so. I will answer in the terminal."
+  "srv.denial.again": "If the judgement stops it again, or you judge it needs a confirmation in the terminal, say so. I will answer in the terminal.",
+  "srv.git.uptodate": "up to date",
+  "srv.git.rejected": "rejected",
+  "srv.git.conflict": "conflict",
+  "srv.git.failed": "failed",
+  "srv.git.deleted": "deleted",
+  "srv.git.tag": "tag {branch}",
+  "srv.git.new": " (new branch)",
+  "srv.git.forced": " (forced)",
+  "srv.git.commits": {
+    "one": "{n} commit",
+    "other": "{n} commits"
+  }
 }

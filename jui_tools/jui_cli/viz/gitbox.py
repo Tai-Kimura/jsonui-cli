@@ -29,6 +29,7 @@ import os
 import re
 import subprocess
 
+from . import i18n
 from .robots import _head, simple_commands
 
 COUNT_TIMEOUT_SEC = 3
@@ -203,19 +204,19 @@ def label(trip: dict) -> str:
     branch = trip.get("branch") or ""          # an up-to-date pull does not say the branch: no name, not a "?"
     status = trip.get("status")
     if status == "uptodate":
-        return f"{arrow} {branch + ' ' if branch else ''}— 変更なし"
+        return f"{arrow} {branch + ' ' if branch else ''}— {i18n.tl('srv.git.uptodate')}"
     if status == "rejected":
-        return f"{arrow} {branch + ' ' if branch else ''}— 突き返された"
+        return f"{arrow} {branch + ' ' if branch else ''}— {i18n.tl('srv.git.rejected')}"
     if status in ("failed", "conflict"):
-        return f"{arrow} {branch + ' ' if branch else ''}— {'衝突' if status == 'conflict' else '失敗'}"
+        return f"{arrow} {branch + ' ' if branch else ''}— {i18n.tl('srv.git.conflict') if status == 'conflict' else i18n.tl('srv.git.failed')}"
     if status == "deleted":
-        return f"{arrow} {branch + ' ' if branch else ''}— 削除"
+        return f"{arrow} {branch + ' ' if branch else ''}— {i18n.tl('srv.git.deleted')}"
     if status == "tag":
-        return f"{arrow} タグ {branch}"
+        return f"{arrow} {i18n.tl('srv.git.tag', branch=branch)}"
     c = trip.get("counted") or {}
-    parts = [f"{arrow}{' ' + branch if branch else ''}{'（新しいブランチ）' if status == 'new' else ''}{'（強制）' if status == 'forced' else ''}"]
+    parts = [f"{arrow}{' ' + branch if branch else ''}{i18n.tl('srv.git.new') if status == 'new' else ''}{i18n.tl('srv.git.forced') if status == 'forced' else ''}"]
     if c.get("commits") is not None:
-        parts.append(f"{c['commits']} コミット")
+        parts.append(i18n.tl("srv.git.commits", n=c['commits']))
     if c.get("ins") is not None:
         parts.append(f"+{c['ins']} −{c['dels']}")
     return " ".join(parts)
