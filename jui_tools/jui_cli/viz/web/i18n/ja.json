@@ -1951,5 +1951,9 @@
   "srv.call.name.empty": "担当名を入れてください",
   "srv.call.name.max": "担当名は {max} 文字まで",
   "srv.call.name.line": "担当名は 1 行で（改行・タブなどの制御文字は使えません）",
-  "srv.call.role.max": "役割の文は {max} 文字まで"
+  "srv.call.role.max": "役割の文は {max} 文字まで",
+  "srv.clockout.vscode": "VS Code ではタブがエラーで残るので使えない。タブを閉じて終わらせる",
+  "srv.clockout.desktop": "デスクトップアプリでは画面が変わらないので使えない",
+  "srv.clockout.other": "ターミナルで起動したセッションだけ退勤させられる",
+  "srv.clockout.unknown": "起動元が分からないので使えない（ターミナルで起動したセッションだけ）"
 }

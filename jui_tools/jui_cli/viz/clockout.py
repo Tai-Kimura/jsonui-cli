@@ -37,6 +37,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from . import i18n
 from .sources import session_files
 
 SIGNAL = signal.SIGTERM
@@ -45,12 +46,10 @@ POLL_SEC = 0.1
 
 #: The registry's ``entrypoint`` -> the client the page names. Only "terminal" may be clocked out.
 CLIENTS = {"cli": "terminal", "claude-vscode": "vscode", "claude-desktop": "desktop"}
-#: Why each other client is refused (the page shows the same words: 50-panel.js CLOCK_WHY).
+#: Why each other client is refused (the page says the same: 50-panel.js CLOCK_WHY): a key, said when refused.
 REFUSED_CLIENT = {
-    "vscode": "VS Code ではタブがエラーで残るので使えない。タブを閉じて終わらせる",
-    "desktop": "デスクトップアプリでは画面が変わらないので使えない",
-    "other": "ターミナルで起動したセッションだけ退勤させられる",
-    "unknown": "起動元が分からないので使えない（ターミナルで起動したセッションだけ）",
+    "vscode": "srv.clockout.vscode", "desktop": "srv.clockout.desktop", "other": "srv.clockout.other",
+    "unknown": "srv.clockout.unknown",
 }
 
 LEDGER_LOCK_TRIES = 50
@@ -124,7 +123,7 @@ def check_pid(folder: Path, pid: int, sid: str, own_pid: int,
         return 409, "not an interactive session"
     client = client_of(data.get("entrypoint"))
     if client != "terminal":
-        return 409, REFUSED_CLIENT[client]
+        return 409, i18n.tl(REFUSED_CLIENT[client])
     start = data.get("procStart")
     if not isinstance(start, str) or not start.strip():
         return 409, "the entry has no procStart: the process cannot be told from a reused pid"
