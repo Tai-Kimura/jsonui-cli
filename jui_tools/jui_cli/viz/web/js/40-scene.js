@@ -64,11 +64,27 @@ const KB_PAL = {
   dark: { cork: '#47331f', speck: 'rgba(0, 0, 0, 0.22)', title: '#f3e6d4', sub: '#d8c3a6', col: 'rgba(0, 0, 0, 0.2)', ink: '#eef2f8', soft: '#b9c6d8', pin: '#ff6b78', warn: '#ffb020', warnInk: '#2a1a00', note: { todo: '#4a4222', wait: '#4e3322', doing: '#1f375c', done: '#1b3f2e' }, head: { todo: '#e6c766', wait: '#ffab73', doing: '#86b8ff', done: '#5ad893' } },
 };
 
-function fitText(ctx, text, x, y, maxW) {
+/* The ctx's font, smaller a pixel at a time down to floor of its size, until the words fit maxW: what a language
+   says longer (English beside Japanese) is drawn smaller before it is cut (ticket
+   2026-10-21-viz-english-screen-checks: the spec board's statuses and names came out cut in English). Returns
+   whether they fit; the font is left at the size reached. */
+function shrinkToFit(ctx, words, maxW, floor) {
+  const m = /(\d+(?:\.\d+)?)px/.exec(ctx.font);
+  if (!m) return ctx.measureText(words).width <= maxW;
+  const font = ctx.font, px = Number(m[1]), least = Math.ceil(px * floor);
+  for (let p = px; p >= least; p--) {
+    ctx.font = font.replace(m[0], `${p}px`);
+    if (ctx.measureText(words).width <= maxW) return true;
+  }
+  return false;
+}
+function fitText(ctx, text, x, y, maxW, floor = 0.72) {
+  const font = ctx.font;
   let s = String(text);
-  if (ctx.measureText(s).width <= maxW) { ctx.fillText(s, x, y); return; }
+  if (shrinkToFit(ctx, s, maxW, floor)) { ctx.fillText(s, x, y); ctx.font = font; return; }
   while (s.length > 1 && ctx.measureText(`${s}…`).width > maxW) s = s.slice(0, -1);
   ctx.fillText(`${s}…`, x, y);
+  ctx.font = font;
 }
 function wrapText(ctx, text, x, y, maxW, lineH, maxLines) {
   const chars = [...String(text)];
@@ -1605,6 +1621,7 @@ function signTexture(text, bg, ink, w = 256, h = 96) {
   const cv = makeCanvas(w, h), ctx = cv.getContext('2d');
   ctx.fillStyle = bg; rr(ctx, 0, 0, w, h, 14); ctx.fill();
   ctx.fillStyle = ink; ctx.font = `${Math.round(h * 0.5)}px ${FONT_DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  shrinkToFit(ctx, text, w - h * 0.25, 0.5);   // inside the sign's round corners, whatever its language
   ctx.fillText(text, w / 2, h / 2 + 2);
   return texFrom(cv);
 }
