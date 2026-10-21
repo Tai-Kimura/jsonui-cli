@@ -337,7 +337,62 @@ def infra_config(root: Path) -> tuple[str, dict[str, str], list[dict]]:
             problems.append(M._problem(CONFIG_NAME, where, "config.icon", "names a category the model does not have"))
         else:
             icons[key] = path
-    return folder, icons, problems
+    return folder, icons, problems + exclude_problems(root, infra)
+
+
+#: how many folders infra.exclude may name
+EXCLUDE_MAX = 50
+
+
+def _exclude_entries(root: Path, infra: dict | None) -> tuple[list[str], list[dict]]:
+    """(the folders infra.exclude names that are there, the problems with the rest)."""
+    raw = (infra or {}).get("exclude")
+    if raw is None:
+        return [], []
+    if not isinstance(raw, list):
+        return [], [M._problem(CONFIG_NAME, "/infra/exclude", "config.exclude",
+                               "infra.exclude must be a list of folders (relative paths inside the project)")]
+    out, problems = [], []
+    real_root = root.resolve()
+    for i, item in enumerate(raw[:EXCLUDE_MAX]):
+        where = f"/infra/exclude/{i}"
+        rel = item.rstrip("/") if isinstance(item, str) else item
+        if not _rel_ok(rel):
+            problems.append(M._problem(CONFIG_NAME, where, "config.exclude",
+                                       'must be a relative path inside the project (no "..", no absolute path, no URL)'))
+            continue
+        target = root / rel
+        if not target.is_dir():
+            problems.append(M._problem(CONFIG_NAME, where, "config.exclude",
+                                       f"{rel}: no such folder in the project: nothing is left out for it", "warning"))
+            continue
+        try:
+            target.resolve().relative_to(real_root)
+        except ValueError:
+            problems.append(M._problem(CONFIG_NAME, where, "config.exclude",
+                                       f"{rel}: a link to a folder outside the project: never walked, nothing to leave out"))
+            continue
+        out.append(rel)
+    if len(raw) > EXCLUDE_MAX:
+        problems.append(M._problem(CONFIG_NAME, "/infra/exclude", "config.exclude",
+                                   f"more than {EXCLUDE_MAX} folders: the rest are not left out"))
+    return out, problems
+
+
+def exclude_problems(root: Path, infra: dict | None) -> list[dict]:
+    return _exclude_entries(root, infra)[1]
+
+
+def infra_exclude(root: Path) -> list[str]:
+    """The folders jui.config.json's infra.exclude names (another project's: a submodule, a product of its own), as
+    relative paths that are there: seed and the infra checks do not walk into them (iac_tables.walk_project). What is
+    wrong with the list is said by validate infra (infra_config's problems), never silently dropped. A config that
+    cannot be read: none (infra_config refuses it where it is read)."""
+    try:
+        infra = _infra_section(root)
+    except Refused:
+        return []
+    return _exclude_entries(root, infra)[0]
 
 
 def side_dir(root: Path, key: str) -> str:

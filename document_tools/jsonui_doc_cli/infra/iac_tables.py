@@ -577,11 +577,17 @@ def git_ignored(root) -> set[str] | None:
     return {x for x in r.stdout.decode("utf-8", "surrogateescape").split("\0") if x}
 
 
-def walk_project(root, exclude=()) -> tuple[list[tuple[str, bool]], str | None]:
+def walk_project(root, exclude=(), nested: list | None = None) -> tuple[list[tuple[str, bool]], str | None]:
     """The project's files as seed and check both walk it: (rel, iac_only) in name order — iac_only when under a folder
     only IaC is read in — no symlink followed, SKIP_DIRS, hidden folders (but .github) and what git ignores
     (git_ignored: fetched modules in .terraform/, an import's output) left out but for IAC_OUTPUT_DIRS, where only IaC
-    is read; and, when WALK_CAP files were looked at, where the walk stopped (the rest not looked at), else None."""
+    is read; and, when WALK_CAP files were looked at, where the walk stopped (the rest not looked at), else None.
+
+    exclude: folders not walked (jui.config.json's infra.exclude: another project's, room.infra_exclude). nested, when
+    a list: each folder walked that looks like a project of its own (its own jui.config.json, or its own git: a
+    submodule or a clone) is added to it once, as (rel, why), the outermost only. Such a folder is walked all the same:
+    whether it is another product or a part of this one (an app in its own repository) only the project can say
+    (ticket doc-infra-check-walks-into-nested-projects)."""
     import os  # noqa: PLC0415
     from pathlib import Path  # noqa: PLC0415
     root = Path(root)
@@ -598,6 +604,12 @@ def walk_project(root, exclude=()) -> tuple[list[tuple[str, bool]], str | None]:
         rel_dir = os.path.relpath(dirpath, root).replace(os.sep, "/")
         prefix = "" if rel_dir == "." else rel_dir + "/"
         here = iac_only_at.get(dirpath, False)
+        if nested is not None and prefix and not any(prefix.startswith(r + "/") for r, _w in nested):
+            why = [w for w, there in (("its own jui.config.json", "jui.config.json" in filenames),
+                                      ("its own git (a submodule or a clone)", ".git" in dirnames or ".git" in filenames))
+                   if there]
+            if why:
+                nested.append((rel_dir, " and ".join(why)))
         keep = []
         for n in sorted(dirnames):
             if n.startswith(".") and n not in KEEP_HIDDEN_DIRS:

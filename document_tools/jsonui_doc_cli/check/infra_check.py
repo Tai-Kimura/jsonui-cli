@@ -47,13 +47,21 @@ class InfraCheckError(Exception):
 
 # ---------------------------------------------------------------- walking the project
 
-def _walk(root: Path, accept, code: bool = False) -> tuple[list[Path], str | None]:
+def nested_note(rel: str, why: str) -> str:
+    """The line said once for a folder walked that looks like a project of its own."""
+    return (f"{rel}/ has {why}: walked as part of this project. If it is another project (a product of its own), "
+            f'list it in jui.config.json\'s infra.exclude ("exclude": ["{rel}"]) and it is not walked')
+
+
+def _walk(root: Path, accept, code: bool = False) -> tuple[list[Path], str | None, list[str]]:
     """Files under root that accept(name) takes, walked as seed walks (iac_tables.walk_project: no symlink followed,
     SKIP_DIRS and hidden folders but .github left out; code=True also leaves out the folders seed reads only IaC in);
     and, when the walk stopped at iac_tables.WALK_CAP files, why the rest was not looked at, else None. The cap counts
     every file looked at, not the candidates: a data folder of JSON files no longer uses it up before the Terraform
     (ticket doc-infra-iac-scan-cap-reached-before-terraform)."""
-    rels, stopped = T.walk_project(root)
+    nested: list = []
+    rels, stopped = T.walk_project(root, [root / p for p in R.infra_exclude(root)], nested)
+    notes = [nested_note(rel, why) for rel, why in nested]
     out: list[Path] = []
     for rel, iac_only in rels:
         if code and iac_only:
@@ -62,8 +70,8 @@ def _walk(root: Path, accept, code: bool = False) -> tuple[list[Path], str | Non
         if accept(p.name) and p.is_file() and not p.is_symlink():
             out.append(p)
     if stopped is None:
-        return out, None
-    return out, f"more than {T.WALK_CAP} files in the project: the walk stopped in {stopped}/ and the rest was not looked at"
+        return out, None, notes
+    return out, f"more than {T.WALK_CAP} files in the project: the walk stopped in {stopped}/ and the rest was not looked at", notes
 
 
 def _text(p: Path) -> str | None:
@@ -192,7 +200,9 @@ def scan_iac(root: Path) -> tuple[list[dict], dict[str, list[str]]]:
             unverified[provider].append(why)
 
     names = lambda n: T.iac_kind(n) is not None or n in NOT_COMPARED  # noqa: E731 — IaC by the table, and the platform settings
-    files, stopped = _walk(root, names)
+    files, stopped, nested = _walk(root, names)
+    for line in nested:
+        note("*", line)
     y = _yaml()
     unmapped: dict[str, set[str]] = {}
     parts: dict[str, int] = {}
@@ -396,7 +406,8 @@ def scan_code(root: Path) -> tuple[list[dict], list[str]]:
         if ext in OTHER_CODE:
             others[OTHER_CODE[ext]] = others.get(OTHER_CODE[ext], 0) + 1
         return ext in H.CODE_EXT or bool(H.ENV_NAME_FILES.match(name))
-    files, stopped = _walk(root, take, code=True)
+    files, stopped, nested = _walk(root, take, code=True)
+    notes.extend(nested)
     if stopped:
         notes.append(stopped)
     if len(files) > MAX_CODE_FILES:

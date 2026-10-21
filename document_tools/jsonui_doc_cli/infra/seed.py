@@ -424,7 +424,10 @@ def _scrub(value):
 def _walk(root: Path, exclude: list[Path], d: Draft) -> list[tuple[str, bool]]:
     """(rel, iac_only) for each file: iac_only when it is under a folder seed reads only IaC in (iac_tables.walk_project,
     the walk check takes too)."""
-    out, stopped = T.walk_project(root, exclude)
+    from ..check.infra_check import nested_note  # noqa: PLC0415  (the same line as the checks say)
+    nested: list = []
+    out, stopped = T.walk_project(root, exclude, nested)
+    d.notes.extend(nested_note(rel, why) for rel, why in nested)
     if stopped is not None:
         d.notes.append(f"more than {T.WALK_CAP} files: the rest of the project was not looked at")
     return out
@@ -1446,7 +1449,7 @@ def run(root: Path, out_dir: Path | None = None, to_stdout: bool = False, force:
         err(f"seed infra: {r.reason}: {r.message}")
         return 2
     out_dir = Path(out_dir) if out_dir else root / folder / "seed"
-    doc, rep = draft(root, exclude=[root / folder, out_dir])
+    doc, rep = draft(root, exclude=[root / folder, out_dir] + [root / p for p in R.infra_exclude(root)])
     problems = check_draft(doc)
     if problems:
         for p in problems:

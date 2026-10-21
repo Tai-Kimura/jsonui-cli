@@ -15,6 +15,11 @@ to fix. The schemas (`jsonui_doc_cli/infra/infra-*.v0.schema.json`) hold the ful
 | `docs/infra/seed/` | `jsonui-doc seed infra`'s draft and report — a starting point, never read as the model | — |
 
 `jui.config.json` → `infra` can move them: `dir` (default `docs/infra`), `load_dir`, `prices_dir`, `icons`.
+`infra.exclude` lists folders that are another project (a product of its own in a submodule, say): seed and
+the `infra-iac` / `infra-code` checks do not walk into them, e.g. `"exclude": ["vendor-app"]`. A folder with its
+own `jui.config.json` or its own git is walked unless listed (it may be a part of this project), and the checks
+say so once for it. A folder listed that is not there, or that points outside the project, is said by
+`jsonui-doc validate infra`.
 No file may hold a value: an ARN, an account id, an IP, a connection string, a key or a token is refused wherever it
 appears. Names and ids only.
 
