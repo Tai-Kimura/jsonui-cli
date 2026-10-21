@@ -2032,5 +2032,7 @@
   "srv.data.no_tools": "document_tools is not found",
   "srv.config.not_object": "config.json is not a JSON object",
   "srv.attach.pasted": "pasted image.{ext}",
-  "srv.attach.file": "attachment"
+  "srv.attach.file": "attachment",
+  "srv.sessions.none": "~/.claude/sessions is not there",
+  "srv.usage.unreadable": "The transcripts' usage cannot be read (its form may have changed)"
 }

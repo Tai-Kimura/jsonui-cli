@@ -838,7 +838,7 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
 
             observer = session_files.watch(paths.claude_sessions_dir(), on_session_file)
             set_source("sessionFiles", "running" if observer else "stopped",
-                       None if observer else "~/.claude/sessions がありません")
+                       None if observer else i18n.tl("srv.sessions.none"))
             if agents_poll:
                 def on_rows(rows: list) -> None:
                     world.apply_agents_list(rows, now_ms())
@@ -972,7 +972,7 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                 got = world.poll_usage(at)
                 usage_ticks["dry"] = usage_ticks["dry"] + 1 if got["assistant"] and not got["usage"] else 0 if got["usage"] else usage_ticks["dry"]
                 if usage_ticks["dry"] >= 5:
-                    set_source("transcripts", "error", "記録の usage が読めない（形が変わった可能性）")
+                    set_source("transcripts", "error", i18n.tl("srv.usage.unreadable"))
                 elif sources.get("transcripts", {}).get("status") != "running":
                     set_source("transcripts", "running")
 

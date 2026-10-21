@@ -1984,5 +1984,7 @@
   "srv.data.no_tools": "document_tools が見つかりません",
   "srv.config.not_object": "config.json が JSON のオブジェクトではありません",
   "srv.attach.pasted": "貼り付けた画像.{ext}",
-  "srv.attach.file": "添付"
+  "srv.attach.file": "添付",
+  "srv.sessions.none": "~/.claude/sessions がありません",
+  "srv.usage.unreadable": "記録の usage が読めない（形が変わった可能性）"
 }
