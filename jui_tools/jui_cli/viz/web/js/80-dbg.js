@@ -416,6 +416,9 @@ window.__dbg = {
       band: R.robot.band.visible, cheek: !!(S && S.tagCheek),
       ghost: !!(S && S.ghost), eyes: R.robot.spiritEyes ? R.robot.spiritEyes.shape : null, face: R.robot.faceMode || null,
       pose: R.robot.spiritPose || null,
+      near: S ? S.near !== false : null, figureShown: !!(S && S.figure && S.figure.visible),
+      mixerTime: S && S.mixer ? +S.mixer.time.toFixed(3) : null,
+      bubbleBox: S && shown(S.bubbleEl) ? (({ left, top, right, bottom }) => ({ left, top, right, bottom }))(S.bubbleEl.getBoundingClientRect()) : null,
       fx: S && S.fx ? { aura: !!S.fx.aura, glow: !!S.fx.glow, bolt: !!S.fx.bolt, clones: S.fx.clones.length,
         sparks: S.fx.sparks.filter((x) => x.sp.visible).length, shouts: S.fx.shouts.filter((x) => x.sp.visible).length } : null,
       textures: (() => { let maps = 0, loaded = 0; if (S && S.figure) S.figure.traverse((o) => { if (!o.isMesh) return;

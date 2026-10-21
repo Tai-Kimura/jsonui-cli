@@ -7,7 +7,8 @@
    page's language, then ja, then the first), and its tail points at who says them: the spirit, or the robot. At most
    SPIRIT.maxShown spirits stand at once; a robot past them still wears the parts. With reduced motion the spirit
    stands still. The badge "スキル使用中: <名>" shows by the tag with or without a model. */
-const SPIRIT = { maxShown: 4, fadeMs: 700, listMs: 60_000, bubbleSec: 4, back: [0, 0, -0.9] };
+// minPx: a robot drawn shorter than this on screen (a floor seen from far) shows no spirit or effects, only its parts
+const SPIRIT = { maxShown: 4, fadeMs: 700, listMs: 60_000, bubbleSec: 4, back: [0, 0, -0.9], minPx: 48, gap: 4 };
 const SPIRITS = { list: null, listedAt: 0, asking: null, models: new Map() };
 /* The anchors spirit.json names (spirits.ANCHORS), as points of the robot's parts (10-robot-core.js createRobot). */
 const SPIRIT_ANCHORS = {
@@ -147,9 +148,11 @@ function spiritTick(R, st, nowSec, dt) {
   const k = T.phase === 'appear' ? Math.min(1, (vizNow() - T.phaseAt) / SPIRIT.fadeMs)
     : T.phase === 'leave' ? Math.max(0, 1 - (vizNow() - T.phaseAt) / SPIRIT.fadeMs) : 1;
   if (T.phase === 'appear' && k >= 1) { T.phase = 'shown'; spiritClip(T, 'loop'); }
-  if (T.figure) { spiritFade(T.figure, reduceMotion ? 1 : k); T.figure.visible = !TOWER.on; }
+  const near = !TOWER.on && spiritNear(R);   // the building, or a floor seen from far: the spirit and its effects rest
+  T.near = near;
+  if (T.figure) { spiritFade(T.figure, reduceMotion ? 1 : k); T.figure.visible = near; }
   if (T.ghost) T.ghost.uniforms.uY0.value = R.robot.root.position.y;   // the downward fade from the robot's floor
-  if (T.fx) { T.fx.group.visible = !TOWER.on; spiritFxTick(R, T, dt, reduceMotion ? 1 : k); }
+  if (T.fx) { T.fx.group.visible = near; if (near) spiritFxTick(R, T, dt, reduceMotion ? 1 : k); }
   spiritBubble(R, T);
 }
 async function spiritWear(R, S) {
@@ -245,8 +248,7 @@ function spiritBubble(R, S) {
     tagsEl.appendChild(el);
     S.bubbleEl = el;
   }
-  S.bubbleEl.hidden = false;
-  if (S.bubbleEl.dataset.target === 'spirit') placeTag(S.bubbleEl, spiritHead(R, S));
+  S.bubbleEl.hidden = !S.near;   // placed with the others after the tags (spiritPlaceBubbles)
 }
 /* The point a bubble aimed at the spirit points at: its "bubbleAnchor" node, else the top middle of the figure. */
 function spiritHead(R, S) {
@@ -469,5 +471,40 @@ function spiritFxTick(R, S, dt, k) {
       s.sp.visible = live;
       if (live) { s.sp.position.y += dt * 0.6; s.sp.material.opacity = k * (1 - s.age / SPIRIT_FX.shoutLife); }
     }
+  }
+}
+
+/* Whether the robot is drawn tall enough to wear a spirit: its height on screen, feet to the tag's point. */
+const spiritA = new THREE.Vector3(), spiritB = new THREE.Vector3();
+function spiritNear(R) {
+  spiritA.copy(R.robot.root.position).project(camera);
+  spiritB.copy(R.robot.root.position).addScaledVector(TAG_UP, R.robot.size || 1).project(camera);
+  if (spiritA.z > 1 || spiritB.z > 1) return false;
+  return Math.abs(spiritA.y - spiritB.y) / 2 * canvas.clientHeight >= SPIRIT.minPx;
+}
+/* The bubbles aimed at spirits, after the tags (40-scene.js placeRobotTags leaves its columns in TAGS.placed): the
+   nearest first, each just above anything placed it would cross — a tag's column or another bubble. */
+function spiritPlaceBubbles() {
+  const W = canvas.clientWidth, H = canvas.clientHeight, list = [];
+  for (const R of robots) {
+    const el = R.spirit && R.spirit.bubbleEl;
+    if (!el || el.hidden || el.dataset.target !== 'spirit') continue;
+    const p = spiritHead(R, R.spirit).project(camera);
+    if (p.z > 1 || p.z < -1) { el.style.visibility = 'hidden'; continue; }
+    if (!el._size || el._size.text !== el.textContent) el._size = { text: el.textContent, w: el.offsetWidth, h: el.offsetHeight };
+    list.push({ el, x: ((p.x + 1) / 2) * W, y: ((1 - p.y) / 2) * H, z: p.z });
+  }
+  const placed = [...(TAGS.placed || [])];
+  for (const it of list.sort((a, b) => a.z - b.z)) {
+    const { w, h } = it.el._size, x0 = it.x - w / 2, x1 = it.x + w / 2;
+    let bottom = it.y;
+    for (let pass = 0; pass < TAGS.maxPasses; pass++) {
+      const hit = placed.find((q) => x0 < q.x1 && q.x0 < x1 && bottom - h < q.y1 && q.y0 < bottom);
+      if (!hit) break;
+      bottom = hit.y0 - SPIRIT.gap;
+    }
+    placed.push({ x0, x1, y0: bottom - h, y1: bottom });
+    it.el.style.visibility = 'visible';
+    it.el.style.transform = `translate(${it.x.toFixed(1)}px, ${bottom.toFixed(1)}px) translate(-50%, -100%)`;
   }
 }

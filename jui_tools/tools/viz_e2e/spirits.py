@@ -11,7 +11,9 @@ tex-test (a quad with an embedded PNG). Checked:
   * another session's skill hides its robot's band; the turn's Stop takes the spirit, the parts, the effects and the
     badge off and gives the band, the eyes and the pose back
   * an embedded texture is read (GLTFLoader's blob: URL under the page's CSP) and its picture loaded
-  * five robots with a skill: four spirits stand at most
+  * five robots with a skill: four spirits stand at most, and their bubbles cross neither each other nor the tags
+  * reduced motion (a second page): the spirit stands still, no sparks, afterimages or shouts
+  * seen from far (the robots drawn smaller than SPIRIT.minPx): no spirit and no effects; the parts stay on
   * no console error (the .glb are read through POST /api/spirit-file and GLTFLoader.parse, under the page's CSP)
 No network outside the server.
 """
@@ -202,6 +204,38 @@ async def run_spirits(pw, out, failures):
         res["standing"] = standing
         check(standing == 4, f"four spirits stand at most: {standing}")
         await page.screenshot(path=str(out / "five.png"))
+
+        # the bubbles aimed at spirits keep off each other (and the tags): no two shown boxes cross
+        boxes = "(ls) => ls.map((l) => window.__dbg.spirit(l).bubbleBox).filter(Boolean)"
+        await wait(page, f"(ls) => ({boxes})(ls).length >= 2", arg=list(who.values()), timeout=10000, label="two bubbles shown")
+        shown = await page.evaluate(boxes, list(who.values()))
+        crossed = [(i, j) for i in range(len(shown)) for j in range(i + 1, len(shown))
+                   if shown[i]["left"] < shown[j]["right"] and shown[j]["left"] < shown[i]["right"]
+                   and shown[i]["top"] < shown[j]["bottom"] and shown[j]["top"] < shown[i]["bottom"]]
+        res["bubbles"] = shown
+        check(not crossed, f"no two spirit bubbles cross: {crossed} of {shown}")
+
+        # reduced motion: the spirits stand still, and no sparks, afterimages or shouts
+        still = await new_page(browser, watch, "spirits-reduced", reduced_motion="reduce", **DESKTOP)
+        await still.goto(url + "/")
+        await ready(still)
+        await wait(still, "(l) => { const s = window.__dbg.spirit(l); return s && s.phase === 'shown'; }", arg=who["r1"],
+                   timeout=30000, label="r1's spirit standing, reduced motion")
+        t_a = (await still.evaluate(state, who["r1"]))["mixerTime"]
+        await still.wait_for_timeout(1500)
+        r1 = await still.evaluate(state, who["r1"])
+        res["reduced"] = r1
+        check(r1["mixerTime"] == t_a and r1["fx"]["sparks"] == 0 and r1["fx"]["clones"] == 0 and r1["fx"]["shouts"] == 0,
+              f"reduced motion: no clip runs, no sparks, afterimages or shouts: {t_a} -> {r1}")
+        await still.close()
+
+        # a floor seen from far (the robots drawn small): no spirit, no effects; the parts stay on
+        await page.evaluate("() => { const c = window.__dbg.camera; c.position.multiplyScalar(8); }")
+        await wait(page, "(l) => { const s = window.__dbg.spirit(l); return s.near === false && !s.figureShown; }",
+                   arg=who["r1"], timeout=10000, label="r1's spirit resting, seen from far")
+        far = await page.evaluate(state, who["r1"])
+        res["far"] = far
+        check(far["holders"] == 4 and far["phase"] == "shown", f"seen from far the parts stay on: {far}")
         await page.close()
         for line in watch.console:
             failures.append(f"spirits: console: {line}")

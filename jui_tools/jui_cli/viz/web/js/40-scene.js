@@ -2941,6 +2941,7 @@ function placeRobotTags(dt = 1 / 60) {
     it.target = it.y - bottom;
     it.front = placed.length;   // 1 = the nearest: its tag (and bill) is drawn over, and takes the click from, any farther one
   }
+  TAGS.placed = placed;   // the tags' columns on screen (45-spirits.js keeps its bubbles off them)
   const fix = tagFixtureRects(W, H);
   for (const it of list) {   // the writes
     const el = it.R.tag;
@@ -3065,6 +3066,7 @@ function update3D(model, nowSec, dt) {
   skySync();
   tagsEl.hidden = zoom.zoomed || TOWER.on;
   placeRobotTags(dt);
+  spiritPlaceBubbles();   // 45-spirits.js: the bubbles aimed at spirits, kept off the tags and each other
   for (const rt of roomTags) { placeTag(rt.el, rt.p); rt.el.classList.toggle('on', UI.project === rt.id); }
   if (trayTag) placeTag(trayTag.el, trayTag.p);   // the demo's document tray
 }
