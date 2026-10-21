@@ -169,6 +169,22 @@ def test_the_account_is_offered_only_with_a_scenario_for_each_environment_and_is
     assert one["account"] == {"available": True, "on": False} and one["month"]["by"] == "provider"
 
 
+def test_one_environment_is_its_own_month_and_no_account(tmp_path):
+    """A model of one environment with a load definition: the account is not offered, by default or asked for."""
+    root = _room(tmp_path, "aws-three-tier")
+    main = root / "docs/infra/main.json"
+    doc = json.loads(main.read_text(encoding="utf-8"))
+    gone = {n["id"] for n in doc["nodes"] if n.get("environments") == ["staging"]}
+    doc["environments"] = [e for e in doc["environments"] if e["id"] == "production"]
+    doc["nodes"] = [n for n in doc["nodes"] if n["id"] not in gone]
+    doc["edges"] = [e for e in doc.get("edges", []) if e.get("from") not in gone and e.get("to") not in gone]
+    main.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+    status, got = C.read(root, seq=1)
+    assert status == 200 and got["account"] == {"available": False, "on": False}
+    assert got["month"]["by"] == "provider" and "scenarios" not in got["month"]
+    assert C.read(root, seq=2, account=True)[1]["reason"] == "no_account"
+
+
 def test_the_account_prices_the_environments_with_one_total(tmp_path):
     root = _with_staging(_room(tmp_path, "aws-three-tier"))
     alone = {s: C.read(root, seq=1, scenario=s, account=False)[1]["month"] for s in ("ordinary", "staging")}
