@@ -3,7 +3,10 @@
 let logSeq = 0;
 const logItems = [];
 const CAT_LABEL = { tool: tl('log.cat.tool'), spec: 'spec', test: tl('log.cat.test'), task: tl('log.cat.task'), session: tl('log.cat.session') };
-const kindCat = (k) => (/^(Read|Edit|Write|Bash|MCP)$/.test(k) ? 'tool' : k === 'spec 更新' ? 'spec' : /^(case|retry)/.test(k) ? 'test' : /^Task/.test(k) ? 'task' : 'session');
+/* The demo's own kinds are words of the table; their code is read back from 30-source-demo.js's DEMO_KIND (the live
+   page has none: its events carry their category). */
+const demoKindCode = (k) => (typeof DEMO_KIND === 'undefined' ? null : Object.keys(DEMO_KIND).find((c) => DEMO_KIND[c] === k) || null);
+const kindCat = (k) => (/^(Read|Edit|Write|Bash|MCP)$/.test(k) ? 'tool' : demoKindCode(k) === 'spec' ? 'spec' : /^(case|retry)/.test(k) ? 'test' : /^Task/.test(k) ? 'task' : 'session');
 /* Live events carry their category (plan 04 §2); the demo's are read from the kind. */
 const catOf = (e) => e.cat || kindCat(e.kind);
 function payloadFor(e) {
