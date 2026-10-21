@@ -97,8 +97,11 @@ POINT_JS = """(t) => {
 
 # the target is where a press there lands on it: on the screen and not under something else (choices drawn over a
 # node off the screen took no press, 10-21)
-HIT_JS = """(t) => { const all = [...document.querySelectorAll(t.css)];
-  const el = t.text ? all.find((e) => e.textContent.includes(t.text)) : all[0]; if (!el) return false;
+HIT_JS = """(t) => { if (t.door) return !!window.__dbg.sr().door;
+  let el = null;
+  if (t.cost_day) { const days = [...document.querySelectorAll('#sr-cost .src-day')]; el = days.find((d) => d.querySelector('.src-over')) || days[Math.floor(days.length / 2)]; }
+  else { const all = [...document.querySelectorAll(t.css)]; el = t.text ? all.find((e) => e.textContent.includes(t.text)) : all[0]; }
+  if (!el) return false;
   const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
   if (!r.width || !r.height || x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return false;
   const at = document.elementFromPoint(x, y); return !!at && (at === el || el.contains(at)); }"""
