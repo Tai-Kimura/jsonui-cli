@@ -74,7 +74,7 @@ function liveChrome() {
 }
 if (SOURCE.mode === 'live') {
   document.body.dataset.mode = 'live';
-  const hookChip = document.querySelector('.chips .chip[title="フックの受け口"]');
+  const hookChip = document.querySelector('.chips .chip[data-hook-chip]');
   if (hookChip) hookChip.textContent = location.host;
   for (const id of ['btn-play', 'btn-speed']) $(id).hidden = true;   // demo only
   liveChrome();
