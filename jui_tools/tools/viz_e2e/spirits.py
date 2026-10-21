@@ -12,6 +12,7 @@ tex-test (a quad with an embedded PNG). Checked:
     badge off and gives the band, the eyes and the pose back
   * an embedded texture is read (GLTFLoader's blob: URL under the page's CSP) and its picture loaded
   * five robots with a skill: four spirits stand at most, and their bubbles cross neither each other nor the tags
+  * the frames' cost with 0 to 4 spirits (measured on a third page and written to the results, not judged)
   * reduced motion (a second page): the spirit stands still, no sparks, afterimages or shouts
   * seen from far (the robots drawn smaller than SPIRIT.minPx): no spirit and no effects; the parts stay on
   * no console error (the .glb are read through POST /api/spirit-file and GLTFLoader.parse, under the page's CSP)
@@ -32,6 +33,22 @@ from common import DESKTOP, ISOLATE, LAUNCH_ARGS, Watch, dump, new_page, ready
 
 SIDS = {f"r{i}": f"e2e00000-0000-4000-8000-00000000c0{i}0" for i in range(1, 6)}
 CWD = "/work/spirits"
+
+
+FRAME_COST_JS = """(() => {
+  const raf = window.requestAnimationFrame.bind(window);
+  const work = [], gaps = []; let last = 0, on = false;
+  window.requestAnimationFrame = (cb) => raf((ts) => {
+    const t0 = performance.now(); cb(ts); const t1 = performance.now();
+    if (on) { work.push(t1 - t0); if (last) gaps.push(t0 - last); }
+    last = t0;
+  });
+  const stat = (xs) => { const s = [...xs].sort((a, b) => a - b); const mean = s.reduce((a, b) => a + b, 0) / (s.length || 1);
+    return [+mean.toFixed(2), +(s[Math.floor(s.length * 0.95)] || 0).toFixed(2), s.length]; };
+  window.__frameCost = { sample: (ms) => new Promise((ok) => { work.length = 0; gaps.length = 0; last = 0; on = true;
+    setTimeout(() => { on = false; const [workMean, workP95, frames] = stat(work), [gapMean] = stat(gaps);
+      ok({ workMean, workP95, gapMean, frames }); }, ms); }) };
+})()"""
 
 
 async def wait(page, js, timeout=20000, label="", arg=None):
@@ -228,6 +245,36 @@ async def run_spirits(pw, out, failures):
         check(r1["mixerTime"] == t_a and r1["fx"]["sparks"] == 0 and r1["fx"]["clones"] == 0 and r1["fx"]["shouts"] == 0,
               f"reduced motion: no clip runs, no sparks, afterimages or shouts: {t_a} -> {r1}")
         await still.close()
+
+        # the frames' cost with 0 to 4 spirits standing (a measurement, written to the results; not a pass or a fail:
+        # the machine is shared and its load moves it). Each requestAnimationFrame callback is timed on the main thread
+        # (the page's whole frame, the WebGL calls it submits included, not the GPU's own time).
+        for k in SIDS:
+            hook(k, hook_event_name="Stop")
+        frames = await new_page(browser, watch, "spirits-frames", **DESKTOP)
+        await frames.add_init_script(FRAME_COST_JS)
+        await frames.goto(url + "/")
+        await ready(frames)
+        await wait(frames, "(ls) => ls.every((l) => { const s = window.__dbg.spirit(l); return s && !s.phase; })",
+                   arg=list(who.values()), label="no spirit before the frames are measured")
+        cost = {}
+        for n in range(0, 5):
+            if n:
+                skill(f"r{n}", "code-review", f"f{n}")
+                await wait(frames, "(l) => { const s = window.__dbg.spirit(l); return s && s.phase === 'shown'; }",
+                           arg=who[f"r{n}"], timeout=30000, label=f"{n} spirits standing")
+            await frames.wait_for_timeout(500)
+            cost[n] = await frames.evaluate("() => window.__frameCost.sample(3000)")
+        res["frameCost"] = cost
+        print(f"  spirits frame cost (ms: work mean / p95, interval mean): "
+              + ", ".join(f"{n}: {c['workMean']} / {c['workP95']}, {c['gapMean']}" for n, c in cost.items()), flush=True)
+        await frames.close()
+        for k in ("r1", "r2", "r3", "r4"):
+            hook(k, hook_event_name="Stop")
+        for i, k in enumerate(SIDS):
+            skill(k, "code-review", f"w{i}")
+        await wait(page, "(ls) => ls.every((l) => { const s = window.__dbg.spirit(l); return s && s.phase === 'shown'; })",
+                   arg=list(who.values()), timeout=40000, label="five skills worn again")
 
         # a floor seen from far (the robots drawn small): no spirit, no effects; the parts stay on
         await page.evaluate("() => { const c = window.__dbg.camera; c.position.multiplyScalar(8); }")
