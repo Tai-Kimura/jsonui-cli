@@ -2519,6 +2519,7 @@ def cmd_check(args):
         databases,
         filter_expr=args.filter,
         list_only=args.list,
+        as_json=args.json,
     )
 
 
@@ -3046,6 +3047,12 @@ def main():
         "--list",
         action="store_true",
         help="Show what would run (name, type, exact command) without running",
+    )
+    check_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print one JSON object on stdout (each check's status, counts, the results that are not ok, its "
+             "report's path); the lines the terminal shows go to stderr",
     )
     check_parser.add_argument(
         "-p", "--project",

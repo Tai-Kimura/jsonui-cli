@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 from ..project_config import CheckDecl
@@ -144,33 +145,45 @@ def run_one(decl: CheckDecl, project_root: Path,
 def run_checks(decls: list[CheckDecl], project_root: Path,
                databases: dict,
                filter_expr: str | None = None,
-               list_only: bool = False) -> int:
+               list_only: bool = False,
+               as_json: bool = False) -> int:
+    """Run the selected checks. as_json: stdout is one JSON object (what ran, each check's status, counts, the
+    results that are not ok, its report's path) and every line the terminal would show goes to stderr — each command
+    is still printed before it runs."""
+    say = (lambda *a: print(*a, file=sys.stderr)) if as_json else print
     selected = [d for d in decls if matches_filter(d, filter_expr)]
     if not selected:
         if decls:
-            print(f"No declared check matches '{filter_expr}'. Declared:")
+            say(f"No declared check matches '{filter_expr}'. Declared:")
             for d in decls:
-                print(f"  - {describe_decl(d)}")
+                say(f"  - {describe_decl(d)}")
         else:
-            print("No checks declared in jui.config.json "
-                  "(add a top-level \"checks\" array).")
-        return EXIT_ERROR if filter_expr else EXIT_OK
+            say("No checks declared in jui.config.json "
+                "(add a top-level \"checks\" array).")
+        code = EXIT_ERROR if filter_expr else EXIT_OK
+        if as_json:
+            _print_json(code, [], declared=[_decl_dict(d) for d in decls])
+        return code
 
     if list_only:
-        print("Declared checks that would run:")
+        say("Declared checks that would run:")
         for d in selected:
-            print(f"  - {describe_decl(d)}")
+            say(f"  - {describe_decl(d)}")
+        if as_json:
+            _print_json(EXIT_OK, [], selected=[_decl_dict(d) for d in selected])
         return EXIT_OK
 
     had_error = False
     had_mismatch = False
+    entries = []
     for decl in selected:
-        print(f"▶ {describe_decl(decl)}")
+        say(f"▶ {describe_decl(decl)}")
         try:
             report = run_one(decl, project_root, databases)
         except CheckExecutionError as exc:
-            print(f"  ✗ execution error: {exc}")
+            say(f"  ✗ execution error: {exc}")
             had_error = True
+            entries.append({**_decl_dict(decl), "status": "error", "error": str(exc)})
             continue
         path = save_report(report, project_root)
         s = report.summary
@@ -188,7 +201,7 @@ def run_checks(decls: list[CheckDecl], project_root: Path,
             if report.coverage_residual:
                 coverage += f", {report.coverage_residual} unaccounted"
             coverage += "]"
-        print(
+        say(
             f"  {status}  ok={s['ok']} mismatch={s['mismatch']} "
             f"missing_in_impl={s['missing_in_impl']} "
             f"missing_in_doc={s['missing_in_doc']} skipped={s['skipped']}"
@@ -203,13 +216,25 @@ def run_checks(decls: list[CheckDecl], project_root: Path,
                 line += f"  expected={item.expected!r} actual={item.actual!r}"
             if item.message:
                 line += f"  — {item.message}"
-            print(line)
+            say(line)
         for w in report.warnings:
-            print(f"    (warning) {w}")
-        print(f"  report: {path}")
+            say(f"    (warning) {w}")
+        say(f"  report: {path}")
         if report.has_mismatch:
             had_mismatch = True
+        entries.append({**_decl_dict(decl), "status": "mismatch" if report.has_mismatch else "ok",
+                        "summary": s, "results": [r.to_dict() for r in report.results if r.status != "ok"],
+                        "warnings": list(report.warnings), "report": str(path)})
 
-    if had_error:
-        return EXIT_ERROR
-    return EXIT_MISMATCH if had_mismatch else EXIT_OK
+    code = EXIT_ERROR if had_error else EXIT_MISMATCH if had_mismatch else EXIT_OK
+    if as_json:
+        _print_json(code, entries)
+    return code
+
+
+def _decl_dict(decl: CheckDecl) -> dict:
+    return {"name": decl.name, "type": decl.type}
+
+
+def _print_json(code: int, checks: list[dict], **extra) -> None:
+    print(json.dumps({"ok": code == EXIT_OK, "exit": code, "checks": checks, **extra}, ensure_ascii=False, indent=2))
