@@ -29,7 +29,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, ISOLATE, LAUNCH_ARGS, Watch, dump, new_page, ready
+from common import DESKTOP, ISOLATE, LAUNCH_ARGS, T, T_pattern, Watch, dump, new_page, ready
 
 SIDS = {"a1": "e2e00000-0000-4000-8000-0000000000d1", "b1": "e2e00000-0000-4000-8000-0000000000d2",
         "p1": "e2e00000-0000-4000-8000-0000000000d4",
@@ -133,14 +133,14 @@ async def run_devices_pane(pw, out, failures):
         check(A and B and A != B and proj["b2"] == B, f"two projects: {proj}")
 
         # the button: the count and the server's level
-        await wait(page, "() => { const b = document.getElementById('btn-devices'); return !b.hidden && b.textContent === 'デバイス 4' && !!b.dataset.load; }",
+        await wait(page, f"() => {{ const b = document.getElementById('btn-devices'); return !b.hidden && b.textContent === {json.dumps(T('dev.button.count', count=4))} && !!b.dataset.load; }}",
                    timeout=30000, label="the button with four devices and a level")
         btn = res["button"] = await page.evaluate("""() => { const b = document.getElementById('btn-devices'), m = window.__dbg.devMachine() || {};
           return { load: b.dataset.load, level: m.level, label: b.getAttribute('aria-label'), colours: window.__dbg.devColours(), cpus: m.cpus, hasLoad: Array.isArray(m.load) }; }""")
         check(btn["load"] == btn["level"] and btn["level"] in ("ok", "busy", "high") and btn["hasLoad"] and btn["cpus"],
               f"the button's colour is the server's level: {btn}")
         check(len(set(btn["colours"].values())) == 3, f"a colour per level: {btn['colours']}")
-        check({"ok": "余裕あり", "busy": "混んでいる", "high": "高負荷"}[btn["level"]] in (btn["label"] or "") and "4 台" in (btn["label"] or ""),
+        check(btn["label"] == T("dev.button.aria", level=T(f"dev.level.{btn['level']}"), n=4),
               f"the level and the count in the button's label: {btn['label']}")
 
         # b1 picked in B, then a1 in A: B's last picked robot is b1
@@ -163,17 +163,18 @@ async def run_devices_pane(pw, out, failures):
             underHeader: r.top >= Math.round(document.querySelector('.topbar').getBoundingClientRect().bottom) - 1,
             buttonSeen: (() => { const b = document.getElementById('btn-devices').getBoundingClientRect(); const e = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2); return !!e && e.closest('#btn-devices') !== null; })(),
             sim: row('UDID'), emu: row('emulator-5554'), phone: row('R58M12345678'), phone2: row('R58N99999999') }; }""".replace("UDID", UDID))
-        check(pane["kinds"] == ["iOS シミュレーター 1 台", "Android エミュレーター 1 台", "Android 実機 2 台"], f"the three kinds and counts: {pane['kinds']}")
-        check(pane["load"] and "load（1 / 5 / 15 分）" in pane["loadText"] and "メモリの空き" in pane["loadText"], f"the load: {pane['loadText']}")
+        check(pane["kinds"] == [T("dev.group.title", kind=T("dev.kind.ios"), n=1), T("dev.group.title", kind=T("dev.kind.emulator"), n=1),
+                                T("dev.group.title", kind=T("dev.kind.phone"), n=2)], f"the three kinds and counts: {pane['kinds']}")
+        check(pane["load"] and T_pattern("dev.load.avg").search(pane["loadText"]) and T("dev.mem.free") in pane["loadText"], f"the load: {pane['loadText']}")
         check(pane["right"] == 0 and pane["overSide"], f"where the side panel is: {pane}")
         check(pane["underHeader"] and pane["buttonSeen"], f"under the header, the デバイス button not covered (it closes the pane): {pane}")
         check(pane["focus"] == "dev-close", f"the focus in the pane: {pane['focus']}")
         sim, emu, phone, phone2 = pane["sim"] or {}, pane["emu"] or {}, pane["phone"] or {}, pane["phone2"] or {}
-        check(sim.get("button") and sim.get("robot") == who["a1"] and "テスト実行中" in sim.get("text", ""), f"the simulator: a1's test: {sim}")
-        check(emu.get("button") and emu.get("robot") == who["b2"] and "推定（最後にこの機器を指定したコマンド" in emu.get("text", ""), f"the emulator: b2's command, estimated: {emu}")
-        check(phone.get("button") and phone.get("robot") == who["p1"] and "推定（そのセッションの下のプロセスがこの機器を指定）" in phone.get("text", ""),
+        check(sim.get("button") and sim.get("robot") == who["a1"] and T("dev.how.test") in sim.get("text", ""), f"the simulator: a1's test: {sim}")
+        check(emu.get("button") and emu.get("robot") == who["b2"] and T_pattern("dev.how.command").search(emu.get("text", "")), f"the emulator: b2's command, estimated: {emu}")
+        check(phone.get("button") and phone.get("robot") == who["p1"] and T("dev.how.process") in phone.get("text", ""),
               f"the phone: p1's process, estimated: {phone}")
-        check(phone2 and not phone2.get("button") and "不明" in phone2.get("text", ""), f"the second phone: unknown, not a button: {phone2}")
+        check(phone2 and not phone2.get("button") and T("dev.who.unknown") in phone2.get("text", ""), f"the second phone: unknown, not a button: {phone2}")
         await page.screenshot(path=str(out / "pane.png"))
 
         # b2's row: B, b2 picked (the press wins over B's last picked b1), the pane closed
