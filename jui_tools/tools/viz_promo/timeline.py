@@ -236,10 +236,14 @@ def waits(w: dict) -> list:
 
 # ---- the chapters ----
 
-#: the flow player's 1 歩戻る can be pressed and the branch's choices are not back yet (one press undoes one step and
-#: pauses: it takes a press per step taken since the branch)
+#: the flow player's 1 歩戻る can be pressed and the second choice is still taken (one press undoes one step and
+#: pauses; the press that undoes the branch itself takes its choice off the list, and the player waits, paused,
+#: before the branch)
 BACK_READY = ("() => { const b = document.querySelector(\"#sr-player [data-sr-fp='back']\"); "
-              "return !!b && !b.disabled && !!document.querySelector('#sr-choices[hidden]'); }")
+              "return !!b && !b.disabled && window.__dbg.srFlow().chosen.length >= 2; }")
+#: back before the branch, paused: ▶ plays on to it and its choices come again
+PLAY_READY = ("() => { const f = window.__dbg.srFlow(); return f.state === 'pause' && f.chosen.length === 1 "
+              "&& !!document.querySelector('#sr-choices[hidden]'); }")
 
 
 def chapters(lang: str) -> dict:
@@ -306,11 +310,13 @@ def chapters(lang: str) -> dict:
         E(57.4, "click", target={"css": "#sr-board [data-sr-flow='order']"}, expect="flow:order"),
         E(59.4, "click", target={"css": "#sr-choices [data-sr-choice='hit']"}, ready=choice, arg="hit"),
         E(62.6, "click", target={"css": "#sr-choices [data-sr-choice='in']"}, ready=choice, arg="in"),
-        # back to the branch: a press per step taken since 'in' (each at most once, the rest dropped when 'out' is chosen)
-        E(63.6, "click", target={"css": "#sr-player [data-sr-fp='back']"}, ready=BACK_READY, group="back", until=66.4),
-        E(64.2, "click", target={"css": "#sr-player [data-sr-fp='back']"}, ready=BACK_READY, group="back", until=66.4),
-        E(64.8, "click", target={"css": "#sr-player [data-sr-fp='back']"}, ready=BACK_READY, group="back", until=66.4),
-        E(65.4, "click", target={"css": "#sr-choices [data-sr-choice='out']"}, ready=choice, arg="out", ends="back"),
+        # back to the branch: a press per step taken since 'in' until 'in' is off the list, then ▶ on to the branch
+        # (each at most once; the rest dropped when 'out' is chosen)
+        E(63.4, "click", target={"css": "#sr-player [data-sr-fp='back']"}, ready=BACK_READY, group="back", until=66.4),
+        E(64.0, "click", target={"css": "#sr-player [data-sr-fp='back']"}, ready=BACK_READY, group="back", until=66.4),
+        E(64.6, "click", target={"css": "#sr-player [data-sr-fp='back']"}, ready=BACK_READY, group="back", until=66.4),
+        E(64.6, "click", target={"css": "#sr-player [data-sr-fp='toggle']"}, ready=PLAY_READY, group="back", until=66.6),
+        E(65.6, "click", target={"css": "#sr-choices [data-sr-choice='out']"}, ready=choice, arg="out", ends="back"),
         # the camera pulls back to the whole model (全体を見る): every node of the payment flow, and its choices over
         # payment-api, on the screen (after the wheel alone payment-api was off it and the press on 通る missed)
         E(67.0, "click", target={"css": "#sr-fit"}),
