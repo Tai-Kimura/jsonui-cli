@@ -21,7 +21,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, LAUNCH_ARGS, Watch, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, T, Watch, new_page, ready
 from waits import settled, until
 
 CWD = "/work/bill-app"
@@ -183,7 +183,7 @@ async def run_cost_bill(pw, out, failures, jt=None, shots_only=False):
         res["first"] = b
         check(failures, b["text"] == OPUS_TEXT and b["n"] == 1 and not b["unknown"],
               f"one response, written on three lines, is one bill of {OPUS_TEXT} (the four kinds at opus 5.5's prices): {b}")
-        check(failures, "概算" in b["title"] and "サブスクリプション" in b["title"], f"the bill says it is an estimate: {b['title']!r}")
+        check(failures, T("bill.notice") in b["title"], f"the bill says it is an estimate: {b['title']!r}")
         others = await bills()
         check(failures, not others[other]["shown"] and not others[sub]["shown"], f"only the robot that responded shows a bill: {others}")
 
@@ -239,7 +239,7 @@ async def run_cost_bill(pw, out, failures, jt=None, shots_only=False):
         _append(tr[1], _rec("msg_x2", model=FAKE))
         b = await wait_bill(other, "the newly priced bill")
         check(failures, b["text"] == FAKE_TEXT and not b["unknown"], f"the price added on the page applies to the next response: {b}")
-        check(failures, "単価: あなたの表" in b["title"], f"the bill says the price is the user's own: {b['title']!r}")
+        check(failures, T("bill.title.prices", **{"from": T("bill.from.user")}) in b["title"], f"the bill says the price is the user's own: {b['title']!r}")
 
         # 7. change, remove, reset on the page (a shipped model), each in the user's table
         await page.click("#prices-open")
@@ -247,13 +247,13 @@ async def run_cost_bill(pw, out, failures, jt=None, shots_only=False):
         await page.click("[data-pr-edit='claude-opus-5-5']")
         await page.fill("[data-pr-in='output']", "40")
         await page.click(".pr-save")
-        await until(page, "() => (document.querySelector('[data-pr-row=\"claude-opus-5-5\"] .pr-origin') || {}).textContent === '変更'", "changed", timeout=15000)
+        await until(page, "() => (document.querySelector('[data-pr-row=\"claude-opus-5-5\"] .pr-origin') || {}).textContent === " + json.dumps(T("pr.origin.changed")), "changed", timeout=15000)
         check(failures, json.loads((state / "prices.json").read_text())["models"]["claude-opus-5-5"]["output"] == 40.0, "変更 wrote the new price")
         await page.click("[data-pr-op='remove'][data-pr-model='claude-opus-5-5']")
-        await until(page, "() => (document.querySelector('[data-pr-row=\"claude-opus-5-5\"] .pr-origin') || {}).textContent === '削除'", "removed", timeout=15000)
+        await until(page, "() => (document.querySelector('[data-pr-row=\"claude-opus-5-5\"] .pr-origin') || {}).textContent === " + json.dumps(T("pr.origin.removed")), "removed", timeout=15000)
         check(failures, json.loads((state / "prices.json").read_text())["models"]["claude-opus-5-5"] is None, "削除 took the shipped model out (null)")
         await page.click("[data-pr-op='reset'][data-pr-model='claude-opus-5-5']")
-        await until(page, "() => (document.querySelector('[data-pr-row=\"claude-opus-5-5\"] .pr-origin') || {}).textContent === '既定'", "reset", timeout=15000)
+        await until(page, "() => (document.querySelector('[data-pr-row=\"claude-opus-5-5\"] .pr-origin') || {}).textContent === " + json.dumps(T("pr.origin.default")), "reset", timeout=15000)
         check(failures, "claude-opus-5-5" not in json.loads((state / "prices.json").read_text())["models"], "既定に戻す took the model's line out")
         await page.click(f"[data-pr-op='remove'][data-pr-model='{FAKE}']")
         await until(page, f"() => !document.querySelector('[data-pr-row=\"{FAKE}\"]')", "the user's model removed", timeout=15000)
