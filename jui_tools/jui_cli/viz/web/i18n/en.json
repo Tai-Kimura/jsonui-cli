@@ -2018,5 +2018,6 @@
   "srv.weather.not_numbers": "The latitude and longitude are not numbers",
   "srv.weather.no_current": "The answer has no current",
   "srv.weather.unknown_code": "Unknown weather code {code}",
-  "srv.weather.failed": "Cannot get the weather ({kind}: {error})"
+  "srv.weather.failed": "Cannot get the weather ({kind}: {error})",
+  "srv.task.untitled": "(a prompt with no title)"
 }

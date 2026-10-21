@@ -20,6 +20,8 @@ import json
 import re
 from pathlib import Path
 
+from .. import i18n
+
 STATUSES = ("pending", "in_progress", "completed")
 MAX_TEXT = 200
 TURNS_DONE_KEPT = 3
@@ -127,7 +129,7 @@ class TaskBook:
         self.turn_ended(sid, at, background=False, failed=False)
         n = 1 + max((t.get("turn", 0) for t in self.tasks.values() if t["sessionId"] == sid and t.get("source") == "turn"), default=0)
         from .history import harness_label   # the one place harness text is told from the requester's words
-        self._put(sid, f"turn-{n}", at, subject=self.turn_title(prompt) or "（題のない指示）", status="in_progress",
+        self._put(sid, f"turn-{n}", at, subject=self.turn_title(prompt) or i18n.tl("srv.task.untitled"), status="in_progress",
                   owner=owner, source="turn", turn=n, waiting=False, harness=harness_label(prompt))
 
     def turn_ended(self, sid: str, at: int, background: bool, failed: bool) -> None:

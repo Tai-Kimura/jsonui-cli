@@ -1971,5 +1971,6 @@
   "srv.weather.not_numbers": "緯度と経度が数ではありません",
   "srv.weather.no_current": "応答に current がありません",
   "srv.weather.unknown_code": "知らない天気のコード {code}",
-  "srv.weather.failed": "天気を取れません（{kind}: {error}）"
+  "srv.weather.failed": "天気を取れません（{kind}: {error}）",
+  "srv.task.untitled": "（題のない指示）"
 }
