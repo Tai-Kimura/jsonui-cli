@@ -28,9 +28,14 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, LAUNCH_ARGS, T, Watch, dump, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, T, T_pattern, Watch, dump, new_page, ready
 from lang_checks import doc_words_shot
 from waits import until
+
+
+def say(mark: str, node: str, action: str) -> str:
+    """A flow step's toast head as 59-sr-flows.js words it (sr.flow.say: the mark, the node, the action's verb)."""
+    return T("sr.flow.say", mark=mark, node=node, verb=T(f"sr.flow.action.{action}"))
 
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
 SR = "() => window.__dbg.sr()"
@@ -148,7 +153,7 @@ async def run_flows(page, out, failures, res):
     at_branch = await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'branch' ? f : null; }}", "search: at its branch",
                             timeout=30000, why=FLOW)
     fl["atBranch"] = {k: at_branch[k] for k in ("log", "choices", "hints", "pos", "history")}
-    check(failures, at_branch["log"][:3] == ["👤 検索する", "→ web を呼ぶ", "→ api を呼ぶ"] and at_branch["choices"] == ["hit", "miss"]
+    check(failures, at_branch["log"][:3] == ["👤 検索する", say("→", "web", "request"), say("→", "api", "request")] and at_branch["choices"] == ["hit", "miss"]
           and at_branch["hints"] == 2 and at_branch["pos"] == "api",
           f"the start's toast, a verb's toast per move, then the branch stops with its choices and their first edges: {fl['atBranch']}")
     await page.click("#sr-choices [data-sr-choice='miss']")
@@ -162,8 +167,8 @@ async def run_flows(page, out, failures, res):
     fl["miss"] = {"chosen": done["chosen"], "log": done["log"], "lanes": lanes["lights"], "laneGapMs": round(lane_gap)}
     # the lanes run at once: at 1.0 a move takes 900 ms, so one after the other they would arrive ~900 ms apart
     check(failures, lane_gap < 300, f"lanes side by side arrive together, not one after the other: {fl['miss']['laneGapMs']} ms")
-    check(failures, done["chosen"] == ["KV に結果が有る？ → 無い"] and "📖 d1 から読む" in done["log"] and "📖 kv から読む" not in done["log"]
-          and {"📥 queue に積む", "💾 r2 に保存"} <= set(done["log"]) and done["log"][-2:] == ["← ブラウザ に返す", "✓ 流れの終わり"],
+    check(failures, done["chosen"] == ["KV に結果が有る？ → 無い"] and say("📖", "d1", "read") in done["log"] and say("📖", "kv", "read") not in done["log"]
+          and {say("📥", "queue", "enqueue"), say("💾", "r2", "write")} <= set(done["log"]) and done["log"][-2:] == [say("←", "ブラウザ", "response"), T("sr.flow.end")],
           f"the choice taken is the way played, the other not; the lanes and the way back: {fl['miss']}")
     await page.screenshot(path=str(out / "flow-light.png"))
     fl["chosenRows"] = await page.evaluate("""() => { const ol = document.querySelector('#sr-player .sr-fp-chosen'); if (!ol) return null;
@@ -179,7 +184,7 @@ async def run_flows(page, out, failures, res):
                         timeout=10000, why=FLOW)
     await page.click("#sr-choices [data-sr-choice='hit']")          # a choice plays on
     redone = await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'done' ? f : null; }}", "search again: the end", timeout=40000, why=FLOW)
-    fl["back"] = {"chosen": redone["chosen"], "kv": "📖 kv から読む" in redone["log"], "atBranchAgain": again["pos"]}
+    fl["back"] = {"chosen": redone["chosen"], "kv": say("📖", "kv", "read") in redone["log"], "atBranchAgain": again["pos"]}
     check(failures, again["pos"] == "api" and redone["chosen"] == ["KV に結果が有る？ → 有る"] and fl["back"]["kv"],
           f"back to the branch and the other way chosen: {fl['back']}")
 
@@ -409,7 +414,7 @@ async def run_server_room(pw, out, failures):
         res["readingBubble"] = (await page.evaluate(SR))["bubble"]
         await page.screenshot(path=str(out / "keypad-light.png"))
         check(failures, len(set(stars)) >= 3, f"the keypad's * grow while it reads: {stars}")
-        check(failures, (res["readingBubble"] or {}).get("text") == "サーバー構成を読み込んでいます", f"the bubble while it reads: {res['readingBubble']}")
+        check(failures, (res["readingBubble"] or {}).get("text") == T("sr.loading"), f"the bubble while it reads: {res['readingBubble']}")
         await until(page, "() => window.__dbg.sr().open", "the server room", timeout=15000)
         await page.unroute("**/api/infra-docs", hold)
         s = res["opened"] = await page.evaluate(SR)
@@ -466,7 +471,7 @@ async def run_server_room(pw, out, failures):
                     "the free amount's note", timeout=20000)
         fm = res["costFree"] = (await page.evaluate(COST))["month"]
         fchips = dict(fm["chips"])
-        check(failures, "二重に引く" in fm["free"] and "無料枠のある行 2 件" in fm["free"] and fchips.get("warnings") == ord_w + 1,
+        check(failures, T("cost.free") in fm["free"] and T("cost.free.rows", n=2).strip() in fm["free"] and fchips.get("warnings") == ord_w + 1,
               f"cost.free_per_scenario: its note under the total and one more in 計算の注意: {fm['free']} {fchips} (was {ord_w})")
         await page.unroute("**/api/infra-cost", with_free)
         await page.select_option("#sr-scn", "sale")
@@ -477,7 +482,7 @@ async def run_server_room(pw, out, failures):
         await page.evaluate("() => { const r = document.getElementById('src-hour'); r.value = '1'; r.dispatchEvent(new Event('input', { bubbles: true })); }")
         d = res["costDay"] = (await page.evaluate(COST))["day"]
         await doc_words_shot(page, "sr-cost-day", out, failures)   # the meters' names (lang_checks.py)
-        check(failures, d["hour"] == 1 and d["clock"] == "01:00" and d["red"] and "捌けた / 来た" in d["red"][0],
+        check(failures, d["hour"] == 1 and d["clock"] == "01:00" and d["red"] and T("cost.load.served").strip() in d["red"][0],
               f"over capacity in red as served / demand: {d['red']}")
         check(failures, any(T("srv.cost.q.requests") in x and "/sec" in x and "$" in x for x in d["segments"]), f"a meter says its rate and charge: {d['segments'][:6]}")
         await page.evaluate("() => window.__dbg.srCostPlayMs(120)")
@@ -498,7 +503,7 @@ async def run_server_room(pw, out, failures):
         await page.click("#sr-cost [data-src-seg]")
         await until(page, "() => window.__dbg.srCost().day.price !== ''", "the price's trace")
         price = (await page.evaluate(COST))["day"]["price"]
-        check(failures, "出どころ" in price and ("同梱の表" in price or "利用者のファイル" in price), f"a meter pressed shows its price's trace: {price[:200]}")
+        check(failures, T("cost.pick.from") in price and (T("cost.layer.bundled") in price or T("cost.layer.user") in price), f"a meter pressed shows its price's trace: {price[:200]}")
         await page.screenshot(path=str(out / "cost-day-light.png"))
         # the account (cd 10-21): offered only once each environment has a load definition; one total, by environment,
         # and then the default (the requester 10-21: 「合計で」) — この環境だけ is the other choice
@@ -521,7 +526,7 @@ async def run_server_room(pw, out, failures):
               f"アカウントの合計 by default, nothing pressed: both environments stacked and named, more than production alone: {a}")
         await page.click("#sr-cost [data-src-date='2026-11-02']")
         await until(page, "() => { const c = window.__dbg.srCost(); return c.day && c.day.date === '2026-11-02'; }", "the account's day", timeout=20000)
-        check(failures, "アカウントの合計" in (await page.evaluate(COST))["day"]["acct"], "the account's day says it is priced within the account")
+        check(failures, T_pattern("cost.account.day").search((await page.evaluate(COST))["day"]["acct"]), "the account's day says it is priced within the account")
         await page.click("#sr-cost [data-src-act='month']")
         await page.click("#sr-cost [data-src-act='acct-off']")
         await until(page, "() => { const c = window.__dbg.srCost(); return !c.account && c.month && c.month.by === 'provider'; }",
@@ -644,7 +649,7 @@ async def run_server_room(pw, out, failures):
                        "sizeTag": await page.evaluate("() => window.__dbg.srTagOf('api-prod')")}
         check(failures, res["spec"]["sizeTag"] == "api-prod · ECS Fargate · memory 2048 ×3",
               f"a size (no instance type) says which it is, and the count stays: {res['spec']['sizeTag']}")
-        check(failures, rows == [["インスタンスの種類 instance_class", "db.r6g.large", 0], ["ストレージ（GB） storage_gb", "200", 0], ["マルチ AZ multi_az", "true", 0],
+        check(failures, rows == [[f"{T('sr.spec.instance')} instance_class", "db.r6g.large", 0], [f"{T('sr.spec.storage_gb')} storage_gb", "200", 0], [f"{T('sr.spec.multi_az')} multi_az", "true", 0],
                                  ["note", MARKUP, 0]] and not ran,
               f"the chosen node's spec on the board, the known keys in words, a value with markup shown as its text (no element, nothing run): {rows} {ran}")
         check(failures, res["spec"]["tag"] == ["db-prod · RDS MySQL · db.r6g.large"], f"up close a tag says the service and the main spec: {res['spec']}")
@@ -1113,7 +1118,7 @@ async def run_server_room(pw, out, failures):
         await until(p2, "(t) => performance.now() > t + 600", "600 ms of the page's own clock", arg=a["t"])
         b = await p2.evaluate(SR)
         res["reduced"] = [a["stars"], b["stars"], (a["bubble"] or {}).get("text")]
-        check(failures, a["stars"] == b["stars"] and (a["bubble"] or {}).get("text") == "サーバー構成を読み込んでいます",
+        check(failures, a["stars"] == b["stars"] and (a["bubble"] or {}).get("text") == T("sr.loading"),
               f"reduced motion: the * stand still and the bubble shows: {res['reduced']}")
         await until(p2, "() => window.__dbg.sr().open", "open (reduced motion)", timeout=15000)
         # the cost's day under reduced motion: no play (the button disabled, pressing it moves nothing), the slider only
