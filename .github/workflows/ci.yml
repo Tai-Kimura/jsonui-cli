@@ -768,6 +768,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24" # scripts/run.ts relies on native TS type stripping (Node >= 23)
+          check-latest: true # pick up security releases before the runner image's toolcache does
           cache: npm
           cache-dependency-path: conformance/hosts/web/package-lock.json
       - uses: ruby/setup-ruby@v1 # rjui_tools codegen inside generate.sh
