@@ -643,6 +643,7 @@ def test_the_walk_cap_is_said_and_what_was_not_looked_at_is_not_said_missing(tmp
     root = tmp_path / "mini"
     root.mkdir()
     _data_folder_before_terraform(root, 60)
+    assert T.git_ignored(root) is None     # no git here: the .gitignore is not read, the walk is as before
     _r, rep = _mini(tmp_path, {"infrastructure/terraform/main.tf": 'resource "aws_db_instance" "main" {}\n',
                                "admin/compose.yaml": "services:\n  web:\n    image: nginx\n"},   # read: before the stop
                     [{"id": "db", "category": "database.relational", "provider": "aws", "iac": ["aws_db_instance.main"]},
@@ -681,3 +682,66 @@ def test_check_reads_iac_where_seed_reads_it(tmp_path):
     model, _report = S.draft(root)
     seen = json.dumps(model["nodes"])
     assert "GhQueue" in seen and "TmpQueue" in seen and "HiddenQueue" not in seen
+
+
+def _git(root: Path, *args: str) -> None:
+    subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+
+
+def test_what_git_ignores_neither_seed_nor_check_reads(tmp_path):
+    """walk_project leaves out what git ignores — fetched modules in .terraform/, an import's output — for seed and
+    check alike; a tracked file in an ignored folder and an untracked one that is not ignored are still read."""
+    tpl = lambda n: f"AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  {n}:\n    Type: AWS::SQS::Queue\n"  # noqa: E731
+    files = {".gitignore": "out/\n.terraform/\ndata/\n", "data/q.yaml": tpl("DataQueue"),
+             "out/q.yaml": tpl("IgnoredQueue"), "out/kept.yaml": tpl("TrackedQueue"),
+             "infra/.terraform/modules/m/main.tf": 'resource "aws_s3_bucket" "fetched" {}\n',
+             "infra/main.tf": 'resource "aws_db_instance" "main" {}\n', "new/q.yaml": tpl("NewQueue")}
+    root = tmp_path / "mini"
+    root.mkdir()
+    _git(root, "init", "-q")
+    for rel, text in files.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text)
+    _git(root, "add", "-f", "out/kept.yaml")
+    from jsonui_doc_cli.infra import iac_tables as T
+    assert {"out/q.yaml", "infra/.terraform/", "data/"} <= T.git_ignored(root)
+    found, _un = C.scan_iac(root)
+    addresses = {f["address"] for f in found}
+    assert {"TrackedQueue", "NewQueue", "aws_db_instance.main"} <= addresses
+    assert not {"IgnoredQueue", "DataQueue", "aws_s3_bucket.fetched"} & addresses
+    from jsonui_doc_cli.infra import seed as S
+    model, _report = S.draft(root)
+    seen = json.dumps(model["nodes"])
+    assert "TrackedQueue" in seen and "NewQueue" in seen and "IgnoredQueue" not in seen and "DataQueue" not in seen
+    assert "fetched" not in seen
+
+
+def test_code_only_in_a_folder_seed_reads_only_iac_in_is_no_evidence(tmp_path):
+    """tmp/ and coverage/ (a copy, instrumented code): seed reads only IaC there, and check's infra-code does not count
+    an SDK client made only there."""
+    root = tmp_path / "p"
+    for rel in ("tmp/copy.py", "coverage/lcov/app.py"):
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text('import boto3\ns3 = boto3.client("s3")\n')
+    hints, _notes = C.scan_code(root)
+    assert hints == []
+    (root / "src").mkdir()
+    (root / "src" / "app.py").write_text('import boto3\ns3 = boto3.client("s3")\n')
+    hints, _notes = C.scan_code(root)
+    assert {h["file"] for h in hints} == {"src/app.py"}
+
+
+@pytest.mark.parametrize("under, git_says", [("scratch", {"./"}), ("scratch/proj", None)])
+def test_a_project_inside_a_folder_its_parent_repo_ignores_is_still_read(tmp_path, under, git_says):
+    """A project copied under a folder its parent repo ignores: git says only "./" when the root is the ignored folder,
+    and fails ("directory entry not superset of prefix") when it is deeper. Either way no file under it is left out."""
+    outer = tmp_path / "outer"
+    root = outer / under
+    root.mkdir(parents=True)
+    _git(outer, "init", "-q")
+    (outer / ".gitignore").write_text("scratch/\n")
+    (root / "main.tf").write_text('resource "aws_db_instance" "main" {}\n')
+    from jsonui_doc_cli.infra import iac_tables as T
+    assert T.git_ignored(root) == git_says
+    found, _un = C.scan_iac(root)
+    assert "aws_db_instance.main" in {f["address"] for f in found}

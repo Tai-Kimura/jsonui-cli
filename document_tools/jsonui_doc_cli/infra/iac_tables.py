@@ -551,26 +551,48 @@ def iac_only_dirs() -> set[str]:
     return {n for n in SEED_ONLY_SKIP_DIRS if n not in SKIP_DIRS and not n.startswith(".")}
 
 
+def git_ignored(root) -> set[str] | None:
+    """What git ignores under root, relative to it ("a/b/" for a folder, all of whose untracked files are ignored; a
+    tracked file is never in it): `git ls-files --others --ignored --exclude-standard --directory`. None when root is
+    in no git work tree or git is not there: then nothing is left out for it. When root itself is ignored (a project
+    copied into an ignored folder) git says only "./", which names no file under it: the project is read whole."""
+    import subprocess  # noqa: PLC0415
+    try:
+        r = subprocess.run(["git", "-C", str(root), "ls-files", "--others", "--ignored", "--exclude-standard",
+                            "--directory", "-z"], capture_output=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode != 0:
+        return None
+    return {x for x in r.stdout.decode("utf-8", "surrogateescape").split("\0") if x}
+
+
 def walk_project(root, exclude=()) -> tuple[list[tuple[str, bool]], str | None]:
     """The project's files as seed and check both walk it: (rel, iac_only) in name order — iac_only when under a folder
-    only IaC is read in — no symlink followed, SKIP_DIRS and hidden folders (but .github) left out; and, when WALK_CAP
-    files were looked at, where the walk stopped (the rest not looked at), else None."""
+    only IaC is read in — no symlink followed, SKIP_DIRS, hidden folders (but .github) and what git ignores
+    (git_ignored: fetched modules in .terraform/, an import's output) left out; and, when WALK_CAP files were looked
+    at, where the walk stopped (the rest not looked at), else None."""
     import os  # noqa: PLC0415
     from pathlib import Path  # noqa: PLC0415
     root = Path(root)
     out: list[tuple[str, bool]] = []
     seen = 0
     ex = {str(Path(p).resolve()) for p in exclude}
+    ignored = git_ignored(root) or set()
     only = iac_only_dirs()
     iac_only_at: dict[str, bool] = {str(root): False}
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
-        if str(Path(dirpath).resolve()) in ex:
+        if ex and str(Path(dirpath).resolve()) in ex:
             dirnames[:] = []
             continue
+        rel_dir = os.path.relpath(dirpath, root).replace(os.sep, "/")
+        prefix = "" if rel_dir == "." else rel_dir + "/"
         here = iac_only_at.get(dirpath, False)
         keep = []
         for n in sorted(dirnames):
-            if n.startswith(".") and n not in KEEP_HIDDEN_DIRS or str((Path(dirpath) / n).resolve()) in ex:
+            if n.startswith(".") and n not in KEEP_HIDDEN_DIRS or prefix + n + "/" in ignored:
+                continue
+            if ex and str((Path(dirpath) / n).resolve()) in ex:
                 continue
             if (n in SKIP_DIRS or n in SEED_ONLY_SKIP_DIRS) and n not in only:
                 continue
@@ -578,10 +600,12 @@ def walk_project(root, exclude=()) -> tuple[list[tuple[str, bool]], str | None]:
             keep.append(n)
         dirnames[:] = keep
         for fn in sorted(filenames):
+            if prefix + fn in ignored:
+                continue
             seen += 1
             if seen > WALK_CAP:
-                return out, Path(dirpath).relative_to(root).as_posix() or "."
-            out.append((Path(dirpath, fn).relative_to(root).as_posix(), here))
+                return out, rel_dir
+            out.append((prefix + fn, here))
     return out, None
 
 
