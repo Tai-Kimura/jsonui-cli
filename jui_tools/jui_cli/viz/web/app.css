@@ -277,8 +277,9 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-body); 
 .sessions { display: grid; gap: 8px; }
 .sess-groups { display: grid; gap: 10px; }
 .pgroup { display: grid; gap: 6px; }
-.pg-toggle { display: flex; align-items: baseline; gap: 8px; width: 100%; padding: 2px 0; border: 0; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.pg-toggle { display: flex; align-items: baseline; gap: 8px; width: 100%; min-width: 0; padding: 2px 0; border: 0; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
 .pg-toggle b { font: 700 13px/1.5 var(--font-mono); }
+/* min-width: 0 above: a grid item, the button is otherwise as wide as its summary unshortened (English on a phone: 441 on 390) */
 .pg-toggle small { overflow: hidden; color: var(--ink-soft); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
 .pg-caret { width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 7px solid var(--ink-soft); transform: rotate(90deg); transition: transform 0.15s ease; }
 .pg-toggle[aria-expanded="false"] .pg-caret { transform: none; }

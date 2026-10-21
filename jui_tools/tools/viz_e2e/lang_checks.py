@@ -66,6 +66,15 @@ def cut(report: dict, where: str, failures: list) -> None:
         failures.append(f"lang-checks: {where}: canvas words {how}: {c['text']!r} ({c['font']})")
 
 
+async def sideways(page, where: str, failures: list) -> None:
+    """A phone's page never scrolls sideways (the English summary of a project's sessions once made it 441 wide on
+    390: the card and the talk over it grew with it)."""
+    sw = await page.evaluate("() => document.documentElement.scrollWidth")
+    vw = page.viewport_size["width"]   # the phone's width (innerWidth grows with what is too wide on a mobile viewport)
+    if sw > vw:
+        failures.append(f"lang-checks: {where}: the page scrolls sideways ({sw} wide on {vw})")
+
+
 async def run_lang_checks(pw, out, failures, Server):
     out = pathlib.Path(out) / "lang-checks"
     out.mkdir(parents=True, exist_ok=True)
@@ -92,6 +101,15 @@ async def run_lang_checks(pw, out, failures, Server):
         await ready(phone)
         await phone.wait_for_timeout(1500)
         cut(await shot(phone, "phone-main", out, failures), "phone-main", failures)
+        await sideways(phone, "phone-main", failures)
+        try:   # the demo played (a session waits for permission), a robot's card and its talk over the list
+            await phone.click("#btn-play")
+            await open_card(phone, LABEL)
+            await open_talk(phone)
+            cut(await shot(phone, "phone-talk", out, failures), "phone-talk", failures)
+            await sideways(phone, "phone-talk", failures)
+        except WaitTimeout as e:
+            failures.append(f"lang-checks: phone card / talk: {e}")
         await phone.close()
     finally:
         await browser.close()
