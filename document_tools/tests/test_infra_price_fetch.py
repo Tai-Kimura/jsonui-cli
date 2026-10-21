@@ -269,7 +269,6 @@ def test_an_upgrade_makes_a_run_due_at_once_and_a_failed_run_waits_its_day():
     assert F.due(old, 1) and F.due({"files": {}, "lastRunAt": 0}, 1)   # another version's run, or one before the mark
     failed = {"files": {"aws/x.json": {"writer": "2.3.13", "lastError": "URLError"}}, "lastRunAt": 0, "lastRunWriter": F.WRITER}
     assert not F.due(failed, 1)                                          # no fetch a minute: the bundled prices stand in
-    assert F.written_by_another(failed) == {"aws/x.json": "2.3.13"}
 
 
 def test_a_run_marks_each_file_and_the_run_with_this_version(tmp_path):
@@ -285,7 +284,12 @@ def test_a_run_marks_each_file_and_the_run_with_this_version(tmp_path):
     index = F.run(azure_only(), tmp_path, at_ms=2000, get=fake_get(answers), provider="azure")
     assert index["files"]["azure/functions/japaneast.json"]["writer"] == "2.3.13"
     assert index["files"]["azure/key-vault/japaneast.json"]["writer"] == F.WRITER
-    assert F.written_by_another(index) == {"azure/functions/japaneast.json": "2.3.13"}
+    # the price book reads every file this version wrote and not the one it did not: the bundled price stands in
+    rows, why = pricebook.cache_rows(tmp_path)
+    assert {r["file"] for r in rows} == {k for k in index["files"] if k != "azure/functions/japaneast.json"
+                                         and index["files"][k].get("fetchedAt")}
+    assert why == ["1 fetched price file(s) were written by another jsonui-cli version (or the index does not name "
+                   f"them): not used until fetched again by {F.WRITER}; the bundled prices stand in"]
 
 
 def test_a_file_another_version_wrote_is_not_read_and_the_bundled_price_stands_in(tmp_path):

@@ -251,13 +251,6 @@ def due(index: dict, now_ms: int) -> bool:
     return not isinstance(last, int) or index.get("lastRunWriter") != WRITER or now_ms - last >= EVERY_MS
 
 
-def written_by_another(index: dict) -> dict[str, str | None]:
-    """{file: the version that wrote it (None: before 2.3.17, which wrote no version)} for each file this version did
-    not write."""
-    return {k: v.get("writer") for k, v in index.get("files", {}).items()
-            if isinstance(v, dict) and v.get("writer") != WRITER}
-
-
 def summary(index: dict) -> dict:
     """What the page shows (where each price came from and when): per file, its source, when fetched, its effective
     date, rows and the last error; the newest fetch and how many files fail."""
