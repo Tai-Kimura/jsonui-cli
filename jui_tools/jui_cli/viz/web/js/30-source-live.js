@@ -64,8 +64,10 @@ const SOURCE = {
     if (msg.behavior === 'allow' && always) msg.always = always;
     if (msg.behavior === 'deny' && reason) msg.reason = reason;
     netRequest('perm.decide', msg).then((ack) => showToast(ack.ok
-      ? `${p.who} の ${p.tool} を${msg.behavior === 'deny' ? `拒否${reason ? '（理由つき）' : ''}` : msg.always ? '許可し、ルールを追加' : '許可'}した（Claude Code へ送った）`
-      : `送れなかった（${ack.error || '不明'}）`));
+      ? tl('live.perm.sent.head', { who: p.who, tool: p.tool })
+        + (msg.behavior === 'deny' ? tl('live.perm.deny') + (reason ? tl('live.perm.reason') : '') : msg.always ? tl('live.perm.always') : tl('live.perm.allow'))
+        + tl('live.perm.sent.tail')
+      : tl('live.send.failed', { error: ack.error || tl('live.unknown') })));
   },
   setReplaySpeed(v) { this.replaySpeed = Number(v) || 1; },
   /* A prompt typed in the 応答の履歴 tab, for this robot's session (POST /api/prompt; server.prompt_checks says what it
@@ -80,7 +82,7 @@ const SOURCE = {
         body: JSON.stringify(body),
       });
       return res.ok ? { ok: true, status: res.status } : { ok: false, status: res.status, error: (await res.text()).trim() };
-    } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
+    } catch (err) { return { ok: false, status: 0, error: tl('live.offline') }; }
   },
   /* One file attached to the next prompt for this robot's session (POST /api/attach: the checks of /api/prompt, the bytes
      as application/octet-stream; the server keeps it under its own name). Resolves { ok, id, name, media, size } or
@@ -96,7 +98,7 @@ const SOURCE = {
       });
       if (!res.ok) return { ok: false, status: res.status, error: (await res.text()).trim() };
       return { ok: true, ...(await res.json()) };
-    } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
+    } catch (err) { return { ok: false, status: 0, error: tl('live.offline') }; }
   },
   /* × on an attachment not sent yet (POST /api/attach-remove). Nothing to wait for. */
   attachRemove(label, id) {
@@ -116,7 +118,7 @@ const SOURCE = {
         body: JSON.stringify({ sessionId: SESSION_UUID[label] || '', agentId: (DEF[label] && DEF[label].realId) || '' }),
       });
       return res.ok ? { ok: true, status: res.status } : { ok: false, status: res.status, error: (await res.text()).trim() };
-    } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
+    } catch (err) { return { ok: false, status: 0, error: tl('live.offline') }; }
   },
   /* The 単価 sheet (2.3.6, 54-bills.js): set / remove / reset a model's line in the user's price table (POST /api/prices,
      the checks of /api/prompt). Resolves { ok } or { ok: false, error }. */
@@ -131,7 +133,7 @@ const SOURCE = {
       let body = null;
       try { body = JSON.parse(text); } catch (err) { body = null; }
       return res.ok && body && body.ok ? { ok: true } : { ok: false, error: (body && body.error) || `${res.status} ${text.trim()}` };
-    } catch (err) { return { ok: false, error: 'サーバーにつながらない' }; }
+    } catch (err) { return { ok: false, error: tl('live.offline') }; }
   },
   /* The call bell (2.3.5, 50-panel.js): the line to paste, made by the server (callcmd.py) from the project's own folder,
      under the checks of /api/prompt. Nothing is run. Resolves { ok, command, flag } or { ok: false, why }. */
@@ -146,8 +148,8 @@ const SOURCE = {
       let body = null;
       try { body = JSON.parse(text); } catch (err) { body = null; }
       if (res.ok && body && body.ok) return { ok: true, command: body.command, flag: body.flag };
-      return { ok: false, why: (body && body.why) || `作れなかった（${res.status} ${text.trim()}）` };
-    } catch (err) { return { ok: false, why: 'サーバーにつながらない' }; }
+      return { ok: false, why: (body && body.why) || tl('live.make.failed', { status: res.status, text: text.trim() }) };
+    } catch (err) { return { ok: false, why: tl('live.offline') }; }
   },
   /* 2.3.6: question notifications are on (or not) on this page — POST /api/notify-presence, the checks of /api/prompt */
   async notifyPresence(ask) {
@@ -165,7 +167,7 @@ const SOURCE = {
       let body = null;
       try { body = JSON.parse(text); } catch (err) { body = null; }
       return res.ok && body && body.ok ? { ok: true } : { ok: false, why: (body && body.why) || `${res.status} ${text.trim()}` };
-    } catch (err) { return { ok: false, why: 'サーバーにつながらない' }; }
+    } catch (err) { return { ok: false, why: tl('live.offline') }; }
   },
   /* The server room (56-server-room.js): the room's model, read when its door is pressed (POST /api/infra-docs, the
      room's id and the press's seq; the boundary's §5.2 reply, ok or {ok: false, reason, message, short}). */
@@ -176,8 +178,8 @@ const SOURCE = {
       let body = null;
       try { body = await res.json(); } catch (err) { body = null; }
       if (body && typeof body === 'object' && typeof body.ok === 'boolean') return body;
-      return { ok: false, seq, reason: 'unreadable', message: `HTTP ${res.status}`, short: `読めなかった（HTTP ${res.status}）` };
-    } catch (err) { return { ok: false, seq, reason: 'unreadable', message: 'サーバーにつながらない', short: 'サーバーにつながらない' }; }
+      return { ok: false, seq, reason: 'unreadable', message: `HTTP ${res.status}`, short: tl('live.read.failed', { status: res.status }) };
+    } catch (err) { return { ok: false, seq, reason: 'unreadable', message: tl('live.offline'), short: tl('live.offline') }; }
   },
   /* The cost simulator (56-server-cost.js): POST /api/infra-cost with the room and {seq, scenario, date, by}; the
      server's shapes, or {ok: false, reason, message}. */
@@ -189,7 +191,7 @@ const SOURCE = {
       try { body = await res.json(); } catch (err) { body = null; }
       if (body && typeof body === 'object' && typeof body.ok === 'boolean') return body;
       return { ok: false, reason: 'unreadable', message: `HTTP ${res.status}` };
-    } catch (err) { return { ok: false, reason: 'unreadable', message: 'サーバーにつながらない' }; }
+    } catch (err) { return { ok: false, reason: 'unreadable', message: tl('live.offline') }; }
   },
   /* One icon the room's settings name (POST /api/infra-icon): a Blob, or null (the neutral shape stays). */
   async infraIcon(project, key) {
@@ -213,7 +215,7 @@ const SOURCE = {
       });
       if (!res.ok) return { ok: false, status: res.status, error: (await res.text()).trim() };
       return { ok: true, blob: await res.blob() };
-    } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
+    } catch (err) { return { ok: false, status: 0, error: tl('live.offline') }; }
   },
   /* One attached image of a prompt from this page (POST /api/attach-image: the session and the id from the prompt's
      line, under the prompt's checks). The bytes come back as a Blob; { gone: true } when the kept file is gone. */
@@ -227,7 +229,7 @@ const SOURCE = {
       if (!res.ok) return { ok: false, status: res.status, error: (await res.text()).trim() };
       if ((res.headers.get('Content-Type') || '').startsWith('application/json')) return { ok: false, gone: !!(await res.json()).gone, status: 200 };
       return { ok: true, blob: await res.blob() };
-    } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
+    } catch (err) { return { ok: false, status: 0, error: tl('live.offline') }; }
   },
   /* One picture the robot's session sent with SendUserFile (POST /api/history-file: the robot, the call's record and
      the file's place in it — never a path; under the prompt's checks). A Blob, or { gone: true } when the file is no
@@ -242,7 +244,7 @@ const SOURCE = {
       if (!res.ok) return { ok: false, status: res.status, error: (await res.text()).trim() };
       if ((res.headers.get('Content-Type') || '').startsWith('application/json')) return { ok: false, gone: !!(await res.json()).gone, status: 200 };
       return { ok: true, blob: await res.blob() };
-    } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
+    } catch (err) { return { ok: false, status: 0, error: tl('live.offline') }; }
   },
   /* A file of the history shown in Finder (POST /api/reveal-file, 2.3.12): { sent: { off, n } } or { tool: { off, id } }
      of the robot's transcript, or { attach: { sessionId, id, ext } } — never a path; under the prompt's checks. { ok }, { gone: true }
@@ -258,8 +260,8 @@ const SOURCE = {
       });
       if (!res.ok) return { ok: false, status: res.status, error: (await res.text()).trim() };
       const got = await res.json();
-      return got.gone ? { ok: false, gone: true, status: 200 } : { ok: !!got.ok, status: 200, error: got.ok ? '' : 'Finder で開けなかった' };
-    } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
+      return got.gone ? { ok: false, gone: true, status: 200 } : { ok: !!got.ok, status: 200, error: got.ok ? '' : tl('live.finder.failed') };
+    } catch (err) { return { ok: false, status: 0, error: tl('live.offline') }; }
   },
   /* The data server's documents (2.3.5): the room's API and DB specifications, read by the server now (POST
      /api/data-docs under the prompt's checks; the room's id only, never a path). Resolves { ok, doc } or { ok, error }. */
@@ -274,7 +276,7 @@ const SOURCE = {
       const doc = await res.json();
       const arr = (v) => (Array.isArray(v) ? v : []);
       return { ok: true, doc: { api: arr(doc.api), db: arr(doc.db), skipped: Number(doc.skipped) || 0 } };
-    } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
+    } catch (err) { return { ok: false, status: 0, error: tl('live.offline') }; }
   },
   /* The near weather's switch (10-18): { on, lat, lon } with the position already rounded (40-scene.js). */
   setWeather(body) { return netRequest('weather.set', body); },
@@ -282,11 +284,11 @@ const SOURCE = {
   /* question.hold while someone answers (the hook waits a little longer); question.release: answer in the terminal */
   holdQuestion(id) { netRequest('question.hold', { questionId: id }); },
   releaseQuestion(id) {
-    netRequest('question.release', { questionId: id }).then((ack) => showToast(ack.ok ? 'ターミナルに質問を返した（ターミナルで答えてください）' : `返せなかった（${ack.error || '不明'}）`));
+    netRequest('question.release', { questionId: id }).then((ack) => showToast(ack.ok ? tl('live.q.released') : tl('live.q.release.failed', { error: ack.error || tl('live.unknown') })));
   },
   answerQuestion(id, picks) {
     netRequest('question.answer', { questionId: id, answers: picks }).then((ack) => showToast(ack.ok
-      ? '質問の答えを Claude Code へ送った' : `送れなかった（${ack.error || '不明'}）`));
+      ? tl('live.q.sent') : tl('live.send.failed', { error: ack.error || tl('live.unknown') })));
   },
   /* A card of a call stopped by auto mode (51-denials.js): 'approve' (the server sends the card's own words to its
      session) or 'dismiss'. The checks of /api/prompt. Resolves { ok } or { ok: false, status, error }. */
@@ -298,7 +300,7 @@ const SOURCE = {
         body: JSON.stringify({ id, do: what }),
       });
       return res.ok ? { ok: true } : { ok: false, status: res.status, error: (await res.text()).trim() };
-    } catch (err) { return { ok: false, status: 0, error: 'サーバーにつながらない' }; }
+    } catch (err) { return { ok: false, status: 0, error: tl('live.offline') }; }
   },
   /* 40-scene.js calls this when a leaving robot has walked out of the door. */
   robotGone(label) {
@@ -351,15 +353,17 @@ function liveSpecRow(x) {
   const writingIdx = SPEC_KEYS.findIndex((k) => (secs[k] || {}).state === 'writing');
   const by = labelOf(x.by);
   const pctImpl = impl.total ? pct(share) : 0;
-  const status = tests.running ? { kind: 'test', text: `テスト中 ${tests.passed}/${tests.total}` }
-    : writingIdx >= 0 ? { kind: 'write', text: `書き込み中 ${pct(written.reduce((a, b) => a + b, 0) / 7)}%` }
-      : x.bucket === 'done' ? { kind: 'done', text: '実装・テスト完了' }
-        : x.bucket === 'todo' ? { kind: 'idle', text: '未着手' }
-          : impl.total && impl.done >= impl.total ? { kind: 'impl-done', text: tests.total ? `実装完了・テスト ${tests.passed}/${tests.total}` : '実装完了・テスト待ち' }
-            : impl.done > 0 ? { kind: by ? 'impl' : 'paused', text: `実装 ${pctImpl}%` }
-              : written.every((w) => w >= 1) ? { kind: 'written', text: '記述完了・実装待ち' } : { kind: 'paused', text: `記述 ${pct(written.reduce((a, b) => a + b, 0) / 7)}%` };
+  const status = tests.running ? { kind: 'test', text: tl('live.spec.testing', { passed: tests.passed, total: tests.total }) }
+    : writingIdx >= 0 ? { kind: 'write', text: tl('live.spec.writing', { pct: pct(written.reduce((a, b) => a + b, 0) / 7) }) }
+      : x.bucket === 'done' ? { kind: 'done', text: tl('live.spec.done') }
+        : x.bucket === 'todo' ? { kind: 'idle', text: tl('live.spec.todo') }
+          : impl.total && impl.done >= impl.total ? { kind: 'impl-done', text: tests.total ? tl('live.spec.impl.tests', { passed: tests.passed, total: tests.total }) : tl('live.spec.impl.waiting') }
+            : impl.done > 0 ? { kind: by ? 'impl' : 'paused', text: tl('live.spec.impl', { pct: pctImpl }) }
+              : written.every((w) => w >= 1) ? { kind: 'written', text: tl('live.spec.written') } : { kind: 'paused', text: tl('live.spec.writing.paused', { pct: pct(written.reduce((a, b) => a + b, 0) / 7) }) };
   // maybeStale: the spec or its layout changed after the newest result (mtime, which a git checkout also moves).
-  const note = `実装 ${impl.done}/${impl.total}${tests.total ? ` · テスト ${tests.passed}/${tests.total}${tests.failed ? `（失敗 ${tests.failed}）` : ''}${tests.maybeStale ? '（結果は古い可能性）' : ''}` : ' · テストの定義なし'}`;
+  const note = tl('live.note.impl', { done: impl.done, total: impl.total })
+    + (tests.total ? tl('live.note.tests', { passed: tests.passed, total: tests.total }) + (tests.failed ? tl('live.note.failed', { n: tests.failed }) : '')
+      + (tests.maybeStale ? tl('live.note.stale') : '') : tl('live.note.notests'));
   const prev = LIVE.specRows[x.id];
   const row = {
     id: x.id, screen: String(x.name || ''), name: String(x.name || ''), project: x.projectId, file: String(x.file || ''),
@@ -390,7 +394,7 @@ function liveWantSheet(row) {
   if (row.doc && row.docAt === row.updatedAt) return;
   if (asked && asked.at === row.updatedAt && Date.now() - asked.t < 15000) return;
   LIVE.sheetAsked[row.id] = { at: row.updatedAt, t: Date.now() };
-  netRequest('spec.sheet', { specId: row.id }).then((ack) => { if (!ack.ok) LIVE.sheetFailed[row.id] = ack.error || '不明'; });
+  netRequest('spec.sheet', { specId: row.id }).then((ack) => { if (!ack.ok) LIVE.sheetFailed[row.id] = ack.error || tl('live.unknown'); });
 }
 function liveSheet(msg) {
   const row = LIVE.specRows[msg.specId];
@@ -476,21 +480,21 @@ function liveTestsFor(projectId) {
 }
 /* What decided a finished run's head (ingest robots.test_verdict, 2.3.10): shown as the status's tooltip. */
 const VERDICT_FROM_JA = {
-  runner: '判定: jsonui-test-runner 自身の記録（run_end の passed / failed）',
-  xcode: '判定: xcodebuild の最後の ** TEST SUCCEEDED / FAILED **',
-  summary: '判定: ランナーの要約の行',
-  exit: '判定: 終了コード（出力に要約が無い）',
+  runner: tl('live.verdict.runner'),
+  xcode: tl('live.verdict.xcode'),
+  summary: tl('live.verdict.summary'),
+  exit: tl('live.verdict.exit'),
 };
 /* One run as the panels show it (the test pane, and a robot's card). */
 function liveRunView(run) {
   const cases = Array.isArray(run.cases) ? run.cases : [];
-  const rows = cases.map((c) => ({ name: String(c.name || ''), branch: '', status: CASE_STATUS[c.status] || 'pending', attempt: 1, step: c.status === 'running' ? 'このケースを実行中' : '' }));
+  const rows = cases.map((c) => ({ name: String(c.name || ''), branch: '', status: CASE_STATUS[c.status] || 'pending', attempt: 1, step: c.status === 'running' ? tl('live.run.case') : '' }));
   const passed = rows.filter((r) => r.status === 'passed').length;
   const failed = rows.filter((r) => r.status === 'failed').length;
   const runningIdx = rows.findIndex((r) => r.status === 'running');
   const dev = (Array.isArray(LIVE.slices.devices) ? LIVE.slices.devices : []).find((d) => d && d.id === run.deviceId);
-  const statusText = run.status === 'running' ? `実行中${rows.length ? ` ${passed}/${rows.length} 通過` : ''}`
-    : run.summary ? `${run.status === 'passed' ? '通過' : '失敗'} · ${run.summary}` : run.status === 'passed' ? '通過' : '失敗';
+  const statusText = run.status === 'running' ? tl('live.run.running') + (rows.length ? tl('live.run.passed', { passed, all: rows.length }) : '')
+    : run.summary ? `${run.status === 'passed' ? tl('live.run.pass') : tl('live.run.fail')} · ${run.summary}` : run.status === 'passed' ? tl('live.run.pass') : tl('live.run.fail');
   return {
     rows, passed, failed, runningIdx, retrying: false, active: run.status === 'running', statusText,
     file: String(run.file || run.command || ''), device: dev ? String(dev.name) : ({ ios: 'iOS', android: 'Android', web: 'Web' }[run.platform] || ''),
@@ -893,10 +897,10 @@ function rebuildRooms() {
   for (const k of Object.keys(PROJECT)) delete PROJECT[k];
   for (const r of ROOMS) PROJECT[r.id] = r;
 }
-function sessionHead(a, sess) { return `セッション ${String((sess && sess.id) || a.sessionId || '').slice(0, 4)}…`; }
+function sessionHead(a, sess) { return tl('live.session.head', { id: String((sess && sess.id) || a.sessionId || '').slice(0, 4) }); }
 function displayName(a, sess) {
   if (a.kind === 'main') return sessionName(sess && sess.title) || sessionHead(a, sess);
-  return a.agentType ? String(a.agentType) : 'サブエージェント';
+  return a.agentType ? String(a.agentType) : tl('live.subagent');
 }
 function rebuildRobots(initial) {
   const sessions = Array.isArray(LIVE.slices.sessions) ? LIVE.slices.sessions : [];
@@ -1016,7 +1020,7 @@ function liveApply(changed, replace) {
   placeRobots();
   renderUsage(vizNow());
   const server = LIVE.slices.server || {};
-  const errs = Object.entries(server.sources || {}).filter(([, s]) => s && (s.error || s.state === 'error')).map(([k, s]) => `${k}: ${s.error || 'エラー'}`);
+  const errs = Object.entries(server.sources || {}).filter(([, s]) => s && (s.error || s.state === 'error')).map(([k, s]) => `${k}: ${s.error || tl('live.error')}`);
   LIVE.serverError = errs.join(' / ');
   if (layoutSignature() !== before) SOURCE.layoutRev += 1;
   LIVE.model = null;
@@ -1100,7 +1104,7 @@ Object.assign(SOURCE, {
    0 to red just below 100 (the hue, not steps); at 100 — Claude Code caps the share there — the number gives way
    to 上限到達 in the inactive colour, and the time to the reset stays. */
 const USAGE_STALE_MS = 15 * 60 * 1000;
-const USAGE_LABEL = { fiveHour: '5時間', sevenDay: '週' };
+const USAGE_LABEL = { fiveHour: tl('live.usage.five'), sevenDay: tl('live.usage.week') };
 function usageHue(pct) { return Math.round(120 * (1 - Math.max(0, Math.min(100, pct)) / 100)); }
 // The hue carries the share; the lightness is whatever keeps the text at 4.6:1 or more against the chip (12 px bold
 // needs WCAG AA 4.5): darker in light (yellow especially), lighter in dark (red especially). Reviewed 10-18.
@@ -1126,11 +1130,11 @@ function usageColor(pct, dark = isDark()) {
 }
 function usageLeft(ms) {
   const m = Math.ceil(ms / 60000), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60);
-  return d > 0 ? `あと ${d}日 ${h}時間` : `あと ${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`;
+  return d > 0 ? tl('live.usage.left.days', { d, h }) : tl('live.usage.left.time', { h: Math.floor(m / 60), m: String(m % 60).padStart(2, '0') });
 }
 function usageAgo(ms) {
   const m = Math.floor(ms / 60000);
-  return m < 60 ? `${m}分前` : m < 1440 ? `${Math.floor(m / 60)}時間前` : `${Math.floor(m / 1440)}日前`;   // 「◯分前の値」 until 10-19 (the requester: shorter)
+  return m < 60 ? tl('live.usage.ago.min', { n: m }) : m < 1440 ? tl('live.usage.ago.hour', { n: Math.floor(m / 60) }) : tl('live.usage.ago.day', { n: Math.floor(m / 1440) });   // 「◯分前の値」 until 10-19 (the requester: shorter)
 }
 function renderUsage(now) {
   const el = document.getElementById('usage');
@@ -1152,18 +1156,18 @@ function renderUsage(now) {
   const out = rows.map((r) => {
     const box = span('uw', `${USAGE_LABEL[r.key]} `);
     box.dataset.window = r.key;
-    if (r.over) box.append(span('limit', 'リセット済み'));
-    else if (r.limit) box.append(span('limit', '上限到達'));
+    if (r.over) box.append(span('limit', tl('live.usage.reset')));
+    else if (r.limit) box.append(span('limit', tl('live.usage.limit')));
     // floored: 99.5 is not 100, and 100 only ever means the limit
     else box.append(span('num', String(Math.floor(r.pct)), usageColor(r.pct)), span('pc', '%', usageColor(r.pct)));
-    if (!r.over) box.append(`（${r.left}）`);
+    if (!r.over) box.append(tl('live.usage.left', { left: r.left }));
     if (stale) { box.append(span('stale', ` · ${stale}`));   // not .note: that is the board's sticky-note card (10-19)
-      box.title = `${stale}（ターミナルの claude が動いていると更新されます）`; }
+      box.title = tl('live.usage.stale', { ago: stale }); }
     return box;
   });
   if (!out.length) {
-    const none = span('uw none', '上限の値なし');
-    none.title = 'jui viz statusline install で入ります。値はターミナルの claude から届きます（VS Code 拡張とデスクトップアプリからは届きません）';
+    const none = span('uw none', tl('live.usage.none'));
+    none.title = tl('live.usage.none.title');
     out.push(none);
   }
   el.replaceChildren(...out);
