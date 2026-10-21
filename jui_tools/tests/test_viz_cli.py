@@ -310,16 +310,16 @@ TERM_WITHIN_SEC = 3
 #: nothing busy in the process: it ends without the helpers' grace (measured 0.05 s; the grace is 1 s)
 IDLE_WITHIN_SEC = 0.9
 #: a job that takes 20 s, put on one pool before serve starts (the code under test is not changed)
-SLOW_JOB = {
+SLOW_JOB = {   # name: (the patch, seconds until it runs, the thread left busy, named in the log)
     "the loop's executor (a shelf rescan)": (
         "import time; from jui_cli.viz.sources import test_results as T; o = T.ResultShelf.scan; n = [0]\n"
-        "def slow(self):\n    n[0] += 1\n    if n[0] > 1: time.sleep(20)\n    return o(self)\nT.ResultShelf.scan = slow", 6),
+        "def slow(self):\n    n[0] += 1\n    if n[0] > 1: time.sleep(20)\n    return o(self)\nT.ResultShelf.scan = slow", 6, "jui-viz-serve_"),
     "the talk index's step": (
         "import time; from jui_cli.viz import talk as T; o = T.TalkHub._step\n"
-        "def slow(self, now):\n    time.sleep(20); return o(self, now)\nT.TalkHub._step = slow", 4),
+        "def slow(self, now):\n    time.sleep(20); return o(self, now)\nT.TalkHub._step = slow", 4, "jui-viz-talk_"),
     "the price table's read": (
         "import time; from jui_cli.viz import prices as P; o = P.PriceBook._load\n"
-        "def slow(self):\n    time.sleep(20); return o(self)\nP.PriceBook._load = slow", 2),
+        "def slow(self):\n    time.sleep(20); return o(self)\nP.PriceBook._load = slow", 2, "jui-viz-prices_"),
 }
 
 
@@ -346,8 +346,8 @@ def _serve_as(home: Path, port: int, patch: str = "", claude_sleep: float = 0) -
     raise AssertionError(f"serve did not start: rc={proc.returncode}\n{out}\n{err}")
 
 
-def _term_ends_it(proc: subprocess.Popen) -> float:
-    """TERM; it must end with 0 within TERM_WITHIN_SEC, its files cleared. How long it took."""
+def _term_ends_it(proc: subprocess.Popen, err_out: list | None = None) -> float:
+    """TERM; it must end with 0 within TERM_WITHIN_SEC, its files cleared. How long it took (its stderr into err_out)."""
     start = time.monotonic()
     proc.terminate()  # our own child
     try:
@@ -360,6 +360,8 @@ def _term_ends_it(proc: subprocess.Popen) -> float:
     out, err = proc.communicate()
     assert rc == 0, err
     assert not paths.server_json().exists() and not paths.pid_file().exists()
+    if err_out is not None:
+        err_out.append(err)
     return took
 
 
@@ -396,10 +398,14 @@ def test_term_while_a_hook_is_being_read_ends_it(home):
 
 @pytest.mark.parametrize("where", list(SLOW_JOB))
 def test_term_while_a_pool_job_runs_ends_it(home, where):
-    patch, settle = SLOW_JOB[where]
+    patch, settle, thread = SLOW_JOB[where]
     proc = _serve_as(home, _free_port(), patch=patch)
     time.sleep(settle)   # the slow job is under way
-    _term_ends_it(proc)
+    err: list = []
+    _term_ends_it(proc, err)
+    # the thread not waited for is named on stderr (what `jui viz start` keeps in serve.log)
+    left = [line for line in err[0].splitlines() if "stopped; not waited for:" in line]
+    assert len(left) == 1 and thread in left[0], err[0][-2000:]
 
 
 def test_serve_refuses_a_port_another_process_listens_on_all_addresses(home):
