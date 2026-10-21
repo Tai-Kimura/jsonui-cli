@@ -105,3 +105,17 @@ def test_a_listed_folder_that_is_not_there_or_points_outside_is_said_by_validate
     assert by["/infra/exclude/0"]["severity"] == "warning" and "no such folder" in by["/infra/exclude/0"]["message"]
     assert by["/infra/exclude/1"]["severity"] == by["/infra/exclude/2"]["severity"] == "error"
     assert "/infra/exclude/3" not in by and R.infra_exclude(root) == ["other-product"]
+
+
+def test_only_the_outermost_folder_of_a_nest_is_said(tmp_path):
+    """a/ has its own jui.config.json and a/b/ its own git: one folder said (a), one line — not one per level."""
+    root = tmp_path / "proj"
+    for rel, text in {"a/jui.config.json": "{}", "a/b/.git": "gitdir: ../../.git/modules/b\n", "a/b/x.py": "import stripe\n",
+                      "c/d/jui.config.json": "{}"}.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text)
+    nested: list = []
+    T.walk_project(root, (), nested)
+    assert nested == [("a", "its own jui.config.json"), ("c/d", "its own jui.config.json")]   # a sibling's own nest: its own line
+    _hints, notes = C.scan_code(root)
+    assert [n for n in notes if "infra.exclude" in n and n.startswith("a")] == [C.nested_note("a", "its own jui.config.json")]
