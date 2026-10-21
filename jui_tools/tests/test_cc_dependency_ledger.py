@@ -172,6 +172,15 @@ def test_a_new_version_fetches_the_changelog_and_keeps_the_ledger_lines(world):
     assert r["changelog_lines"] == 1                         # the hooks line, not "Faster startup"
 
 
+def test_an_update_since_the_last_run_fetches_the_changelog(world):
+    """Updated between two runs, the installed version is the latest again: the lines between the last run's version
+    and today's are read (10-22: 2.1.305 the day before, 2.1.307 that day, and the ticket said no version changed)."""
+    go(world, fake_cli("2.1.303"), fake_fetch("2.1.303"))
+    fetch = fake_fetch("2.1.304")
+    r = go(world, fake_cli("2.1.304"), fetch)
+    assert fetch.fetched == [W.REGISTRY, W.CHANGELOG] and r["changelog_lines"] == 1
+
+
 def test_a_changed_shape_files_a_ticket_and_notifies(world):
     repo, state, temp, notified = world
     go(world, fake_cli(), fake_fetch("2.1.304"))

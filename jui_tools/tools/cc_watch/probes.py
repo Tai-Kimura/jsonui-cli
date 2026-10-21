@@ -193,21 +193,82 @@ def tool_names(ctx: Context):
 
 
 # ------------------------------------------------------------------ the talk view (viz/talk.py, sources/talk_records.py)
-#: How far back and how much the talk probes read: the newest files first, records of the last TALK_DAYS days only.
+#: How far back and how much the talk probes read: records of the last TALK_DAYS days. The senders' side (SendMessage,
+#: its result, the envelope, the Skill calls, the receivers' origins) from the newest files' tails, the newest TALK_KEEP
+#: of each kind. The auto mode denials from every file of those days, whole: a few a day at most, and a window cut by
+#: bytes saw none of them on a day the newest files were large (ticket 2026-10-22-cc-dependency-watch-red: the day
+#: before's sat in a 61 MB file's head, past its 16 MB tail), which read as the wording gone. The origins stay in the
+#: window: over a whole week they are thousands, and rare old forms (10-17's inbound_origin without msg_id) would
+#: decide the shape for a week.
 TALK_DAYS = 7
 TALK_FILES = 80
 TALK_BYTES = 256 * 1_048_576
 TALK_FILE_BYTES = 16 * 1_048_576
 TALK_KEEP = 40
+#: the kinds read from every file of the window (_week_needle picks their lines)
+WEEK_KINDS = ("denied",)
 SEND_INPUT_KEYS = ["to", "message", "summary"]
 PEER_ORIGIN_KEYS = ["kind", "msg_id", "from", "verifiedPeerPid", "name", "body"]
 CHILD_ORIGIN_KEYS = ["kind", "senderTaskId", "from", "body"]
 _ENVELOPE = re.compile(r'^<cross-session-message\b[^>]*\bfrom-name="[^"]*"[^>]*>\n')
 
 
+def _kinds() -> dict:
+    return {"sends": [], "results": [], "peer": [], "queued": [], "child": [], "coordinator": [], "enqueue": [],
+            "agent_msg": [], "denied": [], "skills": [], "skill_results": []}
+
+
+def _take(r: dict, got: dict, sends: set, skills: set) -> None:
+    """One record, put under its kinds."""
+    t = r.get("type")
+    if t == "assistant":
+        for b in (r.get("message") or {}).get("content") or []:
+            if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "SendMessage":
+                sends.add(b.get("id"))
+                got["sends"].append(b.get("input") if isinstance(b.get("input"), dict) else {})
+            if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "Skill":
+                skills.add(b.get("id"))
+                got["skills"].append(b.get("input") if isinstance(b.get("input"), dict) else {})
+    elif t == "user":
+        content = (r.get("message") or {}).get("content")
+        for b in content if isinstance(content, list) else []:
+            if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id") in sends:
+                got["results"].append(r.get("toolUseResult"))
+            if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id") in skills:
+                got["skill_results"].append(r.get("toolUseResult"))
+            if isinstance(b, dict) and b.get("type") == "tool_result":   # an auto mode denial (viz/denials.py)
+                text = b.get("content")
+                if isinstance(text, list):
+                    text = "".join(x.get("text", "") for x in text if isinstance(x, dict))
+                # a result that starts by naming the classifier (not a file or an output quoting it: a command's
+                # own error output starts "Exit code N", and one quoted "auto mode" near its start)
+                if (b.get("is_error") is True and isinstance(text, str) and "auto mode" in text[:150].lower()
+                        and not text.startswith("Exit code ")):
+                    got["denied"].append(text[:300])
+        o = r.get("origin")
+        if isinstance(o, dict) and o.get("kind") == "peer" and not o.get("handback"):
+            got["child" if o.get("senderTaskId") else "peer"].append(o)
+        elif isinstance(o, dict) and o.get("kind") == "coordinator":
+            got["coordinator"].append(o)
+    elif t == "attachment":
+        a = r.get("attachment") or {}
+        if a.get("type") == "queued_command" and isinstance(a.get("origin"), dict):
+            got["queued"].append(a)
+    elif t == "queue-operation" and r.get("operation") == "enqueue" and isinstance(r.get("content"), str):
+        c = r["content"]
+        if c.startswith("<cross-session-message"):
+            got["enqueue"].append(c)
+        elif c.startswith("<agent-message"):
+            got["agent_msg"].append(c)
+
+
+def _week_needle(line: bytes) -> bool:
+    return b"uto mode" in line and b'"is_error"' in line
+
+
 def _talk_scan(ctx: Context) -> dict | None:
-    """The newest SendMessage records of this machine's transcripts, by kind (read once per run, only lines with a
-    needle parsed; the bodies are looked at only to compare the two sides, never kept in a shape)."""
+    """This machine's transcripts' talk records, by kind (read once per run, only lines with a needle parsed; the
+    bodies are looked at only to compare the two sides, never kept in a shape). Each kind's list is oldest first."""
     if ctx.transcripts is None:
         return None
     if ctx._talk is not None:
@@ -224,12 +285,12 @@ def _talk_scan(ctx: Context) -> dict | None:
                 continue
             if not f.is_symlink() and st.st_mtime >= since:
                 files.append((st.st_mtime, f))
-    got = {"sends": [], "results": [], "peer": [], "queued": [], "child": [], "coordinator": [], "enqueue": [], "agent_msg": [],
-           "denied": [], "skills": [], "skill_results": []}
+    files.sort(reverse=True)
+    batches = []          # one per file, newest file first
     sends: set = set()
     skills: set = set()   # the Skill calls' ids (viz/ingest.py: a skill in use, the spirit)
     read = 0
-    for _m, f in sorted(files, reverse=True)[:TALK_FILES]:
+    for _m, f in files[:TALK_FILES]:
         if read >= TALK_BYTES:
             break
         try:
@@ -245,6 +306,7 @@ def _talk_scan(ctx: Context) -> dict | None:
         lines = data.split(b"\n")
         if len(data) < size:
             lines = lines[1:]                           # the first line is cut
+        got = _kinds()
         for line in lines:
             if not (b'"SendMessage"' in line or b'"origin"' in line or b'"enqueue"' in line
                     or ((sends or skills) and b'"tool_result"' in line) or b"uto mode" in line or b'"Skill"' in line):
@@ -253,45 +315,34 @@ def _talk_scan(ctx: Context) -> dict | None:
                 r = json.loads(line)
             except ValueError:
                 continue
-            t = r.get("type")
-            if t == "assistant":
-                for b in (r.get("message") or {}).get("content") or []:
-                    if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "SendMessage":
-                        sends.add(b.get("id"))
-                        got["sends"].append(b.get("input") if isinstance(b.get("input"), dict) else {})
-                    if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "Skill":
-                        skills.add(b.get("id"))
-                        got["skills"].append(b.get("input") if isinstance(b.get("input"), dict) else {})
-            elif t == "user":
-                content = (r.get("message") or {}).get("content")
-                for b in content if isinstance(content, list) else []:
-                    if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id") in sends:
-                        got["results"].append(r.get("toolUseResult"))
-                    if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id") in skills:
-                        got["skill_results"].append(r.get("toolUseResult"))
-                    if isinstance(b, dict) and b.get("type") == "tool_result":   # an auto mode denial (viz/denials.py)
-                        text = b.get("content")
-                        if isinstance(text, list):
-                            text = "".join(x.get("text", "") for x in text if isinstance(x, dict))
-                        # a result that starts by naming the classifier (not a file or an output quoting it)
-                        if b.get("is_error") is True and isinstance(text, str) and "auto mode" in text[:150].lower():
-                            got["denied"].append(text[:300])
-                o = r.get("origin")
-                if isinstance(o, dict) and o.get("kind") == "peer" and not o.get("handback"):
-                    got["child" if o.get("senderTaskId") else "peer"].append(o)
-                elif isinstance(o, dict) and o.get("kind") == "coordinator":
-                    got["coordinator"].append(o)
-            elif t == "attachment":
-                a = r.get("attachment") or {}
-                if a.get("type") == "queued_command" and isinstance(a.get("origin"), dict):
-                    got["queued"].append(a)
-            elif t == "queue-operation" and r.get("operation") == "enqueue" and isinstance(r.get("content"), str):
-                c = r["content"]
-                if c.startswith("<cross-session-message"):
-                    got["enqueue"].append(c)
-                elif c.startswith("<agent-message"):
-                    got["agent_msg"].append(c)
-    ctx._talk = {k: v[-TALK_KEEP:] for k, v in got.items()}
+            _take(r, got, sends, skills)
+        batches.append(got)
+    # the newest TALK_KEEP of each kind: the newest files' records (it kept the oldest files' before: the ticket)
+    every = {k: [x for got in reversed(batches) for x in got[k]] for k in _kinds()}
+    talk = {k: v[-TALK_KEEP:] for k, v in every.items()}
+    # the pairing reads every msg_id of the window: the newest 40 sent and the newest 40 received are mostly not the
+    # same messages (the other side of a send is another session's file)
+    talk["sent_ids"] = {r["msg_id"] for r in every["results"] if isinstance(r, dict) and isinstance(r.get("msg_id"), str)}
+    talk["seen_ids"] = {o.get("msg_id") for o in every["peer"] + [a["origin"] for a in every["queued"]
+                                                                  if a["origin"].get("kind") == "peer"]
+                        if isinstance(o.get("msg_id"), str)}
+    week = _kinds()
+    for _m, f in reversed(files):                      # every file of the window, whole, oldest first
+        try:
+            fd = os.open(f, os.O_RDONLY | os.O_NOFOLLOW)
+            with os.fdopen(fd, "rb") as fh:
+                for line in fh:
+                    if not _week_needle(line):
+                        continue
+                    try:
+                        r = json.loads(line)
+                    except ValueError:
+                        continue
+                    _take(r, week, set(), set())
+        except OSError:
+            continue
+    talk.update({k: week[k] for k in WEEK_KINDS})
+    ctx._talk = talk
     return ctx._talk
 
 
@@ -320,7 +371,7 @@ def talk_send_input(ctx: Context):
 
 def talk_msg_id(ctx: Context):
     """The match key: toolUseResult.msg_id on the sender's result and origin.msg_id on the receiver's record, the same
-    value (one msg_id seen on both sides in the window)."""
+    value (one msg_id seen on both sides in the window: every msg_id the window read, not only the newest kept)."""
     if (s := _talk_skipped(ctx)) is not None:
         return s
     results = [r for r in ctx._talk["results"] if isinstance(r, dict) and "msg_id" in r]
@@ -329,7 +380,7 @@ def talk_msg_id(ctx: Context):
     seen = {o.get("msg_id") for o in origins if isinstance(o.get("msg_id"), str)}
     return {"result_has_msg_id": bool(sent), "origin_has_msg_id": bool(seen),
             "uuid_like": _all_any(sorted(sent | seen), lambda v: re.fullmatch(r"[0-9a-f-]{36}", v) is not None),
-            "both_sides": bool(sent & seen) if sent and seen else "unseen"}
+            "both_sides": bool(ctx._talk["sent_ids"] & ctx._talk["seen_ids"]) if sent and seen else "unseen"}
 
 
 def talk_origin(ctx: Context):

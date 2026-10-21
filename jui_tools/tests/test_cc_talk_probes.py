@@ -122,3 +122,70 @@ def test_the_watcher_hands_the_folder_to_the_probes_only_when_live(tmp_path):
     finally:
         P.PROBES["talk_send_input"] = real
     assert seen == [None, projects]
+
+
+# ---- the window (ticket 2026-10-22-cc-dependency-watch-red: two reds of the window, not of Claude Code) -------------
+DENIED = "Permission for this action was denied by the Claude Code auto mode classifier. Reason: [Merge Without Review]"
+
+
+def _denial(text: str) -> dict:
+    return {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "toolu_9", "is_error": True,
+                                                     "content": text}]}}
+
+
+def _files(tmp_path, by_age: list[list[dict]]) -> Path:
+    """One transcript per list, the first the oldest (an hour apart, all within the window)."""
+    import os
+    import time
+    projects = tmp_path / "projects"
+    (projects / "-work").mkdir(parents=True)
+    now = time.time()
+    for i, recs in enumerate(by_age):
+        f = projects / "-work" / f"s{i}.jsonl"
+        f.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in recs))
+        os.utime(f, (now - (len(by_age) - i) * 3600, now - (len(by_age) - i) * 3600))
+    return projects
+
+
+def _ctx(projects):
+    return P.Context(run=lambda argv: (0, ""), transcripts=projects)
+
+
+def test_a_denial_in_a_large_files_head_is_seen(tmp_path, monkeypatch):
+    """The day before's denials sat in a 61 MB file's head, past the 16 MB tail read: the shape said unseen. The
+    denials are read from every file of the window, whole."""
+    monkeypatch.setattr(P, "TALK_FILE_BYTES", 4096)
+    filler = [{"type": "user", "message": {"content": "x" * 200}} for _ in range(100)]   # ~30 KB after the denial
+    projects = _files(tmp_path, [[_denial(DENIED)] + filler])
+    assert P.auto_mode_denial(_ctx(projects)) == {"known": "all", "reason": "all", "no_verdict": "unseen"}
+
+
+def test_a_commands_own_output_quoting_auto_mode_is_not_a_denial(tmp_path):
+    quoted = "Exit code 2\nREFUSE: not an additive conflict:\n  POST /api/denial    a card of a call stopped by auto mode"
+    projects = _files(tmp_path, [[_denial(DENIED), _denial(quoted)]])
+    assert P.auto_mode_denial(_ctx(projects))["known"] == "all"
+
+
+def test_the_newest_records_are_kept_not_the_oldest(tmp_path, monkeypatch):
+    """The window kept the last TALK_KEEP appended, and the newest file is read first: it kept the oldest files'
+    records. An old form (no verifiedPeerPid) in the oldest file decides nothing once newer records fill the keep."""
+    monkeypatch.setattr(P, "TALK_KEEP", 2)
+    peer = records()["peer"]
+    old = json.loads(json.dumps(peer))
+    del old["origin"]["verifiedPeerPid"]
+    projects = _files(tmp_path, [[old], [peer, peer]])
+    assert P.talk_origin(_ctx(projects))["peer"]["verifiedPeerPid"] == "all"
+    projects2 = _files(tmp_path / "b", [[peer, peer], [old]])                   # the old form is the newest: seen
+    assert P.talk_origin(_ctx(projects2))["peer"]["verifiedPeerPid"] == "some"
+
+
+def test_the_two_sides_pair_on_every_msg_id_of_the_window(tmp_path, monkeypatch):
+    """The newest TALK_KEEP sent and the newest received are mostly other messages (the other side of a send is in
+    another session's file): the pairing reads every msg_id the window read."""
+    monkeypatch.setattr(P, "TALK_KEEP", 1)
+    r = records()
+    other = json.loads(json.dumps(r["peer"]))
+    other["origin"]["msg_id"] = "ffffffff-1111-4222-8333-444455556666"
+    # the matching receipt between two others: neither the oldest kept nor the newest kept is it
+    projects = _files(tmp_path, [[other], [r["send"], r["result"]], [r["peer"]], [other]])
+    assert P.talk_msg_id(_ctx(projects))["both_sides"] is True

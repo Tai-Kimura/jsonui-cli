@@ -346,6 +346,15 @@ def write_ticket(repo: Path, today: str, installed: str | None, latest: str | No
     return path
 
 
+def _last_installed(state: Path) -> str | None:
+    """The version the last run found installed (watch.log's last line), None without one."""
+    try:
+        last = (state / "watch.log").read_text(encoding="utf-8").strip().splitlines()[-1]
+        return _version(json.loads(last).get("installed") or "")
+    except (OSError, IndexError, ValueError, AttributeError):
+        return None
+
+
 def run(repo: Path, state: Path, live: bool, cli: str = "claude", runner=None, fetch=default_fetch, notify=notify_route,
         session_maker=live_session, now: dt.datetime | None = None, transcripts=None) -> dict:
     """One day's watch. Returns what it found (also written to the log)."""
@@ -359,9 +368,12 @@ def run(repo: Path, state: Path, live: bool, cli: str = "claude", runner=None, f
     except Exception:  # offline: the probes still run
         latest = None
     lines: list[str] = []
-    if installed and latest and installed != latest:
+    # the versions to read the CHANGELOG between: installed and latest, and the version the last run had (updated
+    # since, installed is latest again: 2.1.305 on 10-21 and 2.1.307 on 10-22 read no line — the ticket of 10-22)
+    versions = {v for v in (installed, latest, _last_installed(state)) if v}
+    if installed and len(versions) > 1:
         try:
-            lines = changelog_lines(fetch(CHANGELOG), min(installed, latest, key=_vkey), max(installed, latest, key=_vkey))
+            lines = changelog_lines(fetch(CHANGELOG), min(versions, key=_vkey), max(versions, key=_vkey))
         except Exception as e:
             lines = [f"（CHANGELOG を取れなかった: {type(e).__name__}）"]
     work = Path(tempfile.mkdtemp(prefix="cc-watch-"))
