@@ -285,7 +285,7 @@
     {
       "id": "skill",
       "name": "スキルの道具（Skill の呼び出しの入力と結果）",
-      "relies_on": "Claude's Skill tool: the call's input names the skill in \"skill\" (a string, with \"args\"), and its result is {success, commandName} when the skill is read in place (inline) or {status: \"forked\", agentId, result} when it runs in a subagent (forked), which starts within seconds of the call with no skill name of its own (measured 10-21 in this machine's transcripts: 6 calls, 2 inline and 4 forked; not documented). viz reads the PreToolUse hook's tool_input as the call's input: the hook's own payload was not measured",
+      "relies_on": "Claude's Skill tool: the call's input names the skill in \"skill\" (a string, with \"args\"), and its result is {success, commandName} when the skill is read in place (inline) or {status: \"forked\", agentId, result} when it runs in a subagent (forked), which starts within seconds of the call with no skill name of its own (measured 10-21 in this machine's transcripts: 6 calls, 2 inline and 4 forked; not documented). the hooks measured 10-22 00:01 with a real claude in a throwaway config (tests/fixtures/viz/skill_hooks.json): PreToolUse tool_input {\"skill\": <name>} (no \"args\" when none are given), PostToolUse tool_response the same two forms, and for a forked skill SubagentStart (agent_type general-purpose) 41 ms after the call",
       "probe": "skill_tool_shape",
       "impact": "viz: スキルを使っている間の守護霊・部品・札が出ない（ほかは変わらない）",
       "files": [

@@ -142,3 +142,40 @@ def test_the_ledger_s_probe_sees_the_two_result_forms_and_flags_another(tmp_path
     (proj / "s.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs + [use(3), result(3, {"done": 1})]))
     assert P.skill_tool_shape(P.Context(run=lambda a: (0, ""), transcripts=tmp_path / "projects"))["result_known"] == "some"
     assert P.skill_tool_shape(P.Context(run=lambda a: (0, "")))["skipped"]
+
+
+def _replay(run: str):
+    """The hooks a real claude sent while using a skill (fixtures/viz/skill_hooks.json, measured 10-22): each applied
+    at its own time; the skills held after each step."""
+    import json
+    from pathlib import Path
+    doc = json.loads((Path(__file__).parent / "fixtures" / "viz" / "skill_hooks.json").read_text(encoding="utf-8"))
+    world, state = _world()
+    steps = []
+    for h in doc[run]:
+        at = 1_000 + h["atMs"]
+        world.apply_hook({k: v for k, v in h.items() if k != "atMs"}, at)
+        steps.append((h["hook_event_name"], _skills(world, state)))
+    return steps
+
+
+def test_a_real_inline_skill_is_held_from_its_call_to_the_turn_s_stop():
+    """inline (measured): PreToolUse tool_input {"skill": "jvz-inline"} (no "args" when none are given), PostToolUse
+    {success, commandName} 40 ms later, then the turn's Stop."""
+    steps = _replay("inline")
+    assert [e for e, _ in steps] == ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"]
+    held = {e: {aid: s["name"] for aid, s in got.items()} for e, got in steps}
+    sid = "1e2330cb-ffa0-4819-809f-66476f312072"
+    assert held == {"UserPromptSubmit": {}, "PreToolUse": {sid: "jvz-inline"}, "PostToolUse": {sid: "jvz-inline"}, "Stop": {}}
+
+
+def test_a_real_forked_skill_moves_to_its_subagent_and_ends_with_the_forked_result():
+    """forked (measured): SubagentStart (agent_type general-purpose) 41 ms after the call, then SubagentStop and the
+    call's PostToolUse {success, commandName, status: "forked", agentId, result}."""
+    steps = _replay("forked")
+    assert [e for e, _ in steps] == ["UserPromptSubmit", "PreToolUse", "SubagentStart", "SubagentStop", "PostToolUse", "Stop"]
+    sid, sub = "94f4f40c-97d2-42af-adb9-f3132f39ecfb", "a72a52a7f6db30534"
+    got = dict(steps)
+    assert {a: s["name"] for a, s in got["PreToolUse"].items()} == {sid: "jvz-forked"}
+    assert {a: (s["name"], s.get("forked")) for a, s in got["SubagentStart"].items()} == {sub: ("jvz-forked", True)}
+    assert got["SubagentStop"] == {} and got["PostToolUse"] == {} and got["Stop"] == {}
