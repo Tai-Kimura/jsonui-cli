@@ -1130,7 +1130,7 @@ module JsonUIShared
     DATE_PICK_HAS_NO_INDEX = 'a date SelectBox has no index: declare onValueChange as (String) or (String, String)'
 
     # A date SelectBox's onValueChange declared to take an Int — `(Int)`,
-    # `(String, Int)` — asks for an index a date does not have (4f's ruling on
+    # `(String, Int)` — asks for an index a date does not have (the orchestrator's ruling on
     # control-onclick-is-called-differently-on-every-path, 1.9.0): it is not
     # called on any path. sjui writes an `// ERROR:` comment where the call
     # would be, SwiftJsonUI's Dynamic runtime names it once in DEBUG, and the

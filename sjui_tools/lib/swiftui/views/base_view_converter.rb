@@ -903,7 +903,7 @@ module SjuiTools
           # an `if #available` here: an availability check in generated code
           # would be duplicated at every site that declares `glass`, and each
           # copy asks the RUNNING OS, so the picture would vary by device. The
-          # helper holds the single check (ruling: iOS lane, 2026-09-14).
+          # helper holds the single check (ruling, 2026-09-14).
           #
           # `shape` is deliberately NOT resolved here. `rounded(N)` and `rect`
           # could be, but `capsule` and `circle` depend on the laid-out height,

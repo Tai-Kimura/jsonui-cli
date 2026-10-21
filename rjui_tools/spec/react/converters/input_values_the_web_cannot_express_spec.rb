@@ -64,7 +64,7 @@ RSpec.describe 'input values web cannot express natively' do
   # type table. NOT copied from our implementation and NOT from the SSoT
   # description -- both of those are the thing under test.
   #
-  # 🔻 WHY THIS LIST EXISTS. triage ran the mutation this file asked for:
+  # 🔻 WHY THIS LIST EXISTS. An independent check ran the mutation this file asked for:
   #
   #   implementation only, spelling broken   37 examples, 1 failure
   #   implementation AND the arm broken      37 examples, 0 failures   <- GREEN
@@ -206,7 +206,7 @@ RSpec.describe 'input values web cannot express natively' do
     end
 
     it 'the near-miss spellings are absent, which is what makes it a check' do
-      # The exact strings triage's mutation used. If any of these were in the
+      # The exact strings an independent check's mutation used. If any of these were in the
       # set, the membership arm would pass the broken implementation too.
       %w[datetime-locale datetime datetimelocal dates times].each do |wrong|
         expect(HTML_INPUT_TYPES).not_to include(wrong)

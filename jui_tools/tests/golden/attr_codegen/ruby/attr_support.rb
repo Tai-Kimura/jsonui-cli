@@ -152,7 +152,7 @@ module JsonUI
       end
 
       # Lenient enum matching: a value is its declared spelling, case and
-      # all (4f's ruling, 1.9.0 — it matched case-insensitively); unknown
+      # all (the orchestrator's ruling, 1.9.0 — it matched case-insensitively); unknown
       # values (including non-strings) are reported through AttrWarnings —
       # with the declared spelling one differs from in case only — and
       # PASSED THROUGH raw: codegen consumers must never lose author input

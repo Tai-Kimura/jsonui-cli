@@ -101,7 +101,7 @@ module JsonUIShared
     CHILDREN_DECLARATION = '_children'
     NO_CHILDREN = 'none'
 
-    # The sentence a node of a type the tool cannot draw is named with (4f's
+    # The sentence a node of a type the tool cannot draw is named with (the orchestrator's
     # ruling, jsonui-cli 1.9.0): the type as written, and — when it matches a
     # type the tool draws but for its case — that type. Type names are
     # matched as written, as the SSoT spells them. One sentence: the kjui /
@@ -125,7 +125,7 @@ module JsonUIShared
     # or the project's extension definitions, a type synonym, registered by
     # the app) that a tool has no drawer for is not unknown: the codegen
     # names it in this sentence and draws it as a View, its children in it
-    # (4f's ruling, jsonui-cli 1.9.0). An unknown type is named in the one
+    # (the orchestrator's ruling, jsonui-cli 1.9.0). An unknown type is named in the one
     # above and drawn as nothing.
     DECLARED_WITHOUT_DRAWER = "'%<written>s' is declared but has no %<platform>s converter — drawn as a View"
 
@@ -958,7 +958,7 @@ module JsonUIShared
       []
     end
 
-    # A node whose type the tool cannot draw, named by the type (4f's ruling:
+    # A node whose type the tool cannot draw, named by the type (the orchestrator's ruling:
     # "Unknown attribute 'isOn' for component type 'switch'" did not say
     # that the type was the cause). Nothing is said when there are no SSoT
     # definitions to know types by (load_definitions names that).
@@ -1013,7 +1013,7 @@ module JsonUIShared
     # A section whose value depends on another attribute (a `primaryValue`
     # object — SelectBox by selectItemType): the attributes of the
     # `whenAbsent` kind that are not this node's value are read by no path. A
-    # Date SelectBox's value is selectedDate (4f's ruling, jsonui-cli 1.9.0);
+    # Date SelectBox's value is selectedDate (the orchestrator's ruling, jsonui-cli 1.9.0);
     # sjui read it alone, while the kjui codegen, rjui and KotlinJsonUI
     # Dynamic fell back to selectedItem / selectedValue / selectedIndex, each
     # to a different few.
@@ -1055,7 +1055,7 @@ module JsonUIShared
     # A `style` inside a responsive override (`responsive.<class>.style`): an
     # override's attributes are its own, and no path applies a style named
     # there — sjui / kjui codegen, rjui and both Dynamic runtimes did not; jui's
-    # normalizer did, so the hotloader drew what no build draws (4f's ruling,
+    # normalizer did, so the hotloader drew what no build draws (the orchestrator's ruling,
     # 1.9.0: named on every path, applied by none). The same sentence as the
     # normalizer's StyleMerger and SwiftJsonUI Dynamic's ResponsiveResolver.
     STYLE_IN_RESPONSIVE_OVERRIDE =
@@ -1064,7 +1064,7 @@ module JsonUIShared
     # A layout written inline where the declaration takes a layout's name —
     # a tab's `child` (a tab names its layout with `view`), a section's
     # header / cell / footer as a node — is declared nowhere, and no path
-    # draws it: sjui / kjui / rjui and both Dynamic runtimes read names (4f's
+    # draws it: sjui / kjui / rjui and both Dynamic runtimes read names (the orchestrator's
     # ruling, 1.9.0). sjui's and kjui's builds raised on an inline cell; they
     # go on without it now. It was "Unknown property" or "expects string".
     def inline_layout?(value)

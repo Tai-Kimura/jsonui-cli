@@ -305,7 +305,7 @@ class GenerationRun:
     #: nothing (the record says "not declared"); `()` = declared and empty,
     #: under which every present key stands outside the scan. Two states
     #: that used to share one value — the ticket's 0 ≠ not-observed, on the
-    #: directory axis (found by triage's probe, 2026-09-11).
+    #: directory axis (found by an independent check's probe, 2026-09-11).
     roots: tuple | None = None
     #: How many paths `observe` was handed. None = observe never ran.
     observed: int | None = None
@@ -365,7 +365,7 @@ class GenerationRun:
         # first cut kept the caller's spelling verbatim, so a key whose case
         # differed from the disk (`DOCS/y.html`) would have been recorded as
         # given — the drift `_key` exists to prevent, bypassed by one of the
-        # two producers. Found by triage's probe before it shipped.
+        # two producers. Found by an independent check's probe before it shipped.
         listings = listing_memo()
         keys = sorted(self._key(Path(self.project_root) / k, listings=listings)
                       for k in keys)

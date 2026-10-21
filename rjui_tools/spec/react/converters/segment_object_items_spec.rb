@@ -153,7 +153,7 @@ RSpec.describe RjuiTools::React::Converters::SegmentConverter do
     #
     # ⚠️ Until 1.8.69 this example was PENDING in EVERY environment that ran
     # it — CI's default rjui leg, CI's ruby 2.6 leg, the release gate's 26
-    # legs, and triage's worktree, four for four on 2026-09-10 — because it
+    # legs, and an independent check's worktree, four for four on 2026-09-10 — because it
     # waited on a JSONUI_BABEL_DIR nobody set. A parse claim nobody ran is
     # not a green, and a gate that has never once observed its subject is
     # not a gate. The parser is pinned in spec/support/package.json beside

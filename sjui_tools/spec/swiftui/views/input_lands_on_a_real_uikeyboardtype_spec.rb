@@ -130,7 +130,7 @@ RSpec.describe 'input values on iOS' do
   end
 
   # 🔻 THE NEXT TWO ARMS ARE A PAIR; NEITHER IS REDUNDANT.
-  # triage's mutation run (8 mutations, all red) measured which arm catches
+  # an independent check's mutation run (8 mutations, all red) measured which arm catches
   # what: deleting the `signeddecimal` row leaves "gets a keyboard that can
   # type a sign" GREEN, because signedDecimal falls to `.default` while
   # decimal keeps `.decimalPad` -- still different, just both wrong. The one

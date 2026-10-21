@@ -3,7 +3,7 @@
 require 'json'
 
 module JsonUIShared
-  # An enum attribute's value by its declared spelling, case and all (4f's
+  # An enum attribute's value by its declared spelling, case and all (the orchestrator's
   # ruling on the enum parse, 1.9.0 — as type names are): the values
   # attribute_definitions.json declares for the attribute, and its
   # valueAliases keys. The converters compared `value.downcase` against

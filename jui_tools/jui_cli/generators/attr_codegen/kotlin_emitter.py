@@ -489,7 +489,7 @@ def _enum_decl(attr: Attribute) -> list[str]:
         "            val declaredSpellings: List<String> = listOf("
         + ", ".join(_kotlin_str(v) for v in declared_spellings(attr.enum_values, attr.value_alias_map)) + ")",
         "",
-        "            /** The declared spelling, case and all (4f's ruling, 1.9.0). */",
+        "            /** The declared spelling, case and all (the orchestrator's ruling, 1.9.0). */",
         f"            fun from(raw: String): {type_name}? = when (raw) {{",
     ]
     for name, spellings in enum_exact_cases(attr.enum_values, _entry_name, attr.value_alias_map):

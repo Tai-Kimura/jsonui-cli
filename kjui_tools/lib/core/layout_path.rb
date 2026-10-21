@@ -54,7 +54,7 @@ module JsonUIShared
     # spelling as written),
     # its first letter lowercased, and the node's position: `switch_0_1`,
     # `checkBox_0_2`, `selectBox_0_3`, `textField_0_4`, `view_0_5`; a Radio's
-    # `radio_0_2_1` is the same name. 4f's ruling (on
+    # `radio_0_2_1` is the same name. The orchestrator's ruling (on
     # sjui-codegen-state-declarations-collide-by-name, 1.9.0): the viewId of an
     # id-less node was a per-kind word that differed per path (`toggle`,
     # `switch`, `selectBox`, `selectbox`, `""`), the same for every node of a

@@ -491,7 +491,7 @@ def enum_exact_cases(
 ) -> list[tuple[str, list[str]]]:
     """Match table by the declared spelling: ``[(case_name, [spellings])]``.
 
-    A value is its declared spelling, case and all (4f's ruling, 1.9.0 — as
+    A value is its declared spelling, case and all (the orchestrator's ruling, 1.9.0 — as
     type names are): the accepted spellings are the declared values and the
     ``valueAliases`` keys, each once (first-seen case wins — definition order
     is stable, so this is deterministic). The parse switched on the

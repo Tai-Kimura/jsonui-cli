@@ -5,7 +5,7 @@ require 'json'
 module JsonUIShared
   # `bind`, folded into the attribute it stands for, on the node a renderer
   # actually draws — after its style is merged and its responsive branch
-  # resolved (4f's ruling, jsonui-cli 1.9.0). SSoT common.bind: "an
+  # resolved (the orchestrator's ruling, jsonui-cli 1.9.0). SSoT common.bind: "an
   # alternative spelling to each component's own value attribute, which takes
   # precedence when both are set"; `primaryValue` names, per section, the
   # attributes `bind` stands for:

@@ -50,7 +50,7 @@ module JsonUIShared
   # container that might hold a control is not flattened. So a tap on an
   # app's own component gets no role (shape `none`): JsonUI does not know
   # what the component holds, and a role could hide a control inside it from
-  # a screen reader. The component carries its own role (4f's ruling, 1.9.0).
+  # a screen reader. The component carries its own role (the orchestrator's ruling, 1.9.0).
   module TapAccessibility
     module_function
 
@@ -145,7 +145,7 @@ module JsonUIShared
     # codegen stops its operation and its reading as a control.
     #
     # Asked of the type the node is drawn as (TypeSynonyms.drawn_type), as
-    # interactive_type? is (4f's ruling, jsonui-cli 1.9.0): a Picker is drawn
+    # interactive_type? is (the orchestrator's ruling, jsonui-cli 1.9.0): a Picker is drawn
     # as a SelectBox and a SegmentedControl as a Segment — controls — and a
     # Table, a List or a RecyclerView as a Collection, a container. As
     # written, a synonym spelling was no control inside a stop while the
@@ -266,7 +266,7 @@ module JsonUIShared
     # wrote; WRITTEN_STAMPS) — declares the data and draws nothing, so the
     # shapes do not count it. It was read as a child of unknown type — a
     # control — and a Label with onClick whose only child declared its data
-    # was no button (4f's ruling, jsonui-cli 1.9.0).
+    # was no button (the orchestrator's ruling, jsonui-cli 1.9.0).
     def drawn_children(node)
       children(node).reject { |c| data_only?(c) }
     end

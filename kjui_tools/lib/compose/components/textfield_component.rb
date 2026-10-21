@@ -98,7 +98,7 @@ module KjuiTools
         # false, because at index 5 '1' > '0'. Against a FIXED floor the
         # multi-digit patch never discriminates -- it would take a moving
         # floor, or a comparison like 1.12.9 against 1.12.10. The specimen
-        # came from triage, the emitter's arms were corrected to '1.12' when
+        # came from an independent check, the emitter's arms were corrected to '1.12' when
         # this lane measured it, and the correction reached the arms and the
         # commit message before it reached this comment. Comments ship; commit
         # messages do not.

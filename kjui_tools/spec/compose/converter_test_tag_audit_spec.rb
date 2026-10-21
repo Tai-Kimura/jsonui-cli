@@ -89,7 +89,7 @@ RSpec.describe 'the audit is wired into the build' do
     # 🚨 Matches on `ConverterTestTagAudit.findings`, NOT the bare class name.
     # The bare name also appears in the comment ABOVE the call ("see
     # ConverterTestTagAudit for why both numbers print"), and a comment does
-    # not move when the call does. Measured 2026-09-08 by the triage lane:
+    # not move when the call does. Measured 2026-09-08 by an independent check:
     # with the bare spelling this arm scored the comment at offset 265 while
     # the call was at 402, so moving the call BELOW ComposeBuilder.new left it
     # green. `.findings` is unambiguous because the comment does not contain it.

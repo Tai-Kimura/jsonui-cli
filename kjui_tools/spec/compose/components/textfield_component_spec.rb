@@ -218,10 +218,10 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
     # KeyboardType.Datetime left the suite fully green.
     #
     # Transcribed twice, by two lanes, javap -p on
-    # androidx.compose.ui.text.input.KeyboardType$Companion: triage from the
+    # androidx.compose.ui.text.input.KeyboardType$Companion: an independent check from the
     # 1.12.0 aar (md5 343361cd…), this lane from 1.12.1 (2a172948…).
     #
-    # The triage lane did not compare by eye. It dumped javap to a file, parsed
+    # An independent check did not compare by eye. It dumped javap to a file, parsed
     # the %w[] below out of the commit, and ran comm: only-in-list 0 and
     # only-in-javap 0, against 1.12.0 AND against 1.12.1. So what is
     # established is that THIS LIST EQUALS THE ARTIFACT'S MEMBER SET, with no

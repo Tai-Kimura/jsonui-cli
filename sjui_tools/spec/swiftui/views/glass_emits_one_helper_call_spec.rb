@@ -12,7 +12,7 @@ require 'stringio'
 # would then depend on the device, which is how a fallback stopped being
 # reproducible in b7056242 and had to come out. The library holds the single
 # check; this emitter writes `.sjuiGlassEffect(…)` and nothing else.
-# (Ruling: iOS lane, 2026-09-14.)
+# (Ruling, 2026-09-14.)
 #
 # 🔻 `shape` IS PASSED THROUGH, NOT RESOLVED.
 # `rounded(N)` and `rect` could be resolved statically. `capsule` and
@@ -75,7 +75,7 @@ RSpec.describe 'glass on the SwiftUI codegen path' do
   #
   # Every arm that asserts something ABOUT the emitted call — the equality
   # arms and, critically, the three compile arms — has to fail when there is
-  # no call to assert about. Measured by triage: renaming the emitted
+  # no call to assert about. Measured by an independent check: renaming the emitted
   # spelling in the implementation AND the assertions, leaving the stub's
   # `func sjuiGlassEffect` alone, made `find` return nil. The compile arms
   # then handed swiftc
