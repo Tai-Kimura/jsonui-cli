@@ -24,6 +24,8 @@ import os
 import stat
 from pathlib import Path
 
+from . import i18n
+
 MAX_FILES = 200            # documents per room
 MAX_FILE_BYTES = 2_000_000
 MAX_TOTAL_BYTES = 8_000_000
@@ -295,7 +297,7 @@ def read(project) -> dict:
     mods = _doc()
     out: dict = {"api": [], "db": [], "skipped": 0}
     if mods is None:
-        out["error"] = "document_tools が見つかりません"
+        out["error"] = i18n.tl("srv.data.no_tools")
         return out
     total = 0
     groups: dict[str, list[dict]] = {}
