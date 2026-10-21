@@ -24,7 +24,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, ISOLATE, LAUNCH_ARGS, Watch, dump, new_page, ready
+from common import DESKTOP, ISOLATE, LAUNCH_ARGS, T, T_pattern, Watch, dump, new_page, ready
 
 SID = "a0000000-0000-4000-8000-0000000000c1"
 Q = {"questions": [{"question": "どちらにしますか", "header": "選択", "multiSelect": False,
@@ -145,17 +145,17 @@ async def run_notify(pw, out, failures):
         # 1. nothing asked on load; the settings' button asks once
         await wait(a, "() => !document.getElementById('btn-notify').hidden && !document.getElementById('chip-askwait').hidden", label="the settings' button and chip")
         res["chip"] = await a.evaluate("() => document.getElementById('chip-askwait').textContent")
-        check(failures, res["chip"] == "質問は viz で 3 分待つ", f"the chip says the default window: {res['chip']!r}")
+        check(failures, res["chip"] == T("panel.ask.chip", wait=T("srv.ask.min", n="3")), f"the chip says the default window: {res['chip']!r}")
         check(failures, await a.evaluate("() => window.__asked") == 0, "nothing is asked on load")
         await a.click("#btn-notify")
         await wait(a, "() => !document.getElementById('notify-ask-perm').hidden", label="the permission button")
         # the OS's own switch (the orchestrator and the requester, 10-19: off, nothing showed, and the question still waited in viz)
         res["osNote"] = await a.evaluate("() => { const e = document.getElementById('notify-os-note'); return e && e.offsetParent !== null ? e.textContent : null; }")
-        check(failures, bool(res["osNote"]) and "システム設定 → 通知 → Google Chrome" in res["osNote"] and "質問は viz で待ちます" in res["osNote"],
+        check(failures, bool(res["osNote"]) and T("page.notify.os.note") in res["osNote"],
               f"the settings say the Mac's own switch for Chrome: {res['osNote']!r}")
         await a.screenshot(path=str(out / "settings-light.png"))
         await a.click("#notify-ask-perm")
-        await wait(a, "() => document.getElementById('notify-perm-state').textContent.includes('許可済み')", label="granted")
+        await wait(a, f"() => document.getElementById('notify-perm-state').textContent.includes({json.dumps(T('panel.nt.granted'))})", label="granted")
         check(failures, await a.evaluate("() => window.__asked") == 1, "asked once, from the button")
         await a.keyboard.press("Escape")
 
@@ -189,11 +189,11 @@ async def run_notify(pw, out, failures):
         turn()
         shown = await shown_after(1, "the turn end's notification")
         res["done"] = shown[-1]
-        check(failures, len(shown) == 1 and shown[0]["body"].endswith("が完了") and ":done:" in shown[0]["tag"], f"the turn end rings once: {shown}")
+        check(failures, len(shown) == 1 and T_pattern("panel.nt.done").fullmatch(shown[0]["body"]) and ":done:" in shown[0]["tag"], f"the turn end rings once: {shown}")
         perm_p = hook(body(hook_event_name="PermissionRequest", tool_name="Bash", tool_input={"command": "ls -la /tmp", "description": "一覧"}), "--decide")
         shown = await shown_after(2, "the permission's notification")
         res["perm"] = shown[-1]
-        check(failures, len(shown) == 2 and "許可を待っています: Bash" in shown[1]["body"] and "ls -la" not in shown[1]["body"],
+        check(failures, len(shown) == 2 and T_pattern("panel.nt.perm", tool="Bash").search(shown[1]["body"]) and "ls -la" not in shown[1]["body"],
               f"the permission rings once, the tool's name and not the command: {shown}")
         # the two hooks of a question in the order that sent the text to the terminal: the async one first, seen by the
         # page before --ask (ticket 2026-10-20-jui-viz-notify-ask-says-terminal-while-viz-waits)
@@ -202,7 +202,7 @@ async def run_notify(pw, out, failures):
         ask_p = hook(body(hook_event_name="PreToolUse", tool_name="AskUserQuestion", tool_use_id="ask-1", tool_input=Q), "--ask")
         shown = await shown_after(3, "the question's notification")
         res["ask"] = shown[-1]
-        check(failures, len(shown) == 3 and "が質問しています" in shown[2]["body"] and "viz で答えるか、3 分後にターミナルへ" in shown[2]["body"],
+        check(failures, len(shown) == 3 and T_pattern("panel.nt.ask", how=T("panel.nt.left", wait=T("srv.ask.min", n="3"))).search(shown[2]["body"]),
               f"the question rings once and says how long it waits (--ask after the card): {shown}")
         res["perTab"] = [len(await p.evaluate("() => window.__shown")) for p in (a, b)]
         check(failures, sum(res["perTab"]) == 3, f"three in all, not three per tab: {res['perTab']}")
@@ -211,7 +211,7 @@ async def run_notify(pw, out, failures):
         hook(body(hook_event_name="PreToolUse", tool_name="AskUserQuestion", tool_use_id="ask-nohook", tool_input=Q2))
         shown = await shown_after(4, "the question without --ask")
         res["askNoHook"] = shown[3:]
-        check(failures, len(shown) == 4 and "ターミナルで答えてください" in shown[3]["body"], f"a question with no --ask: once, to the terminal: {shown[3:]}")
+        check(failures, len(shown) == 4 and T("panel.nt.terminal") in shown[3]["body"], f"a question with no --ask: once, to the terminal: {shown[3:]}")
         hook(body(hook_event_name="PostToolUse", tool_name="AskUserQuestion", tool_use_id="ask-nohook", tool_input=Q2, tool_response={"answers": {}}))
         await wait(a, "() => window.__dbg.questions().filter((q) => q.status === 'pending').length <= 1", label="the second question answered")
         try:
@@ -274,7 +274,7 @@ async def run_notify(pw, out, failures):
             res["noTab"] = [await owner.evaluate("() => (window.__dbg.notifyLastChime() || {}).noTab"),
                             await owner.evaluate("() => document.getElementById('notify-chime-note').textContent")]
             await owner.keyboard.press("Escape")
-        check(failures, bool(res.get("noTab")) and res["noTab"][0] is True and "どのタブも音を鳴らせません" in res["noTab"][1],
+        check(failures, bool(res.get("noTab")) and res["noTab"][0] is True and T("panel.chime.notab").strip() in res["noTab"][1],
               f"no tab can sound: the settings say so: {res.get('noTab')}")
         for p in (a, b):
             await p.evaluate("() => { localStorage.setItem('e2e-ac', 'running'); window.__ac.state = 'running'; }")
@@ -428,7 +428,7 @@ async def run_notify(pw, out, failures):
         # the reloaded tab, never pressed: no context yet, and the settings say so
         await a.evaluate("() => window.__dbg.notifyPanel()")
         res["noContext"] = await a.evaluate("() => [window.__dbg.notifyAudio(), document.getElementById('notify-chime-note').textContent]")
-        check(failures, res["noContext"][0] is None and "まだ作られていない" in res["noContext"][1], f"a reloaded tab never pressed: no sound yet, and it says so: {res['noContext']}")
+        check(failures, res["noContext"][0] is None and T("panel.chime.none") in res["noContext"][1], f"a reloaded tab never pressed: no sound yet, and it says so: {res['noContext']}")
         await a.keyboard.press("Escape")
         await a.mouse.click(5, 880)   # wakes the reloaded tab's sound (a press), so a ring would sound
         await wait(a, "() => window.__dbg.notifyAudio() === 'running'", label="tab a's sound woken again")
@@ -461,7 +461,8 @@ async def run_notify(pw, out, failures):
         except subprocess.TimeoutExpired:
             res["hiddenOff"] = "still waiting"
         check(failures, res["hiddenOff"] == "returned", f"notifications off on a hidden page: the question goes back at once: {res['hiddenOff']}")
-        await wait(a, "() => document.body.textContent.includes('viz のページが見えなくなったので、ターミナルに返しました')", label="the card says why")
+        hidden_said = T("panel.q.end.hidden", at="\x00").split("\x00")[0]   # its words up to when
+        await wait(a, f"() => document.body.textContent.includes({json.dumps(hidden_said)})", label="the card says why")
         res["reasons"] = await a.evaluate("() => window.__dbg.questions().map((q) => q.waitEndReason)")
         await a.evaluate("() => { delete document.visibilityState; document.dispatchEvent(new Event('visibilitychange')); }")
 
@@ -471,15 +472,15 @@ async def run_notify(pw, out, failures):
         res["offered"] = await a.evaluate("() => [...document.querySelectorAll('#ask-wait option')].map((o) => [Number(o.value), o.textContent])")
         check(failures, [v for v, _ in res["offered"]] == [20, 60, 180, 600, 1800, 0],
               f"the offered windows: {res['offered']}")
-        check(failures, any(v == 0 and t == "答えるまで（最長 24 時間）" for v, t in res["offered"]),
+        check(failures, any(v == 0 and t == T("panel.ask.until.most", most=T("panel.ask.hours", n=24)) for v, t in res["offered"]),
               f"until answered says how long at most: {res['offered']}")
         # the hook (forward.py --ask) reads how long to wait from server.json, rewritten on every choice
         await a.select_option("#ask-wait", "1800")
-        await wait(a, "() => document.getElementById('chip-askwait').textContent === '質問は viz で 30 分待つ'", label="the chip says 30 min")
+        await wait(a, f"() => document.getElementById('chip-askwait').textContent === {json.dumps(T('panel.ask.chip', wait=T('srv.ask.min', n='30')))}", label="the chip says 30 min")
         res["hookWait1800"] = json.loads((state / "server.json").read_text()).get("askHookWaitSec")
         check(failures, res["hookWait1800"] == 1800, f"30 min: server.json tells the hook 1800 s: {res['hookWait1800']}")
         await a.select_option("#ask-wait", "20")
-        await wait(a, "() => document.getElementById('chip-askwait').textContent === '質問は viz で 20 秒待つ'", label="the chip follows the choice")
+        await wait(a, f"() => document.getElementById('chip-askwait').textContent === {json.dumps(T('panel.ask.chip', wait=T('srv.ask.sec', n=20)))}", label="the chip follows the choice")
         res["chip20"] = await a.evaluate("() => document.getElementById('chip-askwait').textContent")
         res["saved"] = json.loads((state / "config.json").read_text()).get("askWaitSec")
         check(failures, res["saved"] == 20, f"the choice is saved in config.json: {res['saved']}")

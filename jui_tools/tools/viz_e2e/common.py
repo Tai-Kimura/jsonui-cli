@@ -335,3 +335,20 @@ def T(key: str, **params) -> str:
     if key not in _STRINGS.table:
         raise KeyError(f"no words for {key!r} in the {_STRINGS.language} table")
     return i18n.lookup(_STRINGS, key, params)
+
+
+def T_pattern(key: str, **params) -> "re.Pattern":
+    """T(key) as a regular expression: the slots given filled (escaped), every other slot any words — for a check
+    that knows part of what the page says (a notification's tool, not the session's name)."""
+    import re as _re
+    marker = "\x00"
+    words = T(key, **{**{s: marker + s + marker for s in _re.findall(r"\{(\w+)\}", _template(key))}, **params})
+    parts = words.split(marker)
+    return _re.compile("".join(_re.escape(p) if i % 2 == 0 else ".+?" for i, p in enumerate(parts)))
+
+
+def _template(key: str) -> str:
+    """The key's words as the table has them (its {slots} unfilled; a count's forms joined)."""
+    T(key)   # loads the table, raises for a key it lacks
+    value = _STRINGS.table[key]
+    return " ".join(value.values()) if isinstance(value, dict) else value

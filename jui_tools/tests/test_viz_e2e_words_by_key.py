@@ -36,3 +36,13 @@ def test_a_key_the_table_lacks_raises(monkeypatch):
     monkeypatch.setenv("JUI_VIZ_LANGUAGE", "en")
     with pytest.raises(KeyError, match="no words for 'panel.nope' in the en table"):
         common.T("panel.nope")
+
+
+def test_a_pattern_fills_what_it_is_given_and_matches_the_rest(monkeypatch):
+    monkeypatch.setenv("JUI_VIZ_LANGUAGE", "en")
+    p = common.T_pattern("panel.nt.perm", tool="Bash")
+    assert p.search("a0 is waiting for permission: Bash") and not p.search("a0 is waiting for permission: Edit")
+    monkeypatch.setattr(common, "_STRINGS", None)
+    monkeypatch.setenv("JUI_VIZ_LANGUAGE", "ja")
+    p = common.T_pattern("panel.nt.done")
+    assert p.fullmatch("a0（Login 画面を実装） が完了") and not p.search("a0 is done")
