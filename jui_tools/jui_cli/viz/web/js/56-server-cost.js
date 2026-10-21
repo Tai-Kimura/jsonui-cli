@@ -8,8 +8,12 @@
    pauses (no frame drawn) while the cost is shown. The month: the days stacked by provider or by node, a red mark on a
    day with an hour over capacity, a flag on one at the autoscale's top, the sum, and the counts of what is not priced
    (never hidden). A day: the top nodes' bars hour by hour (play, stop, the hour's slider), each bar its meters with the
-   quantity's rate and the charge; over capacity in red as 捌けた / 来た. A meter pressed shows the price it used. */
-const SRC = { mode: '3d', seq: 0, scenario: null, by: 'provider', month: null, day: null, date: null, hour: 0, timer: 0,
+   quantity's rate and the charge; over capacity in red as 捌けた / 来た. A meter pressed shows the price it used.
+   The account (the server's account.available: two environments or more, each with a load definition): この環境だけ /
+   アカウントの合計 — the environments priced with one total (a free amount taken once), the month stacked by
+   environment; a day is the chosen scenario's within that pricing. アカウントの合計 is the default (the requester 10-21:
+   「合計で」): SRC.account stays null (the server's default) until one is pressed. */
+const SRC = { mode: '3d', seq: 0, scenario: null, by: 'provider', account: null, month: null, day: null, date: null, hour: 0, timer: 0,
   playMs: 700, picked: null, error: '' };
 const srcEl = $('sr-cost');
 const SRC_PER = { second: 'sec', minute: 'min', hour: 'h', day: 'day', month: 'mo' };
@@ -48,7 +52,7 @@ function srcSetMode(mode) {
 }
 function srCostReset() {   // the server room closed (56-server-room.js srClose): back to 3D, nothing kept
   srcStop();
-  Object.assign(SRC, { mode: '3d', scenario: null, month: null, day: null, date: null, hour: 0, picked: null, error: '' });
+  Object.assign(SRC, { mode: '3d', scenario: null, account: null, month: null, day: null, date: null, hour: 0, picked: null, error: '' });
   SR.paused = false;
   $('sr-boxzoom').disabled = false;
   $('sr-mode-3d').setAttribute('aria-pressed', 'true');
@@ -61,7 +65,7 @@ function srCostReset() {   // the server room closed (56-server-room.js srClose)
 /* ---- asking the server ---- */
 async function srcAsk(extra) {
   const seq = ++SRC.seq;
-  const got = typeof SOURCE.infraCost === 'function' ? await SOURCE.infraCost(SR.project, { seq, scenario: SRC.scenario, ...extra })
+  const got = typeof SOURCE.infraCost === 'function' ? await SOURCE.infraCost(SR.project, { seq, scenario: SRC.scenario, account: SRC.account, ...extra })
     : { ok: false, reason: 'unreadable', message: tl('cost.unavailable') };
   return seq === SRC.seq && SRC.mode === 'cost' ? got : null;   // an older answer, or the view left: dropped
 }
@@ -72,9 +76,10 @@ async function srcLoad() {
   if (!got) return;
   if (!got.ok) { SRC.error = got.message || got.reason || tl('cost.failed'); SRC.month = null; srcRender(); return; }
   SRC.scenario = got.scenario;
-  SRC.month = { ...got.month, scenarios: got.scenarios, problems: got.problems, prices: got.prices };
+  SRC.month = { ...got.month, scenarios: got.scenarios, problems: got.problems, prices: got.prices, account: got.account };
   setHTML($('sr-scn'), got.scenarios.map((s) => `<option value="${esc(s.id)}"${s.id === got.scenario ? ' selected' : ''}>${esc(tl('cost.scn.option', { label: s.label, month: s.month }))}</option>`).join(''));
-  srLog(tl('cost.log.done', { label: got.scenarios.find((s) => s.id === got.scenario).label, usd: srcUsd(got.month.usd) }));
+  const label = got.scenarios.find((s) => s.id === got.scenario).label;
+  srLog(tl(got.account.on ? 'cost.account.log' : 'cost.log.done', { label, usd: srcUsd(got.month.usd) }));
   if (SRC.date) await srcOpenDay(SRC.date); else srcRender();
 }
 async function srcOpenDay(date) {
@@ -113,14 +118,22 @@ function srcSummary(M) {
   // the free amount is taken once per scenario (one environment): environments on one account each counted take it twice
   const free = M.warnings.find((w) => w.code === 'cost.free_per_scenario');
   const freeHTML = free ? `<p class="src-free" data-src-free role="note">${esc(tl('cost.free'))}${free.rows && free.rows.length ? esc(tl('cost.free.rows', { n: Number(free.rows.length) })) : ''}</p>` : '';
+  const acctHTML = M.account && M.account.available ? `<span class="sr-ctl sr-mode" role="group" aria-label="${esc(tl('cost.account.group'))}"><button type="button" class="wb-btn" data-src-act="acct-on" aria-pressed="${esc(String(!!M.account.on))}">${esc(tl('cost.account.all'))}</button><button type="button" class="wb-btn" data-src-act="acct-off" aria-pressed="${esc(String(!M.account.on))}">${esc(tl('cost.account.one'))}</button></span>` : '';
+  const byHTML = M.by === 'environment' ? '' : `<label class="sr-ctl">${esc(tl('cost.by'))} <select id="src-by"><option value="provider"${M.by === 'provider' ? ' selected' : ''}>${esc(tl('cost.by.provider'))}</option><option value="node"${M.by === 'node' ? ' selected' : ''}>${esc(tl('cost.by.node'))}</option></select></label>`;
   return `<div class="src-sum"><strong class="src-total" data-src-total>${esc(srcUsd(M.usd))}</strong><span class="src-note">${esc(tl('cost.month.note'))}</span>
-<label class="sr-ctl">${esc(tl('cost.by'))} <select id="src-by"><option value="provider"${M.by === 'provider' ? ' selected' : ''}>${esc(tl('cost.by.provider'))}</option><option value="node"${M.by === 'node' ? ' selected' : ''}>${esc(tl('cost.by.node'))}</option></select></label></div>
+${acctHTML}${byHTML}</div>${M.account && M.account.on ? srcAccountHTML(M) : ''}
 <div class="src-chips">${chips.map(([k, label, n, items]) => `<details class="src-chip" data-src-chip="${k}"${n ? ' data-some="1"' : ''}><summary>${esc(label)} <b>${n}</b></summary>${items.length ? `<ul>${items.slice(0, 50).map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : `<p>${esc(tl('cost.chip.none'))}</p>`}</details>`).join('')}</div>${freeHTML}`;
+}
+/* The account's environments: each one's scenario and month, the ones left out, and how the free amounts were taken. */
+function srcAccountHTML(M) {
+  const partsHTML = M.scenarios.map((s) => `<li>${esc(M.keys.find((k) => k.key === s.environment)?.label || s.environment)}: ${esc(s.label)} ${esc(srcUsd(s.usd))}</li>`).join('');
+  const missing = M.account.missing || [];
+  return `<div class="src-acct" data-src-acct><p class="src-note">${esc(tl('cost.account.note'))}</p><ul>${partsHTML}</ul>${missing.length ? `<p class="src-note">${esc(tl('cost.account.missing', { month: M.month, envs: new Intl.ListFormat(LOCALE).format(missing) }))}</p>` : ''}</div>`;
 }
 /* An engine warning in one line: its message, and the rows it names (a row is an id or a {id}). */
 function srcWarnText(w) {
   const rows = Array.isArray(w.rows) ? w.rows.map((r) => (r && typeof r === 'object' ? String(r.id || r.sku || JSON.stringify(r)) : String(r))) : [];
-  return `${w.node ? `${w.node} · ` : ''}${w.message}${rows.length ? tl('cost.warn.rows', { rows: rows.slice(0, 8).join(tl('cost.warn.sep')), more: rows.length > 8 ? tl('cost.warn.more', { n: rows.length - 8 }) : '' }) : ''}`;
+  return `${w.environment ? `${w.environment} · ` : ''}${w.node ? `${w.node} · ` : ''}${w.message}${rows.length ? tl('cost.warn.rows', { rows: rows.slice(0, 8).join(tl('cost.warn.sep')), more: rows.length > 8 ? tl('cost.warn.more', { n: rows.length - 8 }) : '' }) : ''}`;
 }
 function srcMonthSvg(M) {
   const w = Math.max(320, srcEl.clientWidth - 32), h = 260, padL = 56, padB = 28, padT = 18;
@@ -175,7 +188,8 @@ function srcDayHtml(D) {
   const rowsHTML = D.nodes.map((n) => srcRow(n, k, max, barPx)).join('')
     + (D.others.count ? `<div class="src-row src-noted"><div class="src-name">${esc(tl('cost.others', { n: Number(D.others.count) }))}</div><div class="src-bar"></div><div class="src-usd">${esc(srcUsd(D.others.usd[k]))}</div></div>` : '');
   const pickHTML = SRC.picked ? srcPicked(D) : '';
-  return `<div class="src-dayhead"><button type="button" class="wb-btn" data-src-act="month">${esc(tl('cost.back.month'))}</button><strong>${esc(D.date)}</strong>
+  const acctHTML = SRC.month && SRC.month.account && SRC.month.account.on ? `<span class="src-note" data-src-dayacct>${esc(tl('cost.account.day', { scenario: (SRC.month.scenarios.find((s) => s.scenario === SRC.scenario) || {}).label || SRC.scenario }))}</span>` : '';
+  return `<div class="src-dayhead"><button type="button" class="wb-btn" data-src-act="month">${esc(tl('cost.back.month'))}</button><strong>${esc(D.date)}</strong>${acctHTML}
 <button type="button" class="wb-btn" data-src-act="${SRC.timer ? 'stop' : 'play'}"${reduceMotion ? ` disabled title="${esc(tl('cost.play.reduced'))}"` : ''}>${esc(SRC.timer ? tl('cost.stop') : tl('cost.play'))}</button>
 <label class="sr-ctl">${esc(tl('cost.hour'))} <input type="range" id="src-hour" min="0" max="${Number(D.hours.length - 1)}" value="${k}" step="1"></label><span class="src-clock" data-src-clock>${esc(String(D.hours[k]).padStart(2, '0'))}:00</span>
 <span class="src-hoursum">${esc(tl('cost.hoursum', { hour: srcUsd(hourUsd), day: srcUsd(D.usd) }))}</span></div>
@@ -208,6 +222,10 @@ srcEl.addEventListener('click', (e) => {
   const act = e.target.closest('[data-src-act]');
   if (act) {
     if (act.dataset.srcAct === 'month') srcBackToMonth();
+    else if (act.dataset.srcAct === 'acct-on' || act.dataset.srcAct === 'acct-off') {
+      const on = act.dataset.srcAct === 'acct-on';
+      if (on !== !!(SRC.month && SRC.month.account.on)) { SRC.account = on; Object.assign(SRC, { month: null, day: null, date: null }); srcLoad(); }
+    }
     else if (act.dataset.srcAct === 'play') srcPlay();
     else { srcStop(); srcRender(); }
     return;

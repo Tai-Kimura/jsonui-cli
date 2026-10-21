@@ -125,3 +125,30 @@ def day_view(result: E.Result, model: dict, date: str, top: int = 20) -> dict:
     others = {"count": len(rest), "usd": [sum(node_hour_usd(r, k) for r in rest) for k in ks]}
     return {"scenario": result.scenario, "date": date, "hours": [result.hours[k]["hour"] for k in ks],
             "usd": sum(node_hour_usd(r, k) for r in result.nodes for k in ks), "nodes": nodes, "others": others}
+
+
+def account_view(pairs: list[tuple[dict, E.Result]], model: dict) -> dict:
+    """The account's month (engine.simulate_account's results, one scenario per environment): month_view's shape with
+    the days stacked by environment, the sum of all, each scenario's own month, and what is not priced said with its
+    environment ({environment} on the items, "<environment> · " before a name)."""
+    envs = {e["id"]: e.get("label") or e["id"] for e in model.get("environments") or []}
+    each = [(sc, month_view(r, model)) for sc, r in pairs]
+    keys = [{"key": sc["environment"], "label": envs.get(sc["environment"], sc["environment"])} for sc, _ in each]
+    days: dict[str, dict] = {}
+    for sc, mv in each:
+        for d in mv["days"]:
+            got = days.setdefault(d["date"], {"date": d["date"], "usd": 0.0, "stack": {}, "overflowHours": 0, "atMaxHours": 0})
+            got["usd"] += d["usd"]
+            got["stack"][sc["environment"]] = got["stack"].get(sc["environment"], 0.0) + d["usd"]
+            got["overflowHours"] += d.get("overflowHours", 0)
+            got["atMaxHours"] += d.get("atMaxHours", 0)
+    warnings = [dict(w, environment=sc["environment"]) for sc, mv in each for w in mv["warnings"]]
+    return {"scenario": pairs[0][0]["id"], "month": pairs[0][0]["month"], "usd": sum(mv["usd"] for _, mv in each),
+            "by": "environment", "keys": keys, "days": [days[d] for d in sorted(days)],
+            "scenarios": [{"scenario": sc["id"], "label": sc.get("label") or sc["id"], "environment": sc["environment"],
+                           "usd": mv["usd"]} for sc, mv in each],
+            "noPrice": [dict(x, environment=sc["environment"]) for sc, mv in each for x in mv["noPrice"]],
+            "noRule": [f"{sc['environment']} · {x}" for sc, mv in each for x in mv["noRule"]],
+            "loadUndefined": [f"{sc['environment']} · {x}" for sc, mv in each for x in mv["loadUndefined"]],
+            "overflowHours": {f"{sc['environment']} · {n}": h for sc, mv in each for n, h in mv["overflowHours"].items()},
+            "warnings": warnings[:50], "warningCount": sum(mv["warningCount"] for _, mv in each)}

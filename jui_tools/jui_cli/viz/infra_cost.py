@@ -7,6 +7,12 @@ reads are the model's (inside the room, O_NOFOLLOW, capped, secret shapes refuse
 are kept, keyed by the room, the scenario and the files' sizes and times, so going from the month to a day does not
 simulate again.
 
+The account (engine.simulate_account): with two environments or more in the model and a scenario for each, the month
+is the account's unless the page asks for one environment (the requester 10-21: 「合計で」), its environments priced
+with one total (a free amount taken once). Each environment's
+scenario is the chosen one for its own environment, else that environment's first of the chosen one's month; an
+environment without one of that month is left out and named.
+
 Blocking: the server runs it in its read pool.
 """
 from __future__ import annotations
@@ -60,8 +66,24 @@ def _refuse(status: int, seq, reason: str, message: str) -> tuple[int, dict]:
     return status, {"ok": False, "seq": seq, "reason": reason, "message": message}
 
 
-def _simulate(m: dict, root: Path, scenario_id: str | None):
-    """(status, error reply) or (None, (the loads' reply, the chosen scenario, the model, the result, warnings))."""
+def account_scenarios(scenarios: list[dict], model: dict, chosen: dict) -> tuple[bool, list[dict], list[str]]:
+    """(whether the account can be asked for, its scenarios in the model's environments' order, the environments left
+    out): two environments or more, each with a scenario of some month; per environment the chosen scenario, else
+    its first of the chosen one's month."""
+    envs = [e["id"] for e in model.get("environments") or []]
+    available = len(envs) > 1 and all(any(s["environment"] == e for s in scenarios) for e in envs)
+    picked, missing = [], []
+    for e in envs:
+        s = chosen if chosen["environment"] == e else next(
+            (x for x in scenarios if x["environment"] == e and x["month"] == chosen["month"]), None)
+        (picked.append(s) if s else missing.append(e))
+    return available, picked, missing
+
+
+def _simulate(m: dict, root: Path, scenario_id: str | None, account: bool | None = None):
+    """(status, error reply) or (None, (the loads' reply, the chosen scenario, the model, the result, warnings, the
+    account: None, or (its scenarios, their results, the environments left out))). With account, the result is the
+    chosen scenario's within the account's pricing; None: the account where it can be had."""
     loads = m["load"].read(root)
     if not loads.get("ok"):
         return (404 if loads.get("reason") in ("no_infra", "not_a_room") else 422), loads
@@ -72,16 +94,28 @@ def _simulate(m: dict, root: Path, scenario_id: str | None):
     if chosen is None:
         return 404, {"ok": False, "reason": "no_scenario", "message": "no such scenario"}
     model = m["room"].read(root)
+    if account is None:
+        account = account_scenarios(scenarios, model, chosen)[0]
     folders = [model["dir"], loads["dir"], m["room"].side_dir(root, "prices_dir")]
-    key = (str(root), chosen["id"], _signature(root, m["room"], folders, m["pricebook"].cache_dir()))
+    key = (str(root), chosen["id"], account, _signature(root, m["room"], folders, m["pricebook"].cache_dir()))
     with _LOCK:
         kept = _KEPT.get(key)
         if kept is not None:
             _KEPT.move_to_end(key)
             return None, kept
     book, warnings = m["pricebook"].load(root)
-    result = m["engine"].simulate(chosen, model, book)
-    got = (loads, chosen, model, result, warnings)
+    acct = None
+    if account:
+        available, picked, missing = account_scenarios(scenarios, model, chosen)
+        if not available:
+            return 404, {"ok": False, "reason": "no_account",
+                         "message": "the account needs two environments or more, each with a load definition"}
+        results = m["engine"].simulate_account(picked, model, book)
+        result = results[picked.index(chosen)]
+        acct = (picked, results, missing)
+    else:
+        result = m["engine"].simulate(chosen, model, book)
+    got = (loads, chosen, model, result, warnings, acct)
     with _LOCK:
         _KEPT[key] = got
         while len(_KEPT) > KEEP:
@@ -90,9 +124,12 @@ def _simulate(m: dict, root: Path, scenario_id: str | None):
 
 
 def read(root: Path | str, seq=None, scenario: str | None = None, date: str | None = None,
-         by: str = "provider") -> tuple[int, dict]:
-    """(HTTP status, the page's reply). No date: {ok, seq, scenarios, scenario, month, problems, prices}; a date:
-    {ok, seq, scenario, day}."""
+         by: str = "provider", account: bool | None = None) -> tuple[int, dict]:
+    """(HTTP status, the page's reply). No date: {ok, seq, scenarios, scenario, month, problems, prices, account:
+    {available, on, scenarios?, missing?}}; a date: {ok, seq, scenario, day} (with account, the chosen scenario's day
+    priced within the account). account: true, false (one environment) or None (the account where it can be had)."""
+    if account is not None and not isinstance(account, bool):
+        return _refuse(400, seq, "bad_request", "account is true, false or null")
     if scenario is not None and not (isinstance(scenario, str) and ID.match(scenario)):
         return _refuse(400, seq, "bad_request", "scenario is an id")
     if date is not None and not (isinstance(date, str) and DATE.match(date)):
@@ -103,14 +140,14 @@ def read(root: Path | str, seq=None, scenario: str | None = None, date: str | No
     if m is None:
         return _refuse(500, seq, "unreadable", i18n.tl("srv.cost.no_tools"))
     try:
-        status, got = _simulate(m, Path(root), scenario)
+        status, got = _simulate(m, Path(root), scenario, account)
     except m["room"].Refused as r:
         return _refuse(400, seq, r.reason, r.message)
     if status is not None:
         got = dict(got, seq=seq, ok=False)
         got.pop("scenarios", None)
         return status, got
-    loads, chosen, model, result, warnings = got
+    loads, chosen, model, result, warnings, acct = got
     if date is not None:
         if not date.startswith(chosen["month"] + "-") or not any(h["date"] == date for h in chosen["hours"]):
             return _refuse(400, seq, "bad_request", "the date is not in the scenario's month")
@@ -119,7 +156,10 @@ def read(root: Path | str, seq=None, scenario: str | None = None, date: str | No
     return 200, {"ok": True, "seq": seq, "scenario": chosen["id"],
                  "scenarios": [{"id": s["id"], "label": s["label"], "file": s["file"], "month": s["month"],
                                 "environment": s["environment"]} for s in loads["scenarios"]],
-                 "month": m["view"].month_view(result, model, by),
+                 "month": m["view"].account_view(list(zip(acct[0], acct[1])), model) if acct
+                 else m["view"].month_view(result, model, by),
+                 "account": {"available": account_scenarios(loads["scenarios"], model, chosen)[0], "on": bool(acct),
+                             **({"scenarios": [s["id"] for s in acct[0]], "missing": acct[2]} if acct else {})},
                  "problems": {"count": len(problems), "first": [{k: p.get(k) for k in ("file", "path", "code", "message", "severity")}
                                                                  for p in problems[:20]]},
                  "prices": {"warnings": warnings[:20]}}

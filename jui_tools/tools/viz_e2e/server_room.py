@@ -461,6 +461,39 @@ async def run_server_room(pw, out, failures):
         price = (await page.evaluate(COST))["day"]["price"]
         check(failures, "出どころ" in price and ("同梱の表" in price or "利用者のファイル" in price), f"a meter pressed shows its price's trace: {price[:200]}")
         await page.screenshot(path=str(out / "cost-day-light.png"))
+        # the account (cd 10-21): offered only once each environment has a load definition; one total, by environment,
+        # and then the default (the requester 10-21: 「合計で」) — この環境だけ is the other choice
+        await page.click("#sr-cost [data-src-act='month']")
+        check(failures, not (await page.evaluate(COST))["month"]["acctSwitch"], "no account switch while staging has no load definition")
+        load_dir = rooms["three"] / "docs/infra/load"
+        stg = json.loads((load_dir / "ordinary.json").read_text(encoding="utf-8"))
+        stg.update(id="staging", label="ステージングの月", environment="staging")
+        stg["loads"] = [dict(r, node=r["node"].replace("-prod", "-stg")) for r in stg["loads"] if "node" in r]
+        (load_dir / "staging.json").write_text(json.dumps(stg, ensure_ascii=False), encoding="utf-8")
+        await page.select_option("#sr-scn", "ordinary")
+        await until(page, "() => { const c = window.__dbg.srCost(); return c.scenario === 'ordinary' && c.month && c.month.acctSwitch; }",
+                    "the account switch", timeout=20000)
+        a = res["costAccount"] = {**(await page.evaluate(COST)), "pressed": await page.evaluate(
+            "() => [...document.querySelectorAll('#sr-cost [data-src-act^=acct]')].map((b) => [b.dataset.srcAct, b.getAttribute('aria-pressed')])")}
+        m = a["month"]
+        check(failures, a["account"] and a["asked"] is None and m["by"] == "environment" and m["keys"] == ["production", "staging"]
+              and a["pressed"] == [["acct-on", "true"], ["acct-off", "false"]]
+              and "ふだんの月" in m["acct"] and "ステージングの月" in m["acct"] and m["bars"] == m["days"] == 30 and m["usd"] > c["month"]["usd"],
+              f"アカウントの合計 by default, nothing pressed: both environments stacked and named, more than production alone: {a}")
+        await page.click("#sr-cost [data-src-date='2026-11-02']")
+        await until(page, "() => { const c = window.__dbg.srCost(); return c.day && c.day.date === '2026-11-02'; }", "the account's day", timeout=20000)
+        check(failures, "アカウントの合計" in (await page.evaluate(COST))["day"]["acct"], "the account's day says it is priced within the account")
+        await page.click("#sr-cost [data-src-act='month']")
+        await page.click("#sr-cost [data-src-act='acct-off']")
+        await until(page, "() => { const c = window.__dbg.srCost(); return !c.account && c.month && c.month.by === 'provider'; }",
+                    "この環境だけ", timeout=20000)
+        one = await page.evaluate(COST)
+        check(failures, one["month"]["acct"] == "" and one["asked"] is False and one["month"]["usd"] == c["month"]["usd"],
+              f"この環境だけ: production's own month again, no account's lines: {one['month']['usd']} {c['month']['usd']}")
+        await page.click("#sr-cost [data-src-act='acct-on']")
+        await until(page, "() => { const c = window.__dbg.srCost(); return c.account && c.month && c.month.by === 'environment'; }",
+                    "the account again", timeout=20000)
+        (load_dir / "staging.json").unlink()
         await page.click("#sr-mode-3d")
         await until(page, "() => { const c = window.__dbg.srCost(); return !c.paused && c.raf; }", "the 3D again")
         check(failures, not await page.evaluate("() => document.getElementById('sr-boxzoom').disabled"), "3D: 範囲で寄る on again")

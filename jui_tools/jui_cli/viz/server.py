@@ -908,7 +908,7 @@ def make_app(ctx: ServerContext) -> web.Application:
 
     async def api_infra_cost(request: web.Request) -> web.Response:
         """The cost simulator (infra_cost.read → document_tools' infra.load, infra.cost): {"projectId", "seq",
-        "scenario"?, "date"?, "by"?} names a room and a scenario of its load definitions (the first when none); no date:
+        "scenario"?, "date"?, "by"?, "account"?} names a room and a scenario of its load definitions (the first when none); no date:
         the month and the scenarios, a date: that day. The checks of /api/prompt; never a path from the client; off the
         event loop; JSON, no-store."""
         body, root = await _infra_room(request, "/api/infra-cost")
@@ -917,7 +917,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         seq = body.get("seq") if isinstance(body.get("seq"), int) and not isinstance(body.get("seq"), bool) else None
         status, got = await asyncio.get_running_loop().run_in_executor(
             _data_docs_pool(), lambda: infra_cost.read(root, seq, body.get("scenario"), body.get("date"),
-                                                       body.get("by", "provider")))
+                                                       body.get("by", "provider"), body.get("account")))
         return web.json_response(got, status=status, headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
     async def api_prices(request: web.Request) -> web.Response:

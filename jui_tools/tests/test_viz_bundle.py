@@ -191,7 +191,7 @@ BUILDERS = {
     "53-devices.js": {"devWhoHTML", "devRowHTML", "devLoadHTML"},   # the デバイス pane (ticket 2026-10-20-jui-viz-device-panel-machine-load-and-emulators)
     "52-data-docs.js": {"dsContentHTML", "dsEndpointHTML", "dsEpHTML", "dsApiHTML", "dsTableHTML", "dsDbHTML"},
     "59-sr-flows.js": {"srFlowBoardHTML"},   # the flows a chosen node starts, on the server room's board (its item 7)
-    "56-server-cost.js": {"srcSummary", "srcMonthSvg", "srcRow", "srcDayHtml", "srcPicked"},   # the cost simulator's month and day
+    "56-server-cost.js": {"srcSummary", "srcAccountHTML", "srcMonthSvg", "srcRow", "srcDayHtml", "srcPicked"},   # the cost simulator's month and day
 }
 # Builders a part may call that another part defines (each checked where it is defined).
 SHARED_BUILDERS = {"pill", "histOffHTML", "srFlowBoardHTML"}

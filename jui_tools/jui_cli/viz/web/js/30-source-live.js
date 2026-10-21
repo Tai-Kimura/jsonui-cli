@@ -181,7 +181,7 @@ const SOURCE = {
       return { ok: false, seq, reason: 'unreadable', message: `HTTP ${res.status}`, short: tl('live.read.failed', { status: res.status }) };
     } catch (err) { return { ok: false, seq, reason: 'unreadable', message: tl('live.offline'), short: tl('live.offline') }; }
   },
-  /* The cost simulator (56-server-cost.js): POST /api/infra-cost with the room and {seq, scenario, date, by}; the
+  /* The cost simulator (56-server-cost.js): POST /api/infra-cost with the room and {seq, scenario, date, by, account (null: the server's default)}; the
      server's shapes, or {ok: false, reason, message}. */
   async infraCost(project, ask) {
     try {

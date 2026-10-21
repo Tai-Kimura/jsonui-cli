@@ -135,3 +135,70 @@ def test_the_free_amount_taken_per_scenario_reaches_the_page(tmp_path):
     free = [w for w in month["warnings"] if w.get("code") == "cost.free_per_scenario"]
     assert len(free) == 1 and free[0]["rows"] and all(isinstance(r, str) for r in free[0]["rows"])
     assert month["warningCount"] >= 1
+
+
+def _with_staging(root):
+    """The example with a staging load definition (the ordinary month, the production nodes' loads on their staging
+    twins) and a CloudWatch node in both with 113 metrics: 10 of them free a month to the account, so alone each
+    environment takes the 10 and as the account only the first does (+$3.00)."""
+    (root / "docs/infra/logs.json").write_text(json.dumps({"version": 0, "groups": [], "edges": [], "nodes": [
+        {"id": "logs", "label": "ログ", "category": "monitoring", "provider": "aws", "service": "cloudwatch",
+         "region": "ap-northeast-1"}]}), encoding="utf-8")
+    load = root / "docs/infra/load"
+    ordinary = json.loads((load / "ordinary.json").read_text(encoding="utf-8"))
+    ordinary["loads"].append({"node": "logs", "quantities": {"metrics": 113}})
+    (load / "ordinary.json").write_text(json.dumps(ordinary, ensure_ascii=False), encoding="utf-8")
+    doc = dict(ordinary, id="staging", label="ステージングの月", environment="staging")
+    doc["loads"] = [dict(row, node=row["node"].replace("-prod", "-stg")) for row in ordinary["loads"] if "node" in row]
+    (load / "staging.json").write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+    return root
+
+
+def test_the_account_is_offered_only_with_a_scenario_for_each_environment_and_is_then_the_default(tmp_path):
+    """The requester 10-21: 「合計で」 — the account's month unless one environment is asked for (account false)."""
+    root = _room(tmp_path, "aws-three-tier")
+    got = C.read(root, seq=1)[1]
+    assert got["account"] == {"available": False, "on": False}         # two environments, both scenarios production
+    status, refused = C.read(root, seq=2, account=True)
+    assert status == 404 and refused["reason"] == "no_account"
+    assert C.read(root, seq=3, account="yes")[1]["reason"] == "bad_request"
+    assert C.read(root, seq=5, account=None)[1]["account"]["on"] is False      # the default where there is none
+    got = C.read(_with_staging(root), seq=4)[1]
+    assert got["account"]["available"] and got["account"]["on"] and got["month"]["by"] == "environment"
+    one = C.read(root, seq=6, account=False)[1]
+    assert one["account"] == {"available": True, "on": False} and one["month"]["by"] == "provider"
+
+
+def test_the_account_prices_the_environments_with_one_total(tmp_path):
+    root = _with_staging(_room(tmp_path, "aws-three-tier"))
+    alone = {s: C.read(root, seq=1, scenario=s, account=False)[1]["month"] for s in ("ordinary", "staging")}
+    assert any(w.get("code") == "cost.free_per_scenario" for w in alone["ordinary"]["warnings"])
+    got = C.read(root, seq=2, scenario="ordinary", account=True)[1]
+    acct, month = got["account"], got["month"]
+    assert acct == {"available": True, "on": True, "scenarios": ["ordinary", "staging"], "missing": []}
+    assert month["by"] == "environment" and [k["key"] for k in month["keys"]] == ["production", "staging"]
+    assert [s["scenario"] for s in month["scenarios"]] == ["ordinary", "staging"]
+    assert month["usd"] == pytest.approx(sum(s["usd"] for s in month["scenarios"]))
+    assert month["usd"] == pytest.approx(sum(d["usd"] for d in month["days"]))
+    # each day stacked by environment: one part per environment, the parts its sum
+    assert all(sorted(d["stack"]) == ["production", "staging"] and sum(d["stack"].values()) == pytest.approx(d["usd"])
+               for d in month["days"])
+    # the free amounts taken once: the account is dearer than the two alone, and not told it is per scenario
+    assert month["usd"] == pytest.approx(alone["ordinary"]["usd"] + alone["staging"]["usd"] + 3.0)
+    assert not any(w.get("code") == "cost.free_per_scenario" for w in month["warnings"])
+    # the chosen one's own environment first or not, the sum is the account's; its day is priced within it
+    other = C.read(root, seq=3, scenario="staging", account=True)[1]
+    assert other["account"]["scenarios"] == ["ordinary", "staging"] and other["month"]["usd"] == pytest.approx(month["usd"])
+    day = C.read(root, seq=4, scenario="staging", date="2026-11-02", account=True)[1]
+    assert day["ok"] and day["scenario"] == "staging" and all(n["node"] != "api-prod" for n in day["day"]["nodes"])
+
+
+def test_an_environment_without_a_scenario_of_that_month_is_left_out_and_named(tmp_path):
+    root = _with_staging(_room(tmp_path, "aws-three-tier"))
+    path = root / "docs/infra/load/staging.json"
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    doc.update(month="2026-12", holidays=[])
+    path.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+    got = C.read(root, seq=1, scenario="ordinary", account=True)[1]
+    assert got["account"]["scenarios"] == ["ordinary"] and got["account"]["missing"] == ["staging"]
+    assert [k["key"] for k in got["month"]["keys"]] == ["production"]
