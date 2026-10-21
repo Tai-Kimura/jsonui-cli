@@ -2004,5 +2004,11 @@
   "srv.clockout.other": "Only a session started in a terminal can clock out",
   "srv.clockout.unknown": "Not usable: where it was started is unknown (only a session started in a terminal)",
   "srv.talk.session": "Session {id}",
-  "srv.talk.subagent": "Subagent {id}"
+  "srv.talk.subagent": "Subagent {id}",
+  "srv.ask.until_answered": "until answered",
+  "srv.ask.sec": "{n} s",
+  "srv.ask.min": "{n} min",
+  "srv.config.not_saved": "Could not save to config.json ({error})",
+  "srv.talk.unavailable": "Talk is not available on this server",
+  "srv.weather.unavailable": "Weather is not available on this server"
 }

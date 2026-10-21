@@ -195,8 +195,8 @@ def _hook_wait_sec(request: web.Request, config: VizConfig) -> float:
 def ask_wait_text(sec: float) -> str:
     """質問は viz で <これ> 待つ: 20 秒, 3 分, 答えるまで."""
     if sec <= 0:
-        return "答えるまで"
-    return f"{int(sec)} 秒" if sec < 60 else f"{sec / 60:g} 分"
+        return i18n.tl("srv.ask.until_answered")
+    return i18n.tl("srv.ask.sec", n=int(sec)) if sec < 60 else i18n.tl("srv.ask.min", n=f"{sec / 60:g}")
 
 
 def settings_slice(config: VizConfig) -> dict:
@@ -705,7 +705,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         try:
             save_setting("askWaitSec", sec)
         except (OSError, ValueError) as exc:
-            return web.json_response({"ok": False, "why": f"config.json に保存できなかった（{exc}）"}, status=500)
+            return web.json_response({"ok": False, "why": i18n.tl("srv.config.not_saved", error=exc)}, status=500)
         ctx.config.askWaitSec = float(sec)
         if ctx.on_settings:
             ctx.on_settings()   # server.json's askHookWaitSec: forward.py --ask waits that long from the next question on
@@ -1194,7 +1194,7 @@ async def _handle_browser_message(ctx: ServerContext, sock, message: dict) -> No
     elif isinstance(kind, str) and kind.startswith("talk."):
         # The talk view (talk_contract.json): read only; there is no request that sends a message.
         if ctx.talk is None:
-            await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": "トークはこのサーバーでは使えません"})
+            await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": i18n.tl("srv.talk.unavailable")})
             return
         await ctx.talk.handle(sock, message)
     elif kind == "perm.decide":
@@ -1238,7 +1238,7 @@ async def _handle_browser_message(ctx: ServerContext, sock, message: dict) -> No
         # The page's switch (10-18): on with the position it got from the browser (rounded there; rounded again in
         # sources/weather.py, so an unrounded one is never stored), or off (the position removed).
         if ctx.weather is None:
-            await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": "天気はこのサーバーでは使えません"})
+            await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": i18n.tl("srv.weather.unavailable")})
             return
         try:
             ctx.weather.set(message.get("on") is True, message.get("lat"), message.get("lon"))

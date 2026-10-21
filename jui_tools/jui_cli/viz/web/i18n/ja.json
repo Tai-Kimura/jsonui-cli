@@ -1957,5 +1957,11 @@
   "srv.clockout.other": "ターミナルで起動したセッションだけ退勤させられる",
   "srv.clockout.unknown": "起動元が分からないので使えない（ターミナルで起動したセッションだけ）",
   "srv.talk.session": "セッション {id}",
-  "srv.talk.subagent": "サブエージェント {id}"
+  "srv.talk.subagent": "サブエージェント {id}",
+  "srv.ask.until_answered": "答えるまで",
+  "srv.ask.sec": "{n} 秒",
+  "srv.ask.min": "{n} 分",
+  "srv.config.not_saved": "config.json に保存できなかった（{error}）",
+  "srv.talk.unavailable": "トークはこのサーバーでは使えません",
+  "srv.weather.unavailable": "天気はこのサーバーでは使えません"
 }
