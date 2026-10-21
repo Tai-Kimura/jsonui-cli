@@ -361,3 +361,22 @@ def T_head(key: str, slot: str, **params) -> str:
     """T(key)'s words up to {slot} (the slot and what follows left out): for words whose end the suite cannot know (a
     time, a summary) and a check that reads their start."""
     return T(key, **{**params, slot: "\x00"}).split("\x00")[0]
+
+
+_DEMO_TALK = None
+
+
+def demo_talk(key):
+    """The demo's talk words for ``key`` in the run's language (tools/viz_e2e/talk_demo_gen.py WORDS, English when the
+    language has none — as 31-talk-demo-data.js picks its set). Read from the generator's source, never run: importing
+    it writes the data file."""
+    global _DEMO_TALK
+    import ast
+    import os
+    if _DEMO_TALK is None:
+        tree = ast.parse((Path(__file__).resolve().parent / "talk_demo_gen.py").read_text(encoding="utf-8"))
+        node = next(n for n in tree.body if isinstance(n, ast.Assign) and any(getattr(t, "id", None) == "WORDS" for t in n.targets))
+        _DEMO_TALK = ast.literal_eval(node.value)
+    lang = os.environ.get("JUI_VIZ_LANGUAGE", "") or "en"
+    words = _DEMO_TALK.get(lang) or _DEMO_TALK["en"]
+    return words[key]

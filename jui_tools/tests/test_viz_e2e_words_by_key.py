@@ -61,3 +61,14 @@ def test_the_head_of_words_is_what_comes_before_the_slot(monkeypatch):
     monkeypatch.setattr(common, "_STRINGS", None)
     monkeypatch.setenv("JUI_VIZ_LANGUAGE", "en")
     assert common.T_head("panel.q.end.time", "at") == "The time to answer in the browser is over"
+
+
+def test_the_demo_talks_words_follow_the_language_and_the_generator_is_not_run(monkeypatch):
+    data = Path(__file__).resolve().parents[1] / "jui_cli" / "viz" / "web" / "js" / "31-talk-demo-data.js"
+    before = data.stat().st_mtime_ns
+    monkeypatch.setattr(common, "_DEMO_TALK", None)
+    monkeypatch.setenv("JUI_VIZ_LANGUAGE", "ja")
+    assert common.demo_talk("a3") == "サブエージェント a3（jsonui-define）"
+    monkeypatch.setenv("JUI_VIZ_LANGUAGE", "en")
+    assert common.demo_talk("a3") == "subagent a3 (jsonui-define)" and common.demo_talk(11)[0].startswith("The screenshots")
+    assert data.stat().st_mtime_ns == before                     # talk_demo_gen.py writes the file when it runs

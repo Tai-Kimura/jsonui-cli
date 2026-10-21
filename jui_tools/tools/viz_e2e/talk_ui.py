@@ -45,7 +45,8 @@ import pathlib
 import sys
 import time
 
-from common import DESKTOP, PHONE, LAUNCH_ARGS, Watch, new_page, ready
+from common import DESKTOP, PHONE, LAUNCH_ARGS, Watch, demo_talk, new_page, ready
+from common import T as TL   # this suite's own T is the talk's state
 from waits import WaitTimeout, until
 from workwear import contrast, de2000
 
@@ -53,12 +54,16 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 from jui_cli.viz import talk_contract  # noqa: E402
 
 LONG_NAME = 'jsonui-agents-for-claude-4f-library-orchestrator-for-the-2.3.7-train'
-SUB_NAME = 'サブエージェント a3（jsonui-define）'
+def sub_name() -> str:
+    """The subagent's name in the talk list: the demo's words in the run's language."""
+    return demo_talk("a3")
+
+
 T = "() => window.__dbg.talk()"
 CARD = "(l) => (document.querySelector('#rb .rb-badge') || {}).textContent === l && !document.getElementById('rb').hidden && getComputedStyle(document.getElementById('rb')).opacity === '1' && !!document.querySelector('#rb [data-rb-talk]')"
 SEND_UI = """() => { const t = document.querySelector('#rb [data-talk]'); if (!t) return null;
   return { fields: t.querySelectorAll('input, textarea, select, form, [contenteditable=""], [contenteditable="true"]').length,
-    sendWords: [...t.querySelectorAll('button')].filter((b) => /送/.test(b.textContent + (b.getAttribute('aria-label') || ''))).map((b) => b.textContent),
+    sendWords: [...t.querySelectorAll('button')].filter((b) => /送|\\bsend\\b/i.test(b.textContent + (b.getAttribute('aria-label') || ''))).map((b) => b.textContent),
     compose: [...document.querySelectorAll('#rb .h-compose')].filter((b) => b.getClientRects().length).length }; }"""
 ROWS = """() => [...document.querySelectorAll('#rb .talk-row')].map((b) => ({ id: b.dataset.tkConv, name: b.querySelector('.talk-row-name').textContent,
   unread: (b.querySelector('[data-tk-unread]') || {}).textContent || '', gone: (b.querySelector('.talk-row-gone-note') || {}).textContent || '' }))"""
@@ -236,14 +241,14 @@ async def one_scheme(browser, watch, url, scheme, out, r, failures):
     lst = (await page.evaluate(T))["list"]
     check(failures, [x["id"] for x in rows] == [x["id"] for x in lst] and len(rows) == 5, f"{scheme}: the rows are the list ({len(rows)})")
     names = [x["name"] for x in rows]
-    check(failures, names == [LONG_NAME, "shop-app-signup", "cloud-reviewer", SUB_NAME, "shop-app-payment"], f"{scheme}: newest first: {names}")
+    check(failures, names == [LONG_NAME, "shop-app-signup", "cloud-reviewer", sub_name(), "shop-app-payment"], f"{scheme}: newest first: {names}")
     check(failures, [x["unread"] for x in rows] == ["1", "1", "", "", ""], f"{scheme}: unread on the rows: {[x['unread'] for x in rows]}")
     await marks_read(page, scheme, r, failures, "rows", 3)
     if scheme == "light":
         rp = await page.evaluate("() => window.__dbg.rolePills()")
         heads = r["phoneHeads"] = await page.evaluate("() => window.__dbg.phoneHeads()")
         phone_heads_read(heads, rp["canvas"], failures, f"{scheme}: demo", ("phoneUI", "cart"))
-    check(failures, rows[-1]["gone"].startswith("終了"), f"{scheme}: the ended peer is marked: {rows[-1]['gone']!r}")
+    check(failures, rows[-1]["gone"].startswith(TL("talk.ended")), f"{scheme}: the ended peer is marked: {rows[-1]['gone']!r}")
     no_send = r["noSend"] = await page.evaluate(SEND_UI)
     check(failures, no_send == {"fields": 0, "sendWords": [], "compose": 0}, f"{scheme}: no send UI in the talk: {no_send}")
     await page.screenshot(path=str(out / f"ui-after-list-{scheme}.png"))
@@ -257,7 +262,7 @@ async def one_scheme(browser, watch, url, scheme, out, r, failures):
     check(failures, len(ins) == 2 and len(outs) == 2, f"{scheme}: 2 in, 2 out: {len(ins)}, {len(outs)}")
     check(failures, ins and outs and max(b["l"] for b in ins) < min(b["l"] for b in outs) and max(b["r"] for b in ins) < max(b["r"] for b in outs),
           f"{scheme}: the peer's left, a0's right: {[(b['dir'], b['l'], b['r']) for b in bubbles]}")
-    check(failures, outs and outs[0]["state"].startswith("既読") and outs[1]["state"] == "届いた", f"{scheme}: 既読 / 届いた: {[b['state'] for b in outs]}")
+    check(failures, outs and outs[0]["state"].startswith(TL("talk.state.read")) and outs[1]["state"] == TL("talk.state.delivered"), f"{scheme}: 既読 / 届いた: {[b['state'] for b in outs]}")
     await until(page, "() => { const t = [...document.querySelectorAll('#rb [data-tk-text]')].find((x) => x._long); return !!t; }", "the long text measured", why=FOLD)
     f1 = await page.evaluate(FOLD)
     await page.evaluate("() => { const t = [...document.querySelectorAll('#rb [data-tk-text]')].find((x) => x._long); t.querySelector('p, li').click(); }")
@@ -283,15 +288,15 @@ async def one_scheme(browser, watch, url, scheme, out, r, failures):
     # the script at 20 s: a new message while at the end shows at the bottom, and is seen
     await page.evaluate("() => window.__dbg.talkDemo.play(20)")
     await until(page, "() => document.querySelectorAll('#rb [data-tk-msg]').length === 5", "the new message", why=T)
-    await until(page, "() => { const p = document.querySelector('#rb [data-tk-body]'); const last = [...p.querySelectorAll('[data-tk-msg]')].pop();"
-                      " return last.textContent.includes('スクリーンショットを差し替えました') && p.scrollHeight - p.scrollTop - p.clientHeight < 30; }",
-                "the new message in view at the bottom", why=T)
+    await until(page, "(w) => { const p = document.querySelector('#rb [data-tk-body]'); const last = [...p.querySelectorAll('[data-tk-msg]')].pop();"
+                      " return last.textContent.includes(w) && p.scrollHeight - p.scrollTop - p.clientHeight < 30; }",
+                "the new message in view at the bottom", why=T, arg=demo_talk(11)[0])
     await until(page, "() => (document.querySelector('#rb [data-rb-talk-n]') || {}).textContent === '1' && window.__dbg.talk().sent.filter((f) => f.type === 'talk.seen').length >= 2",
                 "the new message seen (the badge back to 1)", why=T)
     # the script at 30 s: a0's message is read
     await page.evaluate("() => window.__dbg.talkDemo.play(30)")
-    await until(page, "() => { const s = [...document.querySelectorAll('#rb .talk-out [data-tk-state]')].map((x) => x.textContent); return s.length === 2 && s.every((x) => x.startsWith('既読')); }",
-                "既読 on the read message", why=BUBBLES)
+    await until(page, "(w) => { const s = [...document.querySelectorAll('#rb .talk-out [data-tk-state]')].map((x) => x.textContent); return s.length === 2 && s.every((x) => x.startsWith(w)); }",
+                "既読 on the read message", why=BUBBLES, arg=TL("talk.state.read"))
 
     # the long name: one line with …, the whole on hover
     await page.click("#rb [data-tk-back]")
@@ -321,8 +326,8 @@ async def one_scheme(browser, watch, url, scheme, out, r, failures):
     await open_row(page, "cloud-reviewer", 1)
     ext = r["external"] = {"head": await page.evaluate(HEAD), "bubbles": await page.evaluate(BUBBLES),
                            "sub": await page.evaluate("() => document.querySelector('#rb .talk-peer-sub').textContent")}
-    check(failures, ext["head"] and not ext["head"]["switchable"] and not ext["head"]["button"] and ext["bubbles"][0]["state"] == "届かなかった"
-          and "この機械の外の相手" in ext["sub"], f"{scheme}: the outside peer: not a button, 届かなかった: {ext}")
+    check(failures, ext["head"] and not ext["head"]["switchable"] and not ext["head"]["button"] and ext["bubbles"][0]["state"] == TL("talk.state.undelivered")
+          and TL("talk.kind.external") in ext["sub"], f"{scheme}: the outside peer: not a button, 届かなかった: {ext}")
     und = ext["undelivered"] = (await page.evaluate(BUBBLE_PAINT))["undelivered"]
     check(failures, bool(und) and und["style"] == "dashed" and rgb_hex(und["color"]) == BAD[scheme], f"{scheme}: an undelivered message keeps its red dashed edge: {und}")
     await page.click("#rb [data-tk-back]")
@@ -330,7 +335,7 @@ async def one_scheme(browser, watch, url, scheme, out, r, failures):
 
     # paging: a page of one, read up → talk.get before
     await page.evaluate("() => window.__dbg.talkPage(1)")
-    await open_row(page, SUB_NAME, 1)
+    await open_row(page, sub_name(), 1)
     t = await page.evaluate(T)
     check(failures, t["msgs"] == 1 and t["more"] is True, f"{scheme}: the first page is 1 with more: {t['msgs']}, {t['more']}")
     await page.evaluate("() => { const p = document.querySelector('#rb [data-tk-body]'); p.scrollTop = 0; p.dispatchEvent(new Event('scroll')); }")
@@ -408,7 +413,7 @@ async def tabs(browser, watch, url, out, res, failures):
     await open_card(page, "a0")
     await open_talk(page)
     t = r["history"] = await page.evaluate(TABS)
-    check(failures, t["tabs"] == [["talks", "トーク履歴", "true"], ["robots", "ロボット一覧", "false"]], f"tabs: two tabs, トーク履歴 picked: {t['tabs']}")
+    check(failures, t["tabs"] == [["talks", TL("talk.tab.talks"), "true"], ["robots", TL("talk.tab.robots"), "false"]], f"tabs: two tabs, トーク履歴 picked: {t['tabs']}")
     check(failures, t["rowGo"] == ["4f", "b4", None, "a3", "d8"], f"tabs: ロボットへ移る on the rows whose robot is here: {t['rowGo']}")
     await go("4f", "cli", "history-go")
 
