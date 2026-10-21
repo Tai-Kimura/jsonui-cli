@@ -14,7 +14,7 @@ from common import DESKTOP, LAUNCH_ARGS, PHONE, Watch, new_page, ready, shot
 from talk_ui import open_card, open_talk
 from waits import WaitTimeout
 
-LABEL = "a1"
+LABEL = "a0"   # the demo's main session (talk_ui opens it too)
 
 
 async def run_lang_checks(pw, out, failures, Server):

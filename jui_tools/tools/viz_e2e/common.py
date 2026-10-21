@@ -259,8 +259,11 @@ SCREEN_REPORT_JS = r"""() => {
     const over = el.scrollWidth - el.clientWidth;
     if (over > 1) out.overflow.push({ at: where(el), text: el.textContent.trim().slice(0, 60), over });
   }
+  const drawn = new Set();   // a texture is drawn again and again: one line for each words on each canvas width
   for (const c of window.__canvasText || []) {
-    if (c.right > c.canvas + 1 || c.left < -1 || /…$/.test(c.text)) out.canvas.push(c);
+    const id = `${c.text}\u0000${c.canvas}`;
+    if (drawn.has(id)) continue;
+    if (c.right > c.canvas + 1 || c.left < -1 || /…$/.test(c.text)) { drawn.add(id); out.canvas.push(c); }
   }
   return out;
 }"""
