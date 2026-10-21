@@ -29,7 +29,7 @@ import secrets
 import stat
 from pathlib import Path
 
-from . import paths
+from . import i18n, paths
 
 FILE_MAX = 20 * 1024 * 1024
 PER_PROMPT_MAX = 10
@@ -76,7 +76,7 @@ def display_name(name: object, media: str = "") -> str:
     text = re.split(r"[/\\]", text)[-1]
     text = "".join(ch for ch in text if ch.isprintable()).strip()
     if not text:
-        text = f"貼り付けた画像.{_MEDIA_EXT[media]}" if media in _MEDIA_EXT else "添付"
+        text = i18n.tl("srv.attach.pasted", ext=_MEDIA_EXT[media]) if media in _MEDIA_EXT else i18n.tl("srv.attach.file")
     return text[:NAME_MAX]
 
 
