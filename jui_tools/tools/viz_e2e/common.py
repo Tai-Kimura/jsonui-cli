@@ -293,3 +293,22 @@ async def shot(page, name: str, out, failures: list, clip: dict | None = None) -
     data[name] = {"language": os.environ.get("JUI_VIZ_LANGUAGE", ""), "report": report}
     index.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
     return report
+
+
+_STRINGS = None
+
+
+def T(key: str, **params) -> str:
+    """The page's words for ``key`` in the run's language (JUI_VIZ_LANGUAGE, as the server under test reads it), its
+    slots filled: a suite compares the page with the table, not with the words of one language (ticket
+    2026-10-21-viz-english-screen-checks §2c), so it reads the same in Japanese and in English. A key the table lacks
+    raises — a suite never waits for words that cannot appear."""
+    global _STRINGS
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from jui_cli.viz import i18n
+    if _STRINGS is None:
+        _STRINGS = i18n.load()
+    if key not in _STRINGS.table:
+        raise KeyError(f"no words for {key!r} in the {_STRINGS.language} table")
+    return i18n.lookup(_STRINGS, key, params)
