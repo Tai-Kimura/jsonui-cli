@@ -128,3 +128,8 @@ def test_a_row_that_keeps_the_free_amount_or_has_none_bundled_is_quiet(tmp_path)
 
 def test_the_example_room_drops_no_free_amount():
     assert [w for w in PB.load(FIX / "aws-three-tier", NO_CACHE)[1] if "prices.free_dropped" in w] == []
+
+
+def test_one_warning_per_price_however_many_rows_drop_it(tmp_path):
+    [w] = _book_warnings(tmp_path, EGRESS, dict(EGRESS, region="us-east-1"))
+    assert "aws/data-transfer/egress has no free amount" in w

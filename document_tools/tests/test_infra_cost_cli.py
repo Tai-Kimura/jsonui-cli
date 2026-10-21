@@ -88,3 +88,11 @@ def test_the_command_prints_json_and_exits_as_reply():
     assert day.returncode == 0 and "2026-11-03: $" in day.stdout
     bad = _cli(str(ROOM), "--scenario", "nope")
     assert bad.returncode == 2 and "no scenario 'nope'; there are: ordinary, sale" in bad.stderr and bad.stdout == ""
+
+
+def test_warnings_alone_are_0_and_still_counted(tmp_path):
+    root = _room(tmp_path, {"a.json": _scenario(id="a", loads=[{"node": "api-prod", "quantities": {"requests": 1}},
+                                                               {"node": "api-prod", "quantities": {"requests": 2}}])})
+    code, out = RUN.reply(root, env=NO_CACHE)
+    assert code == 0 and out["problems"]["errors"] == 0 and out["problems"]["count"] >= 1
+    assert {p["code"] for p in out["problems"]["first"]} == {"load.overlap"}
