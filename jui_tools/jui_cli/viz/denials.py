@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import re
 
+from . import i18n
+
 #: The tool_result text of an auto mode denial, as seen in this machine's transcripts of 10-19 and 10-20 (11 records;
 #: not documented; the dependency is in cc_watch's ledger, probe auto_mode_denial): "Permission for this action was
 #: denied by the Claude Code auto mode classifier. Reason: <reason>. If you have other tasks ...". The reason was a
@@ -63,7 +65,8 @@ def _clip(text: str, n: int = INPUT_HEAD) -> str:
 
 
 #: the first line of the words: where they come from, said as it is (never that the sender was verified)
-SOURCE_LINE = "[jui viz の「止められた操作」の札から、依頼者がボタンで送った文です]"
+def source_line() -> str:
+    return i18n.tl("srv.denial.source")
 
 
 def prompt_text(card: dict) -> str:
@@ -73,13 +76,13 @@ def prompt_text(card: dict) -> str:
     ask for a confirmation in the terminal. What viz claims is that the person's judgement reaches the receiver
     unmistaken, not that the receiver goes on."""
     what = f"{card['tool']}: {card['input']}" if card["input"] else card["tool"]
-    why = card["reason"] or "（記録に理由が無い）"
+    why = card["reason"] or i18n.tl("srv.denial.no_reason")
     return "\n".join([
-        SOURCE_LINE,
-        f"止められた操作: {what}",
-        f"止めた理由（自動モードの判定）: {why}",
-        "この操作は、私が内容を見て、実行してよいと判断しました。もう一度試してください。",
-        "判定がまた止めるとき、またはあなたが端末での確認が要ると判断するときは、そう返してください。端末で答えます。",
+        source_line(),
+        i18n.tl("srv.denial.what", what=what),
+        i18n.tl("srv.denial.why", why=why),
+        i18n.tl("srv.denial.judged"),
+        i18n.tl("srv.denial.again"),
     ])
 
 

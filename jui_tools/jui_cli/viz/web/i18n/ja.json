@@ -1920,5 +1920,11 @@
   "srv.harness.meta": "ハーネスの文",
   "srv.peer.unnamed": "別のセッション",
   "srv.history.image": "[画像]",
-  "srv.denied.no_reason": "理由は書かれていない"
+  "srv.denied.no_reason": "理由は書かれていない",
+  "srv.denial.source": "[jui viz の「止められた操作」の札から、依頼者がボタンで送った文です]",
+  "srv.denial.no_reason": "（記録に理由が無い）",
+  "srv.denial.what": "止められた操作: {what}",
+  "srv.denial.why": "止めた理由（自動モードの判定）: {why}",
+  "srv.denial.judged": "この操作は、私が内容を見て、実行してよいと判断しました。もう一度試してください。",
+  "srv.denial.again": "判定がまた止めるとき、またはあなたが端末での確認が要ると判断するときは、そう返してください。端末で答えます。"
 }

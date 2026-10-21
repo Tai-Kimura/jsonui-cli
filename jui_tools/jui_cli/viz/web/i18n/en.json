@@ -1965,5 +1965,11 @@
   "srv.harness.meta": "Harness text",
   "srv.peer.unnamed": "another session",
   "srv.history.image": "[image]",
-  "srv.denied.no_reason": "no reason written"
+  "srv.denied.no_reason": "no reason written",
+  "srv.denial.source": "[Words the requester sent with a button from jui viz's \"stopped call\" card]",
+  "srv.denial.no_reason": "(no reason recorded)",
+  "srv.denial.what": "Stopped call: {what}",
+  "srv.denial.why": "Why it was stopped (auto mode's judgement): {why}",
+  "srv.denial.judged": "I have looked at this call and judged it fine to run. Please try it again.",
+  "srv.denial.again": "If the judgement stops it again, or you judge it needs a confirmation in the terminal, say so. I will answer in the terminal."
 }
