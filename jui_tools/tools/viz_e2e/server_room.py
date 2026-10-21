@@ -120,11 +120,12 @@ async def run_flows(page, out, failures, res):
     check(failures, fl["dnsList"] == 0 and fl["browserList"] == [["search", "👤 検索する"]],
           f"a node with no flow lists none; the browser lists its flow with the trigger's mark: {fl['dnsList']} {fl['browserList']}")
     # a node with many rows (the ticket 2026-10-21-jui-viz-flow-chosen-path-list-has-no-separator): its flows right under what
-    # was chosen, and the board turned there, so the button is pressable where it shows — on a page too short for the board
+    # was chosen, and the board turned there (from its top, where 構成 and 凡例 fill it), so the button is pressable where it
+    # shows — on a page too short for the board
     size = page.viewport_size
-    await page.set_viewport_size({"width": size["width"], "height": 560})
+    await page.set_viewport_size({"width": size["width"], "height": 460})
     await page.evaluate("() => window.__dbg.srSelect('r2')")
-    await page.evaluate("() => { const B = document.getElementById('sr-board'); B.scrollTop = B.scrollHeight; }")
+    await page.evaluate("() => { const B = document.getElementById('sr-board'); B.scrollTop = 0; }")
     await page.evaluate("() => window.__dbg.srSelect('browser')")
     fl["boardInView"] = await page.evaluate("""() => { const B = document.getElementById('sr-board'), b = B.querySelector('[data-sr-flow]');
       const e = B.querySelector('.sr-edges'), r = b.getBoundingClientRect(), R = B.getBoundingClientRect();
