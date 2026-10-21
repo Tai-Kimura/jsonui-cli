@@ -136,6 +136,7 @@ class Watch:
 async def new_page(browser, watch: Watch, label: str, **opts):
     page = await browser.new_page(**opts)
     watch.attach(page, label)
+    await page.add_init_script(CANVAS_TEXT_JS)   # the canvas's words, for screen_check (defined below)
     return page
 
 
@@ -198,3 +199,97 @@ def squash(s: str) -> str:
 
 def dump(obj) -> str:
     return json.dumps(obj, ensure_ascii=False, indent=1, sort_keys=True)
+
+
+# ---- the English screen (ticket 2026-10-21-viz-english-screen-checks) ---------------------------------------------
+# The page's words come from the language's table; a key it lacks or a slot left unfilled is a console warning (tl in
+# 05-i18n.js), which every suite already fails on. What a console cannot say is what the reader sees: a key drawn as
+# itself, Japanese left on an English page, a button or a sign whose words do not fit. screen_check reads them from
+# the page; shot keeps a picture of it with that report, for lang_sheet.py's side-by-side sheet (en and ja).
+
+#: Every text a canvas draws, recorded before the page's own code runs (textures drawn at load too): its words, where
+#: it starts and ends in the canvas, the canvas's width. An approximation — a canvas transform is not followed.
+CANVAS_TEXT_JS = """(() => {
+  if (window.__canvasText) return;
+  const rec = window.__canvasText = [];
+  const P = CanvasRenderingContext2D.prototype, fill = P.fillText;
+  P.fillText = function (text, x, y, maxWidth) {
+    try {
+      if (rec.length < 20000) {
+        const s = String(text), w = this.measureText(s).width, a = this.textAlign;
+        const left = a === 'center' ? x - w / 2 : (a === 'right' || a === 'end') ? x - w : x;
+        rec.push({ text: s, left: Math.round(left), right: Math.round(left + w), canvas: this.canvas.width,
+                   font: this.font, maxWidth: maxWidth === undefined ? null : maxWidth });
+      }
+    } catch (err) { /* never in the page's way */ }
+    return fill.apply(this, arguments);
+  };
+})();"""
+
+#: The page as read: keys drawn as themselves (a failure), Japanese on an English page, elements whose words do not
+#: fit, canvas words past the canvas or cut with "…" (reported, for eyes). Hidden elements are not read.
+SCREEN_REPORT_JS = r"""() => {
+  const out = { lang: document.documentElement.lang || '', keys: [], japanese: [], overflow: [], canvas: [] };
+  let strings = {};
+  try { strings = JSON.parse(document.getElementById('jui-viz-strings').textContent).strings || {}; } catch (err) { /* none */ }
+  const KEY = /^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/, JA = /[぀-ヿ㐀-鿿！-｠]/;
+  const en = out.lang === 'en';
+  const away = (el) => !el || el.closest('script, style, template, #jui-viz-strings') || !el.getClientRects().length;
+  const where = (el) => el.id ? `#${el.id}` : `${el.tagName.toLowerCase()}${el.classList.length ? '.' + [...el.classList].join('.') : ''}`;
+  const seen = new Set();
+  const note = (list, v) => { if (!seen.has(v) && list.length < 200) { seen.add(v); list.push(v); } };
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    const t = n.nodeValue.trim();
+    if (!t || away(n.parentElement)) continue;
+    if (KEY.test(t) && t in strings) note(out.keys, `${where(n.parentElement)}: ${t}`);
+    if (en && JA.test(t)) note(out.japanese, `${where(n.parentElement)}: ${t.slice(0, 80)}`);
+  }
+  for (const el of document.querySelectorAll('[title], [aria-label], [placeholder], [alt]')) {
+    if (away(el)) continue;
+    for (const a of ['title', 'aria-label', 'placeholder', 'alt']) {
+      const v = el.getAttribute(a);
+      if (!v) continue;
+      if (KEY.test(v) && v in strings) note(out.keys, `${where(el)}[${a}]: ${v}`);
+      if (en && JA.test(v)) note(out.japanese, `${where(el)}[${a}]: ${v.slice(0, 80)}`);
+    }
+  }
+  for (const el of document.querySelectorAll('button, .chip, [role=tab], h1, h2, h3, h4, label, th, .wb-btn, .pill')) {
+    if (away(el)) continue;
+    const over = el.scrollWidth - el.clientWidth;
+    if (over > 1) out.overflow.push({ at: where(el), text: el.textContent.trim().slice(0, 60), over });
+  }
+  for (const c of window.__canvasText || []) {
+    if (c.right > c.canvas + 1 || c.left < -1 || /…$/.test(c.text)) out.canvas.push(c);
+  }
+  return out;
+}"""
+
+
+async def screen_hooks(page):
+    """For a page a suite opens itself (not through new_page): record the canvas's words from the start."""
+    await page.add_init_script(CANVAS_TEXT_JS)
+
+
+async def screen_check(page, tag: str, failures: list) -> dict:
+    """Read the page as the reader sees it. A key drawn as itself is a failure in either language; the rest (Japanese
+    on an English page, words that do not fit, canvas words past the canvas or cut) is returned for the sheet."""
+    got = await page.evaluate(SCREEN_REPORT_JS)
+    for k in got["keys"]:
+        failures.append(f"{tag}: a key of the table on the page as itself: {k}")
+    return got
+
+
+async def shot(page, name: str, out, failures: list, clip: dict | None = None) -> dict:
+    """A picture of the page for lang_sheet.py with screen_check's report: <out>/shots/<name>.png and its line in
+    <out>/shots/shots.json (the language the run was in, the report). Returns the report."""
+    import os
+    folder = Path(out) / "shots"
+    folder.mkdir(parents=True, exist_ok=True)
+    report = await screen_check(page, f"shot {name}", failures)
+    await page.screenshot(path=str(folder / f"{name}.png"), clip=clip)
+    index = folder / "shots.json"
+    data = json.loads(index.read_text(encoding="utf-8")) if index.exists() else {}
+    data[name] = {"language": os.environ.get("JUI_VIZ_LANGUAGE", ""), "report": report}
+    index.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    return report
