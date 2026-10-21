@@ -2029,5 +2029,6 @@
   "srv.agents.unreadable": "Could not read claude agents --json (trying again)",
   "srv.infra.no_tools": "document_tools (jsonui-doc) is not found, so the infra cannot be read",
   "srv.cost.no_tools": "document_tools (jsonui-doc) is not found, so the cost cannot be calculated",
-  "srv.data.no_tools": "document_tools is not found"
+  "srv.data.no_tools": "document_tools is not found",
+  "srv.config.not_object": "config.json is not a JSON object"
 }

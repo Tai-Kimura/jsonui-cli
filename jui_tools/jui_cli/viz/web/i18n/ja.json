@@ -1981,5 +1981,6 @@
   "srv.agents.unreadable": "claude agents --json を読めませんでした（続けて試します）",
   "srv.infra.no_tools": "document_tools (jsonui-doc) が見つからないので、構成を読めない",
   "srv.cost.no_tools": "document_tools (jsonui-doc) が見つからないので、コストを計算できない",
-  "srv.data.no_tools": "document_tools が見つかりません"
+  "srv.data.no_tools": "document_tools が見つかりません",
+  "srv.config.not_object": "config.json が JSON のオブジェクトではありません"
 }

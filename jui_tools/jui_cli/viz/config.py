@@ -7,7 +7,7 @@ import os
 import sys
 from dataclasses import dataclass, fields
 
-from . import paths
+from . import i18n, paths
 
 
 @dataclass
@@ -104,7 +104,7 @@ def save_setting(key: str, value) -> None:
     if path.exists():
         data = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
-            raise ValueError("config.json が JSON のオブジェクトではありません")
+            raise ValueError(i18n.tl("srv.config.not_object"))
     data[key] = value
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
