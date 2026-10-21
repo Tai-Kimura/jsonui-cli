@@ -78,6 +78,26 @@ def test_a_forked_skill_moves_to_its_subagent_and_ends_with_the_forked_result():
     assert _skills(world, state) == {}
 
 
+@pytest.mark.parametrize("order", ["call, start, call, start", "call, call, start, start"])
+def test_two_forked_skills_of_one_session_each_end_with_their_own_result(order):
+    """Two forked skills at once (each its own useId and subagent, the subagents taking the calls oldest first): the
+    first one's result ends the first subagent's skill only; the second goes on until its own."""
+    world, state = _world()
+    steps = {"call": [lambda: _skill_call(world, 1000, use="t1"), lambda: _skill_call(world, 1500, name="claude-api", use="t2")],
+             "start": [lambda: world.apply_hook(_hook("SubagentStart", 1200, agent_id="ag1", agent_type="general-purpose"), 1200),
+                       lambda: world.apply_hook(_hook("SubagentStart", 1700, agent_id="ag2", agent_type="general-purpose"), 1700)]}
+    for step in order.split(", "):
+        steps[step].pop(0)()
+    assert _skills(world, state) == {"ag1": {"name": "code-review", "since": 1000, "useId": "t1", "forked": True},
+                                     "ag2": {"name": "claude-api", "since": 1500, "useId": "t2", "forked": True}}
+    world.apply_hook(_hook("PostToolUse", 60_000, tool_name="Skill", tool_input={"skill": "code-review"}, tool_use_id="t1",
+                           tool_response={"status": "forked", "agentId": "ag1", "result": "…"}), 60_000)
+    assert _skills(world, state) == {"ag2": {"name": "claude-api", "since": 1500, "useId": "t2", "forked": True}}
+    world.apply_hook(_hook("PostToolUse", 90_000, tool_name="Skill", tool_input={"skill": "claude-api"}, tool_use_id="t2",
+                           tool_response={"status": "forked", "agentId": "ag2", "result": "…"}), 90_000)
+    assert _skills(world, state) == {}
+
+
 def test_a_subagent_started_later_or_by_another_session_does_not_take_the_skill():
     world, state = _world()
     _skill_call(world, 1000)

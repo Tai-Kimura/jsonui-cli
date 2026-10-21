@@ -210,7 +210,8 @@ class World:
         self._open: dict[str, list[str]] = {}
         self._open_tool: dict[str, str] = {}  # tool_use_id -> tool_name
         self._deleting: dict[str, dict] = {}  # tool_use_id -> what its Bash command deletes (robots.deletions)
-        self._skill_called: dict[str, tuple[int, str]] = {}   # session id -> (when, the main agent) of its last Skill call
+        # session id -> the Skill calls not yet given a subagent: (when, the calling agent, the skill), oldest first
+        self._skill_called: dict[str, list[tuple[int, str, dict]]] = {}
         self._until: dict[str, tuple[int, str]] = {}  # agent id -> (time, state to go to)
         # The tool_use_id an agent was asking permission for. PermissionRequest
         # carries no tool_use_id and a refusal may send no PostToolUse (nor
@@ -957,26 +958,31 @@ class World:
     # ---------------------------------------------------------------- a skill in use (the spirit, 2.3.16)
 
     def _skill_started(self, session: dict, agent: dict, tool_input: dict, use_id: str | None, at: int) -> None:
-        """Claude called the Skill tool: its robot carries the skill (a skill named otherwise than SKILL_NAME is
-        none). A skill started while another is held replaces it."""
+        """The session called the Skill tool: its robot carries the skill (a skill named otherwise than SKILL_NAME is
+        none). It replaces the skill that robot held; a forked skill already in a subagent goes on until its own
+        result. The call waits SKILL_FORK_MS for a subagent (two calls at once: two subagents, oldest first)."""
         name = tool_input.get("skill")
         if not isinstance(name, str) or not SKILL_NAME.fullmatch(name):
             return
-        self._skill_ended(session["id"], at)
-        self._set(agent, at, skill={"name": name, "since": at, **({"useId": use_id} if use_id else {})})
-        self._skill_called[session["id"]] = (at, agent["id"])
+        skill = {"name": name, "since": at, **({"useId": use_id} if use_id else {})}
+        self._set(agent, at, skill=skill)
+        waiting = [c for c in self._skill_called.get(session["id"], []) if at - c[0] <= SKILL_FORK_MS]
+        self._skill_called[session["id"]] = waiting + [(at, agent["id"], skill)]
 
     def _skill_forked_to(self, sid: str, sub: dict, at: int) -> None:
         """A subagent started within SKILL_FORK_MS of the session's Skill call: the skill runs there (forked), so the
         skill moves from the calling robot to it."""
-        called = self._skill_called.pop(sid, None)
-        if called is None or at - called[0] > SKILL_FORK_MS:
+        waiting = [c for c in self._skill_called.get(sid, []) if at - c[0] <= SKILL_FORK_MS]
+        if not waiting:
+            self._skill_called.pop(sid, None)
             return
-        caller = self.agents.get(called[1])
-        if caller is None or not caller.get("skill") or caller["id"] == sub["id"]:
+        _when, caller_id, skill = waiting.pop(0)
+        self._skill_called[sid] = waiting
+        caller = self.agents.get(caller_id)
+        if caller is None or caller["id"] == sub["id"]:
             return
-        skill = caller["skill"]
-        self._set(caller, at, skill=None)
+        if caller.get("skill") is skill:   # the caller still holds it (not replaced by a later call)
+            self._set(caller, at, skill=None)
         self._set(sub, at, skill={**skill, "forked": True})
 
     def _skill_ended(self, sid: str, at: int, use_id: str | None = None) -> None:
