@@ -23,7 +23,7 @@ def _run(expr: str, language: str = "en"):
         start = re.search(rf"\nfunction {name}\(", src).start() + 1
         parts.append(src[start:_match(src, src.index("{", start)) + 1])
     script = f"const I18N = {{ language: {json.dumps(language)} }};\n" + "\n".join(parts) + f"\nprocess.stdout.write(JSON.stringify({expr}));"
-    out = subprocess.run([node, "-e", script], capture_output=True, text=True, timeout=30)
+    out = subprocess.run([node, "-"], input=script, capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout)
 
