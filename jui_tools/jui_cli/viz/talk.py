@@ -47,7 +47,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable
 
-from . import talk_contract
+from . import i18n, talk_contract
 from .calls import peer_name
 from .sources import session_files
 from .sources.talk_records import observations, wanted
@@ -458,11 +458,11 @@ class TalkIndex:
             self.db.execute("UPDATE parts SET name=? WHERE key=?", (self.reg.names[key], key))
 
     def _session_part(self, sid: str, fallback: str | None = None) -> str:
-        self._part(sid, sid, "session", self.reg.names.get(sid) or fallback or f"セッション {sid[:8]}")
+        self._part(sid, sid, "session", self.reg.names.get(sid) or fallback or i18n.tl("srv.talk.session", id=sid[:8]))
         return sid
 
     def _sub_part(self, aid: str, sid: str) -> str:
-        self._part(aid, sid, "subagent", f"サブエージェント {aid[:9]}")
+        self._part(aid, sid, "subagent", i18n.tl("srv.talk.subagent", id=aid[:9]))
         return aid
 
     def _sender_of_file(self, sid: str, agent: str | None) -> str:
@@ -610,7 +610,7 @@ class TalkIndex:
                 if sender_sid and sender_sid != sid:
                     sender, via = self._session_part(sender_sid, info.get("name")), "session"
                 else:
-                    name = info.get("name") or "別のセッション"
+                    name = info.get("name") or i18n.tl("srv.peer.unnamed")
                     sender, via = external_key(name), "external"
                     self._part(sender, sender, "external", name)
                 self._insert(mid, sender, receiver, at, info["body"], now, state="read", read_at=at, delivered_at=at,
@@ -683,7 +683,7 @@ class TalkIndex:
                 elif info.get("kind") == "coordinator":
                     sender, via = self._session_part(sid), "subagent"
                 else:
-                    name = info.get("name") or "別のセッション"
+                    name = info.get("name") or i18n.tl("srv.peer.unnamed")
                     sender, via = external_key(name), "external"
                     self._part(sender, sender, "external", name)
                 rid = "r-" + _KEY_SAFE.sub("_", f"{receiver}:{uuid}")[:190]

@@ -1955,5 +1955,7 @@
   "srv.clockout.vscode": "VS Code ではタブがエラーで残るので使えない。タブを閉じて終わらせる",
   "srv.clockout.desktop": "デスクトップアプリでは画面が変わらないので使えない",
   "srv.clockout.other": "ターミナルで起動したセッションだけ退勤させられる",
-  "srv.clockout.unknown": "起動元が分からないので使えない（ターミナルで起動したセッションだけ）"
+  "srv.clockout.unknown": "起動元が分からないので使えない（ターミナルで起動したセッションだけ）",
+  "srv.talk.session": "セッション {id}",
+  "srv.talk.subagent": "サブエージェント {id}"
 }

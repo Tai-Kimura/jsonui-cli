@@ -2002,5 +2002,7 @@
   "srv.clockout.vscode": "Not in VS Code: the tab stays with an error. Close the tab to end it",
   "srv.clockout.desktop": "Not in the desktop app: its screen does not change",
   "srv.clockout.other": "Only a session started in a terminal can clock out",
-  "srv.clockout.unknown": "Not usable: where it was started is unknown (only a session started in a terminal)"
+  "srv.clockout.unknown": "Not usable: where it was started is unknown (only a session started in a terminal)",
+  "srv.talk.session": "Session {id}",
+  "srv.talk.subagent": "Subagent {id}"
 }
