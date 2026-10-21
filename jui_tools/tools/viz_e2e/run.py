@@ -204,12 +204,21 @@ def main(argv=None) -> int:
                     help="run one half (server-room: only the server room's door, keypad and 3D; talk-ui: only the talk view's page side, on the demo; talk: only the talk view's server side (talk.* over the WebSocket); hist-peers: only a SendMessage's recipient linked to its robot; hist-fold: only a history fold closing on a click in its body; rooms: only the rooms/doors suite; ask: only the question card suite; history: only the 応答の履歴 tab; robot-tests: only a robot card's test runs; calls: only the phone calls; play: only idle robots playing; play-look: only what a game looks like (tags, the ball, the slap, the bubble); spec-help: only the 「?」 dialog of spec の進み具合; spec-colors: only the spec sheet's colours; weather: only the season and the near weather outside; name-tags: only robots' name tags kept apart; hist-wide: only the wide history; hist-labels: only the history's labels on one line; hist-images: only the pictures in the history; name-tag-role: only a session's name on its robot's tag; clock-out: only the 退勤 button; arrows-rooms: only ← → between rooms and ↑ ↓ between floors; ask-board: only the 質問 / 許可待ち chips' board; mermaid: only the vendored Mermaid (strict, nothing outside); dataflow-mermaid: only a spec's data flow as a diagram; data-server: only the rack and its API / DB sheet; heavy-looks: only heavy work's three looks (red, blue, the whistle); cost-bill: only the bill over a robot and the 単価 sheet; bg-look: only background work's headset, notes and laptop; web-dict: only WebFetch / WebSearch's dictionary on the desk; launch-whistle: only the whistle when a subagent is called (demo and live); card-note: only the × of the note over the card's prompt box; tag-click: only a click on a robot's tag (or its bill) selecting the robot; spec-nest: only the spec sheet's 構造 as a tree (the list's indent and lines, nested boxes); spec-sheet-layout: only the spec sheet in one column, nothing sideways (long text everywhere, 1440 and 390 px); spec-tables: only イベント and 操作 as one table; spec-branch-json: only 分岐's when / then as formatted JSON; waiting-input: only the 入力待ち notification (the hooks replayed); devices: only the デバイス button and pane; "
                          "tower: only the building's window press)")
     ap.add_argument("--suite", action="append", help="demo suite(s) to run (default: all)")
+    ap.add_argument("--group-ok", action="store_true",
+                    help="run an --only that is a group (live, demo: most of the e2e); without it such a name stops "
+                         "the run, after saying the suites it holds (only_groups.py)")
     ap.add_argument("--priority", action="store_true",
                     help="the integration's check: its ticket goes before every unmarked one in the machine's line "
                          "(e2e_lock.py; JUI_VIZ_E2E_PRIORITY=1 says the same). Only the integration uses it")
     ap.add_argument("--record-demo", metavar="URL",
                     help="run the demo suites against URL (the prototype's agent-test.html) and write expect_demo.json")
     a = ap.parse_args(argv)
+    import only_groups
+    lines, stop = only_groups.check(a.only, a.group_ok)   # before the line: a group is said, and stops without --group-ok
+    for line in lines:
+        print(line, flush=True)
+    if stop:
+        return 2
     # The checks wait on the page's Japanese words: every server these suites start (they pass this environment on)
     # shows Japanese, whatever the default language (viz/i18n.py). JUI_VIZ_LANGUAGE=en runs them on the English words.
     os.environ.setdefault("JUI_VIZ_LANGUAGE", "ja")
