@@ -25,7 +25,7 @@ def test_the_month_the_scenarios_and_a_day(tmp_path):
     assert status == 200 and got["ok"] and got["seq"] == 3 and got["scenario"] == "ordinary"
     assert [s["id"] for s in got["scenarios"]] == ["ordinary", "sale"]
     month = got["month"]
-    assert len(month["days"]) == 30 and month["usd"] > 0 and month["noRule"] == ["stripe", "api-role"]
+    assert len(month["days"]) == 30 and month["usd"] > 0 and month["noRule"] == ["api-role"] and month["loadUndefined"] == ["stripe"]
     status, day = C.read(root, seq=4, scenario="sale", date="2026-11-27")
     assert status == 200 and day["scenario"] == "sale" and day["day"]["date"] == "2026-11-27"
     api = next(n for n in day["day"]["nodes"] if n["node"] == "api-prod")

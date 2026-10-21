@@ -464,6 +464,10 @@ def normalize_quantities(qs: dict) -> dict:
         if name == "cdn_egress_gb":
             per = value.get("per", "hour")
             entry.update(byZone={z: a / per_hours()[per] for z, a in value["by_zone"].items()}, per=per)
+        elif isinstance(value, dict) and "by_sku" in value:   # an LLM's tokens by model (input_tokens, output_tokens)
+            per = value.get("per", "hour")
+            entry.update(bySku={s: a / per_hours()[per] for s, a in value["by_sku"].items()}, per=per)
+            entry["perHour"] = sum(entry["bySku"].values())
         elif q["kind"] == "flow":
             entry["perHour"], entry["per"] = per_hour(value)
         else:

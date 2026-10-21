@@ -418,7 +418,8 @@ def test_check_says_ok_undefined_and_missing(tmp_path):
     assert by["load/s/gone"].status == "warning" and "does not have" in by["load/s/gone"].message
     assert by["load/s/assets"].status == "warning" and "undefined" in by["load/s/assets"].message   # billed by use
     assert by["load/s/db-prod"].status == "ok" and "the model's count" in by["load/s/db-prod"].message   # by the hour
-    assert by["load/s/stripe"].status == "skipped"
+    assert by["load/s/stripe"].status == "warning" and "undefined" in by["load/s/stripe"].message   # a SaaS billed by use
+    assert by["load/s/api-role"].status == "skipped"         # an IAM role: its kind reads no load
     assert "load/s/api-stg" not in by                       # another environment
     gated = {r.target: r.status for r in C.run_infra_load(_decl(gate=True), root).results}
     assert gated["load/s/gone"] == "missing_in_impl" and gated["load/s/assets"] == "missing_in_doc"

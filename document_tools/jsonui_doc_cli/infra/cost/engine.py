@@ -122,18 +122,22 @@ def instances_and_steps(row: dict, node: dict, hourly: bool, n: int) -> dict:
     return out
 
 
-def hour_quantities(row: dict, k: int, demand_quantity: str | None, served_ratio: float) -> tuple[dict, dict]:
-    """(quantity -> this hour's amount, cdn_egress_gb by zone): flows times the hour's multiplier (the scaling quantity
-    times what was served of it), levels and per-request values as written."""
-    q, by_zone, m = {}, {}, row["multiplier"][k]
+def hour_quantities(row: dict, k: int, demand_quantity: str | None, served_ratio: float) -> tuple[dict, dict, dict]:
+    """(quantity -> this hour's amount, cdn_egress_gb by zone, quantity -> its amount by sku): flows times the hour's
+    multiplier (the scaling quantity times what was served of it), levels and per-request values as written. A
+    quantity written by sku (an LLM's tokens by model) is also in the first, as the skus' sum."""
+    q, by_zone, by_sku, m = {}, {}, {}, row["multiplier"][k]
     for name, e in row["quantities"].items():
         if "byZone" in e:
             by_zone = {z: gb * m for z, gb in e["byZone"].items()}
+        elif "bySku" in e:
+            by_sku[name] = {s: a * m for s, a in e["bySku"].items()}
+            q[name] = sum(by_sku[name].values())
         elif e["kind"] == "flow":
             q[name] = e["perHour"] * m * (served_ratio if name == demand_quantity else 1.0)
         else:
             q[name] = e["value"]
-    return q, by_zone
+    return q, by_zone, by_sku
 
 
 def meters_of(rule, node: dict, hour_ctx: F.Hour, warnings: list, hour: dict) -> list[F.Meter]:
@@ -207,10 +211,10 @@ def run_node(row: dict, node: dict, rule, book: PB.Book, totals: dict, hours: li
         ratio = 1.0
         if run.demand is not None and run.demand[k] > 0 and not charge_overflow:
             ratio = run.served[k] / run.demand[k]
-        q, by_zone = hour_quantities(row, k, qname, ratio)
+        q, by_zone, by_sku = hour_quantities(row, k, qname, ratio)
         for name in run.quantities:
             run.quantities[name]["perHour"][k] = q.get(name, sum(by_zone.values()) if name == "cdn_egress_gb" else 0.0)
-        ctx = F.Hour(node=node, q=q, by_zone=by_zone, running=run.running[k], sku=run.sku[k], hours_in_month=n)
+        ctx = F.Hour(node=node, q=q, by_zone=by_zone, by_sku=by_sku, running=run.running[k], sku=run.sku[k], hours_in_month=n)
         for m in meters_of(rule, node, ctx, warnings, hour):
             usd, ref = price_meter(book, totals, m, node, run.region, on)
             slot = _meter_slot(run, m, n)

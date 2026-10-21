@@ -402,7 +402,7 @@ async def run_server_room(pw, out, failures):
             await page.click("#sr-cost [data-src-act='month']")
         check(failures, bz["disabled"] and not bz["armed"] and not mid["drawing"] and not mid["shown"] and not res["costBox"]["after"]["armed"],
               f"コスト: 範囲で寄る off and an Option + drag draws no box: {res['costBox']}")
-        check(failures, chips.get("noRule") == 2 and chips.get("noPrice") == 2 and "loadUndefined" in chips, f"what is not priced is counted on the page: {chips}")
+        check(failures, chips.get("noRule") == 1 and chips.get("noPrice") == 2 and "loadUndefined" in chips, f"what is not priced is counted on the page: {chips}")
         await page.select_option("#sr-scn", "sale")
         await until(page, "(u) => { const c = window.__dbg.srCost(); return c.scenario === 'sale' && c.month && c.month.usd !== u; }",
                     "another scenario's month", arg=c["month"]["usd"], timeout=20000)

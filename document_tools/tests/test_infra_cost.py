@@ -260,13 +260,14 @@ def test_the_examples_run_and_say_what_is_not_priced():
     model = R.read(FIX / "aws-three-tier")
     sc = {s["id"]: s for s in L.read(FIX / "aws-three-tier")["scenarios"]}
     ordinary = E.month_totals(E.simulate(sc["ordinary"], model, BUNDLED))
-    assert ordinary["noRule"] == ["stripe", "api-role"]   # api-5xx: an alarm, priced since 2026-10-21
+    assert ordinary["noRule"] == ["api-role"]   # api-5xx: an alarm, priced since 2026-10-21
+    assert ordinary["loadUndefined"] == ["stripe"]   # a SaaS billed by use (2.3.16): its load is not written
     assert ordinary["noPrice"] == [{"node": "mailer", "meter": "emails", "sku": "emails", "unit": "email"},   # sendgrid
                                    # an alarm in no region's group: its region's price is not found, said not guessed
                                    {"node": "api-5xx", "meter": "alarm", "sku": "alarm", "unit": "month"}]
     assert ordinary["usd"] > 0 and abs(sum(d["usd"] for d in ordinary["days"]) - ordinary["usd"]) < 1e-6
     sale = E.month_totals(E.simulate(sc["sale"], model, BUNDLED))
-    assert sale["loadUndefined"] == ["mailer", "assets"] and "api-prod" in sale["overflowHours"]
+    assert sale["loadUndefined"] == ["stripe", "mailer", "assets"] and "api-prod" in sale["overflowHours"]
 
 
 def test_overflow_is_judged_by_capacity_and_left_out_of_the_charge_unless_the_rule_says():

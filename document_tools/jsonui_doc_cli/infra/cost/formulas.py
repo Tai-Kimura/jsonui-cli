@@ -11,7 +11,8 @@ requests-<zone> (request) for a CDN, hour
 (instance-hour) and lcu (LCU-hour) for a load balancer, cluster (instance-hour), shard (capacity_unit-hour), rows-read /
 rows-written (row), queries (request), emails (email), mau (user), secret (secret), api (request), ingest (GB),
 hour (instance-hour) and processed (GB) for a NAT gateway, address (instance-hour) for a public IP address, alarm,
-metric, acl and rule (month: each a monthly fee, its share of the month). A node whose spec says an ARM architecture
+metric, acl and rule (month: each a monthly fee, its share of the month), input-tokens / output-tokens (token) for an
+LLM, "<model>:" before them when the load names the model (requests too), and minutes (minute) for a CI service. A node whose spec says an ARM architecture
 (arch / cpu_architecture / architecture: arm64, aarch64, graviton) is priced on the ":arm64" skus of its compute
 (vcpu, memory, compute).
 """
@@ -37,6 +38,7 @@ class Hour:
     node: dict
     q: dict                       # quantity -> this hour's amount (a flow per hour, a level, a per-request value)
     by_zone: dict = field(default_factory=dict)   # cdn_egress_gb by zone, this hour
+    by_sku: dict = field(default_factory=dict)    # quantity -> sku -> this hour's amount (an LLM's tokens by model)
     running: float = 0.0          # instance-hours this hour (0 when stopped)
     sku: str | None = None        # the type this hour (a step, the row's sku)
     hours_in_month: int = 720
@@ -285,6 +287,32 @@ def nat(h: Hour) -> list[Meter]:
     return instances(h, "hour", "hour") + counted(h, "processed_gb", "processed", "GB", "processed")
 
 
+TOKENS = (("input_tokens", "input-tokens"), ("output_tokens", "output-tokens"))
+
+
+def saas(h: Hour) -> list[Meter]:
+    """A SaaS billed by use (an LLM, a geocoding or a rates API): its requests, and an LLM's tokens in and out. Tokens
+    written by sku (by_sku: one node calling two models) are each priced under <sku>:input-tokens /
+    <sku>:output-tokens; written as one flow, under the row's sku the same way, else input-tokens / output-tokens. With
+    tokens, requests are optional (an LLM bills its tokens; a price per call is still taken when one is written)."""
+    out = []
+    for quantity, kind in TOKENS:
+        if quantity in h.by_sku:
+            out += [Meter(f"{sku}:{kind}", n, "token", f"{sku}:{kind}", quantity) for sku, n in sorted(h.by_sku[quantity].items())]
+        elif quantity in h.q:
+            sku = f"{h.sku}:{kind}" if h.sku else kind
+            out.append(Meter(sku, _flow(h, quantity), "token", sku, quantity))
+    if "requests" in h.q:
+        sku = f"{h.sku}:requests" if h.sku else "requests"
+        out.insert(0, Meter("requests", _flow(h, "requests"), "request", sku, "requests", optional=bool(out)))
+    return out
+
+
+def ci(h: Hour) -> list[Meter]:
+    """A CI service: the build minutes it bills (a runner's minutes) and the artifacts it keeps."""
+    return counted(h, "build_minutes", "minutes", "minute", "minutes") + stored(h)
+
+
 def ip_address(h: Hour) -> list[Meter]:
     """Public IP addresses: each an hourly charge (the node's count is how many)."""
     return instances(h, "address", "address")
@@ -297,7 +325,7 @@ BY_CATEGORY = {
     "database.kv": key_value, "database.search": search, "cache": cache, "storage.object": object_store,
     "storage.file": file_store, "storage.block": file_store, "queue": queue, "stream": stream, "scheduler": scheduler,
     "mail": mail, "auth": auth, "secrets": secrets, "monitoring": monitoring, "monitoring.alarm": alarm,
-    "gateway.nat": nat, "network.ip": ip_address,
+    "gateway.nat": nat, "network.ip": ip_address, "external.saas": saas, "ci": ci,
 }
 
 

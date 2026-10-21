@@ -43,7 +43,7 @@ def test_the_month_by_provider_adds_up_to_the_totals():
         assert sum(d["stack"].values()) == pytest.approx(t["usd"]) == pytest.approx(d["usd"])
     # api-5xx has its rule (the alarm) and no price: it has no group and no region, so only the global rows are looked
     # in, said not guessed
-    assert mv["noRule"] == ["stripe", "api-role"] and [x["node"] for x in mv["noPrice"]] == ["mailer", "api-5xx"]
+    assert mv["noRule"] == ["api-role"] and [x["node"] for x in mv["noPrice"]] == ["mailer", "api-5xx"]
 
 
 def test_the_month_by_node_keeps_the_top_and_the_rest():
@@ -105,4 +105,4 @@ def test_a_node_with_a_note_is_kept_with_it():
     result, model = _example("sale")
     dv = V.day_view(result, model, "2026-11-02", top=50)
     notes = {n["node"]: n["note"] for n in dv["nodes"] if n["note"]}
-    assert notes["stripe"] == "no rule" and notes["assets"] == "load undefined"
+    assert notes["api-role"] == "no rule" and notes["stripe"] == notes["assets"] == "load undefined"

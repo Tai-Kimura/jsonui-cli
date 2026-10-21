@@ -398,6 +398,83 @@
           "x-kind": "flow",
           "x-label": "メール"
         },
+        "input_tokens": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/flow"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "by_sku": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "propertyNames": {
+                    "$ref": "#/$defs/sku"
+                  },
+                  "minProperties": 1,
+                  "maxProperties": 20
+                },
+                "per": {
+                  "$ref": "#/$defs/per"
+                }
+              },
+              "required": [
+                "by_sku"
+              ]
+            }
+          ],
+          "description": "tokens sent to a model (an LLM API's input, the prompt). A flow, or by_sku: the tokens of each model (sku) the node calls, priced as <sku>:input-tokens",
+          "x-unit": "token",
+          "x-kind": "flow",
+          "x-label": "入力トークン"
+        },
+        "output_tokens": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/flow"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "by_sku": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "propertyNames": {
+                    "$ref": "#/$defs/sku"
+                  },
+                  "minProperties": 1,
+                  "maxProperties": 20
+                },
+                "per": {
+                  "$ref": "#/$defs/per"
+                }
+              },
+              "required": [
+                "by_sku"
+              ]
+            }
+          ],
+          "description": "tokens a model returns (an LLM API's output). A flow, or by_sku as input_tokens, priced as <sku>:output-tokens",
+          "x-unit": "token",
+          "x-kind": "flow",
+          "x-label": "出力トークン"
+        },
+        "build_minutes": {
+          "$ref": "#/$defs/flow",
+          "description": "build minutes a CI service bills (GitHub Actions, CodeBuild, Cloud Build runner minutes)",
+          "x-unit": "minute",
+          "x-kind": "flow",
+          "x-label": "ビルドの分"
+        },
         "lcu": {
           "type": "number",
           "minimum": 0,

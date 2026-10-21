@@ -64,6 +64,13 @@ NOT_YET = {
                                          "Workers, priced on the Workers rows)",
     ("cloudflare", "pages", "storage"): "as instance", ("cloudflare", "pages", "egress"): "Pages' data out is free",
     ("cloudflare", "zone", "queries"): "Cloudflare DNS: free",
+    # CI (2.3.16: a CI node bills its build minutes): not bundled, a person's price file prices them
+    ("aws", "codebuild", "minutes"): "CodeBuild bills by its compute type's minute: not bundled",
+    ("aws", "codebuild", "storage"): "CodeBuild keeps no storage of its own (S3 holds the artifacts)",
+    ("aws", "codepipeline", "minutes"): "CodePipeline bills a pipeline a month (V1) or an action's minute (V2): not bundled",
+    ("aws", "codepipeline", "storage"): "as codebuild",
+    ("azure", "acr", "minutes"): "a container registry bills no build minutes (ACR Tasks: not bundled)",
+    ("azure", "acr", "storage"): "ACR bills its tier by the day, storage over the tier's: not bundled",
     # GCP: the services not bundled yet (stage C), and two that the catalog does not give as the rules count
     **{("gcp", svc, sku): "GCP stage C: not bundled yet (the generic rule; a person's price file prices it)" for svc, sku in [
         ('apigateway', 'requests'), ('appengine', 'instance'), ('appengine', 'storage'), ('armor', 'requests'),

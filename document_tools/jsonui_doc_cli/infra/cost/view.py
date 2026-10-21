@@ -84,7 +84,10 @@ def month_view(result: E.Result, model: dict, by: str = "provider", top: int = 8
 def segment(run: E.NodeRun, name: str, m: dict, k: int) -> dict:
     """One meter of one hour: its label, the quantity's rate as written, the amount, the charge, the price's trace."""
     q = run.quantities.get(m["quantity"] or "")
-    out = {"meter": name, "label": (q or {}).get("label") or METER_LABELS.get(name) or name,
+    label = (q or {}).get("label") or METER_LABELS.get(name) or name
+    if q and ":" in name:   # one model's tokens (<model>:input-tokens): the quantity's label and the model
+        label = f"{label}（{name.rsplit(':', 1)[0]}）"
+    out = {"meter": name, "label": label,
            "amount": m["amount"][k], "unit": m["unit"], "sku": m["sku"], "usd": m["usd"][k], "price": m["price"]}
     if q:
         per_hour = m["amount"][k] if m["unit"] == q["unit"] else q["perHour"][k]

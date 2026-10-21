@@ -83,7 +83,7 @@ def test_the_command_prints_json_and_exits_as_reply():
     assert got.returncode == 0 and json.loads(got.stdout) == json.loads(json.dumps(RUN.reply(ROOM, env=NO_CACHE)[1]))
     text = _cli(str(ROOM))
     assert text.returncode == 0 and "scenario ordinary (2026-11, production); other scenarios: sale" in text.stdout
-    assert "a month (USD, on demand" in text.stdout and "no rule (2): stripe, api-role" in text.stdout
+    assert "a month (USD, on demand" in text.stdout and "no rule (1): api-role" in text.stdout
     day = _cli(str(ROOM), "--date", "2026-11-03")
     assert day.returncode == 0 and "2026-11-03: $" in day.stdout
     bad = _cli(str(ROOM), "--scenario", "nope")
