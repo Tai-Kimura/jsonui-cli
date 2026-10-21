@@ -1242,6 +1242,9 @@ jobs:
     permissions:
       contents: read
       issues: write
+      # gh run view reads the run (GET /actions/runs/{id}); a job's permissions block sets every scope it does not
+      # name to none, and a red week must not end in this job failing silently
+      actions: read
     steps:
       - uses: actions/checkout@v4
         with:

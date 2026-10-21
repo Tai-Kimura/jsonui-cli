@@ -67,6 +67,8 @@ def test_the_job_runs_on_a_schedule_only_and_waits_for_every_other_job():
     assert "github.event_name == 'schedule'" in job["if"] and "always()" in job["if"]
     others = set(wf["jobs"]) - {"weekly-red", "tap-repro"}       # tap-repro runs only when dispatched
     assert set(job["needs"]) == others
-    assert job["permissions"] == {"contents": "read", "issues": "write"}
     run = job["steps"][-1]["run"]
+    # a permissions block sets every scope it does not name to none: the run's own read (gh run view) needs actions
+    assert job["permissions"] == {"contents": "read", "issues": "write", "actions": "read"}
+    assert "gh run view" in run
     assert "weekly_red_issue.py" in run and "createdAt" in run and job["steps"][-1]["env"]["NEEDS"] == "${{ toJSON(needs) }}"
