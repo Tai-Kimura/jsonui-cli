@@ -49,6 +49,9 @@ window.__dbg = {
     playing: P ? P.flow.id : null, state: P ? P.state : null, pos: P ? P.pos : null, log: P ? P.log.slice() : [], arrivals: P ? P.arrivals.slice() : [],
     reached: P ? P.reached.slice() : [],
     lights: P ? P.lights.filter((o) => o.geometry && o.geometry.type === 'SphereGeometry').length : 0, chosen: P ? P.chosen.slice() : [],
+    // the smallest light's radius on the screen, in pixels (null: none moving)
+    lightPx: (() => { const d = P && V ? P.lights.filter((o) => o.geometry && o.geometry.type === 'SphereGeometry') : [];
+      return d.length ? Math.min(...d.map((o) => +(0.28 * o.scale.x * srFlowPxPerUnit(V, o.position)).toFixed(2))) : null; })(),
     hints: P && P.hints ? P.hints.userData.hints : 0, choices: [...document.querySelectorAll('#sr-choices:not([hidden]) [data-sr-choice]')].map((b) => b.dataset.srChoice),
     toasts: [...document.querySelectorAll('#sr-toasts .sr-toast')].map((t) => t.textContent), history: P ? P.history.length : 0 }; },
   srFlowSpeed: (s) => { SR_FLOW.speed = s; srFlowRenderBar(); return SR_FLOW.speed; },

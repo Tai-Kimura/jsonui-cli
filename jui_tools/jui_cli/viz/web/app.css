@@ -1522,7 +1522,7 @@ button.talk-peer:focus-visible { outline: 2px solid var(--focus); outline-offset
 .sr-player { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 3; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font: 13px/1.4 var(--font-body); }
 .sr-player[hidden] { display: none; }
 .sr-fp-state { color: var(--ink-soft); }
-.sr-fp-chosen { display: flex; flex-wrap: wrap; gap: 4px 12px; width: 100%; margin: 0; padding-left: 18px; font-size: 12px; }
+.sr-fp-chosen { display: grid; gap: 2px; width: 100%; margin: 0; padding-left: 22px; font-size: 12px; }   /* one choice a line, its number before it */
 .sr-flows { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 4px; }
 /* the cost simulator over the stage (56-server-cost.js): the month's stacked days, a day's bars */
 .sr-mode { gap: 0; }

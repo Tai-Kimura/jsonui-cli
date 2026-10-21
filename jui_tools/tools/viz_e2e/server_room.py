@@ -119,6 +119,20 @@ async def run_flows(page, out, failures, res):
     fl["browserList"] = await page.evaluate("() => [...document.querySelectorAll('#sr-board [data-sr-flow]')].map((b) => [b.dataset.srFlow, b.textContent])")
     check(failures, fl["dnsList"] == 0 and fl["browserList"] == [["search", "👤 検索する"]],
           f"a node with no flow lists none; the browser lists its flow with the trigger's mark: {fl['dnsList']} {fl['browserList']}")
+    # a node with many rows (the ticket 2026-10-21-jui-viz-flow-chosen-path-list-has-no-separator): its flows right under what
+    # was chosen, and the board turned there, so the button is pressable where it shows — on a page too short for the board
+    size = page.viewport_size
+    await page.set_viewport_size({"width": size["width"], "height": 560})
+    await page.evaluate("() => window.__dbg.srSelect('r2')")
+    await page.evaluate("() => { const B = document.getElementById('sr-board'); B.scrollTop = B.scrollHeight; }")
+    await page.evaluate("() => window.__dbg.srSelect('browser')")
+    fl["boardInView"] = await page.evaluate("""() => { const B = document.getElementById('sr-board'), b = B.querySelector('[data-sr-flow]');
+      const e = B.querySelector('.sr-edges'), r = b.getBoundingClientRect(), R = B.getBoundingClientRect();
+      return { overflows: B.scrollHeight > B.clientHeight, inView: r.top >= R.top && r.bottom <= R.bottom,
+               beforeEdges: !!(e && (b.compareDocumentPosition(e) & Node.DOCUMENT_POSITION_FOLLOWING)) }; }""")
+    await page.set_viewport_size(size)
+    check(failures, fl["boardInView"] == {"overflows": True, "inView": True, "beforeEdges": True},
+          f"a chosen node's flows sit under its rows and the board turns to them: pressable without a scroll: {fl['boardInView']}")
 
     # played step by step: the toasts, the branch's choices and the edges ahead
     await page.click("#sr-board [data-sr-flow='search']")
@@ -143,6 +157,11 @@ async def run_flows(page, out, failures, res):
           and {"📥 queue に積む", "💾 r2 に保存"} <= set(done["log"]) and done["log"][-2:] == ["← ブラウザ に返す", "✓ 流れの終わり"],
           f"the choice taken is the way played, the other not; the lanes and the way back: {fl['miss']}")
     await page.screenshot(path=str(out / "flow-light.png"))
+    fl["chosenRows"] = await page.evaluate("""() => { const ol = document.querySelector('#sr-player .sr-fp-chosen'); if (!ol) return null;
+      const cs = getComputedStyle(ol), w = ol.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      return [...ol.children].map((li) => [Math.round(li.getBoundingClientRect().width), Math.round(w)]); }""")
+    check(failures, fl["chosenRows"] and all(lw >= w - 2 for lw, w in fl["chosenRows"]),
+          f"each choice taken is a line of its own on the player's bar (none run on after another): {fl['chosenRows']}")
     # back to the branch (each step back undoes one), choose again
     for _ in range(done["history"] - at_branch["history"] + 1):
         await page.click("#sr-player [data-sr-fp='back']")
@@ -181,6 +200,16 @@ async def run_flows(page, out, failures, res):
     fl["auto"] = auto["chosen"]
     check(failures, auto["chosen"] == ["KV に結果が有る？ → 有る"], f"自動: the default taken without a press: {auto['chosen']}")
     await page.uncheck("#sr-player [data-sr-fp='auto']")
+    # pulled back over the room, the light keeps a radius you can see (7 px at the least)
+    await page.click("#sr-player [data-sr-fp='stop']")
+    await page.evaluate("() => window.__dbg.srFlowSpeed(1)")
+    await page.evaluate("() => window.__dbg.srZoom(8)")
+    await page.evaluate("() => window.__dbg.srSelect('browser')")
+    await page.click("#sr-board [data-sr-flow='search']")
+    far = await until(page, f"() => {{ const f = ({FLOW})(); return f.lightPx !== null ? f : null; }}", "search: a light moving, far", timeout=30000, why=FLOW)
+    fl["lightPxFar"] = far["lightPx"]
+    check(failures, far["lightPx"] >= 6.5, f"pulled back, a moving light is drawn at least 7 px in radius: {far['lightPx']}")
+    await page.evaluate("() => window.__dbg.srZoom(1 / 8)")
     # a schedule's flow: its mark and its schedule as written
     await page.click("#sr-player [data-sr-fp='stop']")
     await page.evaluate("() => window.__dbg.srSelect('r2')")

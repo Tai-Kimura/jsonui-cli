@@ -51,7 +51,7 @@ function srFlowBuild(V) {
   }
 }
 
-/* The board's list for the chosen node: the flows it starts (none: nothing is added). */
+/* The board's list for the chosen node: the flows it starts (none: nothing is added), right under the node's own rows. */
 function srFlowBoardHTML(nodeId) {
   const V = SR.view;
   if (!V || !nodeId) return '';
@@ -129,6 +129,7 @@ function srFlowMove(P, step) {
   const V = SR.view, a = srFlowPos(V, step.from), b = srFlowPos(V, step.to);
   const dot = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffcf33 }));
   dot.position.copy(a);
+  dot.userData.r = 0.28; dot.userData.minPx = SR_FLOW_MIN_PX;
   V.flowLayer.add(dot);
   P.lights.push(dot);
   return { kind: 'move', step, a, b, dot, done: 0 };
@@ -216,8 +217,21 @@ function srFlowGlow(P, at) {
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.08, 6, 24), new THREE.MeshBasicMaterial({ color: 0xffcf33, transparent: true, opacity: 0.9 }));
   ring.position.set(p.x, p.y - 0.6, p.z); ring.rotation.x = Math.PI / 2;
   ring.userData.left = SR_FLOW.nodeMs * 2;
+  ring.userData.r = 0.75; ring.userData.minPx = SR_FLOW_MIN_PX * 2;
   SR.view.flowLayer.add(ring);
   P.lights.push(ring);
+}
+
+/* Pulled back over a large room a light 0.28 across is a few pixels: it is drawn at least SR_FLOW_MIN_PX in radius
+   (the ring under a node twice that), and at its own size once the camera is near enough for that. */
+const SR_FLOW_MIN_PX = 7;
+function srFlowPxPerUnit(V, at) {
+  const d = V.camera.position.distanceTo(at);
+  return V.renderer.domElement.clientHeight / (2 * Math.max(d, 1e-3) * Math.tan(V.camera.fov * Math.PI / 360));
+}
+function srFlowKeepSize(V, o) {
+  if (!o.userData.r) return;
+  o.scale.setScalar(Math.max(1, o.userData.minPx / (o.userData.r * srFlowPxPerUnit(V, o.position))));
 }
 
 /* ---- each frame: the light along its edge, the toasts' places and lives, the next step when one is done */
@@ -249,6 +263,7 @@ function srFlowTick(V, dt) {
       if (advance(P.anim)) { P.anim = null; if (P.stepOnce) P.stepOnce = false; else srFlowNext(P); }
     } else if (P.state === 'play') srFlowNext(P);
   }
+  for (const o of P.lights) srFlowKeepSize(V, o);
   if (P.state === 'branch' && SR_FLOW.auto && P.branch && P.branch.b.default && srNow() - P.branch.shownAt > 600 / SR_FLOW.speed) srFlowChoose(P.branch.b.default);
   for (const o of [...V.flowLayer.children]) if (o.userData.left !== undefined && (o.userData.left -= step) <= 0) { V.flowLayer.remove(o); P.lights = P.lights.filter((x) => x !== o); }
   // the toasts over their nodes, stacked when several are on one
