@@ -355,3 +355,9 @@ def _template(key: str) -> str:
     T(key)   # loads the table, raises for a key it lacks
     value = _STRINGS.table[key]
     return " ".join(value.values()) if isinstance(value, dict) else value
+
+
+def T_head(key: str, slot: str, **params) -> str:
+    """T(key)'s words up to {slot} (the slot and what follows left out): for words whose end the suite cannot know (a
+    time, a summary) and a check that reads their start."""
+    return T(key, **{**params, slot: "\x00"}).split("\x00")[0]

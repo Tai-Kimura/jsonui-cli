@@ -17,7 +17,7 @@ import subprocess
 import sys
 import time
 
-from common import ISOLATE, DESKTOP, LAUNCH_ARGS, PHONE, Watch, dump, new_page, ready
+from common import DESKTOP, ISOLATE, LAUNCH_ARGS, PHONE, T, T_head, T_pattern, Watch, dump, new_page, ready
 
 FRUIT = {"question": "好きな果物は？ <b>太字</b>", "header": "果物", "multiSelect": False,
          "options": [{"label": "りんご", "description": "赤くて丸い"},
@@ -108,18 +108,18 @@ async def run_ask(pw, out, failures):
                    chip: document.getElementById('chip-ask').textContent, robot: (window.__dbg.robotState()['e2'] || window.__dbg.robotState()[Object.keys(window.__dbg.robotState())[0]] || {}).state }; }""")
         check(failures, res["card"]["legends"][0].startswith("果物好きな果物は？ <b>太字</b>") and not res["card"]["bold"] and not res["card"]["script"]
               and "<script>x</script>" in res["card"]["preview"], f"the question shows as text, not markup: {res['card']}")
-        check(failures, res["card"]["chip"] == "質問 1" and res["card"]["robot"] == "waiting", f"the chip counts it and the robot waits: {res['card']}")
+        check(failures, res["card"]["chip"] == T("panel.chip.ask", n=1) and res["card"]["robot"] == "waiting", f"the chip counts it and the robot waits: {res['card']}")
         # a robot waiting on a question is not waiting for a permission: its own badge and filter (requester, 10-18)
         res["asking"] = await page.evaluate("""() => { const n = (k) => document.querySelector(`#sess-filter [data-sf="${k}"] b`).textContent;
           const badge = document.querySelector('#sessions [data-sst]'); return { waiting: n('waiting'), asking: n('asking'), badge: badge && badge.textContent,
           sum: (document.querySelector('#sessions [data-pgsum]') || {}).textContent || '' }; }""")
-        check(failures, res["asking"]["waiting"] == "0" and res["asking"]["asking"] == "1" and res["asking"]["badge"] == "質問に回答待ち"
-              and "許可待ち" not in res["asking"]["sum"] and "質問待ち 1" in res["asking"]["sum"], f"a question is not counted as a permission wait: {res['asking']}")
+        check(failures, res["asking"]["waiting"] == "0" and res["asking"]["asking"] == "1" and res["asking"]["badge"] == T("status.asking")
+              and not T_pattern("panel.pg.waiting").search(res["asking"]["sum"]) and T("panel.pg.asking", n=1) in res["asking"]["sum"], f"a question is not counted as a permission wait: {res['asking']}")
         # the session row's second line says so while it waits (ticket 2026-10-19-jui-viz-act-stays-question-waiting-after-answer)
         res["actWaiting"] = await page.evaluate(ACT)
-        check(failures, res["actWaiting"].startswith("質問に回答待ち"), f"while it waits, the row's act says so: {res['actWaiting']!r}")
+        check(failures, res["actWaiting"].startswith(T("status.asking")), f"while it waits, the row's act says so: {res['actWaiting']!r}")
         res["countdown"] = await page.evaluate("() => (document.querySelector('.qcard.q-open [data-quntil]') || {}).textContent || ''")
-        check(failures, res["countdown"].startswith("あと ") and res["countdown"].endswith("秒でターミナルに戻す"), f"the time left shows: {res['countdown']!r}")
+        check(failures, bool(T_pattern("panel.q.left.sec").fullmatch(res["countdown"]) or T_pattern("panel.q.left.min").fullmatch(res["countdown"])), f"the time left shows: {res['countdown']!r}")
         send = ".qcard.q-open [data-qsend]"
         steps = []
         await page.click(".qcard.q-open fieldset:nth-of-type(1) label:has-text('みかん')")
@@ -144,15 +144,16 @@ async def run_ask(pw, out, failures):
         check(failures, answers == {FRUIT["question"]: "みかん", COLOR["question"]: "赤, 緑, 金 と 銀"}, f"the answers: {answers}")
         hook(dict(base, hook_event_name="PostToolUse", tool_name="AskUserQuestion", tool_use_id="ask-1",
                   tool_input={**INPUT, "answers": answers or {}}, tool_response={"answers": answers or {}}))
-        await wait(page, "() => [...document.querySelectorAll('.qcard .qdone')].some((p) => p.textContent.includes('ブラウザの答えが届いた'))", label="the card confirmed")
+        await wait(page, f"() => [...document.querySelectorAll('.qcard .qdone')].some((p) => p.textContent.includes({json.dumps(T('panel.q.answered'))}))", label="the card confirmed")
         try:
-            await wait(page, f"() => ({ACT})() === '質問の回答を受けた'", timeout=10000, label="the row's act after the page's answer")
+            await wait(page, f"() => ({ACT})() === {json.dumps(T('act.question.answered'))}", timeout=10000, label="the row's act after the page's answer")
         except RuntimeError:
             pass
         res["actAfterPage"] = await page.evaluate(ACT)
-        check(failures, res["actAfterPage"] == "質問の回答を受けた", f"answered on the page and PostToolUse came: the row's act no longer waits: {res['actAfterPage']!r}")
-        res["log"] = await page.evaluate("() => [...document.querySelectorAll('#ticker li')].map((l) => l.textContent).filter((t) => t.includes('質問に回答'))")
-        check(failures, any("ブラウザで質問に回答" in t and "果物: みかん" in t for t in res["log"]), f"the answer is in the log: {res['log']}")
+        check(failures, res["actAfterPage"] == T("act.question.answered"), f"answered on the page and PostToolUse came: the row's act no longer waits: {res['actAfterPage']!r}")
+        answered = T_head("ev.question.answered", "summary").strip()
+        res["log"] = await page.evaluate("(w) => [...document.querySelectorAll('#ticker li')].map((l) => l.textContent).filter((t) => t.includes(w))", answered)
+        check(failures, any(answered in t and "果物: みかん" in t for t in res["log"]), f"the answer is in the log: {res['log']}")
 
         # 2. the terminal answers first: the waiting hook prints nothing
         hook(pre("ask-2"))
@@ -163,13 +164,13 @@ async def run_ask(pw, out, failures):
         outp, _ = waiting.communicate(timeout=20)
         res["terminalFirst"] = outp.decode()
         check(failures, res["terminalFirst"] == "", f"the terminal answered first: the hook printed {res['terminalFirst']!r}")
-        await wait(page, "() => [...document.querySelectorAll('.qcard .qdone')].some((p) => p.textContent.includes('ターミナルで答えた'))", label="the terminal's answer shown")
+        await wait(page, f"() => [...document.querySelectorAll('.qcard .qdone')].some((p) => p.textContent.includes({json.dumps(T('panel.q.terminal'))}))", label="the terminal's answer shown")
         try:
-            await wait(page, f"() => ({ACT})() === '質問の回答を受けた'", timeout=10000, label="the row's act after the terminal's answer")
+            await wait(page, f"() => ({ACT})() === {json.dumps(T('act.question.answered'))}", timeout=10000, label="the row's act after the terminal's answer")
         except RuntimeError:
             pass
         res["actAfterTerminal"] = await page.evaluate(ACT)
-        check(failures, res["actAfterTerminal"] == "質問の回答を受けた", f"answered in the terminal: the row's act no longer waits: {res['actAfterTerminal']!r}")
+        check(failures, res["actAfterTerminal"] == T("act.question.answered"), f"answered in the terminal: the row's act no longer waits: {res['actAfterTerminal']!r}")
 
         # 2b. 「ターミナルで答える」: the hook stops waiting at once and prints nothing
         hook(pre("ask-2b"))
@@ -179,7 +180,7 @@ async def run_ask(pw, out, failures):
         await page.click(".qcard.q-open [data-qrelease]")
         outp, _ = waiting.communicate(timeout=20)
         res["release"] = {"printed": outp.decode(), "sec": round(time.monotonic() - t1, 1)}
-        await wait(page, "() => [...document.querySelectorAll('.qcard .qnote')].some((p) => p.textContent.includes('ターミナルで答えてください'))", label="the card says: the terminal")
+        await wait(page, f"() => [...document.querySelectorAll('.qcard .qnote')].some((p) => p.textContent.includes({json.dumps(T('panel.q.why', why=T('panel.q.why.released')))}))", label="the card says: the terminal")
         check(failures, res["release"]["printed"] == "" and res["release"]["sec"] < 5, f"the terminal button ends the wait: {res['release']}")
 
         # 2c. nobody answers: the hook gives the question back after askWaitSec (8 s here), nothing printed
@@ -191,11 +192,12 @@ async def run_ask(pw, out, failures):
 
         # 2d. the card left behind cannot be answered here and says so first (requester, 10-18: the choices looked
         # pickable and the reason was one line at the bottom)
-        await wait(page, "() => [...document.querySelectorAll('.qcard.q-closed .qwhy')].some((p) => p.textContent.includes('時間が過ぎました'))", label="the closed card's reason")
-        res["closed"] = await page.evaluate("""() => { const c = [...document.querySelectorAll('.qcard.q-closed')].find((x) => x.querySelector('.qwhy').textContent.includes('時間が過ぎました'));
+        timed_out = T_head("panel.q.end.time", "at")
+        await wait(page, f"() => [...document.querySelectorAll('.qcard.q-closed .qwhy')].some((p) => p.textContent.includes({json.dumps(timed_out)}))", label="the closed card's reason")
+        res["closed"] = await page.evaluate("""(timedOut) => { const c = [...document.querySelectorAll('.qcard.q-closed')].find((x) => x.querySelector('.qwhy').textContent.includes(timedOut));
           const opt = c.querySelector('.qopt'), st = getComputedStyle(opt);
           return { afterHeader: c.children[1].classList.contains('qwhy'), live: c.querySelectorAll('input:not([disabled])').length,
-                   inputs: c.querySelectorAll('input').length, cursor: st.cursor, opacity: Number(st.opacity), open: c.classList.contains('q-open') }; }""")
+                   inputs: c.querySelectorAll('input').length, cursor: st.cursor, opacity: Number(st.opacity), open: c.classList.contains('q-open') }; }""", timed_out)
         check(failures, res["closed"]["afterHeader"] and res["closed"]["live"] == 0 and res["closed"]["inputs"] > 0 and res["closed"]["cursor"] == "not-allowed"
               and res["closed"]["opacity"] < 1 and not res["closed"]["open"], f"a card nobody waits on: the reason on top, choices not pickable: {res['closed']}")
         await page.screenshot(path=str(out / "question-closed.png"))
@@ -220,8 +222,8 @@ async def run_ask(pw, out, failures):
         t1 = time.monotonic()
         outp, _ = hook(pre("ask-3", long), ask=True).communicate(timeout=20)
         res["tooLong"] = {"printed": outp.decode(), "sec": round(time.monotonic() - t1, 1)}
-        await wait(page, "() => [...document.querySelectorAll('.qcard .qnote')].some((p) => p.textContent.includes('全部をここに表示できない'))", label="the too-long note")
-        res["tooLong"]["inputs"] = await page.evaluate("() => [...document.querySelectorAll('.qcard')].filter((c) => c.textContent.includes('全部をここに表示できない')).map((c) => c.querySelectorAll('input:not([disabled])').length)")
+        await wait(page, f"() => [...document.querySelectorAll('.qcard .qnote')].some((p) => p.textContent.includes({json.dumps(T('panel.q.why.toolong'))}))", label="the too-long note")
+        res["tooLong"]["inputs"] = await page.evaluate("(w) => [...document.querySelectorAll('.qcard')].filter((c) => c.textContent.includes(w)).map((c) => c.querySelectorAll('input:not([disabled])').length)", T("panel.q.why.toolong"))
         check(failures, res["tooLong"]["printed"] == "" and res["tooLong"]["sec"] < 5 and res["tooLong"]["inputs"] == [0], f"a question not shown in full: {res['tooLong']}")
 
         # dark and 390 px with an open card

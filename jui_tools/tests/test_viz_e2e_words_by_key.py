@@ -53,3 +53,11 @@ def test_a_pattern_takes_a_pattern_for_a_slot(monkeypatch):
     monkeypatch.setenv("JUI_VIZ_LANGUAGE", "en")
     p = common.T_pattern("live.usage.left.time", h="2", m=re.compile(r"1\d"))
     assert p.fullmatch("2:15 left") and not p.search("2:25 left")
+
+
+def test_the_head_of_words_is_what_comes_before_the_slot(monkeypatch):
+    monkeypatch.setenv("JUI_VIZ_LANGUAGE", "ja")
+    assert common.T_head("panel.q.end.time", "at") == "ブラウザで答えられる時間が過ぎました"
+    monkeypatch.setattr(common, "_STRINGS", None)
+    monkeypatch.setenv("JUI_VIZ_LANGUAGE", "en")
+    assert common.T_head("panel.q.end.time", "at") == "The time to answer in the browser is over"
