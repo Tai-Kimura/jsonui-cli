@@ -1983,5 +1983,12 @@
   "srv.git.commits": {
     "one": "{n} commit",
     "other": "{n} commits"
+  },
+  "act.delegate": "Delegating {kind}: {what}",
+  "srv.stdin": "(standard input)",
+  "srv.list.sep": ", ",
+  "srv.list.more": {
+    "one": "{head} and {n} more",
+    "other": "{head} and {n} more"
   }
 }

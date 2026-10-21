@@ -1937,5 +1937,11 @@
   "srv.git.forced": "（強制）",
   "srv.git.commits": {
     "other": "{n} コミット"
+  },
+  "act.delegate": "依頼 {kind}: {what}",
+  "srv.stdin": "（標準入力）",
+  "srv.list.sep": "、",
+  "srv.list.more": {
+    "other": "{head} ほか {n} 件"
   }
 }

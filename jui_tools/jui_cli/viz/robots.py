@@ -10,6 +10,8 @@ import os
 import re
 import shlex
 
+from . import i18n
+
 TYPING_TOOLS = {"Edit", "Write", "NotebookEdit", "MultiEdit"}
 READING_TOOLS = {"Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch", "ToolSearch"}
 # Reading the web (requester 10-20: "WebFetchの時は机で辞書をペラペラめくるアニメーションにして欲しい"; WebSearch too, the
@@ -90,7 +92,7 @@ def act_for_tool(tool: str, tool_input: dict, root: str | None) -> str:
         return _clip(f"{tool} {tool_input.get('pattern', '')}")
     if tool in ("Agent", "Task"):
         kind = tool_input.get("subagent_type") or "agent"
-        return _clip(f"依頼 {kind}: {tool_input.get('description', '')}")
+        return _clip(i18n.tl("act.delegate", kind=kind, what=tool_input.get('description', '')))
     if tool.startswith("mcp__"):
         name = tool.split("__", 2)[-1]
         return _clip(f"{name} {_rel(str(path), root)}" if path else name)
@@ -253,7 +255,8 @@ def drives_a_device(command: str) -> bool:
 # removed with -r is one target, how many files were in it is not known). Not seen: a script that deletes from inside
 # (Python's os.remove, a Makefile), and anything the user deletes by hand.
 _DELETERS = {"rm", "rmdir", "unlink", "trash", "trash-put"}
-STDIN_TARGETS = "（標準入力）"   # what xargs hands a deleter: named nowhere in the command
+def stdin_targets() -> str:
+    return i18n.tl("srv.stdin")   # what xargs hands a deleter: named nowhere in the command
 _RECURSIVE = re.compile(r"^-[A-Za-z]*[rR]")
 
 
@@ -318,10 +321,10 @@ def _deletes(words: list[str]) -> dict | None:
         while i < len(args) and args[i].startswith("-"):
             i += 2 if args[i] in ("-n", "-L", "-I", "-P", "-s", "-E", "-d", "-a") else 1
         # judged with a stand-in operand for what stdin brings (rm and git rm want one); find is no xargs target
-        inner = _deletes([*args[i:], STDIN_TARGETS]) if i < len(args) and os.path.basename(args[i]) != "find" else None
+        inner = _deletes([*args[i:], stdin_targets()]) if i < len(args) and os.path.basename(args[i]) != "find" else None
         if inner is None:
             return None
-        return {"targets": [STDIN_TARGETS], "folder": inner["folder"], "how": f"xargs {inner['how']}"}
+        return {"targets": [stdin_targets()], "folder": inner["folder"], "how": f"xargs {inner['how']}"}
     if exe == "find":
         k = next((j for j, a in enumerate(args) if a.startswith("-") or a in ("(", "!")), len(args))
         roots, expr = args[:k] or ["."], args[k:]
@@ -351,8 +354,8 @@ def deletions(command: str) -> dict | None:
 def deletion_label(d: dict, n: int = 2) -> str:
     """a.txt、b.txt ほか 3 件 — the names (last path segment) of what was deleted, short."""
     names = [os.path.basename(t.rstrip("/")) or t for t in d["targets"]]
-    head = "、".join(names[:n])
-    return _clip(f"{head} ほか {len(names) - n} 件" if len(names) > n else head, 60)
+    head = i18n.tl("srv.list.sep").join(names[:n])
+    return _clip(i18n.tl("srv.list.more", head=head, n=len(names) - n) if len(names) > n else head, 60)
 
 
 _NOTHING_THERE = re.compile(r"No such file or directory|did not match any files|is not a working tree|cannot remove", re.I)
