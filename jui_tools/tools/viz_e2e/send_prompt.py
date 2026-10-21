@@ -26,7 +26,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, ISOLATE, LAUNCH_ARGS, PHONE, Watch, dump, new_page, ready, stamp
+from common import DESKTOP, ISOLATE, LAUNCH_ARGS, PHONE, T, T_head, T_pattern, Watch, dump, new_page, ready, stamp
 
 S_OK = "e2e00000-0000-4000-8000-0000000000d1"
 S_OLD = "e2e00000-0000-4000-8000-0000000000d2"
@@ -180,7 +180,7 @@ async def run_send_prompt(pw, out, failures):
         # 送信… → the confirmation names the robot and the session; やめる keeps the text
         await page.click("[data-h-send]")
         r = res["confirm"] = await page.evaluate(COMPOSE)
-        check(r["confirm"] and label in r["to"] and "メインセッション" in r["to"] and "prompt-ok" in r["to"] and r["preview"] == TEXT,
+        check(r["confirm"] and label in r["to"] and T_pattern("hist.to.name").search(r["to"]) and "prompt-ok" in r["to"] and r["preview"] == TEXT,
               f"the confirmation names the robot and the session and shows the text: {r}")
         await page.screenshot(path=str(out / "confirm.png"))
         await page.click("[data-h-back]")
@@ -195,16 +195,17 @@ async def run_send_prompt(pw, out, failures):
         check(r["confirm"], f"Ctrl+Enter opens the confirmation: {r}")
         await page.wait_for_timeout(500)
         await page.click("[data-h-go]")
-        await wait(page, "() => document.querySelector('[data-h-compose] [data-h-state]').textContent.startsWith('送信中')", label="送信中")
+        await wait(page, f"() => document.querySelector('[data-h-compose] [data-h-state]').textContent.startsWith({json.dumps(T_head('hist.state.sending', 'at').strip())})", label="送信中")
         r = res["sent"] = await page.evaluate(COMPOSE)
-        check(r["value"] == "" and not r["confirm"] and "まだ届いたとは言えない" in r["state"] and "届いた（" not in r["state"],
+        check(r["value"] == "" and not r["confirm"] and T_pattern("hist.state.sending").fullmatch(r["state"]) and not T_pattern("hist.state.arrived").search(r["state"]),
               f"sent: the box is empty again, and the page says 送信中, not arrived: {r}")
         _, polled = local("GET", f"/channel/poll?channelId={ok_channel}", timeout=30)
         check(polled["prompts"] == [{"text": TEXT}], f"the channel got the text exactly: {polled}")
         await page.screenshot(path=str(out / "sent.png"))
         # the event log: when, to whom, the head
-        await wait(page, "() => document.body.textContent.includes('ブラウザからプロンプトを送信')", timeout=10000, label="the event log line")
-        res["log"] = await page.evaluate("() => [...document.querySelectorAll('body *')].map((n) => n.childElementCount ? '' : n.textContent).find((t) => t.includes('ブラウザからプロンプトを送信')) || ''")
+        sent_log = T_head("ev.prompt.sent", "label").strip()
+        await wait(page, f"() => document.body.textContent.includes({json.dumps(sent_log)})", timeout=10000, label="the event log line")
+        res["log"] = await page.evaluate("(w) => [...document.querySelectorAll('body *')].map((n) => n.childElementCount ? '' : n.textContent).find((t) => t.includes(w)) || ''", sent_log)
         check(LINE1 in res["log"] and "TAILX" not in res["log"], f"the log line has the head only: {res['log']!r}")
         # the same words typed by hand are not the channel's record: still 送信中
         now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -213,14 +214,14 @@ async def run_send_prompt(pw, out, failures):
         await wait(page, "() => document.querySelector('[data-rb-hist]').textContent.includes('末尾TAILX')", timeout=15000, label="the hand-typed copy")
         await page.wait_for_timeout(3500)
         res["handTyped"] = await page.evaluate(COMPOSE)
-        check(res["handTyped"]["state"].startswith("送信中"), f"the same words typed by hand are not an arrival: {res['handTyped']}")
+        check(res["handTyped"]["state"].startswith(T_head("hist.state.sending", "at").strip()), f"the same words typed by hand are not an arrival: {res['handTyped']}")
         # the CLI's own record of the channel text, in the shape seen on a real receiver (10-19 09:20): 届いた
         with open(transcripts[S_OK], "a") as f:
             f.write(json.dumps({"type": "user", "isMeta": True, "promptSource": "system", "timestamp": now_iso,
                                 "origin": {"kind": "channel", "server": "plugin:jui-viz:jui-viz"}, "userType": "external", "entrypoint": "cli",
                                 "message": {"role": "user", "content": f'<channel source="plugin:jui-viz:jui-viz" sender="jui_viz_page">\n{TEXT}\n</channel>'}},
                                ensure_ascii=False) + "\n")
-        await wait(page, "() => document.querySelector('[data-h-compose] [data-h-state]').textContent.startsWith('届いた')", timeout=15000, label="届いた once it shows in the transcript")
+        await wait(page, f"() => document.querySelector('[data-h-compose] [data-h-state]').textContent.startsWith({json.dumps(T_head('hist.state.arrived', 'at').strip())})", timeout=15000, label="届いた once it shows in the transcript")
         res["arrived"] = await page.evaluate(COMPOSE)
         await page.screenshot(path=str(out / "arrived.png"))
         # a prompt that never shows in the transcript: 届いていない (the waits shortened through the e2e hook)
@@ -230,31 +231,31 @@ async def run_send_prompt(pw, out, failures):
         await page.click("[data-h-send]")
         await page.wait_for_timeout(500)
         await page.click("[data-h-go]")
-        await wait(page, "() => document.querySelector('[data-h-compose] [data-h-state]').textContent.startsWith('送信中')", label="送信中 again")
+        await wait(page, f"() => document.querySelector('[data-h-compose] [data-h-state]').textContent.startsWith({json.dumps(T_head('hist.state.sending', 'at').strip())})", label="送信中 again")
         res["sending2"] = await page.evaluate(COMPOSE)
-        await wait(page, "() => document.querySelector('[data-h-compose] [data-h-state]').textContent.startsWith('届いていない')", timeout=15000, label="届いていない")
+        await wait(page, f"() => document.querySelector('[data-h-compose] [data-h-state]').textContent.startsWith({json.dumps(T_head('hist.state.missing', 'at'))})", timeout=15000, label="届いていない")
         res["missing"] = await page.evaluate(COMPOSE)
-        check("候補" in res["missing"]["state"], f"届いていない names the likely causes: {res['missing']}")
+        check(bool(T_pattern("hist.state.missing").fullmatch(res["missing"]["state"])), f"届いていない names the likely causes: {res['missing']}")
         await page.screenshot(path=str(out / "missing.png"))
         await page.evaluate("() => { window.__dbg.promptWait.notArrivedMs = 60000; window.__dbg.promptWait.quietMs = 30000; }")
         local("GET", f"/channel/poll?channelId={ok_channel}", timeout=30)   # the stand-in takes it
         # started without the flag, or in the VS Code extension: disabled, with the reason and how to start
         await open_robot(page, S_PLAIN)
         r = res["plain"] = await page.evaluate(COMPOSE)
-        check(r["disabled"] and "起動に channel の指定が無い" in r["why"] and "claude --dangerously-load-development-channels plugin:jui-viz@jsonui" in r["why"]
+        check(r["disabled"] and T("hist.launch.noflag") in r["why"] and "claude --dangerously-load-development-channels plugin:jui-viz@jsonui" in r["why"]
               and r["sendDisabled"], f"no flag: disabled, with the reason and the command: {r}")
         await page.screenshot(path=str(out / "no-flag.png"))
         await open_robot(page, S_IDE)
         r = res["ide"] = await page.evaluate(COMPOSE)
-        check(r["disabled"] and "VS Code 拡張" in r["why"] and r["sendDisabled"], f"the VS Code extension: disabled, with the reason: {r}")
+        check(r["disabled"] and T("hist.launch.vscode") in r["why"] and r["sendDisabled"], f"the VS Code extension: disabled, with the reason: {r}")
         # the old plugin and the relay-less session: disabled, with the reason
         await open_robot(page, S_OLD)
         r = res["old"] = await page.evaluate(COMPOSE)
-        check(r["disabled"] and "古い" in r["why"] and "1.2.0" in r["why"] and r["sendDisabled"], f"an old plugin: disabled, with the reason: {r}")
+        check(r["disabled"] and T("hist.why.old") in r["why"] and r["sendDisabled"], f"an old plugin: disabled, with the reason: {r}")
         await page.screenshot(path=str(out / "old-plugin.png"))
         await open_robot(page, S_NONE)
         r = res["none"] = await page.evaluate(COMPOSE)
-        check(r["disabled"] and "中継" in r["why"] and r["sendDisabled"] and r["value"] == "", f"relay: false: disabled, with the reason: {r}")
+        check(r["disabled"] and T("hist.why.norelay") in r["why"] and r["sendDisabled"] and r["value"] == "", f"relay: false: disabled, with the reason: {r}")
         await page.screenshot(path=str(out / "no-relay.png"))
         await page.emulate_media(color_scheme="dark")
         await open_robot(page, S_OK)
