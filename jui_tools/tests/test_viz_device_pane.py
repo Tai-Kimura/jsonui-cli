@@ -249,7 +249,7 @@ const rebuildRooms = count, rebuildRobots = () => {}, rebuildSpecs = () => {}, r
     calls = "".join(f"rebuilds = 0; liveApply({json.dumps(c)}, {str(r).lower()}); out.push([rebuilds, Object.keys(LIVE.slices).sort()]);\n"
                     for c, r in pushes)
     script = stubs + const + src[start:end] + "\nconst out = [];\n" + calls + "process.stdout.write(JSON.stringify(out));"
-    got = subprocess.run([node, "-e", script], capture_output=True, text=True, timeout=30)
+    got = subprocess.run([node, "-"], input=script, capture_output=True, text=True, timeout=30)
     assert got.returncode == 0, got.stderr
     return json.loads(got.stdout)
 

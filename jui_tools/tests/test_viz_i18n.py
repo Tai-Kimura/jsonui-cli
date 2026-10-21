@@ -320,8 +320,8 @@ def run_tl(table: dict, locale: str, calls: list, fn: str = "tl") -> list:
     script = (WEB_JS / "05-i18n.js").read_text(encoding="utf-8")
     blob = json.dumps({"language": locale[:2], "locale": locale, "strings": table})
     prelude = f"globalThis.document = {{ getElementById: () => ({{ textContent: {json.dumps(blob)} }}) }};\n"
-    out = subprocess.run([node, "-e", prelude + script + f"\nprocess.stdout.write(JSON.stringify({json.dumps(calls)}"
-                          f".map(([k, p]) => {fn}(k, p))));"], capture_output=True, text=True, timeout=30)
+    out = subprocess.run([node, "-"], input=prelude + script + f"\nprocess.stdout.write(JSON.stringify({json.dumps(calls)}"
+                          f".map(([k, p]) => {fn}(k, p))));", capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout)
 
@@ -413,7 +413,7 @@ def test_a_session_badge_is_the_same_in_every_language(locale, table):
     cases = [["t", "b"], ["t"], ["d"], ["g", "t"], ["q", "b"], ["q", "w"], ["g", "d"]]
     script = (prelude + (WEB_JS / "05-i18n.js").read_text(encoding="utf-8") + f"\nconst robotState = {json.dumps(robots)};\n" + code
               + f"\nprocess.stdout.write(JSON.stringify({json.dumps(cases)}.map((r) => sessionBadge({{ robots: r }}))));")
-    out = subprocess.run([node, "-e", script], capture_output=True, text=True, timeout=30)
+    out = subprocess.run([node, "-"], input=script, capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     w = words
     assert json.loads(out.stdout) == [
@@ -459,8 +459,8 @@ def css_vars(table: dict) -> dict:
     blob = json.dumps({"language": "en", "locale": "en-US", "strings": table})
     prelude = ("const set = {};\nglobalThis.document = { getElementById: () => ({ textContent: " + json.dumps(blob) + " }),"
                " documentElement: { style: { setProperty: (k, v) => { set[k] = v; } } } };\n")
-    out = subprocess.run([node, "-e", prelude + (WEB_JS / "05-i18n.js").read_text(encoding="utf-8")
-                          + "\nprocess.stdout.write(JSON.stringify(set));"], capture_output=True, text=True, timeout=30)
+    out = subprocess.run([node, "-"], input=prelude + (WEB_JS / "05-i18n.js").read_text(encoding="utf-8")
+                          + "\nprocess.stdout.write(JSON.stringify(set));", capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout)
 

@@ -38,7 +38,7 @@ def _run(cases: str):
         parts.append(src[start:_match(src, src.index("{", start)) + 1])
     ja = web_text("i18n", "ja.json")   # the words in Japanese, as the page says them under ja
     tl = f"const JA = {ja};\nconst tl = (k, p = {{}}) => JA[k].replace(/\\{{(\\w+)\\}}/g, (m, n) => (n in p ? String(p[n]) : m));\n"
-    out = subprocess.run([node, "-e", tl + STAND_IN + "\n".join(parts) + f"\nprocess.stdout.write(JSON.stringify({cases}));"],
+    out = subprocess.run([node, "-"], input=tl + STAND_IN + "\n".join(parts) + f"\nprocess.stdout.write(JSON.stringify({cases}));",
                          capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout)

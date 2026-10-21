@@ -30,7 +30,7 @@ def _cut(file: str, name: str) -> str:
 def _node(parts: list, expr: str):
     node = shutil.which("node")
     assert node, "node is needed (the jui_tools job has it)"
-    out = subprocess.run([node, "-e", "\n".join(parts) + f"\nprocess.stdout.write(JSON.stringify({expr}));"],
+    out = subprocess.run([node, "-"], input="\n".join(parts) + f"\nprocess.stdout.write(JSON.stringify({expr}));",
                          capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     return json.loads(out.stdout)

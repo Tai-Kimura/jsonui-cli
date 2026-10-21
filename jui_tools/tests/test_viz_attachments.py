@@ -267,8 +267,8 @@ def test_the_history_reads_the_english_line_and_the_japanese_one_of_older_transc
     rec = {"path": "/s/uploads/ab-1/0123456789abcdef.png", "name": "a, (b).png", "media": "image/png", "size": 2048}
     lines = [attachment_line(rec), "添付: /s/uploads/ab-1/0123456789abcdef.png（a, (b).png、image/png、2 KB）",
              "attached: see the file", "添付: なし"]
-    out = subprocess.run([node, "-e", src[start:end] + f"\nprocess.stdout.write(JSON.stringify({json.dumps(lines)}"
-                          ".map((l) => { const m = histAttachMatch(l); return m && m.slice(1); })));"],
+    out = subprocess.run([node, "-"], input=src[start:end] + f"\nprocess.stdout.write(JSON.stringify({json.dumps(lines)}"
+                          ".map((l) => { const m = histAttachMatch(l); return m && m.slice(1); })));",
                          capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     parts = ["/s/uploads/ab-1/0123456789abcdef.png", "ab-1", "0123456789abcdef", "png", "a, (b).png", "image/png", "2 KB"]
@@ -295,7 +295,7 @@ const run = (items) => {{ HIST.sent = {{ id: 's1', text: '', at: 100000 }}; comp
 const HIST = {{ id: 's1', sent: null }};
 const mine = {{ kind: 'channel', server: 'plugin:jui-viz:jui-viz', text: {json.dumps(line)}, at: 100500 }};
 process.stdout.write(JSON.stringify([run([mine]), run([{{ ...mine, server: 'other' }}]), run([{{ ...mine, at: 1000 }}]), painted]));"""
-    out = subprocess.run([node, "-e", script], capture_output=True, text=True, timeout=30)
+    out = subprocess.run([node, "-"], input=script, capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     assert json.loads(out.stdout) == [True, False, False, 1]
 

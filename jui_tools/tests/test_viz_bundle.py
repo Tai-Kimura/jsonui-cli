@@ -869,7 +869,7 @@ def _assign_floors(cases: list) -> list:
     body = src[start:_match(src, src.index("{", start)) + 1]
     script = f"const ROOM_MAX = 6;\n{body}\nconst cases = {_json.dumps(cases)};\n" \
              "process.stdout.write(JSON.stringify(cases.map((c) => assignFloors(c.rooms, c.rank, c.prev))));"
-    out = subprocess.run([node, "-e", script], capture_output=True, text=True, timeout=30)
+    out = subprocess.run([node, "-"], input=script, capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     return _json.loads(out.stdout)
 
@@ -935,7 +935,7 @@ def _run_js(file: str, names: list, expr: str):
         start = m.start(1)
         end = _match(src, src.index("{", start)) + 1 if m.group(1).startswith("function") else src.index(";\n", start) + 1
         parts.append(src[start:end])
-    out = subprocess.run([node, "-e", "\n".join(parts) + f"\nprocess.stdout.write(JSON.stringify({expr}));"], capture_output=True, text=True, timeout=30)
+    out = subprocess.run([node, "-"], input="\n".join(parts) + f"\nprocess.stdout.write(JSON.stringify({expr}));", capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     return _json.loads(out.stdout)
 
@@ -965,7 +965,7 @@ def _rolls(script_tail: str):
     src = web_text("js", "40-scene.js")
     start = src.index("const ROLL_CATCHUP_SEC")
     end = src.index("\n", src.index("const chanceIn"))
-    out = subprocess.run([node, "-e", src[start:end] + "\n" + script_tail], capture_output=True, text=True, timeout=30)
+    out = subprocess.run([node, "-"], input=src[start:end] + "\n" + script_tail, capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     return _json.loads(out.stdout)
 
