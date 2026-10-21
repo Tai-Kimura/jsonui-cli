@@ -17,6 +17,8 @@ import threading
 from collections import OrderedDict
 from pathlib import Path
 
+from . import i18n
+
 ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 DATE = re.compile(r"^20[0-9]{2}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$")
 KEEP = 2
@@ -99,7 +101,7 @@ def read(root: Path | str, seq=None, scenario: str | None = None, date: str | No
         return _refuse(400, seq, "bad_request", "by is provider or node")
     m = _mods()
     if m is None:
-        return _refuse(500, seq, "unreadable", "document_tools (jsonui-doc) が見つからないので、コストを計算できない")
+        return _refuse(500, seq, "unreadable", i18n.tl("srv.cost.no_tools"))
     try:
         status, got = _simulate(m, Path(root), scenario)
     except m["room"].Refused as r:

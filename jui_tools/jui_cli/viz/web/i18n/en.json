@@ -2027,5 +2027,6 @@
   },
   "srv.agents.no_claude": "claude is not on PATH (the session list is not read)",
   "srv.agents.unreadable": "Could not read claude agents --json (trying again)",
-  "srv.infra.no_tools": "document_tools (jsonui-doc) is not found, so the infra cannot be read"
+  "srv.infra.no_tools": "document_tools (jsonui-doc) is not found, so the infra cannot be read",
+  "srv.cost.no_tools": "document_tools (jsonui-doc) is not found, so the cost cannot be calculated"
 }
