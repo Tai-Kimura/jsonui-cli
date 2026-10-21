@@ -92,7 +92,30 @@ def load(root: Path | None = None, env: dict | None = None) -> tuple[Book, list[
         else:
             warnings.append(f"the room's price files are not used ({got['reason']}): {got['message']}")
     cache, why = cache_rows(cache_dir(env))
-    return Book(user, cache, bundled_rows()), warnings + why
+    bundled = bundled_rows()
+    return Book(user, cache, bundled), warnings + why + free_dropped(user, bundled)
+
+
+def free_dropped(user: list[dict], bundled: list[dict]) -> list[str]:
+    """A room's price row with no free amount where the bundled row of the same price has one: the room's row wins, so
+    that free amount is not taken (an egress row written by hand drops the account's 100 GB a month; ticket
+    2026-10-21-agents-skills-mcp-for-server-room §2 C2). One warning per price."""
+    free = {}
+    for row in bundled:
+        if row.get("free"):
+            free.setdefault((row["provider"], row["service"], row["sku"], row["unit"]), row["free"])
+    out, seen = [], set()
+    for row in user:
+        key = (row["provider"], row["service"], row["sku"], row["unit"])
+        if row.get("free") or key not in free or key in seen:
+            continue
+        seen.add(key)
+        f = free[key]
+        pool = f" from the account's pool {f['pool']}" if f.get("pool") else ""
+        out.append(f"{row.get('file')} /prices/{row.get('index')}: {'/'.join(key[:3])} has no free amount, but the "
+                   f"bundled price takes {f['amount']:g} {key[3]} a {f['period']}{pool} free; this row wins, so none is "
+                   f"taken (write free on it to keep it) [prices.free_dropped]")
+    return out
 
 
 def ref(found: dict) -> dict:

@@ -376,13 +376,34 @@ def assign_rows(name: str, doc: dict, env: str, model: dict) -> tuple[dict[str, 
             prev = got.get(nid)
             if prev is not None and prev[2] and not own:      # a node's own row beats a selector's
                 out.append(_p(name, f"/loads/{i}", "load.overlap", f"the node has its own row {prev[0]}: that one is "
-                              "used", "warning", fn="assign_rows", node=nid))
+                              "used (one row applies to a node, and a node's own row beats a selector's)", "warning",
+                              fn="assign_rows", node=nid))
                 continue
             if prev is not None:
                 out.append(_p(name, f"/loads/{i}", "load.overlap", f"the node already has row {prev[0]}: this later "
-                              "row is used", "warning", fn="assign_rows", node=nid))
+                              f"row is used and row {prev[0]} counts for nothing (one row applies to a node: put all of "
+                              "the node's quantities in one row)", "warning", fn="assign_rows", node=nid))
             got[nid] = (i, row, own)
     return {k: (i, r) for k, (i, r, _o) in got.items()}, out
+
+
+def check_multi_az_sku(name: str, i: int, row: dict, schedule: dict | None) -> list[dict]:
+    """A sku written with ":multi-az" (on the row, its schedule's rules or its ladder): the cost adds ":multi-az" from
+    the node's ha itself, to the instance and to the storage. Written by hand, the storage stays single-AZ, or with ha
+    too the sku is doubled and finds no price (ticket 2026-10-21-agents-skills-mcp-for-server-room §2 M1)."""
+    skus = [(f"/loads/{i}/sku", row.get("sku"))]
+    vertical = row.get("vertical") or {}
+    skus += [(f"/loads/{i}/vertical/ladder/{k}/sku", step.get("sku")) for k, step in enumerate(vertical.get("ladder", []))]
+    skus += [(f"/loads/{i}/vertical/{k}", vertical.get(k)) for k in ("min", "max")]
+    skus += [(f"/schedules/{M._seg(row['schedule'], schema())}/rules/{k}/sku", r.get("sku"))
+             for k, r in enumerate((schedule or {}).get("rules", []))]
+    for path, sku in skus:
+        if isinstance(sku, str) and sku.lower().endswith(":multi-az"):
+            return [_p(name, path, "load.sku.multi_az", f"the sku {sku!r} is written with :multi-az: write the plain "
+                       "sku and ha: multi-az on the node (the cost adds :multi-az to the instance and the storage from "
+                       "ha; by hand the storage stays single-AZ)", "warning", fn="check_multi_az_sku",
+                       node=row.get("node"))]
+    return []
 
 
 def check_against_rule(name: str, i: int, row: dict, node: dict) -> list[dict]:
@@ -539,6 +560,7 @@ def normalize(name: str, doc: dict, model: dict) -> tuple[dict, list[dict]]:
         rule = RULES.lookup(node)
         hourly = bool(rule and rule.hourly)
         sch = doc.get("schedules", {}).get(row.get("schedule")) if row.get("schedule") else None
+        problems += check_multi_az_sku(name, i, row, sch)
         mult = [day_shape(doc, h, row.get("profile")) * row.get("multiplier", 1.0) for h in hours]
         qs = normalize_quantities(row.get("quantities", {}))
         count = count_hours(row, sch, node, hours, hourly)

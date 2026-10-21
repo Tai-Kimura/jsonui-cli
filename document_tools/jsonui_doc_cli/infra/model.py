@@ -485,6 +485,7 @@ def merge(files: list[tuple[str, bytes]]) -> tuple[dict, list[dict]]:
             continue
         if "spec" in n:
             n["spec"] = _spec_once(n["spec"], name, path, problems)
+            _multi_az_in_spec(n, name, path, problems)
         out_nodes.append({**n, "label": n.get("label", nid), "count": n.get("count", 1),
                           "providerResolved": n.get("provider") or group_provider(gid),
                           "regionResolved": n.get("region") or group_region(gid),
@@ -527,6 +528,26 @@ def _spec_once(spec: list[dict], name: str, path: str, problems: list[dict]) -> 
         seen.add(item["key"])
         out.append(item)
     return out
+
+
+#: Multi-AZ as a spec's key or words say it (the page's own names, the cloud's, Japanese), and the words that say no
+_MULTI_AZ = re.compile(r"multi[-_ ]?az|マルチ\s*az", re.I)
+_SAYS_NO = re.compile(r"^\s*(no|none|false|off|single|single[-_ ]?az|無し|なし|無|いいえ|シングル.*)\s*$", re.I)
+
+
+def _multi_az_in_spec(n: dict, name: str, path: str, problems: list[dict]) -> None:
+    """A spec that says Multi-AZ on a node whose ha does not: the spec is only shown, the cost reads ha (ticket
+    2026-10-21-agents-skills-mcp-for-server-room §2 M1: a draft wrote multi_az in spec and its storage came out
+    single-AZ). A warning, on the spec item."""
+    if "multi" in (n.get("ha") or "").lower():
+        return
+    for i, item in enumerate(n["spec"]):
+        key, value = str(item.get("key", "")), str(item.get("value", ""))
+        if _MULTI_AZ.search(value) or (_MULTI_AZ.search(key) and not _SAYS_NO.match(value)):
+            problems.append(_problem(name, f"{path}/spec/{i}", "spec.ha", "the spec says Multi-AZ but ha does not: "
+                                     "the cost (and the 3D) read ha, the spec is only shown; write ha: multi-az",
+                                     "warning"))
+            return
 
 
 def _capped(items: list[dict], kind: str, problems: list[dict]) -> list[dict]:
