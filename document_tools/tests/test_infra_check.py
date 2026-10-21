@@ -745,3 +745,78 @@ def test_a_project_inside_a_folder_its_parent_repo_ignores_is_still_read(tmp_pat
     assert T.git_ignored(root) == git_says
     found, _un = C.scan_iac(root)
     assert "aws_db_instance.main" in {f["address"] for f in found}
+
+
+# ---------------------------------------------------------------- IaC a tool writes where its init ignores it (ticket 2026-10-21-infra-walk-gitignore-drops-cdk-out)
+
+def _git_room(tmp_path, gitignore: str, files: dict[str, str], tracked=()) -> Path:
+    root = tmp_path / "room"
+    root.mkdir()
+    _git(root, "init", "-q")
+    (root / ".gitignore").write_text(gitignore)
+    for rel, text in files.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text)
+    if tracked:
+        _git(root, "add", *tracked)
+    return root
+
+
+CDK_TEMPLATE = json.dumps({"Resources": {"Bucket": {"Type": "AWS::S3::Bucket"},
+                                         "Fn": {"Type": "AWS::Lambda::Function", "Properties": {"Runtime": "nodejs20.x"}}}})
+#: one room per IAC_OUTPUT_DIRS name: (the file the tool writes there, its text, an address read from it)
+OUTPUT_ROOMS = {
+    "cdk.out": ("cdk.out/AppStack.template.json", CDK_TEMPLATE, "Bucket"),
+    "cdktf.out": ("cdktf.out/stacks/app/cdk.tf.json", json.dumps({"resource": {"aws_s3_bucket": {"b": {}}}}),
+                  "aws_s3_bucket.b"),
+}
+
+
+def test_a_cdk_app_whose_cdk_out_git_ignores_is_read_by_seed_and_check(tmp_path):
+    """cdk init puts cdk.out in .gitignore and the app's source is TypeScript: the synthesized template is its only
+    IaC. Seed drafts Bucket and Fn from it and check reads them (5acf45f8 left cdk.out out: no IaC for either)."""
+    root = _git_room(tmp_path, "cdk.out\n*.js\nnode_modules\n",
+                     {"bin/app.ts": "new AppStack(app, 'AppStack');\n", "cdk.out/AppStack.template.json": CDK_TEMPLATE},
+                     tracked=["bin/app.ts"])
+    from jsonui_doc_cli.infra import iac_tables as T
+    assert "cdk.out/" in T.git_ignored(root)
+    from jsonui_doc_cli.infra import seed as S
+    model, _report = S.draft(root)
+    iac = {a for n in model["nodes"] for a in n.get("iac", [])}
+    assert {"Bucket", "Fn"} <= iac
+    found, _un = C.scan_iac(root)
+    assert {"Bucket", "Fn"} <= {f["address"] for f in found}
+
+
+@pytest.mark.parametrize("name", sorted(OUTPUT_ROOMS))
+def test_every_iac_output_folder_is_read_when_git_ignores_it(tmp_path, name):
+    """Each IAC_OUTPUT_DIRS folder, ignored, is read by seed and check — IaC only: code in it is no evidence."""
+    from jsonui_doc_cli.infra import iac_tables as T
+    assert set(OUTPUT_ROOMS) == set(T.IAC_OUTPUT_DIRS)       # a name added to the list comes with its room here
+    rel, text, address = OUTPUT_ROOMS[name]
+    root = _git_room(tmp_path, f"{name}\n", {rel: text, f"{name}/asset.1/index.py": 'import boto3\nboto3.client("s3")\n'})
+    assert f"{name}/" in T.git_ignored(root)
+    found, _un = C.scan_iac(root)
+    assert address in {f["address"] for f in found}
+    from jsonui_doc_cli.infra import seed as S
+    model, _report = S.draft(root)
+    assert address in {a for n in model["nodes"] for a in n.get("iac", [])}
+    hints, _notes = C.scan_code(root)
+    assert hints == []
+
+
+@pytest.mark.parametrize("folder", [".aws-sam/build", ".serverless", "synth-out", "infra/cdk.out.bak"])
+def test_an_ignored_folder_not_in_the_list_is_not_read(tmp_path, folder):
+    """Only the listed names are kept: SAM's build copy, Serverless's package, any other ignored output is not read
+    (and a name like a listed one is not it)."""
+    tpl = "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  OutQueue:\n    Type: AWS::SQS::Queue\n"
+    # infra/main.tf beside it: git then names the folder itself, not a parent all of whose files are ignored
+    root = _git_room(tmp_path, f"{folder}/\n", {f"{folder}/template.yaml": tpl, "infra/main.tf": 'resource "aws_sqs_queue" "q" {}\n'})
+    from jsonui_doc_cli.infra import iac_tables as T
+    assert f"{folder}/" in T.git_ignored(root)
+    found, _un = C.scan_iac(root)
+    addresses = {f["address"] for f in found}
+    assert "aws_sqs_queue.q" in addresses and "OutQueue" not in addresses
+    from jsonui_doc_cli.infra import seed as S
+    model, _report = S.draft(root)
+    assert "OutQueue" not in json.dumps(model["nodes"])

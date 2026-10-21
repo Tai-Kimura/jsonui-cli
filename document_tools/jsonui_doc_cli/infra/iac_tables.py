@@ -551,6 +551,16 @@ def iac_only_dirs() -> set[str]:
     return {n for n in SEED_ONLY_SKIP_DIRS if n not in SKIP_DIRS and not n.startswith(".")}
 
 
+#: IaC a tool writes into a folder its own `init` puts in .gitignore, and the only IaC its project has (the source is
+#: code): walked even when git ignores it, IaC only read in it. A closed list; each name with why (ticket
+#: 2026-10-21-infra-walk-gitignore-drops-cdk-out). Not here: .terraform/ (fetched modules), .serverless/ (made from
+#: serverless.yml, which is read; hidden, never walked) and .aws-sam/ (a build copy of template.yaml, which is read).
+IAC_OUTPUT_DIRS = {
+    "cdk.out": "a CDK app's synthesized CloudFormation (cdk init ignores it)",
+    "cdktf.out": "a CDKTF app's synthesized Terraform JSON, stacks/*/cdk.tf.json (cdktf init ignores it)",
+}
+
+
 def git_ignored(root) -> set[str] | None:
     """What git ignores under root, relative to it ("a/b/" for a folder, all of whose untracked files are ignored; a
     tracked file is never in it): `git ls-files --others --ignored --exclude-standard --directory`. None when root is
@@ -570,8 +580,8 @@ def git_ignored(root) -> set[str] | None:
 def walk_project(root, exclude=()) -> tuple[list[tuple[str, bool]], str | None]:
     """The project's files as seed and check both walk it: (rel, iac_only) in name order — iac_only when under a folder
     only IaC is read in — no symlink followed, SKIP_DIRS, hidden folders (but .github) and what git ignores
-    (git_ignored: fetched modules in .terraform/, an import's output) left out; and, when WALK_CAP files were looked
-    at, where the walk stopped (the rest not looked at), else None."""
+    (git_ignored: fetched modules in .terraform/, an import's output) left out but for IAC_OUTPUT_DIRS, where only IaC
+    is read; and, when WALK_CAP files were looked at, where the walk stopped (the rest not looked at), else None."""
     import os  # noqa: PLC0415
     from pathlib import Path  # noqa: PLC0415
     root = Path(root)
@@ -590,13 +600,17 @@ def walk_project(root, exclude=()) -> tuple[list[tuple[str, bool]], str | None]:
         here = iac_only_at.get(dirpath, False)
         keep = []
         for n in sorted(dirnames):
-            if n.startswith(".") and n not in KEEP_HIDDEN_DIRS or prefix + n + "/" in ignored:
+            if n.startswith(".") and n not in KEEP_HIDDEN_DIRS:
+                continue
+            # git names an ignored folder alone (not what is under it): an IAC_OUTPUT_DIRS one is walked, IaC only
+            kept = prefix + n + "/" in ignored
+            if kept and n not in IAC_OUTPUT_DIRS:
                 continue
             if ex and str((Path(dirpath) / n).resolve()) in ex:
                 continue
             if (n in SKIP_DIRS or n in SEED_ONLY_SKIP_DIRS) and n not in only:
                 continue
-            iac_only_at[os.path.join(dirpath, n)] = here or n in only
+            iac_only_at[os.path.join(dirpath, n)] = here or n in only or kept
             keep.append(n)
         dirnames[:] = keep
         for fn in sorted(filenames):
