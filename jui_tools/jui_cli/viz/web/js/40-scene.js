@@ -6,7 +6,7 @@ try {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
 } catch (err) {
   has3D = false;
-  sceneEl.insertAdjacentHTML('beforeend', '<p class="nogl">この環境では WebGL を使えないため 3D 表示を出せません。右のパネルとイベント欄はそのまま動きます。</p>');
+  sceneEl.insertAdjacentHTML('beforeend', `<p class="nogl">${esc(tl('scene.nogl'))}</p>`);
 }
 let latestModel = computeModel(START_AT);
 let scene, camera, controls;
@@ -90,13 +90,13 @@ function drawSpecBoard(model, now) {
   for (let x = 0; x < SB.W; x += 32) ctx.fillRect(x, 0, 1, SB.H);
   for (let y = 0; y < SB.H; y += 32) ctx.fillRect(0, y, SB.W, 1);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = P.title; ctx.font = `36px ${FONT_DISPLAY}`; ctx.fillText('spec ボード', SB.pad + 4, 52);
+  ctx.fillStyle = P.title; ctx.font = `36px ${FONT_DISPLAY}`; ctx.fillText(tl('scene.specboard.title'), SB.pad + 4, 52);
   const shop = SHOP_IDX.map((i) => model.specs[i]), c = bucketCounts(shop);
   ctx.fillStyle = P.sub; ctx.font = `700 24px ${FONT_BODY}`;
-  ctx.fillText(`shop-app/ · 全 ${shop.length} 画面 · 作業中 ${c.live} · 途中 ${c.partial} · 未着手 ${c.todo} · 完了 ${c.done}`, SB.pad + 250, 50);
+  ctx.fillText(`shop-app/ · ${tl('scene.spec.counts', { n: shop.length, live: c.live, partial: c.partial, todo: c.todo, done: c.done })}`, SB.pad + 250, 50);
   ctx.font = `700 20px ${FONT_BODY}`;
   let lx = SB.W - SB.pad;
-  for (const [label, color] of [['テスト済み', P.green], ['実装済み', P.blue], ['記入済み', P.base], ['書き込み中', P.violet]]) {
+  for (const [label, color] of [[tl('scene.legend.tested'), P.green], [tl('scene.legend.implemented'), P.blue], [tl('scene.legend.written'), P.base], [tl('scene.legend.writing'), P.violet]]) {
     const tw = ctx.measureText(label).width;
     ctx.fillStyle = P.sub; ctx.fillText(label, lx - tw, 49);
     lx -= tw + 26; rr(ctx, lx, 33, 18, 18, 4); ctx.fillStyle = color; ctx.fill(); lx -= 28;
@@ -153,7 +153,7 @@ function drawProjectBoard(pb, model, now) {
   ctx.fillStyle = P.sub; ctx.font = `600 19px ${FONT_MONO}`; ctx.fillText(proj.path, 30, 88);
   const pend = model.pending.filter((p) => projectOfRobot(p.who) === pb.project).length;
   if (pend) {
-    const label = `許可待ち ${pend}`;
+    const label = tl('scene.pending.count', { n: pend });
     ctx.font = `700 24px ${FONT_BODY}`;
     const w = ctx.measureText(label).width + 36;
     rr(ctx, W - 24 - w, 28, w, 42, 21); ctx.fillStyle = K.warn; ctx.fill();
@@ -164,7 +164,7 @@ function drawProjectBoard(pb, model, now) {
   if (pb.specs.length) {
     const specs = pb.specs.map((i) => model.specs[i]), c = bucketCounts(specs);
     ctx.fillStyle = P.sub; ctx.font = `700 20px ${FONT_BODY}`;
-    ctx.fillText(`spec ${specs.length} 画面 · 作業中 ${c.live} · 途中 ${c.partial} · 未着手 ${c.todo} · 完了 ${c.done}`, 30, y + 20);
+    ctx.fillText(tl('scene.pb.spec.counts', { n: specs.length, live: c.live, partial: c.partial, todo: c.todo, done: c.done }), 30, y + 20);
     const cols = 3, gap = 12, tw = (W - 56 - gap * (cols - 1)) / cols, th = 104;
     pb.specs.forEach((i, k) => {
       const x = 28 + (k % cols) * (tw + gap), ty = y + 34 + Math.floor(k / cols) * (th + gap);
@@ -175,7 +175,7 @@ function drawProjectBoard(pb, model, now) {
   }
   pb.splitY = y;
   const tasks = model.tasks.filter((x) => PROJECT_OF[x.list] === pb.project);
-  ctx.fillStyle = P.title; ctx.font = `700 23px ${FONT_BODY}`; ctx.fillText(`タスク ${tasks.length} 件`, 30, y + 34);
+  ctx.fillStyle = P.title; ctx.font = `700 23px ${FONT_BODY}`; ctx.fillText(tl('scene.pb.tasks', { n: tasks.length }), 30, y + 34);
   const bw = (W - 56 - 3 * 12) / 4, by = y + 48, bh = 78;
   KCOLS.forEach(([col, label], c) => {
     const x = 28 + c * (bw + 12), n = tasks.filter((t) => t.col === col).length;
@@ -188,9 +188,9 @@ function drawProjectBoard(pb, model, now) {
     open.slice(0, 3).forEach((t, k) => {
       const ly = by + bh + 26 + k * 40;
       ctx.fillStyle = K.head[t.col]; ctx.beginPath(); ctx.arc(40, ly - 7, 7, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = P.title; ctx.font = `700 20px ${FONT_BODY}`; fitText(ctx, `${t.list} ${taskRef(t)} ${t.subject}${t.perm ? '（許可待ち）' : ''}`, 58, ly, W - 90);
+      ctx.fillStyle = P.title; ctx.font = `700 20px ${FONT_BODY}`; fitText(ctx, `${t.list} ${taskRef(t)} ${t.subject}${t.perm ? tl('scene.task.perm.paren') : ''}`, 58, ly, W - 90);
     });
-    const note = SOURCE.mode === 'demo' ? '画面の spec はない（CLI ツール）' : proj.jsonui ? 'spec はまだ無い' : 'JsonUI のプロジェクトではない（spec なし）';
+    const note = SOURCE.mode === 'demo' ? tl('scene.pb.note.demo') : proj.jsonui ? tl('scene.pb.note.none') : tl('scene.pb.note.notjsonui');
     ctx.fillStyle = P.sub; ctx.font = `600 18px ${FONT_BODY}`; ctx.fillText(note, 30, H - 22);
   }
   pb.tex.needsUpdate = true;
@@ -205,11 +205,11 @@ function drawTaskBoard(full, project = 'shop', board = null) {
   ctx.fillStyle = P.speck;
   for (let i = 0; i < 520; i++) ctx.fillRect((i * 97.31) % B.W, (i * 61.7 + (i % 7) * 13) % B.H, 3, 2);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = P.title; ctx.font = `40px ${FONT_DISPLAY}`; ctx.fillText('タスクボード', 26, 58);
+  ctx.fillStyle = P.title; ctx.font = `40px ${FONT_DISPLAY}`; ctx.fillText(tl('scene.taskboard.title'), 26, 58);
   ctx.fillStyle = P.sub; ctx.font = `700 21px ${FONT_BODY}`;
-  ctx.fillText(`${PROJECT[project].name} · ${model.tasks.length} 件 · ${new Set(model.tasks.map((x) => x.list)).size} セッションの一覧`, 30, 92);
+  ctx.fillText(`${PROJECT[project].name} · ${tl('scene.taskboard.sub', { n: model.tasks.length, lists: new Set(model.tasks.map((x) => x.list)).size })}`, 30, 92);
   if (model.pending.length) {
-    const label = `許可待ち ${model.pending.length}`;
+    const label = tl('scene.pending.count', { n: model.pending.length });
     ctx.font = `700 24px ${FONT_BODY}`;
     const w = ctx.measureText(label).width + 36;
     rr(ctx, B.W - 24 - w, 30, w, 42, 21); ctx.fillStyle = P.warn; ctx.fill();
@@ -234,7 +234,7 @@ function drawTaskBoard(full, project = 'shop', board = null) {
       ctx.fillStyle = P.soft; ctx.font = `700 15px ${FONT_MONO}`; ctx.fillText(`${task.list} ${taskRef(task)}`, nx + (isTurn(task) ? 14 : 10), ny + 25);
       if (task.perm) {
         rr(ctx, nx + nw - 76, ny + 9, 66, 24, 12); ctx.fillStyle = P.warn; ctx.fill();
-        ctx.fillStyle = P.warnInk; ctx.font = `700 14px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.fillText('許可待ち', nx + nw - 43, ny + 26); ctx.textAlign = 'left';
+        ctx.fillStyle = P.warnInk; ctx.font = `700 14px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.fillText(tl('scene.note.perm'), nx + nw - 43, ny + 26); ctx.textAlign = 'left';
       } else if (task.owner) {
         const role = DEF[task.owner].role;
         drawRolePill(ctx, role, task.owner, nx + nw - 50, ny + 11, 40, 20, 13, 15);
@@ -243,7 +243,7 @@ function drawTaskBoard(full, project = 'shop', board = null) {
       wrapText(ctx, task.subject, nx + 10, ny + 49, nw - 20, 20, 2);
       ctx.restore();
     });
-    if (items.length > maxN) { ctx.fillStyle = P.title; ctx.font = `700 17px ${FONT_BODY}`; ctx.fillText(`ほか ${items.length - maxN} 件`, x + 12, B.H - 34); }
+    if (items.length > maxN) { ctx.fillStyle = P.title; ctx.font = `700 17px ${FONT_BODY}`; ctx.fillText(tl('scene.more', { n: items.length - maxN }), x + 12, B.H - 34); }
   });
   tx.needsUpdate = true;
 }
@@ -253,7 +253,7 @@ function drawTestBoard(model, board = null, run = null) {
   const nCases = Math.max(1, T.rows.length), maxRows = Math.floor((TB.H - 186) / 78);
   ctx.fillStyle = '#102640'; ctx.fillRect(0, 0, TB.W, TB.H);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = '#ffffff'; ctx.font = `40px ${FONT_DISPLAY}`; ctx.fillText('テスト実行', 36, 62);
+  ctx.fillStyle = '#ffffff'; ctx.font = `40px ${FONT_DISPLAY}`; ctx.fillText(tl('scene.testrun.title'), 36, 62);
   ctx.fillStyle = '#9fc3ff'; ctx.font = `600 21px ${FONT_MONO}`; ctx.fillText(`${T.file} · ${T.device}`, 36, 98);
   ctx.fillStyle = '#d6e4f7'; ctx.font = `700 23px ${FONT_BODY}`; ctx.fillText(T.statusText, 36, 134);
   const bx = 36, bw = TB.W - 72, by = 150;
@@ -272,8 +272,8 @@ function drawTestBoard(model, board = null, run = null) {
     ctx.font = `700 28px ${FONT_MONO}`; ctx.fillText(icon, 36, y + 36);
     ctx.fillStyle = c.status === 'pending' ? '#8aa0bd' : '#ffffff'; ctx.font = `700 25px ${FONT_BODY}`; ctx.fillText(`${i + 1}. ${c.name}`, 80, y + 34);
     ctx.font = `500 18px ${FONT_MONO}`;
-    if (c.status === 'running') { ctx.fillStyle = '#7ef9ff'; ctx.fillText(`${c.attempt > 1 ? '再実行 2 回目 · ' : ''}${c.step}`, 80, y + 62); }
-    else if (c.branch) { ctx.fillStyle = '#8fa6c4'; ctx.fillText(`分岐: ${c.branch}${c.status === 'flaky' ? ' · 再実行で通過' : ''}`, 80, y + 62); }
+    if (c.status === 'running') { ctx.fillStyle = '#7ef9ff'; ctx.fillText(`${c.attempt > 1 ? tl('scene.test.retry2') : ''}${c.step}`, 80, y + 62); }
+    else if (c.branch) { ctx.fillStyle = '#8fa6c4'; ctx.fillText(`${tl('scene.test.branch', { branch: c.branch })}${c.status === 'flaky' ? tl('scene.test.flaky') : ''}`, 80, y + 62); }
   });
   if (!T.rows.length && T.command) { ctx.fillStyle = '#8fa6c4'; ctx.font = `500 20px ${FONT_MONO}`; wrapText(ctx, T.command, 36, 220, TB.W - 72, 28, 6); }
   (board ? board.tex : tbTex).needsUpdate = true;
@@ -295,11 +295,11 @@ function drawCartUI(r, t) {
   ctx.fillStyle = accent; ctx.fillRect(sx, sy, sw, 58);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = ink; ctx.font = `700 11px ${FONT_MONO}`; ctx.fillText('9:41', sx + 12, sy + 16);
-  ctx.font = `700 18px ${FONT_BODY}`; ctx.fillText(idx === 6 && step.includes('screen') ? 'ログイン' : 'カート', sx + 14, sy + 46);
+  ctx.font = `700 18px ${FONT_BODY}`; ctx.fillText(idx === 6 && step.includes('screen') ? tl('robot.screen.login') : tl('scene.phone.cart'), sx + 14, sy + 46);
   const empty = idx === 2;
   const items = empty ? 0 : idx === 1 && step.includes('count') ? 2 : 3;
   if (empty) {
-    ctx.fillStyle = '#7a879b'; ctx.font = `700 14px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.fillText('カートは空です', sx + sw / 2, sy + 130); ctx.textAlign = 'left';
+    ctx.fillStyle = '#7a879b'; ctx.font = `700 14px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.fillText(tl('scene.phone.empty'), sx + sw / 2, sy + 130); ctx.textAlign = 'left';
   }
   for (let i = 0; i < items; i++) {
     const y = sy + 70 + i * 50;
@@ -308,16 +308,16 @@ function drawCartUI(r, t) {
     ctx.fillStyle = '#394150'; ctx.fillRect(sx + 54, y + 10, 70 - i * 10, 7);
     ctx.fillStyle = '#7a879b'; ctx.fillRect(sx + 54, y + 24, 40, 6);
     ctx.fillStyle = '#394150'; ctx.font = `700 12px ${FONT_MONO}`; ctx.fillText(`×${i === 0 && idx === 1 && !step.includes('count') ? 0 : 1}`, sx + sw - 42, y + 27);
-    if (idx === 5 && i === 1) { ctx.fillStyle = '#c62f3c'; ctx.font = `700 10px ${FONT_BODY}`; ctx.fillText('在庫切れ', sx + 54, y + 38); }
+    if (idx === 5 && i === 1) { ctx.fillStyle = '#c62f3c'; ctx.font = `700 10px ${FONT_BODY}`; ctx.fillText(tl('scene.phone.soldout'), sx + 54, y + 38); }
   }
   const cy = sy + 226;
   rr(ctx, sx + 10, cy, sw - 20, 26, 6); ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.strokeStyle = '#cfd8e6'; ctx.lineWidth = 2; ctx.stroke();
-  ctx.fillStyle = '#394150'; ctx.font = `500 11px ${FONT_MONO}`; ctx.fillText(idx === 3 ? 'WELCOME10' : idx === 4 ? 'OLD2025' : 'クーポン', sx + 18, cy + 17);
-  if (idx === 4 && T.retrying) { ctx.fillStyle = '#c62f3c'; ctx.font = `700 10px ${FONT_BODY}`; ctx.fillText('期限切れのクーポンです', sx + 14, cy + 40); }
+  ctx.fillStyle = '#394150'; ctx.font = `500 11px ${FONT_MONO}`; ctx.fillText(idx === 3 ? 'WELCOME10' : idx === 4 ? 'OLD2025' : tl('scene.phone.coupon'), sx + 18, cy + 17);
+  if (idx === 4 && T.retrying) { ctx.fillStyle = '#c62f3c'; ctx.font = `700 10px ${FONT_BODY}`; ctx.fillText(tl('scene.phone.expired'), sx + 14, cy + 40); }
   const disabled = empty || idx === 5;
   const byBtn = sy + 274;
   rr(ctx, sx + 10, byBtn, sw - 20, 34, 10); ctx.fillStyle = disabled ? '#b9c3d1' : accent; ctx.fill();
-  ctx.fillStyle = disabled ? '#ffffff' : ink; ctx.font = `700 14px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.fillText('購入する', sx + sw / 2, byBtn + 23);
+  ctx.fillStyle = disabled ? '#ffffff' : ink; ctx.font = `700 14px ${FONT_BODY}`; ctx.textAlign = 'center'; ctx.fillText(tl('scene.phone.buy'), sx + sw / 2, byBtn + 23);
   if (idx >= 0) {
     let tx = sx + sw / 2, ty = byBtn + 17;
     if (step.includes('coupon')) { tx = sx + 60; ty = cy + 13; } else if (step.includes('qty')) { tx = sx + sw - 34; ty = sy + 92; } else if (step.includes('cart_list') || step.includes('count')) { tx = sx + 90; ty = sy + 120; }
@@ -326,7 +326,7 @@ function drawCartUI(r, t) {
   }
   ctx.restore();
   ctx.fillStyle = '#4b5c76'; ctx.font = `700 11px ${FONT_MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-  ctx.fillText(idx >= 0 ? `case ${idx + 1}/8 · iPhone 16` : 'iPhone 16 シミュレータ', W / 2, 359);
+  ctx.fillText(idx >= 0 ? `case ${idx + 1}/8 · iPhone 16` : tl('scene.phone.sim'), W / 2, 359);
   r.phoneTex.needsUpdate = true; r.phoneScreenTex.needsUpdate = true;
 }
 
@@ -394,7 +394,7 @@ function buildDemoOffice() {
     const back = new THREE.Mesh(new THREE.BoxGeometry(w + 0.16, room.back, 0.16), wallMat); back.position.set(cx - 0.08, room.back / 2, room.z0 - 0.08); scene.add(back);
     const left = new THREE.Mesh(new THREE.BoxGeometry(0.16, room.left, d), wallMat); left.position.set(room.x0 - 0.08, room.left / 2, cz); scene.add(left);
     const tag = document.createElement('button');
-    tag.type = 'button'; tag.className = 'tag room'; tag.dataset.setProject = room.id; tag.title = `${room.name} だけを表示する`; tag.textContent = room.name;
+    tag.type = 'button'; tag.className = 'tag room'; tag.dataset.setProject = room.id; tag.title = tl('scene.room.only', { name: room.name }); tag.textContent = room.name;
     tagsEl.append(tag);
     roomTags.push({ el: tag, id: room.id, p: new THREE.Vector3(room.x0 + 0.2, 0.02, room.z1 - 0.1) });
   }
@@ -442,7 +442,7 @@ function buildDemoOffice() {
   const big = new THREE.Mesh(new RoundedBoxGeometry(0.94, 1.58, 0.08, 3, 0.08), toon(COL.phone)); big.position.y = 2.15; stand.add(big);
   const offCanvas = makeCanvas(192, 320), octx = offCanvas.getContext('2d');
   octx.fillStyle = '#0d1828'; octx.fillRect(0, 0, 192, 320);
-  octx.fillStyle = '#6f87a6'; octx.font = `700 16px ${FONT_BODY}`; octx.textAlign = 'center'; octx.fillText('シミュレータ', 96, 150); octx.fillText('待機中', 96, 176);
+  octx.fillStyle = '#6f87a6'; octx.font = `700 16px ${FONT_BODY}`; octx.textAlign = 'center'; octx.fillText(tl('scene.stand.sim'), 96, 150); octx.fillText(tl('scene.idle'), 96, 176);
   standOffTex = texFrom(offCanvas);
   standMat = new THREE.MeshBasicMaterial({ map: standOffTex, toneMapped: false });
   const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.82, 1.37), standMat); screen.position.set(0, 2.15, 0.042); stand.add(screen);
@@ -511,7 +511,7 @@ function build3D() {
     // the server room's door behind a robot still takes the press, as in the live office (liveFirstHit; the independent re-verification)
     const hit = hits.length && robotOf(hits[0].object) !== undefined ? hits.find((h) => h.object.userData.serverDoor) || hits[0] : hits[0];
     if (!hit) return null;
-    if (hit.object.userData.serverDoor) return { kind: 'serverroom', project: DEMO_SRDOOR.room, title: 'サーバールームに入る（構成を読み込む）' };
+    if (hit.object.userData.serverDoor) return { kind: 'serverroom', project: DEMO_SRDOOR.room, title: tl('scene.pick.serverroom') };
     let o = hit.object;
     while (o && o.userData.robotId === undefined && o.parent) o = o.parent;
     if (o && o.userData.robotId !== undefined) return { kind: 'robot', id: o.userData.robotId };
@@ -696,7 +696,7 @@ function liveBuildRoom(room) {
   kb.mesh.rotation.y = Math.PI / 2; kb.mesh.position.set(room.x0 + 0.02, 2.1, doors.left ? Math.min(cz, da.leftZ - half - 0.25 - kw / 2) : cz); g.add(kb.mesh);
   scene.add(g);
   const tag = document.createElement('button');
-  tag.type = 'button'; tag.className = 'tag room'; tag.dataset.setProject = room.id; tag.title = `${room.name} だけを表示する`; tag.textContent = room.name;
+  tag.type = 'button'; tag.className = 'tag room'; tag.dataset.setProject = room.id; tag.title = tl('scene.room.only', { name: room.name }); tag.textContent = room.name;
   tagsEl.append(tag);
   // over its own back wall's left end: at the front corner it sat on the back edge of the room in front (3×2 floors)
   const rt = { el: tag, id: room.id, p: new THREE.Vector3(room.x0 + 0.6, room.back + 0.35, room.z0 - 0.05) };
@@ -893,10 +893,10 @@ function snackTick(t) {
   }
 }
 /* A call on the robot and on its name tag: a phone mark and the other robot's number, never the message. */
-const CALL_TAG_TEXT = { dialing: '発信中', ringing: '呼び出し中', answered: '通話中' };
+const CALL_TAG_TEXT = { dialing: tl('scene.call.dialing'), ringing: tl('scene.call.ringing'), answered: tl('scene.call.answered') };
 /* Alone at its desk (2.3.1): the name tag says so too — the robot is small in any view, so the zzz and the bento alone
    were hard to see (jsonuidocument-96, 10-18). The call mark wins; a call stops a nap anyway. */
-const SOLO_TAG_TEXT = { nap: 'zzz 居眠り', bento: '弁当' };
+const SOLO_TAG_TEXT = { nap: tl('scene.solo.nap'), bento: tl('scene.solo.bento') };
 /* The tag's name (10-19): a session with a name (/rename, `claude -n`) shows it in place of the two-letter mark, cut at
    its end by the CSS; none (and a subagent) keeps the mark. Text only (textContent), and a rename shows at once. */
 function liveTagName(R) {
@@ -910,7 +910,7 @@ function liveTagName(R) {
 function liveCallTag(R, call) {
   R.robot.call = call && CALL_ON_LINE.has(call.state) ? call : null;
   const c = R.robot.call;
-  const text = c ? `☎ ${c.role === 'callee' && c.state !== 'answered' ? '着信' : CALL_TAG_TEXT[c.state]}${c.peer ? ` ${c.peer}` : ''}`
+  const text = c ? `☎ ${c.role === 'callee' && c.state !== 'answered' ? tl('scene.call.incoming') : CALL_TAG_TEXT[c.state]}${c.peer ? ` ${c.peer}` : ''}`
     : R.solo ? SOLO_TAG_TEXT[R.solo.kind] || '' : playText(R) || brkTagText(R);   // a game and a break never overlap
   if (text === (R.callText || '')) return;
   R.callText = text;
@@ -945,13 +945,13 @@ const SOLO = { p: 1 / 20, minSec: 20, maxSec: 60, kinds: SOLO_KINDS };
    see from the usual view and goes from hand to hands, and at highfive the two walk toward each other and slap with a
    パチン mark. The poses are 10-robot-core.js's; both read the same phase helpers (ballPhase, highfivePhase). */
 const PLAY_LOOK = { ballR: 0.3, gap: { ball: 1.3, highfive: 1.4 }, hfNear: 0.8 };   // gap: half the distance between the two spots
-const PLAY_TAG_TEXT = { ball: 'キャッチボール中', highfive: 'ハイタッチ中', rps: 'じゃんけん中' };
+const PLAY_TAG_TEXT = { ball: tl('scene.play.ball'), highfive: tl('scene.play.highfive'), rps: tl('scene.play.rps') };
 function playText(R) {
   if (!R.play) return '';
-  return R.robot.play ? PLAY_TAG_TEXT[R.robot.play.kind] || '' : '遊びに行く';
+  return R.robot.play ? PLAY_TAG_TEXT[R.robot.play.kind] || '' : tl('scene.play.going');
 }
 function playTagText(id) { const R = robots.find((x) => x.def.id === id); return R ? playText(R) : ''; }   // the card (50-panel.js)
-function playRoomText(room) { const G = PLAY.list.find((x) => x.room === room); return !G ? '' : G.t0 ? PLAY_TAG_TEXT[G.kind] || '' : '遊びに行く'; }   // the building
+function playRoomText(room) { const G = PLAY.list.find((x) => x.room === room); return !G ? '' : G.t0 ? PLAY_TAG_TEXT[G.kind] || '' : tl('scene.play.going'); }   // the building
 const playV = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
 function playHand(r, side, out) { return (side === 'L' ? r.armL : r.armR).localToWorld(out.set(0, -0.38, 0)); }
 function pachinCanvas() {
@@ -960,8 +960,8 @@ function pachinCanvas() {
   for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2, rad = i % 2 ? 52 : 88; ctx.lineTo(140 + Math.cos(a) * rad * 1.45, 90 + Math.sin(a) * rad); }
   ctx.closePath(); ctx.fillStyle = '#ffd23f'; ctx.fill(); ctx.lineWidth = 7; ctx.strokeStyle = '#1f2532'; ctx.lineJoin = 'round'; ctx.stroke();
   ctx.font = `700 52px ${FONT_DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.lineWidth = 8; ctx.strokeStyle = '#ffffff'; ctx.strokeText('パチン!', 140, 92);
-  ctx.fillStyle = '#d0352b'; ctx.fillText('パチン!', 140, 92);
+  ctx.lineWidth = 8; ctx.strokeStyle = '#ffffff'; ctx.strokeText(tl('scene.play.pachin'), 140, 92);
+  ctx.fillStyle = '#d0352b'; ctx.fillText(tl('scene.play.pachin'), 140, 92);
   return c;
 }
 function playMove(G, left, nowSec) {
@@ -1165,7 +1165,7 @@ function liveUpdateRobots(nowSec, dt) {
     if (vis === 'reading') R.robot.readKind = st.readKind || null;   // kept after it: the dictionary fades out as it came (10-20)
     // over its head: the errand under way says its own line (one robot never runs both, gitTick / shredTick); else, of
     // what it deleted (SHRED.labelMs after) and the box's line (GITBOX.showMs after), the newer one; else what it does
-    const shredLine = st.shred && (R.shred || vizNow() - st.shred.at < SHRED.labelMs) ? `${st.shred.ok ? 'シュレッダー' : '削除できず'} ${st.shred.label}` : '';
+    const shredLine = st.shred && (R.shred || vizNow() - st.shred.at < SHRED.labelMs) ? `${st.shred.ok ? tl('scene.shred.ok') : tl('scene.shred.failed')} ${st.shred.label}` : '';
     const gitLine = gitSaid(R, st);
     const act = R.shred ? shredLine : R.git ? gitLine || st.act
       : shredLine && gitLine ? (st.shred.at >= (st.git.at || 0) ? shredLine : gitLine) : shredLine || gitLine || st.act;
@@ -1365,7 +1365,7 @@ function bellBuild(B) {
   const top = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.04, 20), metal); top.position.y = BELL.h - 0.08; g.add(top);
   const dome = new THREE.Mesh(new THREE.SphereGeometry(0.12, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), brass); dome.position.y = BELL.h - 0.06; g.add(dome);
   const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.05, 10), red); knob.position.y = BELL.h + 0.08; g.add(knob);
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.18), new THREE.MeshBasicMaterial({ map: signTexture('呼び出し', '#e5484d', '#ffffff'), toneMapped: false }));
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.18), new THREE.MeshBasicMaterial({ map: signTexture(tl('scene.sign.bell'), '#e5484d', '#ffffff'), toneMapped: false }));
   sign.position.set(0, BELL.h - 0.32, 0.035); g.add(sign);
   g.position.set(B.x, 0, B.z);
   g.traverse((o) => { o.userData.callBell = true; });
@@ -1620,7 +1620,7 @@ function boothBuild(B) {
   pane(lw, h, B.x0 + lw / 2, h / 2, fz - 0.03, 0); pane(rw, h, dx + half + rw / 2, h / 2, fz - 0.03, 0); pane(BOOTH.door, h - 1.95, dx, (h + 1.95) / 2, fz - 0.03, 0);
   pane(d, h, rx - 0.03, h / 2, B.z0 + d / 2, Math.PI / 2);
   const roof = new THREE.Mesh(new THREE.PlaneGeometry(w, d), glass); roof.rotation.x = -Math.PI / 2; roof.position.set(dx, h, B.z0 + d / 2); g.add(roof);   // glass: the view from above sees in
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.34), new THREE.MeshBasicMaterial({ map: signTexture('喫煙室', '#2b3340', '#ffffff'), toneMapped: false }));
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.34), new THREE.MeshBasicMaterial({ map: signTexture(tl('scene.sign.smoking'), '#2b3340', '#ffffff'), toneMapped: false }));
   sign.position.set(dx, (h + 1.95) / 2, fz + 0.01); g.add(sign);
   // the ventilation fan on the back wall inside, turning (BRK's tick turns it)
   const fan = new THREE.Group(); fan.position.set(dx, 1.85, B.z0 + 0.06); g.add(fan);
@@ -1652,7 +1652,7 @@ function vendTexture() {
   const W = 256, H = 576, cv = makeCanvas(W, H), ctx = cv.getContext('2d');
   ctx.fillStyle = '#f6f8fb'; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = '#d8343c'; ctx.fillRect(0, 0, W, 64);
-  ctx.fillStyle = '#ffffff'; ctx.font = `34px ${FONT_DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('のみもの', W / 2, 34);
+  ctx.fillStyle = '#ffffff'; ctx.font = `34px ${FONT_DISPLAY}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(tl('scene.vend.title'), W / 2, 34);
   const colors = [['#1c2440', '#b6f03c'], ['#2f7fd1', '#ffffff'], ['#e8554e', '#fff3bf'], ['#2e9e5b', '#e1f1ef'], ['#7a4a2a', '#f3e6d4'], ['#f2b632', '#3b2410']];
   for (let row = 0; row < 3; row++) {
     const y = 84 + row * 128;
@@ -1678,7 +1678,7 @@ function vendBuild(V) {
   const slot = new THREE.Mesh(new THREE.BoxGeometry(VEND.w - 0.3, 0.2, 0.04), toon('#1f242c')); slot.position.set(V.cx, 0.22, V.z1 + 0.01); g.add(slot);
   return g;
 }
-const BRK_TAG_TEXT = { smoke: 'タバコ休憩', vend: '飲み物を買いに' };
+const BRK_TAG_TEXT = { smoke: tl('scene.brk.smoke'), vend: tl('scene.brk.vend') };
 const BRK = { seed: 20261021, kinds: ['smoke', 'vend'], p: { smoke: 1 / 40, vend: 1 / 40 }, joinP: 1 / 6, smokeMinSec: 20, smokeMaxSec: 40,
   buySec: 2.4, drinkMinSec: 8, drinkMaxSec: 16, restMinSec: 60, restMaxSec: 180, walkSec: 30, puffs: 10, next: 0, last: 0, rng: null, ends: [] };
 const brkTagText = (R) => (R.brk ? BRK_TAG_TEXT[R.brk.kind] || '' : '');
@@ -1865,7 +1865,7 @@ function serverDoorBuild(S, g) {
   const frame = new THREE.Mesh(new THREE.BoxGeometry(0.08, SRDOOR.h + 0.1, SRDOOR.w + 0.14), metal); frame.position.set(0.02, (SRDOOR.h + 0.1) / 2, 0); root.add(frame);
   const hinge = new THREE.Group(); hinge.position.set(0.07, 0, -SRDOOR.w / 2); root.add(hinge);   // swings from its back edge
   const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.05, SRDOOR.h, SRDOOR.w), steel); leaf.position.set(0, SRDOOR.h / 2, SRDOOR.w / 2); hinge.add(leaf);
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.22), new THREE.MeshBasicMaterial({ map: signTexture('サーバールーム', '#2b3340', '#ffffff'), toneMapped: false }));
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.22), new THREE.MeshBasicMaterial({ map: signTexture(tl('scene.sign.serverroom'), '#2b3340', '#ffffff'), toneMapped: false }));
   sign.rotation.y = Math.PI / 2; sign.position.set(0.1, SRDOOR.h - 0.35, SRDOOR.w / 2); hinge.add(sign);
   root.position.set(S.x, 0, S.z);
   const cv = makeCanvas(256, 160), tex = texFrom(cv);
@@ -1894,7 +1894,7 @@ function serverDoorDraw(D, k) {
   ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = `bold 46px ${FONT_MONO}`;
-  const text = k.state === 'ok' ? '解錠' : k.state === 'failed' ? '× エラー' : '*'.repeat(Math.min(k.stars, 8)) || '— — — —';
+  const text = k.state === 'ok' ? tl('scene.keypad.ok') : k.state === 'failed' ? tl('scene.keypad.failed') : '*'.repeat(Math.min(k.stars, 8)) || '— — — —';
   if (k.state === 'ok' || k.state === 'failed') ctx.font = `bold 44px ${FONT_BODY}`;
   ctx.fillText(text, W / 2, H / 2 + 4);
   D.tex.needsUpdate = true;
@@ -2072,13 +2072,13 @@ function liveHit(ray) {
     // a room's floor picks the room (the floor view only)
     const f = solo ? null : ray.intersectObjects(rooms.map((R) => R.floor), false)[0];
     const id = f && Object.keys(LIVE3D.rooms).find((k) => LIVE3D.rooms[k].floor === f.object);
-    return id ? { kind: 'room', project: id, title: `${PROJECT[id].name} を選ぶ` } : null;
+    return id ? { kind: 'room', project: id, title: tl('scene.pick.room', { name: PROJECT[id].name }) } : null;
   }
   const rid = robotOf(hit.object);
   if (rid !== undefined) return { kind: 'robot', id: rid };
-  for (let q = hit.object; q; q = q.parent) if (q.userData.callBell) return { kind: 'call', project: PROPS.room, title: 'ロボットを呼ぶ（起動のコマンドをコピー）' };
-  if (hit.object.userData.dataServer && PROPS.room) return { kind: 'data', project: PROPS.room, title: 'API 仕様書・DB 仕様書を見る' };
-  if (hit.object.userData.serverDoor && PROPS.room) return { kind: 'serverroom', project: PROPS.room, title: 'サーバールームに入る（構成を読み込む）' };
+  for (let q = hit.object; q; q = q.parent) if (q.userData.callBell) return { kind: 'call', project: PROPS.room, title: tl('scene.pick.call') };
+  if (hit.object.userData.dataServer && PROPS.room) return { kind: 'data', project: PROPS.room, title: tl('scene.pick.data') };
+  if (hit.object.userData.serverDoor && PROPS.room) return { kind: 'serverroom', project: PROPS.room, title: tl('scene.pick.serverroom') };
   for (const [id, R] of Object.entries(LIVE3D.rooms)) {
     if (hit.object === R.kb.mesh) return { kind: 'tasks', project: id };
     if (R.tb && hit.object === R.tb.mesh) return { kind: 'board', project: id };
@@ -2097,7 +2097,7 @@ function liveRedrawBoards(model, now, force) {
   for (const [id, R] of Object.entries(LIVE3D.rooms)) {
     if (!PROJECT[id]) continue;
     // the room's label: its name, and its mock server when one runs (P7 §A3)
-    const mk = PROJECT[id].mock, label = `${PROJECT[id].name}${mk && mk.running ? ` · モック :${mk.port}` : mk && mk.other ? ` · :${mk.port} は別のモック` : ''}`;
+    const mk = PROJECT[id].mock, label = `${PROJECT[id].name}${mk && mk.running ? tl('scene.room.mock', { port: mk.port }) : mk && mk.other ? tl('scene.room.mock.other', { port: mk.port }) : ''}`;
     if (R.rt.el.textContent !== label) { R.rt.el.textContent = label; R.rt.el.classList.toggle('mock-on', !!(mk && mk.running)); }
     const tasks = model.tasks.filter((x) => PROJECT_OF[x.list] === id);
     const pend = model.pending.filter((p) => projectOfRobot(p.who) === id).map((p) => p.id).join();
@@ -2136,9 +2136,9 @@ function drawBigSpecBoard(pb, model, now) {
   for (let y = 0; y < H; y += 32) ctx.fillRect(0, y, W, 1);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   const specs = pb.specs.map((i) => model.specs[i]), c = bucketCounts(specs);
-  ctx.fillStyle = P.title; ctx.font = `36px ${FONT_DISPLAY}`; ctx.fillText('spec ボード', 26, 52);
+  ctx.fillStyle = P.title; ctx.font = `36px ${FONT_DISPLAY}`; ctx.fillText(tl('scene.specboard.title'), 26, 52);
   ctx.fillStyle = P.sub; ctx.font = `700 24px ${FONT_BODY}`;
-  fitText(ctx, `${proj.name} · 全 ${specs.length} 画面 · 作業中 ${c.live} · 途中 ${c.partial} · 未着手 ${c.todo} · 完了 ${c.done}`, 276, 50, W - 300);
+  fitText(ctx, `${proj.name} · ${tl('scene.spec.counts', { n: specs.length, live: c.live, partial: c.partial, todo: c.todo, done: c.done })}`, 276, 50, W - 300);
   const pad = 22, top = 76, n = Math.max(1, specs.length), aspect = 2.6;
   // columns so that the tiles keep roughly the prototype's shape
   let cols = Math.max(1, Math.round(Math.sqrt((n * (W - pad * 2)) / ((H - top - pad) * aspect))));
@@ -2183,7 +2183,7 @@ function liveRoomPose(id) {
    place that asks the browser for the position — the permission dialog shows inside this click, never on opening the
    page — and the position is rounded to two decimals (about 1 km) before it leaves the page; the server rounds again
    and asks Open-Meteo itself (the page never talks to anyone but this server). Turning it off removes the position. */
-const WEATHER_JA = { clear: '晴れ', cloudy: '曇り', fog: '霧', rain: '雨', snow: '雪', thunder: '雷雨' };
+const WEATHER_JA = { clear: tl('scene.weather.clear'), cloudy: tl('scene.weather.cloudy'), fog: tl('scene.weather.fog'), rain: tl('scene.weather.rain'), snow: tl('scene.weather.snow'), thunder: tl('scene.weather.thunder') };
 const WEATHER_UI = { busy: false, note: '' };
 const roundCoord = (v) => Math.round(v * 100) / 100;
 /* Two places show the same switch (10-18): the building view's corner, and the side panel's 設定 — the latter for every
@@ -2196,9 +2196,9 @@ function weatherPaint(towerHidden) {
   if (SOURCE.mode !== 'live') return;   // the demo has no server to ask, and no LIVE.slices
   const w = LIVE.slices.weather || { on: false };
   const at = typeof w.at === 'number' ? new Date(w.at).toTimeString().slice(0, 5) : '';
-  const text = WEATHER_UI.note || (!w.on ? 'オフ — 外への通信はしません'
-    : w.kind ? `${WEATHER_JA[w.kind] || w.kind}${typeof w.tempC === 'number' ? ` ${Math.round(w.tempC)}℃` : ''}（最後に取れた時刻 ${at}${w.stale ? '・古い値' : ''}）${w.error ? ` — 失敗: ${w.error}` : ''}`
-      : w.error ? `取れていません — 失敗: ${w.error}` : '取得中…');
+  const text = WEATHER_UI.note || (!w.on ? tl('scene.weather.off')
+    : w.kind ? `${WEATHER_JA[w.kind] || w.kind}${typeof w.tempC === 'number' ? ` ${Math.round(w.tempC)}℃` : ''}${tl('scene.weather.at', { at, stale: w.stale ? tl('scene.weather.stale') : '' })}${w.error ? tl('scene.weather.failed', { error: w.error }) : ''}`
+      : w.error ? tl('scene.weather.none', { error: w.error }) : tl('scene.weather.loading'));
   for (const [b, n, hidden] of [['weather-switch', 'weather-note', towerHidden], ['weather-switch-panel', 'weather-note-panel', !sec || sec.hidden]]) {
     if (hidden) continue;
     const btn = document.getElementById(b), note = document.getElementById(n);
@@ -2211,23 +2211,23 @@ function weatherPaint(towerHidden) {
 async function weatherSwitch() {
   if (WEATHER_UI.busy) return;
   const on = !(LIVE.slices.weather && LIVE.slices.weather.on);
-  WEATHER_UI.busy = true; WEATHER_UI.note = on ? '位置の許可を待っています…' : '';
+  WEATHER_UI.busy = true; WEATHER_UI.note = on ? tl('scene.weather.asking') : '';
   floorNavSync();
   try {
     if (!on) {
       const ack = await SOURCE.setWeather({ on: false });
-      WEATHER_UI.note = ack.ok ? '' : `オフにできませんでした — ${ack.error || ''}`;
+      WEATHER_UI.note = ack.ok ? '' : tl('scene.weather.offfailed', { error: ack.error || '' });
       return;
     }
-    if (!navigator.geolocation) { WEATHER_UI.note = 'このブラウザでは位置を取れないため、オフのままです'; return; }
+    if (!navigator.geolocation) { WEATHER_UI.note = tl('scene.weather.nogeo'); return; }
     const pos = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject,
       { enableHighAccuracy: false, timeout: 20000, maximumAge: 600000 }));
     const lat = roundCoord(pos.coords.latitude), lon = roundCoord(pos.coords.longitude);   // about 1 km, before it leaves the page
     const ack = await SOURCE.setWeather({ on: true, lat, lon });
-    WEATHER_UI.note = ack.ok ? '' : `オンにできませんでした — ${ack.error || ''}`;
+    WEATHER_UI.note = ack.ok ? '' : tl('scene.weather.onfailed', { error: ack.error || '' });
   } catch (err) {
-    const why = err && err.code === 1 ? '位置の利用が許可されませんでした' : err && err.code === 3 ? '位置を取るのに時間がかかりすぎました' : '位置を取れませんでした';
-    WEATHER_UI.note = `${why}。オフのままです`;
+    const why = err && err.code === 1 ? tl('scene.weather.denied') : err && err.code === 3 ? tl('scene.weather.timeout') : tl('scene.weather.nopos');
+    WEATHER_UI.note = tl('scene.weather.stays', { why });
   } finally {
     WEATHER_UI.busy = false;
     floorNavSync();
@@ -2246,7 +2246,7 @@ function floorNavSync() {
   legend.hidden = nav.hidden || !TOWER.on;
   weatherPaint(!has3D || covered || !TOWER.on || SOURCE.mode !== 'live');
   if (nav.hidden) return;
-  setText(document.getElementById('floor-label'), TOWER.on && SOURCE.mode === 'live' ? `全 ${n} 階` : `${k + 1}F / ${n}F`);
+  setText(document.getElementById('floor-label'), TOWER.on && SOURCE.mode === 'live' ? tl('scene.floor.all', { n }) : `${k + 1}F / ${n}F`);
   const waits = LIVE.floors.map((f) => f.some((id) => LIVE.rank[id] === 0));
   const up = document.getElementById('floor-up'), down = document.getElementById('floor-down'), bld = document.getElementById('floor-building');
   const free = TOWER.on && SOURCE.mode === 'live';
@@ -2254,8 +2254,8 @@ function floorNavSync() {
   const above = waits.some((w, j) => w && j > k), below = waits.some((w, j) => w && j < k);
   up.toggleAttribute('data-alert', above && !free); down.toggleAttribute('data-alert', below && !free);
   bld.toggleAttribute('data-alert', (above || below) && !TOWER.on);
-  up.setAttribute('aria-label', above ? '上の階へ（上の階に許可待ち）' : '上の階へ');
-  down.setAttribute('aria-label', below ? '下の階へ（下の階に許可待ち）' : '下の階へ');
+  up.setAttribute('aria-label', above ? tl('scene.floor.up.waiting') : tl('scene.floor.up'));
+  down.setAttribute('aria-label', below ? tl('scene.floor.down.waiting') : tl('scene.floor.down'));
   bld.setAttribute('aria-pressed', TOWER.on ? 'true' : 'false');
 }
 /* The demo's director: once a loop, the camera beats (out to the building, up to 2F, back, down; the building at
@@ -2445,9 +2445,9 @@ function towerFacade(F, k, P) {
     const id = ids[i], state = towerState(id), gy = WIN_TOP + BADGE;
     // the badge band: the state in words and a symbol (not only a colour)
     ctx.fillStyle = P.frame; ctx.fillRect(x, WIN_TOP, w, BADGE);
-    const badge = { working: ['▶ 作業中', P.ok, P.okBg], thinking: ['… 考え中', P.ok, P.okBg], waiting: ['! 許可待ち', P.warn, P.warnBg],
-      asking: ['? 質問待ち', '#14062e', '#b48cff'], input: ['… 入力待ち', '#13233a', '#e8ecf1'],
-      idle: ['● 待機（消灯）', P.soft, P.chip], empty: ['空き', P.soft, P.panel] }[state];
+    const badge = { working: [tl('scene.badge.working'), P.ok, P.okBg], thinking: [tl('scene.badge.thinking'), P.ok, P.okBg], waiting: [tl('scene.badge.waiting'), P.warn, P.warnBg],
+      asking: [tl('scene.badge.asking'), '#14062e', '#b48cff'], input: [tl('scene.badge.input'), '#13233a', '#e8ecf1'],
+      idle: [tl('scene.badge.idle'), P.soft, P.chip], empty: [tl('scene.tower.empty'), P.soft, P.panel] }[state];
     ctx.font = `700 26px ${FONT_BODY}`;
     const bwid = ctx.measureText(badge[0]).width + 26;
     ctx.fillStyle = badge[2]; ctx.beginPath(); ctx.roundRect(x + 10, WIN_TOP + 8, bwid, 36, 18); ctx.fill();
@@ -2488,9 +2488,9 @@ function towerFacade(F, k, P) {
     ctx.textAlign = 'left'; ctx.fillStyle = P.ink; ctx.fillText(label, sx + 70, y);
     ctx.font = `700 40px ${FONT_MONO}`; ctx.textAlign = 'right'; ctx.fillText(String(n), W - 48, y + 2);
   };
-  row(110, '▶', '作業中', working, P.ok, P.okBg);
-  row(206, '!', '許可待ち', waiting, P.warn, P.warnBg);
-  row(302, '●', '待機', idle, P.soft, P.panel);
+  row(110, '▶', tl('scene.stat.working'), working, P.ok, P.okBg);
+  row(206, '!', tl('scene.stat.waiting'), waiting, P.warn, P.warnBg);
+  row(302, '●', tl('scene.stat.idle'), idle, P.soft, P.panel);
   F.tex.needsUpdate = true;
 }
 /* The office robots seen through the windows: one sprite per pose (a desk, a walk in two steps, pointing at a
@@ -2731,11 +2731,11 @@ function towerAnimate(t, dt) {
   if (flash !== !!TOWER.flash) { TOWER.flash = flash; sceneEl.style.filter = flash ? 'brightness(1.8)' : ''; }
 }
 /* The room under the pointer in the building: its full name and state, as the canvas's title. */
-const TOWER_STATE_JA = { working: '作業中', thinking: '考え中', waiting: '許可待ち', asking: '質問に回答待ち', input: '入力待ち', idle: '待機（消灯）', empty: '空き' };
+const TOWER_STATE_JA = { working: tl('status.busy'), thinking: tl('status.thinking'), waiting: tl('status.waiting'), asking: tl('status.asking'), input: tl('status.input'), idle: tl('scene.tower.idle'), empty: tl('scene.tower.empty') };
 function towerHover(hit) {
   const F = hit && TOWER.floors[hit.object.userData.floor];
   const bay = F && hit.uv ? F.bays.find((b) => hit.uv.x >= b.x0 && hit.uv.x <= b.x1) : null;
-  return bay ? `${hit.object.userData.floor + 1}F · ${bay.id ? towerName(bay.id) : '（空き）'} · ${TOWER_STATE_JA[bay.state]}` : '';
+  return bay ? `${hit.object.userData.floor + 1}F · ${bay.id ? towerName(bay.id) : tl('scene.tower.vacant')} · ${TOWER_STATE_JA[bay.state]}` : '';
 }
 function towerPose() {
   const h = towerBase(LIVE.floors.length) + 3, c = new THREE.Vector3(0, h / 2, 0);
@@ -2821,11 +2821,11 @@ function drawLivePhone(r, t) {
   ctx.fillStyle = '#0d1828'; ctx.fillRect(24, 24, 192, 320);
   ctx.fillStyle = pillBg(r.role); ctx.fillRect(24, 24, 192, 46);   // a header with text: the pill's pair
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = pillInk(r.role); ctx.font = `700 15px ${FONT_BODY}`; ctx.fillText('テスト実行', 36, 54);
+  ctx.fillStyle = pillInk(r.role); ctx.font = `700 15px ${FONT_BODY}`; ctx.fillText(tl('scene.testrun.title'), 36, 54);
   ctx.fillStyle = '#9fc3ff'; ctx.font = `600 12px ${FONT_MONO}`;
-  wrapText(ctx, act || '待機中', 36, 96, 168, 18, cases.length ? 6 : 12);
+  wrapText(ctx, act || tl('scene.idle'), 36, 96, 168, 18, cases.length ? 6 : 12);
   if (cases.length) {
-    ctx.fillStyle = '#4fd48a'; ctx.font = `700 14px ${FONT_BODY}`; ctx.fillText(`${done}/${cases.length} 通過`, 36, 222);
+    ctx.fillStyle = '#4fd48a'; ctx.font = `700 14px ${FONT_BODY}`; ctx.fillText(tl('scene.phone.passed', { done, n: cases.length }), 36, 222);
     if (now) { ctx.fillStyle = '#ffffff'; ctx.font = `500 12px ${FONT_BODY}`; wrapText(ctx, `▶ ${now.name}`, 36, 244, 168, 16, 3); }
   }
   const ph = (t * 0.9) % 1;
@@ -2996,7 +2996,7 @@ function update3D(model, nowSec, dt) {
     const closed = shopTasks.filter((x) => x.status === 'completed').length;
     trayPending.forEach((p, i) => { p.visible = i < open; });
     trayDone.forEach((p, i) => { p.visible = i < closed; });
-    trayTag.el.textContent = `書類 未完了 ${open} ／ 完了 ${closed}`;
+    trayTag.el.textContent = tl('scene.tray', { open, closed });
 
     const a2 = robots.find((x) => x.def.id === 'a2').robot;
     standMat.map = robotState.a2.state === 'phone' ? a2.phoneScreenTex : standOffTex;
