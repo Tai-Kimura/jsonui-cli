@@ -365,8 +365,8 @@ async def run_notify(pw, out, failures):
         seen_a = await a.evaluate("() => window.__dbg.notifySeen()")
         turn()
         await wait(a, "(before) => window.__dbg.notifySeen().some((k) => k.includes(':done:') && !before.includes(k))", arg=seen_a, label="tab a saw the quiet turn end")
-        t0 = await a.evaluate("() => performance.now()")
-        await wait(a, "(t) => performance.now() > t + 2500", arg=t0, timeout=8000, label="past tab a's wait to take it back")
+        page_t0 = await a.evaluate("() => performance.now()")
+        await wait(a, "(t) => performance.now() > t + 2500", arg=page_t0, timeout=8000, label="past tab a's wait to take it back")
         res["quietB"].update({"shown": len(await a.evaluate(SHOWN)) - n0, "chimes": await a.evaluate(CHIMES) - c0})
         check(failures, res["quietB"] == {"focus": ["visible", True], "shown": 0, "chimes": 0},
               f"quiet in the tab that can sound: the other tab does not show it either: {res['quietB']}")
@@ -378,14 +378,14 @@ async def run_notify(pw, out, failures):
         await b.evaluate("() => window.__dbg.notifyDelay(5000)")
         n0, c0 = len(await a.evaluate(SHOWN)), await a.evaluate(CHIMES)
         a0, b0 = len(await a.evaluate("() => window.__shown")), len(await b.evaluate("() => window.__shown"))
-        t0 = await a.evaluate("() => performance.now()")
+        page_t0 = await a.evaluate("() => performance.now()")
         turn()
         try:
             await wait(a, f"() => JSON.parse(localStorage.getItem('e2e-shown') || '[]').length >= {n0 + 1}", timeout=4500, label="tab a takes it back")
         except RuntimeError:
             pass
         res["takeBack"] = {"a": len(await a.evaluate("() => window.__shown")) - a0, "b": len(await b.evaluate("() => window.__shown")) - b0,
-                           "within": round(await a.evaluate("() => performance.now()") - t0)}
+                           "within": round(await a.evaluate("() => performance.now()") - page_t0)}
         await wait(b, "() => window.__dbg.notifySeen().length >= " + str(len(await b.evaluate("() => window.__dbg.notifySeen()")) + 1), timeout=15000, label="tab b took it, late")
         res["takeBack"]["shown"] = len(await a.evaluate(SHOWN)) - n0
         res["takeBack"]["bAfter"] = len(await b.evaluate("() => window.__shown")) - b0
