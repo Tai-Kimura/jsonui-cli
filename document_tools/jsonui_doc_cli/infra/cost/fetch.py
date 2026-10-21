@@ -12,6 +12,12 @@ answer, only a User-Agent sent — the URL holds an offer code or a service name
 What is written is a price file like a person's: read back through prices.read_file (the schema, and the shapes of
 secrets over every string) before it replaces the last one. A failure leaves the last file as it was (the last price
 fetched stays in use) and says why in the index; one failure stops nothing else.
+
+Each file's index entry names the jsonui-cli version that wrote it (``writer``): what a file holds is that version's
+reading of the answer (2.3.14 put the account's free amount on the egress rows; 2.3.13 did not). A file another
+version wrote is not read (pricebook.cache_rows: the bundled price meanwhile) and a run is due at once after an upgrade
+(due), so an upgrade's change reaches the prices the same hour, not the next day (ticket
+2026-10-22-cloud-prices-cache-outlives-the-fetcher-that-wrote-it).
 """
 from __future__ import annotations
 
@@ -24,6 +30,7 @@ import urllib.request
 from pathlib import Path
 from typing import Callable, Iterable
 
+from ... import __version__ as WRITER
 from .. import prices as P
 from . import aws_offers as AWS
 from . import azure_prices as AZ
@@ -195,7 +202,7 @@ def fetch_one(t: dict, cache: Path, at_ms: int, get=http_get, lines=http_lines) 
         return {**entry, "ok": False, "error": f"not written: {first['code']} at {first['path']}: {first['message']}"}
     _write(cache / t["path"], data)
     return {**entry, "ok": True, "fetchedAt": at_ms, "rows": len(rows), "missing": missing[:50],
-            "effective": max(r["effective"] for r in rows)}
+            "effective": max(r["effective"] for r in rows), "writer": WRITER}
 
 
 # ---------------------------------------------------------------- a run, and the index
@@ -213,7 +220,7 @@ def merge(old: dict, rel: str, got: dict) -> dict:
     prev = old.get(rel) or {}
     if got["ok"]:
         return {k: v for k, v in got.items() if k != "ok"} | {"lastError": None}
-    keep = {k: prev[k] for k in ("fetchedAt", "rows", "effective", "missing") if k in prev}
+    keep = {k: prev[k] for k in ("fetchedAt", "rows", "effective", "missing", "writer") if k in prev}
     return {**keep, "provider": got["provider"], "region": got["region"], "source": got["source"],
             "lastTryAt": got["lastTryAt"], "lastError": got["error"]}
 
@@ -225,7 +232,7 @@ def run(setting: dict, cache: Path, at_ms: int, get=http_get, lines=http_lines,
     index = read_index(cache)
     for t in targets(setting, provider, region):
         index["files"][t["path"]] = merge(index["files"], t["path"], fetch_one(t, cache, at_ms, get, lines))
-    index["lastRunAt"] = at_ms
+    index["lastRunAt"], index["lastRunWriter"] = at_ms, WRITER
     _write(cache / INDEX, (json.dumps(index, ensure_ascii=False, indent=1) + "\n").encode("utf-8"))
     return index
 
@@ -237,9 +244,18 @@ def last_ok(index: dict) -> int | None:
 
 
 def due(index: dict, now_ms: int) -> bool:
-    """Once a day: a day after the last run (whatever it got), or now when there was none."""
+    """Once a day: a day after the last run (whatever it got), now when there was none, and now when the last run was
+    another version's (an upgrade: its files are not read until fetched again, cache_rows). A run of this version that
+    failed waits its day as before: the bundled prices stand in meanwhile."""
     last = index.get("lastRunAt")
-    return not isinstance(last, int) or now_ms - last >= EVERY_MS
+    return not isinstance(last, int) or index.get("lastRunWriter") != WRITER or now_ms - last >= EVERY_MS
+
+
+def written_by_another(index: dict) -> dict[str, str | None]:
+    """{file: the version that wrote it (None: before 2.3.17, which wrote no version)} for each file this version did
+    not write."""
+    return {k: v.get("writer") for k, v in index.get("files", {}).items()
+            if isinstance(v, dict) and v.get("writer") != WRITER}
 
 
 def summary(index: dict) -> dict:

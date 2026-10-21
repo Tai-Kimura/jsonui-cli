@@ -28,9 +28,10 @@ def book(tmp_path, mod, setting=None, runner=None, now=lambda: 10 * DAY, started
 
     def fake_run(setting, cache, at):
         calls.append((setting, at))
-        index = {"version": 1, "lastRunAt": at, "files": {"azure/functions/japaneast.json": {
+        # the real run's index: it names the version that ran (fetch.WRITER), so the next run waits its day
+        index = {"version": 1, "lastRunAt": at, "lastRunWriter": mod.WRITER, "files": {"azure/functions/japaneast.json": {
             "provider": "azure", "region": "japaneast", "source": "https://prices.azure.com/api/retail/prices?x",
-            "fetchedAt": at, "effective": "2017-01-01", "rows": 2, "lastTryAt": at, "lastError": None}}}
+            "fetchedAt": at, "effective": "2017-01-01", "rows": 2, "lastTryAt": at, "lastError": None, "writer": mod.WRITER}}}
         (cache).mkdir(parents=True, exist_ok=True)
         (cache / "index.json").write_text(json.dumps(index))
         return index

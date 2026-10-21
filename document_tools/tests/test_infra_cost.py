@@ -102,6 +102,9 @@ def test_the_cache_is_read_from_viz_home(tmp_path):
     (folder / "aws").mkdir(parents=True)
     (folder / "aws" / "s3.json").write_text(json.dumps({"version": 0, "prices": [ROW]}))
     (folder / "bad.json").write_text("{")
+    from jsonui_doc_cli.infra.cost import fetch as FE
+    mine = {"writer": FE.WRITER}
+    (folder / "index.json").write_text(json.dumps({"version": 1, "files": {"aws/s3.json": mine, "bad.json": mine}}))
     rows, why = PB.cache_rows(folder)
     assert [r["sku"] for r in rows] == ["get"] and why == ["bad.json: not used (json)"]
 

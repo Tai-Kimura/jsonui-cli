@@ -34,18 +34,31 @@ def cache_dir(env: dict | None = None) -> Path:
 
 def cache_rows(folder: Path) -> tuple[list[dict], list[str]]:
     """The fetched prices' rows (every *.json below the folder, read as a price file) and why any file was not used.
-    Written by fetch.py (L-B2); an empty or missing folder is no price and no warning."""
+    Written by fetch.py (L-B2); an empty or missing folder is no price and no warning. A file the index does not say
+    this version wrote (another version's reading of the answer, or one the index does not name) is not used: the
+    bundled price stands in until the next fetch, which an upgrade makes due at once (fetch.due)."""
+    from . import fetch as FE  # noqa: PLC0415
     rows, why = [], []
     if not folder.is_dir():
         return rows, why
+    index = FE.read_index(folder)
+    mine = {k for k, v in index.get("files", {}).items() if isinstance(v, dict) and v.get("writer") == FE.WRITER}
+    others = 0
     for f in sorted(folder.rglob("*.json")):
         if f.is_symlink() or not f.is_file() or f.name.startswith(".") or (f.parent == folder and f.name == "index.json"):
             continue   # index.json: where each fetched file came from (fetch.py), not a price file
+        rel = f.relative_to(folder).as_posix()
+        if rel not in mine:
+            others += 1
+            continue
         doc, problems = P.read_file(f.name, f.read_bytes())
         if doc is None:
             why.append(f"{f.relative_to(folder)}: not used ({problems[0]['code']})")
             continue
         rows += P.rows(str(f.relative_to(folder)), doc)[0]
+    if others:
+        why.append(f"{others} fetched price file(s) were written by another jsonui-cli version (or the index does not "
+                   f"name them): not used until fetched again by {FE.WRITER}; the bundled prices stand in")
     return rows, why
 
 

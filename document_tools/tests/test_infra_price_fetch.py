@@ -256,8 +256,61 @@ def test_ec2_is_read_from_lines(tmp_path):
 
 def test_once_a_day():
     assert F.due({"files": {}}, 10)
-    assert not F.due({"files": {}, "lastRunAt": 0}, F.EVERY_MS - 1)
-    assert F.due({"files": {}, "lastRunAt": 0}, F.EVERY_MS)
+    assert not F.due({"files": {}, "lastRunAt": 0, "lastRunWriter": F.WRITER}, F.EVERY_MS - 1)
+    assert F.due({"files": {}, "lastRunAt": 0, "lastRunWriter": F.WRITER}, F.EVERY_MS)
+
+
+# ---------------------------------------------------------------- the version that wrote the cache (ticket
+# 2026-10-22-cloud-prices-cache-outlives-the-fetcher-that-wrote-it: 2.3.13 wrote the egress rows without the account's
+# free amount, and an upgraded viz read them for up to a day)
+
+def test_an_upgrade_makes_a_run_due_at_once_and_a_failed_run_waits_its_day():
+    old = {"files": {}, "lastRunAt": 0, "lastRunWriter": "2.3.13"}
+    assert F.due(old, 1) and F.due({"files": {}, "lastRunAt": 0}, 1)   # another version's run, or one before the mark
+    failed = {"files": {"aws/x.json": {"writer": "2.3.13", "lastError": "URLError"}}, "lastRunAt": 0, "lastRunWriter": F.WRITER}
+    assert not F.due(failed, 1)                                          # no fetch a minute: the bundled prices stand in
+    assert F.written_by_another(failed) == {"aws/x.json": "2.3.13"}
+
+
+def test_a_run_marks_each_file_and_the_run_with_this_version(tmp_path):
+    """Each file fetched names this version, and so does the run; a later failure keeps the last success's writer (its
+    file is still another version's until fetched again)."""
+    answers = azure_answers()
+    index = F.run(azure_only(), tmp_path, at_ms=1000, get=fake_get(answers), provider="azure")
+    e = index["files"]["azure/functions/japaneast.json"]
+    assert e["writer"] == F.WRITER and index["lastRunWriter"] == F.WRITER and not F.due(index, 1001)
+    index["files"]["azure/functions/japaneast.json"]["writer"] = "2.3.13"     # as an older version left it
+    (tmp_path / "index.json").write_text(json.dumps(index))
+    answers.pop(AZ.query_url("Functions", "japaneast"))
+    index = F.run(azure_only(), tmp_path, at_ms=2000, get=fake_get(answers), provider="azure")
+    assert index["files"]["azure/functions/japaneast.json"]["writer"] == "2.3.13"
+    assert index["files"]["azure/key-vault/japaneast.json"]["writer"] == F.WRITER
+    assert F.written_by_another(index) == {"azure/functions/japaneast.json": "2.3.13"}
+
+
+def test_a_file_another_version_wrote_is_not_read_and_the_bundled_price_stands_in(tmp_path):
+    """The ticket's case: the cache holds 2.3.13's egress row (no free amount) for us-east-1. Read by this version, the
+    row is not used and the bundled row (with the account's 100 GB a month) prices it; written by this version, the
+    cache's row is used."""
+    from jsonui_doc_cli.infra.cost import pricebook as PB
+    folder = tmp_path / "cloud-prices"
+    (folder / "aws" / "awsdatatransfer").mkdir(parents=True)
+    old_row = {"provider": "aws", "service": "data-transfer", "sku": "egress", "region": "us-east-1", "unit": "GB",
+               "price_usd": 0.09, "effective": "2026-10-01", "source": "https://pricing.us-east-1.amazonaws.com/x"}
+    (folder / "aws" / "awsdatatransfer" / "us-east-1.json").write_text(json.dumps({"version": 0, "prices": [old_row]}))
+    rel = "aws/awsdatatransfer/us-east-1.json"
+    for writer, layer in ((None, "bundled"), ("2.3.13", "bundled"), (F.WRITER, "cache")):
+        entry = {"fetchedAt": 1} | ({"writer": writer} if writer else {})
+        (folder / "index.json").write_text(json.dumps({"version": 1, "files": {rel: entry}}))
+        rows, why = PB.cache_rows(folder)
+        book = PB.Book(cache=rows, bundled=PB.bundled_rows())
+        found = book.find("aws", "data-transfer", "egress", "GB", "us-east-1", "2026-11-01")
+        assert found["layer"] == layer, (writer, found)
+        if layer == "bundled":
+            assert found["row"].get("free", {}).get("pool") == "aws:data-transfer-out" and rows == []
+            assert why and "written by another jsonui-cli version" in why[0]
+        else:
+            assert "free" not in found["row"] and why == []
 
 
 # ---------------------------------------------------------------- the real get, its answer replaced (nothing outside)
