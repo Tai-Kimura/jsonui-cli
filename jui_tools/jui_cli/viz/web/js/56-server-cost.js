@@ -16,7 +16,7 @@ const SRC_PER = { second: 'sec', minute: 'min', hour: 'h', day: 'day', month: 'm
 const SRC_COLORS = ['#4e79a7', '#f28e2b', '#59a14f', '#e15759', '#76b7b2', '#edc948', '#b07aa1', '#ff9da7', '#9c755f', '#bab0ac'];
 
 function srcUsd(v) {
-  if (v === null || v === undefined) return '単価なし';
+  if (v === null || v === undefined) return tl('cost.noprice');
   const digits = Math.abs(v) < 1 && v !== 0 ? 4 : 2;
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: digits }).format(v);
 }
@@ -62,25 +62,25 @@ function srCostReset() {   // the server room closed (56-server-room.js srClose)
 async function srcAsk(extra) {
   const seq = ++SRC.seq;
   const got = typeof SOURCE.infraCost === 'function' ? await SOURCE.infraCost(SR.project, { seq, scenario: SRC.scenario, ...extra })
-    : { ok: false, reason: 'unreadable', message: 'このページでは計算できない' };
+    : { ok: false, reason: 'unreadable', message: tl('cost.unavailable') };
   return seq === SRC.seq && SRC.mode === 'cost' ? got : null;   // an older answer, or the view left: dropped
 }
 async function srcLoad() {
   SRC.error = '';
-  srcRender('読み込んでいます…');
+  srcRender(tl('cost.loading'));
   const got = await srcAsk({ by: SRC.by });
   if (!got) return;
-  if (!got.ok) { SRC.error = got.message || got.reason || '読めなかった'; SRC.month = null; srcRender(); return; }
+  if (!got.ok) { SRC.error = got.message || got.reason || tl('cost.failed'); SRC.month = null; srcRender(); return; }
   SRC.scenario = got.scenario;
   SRC.month = { ...got.month, scenarios: got.scenarios, problems: got.problems, prices: got.prices };
-  setHTML($('sr-scn'), got.scenarios.map((s) => `<option value="${esc(s.id)}"${s.id === got.scenario ? ' selected' : ''}>${esc(s.label)}（${esc(s.month)}）</option>`).join(''));
-  srLog(`コスト: ${got.scenarios.find((s) => s.id === got.scenario).label} を計算した（${srcUsd(got.month.usd)}）`);
+  setHTML($('sr-scn'), got.scenarios.map((s) => `<option value="${esc(s.id)}"${s.id === got.scenario ? ' selected' : ''}>${esc(tl('cost.scn.option', { label: s.label, month: s.month }))}</option>`).join(''));
+  srLog(tl('cost.log.done', { label: got.scenarios.find((s) => s.id === got.scenario).label, usd: srcUsd(got.month.usd) }));
   if (SRC.date) await srcOpenDay(SRC.date); else srcRender();
 }
 async function srcOpenDay(date) {
   const got = await srcAsk({ date });
   if (!got) return;
-  if (!got.ok) { SRC.error = got.message || '読めなかった'; srcRender(); return; }
+  if (!got.ok) { SRC.error = got.message || tl('cost.failed'); srcRender(); return; }
   Object.assign(SRC, { date, day: got.day, hour: Math.min(SRC.hour, got.day.hours.length - 1), picked: null });
   srcRender();
 }
@@ -103,24 +103,24 @@ function srcStop() { if (SRC.timer) { clearInterval(SRC.timer); SRC.timer = 0; }
 /* ---- the month ---- */
 function srcSummary(M) {
   const chips = [
-    ['noPrice', '単価なし', M.noPrice.length, M.noPrice.map((x) => `${x.node} · ${x.meter}（${x.sku}・${x.unit}）`)],
-    ['noRule', '規則なし', M.noRule.length, M.noRule],
-    ['loadUndefined', '負荷未定義', M.loadUndefined.length, M.loadUndefined],
-    ['overflow', '容量を超えた node', Object.keys(M.overflowHours).length, Object.entries(M.overflowHours).map(([n, h]) => `${n}: ${h} 時間`)],
-    ['problems', '負荷定義の警告', M.problems.count, M.problems.first.map((p) => `${p.file} ${p.path}: ${p.message}`)],
-    ['warnings', '計算の注意', M.warningCount, M.warnings.map(srcWarnText)],
+    ['noPrice', tl('cost.noprice'), M.noPrice.length, M.noPrice.map((x) => tl('cost.noprice.item', { node: x.node, meter: x.meter, sku: x.sku, unit: x.unit }))],
+    ['noRule', tl('cost.norule'), M.noRule.length, M.noRule],
+    ['loadUndefined', tl('cost.noload'), M.loadUndefined.length, M.loadUndefined],
+    ['overflow', tl('cost.overflow'), Object.keys(M.overflowHours).length, Object.entries(M.overflowHours).map(([n, h]) => tl('cost.overflow.item', { node: n, n: h }))],
+    ['problems', tl('cost.problems'), M.problems.count, M.problems.first.map((p) => `${p.file} ${p.path}: ${p.message}`)],
+    ['warnings', tl('cost.warnings'), M.warningCount, M.warnings.map(srcWarnText)],
   ];
   // the free amount is taken once per scenario (one environment): environments on one account each counted take it twice
   const free = M.warnings.find((w) => w.code === 'cost.free_per_scenario');
-  const freeHTML = free ? `<p class="src-free" data-src-free role="note">無料枠はシナリオ（環境）ごとに引いている。同じアカウントの環境を別々に数えると、無料枠を二重に引くので、合計は少なめに出る${free.rows && free.rows.length ? `（無料枠のある行 ${Number(free.rows.length)} 件）` : ''}</p>` : '';
-  return `<div class="src-sum"><strong class="src-total" data-src-total>${esc(srcUsd(M.usd))}</strong><span class="src-note">1 か月の概算（USD・オンデマンド。予約・割引・税は入っていない）</span>
-<label class="sr-ctl">積み上げ <select id="src-by"><option value="provider"${M.by === 'provider' ? ' selected' : ''}>provider ごと</option><option value="node"${M.by === 'node' ? ' selected' : ''}>node ごと</option></select></label></div>
-<div class="src-chips">${chips.map(([k, label, n, items]) => `<details class="src-chip" data-src-chip="${k}"${n ? ' data-some="1"' : ''}><summary>${esc(label)} <b>${n}</b></summary>${items.length ? `<ul>${items.slice(0, 50).map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p>なし</p>'}</details>`).join('')}</div>${freeHTML}`;
+  const freeHTML = free ? `<p class="src-free" data-src-free role="note">${esc(tl('cost.free'))}${free.rows && free.rows.length ? esc(tl('cost.free.rows', { n: Number(free.rows.length) })) : ''}</p>` : '';
+  return `<div class="src-sum"><strong class="src-total" data-src-total>${esc(srcUsd(M.usd))}</strong><span class="src-note">${esc(tl('cost.month.note'))}</span>
+<label class="sr-ctl">${esc(tl('cost.by'))} <select id="src-by"><option value="provider"${M.by === 'provider' ? ' selected' : ''}>${esc(tl('cost.by.provider'))}</option><option value="node"${M.by === 'node' ? ' selected' : ''}>${esc(tl('cost.by.node'))}</option></select></label></div>
+<div class="src-chips">${chips.map(([k, label, n, items]) => `<details class="src-chip" data-src-chip="${k}"${n ? ' data-some="1"' : ''}><summary>${esc(label)} <b>${n}</b></summary>${items.length ? `<ul>${items.slice(0, 50).map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : `<p>${esc(tl('cost.chip.none'))}</p>`}</details>`).join('')}</div>${freeHTML}`;
 }
 /* An engine warning in one line: its message, and the rows it names (a row is an id or a {id}). */
 function srcWarnText(w) {
   const rows = Array.isArray(w.rows) ? w.rows.map((r) => (r && typeof r === 'object' ? String(r.id || r.sku || JSON.stringify(r)) : String(r))) : [];
-  return `${w.node ? `${w.node} · ` : ''}${w.message}${rows.length ? `（${rows.slice(0, 8).join('・')}${rows.length > 8 ? ` ほか ${rows.length - 8}` : ''}）` : ''}`;
+  return `${w.node ? `${w.node} · ` : ''}${w.message}${rows.length ? tl('cost.warn.rows', { rows: rows.slice(0, 8).join(tl('cost.warn.sep')), more: rows.length > 8 ? tl('cost.warn.more', { n: rows.length - 8 }) : '' }) : ''}`;
 }
 function srcMonthSvg(M) {
   const w = Math.max(320, srcEl.clientWidth - 32), h = 260, padL = 56, padB = 28, padT = 18;
@@ -137,26 +137,26 @@ function srcMonthSvg(M) {
       acc += v;
       return `<rect x="${Number(x)}" y="${Number(y0)}" width="${Math.max(1, bw - 2)}" height="${Math.max(0, hh)}" fill="${esc(srcKeyColor(k.key, ki))}"><title>${esc(k.label)} ${esc(srcUsd(v))}</title></rect>`;
     }).join('');
-    const marksHTML = (d.overflowHours ? `<circle class="src-over" cx="${Number(x + bw / 2 - 1)}" cy="${Number(y(d.usd) - 8)}" r="4"><title>${Number(d.overflowHours)} 時間、容量を超えた</title></circle>` : '')
-      + (d.atMaxHours ? `<text class="src-flag" x="${Number(x + bw / 2 - 1)}" y="${Number(y(d.usd) - (d.overflowHours ? 14 : 4))}" text-anchor="middle">⚑<title>${Number(d.atMaxHours)} 時間、自動スケールの上限</title></text>` : '');
+    const marksHTML = (d.overflowHours ? `<circle class="src-over" cx="${Number(x + bw / 2 - 1)}" cy="${Number(y(d.usd) - 8)}" r="4"><title>${esc(tl('cost.day.overflow', { n: Number(d.overflowHours) }))}</title></circle>` : '')
+      + (d.atMaxHours ? `<text class="src-flag" x="${Number(x + bw / 2 - 1)}" y="${Number(y(d.usd) - (d.overflowHours ? 14 : 4))}" text-anchor="middle">⚑<title>${esc(tl('cost.day.atmax', { n: Number(d.atMaxHours) }))}</title></text>` : '');
     return `<g class="src-day" data-src-date="${esc(d.date)}" tabindex="0" role="button" aria-label="${esc(d.date)} ${esc(srcUsd(d.usd))}">${segsHTML}<rect class="src-hit" x="${Number(x)}" y="${Number(padT)}" width="${Math.max(1, bw - 2)}" height="${Number(h - padT - padB)}"/>${marksHTML}<text class="src-dlabel" x="${Number(x + bw / 2 - 1)}" y="${Number(h - 10)}" text-anchor="middle">${esc(String(Number(d.date.slice(8))))}</text></g>`;
   }).join('');
   const legendHTML = M.keys.map((k, ki) => `<span class="src-key"><i style="background:${esc(srcKeyColor(k.key, ki))}"></i>${esc(k.label)}</span>`).join('');
-  return `<svg class="src-month" width="${Number(w)}" height="${Number(h)}" viewBox="0 0 ${Number(w)} ${Number(h)}" role="img" aria-label="${esc(M.month)} の日ごとのコスト">${ticksHTML}${barsHTML}</svg><div class="src-legend">${legendHTML}</div><p class="src-hint">棒を押すと、その日の 1 日を再生します。</p>`;
+  return `<svg class="src-month" width="${Number(w)}" height="${Number(h)}" viewBox="0 0 ${Number(w)} ${Number(h)}" role="img" aria-label="${esc(tl('cost.month.aria', { month: M.month }))}">${ticksHTML}${barsHTML}</svg><div class="src-legend">${legendHTML}</div><p class="src-hint">${esc(tl('cost.month.hint'))}</p>`;
 }
 
 /* ---- a day ---- */
 function srcRunning(hr) {
-  if (hr.range) return `稼働 ${srcNum(hr.running)} 台（自動、${hr.range[0]}〜${hr.range[1]}）`;
+  if (hr.range) return tl('cost.running.auto', { n: srcNum(hr.running), from: hr.range[0], to: hr.range[1] });
   if (hr.sku && hr.running) return `${hr.sku} × ${srcNum(hr.running)}`;
-  return hr.running ? `稼働 ${srcNum(hr.running)} 台` : '';
+  return hr.running ? tl('cost.running', { n: srcNum(hr.running) }) : '';
 }
 function srcSegText(sg) { return `${sg.label}${sg.rate ? ` ${srcRate(sg.rate)}` : ''} · ${srcUsd(sg.usd)}`; }
 function srcRow(n, k, max, barPx) {
   const hr = n.hours[k];
-  if (n.note) return `<div class="src-row src-noted" data-src-node="${esc(n.node)}"><div class="src-name">${esc(n.label)}</div><div class="src-bar"><span class="src-notetext">${esc(n.note === 'no rule' ? '規則なし' : '負荷未定義')}</span></div></div>`;
+  if (n.note) return `<div class="src-row src-noted" data-src-node="${esc(n.node)}"><div class="src-name">${esc(n.label)}</div><div class="src-bar"><span class="src-notetext">${esc(n.note === 'no rule' ? tl('cost.norule') : tl('cost.noload'))}</span></div></div>`;
   const over = hr.load && hr.load.overflow > 0;
-  const marksHTML = (hr.atMax ? '<span class="src-flag" title="自動スケールの上限">⚑</span>' : '') + (hr.stepChanged ? '<span class="src-step" title="型が変わった">◆</span>' : '');
+  const marksHTML = (hr.atMax ? `<span class="src-flag" title="${esc(tl('cost.atmax'))}">⚑</span>` : '') + (hr.stepChanged ? `<span class="src-step" title="${esc(tl('cost.step'))}">◆</span>` : '');
   const outside = [];
   const segsHTML = hr.segments.map((sg, i) => {
     const pct = max > 0 && sg.usd ? (sg.usd / max) * 100 : 0, text = srcSegText(sg);
@@ -164,8 +164,8 @@ function srcRow(n, k, max, barPx) {
     if (!fits) outside.push(text);
     return `<span class="src-seg" tabindex="0" role="button" data-src-seg="${i}" style="width:${Number(pct.toFixed(3))}%;background:${esc(SRC_COLORS[i % SRC_COLORS.length])}" title="${esc(text)}" aria-label="${esc(text)}">${fits ? esc(text) : ''}</span>`;
   }).join('');
-  const noPrice = hr.segments.filter((sg) => sg.usd === null).map((sg) => `${sg.label}${sg.rate ? ` ${srcRate(sg.rate)}` : ''} · 単価なし`);
-  const loadHTML = over ? `<span class="src-red" data-src-over>${esc(hr.load.label)} ${esc(srcNum(hr.load.served))} / ${esc(srcNum(hr.load.demand))} /${esc(SRC_PER[hr.load.per] || hr.load.per)}（捌けた / 来た）</span>` : '';
+  const noPrice = hr.segments.filter((sg) => sg.usd === null).map((sg) => `${sg.label}${sg.rate ? ` ${srcRate(sg.rate)}` : ''} · ${tl('cost.noprice')}`);
+  const loadHTML = over ? `<span class="src-red" data-src-over>${esc(hr.load.label)} ${esc(srcNum(hr.load.served))} / ${esc(srcNum(hr.load.demand))} /${esc(SRC_PER[hr.load.per] || hr.load.per)}${esc(tl('cost.load.served'))}</span>` : '';
   return `<div class="src-row${over ? ' src-overrow' : ''}" data-src-node="${esc(n.node)}"><div class="src-name">${esc(n.label)}<small>${esc(srcRunning(hr))}</small>${marksHTML}</div><div class="src-bar">${segsHTML}<span class="src-out">${esc([...outside, ...noPrice].join('　'))}</span></div><div class="src-usd">${esc(srcUsd(hr.usd))}${loadHTML ? `<br>${loadHTML}` : ''}</div></div>`;
 }
 function srcDayHtml(D) {
@@ -173,28 +173,28 @@ function srcDayHtml(D) {
   const max = Math.max(...D.nodes.flatMap((n) => (n.note ? [] : n.hours.map((h) => h.usd))), 0.0001);
   const barPx = Math.max(160, srcEl.clientWidth - 420);
   const rowsHTML = D.nodes.map((n) => srcRow(n, k, max, barPx)).join('')
-    + (D.others.count ? `<div class="src-row src-noted"><div class="src-name">その他（${Number(D.others.count)}）</div><div class="src-bar"></div><div class="src-usd">${esc(srcUsd(D.others.usd[k]))}</div></div>` : '');
+    + (D.others.count ? `<div class="src-row src-noted"><div class="src-name">${esc(tl('cost.others', { n: Number(D.others.count) }))}</div><div class="src-bar"></div><div class="src-usd">${esc(srcUsd(D.others.usd[k]))}</div></div>` : '');
   const pickHTML = SRC.picked ? srcPicked(D) : '';
-  return `<div class="src-dayhead"><button type="button" class="wb-btn" data-src-act="month">← 1 か月</button><strong>${esc(D.date)}</strong>
-<button type="button" class="wb-btn" data-src-act="${SRC.timer ? 'stop' : 'play'}"${reduceMotion ? ' disabled title="動きを減らす設定のため、再生しません"' : ''}>${SRC.timer ? '止める' : '再生'}</button>
-<label class="sr-ctl">時刻 <input type="range" id="src-hour" min="0" max="${Number(D.hours.length - 1)}" value="${k}" step="1"></label><span class="src-clock" data-src-clock>${esc(String(D.hours[k]).padStart(2, '0'))}:00</span>
-<span class="src-hoursum">この時間 ${esc(srcUsd(hourUsd))}・この日 ${esc(srcUsd(D.usd))}</span></div>
-<div class="src-rows">${rowsHTML}</div>${pickHTML ? `<div class="src-price" data-src-price>${pickHTML}</div>` : '<p class="src-hint">区間を押すと、使った単価の出どころが出ます。</p>'}`;
+  return `<div class="src-dayhead"><button type="button" class="wb-btn" data-src-act="month">${esc(tl('cost.back.month'))}</button><strong>${esc(D.date)}</strong>
+<button type="button" class="wb-btn" data-src-act="${SRC.timer ? 'stop' : 'play'}"${reduceMotion ? ` disabled title="${esc(tl('cost.play.reduced'))}"` : ''}>${esc(SRC.timer ? tl('cost.stop') : tl('cost.play'))}</button>
+<label class="sr-ctl">${esc(tl('cost.hour'))} <input type="range" id="src-hour" min="0" max="${Number(D.hours.length - 1)}" value="${k}" step="1"></label><span class="src-clock" data-src-clock>${esc(String(D.hours[k]).padStart(2, '0'))}:00</span>
+<span class="src-hoursum">${esc(tl('cost.hoursum', { hour: srcUsd(hourUsd), day: srcUsd(D.usd) }))}</span></div>
+<div class="src-rows">${rowsHTML}</div>${pickHTML ? `<div class="src-price" data-src-price>${pickHTML}</div>` : `<p class="src-hint">${esc(tl('cost.day.hint'))}</p>`}`;
 }
 function srcPicked(D) {
   const n = D.nodes.find((x) => x.node === SRC.picked.node);
   const sg = n && !n.note ? n.hours[SRC.hour].segments[SRC.picked.seg] : null;
   if (!sg) return '';
   const p = sg.price;
-  return `<h4>${esc(n.label)} · ${esc(sg.label)}</h4><dl><dt>量</dt><dd>${esc(srcNum(sg.amount))} ${esc(sg.unit)}${sg.rate ? `（${esc(srcRate(sg.rate))} ${esc(sg.rate.unit)}）` : ''}</dd><dt>金額</dt><dd>${esc(srcUsd(sg.usd))}</dd>`
-    + (p ? `<dt>単価</dt><dd>${esc(p.sku)} · ${esc(p.unit)}${p.per_units > 1 ? ` · ${esc(srcNum(p.per_units))} あたり` : ''} · ${esc(p.region)}</dd><dt>出どころ</dt><dd>${esc({ user: '利用者のファイル', cache: '取得した単価', bundled: '同梱の表' }[p.layer] || p.layer)} · ${esc(p.file)} の ${esc(String(p.index))} 行目</dd><dt>source</dt><dd>${esc(p.source)}</dd><dt>effective</dt><dd>${esc(p.effective)}</dd>`
-      : '<dt>単価</dt><dd>単価なし（この sku の単価が、どの層にもない）</dd>') + '</dl>';
+  return `<h4>${esc(n.label)} · ${esc(sg.label)}</h4><dl><dt>${esc(tl('cost.pick.amount'))}</dt><dd>${esc(srcNum(sg.amount))} ${esc(sg.unit)}${sg.rate ? esc(tl('cost.pick.rate', { rate: srcRate(sg.rate), unit: sg.rate.unit })) : ''}</dd><dt>${esc(tl('cost.pick.usd'))}</dt><dd>${esc(srcUsd(sg.usd))}</dd>`
+    + (p ? `<dt>${esc(tl('cost.pick.price'))}</dt><dd>${esc(p.sku)} · ${esc(p.unit)}${p.per_units > 1 ? ` · ${esc(tl('cost.pick.per', { n: srcNum(p.per_units) }))}` : ''} · ${esc(p.region)}</dd><dt>${esc(tl('cost.pick.from'))}</dt><dd>${esc({ user: tl('cost.layer.user'), cache: tl('cost.layer.cache'), bundled: tl('cost.layer.bundled') }[p.layer] || p.layer)} · ${esc(tl('cost.pick.line', { file: p.file, line: String(p.index) }))}</dd><dt>source</dt><dd>${esc(p.source)}</dd><dt>effective</dt><dd>${esc(p.effective)}</dd>`
+      : `<dt>${esc(tl('cost.pick.price'))}</dt><dd>${esc(tl('cost.pick.noprice'))}</dd>`) + '</dl>';
 }
 
 function srcRender(status) {
   if (SRC.mode !== 'cost') return;
   if (status) { setHTML(srcEl, `<p class="src-status">${esc(status)}</p>`); return; }
-  if (SRC.error) { setHTML(srcEl, `<p class="src-status src-red">コストを出せません: ${esc(SRC.error)}</p>`); return; }
+  if (SRC.error) { setHTML(srcEl, `<p class="src-status src-red">${esc(tl('cost.error', { why: SRC.error }))}</p>`); return; }
   if (!SRC.month) return;
   if (SRC.day) setHTML(srcEl, srcDayHtml(SRC.day));
   else setHTML(srcEl, `${srcSummary(SRC.month)}${srcMonthSvg(SRC.month)}`);

@@ -64,6 +64,8 @@ KNOWN = {
     ("viz/ingest.py", "ev.sent.allow"): "was f\"ブラウザで{'許可' if behavior == 'allow' else '拒否'}を送信{extra} …\": the same "
                                          "words, one key a choice",
     ("viz/ingest.py", "ev.sent.deny"): "as ev.sent.allow ('拒否')",
+    ("js/56-server-cost.js", "cost.warn.rows"): "was `（${rows.slice(0, 8).join('・')}${rows.length > 8 ? ` ほか ${…}` : ''}）`: "
+                                                "the {more} slot was a template of its own, now cost.warn.more",
     ("js/54-bills.js", "pr.done.set"): "was `${model}: ${{set: '保存しました', …}[op]}（次の応答から）`: the same words, "
                                        "one key a choice",
     ("js/54-bills.js", "pr.done.remove"): "as pr.done.set ('削除しました')",
