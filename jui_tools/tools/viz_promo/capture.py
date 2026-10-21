@@ -34,7 +34,6 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 import urllib.request
@@ -67,6 +66,11 @@ FEATURES = {
              "() => !!(window.__dbg && window.__dbg.srCost) && !!document.getElementById('sr-mode-cost')"),
     "i18n": ("jui_cli/viz/i18n.py", None),
 }
+
+# Math.random from a fixed seed (mulberry32): the page's idle choices (a robot's break, a game, a glance) are drawn
+# from it, so two captures of a chapter make the same choices. What is drawn is the page's own; only the dice are set.
+SEEDED_RANDOM_JS = """(() => { let a = 0x5eed1234; Math.random = () => { a |= 0; a = (a + 0x6d2b79f5) | 0;
+  let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; })()"""
 
 CURSOR_JS = """() => {
   if (document.getElementById('promo-cursor')) return true;
@@ -136,10 +140,14 @@ def room_of(key: str) -> str:
 class Stage:
     """The throwaway HOME, the rooms and the real server of one chapter."""
 
-    def __init__(self, lang: str, jui_root: Path, demo_shop: Path, keep: bool = False):
+    def __init__(self, lang: str, jui_root: Path, demo_shop: Path, keep: bool = False, name: str = "x"):
         self.lang, self.keep = lang, keep
-        # under /tmp: no user name in any path the page could show
-        self.base = Path(tempfile.mkdtemp(prefix="jui-promo-", dir="/tmp")).resolve()
+        # one fixed folder per language and chapter under /tmp (no user name in any path the page could show): a
+        # room's id is the sha1 of its path and seeds where its desks stand, so a random folder moved the robots
+        # between two captures of the same chapter
+        self.base = (Path("/tmp") / "jui-promo" / f"{lang}-{name}").resolve()
+        cleanup(self.base)
+        self.base.mkdir(parents=True)
         self.home = self.base / "home"
         self.paths = make_home(self.home)
         # the rooms under the server's HOME: the page writes a path there as ~/work/<room> (viz/rooms.py tilde),
@@ -709,7 +717,7 @@ async def capture_chapter(pw, chapter, bounds: tuple, out_root: Path, lang: str,
         return res
     stage = browser = drv = None
     try:
-        stage = Stage(lang, jui_root, demo_shop, keep=keep)
+        stage = Stage(lang, jui_root, demo_shop, keep=keep, name=chapter.id)
         stage.start()
         browser = await pw.chromium.launch(args=LAUNCH_ARGS)
         ctx = await browser.new_context(viewport=VIEWPORT, device_scale_factor=1, color_scheme=theme, reduced_motion="no-preference")
@@ -721,6 +729,7 @@ async def capture_chapter(pw, chapter, bounds: tuple, out_root: Path, lang: str,
         # countdown read 0 s at once)
         t0 = time.time()
         await page.clock.install(time=t0)
+        await page.add_init_script(SEEDED_RANDOM_JS)
         await page.clock.pause_at(t0 + 1)
         drv = Driver(page, stage, lang, watch, sky_time)
         await drv.boot(chapter.needs)
@@ -779,7 +788,7 @@ async def measure_fps(pw, lang: str, jui_root: Path, demo_shop: Path, out: Path,
     res = {"lang": lang, "jui_root": str(jui_root), "robots": len(SESSIONS), "sec": sec, "viewport": VIEWPORT, "gpu": gpu}
     stage = browser = None
     try:
-        stage = Stage(lang, jui_root, demo_shop)
+        stage = Stage(lang, jui_root, demo_shop, name="fps")
         stage.start()
         browser = await (pw.chromium.launch(headless=False, args=GPU_ARGS) if gpu else pw.chromium.launch(args=LAUNCH_ARGS))
         ctx = await browser.new_context(viewport=VIEWPORT, device_scale_factor=1, color_scheme=theme, reduced_motion="no-preference")
