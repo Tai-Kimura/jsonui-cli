@@ -25,31 +25,31 @@ const SESSIONS = [
   { id: 'e1', project: 'doc', robots: ['e1'] },
 ].map((s) => ({ ...s, room: PROJECT[s.project].name }));
 const ROBOT_DEFS = [
-  { id: 'a0', role: 'main', agent: 'セッション a07c…', pos: [0.7, -2.5], ry: 0.3, furnished: true,
-    plan: [[0, 'reading', 'Read docs/screens/json/cart.spec.json'], [12, 'typing', 'TaskCreate #7・#8'], [20, 'idle', 'サブエージェントの報告待ち'], [62, 'reading', 'a3 の報告を確認'], [70, 'typing', 'TaskList で残りを確認'], [76, 'idle', 'サブエージェントの報告待ち']] },
+  { id: 'a0', role: 'main', agent: tl('demo.robot.session.a07c'), pos: [0.7, -2.5], ry: 0.3, furnished: true,
+    plan: [[0, 'reading', 'Read docs/screens/json/cart.spec.json'], [12, 'typing', tl('demo.robot.taskcreate.7.8')], [20, 'idle', tl('demo.robot.waiting.subagent.reports')], [62, 'reading', tl('demo.robot.reviewing.a3.s.report')], [70, 'typing', tl('demo.robot.checking.what.s.left.tasklist')], [76, 'idle', tl('demo.robot.waiting.subagent.reports')]] },
   { id: 'a3', role: 'define', agent: 'jsonui-define', pos: [-6.3, -3.1], ry: 0.55, furnished: true,
-    plan: [[0, 'reading', 'Read home.spec.json（参考）'], [5, 'typing', 'Write docs/screens/json/login.spec.json'], [62, 'done', 'Login の spec を書き終えた'], [66, 'idle', '待機'], [70, 'reading', 'doc_validate_spec login'], [76, 'idle', '待機']] },
+    plan: [[0, 'reading', tl('demo.robot.read.home.spec.json.reference')], [5, 'typing', 'Write docs/screens/json/login.spec.json'], [62, 'done', tl('demo.robot.finished.login.spec')], [66, 'idle', tl('demo.robot.idle')], [70, 'reading', 'doc_validate_spec login'], [76, 'idle', tl('demo.robot.idle')]] },
   { id: 'a5', role: 'implement', agent: 'jsonui-implement', pos: [-2.7, -2.7], ry: 0.5, furnished: true,
-    plan: [[0, 'reading', 'Read docs/screens/json/home.spec.json'], [6, 'typing', 'Edit docs/screens/layouts/home.json'], [40, 'command', 'Bash jui build'], [48, 'typing', 'Edit HomeViewModel.swift'], [70, 'command', 'jui_verify home.spec.json'], [76, 'done', 'Home の実装が終わった'], [80, 'idle', '待機']] },
+    plan: [[0, 'reading', 'Read docs/screens/json/home.spec.json'], [6, 'typing', 'Edit docs/screens/layouts/home.json'], [40, 'command', 'Bash jui build'], [48, 'typing', 'Edit HomeViewModel.swift'], [70, 'command', 'jui_verify home.spec.json'], [76, 'done', tl('demo.robot.finished.implementing.home')], [80, 'idle', tl('demo.robot.idle')]] },
   { id: 'a2', role: 'test', agent: 'jsonui-test', pos: [-7.3, 1.2], ry: 0.75,
-    plan: [[0, 'idle', '待機'], [10, 'command', 'test_validate cart.test.json'], [18, 'phone', 'xcodebuild test（iPhone 16）'], [60, 'done', 'Cart のテスト 8/8 通過'], [66, 'idle', '待機']] },
+    plan: [[0, 'idle', tl('demo.robot.idle')], [10, 'command', 'test_validate cart.test.json'], [18, 'phone', tl('demo.robot.xcodebuild.test.iphone.16')], [60, 'done', tl('demo.robot.cart.tests.8.8.passed')], [66, 'idle', tl('demo.robot.idle')]] },
   { id: 'a7', role: 'navigation', agent: 'jsonui-navigation-ios', walk: true },
-  { id: 'b4', role: 'main', agent: 'セッション b47e…', pos: [-0.4, 3.5], ry: 0.15, furnished: true,
-    plan: [[0, 'typing', 'TaskCreate #5'], [6, 'idle', 'サブエージェントの報告待ち'], [70, 'reading', 'e6 の報告を確認'], [74, 'idle', 'サブエージェントの報告待ち']] },
+  { id: 'b4', role: 'main', agent: tl('demo.robot.session.b47e'), pos: [-0.4, 3.5], ry: 0.15, furnished: true,
+    plan: [[0, 'typing', 'TaskCreate #5'], [6, 'idle', tl('demo.robot.waiting.subagent.reports')], [70, 'reading', tl('demo.robot.reviewing.e6.s.report')], [74, 'idle', tl('demo.robot.waiting.subagent.reports')]] },
   { id: 'e6', role: 'define', agent: 'jsonui-define', pos: [-2.9, 3.4], ry: 0.25, furnished: true,
-    plan: [[0, 'reading', 'Read login.spec.json（参考）'], [8, 'typing', 'Write docs/screens/json/signup.spec.json'], [70, 'done', 'Signup の spec を書き終えた'], [74, 'idle', '待機']] },
+    plan: [[0, 'reading', tl('demo.robot.read.login.spec.json.reference')], [8, 'typing', 'Write docs/screens/json/signup.spec.json'], [70, 'done', tl('demo.robot.finished.signup.spec')], [74, 'idle', tl('demo.robot.idle')]] },
   { id: 'f2', role: 'implement', agent: 'jsonui-implement', pos: [-5.3, 3.3], ry: 0.4, furnished: true,
-    plan: [[0, 'typing', 'Edit docs/screens/layouts/product-detail.json'], [30, 'command', 'Bash jui build'], [36, 'typing', 'Edit ProductDetailViewModel.swift'], [74, 'command', 'jui_verify product-detail.spec.json'], [78, 'done', 'ProductDetail の実装が終わった'], [82, 'idle', '待機']] },
-  { id: 'd8', role: 'main', agent: 'セッション d8a5…', pos: [-8.5, -3.5], ry: 0.6, furnished: true,
-    plan: [[0, 'idle', '待機（次の指示待ち）'], [34, 'thinking', '考え中'], [50, 'idle', '待機（次の指示待ち）']] },
-  { id: '4f', role: 'main', agent: 'セッション 4f2b…', pos: [6.0, -2.9], ry: 0.05, furnished: true,
-    plan: [[0, 'command', 'Bash jui build --ios-only'], [22, 'done', 'ビルド完了'], [26, 'idle', '待機'], [38, 'reading', 'Read jui_cli/commands/hotload_cmd.py'], [44, 'command', 'Bash pip install aiohttp watchdog'], [47, 'typing', 'Edit jui_cli/commands/viz_cmd.py'], [78, 'reading', '差分を確認']] },
-  { id: '7c', role: 'main', agent: 'セッション 7c3f…', pos: [8.9, -2.6], ry: -0.15, furnished: true,
-    plan: [[0, 'typing', 'Edit src/reporter/progress.ts'], [30, 'command', 'Bash npm test -- --progress'], [36, 'typing', 'Edit src/cli/run.ts'], [60, 'command', 'Bash npm test'], [66, 'reading', 'テスト結果を確認']] },
-  { id: 'c9', role: 'main', agent: 'セッション c91e…', pos: [6.4, 2.0], ry: 0.1, furnished: true,
-    plan: [[0, 'reading', 'Read docs/screens/json/spec-anatomy.spec.json'], [38, 'command', 'Bash jsonui-doc generate html'], [52, 'done', 'HTML を生成した'], [56, 'idle', '待機']] },
-  { id: 'e1', role: 'main', agent: 'セッション e1d4…', pos: [8.7, 2.6], ry: -0.1, furnished: true,
-    plan: [[0, 'reading', 'Read component-detail.spec.json（参考）'], [20, 'typing', 'Write docs/screens/json/attribute-reference.spec.json'], [78, 'done', '属性リファレンスの spec を書き終えた'], [82, 'idle', '待機']] },
+    plan: [[0, 'typing', 'Edit docs/screens/layouts/product-detail.json'], [30, 'command', 'Bash jui build'], [36, 'typing', 'Edit ProductDetailViewModel.swift'], [74, 'command', 'jui_verify product-detail.spec.json'], [78, 'done', tl('demo.robot.finished.implementing.productdetail')], [82, 'idle', tl('demo.robot.idle')]] },
+  { id: 'd8', role: 'main', agent: tl('demo.robot.session.d8a5'), pos: [-8.5, -3.5], ry: 0.6, furnished: true,
+    plan: [[0, 'idle', tl('demo.robot.idle.waiting.next.prompt')], [34, 'thinking', tl('demo.robot.thinking')], [50, 'idle', tl('demo.robot.idle.waiting.next.prompt')]] },
+  { id: '4f', role: 'main', agent: tl('demo.robot.session.4f2b'), pos: [6.0, -2.9], ry: 0.05, furnished: true,
+    plan: [[0, 'command', 'Bash jui build --ios-only'], [22, 'done', tl('demo.robot.build.complete')], [26, 'idle', tl('demo.robot.idle')], [38, 'reading', 'Read jui_cli/commands/hotload_cmd.py'], [44, 'command', 'Bash pip install aiohttp watchdog'], [47, 'typing', 'Edit jui_cli/commands/viz_cmd.py'], [78, 'reading', tl('demo.robot.reviewing.diff')]] },
+  { id: '7c', role: 'main', agent: tl('demo.robot.session.7c3f'), pos: [8.9, -2.6], ry: -0.15, furnished: true,
+    plan: [[0, 'typing', 'Edit src/reporter/progress.ts'], [30, 'command', 'Bash npm test -- --progress'], [36, 'typing', 'Edit src/cli/run.ts'], [60, 'command', 'Bash npm test'], [66, 'reading', tl('demo.robot.checking.test.results')]] },
+  { id: 'c9', role: 'main', agent: tl('demo.robot.session.c91e'), pos: [6.4, 2.0], ry: 0.1, furnished: true,
+    plan: [[0, 'reading', 'Read docs/screens/json/spec-anatomy.spec.json'], [38, 'command', 'Bash jsonui-doc generate html'], [52, 'done', tl('demo.robot.generated.html')], [56, 'idle', tl('demo.robot.idle')]] },
+  { id: 'e1', role: 'main', agent: tl('demo.robot.session.e1d4'), pos: [8.7, 2.6], ry: -0.1, furnished: true,
+    plan: [[0, 'reading', tl('demo.robot.read.component.detail.spec.json')], [20, 'typing', 'Write docs/screens/json/attribute-reference.spec.json'], [78, 'done', tl('demo.robot.finished.attribute.reference.spec')], [82, 'idle', tl('demo.robot.idle')]] },
 ];
 const DEF = Object.fromEntries(ROBOT_DEFS.map((d) => [d.id, d]));
 const SESSION_OF = Object.fromEntries(SESSIONS.flatMap((s) => s.robots.map((id) => [id, s.id])));
@@ -62,96 +62,96 @@ const WALK = { points: [[1.0, 1.5], [-2.7, -1.2], [-6.1, -1.5], [-4.0, 1.6]], sp
 
 /* Every screen of the demo project in board order: [key, screen name, 表示名, file stem]. */
 const SCREENS = [
-  ['onboarding', 'Onboarding', 'はじめに', 'onboarding'],
-  ['login', 'Login', 'ログイン', 'login'],
-  ['signup', 'Signup', '新規登録', 'signup'],
-  ['reset', 'PasswordReset', 'パスワード再設定', 'password-reset'],
-  ['home', 'Home', 'ホーム', 'home'],
-  ['search', 'Search', '検索', 'search'],
-  ['filter', 'FilterSheet', '絞り込み', 'filter-sheet'],
-  ['list', 'ProductList', '商品一覧', 'product-list'],
-  ['detail', 'ProductDetail', '商品詳細', 'product-detail'],
-  ['reviews', 'Reviews', 'レビュー', 'reviews'],
-  ['favorites', 'Favorites', 'お気に入り', 'favorites'],
-  ['cart', 'Cart', 'カート', 'cart'],
-  ['coupons', 'Coupons', 'クーポン', 'coupons'],
-  ['checkout', 'Checkout', '購入手続き', 'checkout'],
-  ['complete', 'OrderComplete', '注文完了', 'order-complete'],
-  ['orders', 'OrderHistory', '注文履歴', 'order-history'],
-  ['order', 'OrderDetail', '注文詳細', 'order-detail'],
-  ['mypage', 'MyPage', 'マイページ', 'my-page'],
-  ['address', 'AddressList', 'お届け先', 'address-list'],
-  ['addressEdit', 'AddressEdit', 'お届け先の編集', 'address-edit'],
-  ['payment', 'PaymentMethods', '支払い方法', 'payment-methods'],
-  ['notices', 'Notifications', 'お知らせ', 'notifications'],
-  ['settings', 'Settings', '設定', 'settings'],
-  ['help', 'Help', 'ヘルプ', 'help'],
-  ['top', 'Top', 'トップ', 'top', 'doc'],
-  ['start', 'GettingStarted', 'はじめかた', 'getting-started', 'doc'],
-  ['components', 'ComponentList', 'コンポーネント一覧', 'component-list', 'doc'],
-  ['component', 'ComponentDetail', 'コンポーネント詳細', 'component-detail', 'doc'],
-  ['attrs', 'AttributeReference', '属性リファレンス', 'attribute-reference', 'doc'],
-  ['anatomy', 'SpecAnatomy', 'spec の構造', 'spec-anatomy', 'doc'],
+  ['onboarding', 'Onboarding', tl('demo.screen.onboarding'), 'onboarding'],
+  ['login', 'Login', tl('demo.screen.login'), 'login'],
+  ['signup', 'Signup', tl('demo.screen.signup'), 'signup'],
+  ['reset', 'PasswordReset', tl('demo.screen.reset'), 'password-reset'],
+  ['home', 'Home', tl('demo.screen.home'), 'home'],
+  ['search', 'Search', tl('demo.screen.search'), 'search'],
+  ['filter', 'FilterSheet', tl('demo.screen.filter'), 'filter-sheet'],
+  ['list', 'ProductList', tl('demo.screen.list'), 'product-list'],
+  ['detail', 'ProductDetail', tl('demo.screen.detail'), 'product-detail'],
+  ['reviews', 'Reviews', tl('demo.screen.reviews'), 'reviews'],
+  ['favorites', 'Favorites', tl('demo.screen.favorites'), 'favorites'],
+  ['cart', 'Cart', tl('demo.screen.cart'), 'cart'],
+  ['coupons', 'Coupons', tl('demo.screen.coupons'), 'coupons'],
+  ['checkout', 'Checkout', tl('demo.screen.checkout'), 'checkout'],
+  ['complete', 'OrderComplete', tl('demo.screen.complete'), 'order-complete'],
+  ['orders', 'OrderHistory', tl('demo.screen.orders'), 'order-history'],
+  ['order', 'OrderDetail', tl('demo.screen.order'), 'order-detail'],
+  ['mypage', 'MyPage', tl('demo.screen.mypage'), 'my-page'],
+  ['address', 'AddressList', tl('demo.screen.address'), 'address-list'],
+  ['addressEdit', 'AddressEdit', tl('demo.screen.addressEdit'), 'address-edit'],
+  ['payment', 'PaymentMethods', tl('demo.screen.payment'), 'payment-methods'],
+  ['notices', 'Notifications', tl('demo.screen.notices'), 'notifications'],
+  ['settings', 'Settings', tl('demo.screen.settings'), 'settings'],
+  ['help', 'Help', tl('demo.screen.help'), 'help'],
+  ['top', 'Top', tl('demo.screen.top'), 'top', 'doc'],
+  ['start', 'GettingStarted', tl('demo.screen.start'), 'getting-started', 'doc'],
+  ['components', 'ComponentList', tl('demo.screen.components'), 'component-list', 'doc'],
+  ['component', 'ComponentDetail', tl('demo.screen.component'), 'component-detail', 'doc'],
+  ['attrs', 'AttributeReference', tl('demo.screen.attrs'), 'attribute-reference', 'doc'],
+  ['anatomy', 'SpecAnatomy', tl('demo.screen.anatomy'), 'spec-anatomy', 'doc'],
 ];
 /* The spec files shown on the whiteboard (demo content in the screen_spec format). Counted items per section:
    structure.components, stateManagement.uiVariables, dataFlow.viewModel.methods, userActions, transitions
    and branchContracts branches. */
 const SPEC_DOCS = {
   login: {
-    metadata: { name: 'Login', displayName: 'ログイン', description: 'メールアドレスとパスワードでログインする', platforms: ['ios', 'android', 'web'], layoutFile: 'login', createdAt: '2026-10-17' },
-    components: [['View', 'login_root', '画面全体のコンテナ'], ['Label', 'title_label', '画面タイトル「ログイン」'], ['TextField', 'email_input', 'メールアドレス入力'], ['TextField', 'password_input', 'パスワード入力（伏せ字）'], ['Label', 'error_label', '入力エラーと認証エラー'], ['Button', 'login_button', 'ログインを実行'], ['Indicator', 'loading_indicator', '通信中の表示'], ['Button', 'forgot_button', 'パスワード再設定へ'], ['Button', 'signup_button', '新規登録へ']],
+    metadata: { name: 'Login', displayName: tl('demo.screen.login'), description: tl('demo.spec.log.email.password'), platforms: ['ios', 'android', 'web'], layoutFile: 'login', createdAt: '2026-10-17' },
+    components: [['View', 'login_root', tl('demo.spec.container.whole.screen')], ['Label', 'title_label', tl('demo.spec.screen.title.log')], ['TextField', 'email_input', tl('demo.spec.email.field')], ['TextField', 'password_input', tl('demo.spec.password.field.masked')], ['Label', 'error_label', tl('demo.spec.input.sign.errors')], ['Button', 'login_button', tl('demo.spec.logs')], ['Indicator', 'loading_indicator', tl('demo.spec.shown.while.connecting')], ['Button', 'forgot_button', tl('demo.spec.password.reset')], ['Button', 'signup_button', tl('demo.spec.sign.up')]],
     layoutChildren: ['title_label', 'email_input', 'password_input', 'error_label', 'login_button', 'loading_indicator', 'forgot_button', 'signup_button'],
     uiVariables: [['email', 'String', '""'], ['password', 'String', '""'], ['isLoading', 'Bool', 'false'], ['errorMessage', 'String?', 'null']],
-    eventHandlers: [['onLoginTap', '入力を検証して login() を呼ぶ'], ['onSignupTap', 'Signup 画面へ遷移']],
+    eventHandlers: [['onLoginTap', tl('demo.spec.validate.input.then.call.login')], ['onSignupTap', tl('demo.spec.go.signup.screen')]],
     vmMethods: ['login()', 'validateEmail(_:)', 'validatePassword(_:)', 'clearError()', 'openSignup()'],
     vmVars: ['email', 'password', 'isLoading', 'errorMessage'],
     repositories: ['AuthRepository'],
     apis: [['postLogin', 'POST', '/auth/login']],
-    userActions: [['ログインボタンをタップ', 'onLoginTap → login()'], ['パスワードを忘れたをタップ', '再設定画面へ遷移'], ['新規登録をタップ', 'onSignupTap']],
-    transitions: [['login() 成功', 'Home'], ['signup_button をタップ', 'Signup']],
-    branches: [['login', 'email が空', 'error_label に「メールアドレスを入力」'], ['login', 'password が 8 文字未満', 'error_label に「8 文字以上」'], ['login', 'API が 401', 'error_label に認証エラー'], ['login', 'API が 200', 'Home へ遷移']],
+    userActions: [[tl('demo.spec.tap.login.button'), 'onLoginTap → login()'], [tl('demo.spec.tap.forgot.password'), tl('demo.spec.go.reset.screen')], [tl('demo.spec.tap.sign.up'), 'onSignupTap']],
+    transitions: [[tl('demo.spec.login.succeeds'), 'Home'], [tl('demo.spec.tap.signup.button'), 'Signup']],
+    branches: [['login', tl('demo.spec.email.empty'), tl('demo.spec.error.label.enter.your.email')], ['login', tl('demo.spec.password.under.8.characters'), tl('demo.spec.error.label.at.least.8')], ['login', tl('demo.spec.api.returns.401'), tl('demo.spec.error.label.shows.sign.error')], ['login', tl('demo.spec.api.returns.200'), tl('demo.spec.go.home')]],
   },
   home: {
-    metadata: { name: 'Home', displayName: 'ホーム', description: 'おすすめとカテゴリを並べ、カートと検索の入口になる', platforms: ['ios', 'android', 'web'], layoutFile: 'home', createdAt: '2026-10-12' },
-    components: [['SafeAreaView', 'home_root', '画面全体'], ['View', 'header_view', 'ヘッダー'], ['Label', 'greeting_label', 'あいさつ文'], ['Button', 'cart_button', 'カートへ'], ['Label', 'cart_badge', 'カート内の件数'], ['TextField', 'search_input', '商品検索'], ['Collection', 'banner_collection', 'キャンペーンバナー'], ['Label', 'category_title', 'カテゴリ見出し'], ['Collection', 'category_collection', 'カテゴリ一覧'], ['Label', 'recommend_title', 'おすすめ見出し'], ['Collection', 'recommend_collection', 'おすすめ商品'], ['Indicator', 'loading_indicator', '読み込み中']],
+    metadata: { name: 'Home', displayName: tl('demo.screen.home'), description: tl('demo.spec.shows.picks.categories.way.into'), platforms: ['ios', 'android', 'web'], layoutFile: 'home', createdAt: '2026-10-12' },
+    components: [['SafeAreaView', 'home_root', tl('demo.spec.whole.screen')], ['View', 'header_view', tl('demo.spec.header')], ['Label', 'greeting_label', tl('demo.spec.greeting')], ['Button', 'cart_button', tl('demo.spec.cart')], ['Label', 'cart_badge', tl('demo.spec.items.cart')], ['TextField', 'search_input', tl('demo.spec.product.search')], ['Collection', 'banner_collection', tl('demo.spec.campaign.banners')], ['Label', 'category_title', tl('demo.spec.category.heading')], ['Collection', 'category_collection', tl('demo.spec.categories')], ['Label', 'recommend_title', tl('demo.spec.picks.heading')], ['Collection', 'recommend_collection', tl('demo.spec.recommended.products')], ['Indicator', 'loading_indicator', tl('demo.spec.loading')]],
     layoutChildren: ['header_view', 'search_input', 'banner_collection', 'category_title', 'category_collection', 'recommend_title', 'recommend_collection', 'loading_indicator'],
     uiVariables: [['userName', 'String', '""'], ['cartCount', 'Int', '0'], ['searchText', 'String', '""'], ['isLoading', 'Bool', 'true'], ['banners', '[Banner]', '[]']],
-    eventHandlers: [['onCartTap', 'Cart 画面へ'], ['onSearchSubmit', '検索結果へ'], ['onProductTap', '商品詳細へ']],
+    eventHandlers: [['onCartTap', tl('demo.spec.cart.screen')], ['onSearchSubmit', tl('demo.spec.search.results')], ['onProductTap', tl('demo.spec.product.details')]],
     vmMethods: ['onAppear()', 'loadHome()', 'refresh()', 'openCart()', 'search(_:)', 'openProduct(_:)'],
     vmVars: ['userName', 'cartCount', 'banners', 'categories', 'recommends', 'isLoading'],
     repositories: ['HomeRepository', 'CartRepository'],
     apis: [['getHome', 'GET', '/home'], ['getCartSummary', 'GET', '/cart/summary']],
-    userActions: [['カートボタンをタップ', 'onCartTap → openCart()'], ['検索を確定', 'onSearchSubmit → search(_:)'], ['おすすめ商品をタップ', 'onProductTap → openProduct(_:)'], ['引っ張って更新', 'refresh()']],
+    userActions: [[tl('demo.spec.tap.cart.button'), 'onCartTap → openCart()'], [tl('demo.spec.submit.search'), 'onSearchSubmit → search(_:)'], [tl('demo.spec.tap.recommended.product'), 'onProductTap → openProduct(_:)'], [tl('demo.spec.pull.refresh'), 'refresh()']],
     transitions: [['openCart()', 'Cart'], ['openProduct(_:)', 'ProductDetail']],
-    branches: [['loadHome', 'API 成功', 'banners と recommends を表示'], ['loadHome', 'API 失敗', 'エラーと再試行ボタンを表示'], ['openCart', 'cartCount == 0', '空のカートとして開く']],
+    branches: [['loadHome', tl('demo.spec.api.succeeds'), tl('demo.spec.show.banners.recommends')], ['loadHome', tl('demo.spec.api.fails'), tl('demo.spec.show.error.retry.button')], ['openCart', 'cartCount == 0', tl('demo.spec.open.empty.cart')]],
   },
   cart: {
-    metadata: { name: 'Cart', displayName: 'カート', description: 'カートの中身を確認して、クーポンを当てて購入へ進む', platforms: ['ios', 'android', 'web'], layoutFile: 'cart', createdAt: '2026-10-08' },
-    components: [['SafeAreaView', 'cart_root', '画面全体'], ['Label', 'title_label', '画面タイトル「カート」'], ['Collection', 'cart_list', 'カート内の商品（cart_item）'], ['Label', 'empty_label', 'カートが空のときの案内'], ['Label', 'stock_warning', '在庫切れの警告'], ['TextField', 'coupon_input', 'クーポンコード'], ['Button', 'coupon_apply', 'クーポンを適用'], ['Label', 'coupon_error', 'クーポンのエラー'], ['Label', 'total_label', '合計金額'], ['Button', 'checkout_button', '購入する']],
+    metadata: { name: 'Cart', displayName: tl('demo.screen.cart'), description: tl('demo.spec.review.cart.apply.coupon.go'), platforms: ['ios', 'android', 'web'], layoutFile: 'cart', createdAt: '2026-10-08' },
+    components: [['SafeAreaView', 'cart_root', tl('demo.spec.whole.screen')], ['Label', 'title_label', tl('demo.spec.screen.title.cart')], ['Collection', 'cart_list', tl('demo.spec.products.cart.cart.item')], ['Label', 'empty_label', tl('demo.spec.message.empty.cart')], ['Label', 'stock_warning', tl('demo.spec.out.stock.warning')], ['TextField', 'coupon_input', tl('demo.spec.coupon.code')], ['Button', 'coupon_apply', tl('demo.spec.apply.coupon')], ['Label', 'coupon_error', tl('demo.spec.coupon.error')], ['Label', 'total_label', tl('demo.spec.total.price')], ['Button', 'checkout_button', tl('demo.spec.buy')]],
     layoutChildren: ['title_label', 'cart_list', 'empty_label', 'stock_warning', 'coupon_input', 'coupon_apply', 'coupon_error', 'total_label', 'checkout_button'],
     uiVariables: [['items', '[CartItem]', '[]'], ['isEmpty', 'Bool', 'true'], ['couponCode', 'String', '""'], ['couponError', 'String?', 'null'], ['total', 'Int', '0'], ['canCheckout', 'Bool', 'false']],
-    eventHandlers: [['onQuantityChange', '数量を変更'], ['onApplyCoupon', 'クーポンを適用'], ['onCheckoutTap', '購入へ進む']],
+    eventHandlers: [['onQuantityChange', tl('demo.spec.change.quantity')], ['onApplyCoupon', tl('demo.spec.apply.coupon')], ['onCheckoutTap', tl('demo.spec.proceed.checkout')]],
     vmMethods: ['loadCart()', 'changeQuantity(_:qty:)', 'applyCoupon(_:)', 'removeItem(_:)', 'recalcTotal()', 'checkout()', 'placeOrder()'],
     vmVars: ['items', 'isEmpty', 'couponCode', 'couponError', 'total', 'canCheckout'],
     repositories: ['CartRepository', 'OrderRepository'],
     apis: [['getCart', 'GET', '/cart'], ['postCoupon', 'POST', '/cart/coupon'], ['postOrder', 'POST', '/orders']],
-    userActions: [['数量を変更', 'onQuantityChange → changeQuantity'], ['クーポンを適用', 'onApplyCoupon → applyCoupon'], ['商品を削除', 'removeItem'], ['購入するをタップ', 'onCheckoutTap → checkout()'], ['購入を確定', 'placeOrder()']],
-    transitions: [['checkout()（未ログイン）', 'Login'], ['placeOrder() 成功', 'OrderComplete'], ['商品をタップ', 'ProductDetail']],
-    branches: [['loadCart', 'items.count > 0', 'cart_list を表示'], ['changeQuantity', 'qty == 0', 'その行を消す'], ['loadCart', 'isEmpty == true', 'checkout_button を無効にする'], ['applyCoupon', 'valid', 'discount_label を表示'], ['applyCoupon', 'expired', 'coupon_error を表示'], ['loadCart', 'item.stock == 0', 'stock_warning を表示'], ['checkout', '未ログイン', 'Login へ遷移'], ['placeOrder', 'success', 'OrderComplete へ遷移']],
+    userActions: [[tl('demo.spec.change.quantity'), 'onQuantityChange → changeQuantity'], [tl('demo.spec.apply.coupon'), 'onApplyCoupon → applyCoupon'], [tl('demo.spec.remove.item'), 'removeItem'], [tl('demo.spec.tap.buy'), 'onCheckoutTap → checkout()'], [tl('demo.spec.confirm.purchase'), 'placeOrder()']],
+    transitions: [[tl('demo.spec.checkout.signed.out'), 'Login'], [tl('demo.spec.placeorder.succeeds'), 'OrderComplete'], [tl('demo.spec.tap.product'), 'ProductDetail']],
+    branches: [['loadCart', 'items.count > 0', tl('demo.spec.show.cart.list')], ['changeQuantity', 'qty == 0', tl('demo.spec.remove.row')], ['loadCart', 'isEmpty == true', tl('demo.spec.disable.checkout.button')], ['applyCoupon', 'valid', tl('demo.spec.show.discount.label')], ['applyCoupon', 'expired', tl('demo.spec.show.coupon.error')], ['loadCart', 'item.stock == 0', tl('demo.spec.show.stock.warning')], ['checkout', tl('demo.spec.signed.out'), tl('demo.spec.go.login')], ['placeOrder', 'success', tl('demo.spec.go.ordercomplete')]],
   },
   list: {
-    metadata: { name: 'ProductList', displayName: '商品一覧', description: '商品を一覧で見せ、並び替えと絞り込みができる', platforms: ['ios', 'android', 'web'], layoutFile: 'product-list', createdAt: '2026-10-02' },
-    components: [['SafeAreaView', 'list_root', '画面全体'], ['TextField', 'search_input', '絞り込み'], ['Segment', 'sort_segment', '並び替え'], ['Collection', 'product_collection', '商品一覧（product_cell）'], ['Label', 'result_count', '件数'], ['Indicator', 'loading_indicator', '読み込み中'], ['Label', 'empty_label', '該当なし'], ['Button', 'filter_button', '絞り込み条件']],
+    metadata: { name: 'ProductList', displayName: tl('demo.screen.list'), description: tl('demo.spec.lists.products.sorting.filters'), platforms: ['ios', 'android', 'web'], layoutFile: 'product-list', createdAt: '2026-10-02' },
+    components: [['SafeAreaView', 'list_root', tl('demo.spec.whole.screen')], ['TextField', 'search_input', tl('demo.screen.filter')], ['Segment', 'sort_segment', tl('demo.spec.sort')], ['Collection', 'product_collection', tl('demo.spec.product.list.product.cell')], ['Label', 'result_count', tl('demo.spec.result.count')], ['Indicator', 'loading_indicator', tl('demo.spec.loading')], ['Label', 'empty_label', tl('demo.spec.no.matches')], ['Button', 'filter_button', tl('demo.spec.filter.options')]],
     layoutChildren: ['search_input', 'sort_segment', 'filter_button', 'result_count', 'product_collection', 'loading_indicator', 'empty_label'],
     uiVariables: [['products', '[Product]', '[]'], ['query', 'String', '""'], ['sort', 'SortOrder', '.popular'], ['isLoading', 'Bool', 'true']],
-    eventHandlers: [['onSortChange', '並び替えを変更'], ['onProductTap', '商品詳細へ']],
+    eventHandlers: [['onSortChange', tl('demo.spec.change.sort')], ['onProductTap', tl('demo.spec.product.details')]],
     vmMethods: ['load()', 'loadMore()', 'changeSort(_:)', 'search(_:)', 'openProduct(_:)'],
     vmVars: ['products', 'query', 'sort', 'isLoading'],
     repositories: ['ProductRepository'],
     apis: [['listProducts', 'GET', '/products']],
-    userActions: [['並び替えを変更', 'onSortChange → changeSort'], ['最後までスクロール', 'loadMore()'], ['商品をタップ', 'onProductTap → openProduct']],
-    transitions: [['openProduct(_:)', 'ProductDetail'], ['filter_button をタップ', 'FilterSheet']],
-    branches: [['load', '結果が 0 件', 'empty_label を表示'], ['load', 'API 失敗', 'エラーを表示'], ['loadMore', '最終ページ', '読み込みを止める'], ['changeSort', 'price', '価格順に並べる'], ['search', 'query が空', '全件を表示']],
+    userActions: [[tl('demo.spec.change.sort'), 'onSortChange → changeSort'], [tl('demo.spec.scroll.end'), 'loadMore()'], [tl('demo.spec.tap.product'), 'onProductTap → openProduct']],
+    transitions: [['openProduct(_:)', 'ProductDetail'], [tl('demo.spec.tap.filter.button'), 'FilterSheet']],
+    branches: [['load', tl('demo.spec.no.results'), tl('demo.spec.show.empty.label')], ['load', tl('demo.spec.api.fails'), tl('demo.spec.show.error')], ['loadMore', tl('demo.spec.last.page'), tl('demo.spec.stop.loading.more')], ['changeSort', 'price', tl('demo.spec.sort.price')], ['search', tl('demo.spec.query.empty'), tl('demo.spec.show.everything')]],
   },
 };
 /* The other screens, written more compactly: components are 'Type id 説明' separated by '|'. */
@@ -166,153 +166,153 @@ function doc(key, description, createdAt, comps, r) {
   };
 }
 Object.assign(SPEC_DOCS, {
-  onboarding: doc('onboarding', 'アプリの使い方を 3 枚のスライドで紹介し、通知の許可を求める', '2026-09-20',
-    'SafeAreaView onboarding_root 画面全体|Collection slide_pager 紹介スライド（3 枚）|View page_dots 今のページ|Button next_button 次へ|Button skip_button スキップ|Button start_button はじめる',
-    { vars: [['page', 'Int', '0'], ['isLastPage', 'Bool', 'false']], handlers: [['onNextTap', '次のスライドへ'], ['onStartTap', '通知の許可を求めてホームへ']],
+  onboarding: doc('onboarding', tl('demo.spec.introduces.app.3.slides.asks'), '2026-09-20',
+    `SafeAreaView onboarding_root ${tl('demo.spec.whole.screen')}|Collection slide_pager ${tl('demo.spec.intro.slides.3')}|View page_dots ${tl('demo.spec.current.page')}|Button next_button ${tl('demo.spec.next')}|Button skip_button ${tl('demo.spec.skip')}|Button start_button ${tl('demo.spec.get.started')}`,
+    { vars: [['page', 'Int', '0'], ['isLastPage', 'Bool', 'false']], handlers: [['onNextTap', tl('demo.spec.next.slide')], ['onStartTap', tl('demo.spec.ask.notifications.then.go.home')]],
       methods: ['next()', 'skip()', 'start()', 'requestNotification()'], repos: ['SettingsRepository'], apis: [],
-      actions: [['次へをタップ', 'onNextTap → next()'], ['スキップをタップ', 'skip()'], ['はじめるをタップ', 'onStartTap → start()']],
+      actions: [[tl('demo.spec.tap.next'), 'onNextTap → next()'], [tl('demo.spec.tap.skip'), 'skip()'], [tl('demo.spec.tap.get.started'), 'onStartTap → start()']],
       transitions: [['start()', 'Home'], ['skip()', 'Home']],
-      branches: [['next', '最後のスライド', 'start_button を表示'], ['start', '通知を拒否', 'そのまま Home へ']] }),
-  signup: doc('signup', 'メールアドレスとパスワードでアカウントを作る', '2026-10-17',
-    'SafeAreaView signup_root 画面全体|Label title_label 画面タイトル「新規登録」|TextField name_input お名前|TextField email_input メールアドレス|TextField password_input パスワード（8 文字以上）|CheckBox terms_check 利用規約に同意|Label error_label 入力エラー|Button signup_button 登録する|Button login_link ログインへ戻る|Indicator loading_indicator 通信中の表示',
+      branches: [['next', tl('demo.spec.last.slide'), tl('demo.spec.show.start.button')], ['start', tl('demo.spec.notifications.denied'), tl('demo.spec.go.home.2')]] }),
+  signup: doc('signup', tl('demo.spec.create.account.email.password'), '2026-10-17',
+    `SafeAreaView signup_root ${tl('demo.spec.whole.screen')}|Label title_label ${tl('demo.spec.screen.title.sign.up')}|TextField name_input ${tl('demo.spec.name')}|TextField email_input ${tl('demo.spec.email')}|TextField password_input ${tl('demo.spec.password.8.characters')}|CheckBox terms_check ${tl('demo.spec.agree.terms')}|Label error_label ${tl('demo.spec.input.error')}|Button signup_button ${tl('demo.spec.sign.up.2')}|Button login_link ${tl('demo.spec.back.login')}|Indicator loading_indicator ${tl('demo.spec.shown.while.connecting')}`,
     { vars: [['name', 'String', '""'], ['email', 'String', '""'], ['password', 'String', '""'], ['agreed', 'Bool', 'false'], ['errorMessage', 'String?', 'null'], ['isLoading', 'Bool', 'false']],
-      handlers: [['onSignupTap', '入力を検証して signup() を呼ぶ'], ['onTermsToggle', '同意を切り替える']],
+      handlers: [['onSignupTap', tl('demo.spec.validate.input.then.call.signup')], ['onTermsToggle', tl('demo.spec.toggle.agreement')]],
       methods: ['signup()', 'validate()', 'toggleTerms()', 'openLogin()'], repos: ['AuthRepository'], apis: [['postSignup', 'POST', '/auth/signup']],
-      actions: [['登録するをタップ', 'onSignupTap → signup()'], ['利用規約に同意', 'onTermsToggle → toggleTerms()'], ['ログインへ戻るをタップ', 'openLogin()']],
-      transitions: [['signup() 成功', 'Home'], ['login_link をタップ', 'Login']],
-      branches: [['signup', '規約に未同意', 'signup_button を無効にする'], ['signup', 'email が登録済み', 'error_label に「登録済み」'], ['signup', 'password が 8 文字未満', 'error_label に「8 文字以上」'], ['signup', 'API が 201', 'Home へ遷移']] }),
-  search: doc('search', 'キーワードで商品を探し、履歴と候補を出す', '2026-09-28',
-    'SafeAreaView search_root 画面全体|TextField search_input キーワード|Button cancel_button キャンセル|Collection history_list 検索履歴|Collection suggest_list 候補|Button clear_history 履歴を消す',
-    { vars: [['query', 'String', '""'], ['history', '[String]', '[]'], ['suggestions', '[String]', '[]']], handlers: [['onSubmit', '検索を確定'], ['onClearHistory', '履歴を消す']],
+      actions: [[tl('demo.spec.tap.sign.up.2'), 'onSignupTap → signup()'], [tl('demo.spec.agree.terms'), 'onTermsToggle → toggleTerms()'], [tl('demo.spec.tap.back.login'), 'openLogin()']],
+      transitions: [[tl('demo.spec.signup.succeeds'), 'Home'], [tl('demo.spec.tap.login.link'), 'Login']],
+      branches: [['signup', tl('demo.spec.terms.not.accepted'), tl('demo.spec.disable.signup.button')], ['signup', tl('demo.spec.email.already.registered'), tl('demo.spec.error.label.already.registered')], ['signup', tl('demo.spec.password.under.8.characters'), tl('demo.spec.error.label.at.least.8')], ['signup', tl('demo.spec.api.returns.201'), tl('demo.spec.go.home')]] }),
+  search: doc('search', tl('demo.spec.search.products.keyword.history.suggestions'), '2026-09-28',
+    `SafeAreaView search_root ${tl('demo.spec.whole.screen')}|TextField search_input ${tl('demo.spec.keyword')}|Button cancel_button ${tl('demo.spec.cancel')}|Collection history_list ${tl('demo.spec.search.history')}|Collection suggest_list ${tl('demo.spec.suggestions')}|Button clear_history ${tl('demo.spec.clear.history')}`,
+    { vars: [['query', 'String', '""'], ['history', '[String]', '[]'], ['suggestions', '[String]', '[]']], handlers: [['onSubmit', tl('demo.spec.submit.search')], ['onClearHistory', tl('demo.spec.clear.history')]],
       methods: ['loadHistory()', 'suggest(_:)', 'submit()', 'clearHistory()'], repos: ['SearchRepository'], apis: [['getSuggestions', 'GET', '/search/suggest']],
-      actions: [['キーワードを入力', 'suggest(_:)'], ['検索を確定', 'onSubmit → submit()'], ['履歴を消すをタップ', 'onClearHistory → clearHistory()']],
-      transitions: [['submit()', 'ProductList'], ['cancel_button をタップ', 'Home']],
-      branches: [['suggest', 'query が空', '履歴を表示'], ['suggest', '候補 0 件', '「候補なし」を表示'], ['submit', 'query が空', '何もしない']] }),
-  filter: doc('filter', '価格・カテゴリ・在庫で一覧を絞り込むシート', '2026-09-30',
-    'View filter_root シート全体|Label title_label 見出し「絞り込み」|SelectBox category_select カテゴリ|View price_range 価格の範囲|Switch stock_switch 在庫ありのみ|Button reset_button リセット|Button apply_button 適用する',
-    { vars: [['category', 'String?', 'null'], ['minPrice', 'Int', '0'], ['maxPrice', 'Int', '50000'], ['inStockOnly', 'Bool', 'false']], handlers: [['onApplyTap', '条件を返して閉じる'], ['onResetTap', '条件を初期値に戻す']],
+      actions: [[tl('demo.spec.type.keyword'), 'suggest(_:)'], [tl('demo.spec.submit.search'), 'onSubmit → submit()'], [tl('demo.spec.tap.clear.history'), 'onClearHistory → clearHistory()']],
+      transitions: [['submit()', 'ProductList'], [tl('demo.spec.tap.cancel.button'), 'Home']],
+      branches: [['suggest', tl('demo.spec.query.empty'), tl('demo.spec.show.history')], ['suggest', tl('demo.spec.no.suggestions'), tl('demo.spec.show.no.suggestions')], ['submit', tl('demo.spec.query.empty'), tl('demo.spec.do.nothing')]] }),
+  filter: doc('filter', tl('demo.spec.sheet.filter.list.price.category'), '2026-09-30',
+    `View filter_root ${tl('demo.spec.whole.sheet')}|Label title_label ${tl('demo.spec.heading.filter')}|SelectBox category_select ${tl('demo.spec.category')}|View price_range ${tl('demo.spec.price.range')}|Switch stock_switch ${tl('demo.spec.stock.only')}|Button reset_button ${tl('demo.spec.reset')}|Button apply_button ${tl('demo.spec.apply')}`,
+    { vars: [['category', 'String?', 'null'], ['minPrice', 'Int', '0'], ['maxPrice', 'Int', '50000'], ['inStockOnly', 'Bool', 'false']], handlers: [['onApplyTap', tl('demo.spec.return.filters.close')], ['onResetTap', tl('demo.spec.reset.filters')]],
       methods: ['apply()', 'reset()', 'setPrice(min:max:)'], repos: ['CategoryRepository'], apis: [['listCategories', 'GET', '/categories']],
-      actions: [['適用するをタップ', 'onApplyTap → apply()'], ['リセットをタップ', 'onResetTap → reset()']],
+      actions: [[tl('demo.spec.tap.apply'), 'onApplyTap → apply()'], [tl('demo.spec.tap.reset'), 'onResetTap → reset()']],
       transitions: [['apply()', 'ProductList']],
-      branches: [['apply', 'minPrice > maxPrice', '価格を入れ替える'], ['reset', '—', '全条件を初期値に戻す']] }),
-  detail: doc('detail', '商品の写真・価格・在庫を見せて、カートに入れる', '2026-10-14',
-    'SafeAreaView detail_root 画面全体|Image product_image 商品写真|Label name_label 商品名|Label price_label 価格|Label stock_label 在庫の表示|Segment size_segment サイズの選択|Button add_cart_button カートに入れる|Button favorite_button お気に入り|Label review_summary 評価の平均と件数|Button reviews_button レビューを見る|Indicator loading_indicator 読み込み中',
+      branches: [['apply', 'minPrice > maxPrice', tl('demo.spec.swap.prices')], ['reset', '—', tl('demo.spec.reset.all.filters')]] }),
+  detail: doc('detail', tl('demo.spec.shows.product.s.photos.price'), '2026-10-14',
+    `SafeAreaView detail_root ${tl('demo.spec.whole.screen')}|Image product_image ${tl('demo.spec.product.photo')}|Label name_label ${tl('demo.spec.product.name')}|Label price_label ${tl('demo.spec.price')}|Label stock_label ${tl('demo.spec.stock.status')}|Segment size_segment ${tl('demo.spec.size.picker')}|Button add_cart_button ${tl('demo.spec.add.cart')}|Button favorite_button ${tl('demo.screen.favorites')}|Label review_summary ${tl('demo.spec.average.rating.count')}|Button reviews_button ${tl('demo.spec.see.reviews')}|Indicator loading_indicator ${tl('demo.spec.loading')}`,
     { vars: [['product', 'Product?', 'null'], ['size', 'Int', '-1'], ['isFavorite', 'Bool', 'false'], ['canAddToCart', 'Bool', 'false'], ['isLoading', 'Bool', 'true']],
-      handlers: [['onAddCartTap', 'カートに追加'], ['onFavoriteTap', 'お気に入りを切り替える'], ['onSizeChange', 'サイズを選ぶ']],
+      handlers: [['onAddCartTap', tl('demo.spec.add.cart.2')], ['onFavoriteTap', tl('demo.spec.toggle.favorite')], ['onSizeChange', tl('demo.spec.pick.size')]],
       methods: ['onAppear()', 'loadProduct()', 'selectSize(_:)', 'addToCart()', 'toggleFavorite()', 'openReviews()'], repos: ['ProductRepository', 'CartRepository', 'FavoriteRepository'],
       apis: [['getProduct', 'GET', '/products/{id}'], ['postCartItem', 'POST', '/cart/items'], ['putFavorite', 'PUT', '/favorites/{id}']],
-      actions: [['サイズを選ぶ', 'onSizeChange → selectSize(_:)'], ['カートに入れるをタップ', 'onAddCartTap → addToCart()'], ['お気に入りをタップ', 'onFavoriteTap → toggleFavorite()'], ['レビューを見るをタップ', 'openReviews()']],
-      transitions: [['addToCart() 成功', 'Cart'], ['openReviews()', 'Reviews']],
-      branches: [['loadProduct', 'stock == 0', 'add_cart_button を無効にして在庫切れを表示'], ['addToCart', 'サイズ未選択', 'size_segment を強調'], ['addToCart', 'API 成功', 'Cart へ遷移'], ['toggleFavorite', '未ログイン', 'Login へ遷移']] }),
-  reviews: doc('reviews', '商品のレビューを新しい順に見せ、評価で絞り込む', '2026-10-06',
-    'SafeAreaView reviews_root 画面全体|Label average_label 平均評価|Segment star_filter 評価で絞り込み|Collection review_list レビュー一覧|Indicator loading_indicator 読み込み中|Label empty_label レビューなし',
-    { vars: [['reviews', '[Review]', '[]'], ['stars', 'Int?', 'null'], ['isLoading', 'Bool', 'true']], handlers: [['onStarFilter', '評価で絞り込む']],
+      actions: [[tl('demo.spec.pick.size'), 'onSizeChange → selectSize(_:)'], [tl('demo.spec.tap.add.cart'), 'onAddCartTap → addToCart()'], [tl('demo.spec.tap.favorite'), 'onFavoriteTap → toggleFavorite()'], [tl('demo.spec.tap.see.reviews'), 'openReviews()']],
+      transitions: [[tl('demo.spec.addtocart.succeeds'), 'Cart'], ['openReviews()', 'Reviews']],
+      branches: [['loadProduct', 'stock == 0', tl('demo.spec.disable.add.cart.button.show')], ['addToCart', tl('demo.spec.no.size.picked'), tl('demo.spec.highlight.size.segment')], ['addToCart', tl('demo.spec.api.succeeds'), tl('demo.spec.go.cart')], ['toggleFavorite', tl('demo.spec.signed.out'), tl('demo.spec.go.login')]] }),
+  reviews: doc('reviews', tl('demo.spec.shows.product.s.reviews.newest'), '2026-10-06',
+    `SafeAreaView reviews_root ${tl('demo.spec.whole.screen')}|Label average_label ${tl('demo.spec.average.rating')}|Segment star_filter ${tl('demo.spec.filter.rating')}|Collection review_list ${tl('demo.spec.review.list')}|Indicator loading_indicator ${tl('demo.spec.loading')}|Label empty_label ${tl('demo.spec.no.reviews')}`,
+    { vars: [['reviews', '[Review]', '[]'], ['stars', 'Int?', 'null'], ['isLoading', 'Bool', 'true']], handlers: [['onStarFilter', tl('demo.spec.filter.rating.2')]],
       methods: ['load()', 'loadMore()', 'filter(stars:)'], repos: ['ReviewRepository'], apis: [['listReviews', 'GET', '/products/{id}/reviews']],
-      actions: [['評価で絞り込む', 'onStarFilter → filter(stars:)'], ['最後までスクロール', 'loadMore()']],
-      transitions: [['戻る', 'ProductDetail']],
-      branches: [['load', '0 件', 'empty_label を表示'], ['loadMore', '最終ページ', '読み込みを止める'], ['filter', 'stars == nil', '全件を表示']] }),
-  favorites: doc('favorites', 'お気に入りに入れた商品を並べ、カートへ移せる', '2026-09-26',
-    'SafeAreaView favorites_root 画面全体|Collection favorite_list お気に入り一覧|Label empty_label お気に入りなし|Button edit_button 編集',
-    { vars: [['items', '[Product]', '[]'], ['isEditing', 'Bool', 'false']], handlers: [['onRemove', 'お気に入りから外す'], ['onEditTap', '編集モードを切り替える']],
+      actions: [[tl('demo.spec.filter.rating.2'), 'onStarFilter → filter(stars:)'], [tl('demo.spec.scroll.end'), 'loadMore()']],
+      transitions: [[tl('demo.spec.back'), 'ProductDetail']],
+      branches: [['load', tl('demo.spec.none'), tl('demo.spec.show.empty.label')], ['loadMore', tl('demo.spec.last.page'), tl('demo.spec.stop.loading.more')], ['filter', 'stars == nil', tl('demo.spec.show.everything')]] }),
+  favorites: doc('favorites', tl('demo.spec.lists.favorite.products.move.them'), '2026-09-26',
+    `SafeAreaView favorites_root ${tl('demo.spec.whole.screen')}|Collection favorite_list ${tl('demo.spec.favorites.list')}|Label empty_label ${tl('demo.spec.no.favorites')}|Button edit_button ${tl('demo.spec.edit')}`,
+    { vars: [['items', '[Product]', '[]'], ['isEditing', 'Bool', 'false']], handlers: [['onRemove', tl('demo.spec.remove.from.favorites')], ['onEditTap', tl('demo.spec.toggle.edit.mode')]],
       methods: ['load()', 'remove(_:)', 'moveToCart(_:)'], repos: ['FavoriteRepository'], apis: [['listFavorites', 'GET', '/favorites'], ['deleteFavorite', 'DELETE', '/favorites/{id}']],
-      actions: [['商品をタップ', '商品詳細を開く'], ['外すをタップ', 'onRemove → remove(_:)'], ['カートへをタップ', 'moveToCart(_:)']],
-      transitions: [['商品をタップ', 'ProductDetail']],
-      branches: [['load', '0 件', 'empty_label を表示'], ['remove', '最後の 1 件', 'empty_label に切り替える']] }),
-  checkout: doc('checkout', 'お届け先と支払い方法を確かめて注文を確定する', '2026-10-09',
-    'SafeAreaView checkout_root 画面全体|Label address_label お届け先|Button address_change お届け先を変更|Label payment_label 支払い方法|Button payment_change 支払い方法を変更|Label subtotal_label 小計|Label shipping_label 送料|Label total_label 合計|Button confirm_button 注文を確定する|Indicator loading_indicator 送信中',
+      actions: [[tl('demo.spec.tap.product'), tl('demo.spec.open.product.details')], [tl('demo.spec.tap.remove'), 'onRemove → remove(_:)'], [tl('demo.spec.tap.cart'), 'moveToCart(_:)']],
+      transitions: [[tl('demo.spec.tap.product'), 'ProductDetail']],
+      branches: [['load', tl('demo.spec.none'), tl('demo.spec.show.empty.label')], ['remove', tl('demo.spec.last.one'), tl('demo.spec.switch.empty.label')]] }),
+  checkout: doc('checkout', tl('demo.spec.confirm.address.payment.then.place'), '2026-10-09',
+    `SafeAreaView checkout_root ${tl('demo.spec.whole.screen')}|Label address_label ${tl('demo.screen.address')}|Button address_change ${tl('demo.spec.change.address')}|Label payment_label ${tl('demo.screen.payment')}|Button payment_change ${tl('demo.spec.change.payment.method')}|Label subtotal_label ${tl('demo.spec.subtotal')}|Label shipping_label ${tl('demo.spec.shipping')}|Label total_label ${tl('demo.spec.total')}|Button confirm_button ${tl('demo.spec.place.order')}|Indicator loading_indicator ${tl('demo.spec.sending')}`,
     { vars: [['address', 'Address?', 'null'], ['payment', 'Payment?', 'null'], ['total', 'Int', '0'], ['canConfirm', 'Bool', 'false'], ['isSubmitting', 'Bool', 'false']],
-      handlers: [['onConfirmTap', '注文を送る'], ['onChangeAddress', 'お届け先の選択へ']],
+      handlers: [['onConfirmTap', tl('demo.spec.send.order')], ['onChangeAddress', tl('demo.spec.address.selection')]],
       methods: ['load()', 'changeAddress()', 'changePayment()', 'confirm()', 'recalc()'], repos: ['OrderRepository', 'AddressRepository'], apis: [['getCheckout', 'GET', '/checkout'], ['postOrder', 'POST', '/orders']],
-      actions: [['注文を確定するをタップ', 'onConfirmTap → confirm()'], ['お届け先を変更', 'onChangeAddress → changeAddress()'], ['支払い方法を変更', 'changePayment()']],
-      transitions: [['confirm() 成功', 'OrderComplete'], ['changeAddress()', 'AddressList'], ['changePayment()', 'PaymentMethods']],
-      branches: [['load', 'address == nil', 'confirm_button を無効にする'], ['confirm', '在庫切れ', 'エラーを出して Cart へ'], ['confirm', '決済エラー', 'payment_label を強調'], ['confirm', 'success', 'OrderComplete へ遷移']] }),
-  complete: doc('complete', '注文番号とお届け予定日を見せる', '2026-10-10',
-    'SafeAreaView complete_root 画面全体|Image done_image 完了のイラスト|Label order_number 注文番号|Label delivery_label お届け予定日|Button orders_button 注文履歴を見る|Button home_button 買い物を続ける',
-    { vars: [['orderNumber', 'String', '""'], ['deliveryDate', 'String', '""']], handlers: [['onHomeTap', 'ホームへ戻る']],
+      actions: [[tl('demo.spec.tap.place.order'), 'onConfirmTap → confirm()'], [tl('demo.spec.change.address'), 'onChangeAddress → changeAddress()'], [tl('demo.spec.change.payment.method'), 'changePayment()']],
+      transitions: [[tl('demo.spec.confirm.succeeds'), 'OrderComplete'], ['changeAddress()', 'AddressList'], ['changePayment()', 'PaymentMethods']],
+      branches: [['load', 'address == nil', tl('demo.spec.disable.confirm.button')], ['confirm', tl('demo.spec.out.stock'), tl('demo.spec.show.error.go.cart')], ['confirm', tl('demo.spec.payment.error'), tl('demo.spec.highlight.payment.label')], ['confirm', 'success', tl('demo.spec.go.ordercomplete')]] }),
+  complete: doc('complete', tl('demo.spec.shows.order.number.delivery.date'), '2026-10-10',
+    `SafeAreaView complete_root ${tl('demo.spec.whole.screen')}|Image done_image ${tl('demo.spec.done.illustration')}|Label order_number ${tl('demo.spec.order.number')}|Label delivery_label ${tl('demo.spec.delivery.date')}|Button orders_button ${tl('demo.spec.see.order.history')}|Button home_button ${tl('demo.spec.keep.shopping')}`,
+    { vars: [['orderNumber', 'String', '""'], ['deliveryDate', 'String', '""']], handlers: [['onHomeTap', tl('demo.spec.back.home')]],
       methods: ['onAppear()', 'openOrders()', 'backToHome()'], repos: ['OrderRepository'], apis: [['getOrder', 'GET', '/orders/{id}']],
-      actions: [['注文履歴を見るをタップ', 'openOrders()'], ['買い物を続けるをタップ', 'onHomeTap → backToHome()']],
+      actions: [[tl('demo.spec.tap.see.order.history'), 'openOrders()'], [tl('demo.spec.tap.keep.shopping'), 'onHomeTap → backToHome()']],
       transitions: [['openOrders()', 'OrderHistory'], ['backToHome()', 'Home']],
-      branches: [['onAppear', '注文の取得に失敗', '注文番号だけを表示'], ['onAppear', 'success', 'お届け予定日を表示']] }),
-  orders: doc('orders', '過去の注文を新しい順に並べる', '2026-10-13',
-    'SafeAreaView orders_root 画面全体|Segment period_segment 期間（3 か月 / 1 年 / すべて）|Collection order_list 注文一覧|Label empty_label 注文なし|Indicator loading_indicator 読み込み中',
-    { vars: [['orders', '[Order]', '[]'], ['period', 'Int', '0'], ['isLoading', 'Bool', 'true']], handlers: [['onPeriodChange', '期間を変える'], ['onOrderTap', '注文詳細へ']],
+      branches: [['onAppear', tl('demo.spec.fetching.order.fails'), tl('demo.spec.show.only.order.number')], ['onAppear', 'success', tl('demo.spec.show.delivery.date')]] }),
+  orders: doc('orders', tl('demo.spec.lists.past.orders.newest.first'), '2026-10-13',
+    `SafeAreaView orders_root ${tl('demo.spec.whole.screen')}|Segment period_segment ${tl('demo.spec.period.3.months.1.year')}|Collection order_list ${tl('demo.spec.order.list')}|Label empty_label ${tl('demo.spec.no.orders')}|Indicator loading_indicator ${tl('demo.spec.loading')}`,
+    { vars: [['orders', '[Order]', '[]'], ['period', 'Int', '0'], ['isLoading', 'Bool', 'true']], handlers: [['onPeriodChange', tl('demo.spec.change.period')], ['onOrderTap', tl('demo.spec.order.details')]],
       methods: ['load()', 'loadMore()', 'changePeriod(_:)', 'openOrder(_:)'], repos: ['OrderRepository'], apis: [['listOrders', 'GET', '/orders']],
-      actions: [['期間を変える', 'onPeriodChange → changePeriod(_:)'], ['注文をタップ', 'onOrderTap → openOrder(_:)'], ['最後までスクロール', 'loadMore()']],
+      actions: [[tl('demo.spec.change.period'), 'onPeriodChange → changePeriod(_:)'], [tl('demo.spec.tap.order'), 'onOrderTap → openOrder(_:)'], [tl('demo.spec.scroll.end'), 'loadMore()']],
       transitions: [['openOrder(_:)', 'OrderDetail']],
-      branches: [['load', '0 件', 'empty_label を表示'], ['loadMore', '最終ページ', '読み込みを止める']] }),
-  order: doc('order', '1 件の注文の中身・配送状況・領収書を見せる', '2026-10-16',
-    'SafeAreaView order_root 画面全体|Label status_label 配送状況|Collection item_list 注文した商品|Label total_label 合計|Label address_label お届け先|Button receipt_button 領収書|Button cancel_button 注文をキャンセル',
-    { vars: [['order', 'Order?', 'null'], ['canCancel', 'Bool', 'false'], ['isLoading', 'Bool', 'true']], handlers: [['onCancelTap', 'キャンセルを確認'], ['onReceiptTap', '領収書を開く']],
+      branches: [['load', tl('demo.spec.none'), tl('demo.spec.show.empty.label')], ['loadMore', tl('demo.spec.last.page'), tl('demo.spec.stop.loading.more')]] }),
+  order: doc('order', tl('demo.spec.shows.one.order.s.items'), '2026-10-16',
+    `SafeAreaView order_root ${tl('demo.spec.whole.screen')}|Label status_label ${tl('demo.spec.shipping.status')}|Collection item_list ${tl('demo.spec.ordered.items')}|Label total_label ${tl('demo.spec.total')}|Label address_label ${tl('demo.screen.address')}|Button receipt_button ${tl('demo.spec.receipt')}|Button cancel_button ${tl('demo.spec.cancel.order')}`,
+    { vars: [['order', 'Order?', 'null'], ['canCancel', 'Bool', 'false'], ['isLoading', 'Bool', 'true']], handlers: [['onCancelTap', tl('demo.spec.confirm.cancellation')], ['onReceiptTap', tl('demo.spec.open.receipt')]],
       methods: ['load()', 'cancel()', 'openReceipt()'], repos: ['OrderRepository'], apis: [['getOrder', 'GET', '/orders/{id}'], ['postCancel', 'POST', '/orders/{id}/cancel']],
-      actions: [['注文をキャンセルをタップ', 'onCancelTap → cancel()'], ['領収書をタップ', 'onReceiptTap → openReceipt()']],
-      transitions: [['商品をタップ', 'ProductDetail']],
-      branches: [['load', '発送済み', 'cancel_button を隠す'], ['cancel', 'success', 'status_label を「キャンセル済み」に']] }),
-  mypage: doc('mypage', '会員情報と各種設定の入口をまとめる', '2026-09-24',
-    'SafeAreaView mypage_root 画面全体|Image avatar_image アイコン|Label name_label お名前|Button orders_button 注文履歴|Button favorites_button お気に入り|Button address_button お届け先|Button payment_button 支払い方法|Button settings_button 設定|Button logout_button ログアウト',
-    { vars: [['userName', 'String', '""'], ['avatarUrl', 'String?', 'null']], handlers: [['onLogoutTap', 'ログアウトを確認']],
+      actions: [[tl('demo.spec.tap.cancel.order'), 'onCancelTap → cancel()'], [tl('demo.spec.tap.receipt'), 'onReceiptTap → openReceipt()']],
+      transitions: [[tl('demo.spec.tap.product'), 'ProductDetail']],
+      branches: [['load', tl('demo.spec.shipped'), tl('demo.spec.hide.cancel.button')], ['cancel', 'success', tl('demo.spec.set.status.label.canceled')]] }),
+  mypage: doc('mypage', tl('demo.spec.account.info.way.into.settings'), '2026-09-24',
+    `SafeAreaView mypage_root ${tl('demo.spec.whole.screen')}|Image avatar_image ${tl('demo.spec.avatar')}|Label name_label ${tl('demo.spec.name')}|Button orders_button ${tl('demo.screen.orders')}|Button favorites_button ${tl('demo.screen.favorites')}|Button address_button ${tl('demo.screen.address')}|Button payment_button ${tl('demo.screen.payment')}|Button settings_button ${tl('demo.screen.settings')}|Button logout_button ${tl('demo.spec.log.out')}`,
+    { vars: [['userName', 'String', '""'], ['avatarUrl', 'String?', 'null']], handlers: [['onLogoutTap', tl('demo.spec.confirm.logout')]],
       methods: ['load()', 'logout()', 'open(_:)'], repos: ['UserRepository', 'AuthRepository'], apis: [['getMe', 'GET', '/me'], ['postLogout', 'POST', '/auth/logout']],
-      actions: [['各メニューをタップ', 'open(_:)'], ['ログアウトをタップ', 'onLogoutTap → logout()']],
-      transitions: [['orders_button をタップ', 'OrderHistory'], ['favorites_button をタップ', 'Favorites'], ['settings_button をタップ', 'Settings'], ['logout() 成功', 'Login']],
-      branches: [['logout', '確認でキャンセル', '何もしない'], ['load', '未ログイン', 'Login へ遷移']] }),
-  address: doc('address', '登録したお届け先を並べ、既定の 1 件を選ぶ', '2026-10-15',
-    'SafeAreaView address_root 画面全体|Collection address_list お届け先一覧|Button add_button お届け先を追加|Label empty_label 登録なし',
-    { vars: [['addresses', '[Address]', '[]'], ['selectedId', 'String?', 'null']], handlers: [['onSelect', '既定にする'], ['onAddTap', '追加へ']],
+      actions: [[tl('demo.spec.tap.menu.item'), 'open(_:)'], [tl('demo.spec.tap.log.out'), 'onLogoutTap → logout()']],
+      transitions: [[tl('demo.spec.tap.orders.button'), 'OrderHistory'], [tl('demo.spec.tap.favorites.button'), 'Favorites'], [tl('demo.spec.tap.settings.button'), 'Settings'], [tl('demo.spec.logout.succeeds'), 'Login']],
+      branches: [['logout', tl('demo.spec.canceled.at.prompt'), tl('demo.spec.do.nothing')], ['load', tl('demo.spec.signed.out'), tl('demo.spec.go.login')]] }),
+  address: doc('address', tl('demo.spec.lists.saved.addresses.pick.default'), '2026-10-15',
+    `SafeAreaView address_root ${tl('demo.spec.whole.screen')}|Collection address_list ${tl('demo.spec.address.list')}|Button add_button ${tl('demo.spec.add.address')}|Label empty_label ${tl('demo.spec.none.saved')}`,
+    { vars: [['addresses', '[Address]', '[]'], ['selectedId', 'String?', 'null']], handlers: [['onSelect', tl('demo.spec.make.default')], ['onAddTap', tl('demo.spec.add')]],
       methods: ['load()', 'select(_:)', 'add()', 'edit(_:)'], repos: ['AddressRepository'], apis: [['listAddresses', 'GET', '/addresses'], ['putDefault', 'PUT', '/addresses/{id}/default']],
-      actions: [['お届け先をタップ', 'onSelect → select(_:)'], ['追加をタップ', 'onAddTap → add()'], ['編集をタップ', 'edit(_:)']],
+      actions: [[tl('demo.spec.tap.address'), 'onSelect → select(_:)'], [tl('demo.spec.tap.add'), 'onAddTap → add()'], [tl('demo.spec.tap.edit'), 'edit(_:)']],
       transitions: [['add()', 'AddressEdit'], ['edit(_:)', 'AddressEdit']],
-      branches: [['load', '0 件', 'empty_label と追加ボタンを表示'], ['select', 'Checkout から来た', '選んで Checkout へ戻る']] }),
-  settings: doc('settings', '通知・表示・アカウントの設定', '2026-09-22',
-    'SafeAreaView settings_root 画面全体|Switch push_switch プッシュ通知|Switch mail_switch メールマガジン|SelectBox theme_select 表示モード|Button help_button ヘルプ|Button delete_button アカウントを削除',
-    { vars: [['pushEnabled', 'Bool', 'true'], ['mailEnabled', 'Bool', 'false'], ['theme', 'String', '"system"']], handlers: [['onPushToggle', '通知を切り替える'], ['onDeleteTap', '削除を確認']],
+      branches: [['load', tl('demo.spec.none'), tl('demo.spec.show.empty.label.add.button')], ['select', tl('demo.spec.came.from.checkout'), tl('demo.spec.pick.one.return.checkout')]] }),
+  settings: doc('settings', tl('demo.spec.notification.display.account.settings'), '2026-09-22',
+    `SafeAreaView settings_root ${tl('demo.spec.whole.screen')}|Switch push_switch ${tl('demo.spec.push.notifications')}|Switch mail_switch ${tl('demo.spec.newsletter')}|SelectBox theme_select ${tl('demo.spec.display.mode')}|Button help_button ${tl('demo.screen.help')}|Button delete_button ${tl('demo.spec.delete.account')}`,
+    { vars: [['pushEnabled', 'Bool', 'true'], ['mailEnabled', 'Bool', 'false'], ['theme', 'String', '"system"']], handlers: [['onPushToggle', tl('demo.spec.toggle.notifications')], ['onDeleteTap', tl('demo.spec.confirm.deletion')]],
       methods: ['load()', 'togglePush()', 'toggleMail()', 'setTheme(_:)', 'deleteAccount()'], repos: ['SettingsRepository'], apis: [['getSettings', 'GET', '/settings'], ['putSettings', 'PUT', '/settings']],
-      actions: [['プッシュ通知を切り替える', 'onPushToggle → togglePush()'], ['表示モードを選ぶ', 'setTheme(_:)'], ['アカウントを削除をタップ', 'onDeleteTap → deleteAccount()']],
-      transitions: [['help_button をタップ', 'Help']],
-      branches: [['togglePush', 'OS で通知が拒否', '設定アプリへの案内を表示'], ['deleteAccount', 'success', 'Login へ遷移']] }),
+      actions: [[tl('demo.spec.toggle.push.notifications'), 'onPushToggle → togglePush()'], [tl('demo.spec.pick.display.mode'), 'setTheme(_:)'], [tl('demo.spec.tap.delete.account'), 'onDeleteTap → deleteAccount()']],
+      transitions: [[tl('demo.spec.tap.help.button'), 'Help']],
+      branches: [['togglePush', tl('demo.spec.notifications.denied.os'), tl('demo.spec.show.how.open.settings.app')], ['deleteAccount', 'success', tl('demo.spec.go.login')]] }),
 });
 /* The documentation site (JsonUIDocument) is a JsonUI project of its own. */
 Object.assign(SPEC_DOCS, {
-  top: doc('top', 'JsonUI の紹介と、各プラットフォームの始め方への入口', '2026-09-10',
-    'SafeAreaView top_root 画面全体|Label hero_title 見出し|Label hero_lead 紹介文|Button start_button はじめる|Collection platform_cards iOS・Android・Web の案内|Collection news_list 更新情報',
-    { vars: [['news', '[News]', '[]'], ['isLoading', 'Bool', 'true']], handlers: [['onStartTap', 'はじめかたへ']],
+  top: doc('top', tl('demo.spec.introduces.jsonui.links.getting.started'), '2026-09-10',
+    `SafeAreaView top_root ${tl('demo.spec.whole.screen')}|Label hero_title ${tl('demo.spec.heading')}|Label hero_lead ${tl('demo.spec.intro.text')}|Button start_button ${tl('demo.spec.get.started')}|Collection platform_cards ${tl('demo.spec.ios.android.web.guides')}|Collection news_list ${tl('demo.spec.news')}`,
+    { vars: [['news', '[News]', '[]'], ['isLoading', 'Bool', 'true']], handlers: [['onStartTap', tl('demo.spec.getting.started')]],
       methods: ['load()', 'openStart()', 'openPlatform(_:)'], repos: ['DocsRepository'], apis: [['getNews', 'GET', '/news.json']],
-      actions: [['はじめるをタップ', 'onStartTap → openStart()'], ['プラットフォームを選ぶ', 'openPlatform(_:)']],
+      actions: [[tl('demo.spec.tap.get.started'), 'onStartTap → openStart()'], [tl('demo.spec.pick.platform'), 'openPlatform(_:)']],
       transitions: [['openStart()', 'GettingStarted'], ['openPlatform(_:)', 'GettingStarted']],
-      branches: [['load', '更新情報が 0 件', 'news_list を隠す'], ['openPlatform', 'web', 'Web の手順を開く']] }),
-  start: doc('start', 'インストールから最初の画面を出すまでの手順', '2026-09-12',
-    'SafeAreaView start_root 画面全体|Segment platform_tabs iOS・Android・Web の切り替え|Collection step_list 手順|Label code_sample コード例|Button copy_button コピー|Button next_button 次へ',
-    { vars: [['platform', 'String', '"ios"'], ['copied', 'Bool', 'false']], handlers: [['onPlatformChange', 'プラットフォームを切り替える'], ['onCopyTap', 'コードをコピー']],
+      branches: [['load', tl('demo.spec.no.news'), tl('demo.spec.hide.news.list')], ['openPlatform', 'web', tl('demo.spec.open.web.steps')]] }),
+  start: doc('start', tl('demo.spec.steps.from.install.your.first'), '2026-09-12',
+    `SafeAreaView start_root ${tl('demo.spec.whole.screen')}|Segment platform_tabs ${tl('demo.spec.ios.android.web.switch')}|Collection step_list ${tl('demo.spec.steps')}|Label code_sample ${tl('demo.spec.code.sample')}|Button copy_button ${tl('demo.spec.copy')}|Button next_button ${tl('demo.spec.next')}`,
+    { vars: [['platform', 'String', '"ios"'], ['copied', 'Bool', 'false']], handlers: [['onPlatformChange', tl('demo.spec.switch.platforms')], ['onCopyTap', tl('demo.spec.copy.code')]],
       methods: ['selectPlatform(_:)', 'copyCode()', 'openNext()'], repos: [], apis: [],
-      actions: [['プラットフォームを切り替える', 'onPlatformChange → selectPlatform(_:)'], ['コピーをタップ', 'onCopyTap → copyCode()']],
+      actions: [[tl('demo.spec.switch.platforms'), 'onPlatformChange → selectPlatform(_:)'], [tl('demo.spec.tap.copy'), 'onCopyTap → copyCode()']],
       transitions: [['openNext()', 'ComponentList']],
-      branches: [['copyCode', 'success', '「コピーしました」を表示']] }),
-  components: doc('components', 'コンポーネントを分類ごとに並べ、詳細ページへつなぐ', '2026-09-18',
-    'SafeAreaView list_root 画面全体|TextField filter_input 絞り込み|Segment category_tabs 分類|Collection component_grid コンポーネント一覧|Label empty_label 該当なし',
-    { vars: [['query', 'String', '""'], ['category', 'String', '"all"'], ['components', '[Component]', '[]']], handlers: [['onComponentTap', '詳細へ']],
+      branches: [['copyCode', 'success', tl('demo.spec.show.copied')]] }),
+  components: doc('components', tl('demo.spec.lists.components.category.linking.their'), '2026-09-18',
+    `SafeAreaView list_root ${tl('demo.spec.whole.screen')}|TextField filter_input ${tl('demo.screen.filter')}|Segment category_tabs ${tl('demo.spec.category.tabs')}|Collection component_grid ${tl('demo.screen.components')}|Label empty_label ${tl('demo.spec.no.matches')}`,
+    { vars: [['query', 'String', '""'], ['category', 'String', '"all"'], ['components', '[Component]', '[]']], handlers: [['onComponentTap', tl('demo.spec.details')]],
       methods: ['load()', 'filter(_:)', 'selectCategory(_:)', 'openComponent(_:)'], repos: ['DocsRepository'], apis: [['listComponents', 'GET', '/components.json']],
-      actions: [['絞り込む', 'filter(_:)'], ['分類を選ぶ', 'selectCategory(_:)'], ['コンポーネントをタップ', 'onComponentTap → openComponent(_:)']],
+      actions: [[tl('demo.spec.filter'), 'filter(_:)'], [tl('demo.spec.pick.category'), 'selectCategory(_:)'], [tl('demo.spec.tap.component'), 'onComponentTap → openComponent(_:)']],
       transitions: [['openComponent(_:)', 'ComponentDetail']],
-      branches: [['filter', '0 件', 'empty_label を表示'], ['selectCategory', 'all', '全件を表示']] }),
-  component: doc('component', '1 つのコンポーネントの属性・例・対応プラットフォームを見せる', '2026-10-01',
-    'SafeAreaView detail_root 画面全体|Label name_label コンポーネント名|Label summary_label 概要|Collection attr_table 属性の表|Label sample_code JSON の例|Segment preview_tabs プレビューの切り替え',
-    { vars: [['component', 'Component?', 'null'], ['preview', 'String', '"ios"']], handlers: [['onAttrTap', '属性リファレンスへ']],
+      branches: [['filter', tl('demo.spec.none'), tl('demo.spec.show.empty.label')], ['selectCategory', 'all', tl('demo.spec.show.everything')]] }),
+  component: doc('component', tl('demo.spec.shows.one.component.s.attributes'), '2026-10-01',
+    `SafeAreaView detail_root ${tl('demo.spec.whole.screen')}|Label name_label ${tl('demo.spec.component.name')}|Label summary_label ${tl('demo.spec.summary')}|Collection attr_table ${tl('demo.spec.attribute.table')}|Label sample_code ${tl('demo.spec.json.example')}|Segment preview_tabs ${tl('demo.spec.preview.switch')}`,
+    { vars: [['component', 'Component?', 'null'], ['preview', 'String', '"ios"']], handlers: [['onAttrTap', tl('demo.spec.attribute.reference')]],
       methods: ['load()', 'selectPreview(_:)', 'openAttribute(_:)'], repos: ['DocsRepository'], apis: [['getComponent', 'GET', '/components/{name}.json']],
-      actions: [['属性をタップ', 'onAttrTap → openAttribute(_:)'], ['プレビューを切り替える', 'selectPreview(_:)']],
+      actions: [[tl('demo.spec.tap.attribute'), 'onAttrTap → openAttribute(_:)'], [tl('demo.spec.switch.preview'), 'selectPreview(_:)']],
       transitions: [['openAttribute(_:)', 'AttributeReference']],
-      branches: [['load', '存在しない名前', '一覧へ戻す'], ['selectPreview', 'web', 'Web のプレビューを表示']] }),
-  attrs: doc('attrs', 'すべての属性を、型・既定値・対応コンポーネントつきで引ける', '2026-10-17',
-    'SafeAreaView attr_root 画面全体|TextField search_input 属性名で探す|Segment group_tabs レイアウト・見た目・動き|Collection attr_list 属性一覧|Label type_label 型と既定値|Label platforms_label 対応プラットフォーム|Label empty_label 該当なし',
-    { vars: [['query', 'String', '""'], ['group', 'String', '"layout"'], ['attributes', '[Attribute]', '[]'], ['isLoading', 'Bool', 'true']], handlers: [['onSearch', '絞り込む'], ['onAttrTap', '使える部品を表示']],
+      branches: [['load', tl('demo.spec.unknown.name'), tl('demo.spec.back.list')], ['selectPreview', 'web', tl('demo.spec.show.web.preview')]] }),
+  attrs: doc('attrs', tl('demo.spec.look.up.every.attribute.type'), '2026-10-17',
+    `SafeAreaView attr_root ${tl('demo.spec.whole.screen')}|TextField search_input ${tl('demo.spec.search.attribute.name')}|Segment group_tabs ${tl('demo.spec.layout.style.behavior')}|Collection attr_list ${tl('demo.spec.attribute.list')}|Label type_label ${tl('demo.spec.type.default')}|Label platforms_label ${tl('demo.spec.supported.platforms')}|Label empty_label ${tl('demo.spec.no.matches')}`,
+    { vars: [['query', 'String', '""'], ['group', 'String', '"layout"'], ['attributes', '[Attribute]', '[]'], ['isLoading', 'Bool', 'true']], handlers: [['onSearch', tl('demo.spec.filter')], ['onAttrTap', tl('demo.spec.show.components.use')]],
       methods: ['load()', 'search(_:)', 'selectGroup(_:)', 'openComponent(_:)'], repos: ['DocsRepository'], apis: [['listAttributes', 'GET', '/attributes.json']],
-      actions: [['属性名で探す', 'onSearch → search(_:)'], ['分類を選ぶ', 'selectGroup(_:)'], ['対応コンポーネントをタップ', 'openComponent(_:)']],
+      actions: [[tl('demo.spec.search.attribute.name'), 'onSearch → search(_:)'], [tl('demo.spec.pick.category'), 'selectGroup(_:)'], [tl('demo.spec.tap.supported.component'), 'openComponent(_:)']],
       transitions: [['openComponent(_:)', 'ComponentDetail']],
-      branches: [['search', '0 件', 'empty_label を表示'], ['load', 'SSoT の読み込みに失敗', 'エラーを表示'], ['selectGroup', 'layout', 'レイアウト属性だけ表示']] }),
-  anatomy: doc('anatomy', 'screen spec の各セクションを図つきで説明する', '2026-09-28',
-    'SafeAreaView anatomy_root 画面全体|Label title_label 見出し|Collection section_list セクションごとの説明|Image diagram_image 構造の図|Label sample_json spec の例',
-    { vars: [['sections', '[Section]', '[]']], handlers: [['onSectionTap', 'そのセクションへ移動']],
+      branches: [['search', tl('demo.spec.none'), tl('demo.spec.show.empty.label')], ['load', tl('demo.spec.loading.ssot.fails'), tl('demo.spec.show.error')], ['selectGroup', 'layout', tl('demo.spec.show.layout.attributes.only')]] }),
+  anatomy: doc('anatomy', tl('demo.spec.explains.each.section.screen.spec'), '2026-09-28',
+    `SafeAreaView anatomy_root ${tl('demo.spec.whole.screen')}|Label title_label ${tl('demo.spec.heading')}|Collection section_list ${tl('demo.spec.notes.per.section')}|Image diagram_image ${tl('demo.spec.structure.diagram')}|Label sample_json ${tl('demo.spec.spec.example')}`,
+    { vars: [['sections', '[Section]', '[]']], handlers: [['onSectionTap', tl('demo.spec.jump.section')]],
       methods: ['load()', 'scrollTo(_:)'], repos: ['DocsRepository'], apis: [['getAnatomy', 'GET', '/spec/anatomy.json']],
-      actions: [['セクションをタップ', 'onSectionTap → scrollTo(_:)']],
-      transitions: [['関連リンクをタップ', 'AttributeReference']],
-      branches: [['load', 'success', '図と例を表示']] }),
+      actions: [[tl('demo.spec.tap.section'), 'onSectionTap → scrollTo(_:)']],
+      transitions: [[tl('demo.spec.tap.related.link'), 'AttributeReference']],
+      branches: [['load', 'success', tl('demo.spec.show.diagram.example')]] }),
 });
 /* Screens nobody works on during the demo keep one state: [phase, share]. Live ones are computed below. */
 const STILL = {
@@ -333,130 +333,132 @@ const SPEC_INDEX = Object.fromEntries(SPECS.map((s, i) => [s.id, i]));
 const SCREEN_JA = Object.fromEntries(SCREENS.map((x) => [x[1], x[2]]));
 
 const CASES = [
-  { name: '初期表示（商品 3 点）', branch: 'items.count > 0', s: 18, e: 23, steps: ['assert visible cart_list', 'assert count cart_item = 3', 'assert text total_label'] },
-  { name: '数量を 0 にすると行が消える', branch: 'changeQuantity: qty == 0', s: 23, e: 28, steps: ['input qty_input_1 "0"', 'tap qty_apply_1', 'assert count cart_item = 2'] },
-  { name: '空のカートで購入ボタンが無効', branch: 'isEmpty == true', s: 28, e: 32, steps: ['setMocks cart: empty', 'assert visible empty_label', 'assert disabled checkout_button'] },
-  { name: 'クーポン WELCOME10 を適用', branch: 'applyCoupon → valid', s: 32, e: 37, steps: ['input coupon_input "WELCOME10"', 'tap coupon_apply', 'assert text discount_label'] },
-  { name: '期限切れクーポンでエラー表示', branch: 'applyCoupon → expired', s: 37, e: 45, failAt: 41, steps: ['input coupon_input "OLD2025"', 'tap coupon_apply', 'assert visible coupon_error'] },
-  { name: '在庫切れ商品の警告', branch: 'item.stock == 0', s: 45, e: 50, steps: ['setMocks stock: soldOut', 'assert visible stock_warning', 'assert disabled checkout_button'] },
-  { name: '未ログインで購入 → ログイン画面へ', branch: 'checkout → Login', s: 50, e: 55, steps: ['setMocks auth: guest', 'tap checkout_button', 'assert screen Login'] },
-  { name: '購入確定で注文完了へ', branch: 'placeOrder → success', s: 55, e: 60, steps: ['tap checkout_button', 'tap confirm_button', 'assert screen OrderComplete'] },
+  { name: tl('demo.case.first.view.3.items'), branch: 'items.count > 0', s: 18, e: 23, steps: ['assert visible cart_list', 'assert count cart_item = 3', 'assert text total_label'] },
+  { name: tl('demo.case.quantity.0.removes.row'), branch: 'changeQuantity: qty == 0', s: 23, e: 28, steps: ['input qty_input_1 "0"', 'tap qty_apply_1', 'assert count cart_item = 2'] },
+  { name: tl('demo.case.empty.cart.disables.buy'), branch: 'isEmpty == true', s: 28, e: 32, steps: ['setMocks cart: empty', 'assert visible empty_label', 'assert disabled checkout_button'] },
+  { name: tl('demo.case.apply.coupon.welcome10'), branch: 'applyCoupon → valid', s: 32, e: 37, steps: ['input coupon_input "WELCOME10"', 'tap coupon_apply', 'assert text discount_label'] },
+  { name: tl('demo.case.expired.coupon.shows.error'), branch: 'applyCoupon → expired', s: 37, e: 45, failAt: 41, steps: ['input coupon_input "OLD2025"', 'tap coupon_apply', 'assert visible coupon_error'] },
+  { name: tl('demo.case.out.stock.warning'), branch: 'item.stock == 0', s: 45, e: 50, steps: ['setMocks stock: soldOut', 'assert visible stock_warning', 'assert disabled checkout_button'] },
+  { name: tl('demo.case.buy.while.signed.out.log'), branch: 'checkout → Login', s: 50, e: 55, steps: ['setMocks auth: guest', 'tap checkout_button', 'assert screen Login'] },
+  { name: tl('demo.case.confirming.goes.order.complete'), branch: 'placeOrder → success', s: 55, e: 60, steps: ['tap checkout_button', 'tap confirm_button', 'assert screen OrderComplete'] },
 ];
 /* Task lists are per session (~/.claude/tasks/<list>/), so ids repeat across lists. */
 const TASKS = [
-  { list: 'a0', id: 1, subject: 'ProductList の画面を実装', activeForm: 'ProductList の画面を実装中', owner: 'a5', spec: 'list', created: -1, start: -1, end: -0.5 },
-  { list: 'a0', id: 2, subject: 'Login 画面の spec を書く', activeForm: 'Login の spec を書いています', owner: 'a3', spec: 'login', created: -1, start: 5, end: 62 },
-  { list: 'a0', id: 3, subject: 'Home のレイアウトを実装', activeForm: 'Home のレイアウトを実装中', owner: 'a5', spec: 'home', created: -1, start: 6, end: 40.5 },
-  { list: 'a0', id: 4, subject: 'Home の ViewModel を実装', activeForm: 'Home の ViewModel を実装中', owner: 'a5', spec: 'home', created: -1, start: 44, end: 76, blockedBy: 3 },
-  { list: 'a0', id: 5, subject: 'Cart のテストをシミュレータで流す', activeForm: 'Cart のテストを実行中', owner: 'a2', spec: 'cart', created: -1, start: 13, end: 60 },
-  { list: 'a0', id: 6, subject: '文言を strings.json に登録', owner: null, spec: null, created: -1, start: null, end: null },
-  { list: 'a0', id: 7, subject: 'Home → Cart の遷移をつなぐ', activeForm: 'Home → Cart の遷移をつないでいます', owner: 'a7', spec: 'home', created: 12, start: 40.5, end: null, blockedBy: 3 },
-  { list: 'a0', id: 8, subject: 'jui verify で spec とのズレを確認', activeForm: 'jui verify を実行中', owner: 'a5', spec: 'home', created: 12.4, start: 70, end: 74 },
-  { list: 'b4', id: 1, subject: 'Signup 画面の spec を書く', activeForm: 'Signup の spec を書いています', owner: 'e6', spec: 'signup', created: -1, start: 5, end: 70 },
-  { list: 'b4', id: 2, subject: 'ProductDetail のレイアウトを実装', activeForm: 'ProductDetail のレイアウトを実装中', owner: 'f2', spec: 'detail', created: -1, start: -1, end: 30.2 },
-  { list: 'b4', id: 3, subject: 'ProductDetail の ViewModel を実装', activeForm: 'ProductDetail の ViewModel を実装中', owner: 'f2', spec: 'detail', created: -1, start: 36, end: 78, blockedBy: 2 },
-  { list: 'b4', id: 4, subject: 'Signup 画面を実装', owner: null, spec: 'signup', created: -1, start: null, end: null, blockedBy: 1 },
-  { list: 'b4', id: 5, subject: 'ProductDetail → Cart の遷移をつなぐ', owner: null, spec: 'detail', created: 2, start: null, end: null, blockedBy: 3 },
-  { list: 'd8', id: 1, subject: 'Coupons 画面の spec を書く', owner: null, spec: 'coupons', created: -1, start: null, end: null },
-  { list: '4f', id: 1, subject: 'jui build の iOS 出力を直す', activeForm: 'jui build の iOS 出力を直しています', owner: '4f', spec: null, created: -1, start: -1, end: 22 },
-  { list: '4f', id: 2, subject: 'jui viz コマンドの雛形を作る', activeForm: 'jui viz の雛形を作っています', owner: '4f', spec: null, created: -1, start: 44, end: null },
-  { list: '4f', id: 3, subject: 'フック受信サーバーのテストを書く', owner: null, spec: null, created: -1, start: null, end: null, blockedBy: 2 },
-  { list: '7c', id: 1, subject: 'jsonui-test にケースごとの進捗出力を足す', activeForm: '進捗出力を実装中', owner: '7c', spec: null, created: -1, start: -1, end: null },
-  { list: '7c', id: 2, subject: 'README に --progress の説明を書く', owner: null, spec: null, created: -1, start: null, end: null, blockedBy: 1 },
-  { list: 'c9', id: 1, subject: 'spec の構造ページの HTML を生成', activeForm: 'HTML を生成中', owner: 'c9', spec: 'anatomy', created: -1, start: 0, end: 52 },
-  { list: 'c9', id: 2, subject: 'コンポーネント一覧に新しい属性を反映', owner: null, spec: 'components', created: -1, start: null, end: null },
-  { list: 'c9', id: 3, subject: '検索ページの文言を直す', owner: 'c9', spec: null, created: -1, start: -1, end: -0.5 },
-  { list: 'e1', id: 1, subject: '属性リファレンスの spec を書く', activeForm: '属性リファレンスの spec を書いています', owner: 'e1', spec: 'attrs', created: -1, start: 18, end: 78 },
-  { list: 'e1', id: 2, subject: '属性リファレンスを実装', owner: null, spec: 'attrs', created: -1, start: null, end: null, blockedBy: 1 },
+  { list: 'a0', id: 1, subject: tl('demo.task.implement.productlist.screen'), activeForm: tl('demo.task.implementing.productlist.screen'), owner: 'a5', spec: 'list', created: -1, start: -1, end: -0.5 },
+  { list: 'a0', id: 2, subject: tl('demo.task.write.login.screen.spec'), activeForm: tl('demo.task.writing.login.spec'), owner: 'a3', spec: 'login', created: -1, start: 5, end: 62 },
+  { list: 'a0', id: 3, subject: tl('demo.task.implement.home.layout'), activeForm: tl('demo.task.implementing.home.layout'), owner: 'a5', spec: 'home', created: -1, start: 6, end: 40.5 },
+  { list: 'a0', id: 4, subject: tl('demo.task.implement.home.viewmodel'), activeForm: tl('demo.task.implementing.home.viewmodel'), owner: 'a5', spec: 'home', created: -1, start: 44, end: 76, blockedBy: 3 },
+  { list: 'a0', id: 5, subject: tl('demo.task.run.cart.tests.simulator'), activeForm: tl('demo.task.running.cart.tests'), owner: 'a2', spec: 'cart', created: -1, start: 13, end: 60 },
+  { list: 'a0', id: 6, subject: tl('demo.task.add.strings.strings.json'), owner: null, spec: null, created: -1, start: null, end: null },
+  { list: 'a0', id: 7, subject: tl('demo.task.wire.up.home.cart'), activeForm: tl('demo.task.wiring.up.home.cart'), owner: 'a7', spec: 'home', created: 12, start: 40.5, end: null, blockedBy: 3 },
+  { list: 'a0', id: 8, subject: tl('demo.task.check.drift.from.spec.jui'), activeForm: tl('demo.task.running.jui.verify'), owner: 'a5', spec: 'home', created: 12.4, start: 70, end: 74 },
+  { list: 'b4', id: 1, subject: tl('demo.task.write.signup.screen.spec'), activeForm: tl('demo.task.writing.signup.spec'), owner: 'e6', spec: 'signup', created: -1, start: 5, end: 70 },
+  { list: 'b4', id: 2, subject: tl('demo.task.implement.productdetail.layout'), activeForm: tl('demo.task.implementing.productdetail.layout'), owner: 'f2', spec: 'detail', created: -1, start: -1, end: 30.2 },
+  { list: 'b4', id: 3, subject: tl('demo.task.implement.productdetail.viewmodel'), activeForm: tl('demo.task.implementing.productdetail.viewmodel'), owner: 'f2', spec: 'detail', created: -1, start: 36, end: 78, blockedBy: 2 },
+  { list: 'b4', id: 4, subject: tl('demo.task.implement.signup.screen'), owner: null, spec: 'signup', created: -1, start: null, end: null, blockedBy: 1 },
+  { list: 'b4', id: 5, subject: tl('demo.task.wire.up.productdetail.cart'), owner: null, spec: 'detail', created: 2, start: null, end: null, blockedBy: 3 },
+  { list: 'd8', id: 1, subject: tl('demo.task.write.coupons.screen.spec'), owner: null, spec: 'coupons', created: -1, start: null, end: null },
+  { list: '4f', id: 1, subject: tl('demo.task.fix.jui.build.s.ios'), activeForm: tl('demo.task.fixing.jui.build.s.ios'), owner: '4f', spec: null, created: -1, start: -1, end: 22 },
+  { list: '4f', id: 2, subject: tl('demo.task.scaffold.jui.viz.command'), activeForm: tl('demo.task.scaffolding.jui.viz'), owner: '4f', spec: null, created: -1, start: 44, end: null },
+  { list: '4f', id: 3, subject: tl('demo.task.write.tests.hook.server'), owner: null, spec: null, created: -1, start: null, end: null, blockedBy: 2 },
+  { list: '7c', id: 1, subject: tl('demo.task.add.per.case.progress.output'), activeForm: tl('demo.task.implementing.progress.output'), owner: '7c', spec: null, created: -1, start: -1, end: null },
+  { list: '7c', id: 2, subject: tl('demo.task.document.progress.readme'), owner: null, spec: null, created: -1, start: null, end: null, blockedBy: 1 },
+  { list: 'c9', id: 1, subject: tl('demo.task.generate.html.spec.anatomy.page'), activeForm: tl('demo.task.generating.html'), owner: 'c9', spec: 'anatomy', created: -1, start: 0, end: 52 },
+  { list: 'c9', id: 2, subject: tl('demo.task.add.new.attributes.component.list'), owner: null, spec: 'components', created: -1, start: null, end: null },
+  { list: 'c9', id: 3, subject: tl('demo.task.fix.wording.search.page'), owner: 'c9', spec: null, created: -1, start: -1, end: -0.5 },
+  { list: 'e1', id: 1, subject: tl('demo.task.write.attribute.reference.spec'), activeForm: tl('demo.task.writing.attribute.reference.spec'), owner: 'e1', spec: 'attrs', created: -1, start: 18, end: 78 },
+  { list: 'e1', id: 2, subject: tl('demo.task.implement.attribute.reference'), owner: null, spec: 'attrs', created: -1, start: null, end: null, blockedBy: 1 },
 ];
 /* The turns (requester, 10-18): one card per prompt a session received, done at Stop; 4f waits for its pip install
    (p6) while its second turn works. */
 TASKS.push(
-  { list: 'a0', id: 'turn-1', source: 'turn', turn: 1, subject: 'ホームからカートまでの画面を仕上げて', owner: 'a0', spec: null, created: -1, start: -1, end: null },
-  { list: 'b4', id: 'turn-1', source: 'turn', turn: 1, subject: '会員登録と商品詳細を進めて', owner: 'b4', spec: null, created: -1, start: -1, end: null },
-  { list: '4f', id: 'turn-1', source: 'turn', turn: 1, subject: 'jui build の iOS 出力を直して', owner: '4f', spec: null, created: -1, start: -1, end: 24 },
-  { list: '4f', id: 'turn-2', source: 'turn', turn: 2, subject: 'jui viz の雛形を作って', owner: '4f', spec: null, created: 40, start: 40, end: null, waitFrom: 42, waitTo: 44 },
-  { list: 'c9', id: 'turn-1', source: 'turn', turn: 1, subject: 'spec の構造ページを生成して', owner: 'c9', spec: null, created: -1, start: -1, end: 60 },
+  { list: 'a0', id: 'turn-1', source: 'turn', turn: 1, subject: tl('demo.task.finish.screens.from.home.cart'), owner: 'a0', spec: null, created: -1, start: -1, end: null },
+  { list: 'b4', id: 'turn-1', source: 'turn', turn: 1, subject: tl('demo.task.keep.going.sign.up.product'), owner: 'b4', spec: null, created: -1, start: -1, end: null },
+  { list: '4f', id: 'turn-1', source: 'turn', turn: 1, subject: tl('demo.task.fix.jui.build.s.ios.2'), owner: '4f', spec: null, created: -1, start: -1, end: 24 },
+  { list: '4f', id: 'turn-2', source: 'turn', turn: 2, subject: tl('demo.task.scaffold.jui.viz'), owner: '4f', spec: null, created: 40, start: 40, end: null, waitFrom: 42, waitTo: 44 },
+  { list: 'c9', id: 'turn-1', source: 'turn', turn: 1, subject: tl('demo.task.generate.spec.anatomy.page'), owner: 'c9', spec: null, created: -1, start: -1, end: 60 },
 );
 const TASK_BY_KEY = Object.fromEntries(TASKS.map((x) => [`${x.list}#${x.id}`, x]));
 /* Questions (AskUserQuestion) come from live sessions only: the demo script asks none. */
 const QUESTIONS = [];
+/* The demo's own event kinds, by code (60-log.js reads the code back with demoKindCode). */
+const DEMO_KIND = { spec: tl('demo.event.spec') };
 const EVENTS = [
   [0.2, 'a5', 'Read', 'docs/screens/json/home.spec.json'],
   [0.4, 'f2', 'Edit', 'docs/screens/layouts/product-detail.json'],
   [0.6, 'c9', 'Read', 'docs/screens/json/spec-anatomy.spec.json'],
   [1.4, '7c', 'Edit', 'src/reporter/progress.ts'],
   [1.0, '4f', 'Bash', 'jui build --ios-only'],
-  [2.0, 'b4', 'TaskCreated', '#5 ProductDetail → Cart の遷移をつなぐ'],
+  [2.0, 'b4', 'TaskCreated', `#5 ${tl('demo.task.wire.up.productdetail.cart')}`],
   [5.0, 'a3', 'Write', 'docs/screens/json/login.spec.json'],
   [6.0, 'e6', 'PermissionRequest', 'Write docs/screens/json/signup.spec.json', 'p1'],
   [6.0, 'a5', 'Edit', 'docs/screens/layouts/home.json'],
   [8.0, 'e6', 'Write', 'docs/screens/json/signup.spec.json'],
-  [9.0, 'a3', 'spec 更新', 'login.spec.json › structure'],
+  [9.0, 'a3', DEMO_KIND.spec, 'login.spec.json › structure'],
   [10.0, 'a2', 'MCP', 'jui-tools test_validate cart.test.json'],
-  [12.0, 'a0', 'TaskCreated', '#7 Home → Cart の遷移をつなぐ'],
-  [12.2, 'e6', 'spec 更新', 'signup.spec.json › structure'],
-  [12.4, 'a0', 'TaskCreated', '#8 jui verify で spec とのズレを確認'],
+  [12.0, 'a0', 'TaskCreated', `#7 ${tl('demo.task.wire.up.home.cart')}`],
+  [12.2, 'e6', DEMO_KIND.spec, 'signup.spec.json › structure'],
+  [12.4, 'a0', 'TaskCreated', `#8 ${tl('demo.task.check.drift.from.spec.jui')}`],
   [14.0, 'a2', 'PermissionRequest', "Bash xcodebuild test -destination 'iPhone 16'", 'p2'],
   [16.0, 'c9', 'PermissionRequest', 'Bash jsonui-doc generate html', 'p3'],
   [18.0, 'a2', 'Bash', "xcodebuild test -destination 'iPhone 16'"],
   [20.0, 'e1', 'Write', 'docs/screens/json/attribute-reference.spec.json'],
-  [22.0, '4f', 'Stop', 'ビルド完了'],
-  [23.0, 'a2', 'case ✓', '初期表示（商品 3 点）'],
-  [25.0, 'a3', 'spec 更新', 'login.spec.json › stateManagement'],
+  [22.0, '4f', 'Stop', tl('demo.robot.build.complete')],
+  [23.0, 'a2', 'case ✓', tl('demo.case.first.view.3.items')],
+  [25.0, 'a3', DEMO_KIND.spec, 'login.spec.json › stateManagement'],
   [26.0, 'f2', 'PermissionRequest', 'Bash jui build', 'p4'],
-  [28.0, 'a2', 'case ✓', '数量を 0 にすると行が消える'],
+  [28.0, 'a2', 'case ✓', tl('demo.case.quantity.0.removes.row')],
   [30.0, 'f2', 'Bash', 'jui build'],
-  [30.2, 'f2', 'TaskCompleted', '#2 ProductDetail のレイアウトを実装'],
-  [30.4, 'e6', 'spec 更新', 'signup.spec.json › stateManagement'],
+  [30.2, 'f2', 'TaskCompleted', `#2 ${tl('demo.task.implement.productdetail.layout')}`],
+  [30.4, 'e6', DEMO_KIND.spec, 'signup.spec.json › stateManagement'],
   [30.6, '7c', 'PermissionRequest', 'Bash npm test -- --progress', 'p7'],
-  [26.2, 'e1', 'spec 更新', 'attribute-reference.spec.json › structure'],
-  [32.0, 'a2', 'case ✓', '空のカートで購入ボタンが無効'],
-  [33.0, 'a3', 'spec 更新', 'login.spec.json › dataFlow'],
+  [26.2, 'e1', DEMO_KIND.spec, 'attribute-reference.spec.json › structure'],
+  [32.0, 'a2', 'case ✓', tl('demo.case.empty.cart.disables.buy')],
+  [33.0, 'a3', DEMO_KIND.spec, 'login.spec.json › dataFlow'],
   [36.0, 'f2', 'Edit', 'ProductDetailViewModel.swift'],
-  [37.0, 'a2', 'case ✓', 'クーポン WELCOME10 を適用'],
-  [38.0, 'c9', 'PostToolUse', 'jsonui-doc generate html（許可済み）'],
+  [37.0, 'a2', 'case ✓', tl('demo.case.apply.coupon.welcome10')],
+  [38.0, 'c9', 'PostToolUse', tl('demo.event.jsonui.doc.generate.html.allowed')],
   [40.0, 'a5', 'Bash', 'jui build'],
-  [40.2, 'e6', 'spec 更新', 'signup.spec.json › dataFlow'],
-  [40.4, 'e1', 'spec 更新', 'attribute-reference.spec.json › stateManagement'],
+  [40.2, 'e6', DEMO_KIND.spec, 'signup.spec.json › dataFlow'],
+  [40.4, 'e1', DEMO_KIND.spec, 'attribute-reference.spec.json › stateManagement'],
   [42.0, '4f', 'PermissionRequest', 'Bash pip install aiohttp watchdog', 'p6'],
-  [40.5, 'a5', 'TaskCompleted', '#3 Home のレイアウトを実装'],
-  [41.0, 'a2', 'case ✗', '期限切れクーポンでエラー表示（1 回目）'],
-  [41.2, 'a2', 'retry', '期限切れクーポンでエラー表示を再実行'],
-  [43.0, 'a3', 'spec 更新', 'login.spec.json › userActions'],
-  [45.0, 'a2', 'case ✓', '期限切れクーポンでエラー表示（2 回目で通過）'],
+  [40.5, 'a5', 'TaskCompleted', `#3 ${tl('demo.task.implement.home.layout')}`],
+  [41.0, 'a2', 'case ✗', tl('demo.event.expired.coupon.shows.error.1st')],
+  [41.2, 'a2', 'retry', tl('demo.event.retrying.expired.coupon.shows.error')],
+  [43.0, 'a3', DEMO_KIND.spec, 'login.spec.json › userActions'],
+  [45.0, 'a2', 'case ✓', tl('demo.event.expired.coupon.shows.error.passed')],
   [45.2, 'a5', 'PermissionRequest', 'Edit HomeViewModel.swift', 'p5'],
   [48.0, 'a5', 'Edit', 'HomeViewModel.swift'],
   [50.0, '4f', 'Edit', 'jui_cli/commands/viz_cmd.py'],
-  [50.2, 'a2', 'case ✓', '在庫切れ商品の警告'],
-  [50.4, 'e6', 'spec 更新', 'signup.spec.json › userActions'],
-  [48.2, 'e1', 'spec 更新', 'attribute-reference.spec.json › dataFlow'],
-  [58.4, 'e1', 'spec 更新', 'attribute-reference.spec.json › userActions'],
+  [50.2, 'a2', 'case ✓', tl('demo.case.out.stock.warning')],
+  [50.4, 'e6', DEMO_KIND.spec, 'signup.spec.json › userActions'],
+  [48.2, 'e1', DEMO_KIND.spec, 'attribute-reference.spec.json › dataFlow'],
+  [58.4, 'e1', DEMO_KIND.spec, 'attribute-reference.spec.json › userActions'],
   [60.6, '7c', 'Bash', 'npm test'],
-  [64.4, 'e1', 'spec 更新', 'attribute-reference.spec.json › transitions'],
-  [70.6, 'e1', 'spec 更新', 'attribute-reference.spec.json › branchContracts'],
-  [78.0, 'e1', 'Stop', '属性リファレンスの spec を書き終えた'],
-  [78.4, 'e1', 'TaskCompleted', '#1 属性リファレンスの spec を書く'],
-  [52.0, 'c9', 'Stop', 'HTML を生成した'],
-  [55.0, 'a3', 'spec 更新', 'login.spec.json › branchContracts'],
-  [55.2, 'a2', 'case ✓', '未ログインで購入 → ログイン画面へ'],
-  [58.2, 'e6', 'spec 更新', 'signup.spec.json › transitions'],
-  [60.0, 'a2', 'case ✓', '購入確定で注文完了へ'],
-  [60.2, 'a2', 'TaskCompleted', '#5 Cart のテスト 8/8 通過（1 件は再実行）'],
-  [62.0, 'a3', 'SubagentStop', 'Login の spec を書き終えた'],
-  [62.2, 'a3', 'TaskCompleted', '#2 Login 画面の spec を書く'],
-  [64.2, 'e6', 'spec 更新', 'signup.spec.json › branchContracts'],
+  [64.4, 'e1', DEMO_KIND.spec, 'attribute-reference.spec.json › transitions'],
+  [70.6, 'e1', DEMO_KIND.spec, 'attribute-reference.spec.json › branchContracts'],
+  [78.0, 'e1', 'Stop', tl('demo.robot.finished.attribute.reference.spec')],
+  [78.4, 'e1', 'TaskCompleted', `#1 ${tl('demo.task.write.attribute.reference.spec')}`],
+  [52.0, 'c9', 'Stop', tl('demo.robot.generated.html')],
+  [55.0, 'a3', DEMO_KIND.spec, 'login.spec.json › branchContracts'],
+  [55.2, 'a2', 'case ✓', tl('demo.case.buy.while.signed.out.log')],
+  [58.2, 'e6', DEMO_KIND.spec, 'signup.spec.json › transitions'],
+  [60.0, 'a2', 'case ✓', tl('demo.case.confirming.goes.order.complete')],
+  [60.2, 'a2', 'TaskCompleted', `#5 ${tl('demo.event.cart.tests.8.8.passed')}`],
+  [62.0, 'a3', 'SubagentStop', tl('demo.robot.finished.login.spec')],
+  [62.2, 'a3', 'TaskCompleted', `#2 ${tl('demo.task.write.login.screen.spec')}`],
+  [64.2, 'e6', DEMO_KIND.spec, 'signup.spec.json › branchContracts'],
   [70.0, 'a5', 'MCP', 'jui-tools jui_verify home.spec.json'],
-  [70.2, 'e6', 'SubagentStop', 'Signup の spec を書き終えた'],
-  [70.4, 'e6', 'TaskCompleted', '#1 Signup 画面の spec を書く'],
-  [72.0, 'a5', 'PostToolUse', 'jui_verify: ズレ 0'],
-  [74.0, 'a5', 'TaskCompleted', '#8 jui verify で spec とのズレを確認'],
+  [70.2, 'e6', 'SubagentStop', tl('demo.robot.finished.signup.spec')],
+  [70.4, 'e6', 'TaskCompleted', `#1 ${tl('demo.task.write.signup.screen.spec')}`],
+  [72.0, 'a5', 'PostToolUse', tl('demo.event.jui.verify.no.drift')],
+  [74.0, 'a5', 'TaskCompleted', `#8 ${tl('demo.task.check.drift.from.spec.jui')}`],
   [74.2, 'f2', 'MCP', 'jui-tools jui_verify product-detail.spec.json'],
-  [76.0, 'a5', 'TaskCompleted', '#4 Home の ViewModel を実装'],
-  [76.2, 'a5', 'SubagentStop', 'Home の実装が終わった'],
-  [76.4, 'f2', 'PostToolUse', 'jui_verify: ズレ 0'],
-  [78.0, 'f2', 'TaskCompleted', '#3 ProductDetail の ViewModel を実装'],
-  [78.2, 'f2', 'SubagentStop', 'ProductDetail の実装が終わった'],
+  [76.0, 'a5', 'TaskCompleted', `#4 ${tl('demo.task.implement.home.viewmodel')}`],
+  [76.2, 'a5', 'SubagentStop', tl('demo.robot.finished.implementing.home')],
+  [76.4, 'f2', 'PostToolUse', tl('demo.event.jui.verify.no.drift')],
+  [78.0, 'f2', 'TaskCompleted', `#3 ${tl('demo.task.implement.productdetail.viewmodel')}`],
+  [78.2, 'f2', 'SubagentStop', tl('demo.robot.finished.implementing.productdetail')],
 ];
 
 EVENTS.sort((a, b) => a[0] - b[0]);
@@ -498,11 +500,11 @@ function computeTests(t) {
   const runningIdx = rows.findIndex((r) => r.status === 'running');
   const retrying = runningIdx >= 0 && rows[runningIdx].attempt === 2;
   let statusText;
-  if (t < 10) statusText = '待機中（前回は 5/8 通過）';
-  else if (t < 18) statusText = 'test_validate でテスト JSON を検証中';
-  else if (t < 60) statusText = `実行中 ${passed}/8 通過 · ケース ${runningIdx + 1} を実行中`;
-  else statusText = '完了 8/8 通過（1 件は再実行で通過）';
-  return { rows, passed, runningIdx, retrying, active: t >= 18 && t < 60, statusText, file: 'tests/screens/cart.test.json', device: 'iPhone 16 シミュレータ' };
+  if (t < 10) statusText = tl('demo.status.idle.last.run.5.8');
+  else if (t < 18) statusText = tl('demo.status.validating.test.json.test.validate');
+  else if (t < 60) statusText = tl('demo.status.tests.running', { passed, n: runningIdx + 1 });
+  else statusText = tl('demo.status.done.8.8.passed.1');
+  return { rows, passed, runningIdx, retrying, active: t >= 18 && t < 60, statusText, file: 'tests/screens/cart.test.json', device: tl('demo.status.iphone.16.simulator') };
 }
 
 const BLANK = [0, 0, 0, 0, 0, 0, 0];
@@ -518,12 +520,12 @@ function stillState(s) {
   const T = s.totals;
   const base = { written: FULL, implN: BLANK, implPhase: false, writingIdx: -1, implIdx: -1, testIdx: -1, by: null, relatedNow: -1 };
   switch (phase) {
-    case 'todo': return { ...base, written: BLANK, status: { kind: 'idle', text: '未着手' }, note: 'spec ファイルはまだない' };
-    case 'writing': return { ...base, written: spread(share), status: { kind: 'paused', text: `記述 ${pct(share)}%・中断中` }, note: '書きかけのまま止まっている（担当なし）' };
-    case 'written': return { ...base, status: { kind: 'written', text: '記述完了・実装待ち' }, note: '実装はまだ始まっていない' };
-    case 'impl': return { ...base, implN: spreadImpl(T, share), implPhase: true, status: { kind: 'paused', text: `実装 ${pct(share)}%・停止中` }, note: '実装の途中で止まっている（担当なし）' };
-    case 'impl-done': return { ...base, implN: T.map((n, k) => (k === 6 ? 0 : n)), implPhase: true, status: { kind: 'impl-done', text: '実装完了・テスト待ち' }, note: 'jui verify: ズレ 0 · テストはまだ' };
-    default: return { ...base, implN: [...T], implPhase: true, status: { kind: 'done', text: '実装・テスト完了' }, note: `jui verify: ズレ 0 · branchContracts ${T[6]}/${T[6]}` };
+    case 'todo': return { ...base, written: BLANK, status: { kind: 'idle', text: tl('demo.status.not.started') }, note: tl('demo.status.no.spec.file.yet') };
+    case 'writing': return { ...base, written: spread(share), status: { kind: 'paused', text: tl('demo.status.written.paused', { pct: pct(share) }) }, note: tl('demo.status.stopped.half.written.no.one') };
+    case 'written': return { ...base, status: { kind: 'written', text: tl('demo.status.written.waiting.implementation') }, note: tl('demo.status.implementation.hasn.t.started') };
+    case 'impl': return { ...base, implN: spreadImpl(T, share), implPhase: true, status: { kind: 'paused', text: tl('demo.status.impl.stopped', { pct: pct(share) }) }, note: tl('demo.status.stopped.mid.implementation.no.one') };
+    case 'impl-done': return { ...base, implN: T.map((n, k) => (k === 6 ? 0 : n)), implPhase: true, status: { kind: 'impl-done', text: tl('demo.status.implemented.waiting.tests') }, note: tl('demo.status.jui.verify.no.drift.no') };
+    default: return { ...base, implN: [...T], implPhase: true, status: { kind: 'done', text: tl('demo.status.implemented.tested') }, note: tl('demo.status.verified.branches', { n: T[6] }) };
   }
 }
 /* A define robot writing a spec section by section, watched through file changes. */
@@ -533,8 +535,8 @@ function writingSpec(t, W, who, chars) {
   const writing = t >= t0 && t < t1;
   return {
     written: W.map(([a, b]) => frac(t, a, b)), implN: BLANK, implPhase: false, writingIdx: writing ? idx : -1, implIdx: -1, testIdx: -1, by: writing ? who : null, relatedNow: -1,
-    status: t < t0 ? { kind: 'idle', text: '未着手' } : writing ? { kind: 'write', text: `書き込み中 ${pct(frac(t, t0, t1))}%` } : { kind: 'written', text: '記述完了・実装待ち' },
-    note: writing ? `${Math.round(chars * frac(t, t0, t1)).toLocaleString('ja-JP')} 文字 · ファイル監視で ${SECTIONS[idx]} の書き込みを検知` : t < t0 ? 'spec ファイルはまだない' : `${chars.toLocaleString('ja-JP')} 文字 · 全セクション記述済み`,
+    status: t < t0 ? { kind: 'idle', text: tl('demo.status.not.started') } : writing ? { kind: 'write', text: tl('demo.status.writing', { pct: pct(frac(t, t0, t1)) }) } : { kind: 'written', text: tl('demo.status.written.waiting.implementation') },
+    note: writing ? tl('demo.status.note.writing', { chars: fmtNum(Math.round(chars * frac(t, t0, t1))), section: SECTIONS[idx] }) : t < t0 ? tl('demo.status.no.spec.file.yet') : tl('demo.status.note.written', { chars: fmtNum(chars) }),
   };
 }
 const LOGIN_W = [[5, 9], [9, 25], [25, 33], [33, 43], [43, 49], [49, 55], [55, 62]];
@@ -546,7 +548,7 @@ function computeSpecs(t, tests) {
 
   // a3 writes Login, then runs doc_validate_spec on it; e6 (session b4) writes Signup.
   const login = writingSpec(t, LOGIN_W, 'a3', 5200);
-  if (t >= 70 && t < 76) Object.assign(login, { by: 'a3', status: { kind: 'verify', text: 'doc_validate_spec 実行中' } });
+  if (t >= 70 && t < 76) Object.assign(login, { by: 'a3', status: { kind: 'verify', text: tl('demo.status.running.doc.validate.spec') } });
   put('login', login);
   put('signup', writingSpec(t, SIGNUP_W, 'e6', 5600));
   put('attrs', writingSpec(t, ATTRS_W, 'e1', 4800));
@@ -558,9 +560,9 @@ function computeSpecs(t, tests) {
   if (t >= 6 && t < 48) hIdx = 1; else if (t >= 48 && t < 58) hIdx = 2; else if (t >= 58 && t < 66) hIdx = 3; else if (t >= 66 && t < 70) hIdx = 4;
   put('home', {
     written: FULL, implN: hd, implPhase: true, writingIdx: -1, implIdx: hIdx, testIdx: -1,
-    status: t < 6 ? { kind: 'impl', text: 'spec を読み込み中' } : t < 70 ? { kind: 'impl', text: `実装中 ${pct(sumImpl(hd) / sumImpl(H))}%` } : t < 76 ? { kind: 'verify', text: 'jui verify 実行中' } : { kind: 'impl-done', text: '実装完了・テスト待ち' },
+    status: t < 6 ? { kind: 'impl', text: tl('demo.status.reading.spec') } : t < 70 ? { kind: 'impl', text: tl('demo.status.implementing', { pct: pct(sumImpl(hd) / sumImpl(H)) }) } : t < 76 ? { kind: 'verify', text: tl('demo.status.running.jui.verify') } : { kind: 'impl-done', text: tl('demo.status.implemented.waiting.tests') },
     by: t < 76 ? 'a5' : null, relatedNow: hIdx === 1 ? 0 : hIdx >= 2 ? 1 : -1,
-    note: `jui verify: ${t < 70 ? '未実行（構造は Layout の部品 id で照合中）' : t < 72 ? '確認中…' : 'ズレ 0'}`,
+    note: `jui verify: ${t < 70 ? tl('demo.status.verify.matching') : t < 72 ? tl('demo.status.verify.checking') : tl('demo.status.verify.nodrift')}`,
   });
 
   // f2 (session b4) implements ProductDetail the same way.
@@ -568,12 +570,12 @@ function computeSpecs(t, tests) {
   const dd = [0, Math.min(D[1], 4 + Math.floor((D[1] - 4) * frac(t, 0, 30))), Math.floor(D[2] * frac(t, 36, 56)), Math.floor(D[3] * frac(t, 36, 70)), Math.floor(D[4] * frac(t, 48, 72)), Math.floor(D[5] * frac(t, 60, 74)), 0];
   let dIdx = -1;
   if (t < 30) dIdx = 1; else if (t >= 36 && t < 50) dIdx = 2; else if (t >= 50 && t < 62) dIdx = 3; else if (t >= 62 && t < 70) dIdx = 4; else if (t >= 70 && t < 74) dIdx = 5;
-  const dPct = `実装中 ${pct(sumImpl(dd) / sumImpl(D))}%`;
+  const dPct = tl('demo.status.implementing', { pct: pct(sumImpl(dd) / sumImpl(D)) });
   put('detail', {
     written: FULL, implN: dd, implPhase: true, writingIdx: -1, implIdx: dIdx, testIdx: -1,
-    status: t < 30 ? { kind: 'impl', text: dPct } : t < 36 ? { kind: 'impl', text: 'jui build 実行中' } : t < 74 ? { kind: 'impl', text: dPct } : t < 78 ? { kind: 'verify', text: 'jui verify 実行中' } : { kind: 'impl-done', text: '実装完了・テスト待ち' },
+    status: t < 30 ? { kind: 'impl', text: dPct } : t < 36 ? { kind: 'impl', text: tl('demo.status.running.jui.build') } : t < 74 ? { kind: 'impl', text: dPct } : t < 78 ? { kind: 'verify', text: tl('demo.status.running.jui.verify') } : { kind: 'impl-done', text: tl('demo.status.implemented.waiting.tests') },
     by: t < 78 ? 'f2' : null, relatedNow: dIdx === 1 || (t >= 30 && t < 36) ? 0 : dIdx >= 2 ? 1 : -1,
-    note: `jui verify: ${t < 74 ? '未実行' : t < 76 ? '確認中…' : 'ズレ 0'}`,
+    note: `jui verify: ${t < 74 ? tl('demo.status.verify.notrun') : t < 76 ? tl('demo.status.verify.checking') : tl('demo.status.verify.nodrift')}`,
   });
 
   // a2 runs the Cart tests on the simulator; each passing case covers one branchContract.
@@ -581,9 +583,9 @@ function computeSpecs(t, tests) {
   const cov = t < 18 ? 5 : tests.passed;
   put('cart', {
     written: FULL, implN: [...C.slice(0, 6), cov], implPhase: true, writingIdx: -1, implIdx: -1, testIdx: tests.active ? 6 : -1,
-    status: t < 10 ? { kind: 'impl-done', text: '実装完了・テスト待ち' } : t < 18 ? { kind: 'test', text: 'テスト JSON を検証中' } : t < 60 ? { kind: 'test', text: `テスト中 ${tests.passed}/8` } : { kind: 'done', text: '実装・テスト完了' },
+    status: t < 10 ? { kind: 'impl-done', text: tl('demo.status.implemented.waiting.tests') } : t < 18 ? { kind: 'test', text: tl('demo.status.validating.test.json') } : t < 60 ? { kind: 'test', text: tl('demo.status.testing', { passed: tests.passed }) } : { kind: 'done', text: tl('demo.status.implemented.tested') },
     by: t >= 10 && t < 60 ? 'a2' : null, relatedNow: t >= 10 && t < 60 ? 2 : -1,
-    note: `branchContracts: ${cov}/8 をテストで確認${t < 18 ? '（前回の実行）' : ''}`,
+    note: tl('demo.status.cart.note', { cov, last: t < 18 ? tl('demo.status.cart.note.last') : '' }),
   });
   for (const s of out) s.bucket = s.by ? 'live' : s.status.kind === 'idle' ? 'todo' : s.status.kind === 'done' ? 'done' : 'partial';
   return out;
@@ -616,7 +618,7 @@ function permRequestPayload(p) {
   return o;
 }
 function permResponse(p, behavior, reason) {
-  const decision = behavior === 'deny' ? { behavior: 'deny', message: reason || 'エージェントビューで拒否された' } : { behavior: 'allow' };
+  const decision = behavior === 'deny' ? { behavior: 'deny', message: reason || tl('demo.perm.denied.agent.view') } : { behavior: 'allow' };
   if (behavior === 'always') decision.updatedPermissions = [{ type: 'addRules', rules: [ruleParts(p.rule)], behavior: 'allow', destination: 'localSettings' }];
   return { hookSpecificOutput: { hookEventName: 'PermissionRequest', decision } };
 }
@@ -707,26 +709,26 @@ const SOURCE = {
     permDecisions.set(`${loop}:${id}`, { behavior, at: simT, reason });
     for (const k of permDecisions.keys()) if (Number(k.split(':')[0]) < loop) permDecisions.delete(k);
     if (behavior === 'always') alwaysRules.set(p.rule, simT);
-    const item = { abs: simT, who: p.who, kind: behavior === 'deny' ? '拒否した' : '許可した', what: `${p.tool} ${permSummary(p)}${behavior === 'always' ? `（今後も許可: ${p.rule}）` : ''}${reason ? `（理由: ${reason}）` : ''}`, seq: ++logSeq, perm: id, decision: behavior, reason };
+    const item = { abs: simT, who: p.who, kind: behavior === 'deny' ? tl('demo.perm.denied') : tl('demo.perm.allowed'), what: `${p.tool} ${permSummary(p)}${behavior === 'always' ? tl('demo.perm.always.note', { rule: p.rule }) : ''}${reason ? tl('demo.perm.reason.note', { reason }) : ''}`, seq: ++logSeq, perm: id, decision: behavior, reason };
     tickerItems.unshift(item); logItems.unshift(item);
-    showToast(`${p.who} の ${p.tool} を${behavior === 'deny' ? '拒否' : behavior === 'always' ? '許可し、ルールを追加' : '許可'}した（デモ。実際は Claude Code へ答えを返す）`);
+    showToast(tl('demo.perm.toast', { who: p.who, tool: p.tool, how: behavior === 'deny' ? tl('demo.perm.toast.denied') : behavior === 'always' ? tl('demo.perm.toast.always') : tl('demo.perm.toast.allowed') }));
   },
   history() { return Promise.resolve({ ok: false, error: 'demo' }); },   // the demo has no transcripts
   historyImage() { return Promise.resolve({ ok: false, status: 0, error: 'demo' }); },
   historyFile() { return Promise.resolve({ ok: false, status: 0, error: 'demo' }); },
   attachImage() { return Promise.resolve({ ok: false, status: 0, error: 'demo' }); },
-  revealFile() { return Promise.resolve({ ok: false, status: 0, error: 'デモでは開かない' }); },
+  revealFile() { return Promise.resolve({ ok: false, status: 0, error: tl('demo.perm.not.opened.demo') }); },
   attachFile() { return Promise.resolve({ ok: false, status: 0, error: 'demo' }); },
   attachRemove() {},
   denial() { return Promise.resolve({ ok: false, status: 0, error: 'demo' }); },
   notifyPresence() { return Promise.resolve(); },
-  callCommand() { return Promise.resolve({ ok: false, why: 'デモでは使えません（プロジェクトのフォルダがありません）' }); },
+  callCommand() { return Promise.resolve({ ok: false, why: tl('demo.perm.not.available.demo.there.no') }); },
   setWeather() { return Promise.resolve({ ok: false, error: 'demo' }); },   // the demo asks nobody about the weather
   // the server room (ticket 2026-10-20-jui-viz-server-room): shop-app/'s door reads a made-up, generic layout (no real
   // service's values, requester 10-20), after a moment so the keypad's * are seen
-  infraDocs(project, seq) { return new Promise((r) => setTimeout(() => r(project === 'shop' ? { ...demoInfra(), seq } : { ok: false, seq, reason: 'no_infra', message: 'デモのこの部屋には構成が無い', short: 'docs/infra がありません' }), 1200)); },
+  infraDocs(project, seq) { return new Promise((r) => setTimeout(() => r(project === 'shop' ? { ...demoInfra(), seq } : { ok: false, seq, reason: 'no_infra', message: tl('demo.perm.this.demo.room.has.no'), short: tl('demo.perm.no.docs.infra') }), 1200)); },
   infraIcon() { return Promise.resolve(null); },
-  infraCost() { return Promise.resolve({ ok: false, reason: 'demo', message: 'デモではコストを計算しない（jui viz の部屋で開いてください）' }); },
+  infraCost() { return Promise.resolve({ ok: false, reason: 'demo', message: tl('demo.cost.none') }); },
 };
 /* The demo's server room: a made-up web shop on one cloud, a CDN in front, a card payment service outside, two
    environments; the IAM role and the alarm are folded until asked for. */
@@ -739,29 +741,29 @@ function demoInfra() {
     ok: true, version: 0, dir: 'docs/infra', files: ['shop.json', 'shop-staging.json'], readMs: 3, icons: {}, problems: [],
     environments: [{ id: 'production', label: 'production', kind: 'production' }, { id: 'staging', label: 'staging', kind: 'staging' }],
     groups: [
-      g('shop', 'ショップ（全体）', 'logical'),
-      g('cloud', 'クラウドのアカウント', 'account', { provider: 'aws', parent: 'shop' }),
+      g('shop', tl('demo.infra.shop.all'), 'logical'),
+      g('cloud', tl('demo.infra.cloud.account'), 'account', { provider: 'aws', parent: 'shop' }),
       g('vpc', 'VPC', 'network', { provider: 'aws', parent: 'cloud' }),
-      g('pub', '公開サブネット', 'subnet', { provider: 'aws', parent: 'vpc', visibility: 'public' }),
-      g('app', 'アプリのサブネット', 'subnet', { provider: 'aws', parent: 'vpc', visibility: 'private' }),
-      g('data', 'データのサブネット', 'subnet', { provider: 'aws', parent: 'vpc', visibility: 'private' }),
-      g('edge', 'CDN のアカウント', 'account', { provider: 'cloudflare', parent: 'shop' }),
+      g('pub', tl('demo.infra.public.subnet'), 'subnet', { provider: 'aws', parent: 'vpc', visibility: 'public' }),
+      g('app', tl('demo.infra.app.subnet'), 'subnet', { provider: 'aws', parent: 'vpc', visibility: 'private' }),
+      g('data', tl('demo.infra.data.subnet'), 'subnet', { provider: 'aws', parent: 'vpc', visibility: 'private' }),
+      g('edge', tl('demo.infra.cdn.account'), 'account', { provider: 'cloudflare', parent: 'shop' }),
     ],
     nodes: [
-      n('browser', 'ブラウザ', 'client', undefined, '', { group: undefined }),
+      n('browser', tl('demo.infra.browser'), 'client', undefined, '', { group: undefined }),
       n('cdn', 'CDN', 'edge.cdn', 'edge', 'cloudflare'),
       n('dns', 'DNS', 'edge.dns', 'edge', 'cloudflare'),
-      n('lb', 'ロードバランサー', 'load_balancer', 'pub', 'aws'),
-      n('web', 'Web アプリ', 'compute.container', 'app', 'aws', { count: 3, service: 'ecs.fargate', spec: [{ key: 'cpu', value: '512' }, { key: 'memory', value: '1024' }] }),
-      n('worker', '注文の処理', 'compute.container', 'app', 'aws'),
-      n('queue', '注文のキュー', 'queue', 'app', 'aws', { service: 'sqs' }),
-      n('db', '注文の DB', 'database.relational', 'data', 'aws', { service: 'rds.postgres', engine: 'postgres 16', spec: [{ key: 'instance_class', value: 'db.r6g.large' }, { key: 'storage_gb', value: '200' }, { key: 'multi_az', value: 'true' }] }),
-      n('replica', '読み取りの写し', 'database.relational', 'data', 'aws', { environments: prod }),
-      n('cache', 'セッションのキャッシュ', 'cache', 'data', 'aws', { service: 'elasticache', spec: [{ key: 'node_type', value: 'cache.t4g.small' }] }),
-      n('images', '商品画像', 'storage.object', 'cloud', 'aws'),
-      n('role', 'アプリの IAM ロール', 'security.iam', 'cloud', 'aws', { fold: true }),
-      n('alarm', '5xx のアラーム', 'monitoring.alarm', 'cloud', 'aws', { fold: true }),
-      n('pay', 'カード決済（外部）', 'external.saas', undefined, '', { external: true, group: undefined }),
+      n('lb', tl('demo.infra.load.balancer'), 'load_balancer', 'pub', 'aws'),
+      n('web', tl('demo.infra.web.app'), 'compute.container', 'app', 'aws', { count: 3, service: 'ecs.fargate', spec: [{ key: 'cpu', value: '512' }, { key: 'memory', value: '1024' }] }),
+      n('worker', tl('demo.infra.order.worker'), 'compute.container', 'app', 'aws'),
+      n('queue', tl('demo.infra.order.queue'), 'queue', 'app', 'aws', { service: 'sqs' }),
+      n('db', tl('demo.infra.order.db'), 'database.relational', 'data', 'aws', { service: 'rds.postgres', engine: 'postgres 16', spec: [{ key: 'instance_class', value: 'db.r6g.large' }, { key: 'storage_gb', value: '200' }, { key: 'multi_az', value: 'true' }] }),
+      n('replica', tl('demo.infra.read.replica'), 'database.relational', 'data', 'aws', { environments: prod }),
+      n('cache', tl('demo.infra.session.cache'), 'cache', 'data', 'aws', { service: 'elasticache', spec: [{ key: 'node_type', value: 'cache.t4g.small' }] }),
+      n('images', tl('demo.infra.product.images'), 'storage.object', 'cloud', 'aws'),
+      n('role', tl('demo.infra.app.iam.role'), 'security.iam', 'cloud', 'aws', { fold: true }),
+      n('alarm', tl('demo.infra.5xx.alarm'), 'monitoring.alarm', 'cloud', 'aws', { fold: true }),
+      n('pay', tl('demo.infra.card.payments.external'), 'external.saas', undefined, '', { external: true, group: undefined }),
     ],
     edges: [
       e('browser', 'dns', 'dns'), e('browser', 'cdn', 'https'), e('cdn', 'lb', 'https', true), e('cdn', 'images', 'https', true),
@@ -771,21 +773,21 @@ function demoInfra() {
     ],
     // what the shop does, step by step (59-sr-flows.js): a person's order with a branch, and the worker's schedule
     flows: [
-      { id: 'order', label: '注文する', start: 'browser', trigger: 'user', environments: both, steps: [
+      { id: 'order', label: tl('demo.flow.order'), start: 'browser', trigger: 'user', environments: both, steps: [
         { from: 'browser', to: 'cdn', action: 'request', label: 'POST /orders' }, { from: 'cdn', to: 'lb', action: 'request' },
         { from: 'lb', to: 'web', action: 'request' },
-        { branch: { label: 'セッションはキャッシュに有る？', default: 'hit', choices: [
-          { id: 'hit', label: '有る', steps: [{ from: 'web', to: 'cache', action: 'read' }, { from: 'cache', to: 'web', action: 'response' }] },
-          { id: 'miss', label: '無い', steps: [{ from: 'web', to: 'db', action: 'read' }, { from: 'db', to: 'web', action: 'response' }] }] } },
-        { from: 'web', to: 'db', action: 'write', label: '注文を保存' },
+        { branch: { label: tl('demo.flow.order.cached'), default: 'hit', choices: [
+          { id: 'hit', label: tl('demo.flow.order.hit'), steps: [{ from: 'web', to: 'cache', action: 'read' }, { from: 'cache', to: 'web', action: 'response' }] },
+          { id: 'miss', label: tl('demo.flow.order.miss'), steps: [{ from: 'web', to: 'db', action: 'read' }, { from: 'db', to: 'web', action: 'response' }] }] } },
+        { from: 'web', to: 'db', action: 'write', label: tl('demo.flow.order.save') },
         { from: 'db', to: 'web', action: 'response' },
-        { from: 'web', to: 'queue', action: 'enqueue', async: true, label: '支払いを頼む' },
+        { from: 'web', to: 'queue', action: 'enqueue', async: true, label: tl('demo.flow.order.pay') },
         { from: 'web', to: 'lb', action: 'response' }, { from: 'lb', to: 'cdn', action: 'response' },
-        { from: 'cdn', to: 'browser', action: 'response', label: '注文を受け付けた' }] },
-      { id: 'pay', label: '支払いを処理する', start: 'worker', trigger: 'schedule', schedule: 'rate(1 minute)', environments: both, steps: [
+        { from: 'cdn', to: 'browser', action: 'response', label: tl('demo.flow.order.taken') }] },
+      { id: 'pay', label: tl('demo.flow.pay'), start: 'worker', trigger: 'schedule', schedule: 'rate(1 minute)', environments: both, steps: [
         { from: 'worker', to: 'queue', action: 'dequeue' }, { from: 'queue', to: 'worker', action: 'response' },
-        { from: 'worker', to: 'pay', action: 'request', label: 'カードで払う' }, { from: 'pay', to: 'worker', action: 'response' },
-        { from: 'worker', to: 'db', action: 'write', label: '支払い済みにする' }] },
+        { from: 'worker', to: 'pay', action: 'request', label: tl('demo.flow.pay.card') }, { from: 'pay', to: 'worker', action: 'response' },
+        { from: 'worker', to: 'db', action: 'write', label: tl('demo.flow.pay.done') }] },
     ],
   };
 }
@@ -798,15 +800,15 @@ function updateRobotStates(simT, t, perms) {
     if (d.walk) {
       const w = walkAt(simT);
       const started = t >= TASK_BY_KEY['a0#7'].start;
-      robotState[d.id] = { state: w.moving ? 'carry' : 'idle', act: w.moving ? (started ? '書類を運搬中（#7 Home → Cart の遷移）' : '下調べの資料を運搬中（#7 は #3 の完了待ち）') : '書類を渡す', walk: w };
+      robotState[d.id] = { state: w.moving ? 'carry' : 'idle', act: w.moving ? (started ? tl('demo.robot.carrying.papers.7.home.cart') : tl('demo.robot.carrying.research.notes.7.waits')) : tl('demo.robot.handing.over.papers'), walk: w };
       continue;
     }
     let st = planAt(d.plan, t);
     // While a permission prompt is open the robot waits; an answer from the view lets it go on before the script would.
     const p = perms.find((x) => x.who === d.id && t < x.end && x.status !== 'terminal');
-    if (p && p.status === 'pending') st = { state: 'waiting', act: `許可待ち: ${p.tool} ${permSummary(p)}` };
-    else if (p && p.status === 'deny') st = { state: 'reading', act: '拒否されたので別の手を考え中' };
-    else if (p) { const next = planAt(d.plan, p.end); st = { state: next.state, act: `${next.act}（${p.status === 'rule' ? 'ルールで自動許可' : 'ビューで許可'}）` }; }
+    if (p && p.status === 'pending') st = { state: 'waiting', act: tl('demo.robot.waiting.permission', { tool: p.tool, what: permSummary(p) }) };
+    else if (p && p.status === 'deny') st = { state: 'reading', act: tl('demo.robot.denied.so.thinking.another.way') };
+    else if (p) { const next = planAt(d.plan, p.end); st = { state: next.state, act: tl('demo.robot.act.allowed', { act: next.act, how: p.status === 'rule' ? tl('demo.robot.allowed.rule') : tl('demo.robot.allowed.view') }) }; }
     robotState[d.id] = st;
   }
 }
