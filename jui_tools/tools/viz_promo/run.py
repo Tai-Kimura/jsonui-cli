@@ -11,8 +11,9 @@ promo's CaptureSlot reads them. A window segment inside a viz chapter (5-json: t
 forward.py takes the hooks (a tree with the server room's flow player for chapter 4, with the cost view for 5).
 A chapter whose feature the tree lacks is reported and skipped; the others are captured.
 
-One capture at a time on the machine: it waits for the viz e2e's lock (e2e_lock.py), so it never runs beside a
-browser-test run, whose timing it would spoil. Run it with the Python the viz e2e uses (Playwright and the server's
+One viz load at a time on the machine: before any serve or browser it takes --jui-root's viz e2e lock
+(tools/viz_e2e/e2e_lock.py; from 2.3.16 a FIFO queue, never a priority ticket) and holds it until it exits, so it
+never runs beside a browser-test run, whose timing it would spoil. Run it with the Python the viz e2e uses (Playwright and the server's
 dependencies). Exit status 0 only when every chapter asked for was captured in full.
 """
 
@@ -110,17 +111,34 @@ async def main_async(a) -> int:
     return 0 if all(r["ok"] for r in results) else 1
 
 
+def take_lock(jui_root: Path, what: str, say=print):
+    """The machine's one viz load at a time: --jui-root's own viz e2e lock (its FIFO queue from 2.3.16), taken before
+    any serve or browser starts and held until this process exits. Never a priority ticket. A tree without the lock
+    module runs without it, and says so. Returns the lock's fd, or None."""
+    import importlib.util
+    path = Path(jui_root) / "jui_tools" / "tools" / "viz_e2e" / "e2e_lock.py"
+    if not path.is_file():
+        say(f"no viz e2e lock in {jui_root} (jui_tools/tools/viz_e2e/e2e_lock.py): running without the machine's queue")
+        return None
+    spec = importlib.util.spec_from_file_location("viz_promo_e2e_lock", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    try:
+        return mod.hold(priority=False, only=[what])
+    except TypeError:   # a lock from before 2.3.16: no queue, no ticket fields
+        return mod.hold()
+
+
 def main(argv=None) -> int:
     a = parse(argv)
     import os
 
-    sys.path.append(str(TOOLS / "viz_e2e"))
-    from e2e_lock import hold
-    fd = hold()   # held until this process exits
+    fd = take_lock(a.jui_root, f"viz_promo {a.lang} {'fps' if a.measure_fps else ','.join(a.chapters)}")
     try:
         return asyncio.run(main_async(a))
     finally:
-        os.close(fd)
+        if fd is not None:
+            os.close(fd)
 
 
 if __name__ == "__main__":

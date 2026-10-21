@@ -9,6 +9,7 @@ of one commit by a neutral author, English labels from the project's own generat
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import subprocess
@@ -247,6 +248,48 @@ def test_chapter_4s_payment_flow_ends_inside_the_chapter():
             assert fired - scheduled[pick] <= 0.5, f"{lang}: {pick} waits {fired - scheduled[pick]:.2f} s for its branch: {pay}"
         order = T.flow_budget(ch, flows["order"])
         assert order["choices"][0][1] - 59.4 <= 0.5 and order["press"] < pay["press"], order
+
+
+FAKE_LOCK = """import json, os
+def hold(path=None, say_every=30.0, poll=0.5, say=print, only=None, priority=None):
+    with open(os.environ["PROMO_LOCK_LOG"], "a") as f:
+        f.write(json.dumps({"step": "lock", "priority": priority, "only": only}) + "\\n")
+    return os.open(os.devnull, os.O_RDONLY)
+"""
+
+
+def _fake_tree(tmp_path, with_lock=True):
+    root = tmp_path / "cli"
+    (root / "jui_tools" / "bin").mkdir(parents=True)
+    (root / "jui_tools" / "bin" / "jui").write_text("")
+    if with_lock:
+        (root / "jui_tools" / "tools" / "viz_e2e").mkdir(parents=True)
+        (root / "jui_tools" / "tools" / "viz_e2e" / "e2e_lock.py").write_text(FAKE_LOCK)
+    return root
+
+
+def test_run_takes_the_trees_lock_before_any_serve(tmp_path, monkeypatch):
+    from viz_promo import run
+    log = tmp_path / "log.jsonl"
+    monkeypatch.setenv("PROMO_LOCK_LOG", str(log))
+    monkeypatch.setenv("JUI_VIZ_E2E_PRIORITY", "1")   # the environment never makes it a priority ticket
+
+    async def serves(a):   # where the captures start their servers and browsers
+        with open(log, "a") as f:
+            f.write(json.dumps({"step": "serve"}) + "\n")
+        return 0
+    monkeypatch.setattr(run, "main_async", serves)
+    assert run.main(["--lang", "ja", "--chapters", "hook,2", "--jui-root", str(_fake_tree(tmp_path))]) == 0
+    steps = [json.loads(line) for line in log.read_text().splitlines()]
+    assert [s["step"] for s in steps] == ["lock", "serve"], steps
+    assert steps[0]["priority"] is False and steps[0]["only"] == ["viz_promo ja hook,2"]
+
+
+def test_run_without_the_trees_lock_says_so(tmp_path, monkeypatch, capsys):
+    from viz_promo import run
+    monkeypatch.setattr(run, "main_async", lambda a: asyncio.sleep(0, result=0))
+    assert run.main(["--lang", "en", "--chapters", "6", "--jui-root", str(_fake_tree(tmp_path, with_lock=False))]) == 0
+    assert "running without the machine's queue" in capsys.readouterr().out
 
 
 def test_frame_intervals_are_summed_as_percentiles():
