@@ -13,7 +13,7 @@ import urllib.request
 
 import hooks
 import scenarios
-from common import DESKTOP, LAUNCH_ARGS, PHONE, Watch, dump, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, PHONE, T, T_head, T_pattern, Watch, dump, new_page, ready
 
 ROOM_OF = """(id) => { const R = window.__dbg.robots.find((x) => x.def.id === id); if (!R) return null;
   const p = R.robot.root.position; return { x: p.x, z: p.z, state: R.robot.state, room: R.def.room,
@@ -68,7 +68,7 @@ async def scenario_two_projects(browser, srv, out, failures, res):
     res["sessions"] = await page.evaluate("() => [...document.querySelectorAll('#sessions .pg-toggle')].map((b) => b.textContent)")
     check(failures, res["rooms"] == ["shop-app/", "jsonui-cli/"], f"two rooms in order, got {res['rooms']}")
     check(failures, res["controls"] == [True, True], "play / speed hidden in the live view")
-    check(failures, "127.0.0.1" in " ".join(res["chips"]) and "デモ（実データではない）" not in res["chips"], f"chips name the server, not the demo: {res['chips']}")
+    check(failures, "127.0.0.1" in " ".join(res["chips"]) and T("page.chip.demo") not in res["chips"], f"chips name the server, not the demo: {res['chips']}")
     rb = res["robots"]
     check(failures, all(rb[r] and rb[r]["state"] in ("idle", "command") for r in rb), f"robots seated with their states: {rb}")
     check(failures, rb["a0"]["room"] == rb["b4"]["room"] == "p-shop" and rb["4f"]["room"] == "p-cli", "robots in their sessions' rooms")
@@ -263,10 +263,10 @@ async def scenario_work(browser, srv, out, failures, res):
     s2 = next((x for x in res["strip"] if "xcodebuild" in x["text"]), None)
     check(failures, s1 and s1["buttons"] == ["allow", "deny"] and not s1["relay"], f"work: relay prompt has 許可 / 拒否 only: {s1}")
     check(failures, s2 and s2["buttons"] == [] and s2["relay"] and "jui viz relay install" in s2["text"], f"work: no-relay prompt guides instead: {s2}")
-    check(failures, s1 and "#2" in s1["text"] and s2 and "タスクなし" in s2["text"], "work: the prompt is on its owner's task only")
+    check(failures, s1 and "#2" in s1["text"] and s2 and T_pattern("panel.task.session.none").search(s2["text"]), "work: the prompt is on its owner's task only")
     # allow from the view: perm.decide goes out, the card turns "sent"
     await page.click('#perm-strip [data-do="allow"][data-perm="perm-1"]')
-    await wait(page, "() => [...document.querySelectorAll('#perm-strip .pcard')].some((c) => c.textContent.includes('送信済み'))", label="perm-1 sent")
+    await wait(page, f"() => [...document.querySelectorAll('#perm-strip .pcard')].some((c) => c.textContent.includes({json.dumps(T_head('panel.perm.sent', 'what'))}))", label="perm-1 sent")
     res["decisions"] = fake_state(srv)["decisions"]
     check(failures, res["decisions"] == [{"permId": "perm-1", "behavior": "allow", "always": None, "reason": None}], f"work: perm.decide sent {res['decisions']}")
     await page.screenshot(path=f"{out}/work-sent.png")
@@ -276,7 +276,7 @@ async def scenario_work(browser, srv, out, failures, res):
     res["confirm"] = await page.evaluate("() => [...document.querySelectorAll('.pcf-list li')].map((l) => l.textContent.replace(/\\s+/g, ' '))")
     await page.screenshot(path=f"{out}/work-always-confirm.png")
     check(failures, len(res["confirm"]) == 2 and "Bash(npm test:*)" in res["confirm"][0] and "settings.local.json" in res["confirm"][0]
-          and "Bash(npm:*)" in res["confirm"][1] and "共有" in res["confirm"][1], f"work: the dialog lists the rules and where: {res['confirm']}")
+          and "Bash(npm:*)" in res["confirm"][1] and T("panel.dest.project") in res["confirm"][1], f"work: the dialog lists the rules and where: {res['confirm']}")
     await page.keyboard.press("Escape")
     await wait(page, "() => !document.querySelector('.perm-confirm')", label="Esc closes the dialog")
     check(failures, len(fake_state(srv)["decisions"]) == 1, "work: Esc sent nothing")
@@ -284,7 +284,7 @@ async def scenario_work(browser, srv, out, failures, res):
     await wait(page, "() => !!document.querySelector('.perm-confirm')", label="the dialog again")
     await page.click('.perm-confirm [data-pcf="1"]')        # keep only the narrow rule
     await page.click('.perm-confirm [data-pcf-ok]')
-    await wait(page, "() => [...document.querySelectorAll('#perm-strip .pcard')].some((c) => c.textContent.includes('ルール 1 件を追加・フック経由'))", label="perm-3 sent with one rule")
+    await wait(page, f"() => [...document.querySelectorAll('#perm-strip .pcard')].some((c) => c.textContent.includes({json.dumps(T('panel.sent.rules', n=1) + T('panel.sent.via', via=T('panel.sent.hook')))}))", label="perm-3 sent with one rule")
     res["perm4Buttons"] = await page.evaluate("() => [...document.querySelectorAll('#perm-strip [data-perm=\"perm-4\"]')].map((b) => b.dataset.do)")
     check(failures, res["perm4Buttons"] == ["allow", "deny"], f"work: no suggestions, no 今後も許可: {res['perm4Buttons']}")
     # P6: a reason goes with deny, from the detail drawer
@@ -292,7 +292,7 @@ async def scenario_work(browser, srv, out, failures, res):
     await wait(page, "() => !!document.getElementById('tbd-reason')", label="the reason box")
     await page.fill('#tbd-reason', 'ビルドの成果物は消さないで <b>x</b>')
     await page.click('#tb-detail [data-do="deny"]')
-    await wait(page, "() => [...document.querySelectorAll('#perm-strip .pcard')].some((c) => c.textContent.includes('拒否・理由つき'))", label="perm-4 denied with a reason")
+    await wait(page, f"() => [...document.querySelectorAll('#perm-strip .pcard')].some((c) => c.textContent.includes({json.dumps(T('panel.sent.deny') + T('panel.sent.reason'))}))", label="perm-4 denied with a reason")
     res["decisionsP6"] = fake_state(srv)["decisions"][1:]
     check(failures, res["decisionsP6"] == [{"permId": "perm-3", "behavior": "allow", "always": [0], "reason": None},
                                            {"permId": "perm-4", "behavior": "deny", "always": None, "reason": "ビルドの成果物は消さないで <b>x</b>"}],
@@ -313,7 +313,7 @@ async def scenario_work(browser, srv, out, failures, res):
       escaped: document.getElementById('wb-sec-1').textContent.includes('<b>escaped</b>'), injected: !!document.querySelector('#wb-sec-1 .rows b, #wb-sec-1 .wf-id b'),
       related: document.getElementById('wb-sec-7').textContent.replace(/\\s+/g, ' ') })""")
     await page.screenshot(path=f"{out}/work-sheet.png")
-    check(failures, res["sheet"]["writing"] == ["状態"] and res["sheet"]["components"] == 5 and res["sheet"]["escaped"] and not res["sheet"]["injected"], f"work: sheet {res['sheet']}")
+    check(failures, res["sheet"]["writing"] == [T("core.sec.state")] and res["sheet"]["components"] == 5 and res["sheet"]["escaped"] and not res["sheet"]["injected"], f"work: sheet {res['sheet']}")
     await page.keyboard.press("Escape")
     await page.wait_for_function("() => document.getElementById('wb').hidden")
     # progress: task 2 done, task 3 free; the run ends failed
@@ -322,12 +322,12 @@ async def scenario_work(browser, srv, out, failures, res):
     await wait(page, "() => document.getElementById('tests').textContent.includes('2 passed, 1 failed')", label="the run's summary")
     res["afterProgress"] = await page.evaluate("() => ({ tests: document.getElementById('tests').textContent.replace(/\\s+/g, ' ').slice(0, 120), links: !!(window.__dbg.links().a3 && window.__dbg.model().specs[0].by) })")
     step(srv, "terminal")
-    await wait(page, "() => document.getElementById('chip-perm').textContent === '許可待ち 1'", label="one prompt left (the sent one)")
+    await wait(page, f"() => document.getElementById('chip-perm').textContent === {json.dumps(T('panel.count.waiting', n=1))}", label="one prompt left (the sent one)")
     # a project that is not JsonUI: no spec, no test
     await page.click('.tag.room[data-set-project="p-cli"]')
     await page.wait_for_timeout(2500)
     res["cli"] = await page.evaluate("() => ({ specs: document.getElementById('spec-list').textContent, tests: document.getElementById('tests').textContent })")
-    check(failures, "spec がない" in res["cli"]["specs"] and "まだ無い" in res["cli"]["tests"], f"work: non-JsonUI room {res['cli']}")
+    check(failures, T_pattern("panel.spec.none.scope").search(res["cli"]["specs"]) and (T("tests.none") in res["cli"]["tests"] or T("tests.status.none") in res["cli"]["tests"]), f"work: non-JsonUI room {res['cli']}")
     await page.screenshot(path=f"{out}/work-cli.png")
     await page.close()
     for line in watch.console:
@@ -499,8 +499,8 @@ async def scenario_building(browser, srv, out, failures, res):
           f"building: three working rooms, one thinking, one waiting (all lit), five idle {mixed}")
     texts = await page.evaluate("""() => ({ legend: document.getElementById('tower-legend').textContent,
       card: [...document.querySelectorAll('#sessions .session')].map((c) => c.textContent.replace(/\\s+/g, ' ')).find((t) => t.includes('b9')) || '' })""")
-    check(failures, "考え中" in texts["legend"], "building: the legend has 考え中")
-    check(failures, "考え中" in texts["card"] and "作業中" not in texts["card"], f"building: the thinking session's card says 考え中, not 作業中: {texts['card']}")
+    check(failures, T("status.thinking") in texts["legend"], "building: the legend has 考え中")
+    check(failures, T("status.thinking") in texts["card"] and T("status.busy") not in texts["card"], f"building: the thinking session's card says 考え中, not 作業中: {texts['card']}")
     wraps = await page.evaluate("() => ['tea-finder-agent', 'aurora_base_android2', 'nimbus_android', 'a-very-long-project-name-that-goes-on-and-on-and-on'].map((n) => window.__dbg.towerLines(n))")
     res["wraps"] = wraps
     check(failures, wraps[0] == [30, "tea-finder-", "agent"] and wraps[1][1:] == ["aurora_base_", "android2"] and wraps[1][0] < 30
@@ -558,7 +558,7 @@ async def scenario_building(browser, srv, out, failures, res):
     await page.keyboard.press("Escape")
     await page.wait_for_timeout(500)
     res["card"] = card
-    check(failures, "稼働 9 時間（疲れ気味）" in card and "重い作業: 出力 3,200 トークン/分" in card,
+    check(failures, T("panel.rb.tired", n=9) in card and T("panel.heavy", why=T("panel.heavy.tokens", n="3,200")) in card,
           f"building: the robot card says it is tired and why the work is heavy: {card!r}")
     empty = [k for k, v in g2.items() if not v["act"] and v["actShown"]]
     check(failures, empty == [], f"building: a robot with nothing to say shows no empty bubble {empty}")
@@ -669,7 +669,7 @@ async def scenario_demo_show(browser, srv, out, failures, res):
         skies[t] = (await page.evaluate("() => window.__dbg.sky()"))["phase"]
     show["skies"] = skies
     show["clock"] = await page.evaluate("() => document.getElementById('demo-clock').textContent")
-    check(failures, list(skies.values()) == ["dawn", "day", "dusk", "night"] and "デモの時計" in show["clock"],
+    check(failures, list(skies.values()) == ["dawn", "day", "dusk", "night"] and T_head("demo.clock", "time") in show["clock"],
           f"demo: the sky by the demo clock, which says it is one {show['skies']} {show['clock']}")
     await at(B["nightOut"])
     show["night"] = (await page.evaluate("() => window.__dbg.floors()"))["tower"]
@@ -778,7 +778,7 @@ async def run_real(pw, out, failures, RealServer):
         await page.goto(srv.url + "/?demo=1")
         await ready(page)
         res["demoChips"] = await page.evaluate("() => [...document.querySelectorAll('.chips .chip')].slice(0, 3).map((c) => c.textContent)")
-        check(failures, res["demoChips"][0] == "デモ（実データではない）", f"real: ?demo=1 is the demo: {res['demoChips']}")
+        check(failures, res["demoChips"][0] == T("page.chip.demo"), f"real: ?demo=1 is the demo: {res['demoChips']}")
         await page.close()
         for line in watch.console:
             failures.append(f"real: console: {line}")
@@ -897,17 +897,17 @@ async def run_real_decide(pw, out, failures):
         hook(req)
         waiting = hook(req, decide=True)
         try:
-            await wait(page, "() => [...document.querySelectorAll('#tasks li')].some((li) => li.textContent.includes('長すぎて全部を表示できないので、ターミナルで答えてください'))",
+            await wait(page, f"() => [...document.querySelectorAll('#tasks li')].some((li) => li.textContent.includes({json.dumps(T('panel.perm.toolong'))}))",
                        timeout=15000, label="the too-long card")
-            res["tooLong"] = await page.evaluate("""() => { const li = [...document.querySelectorAll('#tasks li')].find((x) => x.textContent.includes('長すぎて全部を表示できない'));
-                return { buttons: li.querySelectorAll('[data-do]').length }; }""")
+            res["tooLong"] = await page.evaluate("""(w) => { const li = [...document.querySelectorAll('#tasks li')].find((x) => x.textContent.includes(w));
+                return { buttons: li.querySelectorAll('[data-do]').length }; }""", T("panel.perm.toolong"))
         finally:
             if waiting.poll() is None:
                 waiting.terminate()   # our own child: the browser cannot answer it, the terminal would
                 waiting.wait(timeout=10)
         check(failures, res["tooLong"] == {"buttons": 0}, f"real-decide: a command past 20,000 characters has no buttons: {res['tooLong']}")
         hook(dict(base, hook_event_name="PermissionRequest", tool_name="Write", tool_input={"file_path": "/work/notes.txt", "content": "c" * 3000}))
-        await wait(page, "() => [...document.querySelectorAll('#tasks .pe-note')].some((el) => el.textContent === '中身は先頭 2000 字だけ表示（全体 3000 字）')",
+        await wait(page, f"() => [...document.querySelectorAll('#tasks .pe-note')].some((el) => el.textContent === {json.dumps(T('panel.exact.cut', shown=2000, all=3000))})",
                    timeout=15000, label="the Write card's content note")
         await page.screenshot(path=f"{out}/real-decide.png")
         want_always = {"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": {"behavior": "allow", "updatedPermissions": [sugg[0]]}}}
