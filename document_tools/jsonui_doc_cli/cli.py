@@ -2424,6 +2424,65 @@ def cmd_validate_infra_prices(args):
     return 1 if any(p["severity"] == "error" for p in result["problems"]) else 0
 
 
+def _usd(v: float) -> str:
+    return f"${v:,.2f}"
+
+
+def cmd_cost_infra(args):
+    """The cost simulator's month (or one day) for a room's load scenario, as jui viz's コスト shows it, without viz
+    (infra/cost/run.py). Exit 0: simulated; 1: simulated, but a load definition has an error (that file is left out);
+    2: nothing could be simulated (the room, the load folder, the scenario or the date)."""
+    from .infra.cost import run as cost_run
+    code, out = cost_run.reply(Path(args.root), args.scenario, args.date, args.by)
+    if args.json:
+        print(json.dumps(out, ensure_ascii=False, indent=2))
+        return code
+    if not out["ok"]:
+        print(f"cost infra: cannot simulate ({out['reason']}): {out['message']}", file=sys.stderr)
+        for p in out.get("problems", []):
+            print(f"  {p['severity'].upper()} {p.get('file') or ''} {p['path']}: {p['message']}  [{p['code']}]",
+                  file=sys.stderr)
+        return code
+    sc = next(s for s in out["scenarios"] if s["id"] == out["scenario"])
+    others = [s["id"] for s in out["scenarios"] if s["id"] != out["scenario"]]
+    print(f"cost infra: {out['dir']}: scenario {sc['id']} ({sc['month']}, {sc['environment'] or 'no environment'})"
+          + (f"; other scenarios: {', '.join(others)}" if others else ""))
+    if "day" in out:
+        day = out["day"]
+        print(f"  {day['date']}: {_usd(day['usd'])} (USD, on demand)")
+        for n in day["nodes"][:10]:
+            print(f"    {n['node']:<28} {_usd(n['usd'])}" + (f"  ({n['note']})" if n.get("note") else ""))
+        if day["others"]["count"]:
+            print(f"    {day['others']['count']} other node(s)   {_usd(sum(day['others']['usd']))}")
+    else:
+        m = out["month"]
+        print(f"  {m['month']}: {_usd(m['usd'])} a month (USD, on demand; reservations, discounts and tax not included)")
+        by_key: dict[str, float] = {}
+        for d in m["days"]:
+            for k, v in d["stack"].items():
+                by_key[k] = by_key.get(k, 0.0) + v
+        print("  by " + m["by"] + ": " + ", ".join(f"{k if k != '__others__' else 'others'} {_usd(v)}"
+                                                  for k, v in sorted(by_key.items(), key=lambda x: -x[1])))
+        print("  top nodes: " + ", ".join(f"{t['node']} {_usd(t['usd'])}" for t in out["topNodes"][:5]))
+        for label, items in (("no price", [f"{x['node']} {x['meter']} ({x['sku']}, {x['unit']})" for x in m["noPrice"]]),
+                             ("no rule", m["noRule"]), ("load undefined", m["loadUndefined"]),
+                             ("over capacity", [f"{n} {h} h" for n, h in m["overflowHours"].items()])):
+            if items:
+                print(f"  {label} ({len(items)}): " + ", ".join(items[:8]) + (" ..." if len(items) > 8 else ""))
+        for w in m["warnings"][:10]:
+            print(f"  note: {w.get('message') if isinstance(w, dict) else w}")
+        if m["warningCount"] > 10:
+            print(f"  ... {m['warningCount'] - 10} more note(s) (--json has them all)")
+    for w in out["prices"]["warnings"]:
+        print(f"  prices: {w}")
+    for p in out["problems"]["first"]:
+        print(f"  {p['severity'].upper()} {p['file']} {p['path']}: {p['message']}  [{p['code']}]")
+    if out["problems"]["count"] > len(out["problems"]["first"]):
+        print(f"  ... {out['problems']['count'] - len(out['problems']['first'])} more load problem(s): "
+              "jsonui-doc validate infra-load")
+    return code
+
+
 def cmd_check(args):
     """Run declared contract checks (docs ⇔ implementation).
 
@@ -2605,6 +2664,27 @@ def main():
     seed_infra_parser.add_argument("--stdout", action="store_true",
                                    help="Print the draft instead of writing it (the summary goes to stderr)")
     seed_infra_parser.add_argument("--force", action="store_true", help="Replace a draft already in the output folder")
+
+    # Cost command: the cost simulator without jui viz (the server room, 2.3.15)
+    cost_parser = subparsers.add_parser(
+        "cost",
+        help="Simulate a month's cost from the model, the load definitions and the prices (what jui viz's コスト shows)"
+    )
+    cost_subparsers = cost_parser.add_subparsers(dest="cost_type", help="What to simulate")
+    cost_infra_parser = cost_subparsers.add_parser(
+        "infra",
+        help="The month (or one day) of a load scenario: the total, by provider or node, what has no price or rule, "
+             "the hours over capacity. Prices: the room's price files, then the fetched ones, then the bundled table."
+    )
+    cost_infra_parser.add_argument(
+        "root", nargs="?", default=".",
+        help="The project root (the folder with jui.config.json); default: the current folder"
+    )
+    cost_infra_parser.add_argument("--scenario", help="The load scenario's id (default: the first)")
+    cost_infra_parser.add_argument("--date", help="One day of the scenario's month (YYYY-MM-DD): hour by hour")
+    cost_infra_parser.add_argument("--by", choices=("provider", "node"), default="provider",
+                                   help="How the month's days are stacked (default: provider)")
+    cost_infra_parser.add_argument("--json", action="store_true", help="Print the result as JSON")
 
     # Rules command
     rules_parser = subparsers.add_parser(
@@ -3007,6 +3087,11 @@ def main():
             from .infra import seed as infra_seed
             return infra_seed.run(Path(args.root), Path(args.out) if args.out else None, args.stdout, args.force)
         seed_parser.print_help()
+        return 0
+    elif args.command == "cost":
+        if getattr(args, "cost_type", None) == "infra":
+            return cmd_cost_infra(args)
+        cost_parser.print_help()
         return 0
     elif args.command in ["rules", "r"]:
         if hasattr(args, 'rules_type') and args.rules_type:
