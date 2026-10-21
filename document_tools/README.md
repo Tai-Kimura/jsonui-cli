@@ -157,6 +157,20 @@ user_repository:
 jsonui-doc validate component docs/components/UserCard.component.json
 ```
 
+### The server room (`docs/infra`)
+
+`jui viz` draws the project's infrastructure, flows and cost from JSON under `docs/infra`. How to write it — the
+order, the rules that are easy to miss, a small room that passes every check — is in [INFRA.md](INFRA.md).
+
+```bash
+jsonui-doc seed infra              # draft the model from IaC, config files and code (docs/infra/seed/)
+jsonui-doc validate infra          # the model and its flows
+jsonui-doc validate infra-load     # the load scenarios
+jsonui-doc validate infra-prices   # the room's own prices
+jsonui-doc cost infra --by node    # the month's cost (--scenario, --date, --json)
+jsonui-doc check infra --json      # the model against IaC, the code and the load
+```
+
 ### Generation
 
 #### Generate HTML Documentation
