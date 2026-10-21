@@ -1482,13 +1482,15 @@ function gitTick(nowSec) {
       if (R.git.phase === 'back' && !R.path.length) R.git = null;   // home
       continue;
     }
-    if (!trip || trip.id === R.gitSeen || trip.pending) continue;
+    if (!trip || trip.id === R.gitSeen) continue;
     if (trip.stopped) { R.gitSeen = trip.id; continue; }               // an instruction came before it could start
     const deskHere = PROPS.gitDesk && PROPS.room === R.def.room && !R.def.standing;
-    // an old one (a reload) or no box in sight: its line only, never later; busy now (walking to a new desk, playing,
-    // a call, a question, a break, the shredder): it waits — still fresh, the trip starts once the robot is free
+    // an old one (a reload) or no box in sight: its line only, never later, counted or not (one still being counted on
+    // the floor started in the room once its count came: docs/bugs/2026-10-21-jui-viz-git-trip-counted-late-starts-in-the-room.md);
+    // being counted, or busy now (walking to a new desk, playing, a call, a question, a break, the shredder): it waits —
+    // still fresh, the trip starts once it is counted and the robot is free
     if (vizNow() - (trip.at || 0) > GITBOX.freshMs || !deskHere) { R.gitSeen = trip.id; continue; }
-    if (R.play || R.playBack || R.brk || R.shred || R.solo || R.path.length || LIVE.leaving[R.def.id] || R.robot.call || st.state === 'waiting') continue;
+    if (trip.pending || R.play || R.playBack || R.brk || R.shred || R.solo || R.path.length || LIVE.leaving[R.def.id] || R.robot.call || st.state === 'waiting') continue;
     R.gitSeen = trip.id;
     const sp = PROPS.place.git;
     R.git = { trip, phase: 'going', desk: sp.desk, sheets: trip.kind === 'push' ? gitSheets(trip) : 0, t0: nowSec, room: R.def.room, laid: gitLaid(R) };

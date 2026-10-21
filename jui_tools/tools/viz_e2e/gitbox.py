@@ -153,6 +153,15 @@ async def run_gitbox(pw, out, failures):
         check(failures, floor["phase"] is None and not (await page.evaluate("() => window.__dbg.gitBox().desk")),
               f"on the floor: no desk and no trip, the line only: {floor}")
 
+        # 0b. one still being counted on the floor is its line only too: never a trip in the room once its count comes
+        # (docs/bugs/2026-10-21-jui-viz-git-trip-counted-late-starts-in-the-room.md: a slow count let it start there)
+        # after the real one's count came (that state from the server would replace the poke)
+        await wait(page, "(id) => { const t = window.__dbg.gitBox().why[id].trip; return !!t && t.pending === false; }", arg=rid, label="the floor push counted")
+        await page.evaluate("(id) => window.__dbg.gitPoke(id, { id: 'poke-floor', pending: true, label: '↑ push main' })", rid)
+        await page.wait_for_timeout(600)
+        fw = res["floorPending"] = (await page.evaluate("() => window.__dbg.gitBox().why"))[rid]
+        check(failures, fw["seen"] == "poke-floor" and fw["git"] is None, f"one being counted on the floor is seen there, its line only: {fw}")
+
         # no game, nap, bento or break unless an arm asks (2.3.3's breaks start on their own after a while idle)
         await page.evaluate("() => { window.__dbg.play({ p: 0, solo: { p: 0 } }); window.__dbg.brk({ p: { smoke: 0, vend: 0 } }); }")
 
@@ -161,6 +170,12 @@ async def run_gitbox(pw, out, failures):
         await page.evaluate("() => [...document.querySelectorAll('#pop [data-pick-project]')].find((x) => x.textContent.includes('box-app')).click()")
         await wait(page, "() => window.__dbg.gitBox().desk", label="the box's desk in the room up close")
         await page.wait_for_timeout(1500)
+        # its count comes now, in the room: still no trip (else it walks to the box first, and the small push below
+        # replaces it on the way: the live run's red, 10-21)
+        await page.evaluate("(id) => window.__dbg.gitPoke(id, { id: 'poke-floor', pending: false, label: '↑ push main 1 コミット +1 −0' })", rid)
+        await page.wait_for_timeout(800)
+        fl = res["floorCounted"] = await page.evaluate("(id) => ({ trip: window.__dbg.gitBox().trips[id] || null, why: window.__dbg.gitBox().why[id] })", rid)
+        check(failures, fl["trip"] is None and fl["why"]["seen"] == "poke-floor", f"counted later in the room, still no trip: {fl}")
         g = res["desk"] = await page.evaluate("() => window.__dbg.gitBox()")
         ov = g["overlaps"]
         check(failures, ov and ov["inRoom"] and ov["overlaps"] == [], f"the desk stands in the room and overlaps nothing: {ov}")
