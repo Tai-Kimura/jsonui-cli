@@ -264,7 +264,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-body); 
 .tag.room.on { border-color: var(--ink); background: var(--ink); color: var(--panel); }
 .tag.tray { padding: 2px 8px; border-radius: 4px; font: 700 11px/1.5 var(--font-body); }
 .pill { display: inline-block; min-width: 2.5em; padding: 0 7px; border-radius: 999px; background: var(--c, #8a9bb0); color: var(--t, #ffffff); font: 700 11px/1.75 var(--font-mono); text-align: center; }
-.scene-hint { position: absolute; right: 12px; bottom: 10px; margin: 0; padding: 1px 8px; border-radius: 4px; background: var(--tag-bg); color: var(--ink-soft); font: 500 11px/1.6 var(--font-mono); }
+.scene-hint { position: absolute; right: 12px; bottom: 10px; max-width: calc(50% - 18px); margin: 0; padding: 1px 8px; border-radius: 4px; background: var(--tag-bg); color: var(--ink-soft); font: 500 11px/1.6 var(--font-mono); }
 .nogl { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; padding: 16px; color: var(--ink-soft); text-align: center; }
 
 .side { display: grid; align-content: start; gap: 22px; min-height: 0; overflow-y: auto; padding: 14px 16px 24px; background: var(--panel); border-left: 1px solid var(--line); }
@@ -1206,8 +1206,10 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 .rb-cond[hidden] { display: none; }
 .rb-looks { margin: 2px 0 0; font: 12px/1.5 var(--font-body); color: var(--ink-soft); }
 .rb-looks[hidden] { display: none; }
-.demo-clock { position: absolute; left: 12px; bottom: 10px; z-index: 5; margin: 0; padding: 2px 8px; border-radius: 6px; background: var(--tag-bg); color: var(--ink-soft); font: 600 11.5px/1.6 var(--font-body); }
+.demo-clock { position: absolute; left: 12px; bottom: 10px; z-index: 5; max-width: calc(50% - 18px); margin: 0; padding: 2px 8px; border-radius: 6px; background: var(--tag-bg); color: var(--ink-soft); font: 600 11.5px/1.6 var(--font-body); }
 .demo-clock[hidden] { display: none; }
+/* The hint (right) and the demo clock (left) share the scene's foot: each keeps to its half, so words a language
+   says longer wrap within it instead of running into the other (English on a phone did). */
 
 /* a phone call on a robot's name tag (SendMessage, 10-18): a mark and the other robot's number */
 .tag .call-mark { flex: none; padding: 0 6px; border-radius: 999px; background: var(--ok-bg); color: var(--ok); font: 700 10px/1.6 var(--font-body); }
