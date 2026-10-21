@@ -52,7 +52,7 @@ function histInline(parent, text) {
   for (let m = re.exec(src); m; m = re.exec(src)) {
     if (m.index > last) parent.appendChild(document.createTextNode(src.slice(last, m.index)));
     if (m[1]) parent.appendChild(hNode('code', '', m[2]));
-    else if (m[4] !== undefined && m[0][0] === '!') parent.appendChild(hNode('span', 'h-img', `画像: ${m[3] || '（説明なし）'}`));
+    else if (m[4] !== undefined && m[0][0] === '!') parent.appendChild(hNode('span', 'h-img', tl('hist.img.alt', { alt: m[3] || tl('hist.img.noalt') })));
     else if (m[5] !== undefined) {
       const href = histSafeHref(m[6]);
       if (href) {
@@ -147,8 +147,8 @@ function histMarkdown(text) {
 }
 
 /* ---------- the items ---------- */
-const HIST_TIME = (at) => (Number.isFinite(at) ? new Date(at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '');
-function histCutNote(item) { return item.cut ? hNode('p', 'h-cut', '（長いので途中まで）') : null; }
+const HIST_TIME = (at) => (Number.isFinite(at) ? fmtTime(at, { hour: '2-digit', minute: '2-digit' }) : '');
+function histCutNote(item) { return item.cut ? hNode('p', 'h-cut', tl('talk.cut')) : null; }
 /* A fold (a message from another session, the harness's text, a tool's IN / OUT): the summary opens and closes it,
    and once open a click anywhere in its body closes it too (requester, 10-20: 「開くと閉じづらい」), then the row's
    head is scrolled back into view if it went above. A click does not close it when it selects text (a drag, a
@@ -205,21 +205,21 @@ function histPeerName(text, session) {
   if (label && robots.some((R) => R.def.id === label)) {
     const b = hNode('button', 'h-peerlink', text);
     b.type = 'button'; b.dataset.hGo = label;
-    b.title = `${label} のロボットに切り替える`;
+    b.title = tl('hist.peer.switch', { name: label });
     return b;
   }
   const s = hNode('span', 'h-peername', text);
-  s.title = 'この viz にいないセッション';
+  s.title = tl('hist.peer.unseen');
   return s;
 }
 function histItem(item) {
   const at = hNode('time', 'h-at', HIST_TIME(item.at));
   if (item.kind === 'user') {
     const n = hNode('div', 'h-item h-user');
-    const head = hNode('p', 'h-who', '依頼者'); head.appendChild(at); n.appendChild(head);
+    const head = hNode('p', 'h-who', tl('hist.who.user')); head.appendChild(at); n.appendChild(head);
     n.appendChild(hNode('p', 'h-plain', item.text));
     const cut = histCutNote(item); if (cut) n.appendChild(cut);
-    for (const path of Array.isArray(item.gone) ? item.gone : []) n.appendChild(hNode('p', 'h-gone', `元の画像ファイルは消えている: ${path}`));
+    for (const path of Array.isArray(item.gone) ? item.gone : []) n.appendChild(hNode('p', 'h-gone', tl('hist.img.gone', { path })));
     return n;
   }
   if (item.kind === 'assistant') {
@@ -230,7 +230,7 @@ function histItem(item) {
   }
   if (item.kind === 'channel') {   // a prompt that came through a channel (from this page, for jui-viz)
     const n = hNode('div', 'h-item h-user h-channel');
-    const head = hNode('p', 'h-who', /(^|:)jui-viz$/.test(String(item.server || '')) ? 'ページから（jui-viz の channel）' : `channel ${item.server || ''}`);
+    const head = hNode('p', 'h-who', /(^|:)jui-viz$/.test(String(item.server || '')) ? tl('hist.who.page') : `channel ${item.server || ''}`);
     head.appendChild(at); n.appendChild(head);
     const lines = String(item.text).split('\n'), files = lines.filter((l) => histAttachMatch(l));
     const rest = lines.filter((l) => !histAttachMatch(l)).join('\n');
@@ -240,12 +240,12 @@ function histItem(item) {
     return n;
   }
   if (item.kind === 'peer') {
-    const who = hNode('b', 'h-from'); who.append(histPeerName(item.from, item.fromSession), ' から');
+    const who = hNode('b', 'h-from'); who.append(tl('hist.peer.from.pre'), histPeerName(item.from, item.fromSession), tl('hist.peer.from'));
     return histFolded('h-item h-peer', [who, hNode('span', 'h-head', String(item.text).split('\n').find((l) => l.trim()) || ''), at],
       [hNode('p', 'h-plain', item.text), histCutNote(item)], false);
   }
   if (item.kind === 'harness') {
-    return histFolded('h-item h-harness', [hNode('b', '', item.label), hNode('span', 'h-head', 'ハーネスが入れた文'), at],
+    return histFolded('h-item h-harness', [hNode('b', '', item.label), hNode('span', 'h-head', tl('hist.harness')), at],
       [hNode('p', 'h-plain', item.text), histCutNote(item)], false);
   }
   if (item.kind === 'tool') {
@@ -263,9 +263,9 @@ function histItem(item) {
     }
     // stopped by auto mode (2.3.12, the requester's ruling of 10-21): on the row itself, however long ago (the board's card
     // goes a minute after it is answered); the reason in its title and under the OUT
-    if (item.denied) { const m = hNode('span', 'h-denied', '止められた'); m.title = `自動モードが止めた: ${item.denied}`; title.push(m); }
-    else if (item.error) title.push(hNode('span', 'h-err', 'エラー'));
-    if (item.out === undefined) title.push(hNode('span', 'h-run', '結果待ち'));
+    if (item.denied) { const m = hNode('span', 'h-denied', tl('hist.denied')); m.title = tl('hist.denied.title', { why: item.denied }); title.push(m); }
+    else if (item.error) title.push(hNode('span', 'h-err', tl('hist.error')));
+    if (item.out === undefined) title.push(hNode('span', 'h-run', tl('hist.running')));
     // Pictures inside, seen with the row closed (2.3.12, requester 10-21: 「閉じてる時でも画像があるってわかるように」,
     // ticket 2026-10-21-jui-viz-hist-tool-row-shows-no-image-when-closed): as the requester's own attachments show (a
     // thumbnail that opens large), the first picture's small thumbnail and 画像 N. The thumbnail is a button: a press on
@@ -277,12 +277,12 @@ function histItem(item) {
     if (refs.length) {
       const mini = histThumb(refs[0]);
       mini.classList.add('h-thumb-mini');
-      const m = hNode('span', 'h-imgmark', `画像 ${refs.length}`); m.title = `画像 ${refs.length} 枚（行を開くと全部見える）`;
+      const m = hNode('span', 'h-imgmark', tl('hist.img.count', { n: refs.length })); m.title = tl('hist.img.count.title', { n: refs.length });
       title.push(mini, m);
     }
     // and the files that are no picture (SendUserFile's), counted the same way: open the row for their names (2.3.12)
     const files = Array.isArray(item.sent) ? item.sent.filter((f) => !f.image).length : 0;
-    if (files) { const m = hNode('span', 'h-imgmark h-filemark', `ファイル ${files}`); m.title = `ファイル ${files} 個（行を開くと名前が見えて、押すと Finder で開く）`; title.push(m); }
+    if (files) { const m = hNode('span', 'h-imgmark h-filemark', tl('hist.file.count', { n: files })); m.title = tl('hist.file.count.title', { n: files }); title.push(m); }
     // The time the tool was called (its tool_use record's), at the right end after the marks (2.3.7, requester 10-20:
     // 「このBashとかのタイトルの右端にその時の時刻表示できる？」); the description narrows first (.h-head), never the time.
     title.push(at);
@@ -292,7 +292,7 @@ function histItem(item) {
     if (item.out !== undefined) {
       io.appendChild(hNode('span', 'h-io-k', 'OUT'));
       io.appendChild(hNode('pre', `h-code${item.error ? ' h-code-err' : ''}`, `${item.out}${item.outCut ? '\n…' : ''}`));
-      if (item.denied) { io.appendChild(hNode('span', 'h-io-k', '止めた理由')); io.appendChild(hNode('p', 'h-denied-why', item.denied)); }
+      if (item.denied) { io.appendChild(hNode('span', 'h-io-k', tl('hist.denied.why'))); io.appendChild(hNode('p', 'h-denied-why', item.denied)); }
       if (Array.isArray(item.imgs) && item.imgs.length) { const row = hNode('div', 'h-imgs'); for (const ref of item.imgs) row.appendChild(histThumb(ref)); io.appendChild(row); }
     }
     // SendUserFile (ticket 2026-10-20-jui-viz-history-senduserfile-image-no-thumb): the transcript holds only the paths, so
@@ -309,9 +309,9 @@ function histItem(item) {
     }
     return histFolded('h-item h-tool', title, [io], sent.length > 0);
   }
-  if (item.kind === 'thought') return hNode('p', 'h-item h-mark', '考えた');
+  if (item.kind === 'thought') return hNode('p', 'h-item h-mark', tl('hist.thought'));
   if (item.kind === 'image') {
-    if (!item.img) return hNode('p', 'h-item h-mark', '画像 1 枚（表示できない形式）');
+    if (!item.img) return hNode('p', 'h-item h-mark', tl('hist.img.unshown'));
     const row = hNode('div', 'h-item h-imgs');
     row.appendChild(histThumb(item.img));
     return row;
@@ -324,9 +324,9 @@ function histBuild(data) {
   // 40 at a time further back (2.3.12, ticket 2026-10-21-jui-viz-hist-tab-cannot-scroll-back; the requester's ruling: keep
   // the 40, add a way back): the button reads the 40 before the oldest shown, from where they start in the transcript
   if (data.more) {
-    const b = hNode('button', 'h-older wb-btn', 'もっと前を読む');
+    const b = hNode('button', 'h-older wb-btn', tl('hist.older'));
     b.type = 'button'; b.dataset.hOlder = '';
-    b.title = `今は ${items.filter((x) => x.kind !== 'thought' && x.kind !== 'image').length} 件。その前の ${HIST_OLDER_N} 件を読む`;
+    b.title = tl('hist.older.title', { n: items.filter((x) => x.kind !== 'thought' && x.kind !== 'image').length, more: HIST_OLDER_N });
     b.addEventListener('click', () => histOlder(b));
     box.appendChild(b);
   }
@@ -348,7 +348,7 @@ function histBuild(data) {
     }
     prev = item.kind;
   }
-  if (!items.length) box.appendChild(hNode('p', 'h-note', 'まだ応答がない'));
+  if (!items.length) box.appendChild(hNode('p', 'h-note', tl('hist.empty')));
   return box;
 }
 
@@ -357,7 +357,7 @@ function histPane() { return rbEl.querySelector('[data-rb-hist]'); }
 const HIST_END_PX = 24;
 function histMarker() {
   if (!HIST.marker) {
-    const b = hNode('button', 'h-newer', '新しい応答 ↓');
+    const b = hNode('button', 'h-newer', tl('hist.newer'));
     b.type = 'button';
     b.dataset.hNewer = '';
     b.dataset.fk = 'rb-hist-newer';
@@ -390,7 +390,7 @@ function histShow() {
   if (!pane) return;
   if (!pane._histBound) { pane._histBound = true; pane.addEventListener('scroll', () => histRemember(pane), { passive: true }); }
   if (HIST.error && !HIST.data) { pane.replaceChildren(hNode('p', 'h-note', HIST.error)); return; }
-  if (!HIST.node) { pane.replaceChildren(hNode('p', 'h-note', '読み込み中…')); return; }
+  if (!HIST.node) { pane.replaceChildren(hNode('p', 'h-note', tl('talk.loading'))); return; }
   if (pane.firstChild !== HIST.node) { pane.replaceChildren(HIST.node, histMarker()); histRestore(pane); }
 }
 /* The first item at the top of the pane and how far below the top it starts. */
@@ -422,12 +422,12 @@ function histKeepPlace(pane, anchor) {
 async function histOlder(btn) {
   const id = HIST.id;
   if (!id || HIST.olderBusy || !HIST.data || typeof HIST.data.from !== 'number') return;
-  HIST.olderBusy = true; btn.disabled = true; btn.textContent = '読み込み中…';
+  HIST.olderBusy = true; btn.disabled = true; btn.textContent = tl('talk.loading');
   const before = HIST.data.from;
   const got = await SOURCE.history(id, { before });
   HIST.olderBusy = false;
   if (HIST.id !== id) return;
-  if (!got.ok) { btn.disabled = false; btn.textContent = '読めなかった（もう一度）'; return; }
+  if (!got.ok) { btn.disabled = false; btn.textContent = tl('hist.older.failed'); return; }
   if (HIST.tailStop === null) HIST.tailStop = HIST.latest && typeof HIST.latest.from === 'number' ? HIST.latest.from : before;   // the newest part keeps reaching down to here
   HIST.older = [...got.data.items, ...HIST.older];
   HIST.olderFrom = got.data.from; HIST.olderMore = !!got.data.more;
@@ -446,7 +446,7 @@ async function histFetch() {
   const got = await SOURCE.history(id, HIST.tailStop !== null ? { stop: HIST.tailStop } : null);
   HIST.busy = false;
   if (HIST.id !== id || HIST.tab !== 'history') return;
-  if (!got.ok) { HIST.error = got.error === 'demo' ? 'デモでは応答の履歴を表示しない' : '応答の履歴を読めない（このロボットの記録が見つからない）'; histShow(); return; }
+  if (!got.ok) { HIST.error = got.error === 'demo' ? tl('hist.demo') : tl('hist.unreadable'); histShow(); return; }
   HIST.error = '';
   HIST.latest = got.data;
   const data = histCombine(got.data);
@@ -546,14 +546,14 @@ const PROMPT_START = 'claude --dangerously-load-development-channels plugin:jui-
 const PROMPT_START_CHANNELS = 'claude --channels plugin:jui-viz@jsonui';
 const LAUNCH_WHY = {
   dev: [true, ''],
-  channels: [true, '--channels で起動したセッション。managed settings の allowedChannelPlugins に jui-viz が載っていなければ届かない'],
-  'no-flag': [false, '起動に channel の指定が無いので届かない'],
-  other: [false, '起動の channel の指定に jui-viz が無いので届かない'],
-  form: [false, '起動の指定の形が、この channel のつながり方と合わない（プラグインなら plugin:jui-viz@jsonui、jui viz relay install なら server:jui-viz）'],
-  'server-channels': [false, 'server: の指定は --channels では効かない'],
-  vscode: [false, 'VS Code 拡張のセッションは起動の指定を足せないので届かない'],
-  desktop: [false, 'デスクトップアプリのセッションは起動の指定を足せないので届かない'],
-  unreadable: [false, 'このセッションのプロセスの起動の引数を読めないので、届くか確かめられない'],
+  channels: [true, tl('hist.launch.channels')],
+  'no-flag': [false, tl('hist.launch.noflag')],
+  other: [false, tl('hist.launch.other')],
+  form: [false, tl('hist.launch.form')],
+  'server-channels': [false, tl('hist.launch.server')],
+  vscode: [false, tl('hist.launch.vscode')],
+  desktop: [false, tl('hist.launch.desktop')],
+  unreadable: [false, tl('hist.launch.unreadable')],
 };
 /* 送信中 until the receiver's own transcript shows the prompt (届いた); 届いていない when it has not, NOT_ARRIVED_MS after
    sending and with the session quiet (not busy) for QUIET_MS — a busy session takes it at the end of its turn. */
@@ -561,16 +561,16 @@ const PROMPT_WAIT = { notArrivedMs: 60000, quietMs: 30000 };
 function composeTarget(id) {
   if (!id || !DEF[id]) return { why: '' };
   const sess = SESSIONS.find((x) => x.id === SESSION_OF[id]);
-  const name = sess ? `${sess.id} のメインセッション（${DEF[sess.id].agent} · ${sess.room}）` : '';
-  if (SOURCE.mode !== 'live') return { why: 'デモでは送れない' };
-  if (DEF[id].kind === 'sub') return { why: `サブエージェントには送れない。${SESSION_OF[id]} のメインセッションのカードから送る` };
-  if (location.hostname !== '127.0.0.1') return { why: `このページは http://127.0.0.1:${location.port}/ で開いたときだけ送れる（jui viz open）` };
-  if (!sess || sess.status === 'ended') return { why: 'このセッションは終わっている' };
-  if (!sess.relay) return { why: 'このセッションは中継（jui-viz の channel）につながっていないので送れない。' + RELAY_HOW_TEXT };
-  if (!sess.prompt) return { why: 'このセッションの jui-viz プラグインが古いので送れない（1.2.0 から送れる）。/plugin で jui-viz を更新して、セッションを起動し直す' };
+  const name = sess ? tl('hist.to.name', { id: sess.id, agent: DEF[sess.id].agent, room: sess.room }) : '';
+  if (SOURCE.mode !== 'live') return { why: tl('hist.why.demo') };
+  if (DEF[id].kind === 'sub') return { why: tl('hist.why.sub', { main: SESSION_OF[id] }) };
+  if (location.hostname !== '127.0.0.1') return { why: tl('hist.why.local', { port: location.port }) };
+  if (!sess || sess.status === 'ended') return { why: tl('hist.why.ended') };
+  if (!sess.relay) return { why: tl('hist.why.norelay') + RELAY_HOW_TEXT };
+  if (!sess.prompt) return { why: tl('hist.why.old') };
   const L = LAUNCH_WHY[sess.launch] || LAUNCH_WHY.unreadable;
   if (!L[0]) {
-    return { why: `${L[1]}。届くのは、ターミナルで ${PROMPT_START}（起動のたびに確認が出る）か、managed settings の allowedChannelPlugins に jui-viz を載せて ${PROMPT_START_CHANNELS}（警告なし）と起動したセッションだけ。組織のアカウントは channelsEnabled も要る` };
+    return { why: tl('hist.why.launch', { why: L[1], dev: PROMPT_START, channels: PROMPT_START_CHANNELS }) };
   }
   return { why: '', name, note: L[1] };
 }
@@ -589,7 +589,7 @@ function cardNoteSet(off) {
 function cardNotePaint() {
   const b = document.getElementById('card-note-back'), n = document.getElementById('card-note-state');
   if (b) b.disabled = !cardNoteOff;
-  if (n) setText(n, cardNoteOff ? '消してある — ロボットのカードのプロンプト欄の上の説明（--channels のセッション）を出していません' : '出している');
+  if (n) setText(n, cardNoteOff ? tl('hist.cardnote.off') : tl('hist.cardnote.on'));
 }
 { const b = document.getElementById('card-note-back');
   if (b) b.addEventListener('click', () => cardNoteSet(false));
@@ -600,30 +600,30 @@ function composeBuild() {
   const head = hNode('div', 'h-compose-head'); head.dataset.hHead = '';
   const why = hNode('p', 'h-compose-why'); why.dataset.hWhy = '';
   const noteX = hNode('button', 'h-note-x', '×'); noteX.type = 'button'; noteX.dataset.hNoteX = '';
-  noteX.setAttribute('aria-label', 'この説明を消す（ほかのカードでも出さない。設定 › カードの説明をまた出す で戻る）'); noteX.title = 'この説明を消す';
+  noteX.setAttribute('aria-label', tl('hist.note.x.aria')); noteX.title = tl('hist.note.x');
   noteX.addEventListener('click', () => cardNoteSet(true));
   head.append(why, noteX);
   const area = hNode('textarea', 'h-compose-text');
   area.rows = 3;
   area.dataset.hText = '';
   area.dataset.fk = 'rb-prompt';
-  area.setAttribute('aria-label', 'このセッションへのプロンプト');
-  area.placeholder = 'このセッションへのプロンプト（Enter は改行。送信は ボタン か Ctrl/⌘+Enter）';
+  area.setAttribute('aria-label', tl('hist.prompt.aria'));
+  area.placeholder = tl('hist.prompt.placeholder');
   const row = hNode('div', 'h-compose-row');
   const state = hNode('span', 'h-compose-state'); state.dataset.hState = ''; state.setAttribute('aria-live', 'polite');
-  const send = hNode('button', 'wb-btn h-compose-send', '送信…'); send.type = 'button'; send.dataset.hSend = ''; send.dataset.fk = 'rb-prompt-send';
-  const pick = hNode('button', 'wb-btn h-attach-pick', '添付…'); pick.type = 'button'; pick.dataset.hPick = ''; pick.dataset.fk = 'rb-prompt-attach';
-  pick.title = 'ファイルを添付（欄へのドロップ、画像の貼り付けでも添付できる）';
+  const send = hNode('button', 'wb-btn h-compose-send', tl('hist.send')); send.type = 'button'; send.dataset.hSend = ''; send.dataset.fk = 'rb-prompt-send';
+  const pick = hNode('button', 'wb-btn h-attach-pick', tl('hist.attach.pick')); pick.type = 'button'; pick.dataset.hPick = ''; pick.dataset.fk = 'rb-prompt-attach';
+  pick.title = tl('hist.attach.pick.title');
   const input = hNode('input', ''); input.type = 'file'; input.multiple = true; input.hidden = true; input.dataset.hFile = '';
-  const list = hNode('ul', 'h-attach'); list.dataset.hAttach = ''; list.setAttribute('aria-label', '添付');
+  const list = hNode('ul', 'h-attach'); list.dataset.hAttach = ''; list.setAttribute('aria-label', tl('hist.attach.list'));
   row.append(state, pick, send, input);
   const confirm = hNode('div', 'h-confirm'); confirm.dataset.hConfirm = ''; confirm.hidden = true;
-  confirm.setAttribute('role', 'group'); confirm.setAttribute('aria-label', '送信の確認');
+  confirm.setAttribute('role', 'group'); confirm.setAttribute('aria-label', tl('hist.confirm.aria'));
   const to = hNode('p', 'h-confirm-to'); to.dataset.hTo = '';
   const preview = hNode('p', 'h-confirm-text'); preview.dataset.hPreview = '';
   const acts = hNode('div', 'h-confirm-acts');
-  const go = hNode('button', 'wb-btn h-confirm-go', 'このセッションへ送る'); go.type = 'button'; go.dataset.hGo = '';
-  const back = hNode('button', 'wb-btn', 'やめる'); back.type = 'button'; back.dataset.hBack = '';
+  const go = hNode('button', 'wb-btn h-confirm-go', tl('hist.confirm.go')); go.type = 'button'; go.dataset.hGo = '';
+  const back = hNode('button', 'wb-btn', tl('hist.confirm.back')); back.type = 'button'; back.dataset.hBack = '';
   acts.append(go, back);
   confirm.append(to, preview, acts);
   box.append(head, area, list, row, confirm);
@@ -664,18 +664,18 @@ function attachAdd(files) {
   const id = HIST.compose && HIST.compose._for;
   if (!id || composeTarget(id).why) return;
   for (const file of files) {
-    if (HIST.attach.length >= ATTACH_MAX) { showToast(`添付は 1 回に ${ATTACH_MAX} 個まで`); break; }
-    const a = { key: Math.random().toString(36).slice(2), name: file.name || (file.type.startsWith('image/') ? '貼り付けた画像' : '添付'),
+    if (HIST.attach.length >= ATTACH_MAX) { showToast(tl('hist.attach.max', { max: ATTACH_MAX })); break; }
+    const a = { key: Math.random().toString(36).slice(2), name: file.name || (file.type.startsWith('image/') ? tl('hist.attach.pasted') : tl('hist.attach.noname')),
       size: file.size, media: file.type || '', up: true, error: '', id: '',
       thumb: /^image\/(png|jpeg|gif|webp)$/.test(file.type) ? URL.createObjectURL(file) : '' };
     HIST.attach.push(a);
-    if (file.size === 0) { a.up = false; a.error = '空のファイル'; continue; }
-    if (file.size > ATTACH_FILE_MAX) { a.up = false; a.error = `大きすぎる（1 個 ${attachSize(ATTACH_FILE_MAX)} まで）`; continue; }
+    if (file.size === 0) { a.up = false; a.error = tl('hist.attach.empty'); continue; }
+    if (file.size > ATTACH_FILE_MAX) { a.up = false; a.error = tl('hist.attach.big.max', { max: attachSize(ATTACH_FILE_MAX) }); continue; }
     SOURCE.attachFile(id, file).then((got) => {
       a.up = false;
       if (!HIST.attach.includes(a)) { if (got.ok) SOURCE.attachRemove(id, got.id); return; }   // × pressed while it went up
       if (got.ok) { a.id = got.id; a.name = got.name; a.size = got.size; a.media = got.media; }
-      else a.error = got.status === 413 ? '大きすぎる' : got.error || `HTTP ${got.status}`;
+      else a.error = got.status === 413 ? tl('hist.attach.big') : got.error || `HTTP ${got.status}`;
       composePaint();
     });
   }
@@ -705,8 +705,8 @@ function attachPaint(E) {
     li.dataset.hAttachItem = a.id || '';
     if (a.thumb) { const img = hNode('img', 'h-attach-thumb'); img.src = a.thumb; img.alt = ''; li.appendChild(img); }
     li.appendChild(hNode('span', 'h-attach-name', a.name));
-    li.appendChild(hNode('span', 'h-attach-meta', a.error ? a.error : a.up ? '送っている…' : attachSize(a.size)));
-    const x = hNode('button', 'h-attach-x', '×'); x.type = 'button'; x.setAttribute('aria-label', `${a.name} を外す`);
+    li.appendChild(hNode('span', 'h-attach-meta', a.error ? a.error : a.up ? tl('hist.attach.sending') : attachSize(a.size)));
+    const x = hNode('button', 'h-attach-x', '×'); x.type = 'button'; x.setAttribute('aria-label', tl('hist.attach.remove', { name: a.name }));
     x.addEventListener('click', () => attachRemove(a));
     li.appendChild(x);
     return li;
@@ -758,7 +758,7 @@ function histCardsBox() {
     const el = hNode('div', 'h-cards');
     el.dataset.hCards = '';
     el.dataset.dwhere = 'h';
-    el.setAttribute('aria-label', 'このセッションの許可・質問・止められた操作');
+    el.setAttribute('aria-label', tl('hist.cards.aria'));
     el.addEventListener('input', onQuestionInput);
     el.addEventListener('click', onQuestionClick);
     el.addEventListener('click', onDenialClick);
@@ -796,11 +796,11 @@ function composePaint() {
   attachPaint(E);
   const sent = HIST.sent && HIST.sent.id === id ? HIST.sent : null;
   const phase = sent && !sent.error ? composePhase(sent) : '';
-  E.state.textContent = bytes > PROMPT_MAX_BYTES ? `長すぎる（${bytes.toLocaleString('ja-JP')} / ${PROMPT_MAX_BYTES.toLocaleString('ja-JP')} バイト）`
-    : sent && sent.error ? `送れなかった（${sent.error}）`
-    : phase === 'arrived' ? `届いた ${HIST_TIME(sent.arrivedAt)}（受け手の記録に出た）`
-    : phase === 'missing' ? `届いていない（${HIST_TIME(sent.at)} に送ったが、受け手の記録に出ない。候補: 起動の指定が無い・組織の channelsEnabled が無い・セッションが閉じた）`
-    : sent ? `送信中 ${HIST_TIME(sent.at)}（受け手の記録に出るのを待っている。まだ届いたとは言えない）` : '';
+  E.state.textContent = bytes > PROMPT_MAX_BYTES ? tl('hist.state.long', { n: fmtNum(bytes), max: fmtNum(PROMPT_MAX_BYTES) })
+    : sent && sent.error ? tl('hist.state.failed', { error: sent.error })
+    : phase === 'arrived' ? tl('hist.state.arrived', { at: HIST_TIME(sent.arrivedAt) })
+    : phase === 'missing' ? tl('hist.state.missing', { at: HIST_TIME(sent.at) })
+    : sent ? tl('hist.state.sending', { at: HIST_TIME(sent.at) }) : '';
   E.state.dataset.hPhase = bytes > PROMPT_MAX_BYTES ? 'long' : sent && sent.error ? 'error' : phase;
   E.state.classList.toggle('h-compose-err', bytes > PROMPT_MAX_BYTES || !!(sent && sent.error) || phase === 'missing');
   if (asking && t.why) composeClose(false);   // the session lost its relay while the confirmation was open
@@ -816,8 +816,8 @@ function composePhase(sent) {
 function composeAsk() {
   const E = composeEls(), id = HIST.compose._for, t = composeTarget(id), text = E.area.value, files = attachReady();
   if (t.why || (!text.trim() && !files.length) || attachBusy() || composeBytes(id, text) > PROMPT_MAX_BYTES || !E.confirm.hidden) return;
-  E.to.textContent = `送り先: ${t.name}`;
-  const listed = files.map((a) => `添付: ${a.name}（${attachSize(a.size)}）`).join('\n');
+  E.to.textContent = tl('hist.confirm.to', { name: t.name });
+  const listed = files.map((a) => tl('hist.confirm.file', { name: a.name, size: attachSize(a.size) })).join('\n');
   const shown = text.length > 400 ? `${text.slice(0, 400)}…` : text;
   E.preview.textContent = [shown, listed].filter(Boolean).join('\n');
   E.confirm.hidden = false;
@@ -874,7 +874,7 @@ function histImgGet(ref) {
     const id = HIST.id;
     const asked = ref.attach ? SOURCE.attachImage(ref.attach) : ref.sent ? SOURCE.historyFile(id, ref.sent) : SOURCE.historyImage(id, ref);
     HIST.imgs.set(key, asked.then((got) => (got.ok ? { url: URL.createObjectURL(got.blob) }
-      : { error: got.gone ? '消えました' : got.status === 413 ? '大きすぎて表示しない' : got.status === 415 ? '表示できない形式' : `画像を読めない（${got.status || got.error}）` })));
+      : { error: got.gone ? tl('hist.img.err.gone') : got.status === 413 ? tl('hist.img.err.big') : got.status === 415 ? tl('hist.img.err.format') : tl('hist.img.err.read', { error: got.status || got.error }) })));
   }
   return HIST.imgs.get(key);
 }
@@ -900,11 +900,11 @@ function histThumbLoad(btn) {
 function histFileLink(ref, name, cls = '') {
   const b = hNode('button', `h-filelink${cls ? ` ${cls}` : ''}`, `📎 ${name}`);
   b.type = 'button';
-  b.title = 'Finder で表示';
+  b.title = tl('hist.file.reveal');
   b.addEventListener('click', () => {
     SOURCE.revealFile(HIST.id, ref).then((got) => {
-      if (got.gone) { b.disabled = true; b.classList.add('h-file-gone'); b.textContent = `📎 ${name}（もう無い）`; b.title = 'このファイルはもう無い'; }
-      else if (!got.ok) b.title = `Finder で開けなかった（${got.error || got.status}）`;
+      if (got.gone) { b.disabled = true; b.classList.add('h-file-gone'); b.textContent = `📎 ${tl('hist.file.gone', { name })}`; b.title = tl('hist.file.gone.title'); }
+      else if (!got.ok) b.title = tl('hist.file.failed', { error: got.error || got.status });
     });
   });
   return b;
@@ -914,9 +914,9 @@ function histThumb(ref) {
   b.type = 'button';
   b._ref = ref;
   b.dataset.hImg = histRefKey(ref);
-  b.setAttribute('aria-label', '画像を大きく表示');
+  b.setAttribute('aria-label', tl('hist.img.open'));
   const img = hNode('img');
-  img.alt = '履歴の画像';
+  img.alt = tl('hist.img.label');
   img.decoding = 'async';
   b.append(img, hNode('span', 'h-thumb-note', ''));
   b.addEventListener('click', () => histLightOpen(b));
@@ -928,7 +928,7 @@ function histLightShow() {
   const ref = LIGHT.list[LIGHT.k], img = LIGHT.el.querySelector('img'), note = LIGHT.el.querySelector('.h-light-note');
   LIGHT.el.querySelector('.h-light-count').textContent = `${LIGHT.k + 1} / ${LIGHT.list.length}`;
   LIGHT.el.querySelectorAll('[data-h-light-step]').forEach((b) => { b.disabled = LIGHT.list.length < 2; });
-  img.removeAttribute('src'); note.textContent = '読み込み中…';
+  img.removeAttribute('src'); note.textContent = tl('talk.loading');
   const want = LIGHT.k;
   histImgGet(ref).then((g) => {
     if (!LIGHT.el || LIGHT.k !== want) return;
@@ -946,12 +946,12 @@ function histLightOpen(btn) {
   const box = hNode('div', 'h-light-box');
   box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-labelledby', 'h-light-title'); box.tabIndex = -1;
   const head = hNode('div', 'h-light-head');
-  const title = hNode('h3', '', '履歴の画像'); title.id = 'h-light-title';
-  const prev = hNode('button', 'wb-btn', '‹ 前'); prev.type = 'button'; prev.dataset.hLightStep = '-1'; prev.setAttribute('aria-label', '前の画像（←）');
-  const next = hNode('button', 'wb-btn', '次 ›'); next.type = 'button'; next.dataset.hLightStep = '1'; next.setAttribute('aria-label', '次の画像（→）');
-  const close = hNode('button', 'wb-btn', '閉じる'); close.type = 'button'; close.dataset.hLightClose = '';
+  const title = hNode('h3', '', tl('hist.img.label')); title.id = 'h-light-title';
+  const prev = hNode('button', 'wb-btn', tl('hist.light.prev')); prev.type = 'button'; prev.dataset.hLightStep = '-1'; prev.setAttribute('aria-label', tl('hist.light.prev.aria'));
+  const next = hNode('button', 'wb-btn', tl('hist.light.next')); next.type = 'button'; next.dataset.hLightStep = '1'; next.setAttribute('aria-label', tl('hist.light.next.aria'));
+  const close = hNode('button', 'wb-btn', tl('hist.light.close')); close.type = 'button'; close.dataset.hLightClose = '';
   head.append(title, hNode('span', 'h-light-count', ''), prev, next, close);
-  const img = hNode('img'); img.alt = '履歴の画像（拡大）';
+  const img = hNode('img'); img.alt = tl('hist.img.label.large');
   box.append(head, img, hNode('p', 'h-light-note', ''));
   el.appendChild(box);
   document.body.appendChild(el);
@@ -1023,8 +1023,8 @@ function histWidePaint() {
   if (b) {
     b.hidden = false;
     b.setAttribute('aria-pressed', String(HIST.wide));
-    b.textContent = HIST.wide ? '元の幅に戻す' : '広げる';
-    b.title = HIST.wide ? '元の幅に戻す（Esc）' : 'カードを画面いっぱいに広げる（今の様子・応答の履歴で同じ）';
+    b.textContent = HIST.wide ? tl('hist.wide.off') : tl('hist.wide.on');
+    b.title = HIST.wide ? tl('hist.wide.off.title') : tl('hist.wide.on.title');
   }
 }
 /* After every histSync: the card decides whether it is wide (the kept choice, the same for both tabs). */
@@ -1049,8 +1049,8 @@ function histLowPaint() {
   if (b) {
     b.hidden = HIST.tab !== 'history';
     b.setAttribute('aria-pressed', String(on));
-    b.textContent = on ? '元の高さに戻す' : '下を広げる';
-    b.title = on ? '履歴の高さを元に戻す' : '質問の札・プロンプトの欄・送信のボタンが一度に見えるよう、履歴を縮めて下を広げる';
+    b.textContent = on ? tl('hist.low.off') : tl('hist.low.on');
+    b.title = on ? tl('hist.low.off.title') : tl('hist.low.on.title');
   }
 }
 rbEl.addEventListener('click', (e) => {
