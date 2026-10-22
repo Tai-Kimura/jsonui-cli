@@ -67,8 +67,8 @@ SCHEMA_JA = {"maxLength": "は {limit} 文字までです（今 {length} 文字�
              "maxItems": "は {limit} 個までです（今 {count} 個）",
              "uniqueItems": "に同じ物が 2 度あります（{first} 番目と {second} 番目、0 から数えて）",
              "propertyNames": "の名前の形が違います（書ける形: {pattern}）",
-             "minProperties": "は {limit} 個以上です（今 {count} 個）",
-             "maxProperties": "は {limit} 個までです（今 {count} 個）"}
+             "minProperties": "は {limit} 項目以上です（今 {count} 項目）",
+             "maxProperties": "は {limit} 項目までです（今 {count} 項目）"}
 
 #: a JSON type's name, in a type line (SCHEMA_JA["type"])
 TYPE_JA = {"object": "オブジェクト", "array": "配列", "string": "文字列", "integer": "整数", "number": "数",

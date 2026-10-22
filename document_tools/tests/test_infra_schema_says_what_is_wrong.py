@@ -49,9 +49,9 @@ SAMPLES = {
     "uniqueItems": (MS["$defs"]["envRefs"], MS, ["a", MARK, MARK], "に同じ物が 2 度あります（1 番目と 2 番目、0 から数えて）"),
     "propertyNames": (LS["properties"]["profiles"], LS, {"Bad " + MARK: {"hourly": [1] * 24}},
                       "の名前の形が違います（書ける形: ^[a-z0-9][a-z0-9._-]{0,63}$）"),
-    "minProperties": (BY_SKU, LS, {}, "は 1 個以上です（今 0 個）"),
+    "minProperties": (BY_SKU, LS, {}, "は 1 項目以上です（今 0 項目）"),
     "maxProperties": (LS["properties"]["profiles"], LS, {f"p{i}": {"hourly": [1] * 24} for i in range(51)},
-                      "は 50 個までです（今 51 個）"),
+                      "は 50 項目までです（今 51 項目）"),
 }
 
 
