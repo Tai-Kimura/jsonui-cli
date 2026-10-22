@@ -6,7 +6,8 @@
 
    The model's flows (infra/flows.py checked them: every move leaves the node the flow is at). A node that starts a
    flow drawn now carries a small green cone; choosing the node lists its flows on the board, and a flow chosen plays:
-   - a light runs along each move's edge and the node it reaches glows; a toast over that node says what happened
+   - light runs through each move's edge, a bright head and a fading tail inside the cable (requester 10-22: 「ボールが跳ねる
+     んじゃなくて同線に光が流れていくイメージで」), and the node it reaches glows; a toast over that node says what happened
      (the action's mark and verb after the node's name: 「💾 d1 に保存」, the step's label on a second line), and the
      first one says what started it (the trigger's mark: 👤 ⏰ 📡 ⚡, with a schedule as written);
    - a branch stops the light: its choices are buttons over the node, the first edge of each glows faintly ahead, and
@@ -79,7 +80,7 @@ function srFlowStop() {
   if (!P) return;
   for (const x of P.toasts) x.el.remove();
   const layer = SR.view && SR.view.flowLayer;
-  if (layer) for (const o of [...layer.children]) if (!o.userData.flowStarts) { layer.remove(o); if (o.geometry) o.geometry.dispose(); }
+  if (layer) for (const o of [...layer.children]) if (!o.userData.flowStarts) { layer.remove(o); if (o.userData.flowLight) srFlowLightDispose(o); else if (o.geometry) o.geometry.dispose(); }
   SR_FLOW.player = null;
   $('sr-choices').hidden = true;
   srFlowRenderBar();
@@ -126,13 +127,66 @@ function srFlowLaneNext(P, L) {
   else { srFlowSay(P, s, s.at || s.node); L.anim = { kind: 'wait', left: SR_FLOW.nodeMs }; }
 }
 function srFlowMove(P, step) {
-  const V = SR.view, a = srFlowPos(V, step.from), b = srFlowPos(V, step.to);
-  const dot = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffcf33 }));
-  dot.position.copy(a);
-  dot.userData.r = 0.28; dot.userData.minPx = SR_FLOW_MIN_PX;
-  V.flowLayer.add(dot);
-  P.lights.push(dot);
-  return { kind: 'move', step, a, b, dot, done: 0 };
+  const V = SR.view, light = srFlowLight(V, step.from, step.to);
+  V.flowLayer.add(light);
+  P.lights.push(light);
+  return { kind: 'move', step, light, done: 0 };
+}
+
+/* ---- the light in the cable: no object travels. The move's edge gets a tube as long as its cable, at the cable's
+   height (srBuild: 1.7, across clouds 2.6), in two layers — a thin core and a wide soft glow — and SR_FLOW_LIGHT_SHADER
+   lights the part of it behind the head: full at the head (toward white), fading over the tail. The head goes from the
+   cable's start to its end on the move's clock; once there the tail drains into the node (SR_FLOW_LIGHT.drainMs), the
+   light no longer counted as moving. In dark the glow adds to what is behind it; on the light ground it is laid over. */
+const SR_FLOW_LIGHT = { core: 0.07, glow: 0.24, tail: 3.2, drainMs: 380 };
+const SR_FLOW_LIGHT_SHADER = {
+  vertex: `varying float vAlong; varying float vFacing;
+    void main() { vAlong = position.y + 0.5; vec4 mv = modelViewMatrix * vec4(position, 1.0);
+      vFacing = abs(dot(normalize(normalMatrix * normal), normalize(-mv.xyz))); gl_Position = projectionMatrix * mv; }`,
+  fragment: `uniform vec3 uColor; uniform float uHead, uTail, uOpacity, uSoft, uWhite; varying float vAlong; varying float vFacing;
+    void main() { float d = uHead - vAlong;
+      float a = d >= 0.0 ? pow(max(0.0, 1.0 - d / uTail), 1.7) : max(0.0, 1.0 + d / 0.015);
+      a *= mix(1.0, pow(vFacing, 2.0), uSoft);
+      if (a <= 0.004) discard;
+      gl_FragColor = vec4(mix(uColor, vec3(1.0), uWhite * pow(a, 3.0)), a * uOpacity); }`,
+};
+function srFlowCableY(V, from, to) {
+  const e = V.L.edges.find((x) => (x.from === from && x.to === to) || (x.from === to && x.to === from));
+  return e && e.crossProvider ? 2.6 : 1.7;
+}
+function srFlowLight(V, from, to) {
+  const pa = V.L.pos.get(from), pb = V.L.pos.get(to), y = srFlowCableY(V, from, to);
+  const a = new THREE.Vector3(pa.x, y, pa.z), b = new THREE.Vector3(pb.x, y, pb.z), len = Math.max(a.distanceTo(b), 1e-3);
+  const PAL = SR_PAL[V.dark ? 'dark' : 'light'], tail = Math.min(0.85, SR_FLOW_LIGHT.tail / len);
+  const layer = (color, opacity, soft, white) => new THREE.ShaderMaterial({ vertexShader: SR_FLOW_LIGHT_SHADER.vertex, fragmentShader: SR_FLOW_LIGHT_SHADER.fragment,
+    uniforms: { uColor: { value: new THREE.Color(color) }, uHead: { value: 0 }, uTail: { value: tail }, uOpacity: { value: opacity }, uSoft: { value: soft }, uWhite: { value: white } },
+    transparent: true, depthWrite: false, blending: V.dark ? THREE.AdditiveBlending : THREE.NormalBlending });
+  const tube = new THREE.CylinderGeometry(1, 1, 1, 12, 1, true);
+  const glow = new THREE.Mesh(tube, layer(PAL.light, V.dark ? 0.75 : 0.85, 1, 0));
+  const core = new THREE.Mesh(tube, layer(PAL.lightCore, 1, 0, V.dark ? 0.85 : 0.35));
+  const light = new THREE.Group();
+  light.add(glow, core);
+  light.position.copy(a).add(b).multiplyScalar(0.5);
+  light.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+  glow.scale.set(SR_FLOW_LIGHT.glow, len, SR_FLOW_LIGHT.glow); core.scale.set(SR_FLOW_LIGHT.core, len, SR_FLOW_LIGHT.core);
+  light.renderOrder = glow.renderOrder = core.renderOrder = 3;
+  light.userData = { flowLight: true, moving: true, a, b, head: a.clone(), glow, core, tail };
+  return light;
+}
+/* The head at k (0: the cable's start, 1: its end, past 1: the tail draining). */
+function srFlowLightAt(o, k) {
+  for (const m of [o.userData.glow, o.userData.core]) m.material.uniforms.uHead.value = k;
+  o.userData.head.lerpVectors(o.userData.a, o.userData.b, Math.min(k, 1));
+}
+/* Pulled back, the glow is drawn at least SR_FLOW_MIN_PX in radius at its head (the core a third of that). */
+function srFlowLightKeepSize(V, o) {
+  const px = srFlowPxPerUnit(V, o.userData.head), g = Math.max(SR_FLOW_LIGHT.glow, SR_FLOW_MIN_PX / px), c = Math.max(SR_FLOW_LIGHT.core, SR_FLOW_MIN_PX / 3 / px);
+  o.userData.glow.scale.x = o.userData.glow.scale.z = g;
+  o.userData.core.scale.x = o.userData.core.scale.z = c;
+}
+function srFlowLightDispose(o) {
+  o.userData.glow.geometry.dispose();
+  for (const m of [o.userData.glow, o.userData.core]) m.material.dispose();
 }
 function srFlowSay(P, step, at) {
   const act = SR_ACTIONS[step.action];
@@ -161,7 +215,7 @@ function srFlowHints(P, b) {
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
-  const lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xffcf33, transparent: true, opacity: 0.45 }));
+  const lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: SR_PAL[V.dark ? 'dark' : 'light'].light, transparent: true, opacity: 0.45 }));
   lines.userData.hints = arr.length / 6;
   V.flowLayer.add(lines);
   P.hints = lines;
@@ -198,7 +252,7 @@ function srFlowBack() {
   P.flow = s.flow; P.frames = s.frames; P.pos = s.pos; P.chosen = s.chosen;
   P.branch = null; $('sr-choices').hidden = true;
   if (P.hints) { SR.view.flowLayer.remove(P.hints); P.hints = null; }
-  for (const d of P.lights) SR.view.flowLayer.remove(d);
+  for (const d of P.lights) { SR.view.flowLayer.remove(d); if (d.userData.flowLight) srFlowLightDispose(d); }
   P.lights = []; P.anim = null; P.state = 'pause';
   srFlowRenderBar();
   return true;
@@ -214,7 +268,7 @@ function srFlowToast(P, at, head, sub) {
 function srFlowGlow(P, at) {
   const p = srFlowPos(SR.view, at);
   if (!p) return;
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.08, 6, 24), new THREE.MeshBasicMaterial({ color: 0xffcf33, transparent: true, opacity: 0.9 }));
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.08, 6, 24), new THREE.MeshBasicMaterial({ color: SR_PAL[SR.view.dark ? 'dark' : 'light'].light, transparent: true, opacity: 0.9 }));
   ring.position.set(p.x, p.y - 0.6, p.z); ring.rotation.x = Math.PI / 2;
   ring.userData.left = SR_FLOW.nodeMs * 2;
   ring.userData.r = 0.75; ring.userData.minPx = SR_FLOW_MIN_PX * 2;
@@ -222,8 +276,8 @@ function srFlowGlow(P, at) {
   P.lights.push(ring);
 }
 
-/* Pulled back over a large room a light 0.28 across is a few pixels: it is drawn at least SR_FLOW_MIN_PX in radius
-   (the ring under a node twice that), and at its own size once the camera is near enough for that. */
+/* Pulled back over a large room a light is a few pixels: it is drawn at least SR_FLOW_MIN_PX in radius (the ring under a
+   node twice that), and at its own size once the camera is near enough for that. */
 const SR_FLOW_MIN_PX = 7;
 function srFlowPxPerUnit(V, at) {
   const d = V.camera.position.distanceTo(at);
@@ -244,11 +298,10 @@ function srFlowTick(V, dt) {
     if (!A) return true;
     if (A.kind === 'wait') { A.left -= step; return A.left <= 0; }
     A.done = Math.min(1, A.done + step / SR_FLOW.moveMs);
-    const k = A.done, y = Math.sin(Math.PI * k) * 0.8;
-    A.dot.position.lerpVectors(A.a, A.b, k); A.dot.position.y += y;
-    if (k < 1) return false;
-    V.flowLayer.remove(A.dot); A.dot.geometry.dispose();
-    P.lights = P.lights.filter((x) => x !== A.dot);
+    srFlowLightAt(A.light, A.done);
+    if (A.done < 1) return false;
+    A.light.userData.moving = false;               // its tail drains into the node, on the same clock
+    A.light.userData.left = SR_FLOW_LIGHT.drainMs;
     P.pos = A.step.to;
     P.arrivals.push(srNow());
     P.reached.push([A.step.to, srNow()]);       // where and when (the e2e reads that lanes arrive together)
@@ -263,9 +316,16 @@ function srFlowTick(V, dt) {
       if (advance(P.anim)) { P.anim = null; if (P.stepOnce) P.stepOnce = false; else srFlowNext(P); }
     } else if (P.state === 'play') srFlowNext(P);
   }
-  for (const o of P.lights) srFlowKeepSize(V, o);
+  for (const o of P.lights) {
+    if (!o.userData.flowLight) { srFlowKeepSize(V, o); continue; }
+    if (!o.userData.moving) srFlowLightAt(o, 1 + (1 - Math.max(0, o.userData.left) / SR_FLOW_LIGHT.drainMs) * o.userData.tail);
+    srFlowLightKeepSize(V, o);
+  }
   if (P.state === 'branch' && SR_FLOW.auto && P.branch && P.branch.b.default && srNow() - P.branch.shownAt > 600 / SR_FLOW.speed) srFlowChoose(P.branch.b.default);
-  for (const o of [...V.flowLayer.children]) if (o.userData.left !== undefined && (o.userData.left -= step) <= 0) { V.flowLayer.remove(o); P.lights = P.lights.filter((x) => x !== o); }
+  for (const o of [...V.flowLayer.children]) if (o.userData.left !== undefined && (o.userData.left -= step) <= 0) {
+    V.flowLayer.remove(o); P.lights = P.lights.filter((x) => x !== o);
+    if (o.userData.flowLight) srFlowLightDispose(o);
+  }
   // the toasts over their nodes, stacked when several are on one
   const w = V.renderer.domElement.clientWidth, h = V.renderer.domElement.clientHeight, per = {};
   P.toasts = P.toasts.filter((x) => { x.left -= step; if (x.left > 0) return true; x.el.remove(); return false; });

@@ -205,18 +205,50 @@ function srDetailText(n) {
   const shown = !main ? '' : SR_SPEC_KIND.includes(main.key) ? main.value : `${main.key} ${main.value}`;
   return [n.label || n.id, `${name}${eng}`.trim(), shown].filter(Boolean).join(' · ') + (n.count > 1 ? ` ×${n.count}` : '');
 }
-const SR_PALETTE = ['#f29a38', '#4f8ef7', '#3fb26b', '#e2574c', '#a26bd6', '#26a5b8', '#d4a72c', '#7d8a99', '#e06fa8', '#5c6bc0'];
-/* The 3D's colours (2.3.9, item 2, requester 10-20: 「ダークでも背景が白なの嫌だね 背景は暗めにして欲しい」): in dark the
-   background is near-black and every floor at least 3:1 against it; the light set is as before. */
-const SR_PAL = {
-  light: { bg: '#eef2f7', logical: '#c9b8e8', public: '#dfe7f2', private: '#9fb0c4', neutral: '#cfd6df', strip: 0xe9e2f5, plain: 0x5c6b7f, focus: 0x1d4ed8 },
-  dark: { bg: '#10161f', logical: '#6b5b99', public: '#5d7088', private: '#566a83', neutral: '#5f6b7a', strip: 0x66588a, plain: 0x8193a8, focus: 0x7cb4ff },
+/* The 3D's colours (requester 10-22: 「サーバーのノードたち色合いがセンスないからもっとオシャレに」; ticket
+   2026-10-22-viz-server-room-palette-and-light-flow). One designed set: a cloud is a hue, and the role sets how much of it
+   shows — a floor holds a whisper of its cloud's hue, a node the hue itself, the focus and the flow's light the strongest.
+   The hues sit at one lightness and chroma (OKLCH), so they read as a family; the ground and the frames are a cool slate,
+   and the warm gold is kept for light (the flow, its glow) — the accent. Dark (2.3.9, item 2: 「ダークでも背景が白なの嫌だね」):
+   the ground near-black, every floor at least 3:1 against it.
+   SR_HUES: the clouds most rooms name, each its own hue; any other takes one of SR_HUE_RING by its name. */
+const SR_HUES = { aws: 68, gcp: 255, azure: 222, cloudflare: 30, vercel: [270, 0.25], auth0: 300, supabase: 155, firebase: 48, fastly: 350,
+  netlify: 190, heroku: 290, digitalocean: 235, oracle: 25, alibaba: 40, render: 165, fly: 300, github: [265, 0.3] };
+const SR_HUE_RING = [255, 190, 300, 155, 32, 340, 222, 120];
+const SR_ROLE = {   // [lightness, chroma] of a cloud's hue by role, light and dark
+  light: { floor: [0.925, 0.06], floorStep: -0.02, node: [0.74, 0.175], box: [0.82, 0.12] },
+  dark: { floor: [0.55, 0.095], floorStep: 0.018, node: [0.8, 0.165], box: [0.66, 0.125] },
 };
-function srProviderColor(p) {
-  if (!p) return '#9aa4b2';
+const srOk = (L, C, h) => srOklch(L, C, h);
+const SR_PAL = {
+  light: { bg: srOk(0.972, 0.006, 250), logical: srOk(0.935, 0.03, 285), public: srOk(0.955, 0.02, 245), private: srOk(0.885, 0.035, 245),
+    neutral: srOk(0.92, 0.01, 250), logicalBox: srOk(0.8, 0.045, 280), strip: srOk(0.93, 0.02, 280), plain: srOk(0.56, 0.035, 255),
+    focus: srOk(0.52, 0.2, 262), cross: srOk(0.6, 0.19, 350), light: srOk(0.66, 0.2, 48), lightCore: srOk(0.86, 0.12, 80), nodeless: srOk(0.72, 0.02, 250) },
+  dark: { bg: srOk(0.17, 0.016, 258), logical: srOk(0.53, 0.045, 285), public: srOk(0.55, 0.025, 245), private: srOk(0.52, 0.035, 245),
+    neutral: srOk(0.53, 0.015, 250), logicalBox: srOk(0.6, 0.05, 280), strip: srOk(0.36, 0.03, 280), plain: srOk(0.66, 0.035, 255),
+    focus: srOk(0.8, 0.13, 255), cross: srOk(0.7, 0.17, 350), light: srOk(0.83, 0.15, 78), lightCore: srOk(0.97, 0.05, 90), nodeless: srOk(0.72, 0.02, 250) },
+};
+/* OKLCH (L 0..1, C, h in degrees) to '#rrggbb' (out of gamut: clipped). */
+function srOklch(L, C, h) {
+  const a = C * Math.cos(h * Math.PI / 180), b = C * Math.sin(h * Math.PI / 180);
+  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3, m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3, s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
+  const lin = [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s, -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s];
+  return '#' + lin.map((v) => { v = Math.min(1, Math.max(0, v)); const g = v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055; return Math.round(g * 255).toString(16).padStart(2, '0'); }).join('');
+}
+function srHue(p) {
+  const k = String(p).toLowerCase(), known = SR_HUES[k];
+  if (known !== undefined) return Array.isArray(known) ? known : [known, 1];
   let h = 0;
-  for (const ch of String(p)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return SR_PALETTE[h % SR_PALETTE.length];
+  for (const ch of k) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return [SR_HUE_RING[h % SR_HUE_RING.length], 1];
+}
+/* A cloud's colour for a role (node: the shapes, the legend's chip and the cost's bars; box: a closed group and the far
+   view; floor: its floor, `level` deep) in the theme shown. */
+function srProviderColor(p, role = 'node', level = 0, dark = isDark()) {
+  const R = SR_ROLE[dark ? 'dark' : 'light'];
+  if (!p) return dark ? SR_PAL.dark.nodeless : SR_PAL.light.nodeless;
+  const [h, k] = srHue(p), [L, C] = R[role];
+  return srOklch(L + (role === 'floor' ? R.floorStep * Math.min(level, 4) : 0), C * k, h);
 }
 const srVisible = (x, env) => !env || !Array.isArray(x.environments) || !x.environments.length || x.environments.includes(env);
 function srEnvs(model) { return (model.environments || []).map((e) => (typeof e === 'string' ? { id: e, label: e } : { id: e.id, label: e.label || e.id })); }
@@ -363,10 +395,9 @@ function srBuild() {
     const h = 0.05, y = 0.06 * G.level + h / 2;
     m4.compose(at.set(G.x + G.w / 2, y, G.z + G.d / 2), q, sc.set(G.w, h, G.d));
     floorMesh.setMatrixAt(i, m4);
-    const g = G.g, base = g.kind === 'logical' ? PAL.logical : g.visibility === 'public' ? PAL.public : g.visibility === 'private' ? PAL.private : g.provider ? srProviderColor(g.provider) : PAL.neutral;
+    const g = G.g, base = g.kind === 'logical' ? PAL.logical : g.visibility === 'public' ? PAL.public : g.visibility === 'private' ? PAL.private
+      : g.provider ? srProviderColor(g.provider, 'floor', G.level, dark) : PAL.neutral;
     col.set(base);
-    if (!dark && g.provider && g.kind !== 'logical') col.lerp(new THREE.Color('#ffffff'), 0.55 - Math.min(G.level, 4) * 0.08);
-    else if (dark && g.provider && g.kind !== 'logical' && !g.visibility) col.lerp(new THREE.Color(PAL.bg), 0.25);   // a provider's own floor, a little toward the ground
     floorMesh.setColorAt(i, col);
     V.floorColors.push(`#${col.getHexString()}`);
   });
@@ -379,7 +410,7 @@ function srBuild() {
       const h = 0.6 + Math.log2(1 + srCountNodes(G)) * 0.35;
       m4.compose(at.set(G.x + G.w / 2, 0.06 * G.level + h / 2, G.z + SR_HEAD + (G.d - SR_HEAD) / 2), q, sc.set(G.w - SR_PAD, h, G.d - SR_HEAD - SR_PAD * 0.5));
       cm.setMatrixAt(i, m4);
-      cm.setColorAt(i, col.set(G.g.kind === 'logical' ? '#b49be0' : srProviderColor(G.g.providerResolved || G.g.provider)));
+      cm.setColorAt(i, col.set(G.g.kind === 'logical' ? PAL.logicalBox : srProviderColor(G.g.providerResolved || G.g.provider, 'box', 0, dark)));
     });
     cm.userData.groups = L.closed.map((G) => G.g.id);
     V.near.add(cm); V.pick.push(cm);
@@ -399,7 +430,7 @@ function srBuild() {
         const s = p.n.count > 1 ? 1 + Math.min(Math.log2(p.n.count), 4) * 0.12 : 1;
         m4.compose(at.set(p.x, p.y + 0.75, p.z), q, sc.set(s, s, s));
         mesh.setMatrixAt(i, m4);
-        mesh.setColorAt(i, col.set(srProviderColor(p.n.providerResolved || p.n.provider)));
+        mesh.setColorAt(i, col.set(srProviderColor(p.n.providerResolved || p.n.provider, 'node', 0, dark)));
       });
       mesh.userData.nodes = list.map((p) => p.n.id);
       mesh.userData.shape = shape;
@@ -416,10 +447,10 @@ function srBuild() {
   }
   const lines = (arr, mat) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3)); const l = new THREE.LineSegments(g, mat); if (mat.isLineDashedMaterial) l.computeLineDistances(); return l; };
   V.plainLines = lines(plain, new THREE.LineBasicMaterial({ color: PAL.plain, transparent: true, opacity: SR.plainOpacity }));
-  V.crossLines = lines(cross, new THREE.LineDashedMaterial({ color: 0xd63fb0, dashSize: 0.5, gapSize: 0.3, transparent: true, opacity: SR.crossOpacity }));
+  V.crossLines = lines(cross, new THREE.LineDashedMaterial({ color: PAL.cross, dashSize: 0.5, gapSize: 0.3, transparent: true, opacity: SR.crossOpacity }));
   // the strong layer: the pressed and the pointed node's cables (srFocusLines fills it)
   V.focusLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: PAL.focus }));
-  V.focusCross = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xd63fb0 }));
+  V.focusCross = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: PAL.cross }));
   V.focusLines.renderOrder = V.focusCross.renderOrder = 2;
   V.near.add(V.plainLines, V.crossLines, V.focusLines, V.focusCross);
   // far: the top groups as boxes, the cables bundled between them
@@ -430,7 +461,7 @@ function srBuild() {
     G.boxH = h; G.nodeCount = n;
     m4.compose(at.set(G.x + G.w / 2, h / 2, G.z + G.d / 2), q, sc.set(G.w * 0.92, h, G.d * 0.92));
     boxMesh.setMatrixAt(i, m4);
-    boxMesh.setColorAt(i, col.set(G.g.kind === 'logical' ? '#b49be0' : srProviderColor(G.g.provider)));
+    boxMesh.setColorAt(i, col.set(G.g.kind === 'logical' ? PAL.logicalBox : srProviderColor(G.g.provider, 'box', 0, dark)));
   });
   boxMesh.count = tops.length;
   V.far.add(boxMesh);
@@ -451,7 +482,7 @@ function srBuild() {
   V.bundles = [...bundles.values()];
   // the far view's bundles: as faint as the near cables, and the lines switch holds there too (the independent verification of item 1)
   V.farPlain = lines(bp, new THREE.LineBasicMaterial({ color: PAL.plain, transparent: true, opacity: SR.plainOpacity }));
-  V.farCross = lines(bc, new THREE.LineDashedMaterial({ color: 0xd63fb0, dashSize: 1.2, gapSize: 0.7, transparent: true, opacity: SR.crossOpacity }));
+  V.farCross = lines(bc, new THREE.LineDashedMaterial({ color: PAL.cross, dashSize: 1.2, gapSize: 0.7, transparent: true, opacity: SR.crossOpacity }));
   V.far.add(V.farPlain, V.farCross);
   // the external strip's sign
   if (L.ext.length) {

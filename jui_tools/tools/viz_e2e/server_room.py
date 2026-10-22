@@ -223,6 +223,15 @@ async def run_flows(page, out, failures, res):
     far = await until(page, f"() => {{ const f = ({FLOW})(); return f.lightPx !== null ? f : null; }}", "search: a light moving, far", timeout=30000, why=FLOW)
     fl["lightPxFar"] = far["lightPx"]
     check(failures, far["lightPx"] >= 6.5, f"pulled back, a moving light is drawn at least 7 px in radius: {far['lightPx']}")
+    # the light is in the cable, not a ball on it (ticket 2026-10-22-viz-server-room-palette-and-light-flow): no sphere in the
+    # flow's layer, each light the cable's two shader layers, and its head going the length of its cable while it plays
+    # (past 0.6 of it: a head held near its start is not a light that flows)
+    later = await until(page, f"() => {{ const f = ({FLOW})(); return f.lightHead !== null && f.lightHead >= 0.6 ? f : null; }}", "search: the head along its cable",
+                        timeout=10000, why=FLOW)
+    fl["cableLight"] = {"spheres": (far["spheres"], later["spheres"]), "materials": sorted(set(later["lightMaterials"])), "head": (far["lightHead"], later["lightHead"])}
+    check(failures, fl["cableLight"]["spheres"] == (0, 0) and fl["cableLight"]["materials"] == ["ShaderMaterial:uHead+ShaderMaterial:uHead"]
+          and 0 <= far["lightHead"] <= 1 and 0.6 <= later["lightHead"] <= 1,
+          f"the flow's light runs through its cable (a head in the cable's shader), no ball travels: {fl['cableLight']}")
     await page.evaluate("() => window.__dbg.srZoom(1 / 8)")
     # a schedule's flow: its mark and its schedule as written
     await page.click("#sr-player [data-sr-fp='stop']")
