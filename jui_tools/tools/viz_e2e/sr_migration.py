@@ -11,7 +11,7 @@ edge's length from the line's positions), never from the plan's own lists alone.
   * add: the node grows, then its edge is drawn from its start with the flows' light at its head; after it, both
     whole, no light left, the new floor drawn
   * replace: the old version shrinks (its spec still the old one), then the new one (the new spec) grows
-  * remove: its edge shrinks to its middle, then the node goes; the edge removed alone goes at the last step
+  * remove: its edge shrinks to its middle, then the node shrinks away; the edge removed alone goes at the last step
   * the end: what is drawn is the new model, node for node and edge for edge
   * the cost: 旧 → 今 → 新 on the player from the engine's months, the step shown with its own difference; the コスト
     view's 旧 · 新 · 差 table
@@ -184,6 +184,7 @@ async def run_sr_migration(pw, out, failures):
         m = await page.evaluate(MIG)
         step_diff = T("sr.mig.cost.step", diff=("+" if cli["steps"][2]["diff"] >= 0 else "−") + await usd(abs(cli["steps"][2]["diff"])))
         check(failures, step_diff in m["bar"], f"the bar's difference is the step played: {m['bar']!r} lacks {step_diff!r}")
+        await until(page, "() => { const s = window.__dbg.srMig().sizes['mailer']; return s > 0.05 && s < 0.95; }", "the node shrinking away", timeout=20000)
         await until(page, "() => { const m = window.__dbg.srMig(); return m.k === 3 && !m.anim; }", "step 3 done", timeout=20000)
         m = await page.evaluate(MIG)
         check(failures, m["sizes"]["mailer"] == 0 and m["lengths"]["api-prod->mailer"] == 0 and m["lengths"]["cdn->assets"] == 1,
