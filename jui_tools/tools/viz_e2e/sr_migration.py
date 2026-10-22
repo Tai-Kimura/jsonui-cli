@@ -125,14 +125,15 @@ async def run_sr_migration(pw, out, failures):
     srv = subprocess.Popen([sys.executable, str(jt / "bin" / "jui"), "viz", "serve", "--port", str(port)], stdout=log, stderr=subprocess.STDOUT,
                            env=dict(base_env, HOME=str(home), JUI_VIZ_E2E="1"))
     url = f"http://127.0.0.1:{port}"
-    # the engine's months, as `jsonui-doc cost infra --migration` gives them (the page must say these), with the
-    # server's own price cache (its throwaway viz home)
-    sys.path.insert(0, str(jt))
-    from jui_cli.core.document_tools_import import load_document_tools_module
-    _code, cli = load_document_tools_module("infra.cost.diff")[0].reply(rooms["plan"], "move", env={"JUI_VIZ_HOME": str(home / ".local" / "state" / "jui-viz")})
-    check(failures, cli.get("ok") and cli["diff"]["usd"] != 0, f"the plan moves the month (the arm needs it): {json.dumps(cli)[:300]}")
-    browser = await pw.chromium.launch(args=LAUNCH_ARGS)
-    try:
+    browser = None
+    try:   # from the serve's start: whatever stops the suite, the serve stops with it (one was left running, 10-22)
+        # the engine's months, as `jsonui-doc cost infra --migration` gives them (the page must say these), with the
+        # server's own price cache (its throwaway viz home)
+        sys.path.insert(0, str(jt))
+        from jui_cli.core.document_tools_import import load_document_tools_module
+        _code, cli = load_document_tools_module("infra.cost.diff")[0].reply(rooms["plan"], "move", env={"JUI_VIZ_HOME": str(home / ".local" / "state" / "jui-viz")})
+        check(failures, cli.get("ok") and cli["diff"]["usd"] != 0, f"the plan moves the month (the arm needs it): {json.dumps(cli)[:300]}")
+        browser = await pw.chromium.launch(args=LAUNCH_ARGS)
         import urllib.request
         for _ in range(100):
             try:
@@ -390,6 +391,11 @@ async def run_sr_migration(pw, out, failures):
         check(failures, after == flows_before and await page.is_hidden("#sr-mplayer"), f"stopped: the room's own model, its flows offered again: {after} vs {flows_before}")
         (out / "result.json").write_text(json.dumps(res, ensure_ascii=False, indent=1, default=str))
     finally:
-        await browser.close()
-        srv.terminate()
-        srv.wait(10)
+        if browser is not None:
+            await browser.close()
+        srv.terminate()   # our own child (started above)
+        try:
+            srv.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            srv.kill()
+            srv.wait()
