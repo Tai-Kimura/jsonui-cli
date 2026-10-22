@@ -726,8 +726,9 @@ function composePlace(pane, id) {
     composeEls().area.value = '';
     composeClose(false);
   }
-  const cards = histCardsBox();
-  if (pane && cards.previousElementSibling !== pane) pane.after(cards);
+  const cards = histCardsBox(), low = histLowBtn();   // the box's handle on its top edge, a row of its own (not in the box's scroll)
+  if (pane && low.previousElementSibling !== pane) pane.after(low);
+  if (pane && cards.previousElementSibling !== low) low.after(cards);
   if (pane && box.previousElementSibling !== cards) cards.after(box);
   box.hidden = !pane || HIST.tab !== 'history';
   histCardsPaint(id, !pane || HIST.tab !== 'history');
@@ -781,6 +782,7 @@ function histCardsPaint(id = HIST.compose && HIST.compose._for, off = HIST.tab !
   el.hidden = !(perms.length || qs.length || ds.length);
   keyed(el, JSON.stringify([id, NAMES.rev, DEN.asking, perms.map(permSig), questionsSig(qs), denialsSig(ds)]),
     () => `${perms.map((p) => permDetail(p, `hb-${p.id}`)).join('')}${qs.map((q) => questionHTML(q, 'h')).join('')}${ds.map((d) => denialHTML(d, 'h')).join('')}`);
+  histLowBtn().hidden = el.hidden;   // the handle that grows this box (下を広げる until 2.3.20) is shown with it, on its top edge
 }
 function composePaint() {
   if (!HIST.compose) return;
@@ -1083,21 +1085,30 @@ rbEl.addEventListener('click', (e) => { if (e.target.closest('[data-rb-wide]')) 
 
 /* 下を広げる (ticket 2026-10-21-jui-viz-hist-answered-card-dismiss-and-expand, requester: 「スクロールしないと質問と送信ボタン
    全部見えないから見え流用に広げるボタンが欲しい」): on the 応答の履歴 tab, the cards and the prompt box take the height they
-   need and the history keeps what is left (its own scroll); 元の高さに戻す: the history first again. Next to 広げる, kept
-   in this browser as that is. */
+   need and the history keeps what is left (its own scroll); 元の高さに戻す: the history first again. Kept in this browser as
+   広げる is. Since 2.3.20 a handle on the cards box's top edge, saying what grows (the requester: 「下を広げるは広げる領域
+   ないにボタンを設置で」; ticket 2026-10-22-viz-taskboard-top-strips-hide-the-columns, the family of 広げる). */
 const HIST_LOW_PREF = 'hist-low';
 let histLow = readPref(HIST_LOW_PREF, 'off') === 'on';
+let histLowEl = null;
+function histLowBtn() {
+  if (!histLowEl) {
+    histLowEl = hNode('button', 'h-low');
+    histLowEl.type = 'button'; histLowEl.dataset.rbLow = ''; histLowEl.dataset.fk = 'rb-low';
+    histLowEl.setAttribute('aria-controls', 'rb');
+    histLowEl.setAttribute('aria-pressed', 'false');
+    histLowEl.textContent = tl('hist.low.on');
+  }
+  return histLowEl;
+}
 function histLowPaint() {
   const tab = HIST.tab === 'history' && !!rbState.id, on = histLow && tab;
   rbEl.classList.toggle('rb-histtab', tab);   // the tab's rows (app.css)
   rbEl.classList.toggle('rb-low', on);
-  const b = rbEl.querySelector('[data-rb-low]');
-  if (b) {
-    b.hidden = HIST.tab !== 'history';
-    b.setAttribute('aria-pressed', String(on));
-    b.textContent = on ? tl('hist.low.off') : tl('hist.low.on');
-    b.title = on ? tl('hist.low.off.title') : tl('hist.low.on.title');
-  }
+  const b = histLowBtn();
+  b.setAttribute('aria-pressed', String(on));
+  b.textContent = on ? tl('hist.low.off') : tl('hist.low.on');
+  b.title = on ? tl('hist.low.off.title') : tl('hist.low.on.title');
 }
 rbEl.addEventListener('click', (e) => {
   if (!e.target.closest('[data-rb-low]')) return;

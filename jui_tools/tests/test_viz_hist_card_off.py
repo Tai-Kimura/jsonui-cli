@@ -85,6 +85,7 @@ const box = { hidden: false };
 function histCardsBox() { return box; }
 const permSig = () => '', questionsSig = (x) => x.map((q) => q.id), denialsSig = (x) => x.map((d) => d.id);
 function keyed(el, sig, build) { shown = JSON.parse(sig); }
+function histLowBtn() { return {}; }   // the box's handle (its own row on the box's top edge): not what these arms look at
 """
     parts = _pref_parts() + [stubs, _cut("55-history.js", "HIST_OFF_PREF"), _cut("55-history.js", "HIST_OFF"),
                              _cut("55-history.js", "histCardsPaint")]
@@ -108,6 +109,7 @@ let shown = null;
 function histCardsBox() { return { hidden: false }; }
 const permSig = () => '', questionsSig = (x) => x.map((q) => q.id), denialsSig = (x) => x.map((d) => d.id);
 function keyed(el, sig, build) { shown = JSON.parse(sig); }
+function histLowBtn() { return {}; }   // the box's handle (its own row on the box's top edge): not what these arms look at
 """
     parts = _pref_parts() + [stubs, _cut("55-history.js", "HIST_OFF_PREF"), _cut("55-history.js", "HIST_OFF"),
                              _cut("55-history.js", "histOff"), _cut("55-history.js", "histCardsPaint")]

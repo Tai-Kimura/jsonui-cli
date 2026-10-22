@@ -28,7 +28,7 @@ import sys
 import time
 import zlib
 
-from common import ISOLATE, DESKTOP, LAUNCH_ARGS, PHONE, Watch, ago, dump, new_page, ready, stamp
+from common import ISOLATE, DESKTOP, LAUNCH_ARGS, PHONE, T, Watch, ago, dump, new_page, ready, stamp
 
 A = "e2e00000-0000-4000-8000-0000000000c1"
 B = "e2e00000-0000-4000-8000-0000000000c2"
@@ -382,7 +382,7 @@ async def run_hist_wide(pw, out, failures):
               f"at the card's width the head stays stacked: the name, 退勤, then ‹ › and 「← 3D に戻る」: {hn}")
         check(failures, c["compose"], f"the prompt box is in the wide card: {c}")
         check(failures, (c["tableScroll"] or 0) > 0, f"the wide table scrolls sideways: {c['tableScroll']}")
-        check(failures, c["btn"] and c["btn"]["pressed"] == "true" and c["btn"]["text"] == "元の幅に戻す", f"the button says it is pressed: {c['btn']}")
+        check(failures, c["btn"] and c["btn"]["pressed"] == "true" and c["btn"]["text"] == T("hist.wide.off"), f"the button says it is pressed: {c['btn']}")
         check(failures, res["narrow"]["titleLines"] <= 2 and c["titleLines"] <= 2, f"the card's title stays readable (2 lines at most): narrow {res['narrow']['titleLines']}, wide {c['titleLines']}")
         await page.evaluate(TO_END)
         for scheme in ("light", "dark"):
@@ -444,7 +444,7 @@ async def run_hist_wide(pw, out, failures):
         await tab("now")
         await page.wait_for_function(shown, arg="now")
         t1 = res["nowNarrow"] = await page.evaluate(CARD)
-        check(failures, not t1["wide"] and t1["btn"] and not t1["btn"]["hidden"] and t1["btn"]["text"] == "広げる",
+        check(failures, not t1["wide"] and t1["btn"] and not t1["btn"]["hidden"] and t1["btn"]["text"] == T("hist.wide.on"),
               f"今の様子 has the 広げる button too, narrow while the history was narrowed: {t1}")
         await wbtn.click()
         await wait(page, "() => document.getElementById('rb').classList.contains('rb-wide')", label="wide on 今の様子")

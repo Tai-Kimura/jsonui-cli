@@ -32,7 +32,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, ISOLATE, LAUNCH_ARGS, Watch, dump, new_page, ready
+from common import DESKTOP, ISOLATE, LAUNCH_ARGS, T, Watch, dump, new_page, ready
 
 SID = "e2e00000-0000-4000-8000-0000000000f7"
 CWD = "/work/hist-cards"
@@ -49,7 +49,9 @@ CARDS = """() => { const c = document.querySelector('#rb [data-h-cards]'); if (!
     left: (c.querySelector('[data-quntil]') || {}).textContent || '' }; }"""
 LOW = """() => { const rb = document.getElementById('rb').getBoundingClientRect(), c = document.querySelector('#rb [data-h-cards]');
   const send = document.querySelector('#rb [data-h-send]').getBoundingClientRect(), b = document.querySelector('#rb [data-rb-low]');
-  return { on: document.getElementById('rb').classList.contains('rb-low'), pressed: b.getAttribute('aria-pressed'), label: b.textContent,
+  // the handle is on the cards box's top edge (2.3.20, the family of 広げる): right above the box, touching it, in sight
+  const edge = b.nextElementSibling === c && Math.abs(b.getBoundingClientRect().bottom - c.getBoundingClientRect().top) < 2 && b.getClientRects().length > 0;
+  return { on: document.getElementById('rb').classList.contains('rb-low'), pressed: b.getAttribute('aria-pressed'), label: b.textContent, edge,
     cardsScroll: c.scrollHeight - c.clientHeight, cardsHeight: c.clientHeight, sendIn: send.height > 0 && send.top >= rb.top && send.bottom <= rb.bottom + 0.5,
     cardsBelowHist: c.getBoundingClientRect().top >= document.querySelector('[data-rb-hist]').getBoundingClientRect().bottom - 0.5,
     histHeight: Math.round(document.querySelector('[data-rb-hist]').getBoundingClientRect().height),
@@ -71,6 +73,13 @@ SHARED_NAMES = """() => { const here = new Set([...document.querySelectorAll('#r
 def check(failures, cond, text):
     if not cond:
         failures.append(f"hist-cards: {text}")
+
+
+async def press_low(page):
+    """The cards box's handle pressed where it is drawn, as a pointer does (2.3.20: it sticks to the box's top edge, and
+    page.click would first scroll the box to the handle's place in the flow — the top — which a person's press does not)."""
+    r = await page.evaluate("() => { const b = document.querySelector('#rb [data-rb-low]').getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; }")
+    await page.mouse.click(r[0], r[1])
 
 
 async def wait(page, js, timeout=20000, label="", arg=None):
@@ -181,16 +190,16 @@ async def run_hist_cards(pw, out, failures):
         check(failures, off["hist"] == [] and off["elsewhere"] == 0, f"no × on a card that waits on an answer: {off}")
         # 下を広げる: the four cards scroll in their box at first (the control), then all show with 送信 inside the card
         lo = res["lowBefore"] = await page.evaluate(LOW)
-        check(failures, not lo["on"] and lo["pressed"] == "false" and lo["label"] == "下を広げる" and lo["cardsScroll"] > 0,
-              f"before 下を広げる the cards box scrolls (the control): {lo}")
+        check(failures, not lo["on"] and lo["pressed"] == "false" and lo["label"] == T("hist.low.on") and lo["edge"] and lo["cardsScroll"] > 0,
+              f"before 下を広げる the cards box scrolls (the control), its handle on the box's top edge: {lo}")
         check(failures, lo["cardsBelowHist"] and lo["histHeight"] >= 119, f"the history keeps 120 px and does not run under the cards: {lo}")
-        await page.click("#rb [data-rb-low]")
+        await press_low(page)
         lo = res["lowOn"] = await page.evaluate(LOW)
-        check(failures, lo["on"] and lo["pressed"] == "true" and lo["label"] == "元の高さに戻す" and lo["sendIn"] and lo["cardsBelowHist"]
+        check(failures, lo["on"] and lo["pressed"] == "true" and lo["label"] == T("hist.low.off") and lo["edge"] and lo["sendIn"] and lo["cardsBelowHist"]
               and lo["cardsHeight"] > res["lowBefore"]["cardsHeight"] and lo["histHeight"] >= 50,
               f"下を広げる with four cards: the cards box grows, 送信 inside the card, a strip of the history above: {lo}")
         await page.screenshot(path=str(out / "low.png"))
-        await page.click("#rb [data-rb-low]")
+        await press_low(page)
         lo = res["lowOff"] = await page.evaluate(LOW)
         check(failures, not lo["on"] and lo["pressed"] == "false" and lo["histHeight"] >= res["lowBefore"]["histHeight"] - 1,
               f"元の高さに戻す: the history's height back: {lo}")
@@ -199,7 +208,7 @@ async def run_hist_cards(pw, out, failures):
         await page.wait_for_timeout(400)
         res["cardsOnNowTab"] = await page.evaluate("() => { const c = document.querySelector('#rb [data-h-cards]'); return !!c && !c.hidden && c.getClientRects().length > 0; }")
         check(failures, res["cardsOnNowTab"] is False, "the cards box is not shown on the 今の様子 tab")
-        res["lowOnNowTab"] = await page.evaluate("() => { const b = document.querySelector('#rb [data-rb-low]'); return !!b && !b.hidden; }")
+        res["lowOnNowTab"] = await page.evaluate("() => { const b = document.querySelector('#rb [data-rb-low]'); return !!b && b.getClientRects().length > 0; }")
         check(failures, res["lowOnNowTab"] is False, "no 下を広げる on the 今の様子 tab")
         await page.click('#rb [data-rb-tab="history"]')
         await wait(page, f"() => {{ const c = ({CARDS})(); return c && c.shown && c.perm === 2; }}", label="the cards again on the history tab")
@@ -267,7 +276,7 @@ async def run_hist_cards(pw, out, failures):
               f"× takes its own card off the history's cards, the other of its kind stays, the panel keeps both: {off}")
         # 下を広げる with the two answered cards (the requester's case): all of them and 送信 at once
         lo = res["lowAnsweredBefore"] = await page.evaluate(LOW)
-        await page.click("#rb [data-rb-low]")
+        await press_low(page)
         lo2 = res["lowAnswered"] = await page.evaluate(LOW)
         check(failures, not lo["answeredIn"], f"before 下を広げる the two answered cards do not show whole (the control): {lo}")
         check(failures, lo2["on"] and lo2["answeredIn"] and lo2["sendIn"] and lo2["cardsBelowHist"],

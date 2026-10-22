@@ -131,7 +131,6 @@
             <button type="button" class="wb-btn" id="tb-close">{{tl:page.back.3d}}← 3D に戻る{{/tl}}</button>
             <h2 id="tb-title">{{tl:page.tb.title}}タスクボード{{/tl}}</h2>
             <span class="chip" id="tb-count"></span>
-            <button type="button" class="wb-btn" id="tb-wide" hidden aria-pressed="false" aria-controls="q-strip denied-strip perm-strip kanban">{{tl:page.tb.wide}}上の欄を広げる{{/tl}}</button>
             <span class="grow"></span>
             <button type="button" class="scope-btn" data-scope-btn aria-haspopup="dialog" aria-expanded="false"></button>
             <button type="button" class="scope-btn" id="tb-sess" data-picker="lists" aria-haspopup="dialog" aria-expanded="false"></button>
@@ -141,6 +140,7 @@
             <section class="perm-strip q-strip d-strip" id="denied-strip" hidden aria-label="{{tl:page.denied.aria}}自動モードが止めた操作{{/tl}}"></section>
             <section class="perm-strip q-strip" id="q-strip" hidden aria-label="{{tl:page.questions.aria}}答えを待っている質問{{/tl}}"></section>
             <section class="perm-strip" id="perm-strip" hidden aria-label="{{tl:page.perm.aria}}許可を求めているもの{{/tl}}"></section>
+            <button type="button" class="tb-handle" id="tb-wide" hidden aria-pressed="false" aria-controls="q-strip denied-strip perm-strip kanban"></button>
             <div class="kanban" id="kanban"></div>
             <aside class="tb-detail" id="tb-detail" hidden aria-labelledby="tbd-title"></aside>
           </div>

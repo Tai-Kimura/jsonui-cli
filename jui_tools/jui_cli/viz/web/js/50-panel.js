@@ -1224,7 +1224,7 @@ function renderSheet(model, force) {
 
 /* ---------- task board up close: one column per task state, permission prompts on top ---------- */
 const tbEl = $('tb'), kanbanEl = $('kanban'), stripEl = $('perm-strip'), detailEl = $('tb-detail'), qStripEl = $('q-strip');
-const tb = { open: false, detail: null, board: null, waitView: false, wide: false };   // waitView: opened from a 質問 / 許可待ち chip
+const tb = { open: false, detail: null, board: null, waitView: false, wide: false, waiting: { q: 0, d: 0, p: 0 } };   // waitView: opened from a 質問 / 許可待ち chip
 const kbBodyEl = tbEl.querySelector('.kb-body'), wideBtn = $('tb-wide');
 $('tb-lanes').addEventListener('change', (e) => { UI.lanes = e.target.checked; writePref('lanes', UI.lanes ? 'on' : 'off'); renderTaskBoard(latestModel); });
 function openTaskBoard(opener, detail, board) {
@@ -1264,7 +1264,9 @@ $('tb-close').addEventListener('click', closeTaskBoard);
 /* The strips on top, folded or wide (ticket 2026-10-22-viz-taskboard-top-strips-hide-the-columns). Requester: 「上の許可の
    表示を小さくして、広げるを押すと許可の部分だけ表示で下が消える仕様にして欲しい」. Folded (the default each time the board
    opens): each strip is its count and one line per card (who, what, how long); the four columns below stay in sight.
-   Wide: the strips' whole cards and no columns. A card's line opens the strips wide at that card. */
+   Wide: the strips' whole cards and no columns. A card's line opens the strips wide at that card. The handle that opens
+   and folds them hangs under the strips (the requester on the first look: 「上の幅を広げる、たたむはわかりづらい上の方の添付
+   画像の部分を広げるってわかるUIにしてほしい」): ▼ / ▲ and what is waiting in them, in words. */
 const foldLine = (go, x, tool, text, note = '') => `<li><button type="button" class="ps-line" data-ps-go="${esc(go)}" data-fk="fl-${esc(go)}">${pill(x.who, DEF[x.who].role)}<span class="ps-who">${esc(DEF[x.who].agent)}</span><span class="ps-what">${tool ? `<b>${esc(tool)}</b> <code>${esc(text)}</code>` : esc(text)}</span>${note ? `<span class="ps-note">${esc(note)}</span>` : ''}<span class="pc-wait" data-since="${x.at}"></span></button></li>`;
 const countB = (n) => `<b${n ? '' : ' class="ps-zero"'}>${n}</b>`;
 function paintTbWide() {
@@ -1274,7 +1276,8 @@ function paintTbWide() {
   kbBodyEl.classList.toggle('tb-wide', tb.wide);
   kbBodyEl.classList.toggle('tb-fold', !tb.wide);
   wideBtn.setAttribute('aria-pressed', String(tb.wide));
-  setText(wideBtn, tl(tb.wide ? 'panel.tb.fold' : 'panel.tb.wide'));
+  const W = tb.waiting, what = [W.q && tl('panel.tb.wide.q', { n: W.q }), W.d && tl('panel.tb.wide.d', { n: W.d }), W.p && tl('panel.tb.wide.p', { n: W.p })].filter(Boolean).join(tl('panel.tb.wide.sep'));
+  setText(wideBtn, tb.wide ? tl('panel.tb.fold') : tl('panel.tb.wide', { what: what || tl('panel.tb.wide.none') }));
 }
 const FOLD_CARD = { q: (id) => `#q-strip [data-qcard="${CSS.escape(id)}"]`, d: (id) => `#denied-strip [data-dcard="${CSS.escape(id)}"]`, p: (id) => `#perm-strip [data-fk="pt-${CSS.escape(id)}"]` };
 function setTbWide(on, go) {
@@ -1300,7 +1303,8 @@ function renderQuestionStrip() {
     const foldHTML = qs.map((q) => foldLine(`q:${q.id}`, q, '', q.questions.map((x) => x.header || x.question).join(' / '), q.status === 'pending' ? '' : qState(q))).join('');
     return `<h3 class="ps-title">${esc(tl('panel.q.title'))}${countB(qs.filter((q) => q.status === 'pending').length)}<small>${esc(tl('panel.q.oldest'))}</small></h3>${foldHTML ? `<ul class="ps-fold">${foldHTML}</ul>` : ''}${qs.some((q) => q.status === 'pending') ? '' : `<p class="ps-none">${esc(tl('panel.q.none'))}</p>`}${otherHTML}${qs.map((q) => questionHTML(q, 'b')).join('')}`;
   });
-  qStripEl.classList.toggle('ps-hot', qs.some((q) => q.status === 'pending'));
+  tb.waiting.q = qs.filter((q) => q.status === 'pending').length;
+  qStripEl.classList.toggle('ps-hot', tb.waiting.q > 0);
 }
 function renderTaskBoard(model) {
   if (!tb.open) return;
@@ -1328,6 +1332,7 @@ function renderTaskBoard(model) {
     const foldHTML = pend.map((p) => foldLine(`p:${p.id}`, p, p.tool, p.input ? permSummary(p) : '')).join('');
     return `<h3 class="ps-title">${esc(tl('panel.perm.asking'))}${countB(pend.length)}<small>${PERM_NOTE}</small></h3>${foldHTML ? `<ul class="ps-fold">${foldHTML}</ul>` : ''}${cardsHTML ? `<ul class="ps-list">${cardsHTML}</ul>` : `<p class="ps-none">${esc(tl('panel.perm.none'))}</p>`}${otherHTML}${rulesHTML}`;
   });
+  tb.waiting.p = pend.length;
   stripEl.classList.toggle('ps-hot', pend.length > 0);
   paintSince(stripEl, model.t, tl('panel.since.wait'));
   paintTbWide();
@@ -1836,7 +1841,7 @@ function renderRobot(model) {
       return `<li><button type="button" class="task-open" data-open="${esc(x.key)}" data-fk="rt-${esc(x.key)}"><span class="state ${esc(c)}">${esc(l)}</span><span class="tid">${esc(x.list)} ${esc(taskRef(x))}</span><span class="subject">${x.harness ? `<span class="h-tag">${esc(x.harness)}</span>` : ''}${esc(x.subject)}</span>${!isMain || !x.owner ? '' : `<span class="rb-owner">${pill(x.owner, DEF[x.owner].role)}</span>`}</button></li>`;
     }).join('')}</ul>` : `<p class="rb-none">${esc(tl(isMain ? 'panel.rb.tasks.empty' : 'panel.rb.owned.none'))}</p>`;
     return `<div class="rb-head" style="--c:${ROLES[d.role].color}"><span class="rb-badge" aria-hidden="true">${esc(id)}</span><div><h2 class="rb-name" id="rb-title">${esc(isMain ? d.title || tl('panel.rb.main', { id }) : d.agent)}</h2><p class="rb-sub">${esc(isMain ? `${d.title ? tl('panel.rb.main.head', { id, head: d.head }) : d.agent} · ${room}` : tl('panel.rb.sub', { role: ROLE_JA[d.role], sess, room }))}</p></div><div class="rb-side"><div class="rb-menu"><button type="button" class="wb-btn rb-talk" data-rb-talk data-fk="rb-talk" aria-pressed="false" aria-label="${esc(tl('talk.title'))}" title="${esc(tl('panel.rb.talk.title'))}">${TALK_ICON}<span>${esc(tl('talk.title'))}</span><span class="rb-talk-n" data-rb-talk-n hidden></span></button><button type="button" class="wb-btn rb-clock" data-rb-clock data-fk="rb-clock" aria-haspopup="dialog" aria-describedby="rb-clock-why">${esc(tl('panel.clk.button'))}</button></div><div class="rb-nav"><button type="button" class="rb-step" data-rb-step="-1" data-fk="rb-prev" aria-label="${esc(tl('panel.rb.prev'))}" title="${esc(tl('panel.rb.prev'))}">‹</button><button type="button" class="rb-step" data-rb-step="1" data-fk="rb-next" aria-label="${esc(tl('panel.rb.next'))}" title="${esc(tl('panel.rb.next'))}">›</button><button type="button" class="wb-btn" id="rb-close" data-rb-close data-fk="rb-close">${esc(tl('panel.rb.back'))}</button></div></div><p class="rb-clock-why" id="rb-clock-why" data-rb-clock-why hidden></p>${rbMovedHTML()}</div>
-<div class="rb-tabs"><button type="button" class="wb-btn rb-wide-btn" data-rb-wide data-fk="rb-wide" aria-pressed="false" hidden>${esc(tl('panel.rb.wide'))}</button><button type="button" class="wb-btn rb-low-btn" data-rb-low data-fk="rb-low" aria-pressed="false" hidden>${esc(tl('panel.rb.low'))}</button><div class="rb-tablist" role="tablist" aria-label="${esc(tl('panel.rb.tabs'))}"><button type="button" role="tab" data-rb-tab="now" data-fk="rb-tab-now" aria-selected="true">${esc(tl('panel.rb.tab.now'))}</button><button type="button" role="tab" data-rb-tab="history" data-fk="rb-tab-history" aria-selected="false">${esc(tl('panel.rb.tab.history'))}</button></div></div>
+<div class="rb-tabs"><button type="button" class="wb-btn rb-wide-btn" data-rb-wide data-fk="rb-wide" aria-pressed="false" aria-controls="rb" hidden>${esc(tl('hist.wide.on'))}</button><div class="rb-tablist" role="tablist" aria-label="${esc(tl('panel.rb.tabs'))}"><button type="button" role="tab" data-rb-tab="now" data-fk="rb-tab-now" aria-selected="true">${esc(tl('panel.rb.tab.now'))}</button><button type="button" role="tab" data-rb-tab="history" data-fk="rb-tab-history" aria-selected="false">${esc(tl('panel.rb.tab.history'))}</button></div></div>
 <div class="rb-body rb-hist" data-rb-hist hidden aria-label="${esc(tl('panel.rb.tab.history'))}" tabindex="0"></div>
 <div class="rb-body" tabindex="0" aria-label="${esc(tl('panel.rb.tab.now'))}">
 <section class="rb-sec" aria-labelledby="rb-h-now"><h3 id="rb-h-now">${esc(tl('panel.rb.now'))}</h3><div class="rb-now"><p class="rb-state"><span class="rb-lamp" data-rb-lamp></span><b data-rb-state></b><span class="rb-since">${esc(tl('panel.rb.lamp'))}<span data-rb-lampname></span></span></p><p class="rb-act" data-rb-act></p><p class="rb-git" data-rb-git hidden title="${esc(tl('panel.rb.git.title'))}"></p><p class="rb-cond" data-rb-cond></p><p class="rb-looks" data-rb-looks hidden></p>${spec ? `<p class="rb-spec"><button type="button" class="link-btn" data-spec-open="${specIdx}" data-fk="rb-spec">${esc(tl('panel.rb.spec', { name: spec.name, screen: spec.screen }))}</button> <span data-rb-specnow></span></p><span class="rb-segs" style="--c:${ROLES[d.role].color}">${SEGS}</span>` : ''}${(SOURCE.mode === 'demo' && id === 'a2') ? '<p class="rb-test" data-rb-test></p><div class="prog" data-rb-prog role="img"><span class="p"></span><span class="r"></span></div>' : ''}</div></section>

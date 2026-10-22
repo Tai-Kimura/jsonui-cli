@@ -50,7 +50,10 @@ FOLD = """() => { const kb = document.querySelector('#tb .kb-body'), btn = docum
            cards: [...document.querySelectorAll('#denied-strip [data-dcard]')].filter((c) => c.offsetParent).length, heads: heads.length,
            headsIn: heads.filter((h) => { const r = h.getBoundingClientRect(); return r.height > 0 && r.top >= 0 && r.bottom <= innerHeight; }).length,
            headsBottom: Math.round(Math.max(0, ...heads.map((h) => h.getBoundingClientRect().bottom))),
-           kbH: Math.round(document.getElementById('kanban').getBoundingClientRect().height) }; }"""
+           kbH: Math.round(document.getElementById('kanban').getBoundingClientRect().height),
+           // the handle hangs from the strips' bottom edge (the requester on the first look: what grows is said where it grows)
+           handleGap: (() => { const last = ['perm-strip', 'denied-strip', 'q-strip'].map((id) => document.getElementById(id)).find((e) => !e.hidden);
+             return last ? Math.round(btn.getBoundingClientRect().top - last.getBoundingClientRect().bottom) : null; })() }; }"""
 REPLY = "チャンネルから来た破壊的な依頼なので、端末で直接確認してください。"
 CARDS = """(where) => [...document.querySelectorAll(`${where} [data-dcard]`)].map((c) => ({ id: c.dataset.dcard, text: c.textContent,
   ask: !!c.querySelector('[data-dask]'), go: !!c.querySelector('[data-dgo]'), dismiss: !!c.querySelector('[data-ddismiss]'),
@@ -211,7 +214,8 @@ async def run_denied(pw, out, failures):
         await page.wait_for_timeout(600)
         got = res["fold1"] = await page.evaluate(FOLD)
         check(got["fold"] and not got["wide"] and got["cards"] == 0 and len(got["lines"]) == 2 and got["heads"] == 4 and got["headsIn"] == 4
-              and got["btn"] == T("panel.tb.wide") and got["pressed"] == "false", f"the board opens folded, one line per card, the columns' heads in sight: {got}")
+              and got["btn"] == T("panel.tb.wide", what=T("panel.tb.wide.d", n=2)) and got["pressed"] == "false" and -8 <= got["handleGap"] <= 2,
+              f"the board opens folded, one line per card, the columns' heads in sight, the handle on the strips' edge naming what waits: {got}")
         await page.click("#tb-wide[aria-pressed='false']")
         got = res["wide1"] = await page.evaluate(FOLD)
         check(got["wide"] and not got["fold"] and got["cards"] == 2 and got["headsIn"] == 0 and got["btn"] == T("panel.tb.fold") and got["pressed"] == "true",
@@ -291,7 +295,8 @@ async def run_denied(pw, out, failures):
         await page.wait_for_timeout(400)
         got = res["fold2"] = await page.evaluate(FOLD)
         check(got["fold"] and not got["wide"] and got["cards"] == 0 and len(got["lines"]) == 3 and got["heads"] == 4 and got["headsIn"] == 4 and got["kbH"] >= 400
-              and got["btn"] == T("panel.tb.wide") and got["pressed"] == "false", f"1080, たたむ: one line per card, the four columns' heads in sight and 400 px of them: {got}")
+              and got["btn"] == T("panel.tb.wide", what=T("panel.tb.wide.d", n=1)) and got["pressed"] == "false" and -8 <= got["handleGap"] <= 2,
+              f"1080, たたむ: one line per card, the four columns' heads in sight and 400 px of them, the handle on the strips' edge: {got}")
         await page.screenshot(path=str(out / "strips-fold.png"))
         await page.click(f"#denied-strip [data-ps-go='d:{d2}']")
         await wait(page, f"() => {{ const a = document.activeElement; return document.querySelector('#tb .kb-body').classList.contains('tb-wide') && !!a && !!a.closest('#denied-strip [data-dcard=\"{d2}\"]'); }}",

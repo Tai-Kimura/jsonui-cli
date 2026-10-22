@@ -787,11 +787,12 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
    1fr one and their headers covered the permission strip's buttons; ticket 2026-10-20-jui-viz-board-kanban-header-covers-perm-strip).
    A hidden strip leaves an empty row of no height. The strip of calls stopped by auto mode (51-denials.js) has its own
    row too: without one it fell into an auto row after the columns. */
-.kb-body { position: relative; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); min-height: 0; }
+.kb-body { position: relative; display: grid; grid-template-rows: auto auto auto auto minmax(0, 1fr); min-height: 0; }
 .kb-body > #q-strip { grid-row: 1; }
 .kb-body > #denied-strip { grid-row: 2; }
 .kb-body > #perm-strip { grid-row: 3; }
-.kb-body > .kanban { grid-row: 4; }
+.kb-body > #tb-wide { grid-row: 4; }
+.kb-body > .kanban { grid-row: 5; }
 .kanban { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 12px; min-height: 0; overflow: auto; padding: 2px 14px 16px; }
 .perm-strip { display: grid; gap: 8px; max-height: 42vh; margin: 0 14px 10px; padding: 10px 12px; overflow-y: auto; border: 2px solid var(--wb-amber); border-radius: 12px; background: var(--wb-card); color: var(--wb-ink); }
 .ps-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0; font: 700 14px/1.4 var(--font-body); }
@@ -812,7 +813,11 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .kb-body.tb-fold > .perm-strip > :is(.qcard, .ps-list, .ps-none) { display: none; }
 .kb-body.tb-fold .ps-title { flex-wrap: nowrap; }
 .kb-body.tb-fold .ps-title small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.kb-body.tb-wide { overflow-y: auto; }
+.kb-body.tb-wide { overflow-y: auto; scroll-padding-bottom: 64px; }   /* what is scrolled to stays above the stuck handle */
+/* the handle: a bar hanging from the strips' bottom edge, ▼ opens them, ▲ folds them (sticks to the bottom while wide) */
+.tb-handle { display: block; margin: -10px 14px 10px; padding: 6px 12px; border: 2px dashed var(--wb-amber); border-top-style: solid; border-radius: 0 0 12px 12px; background: var(--wb-amber-bg); color: var(--wb-ink); font: 700 13px/1.5 var(--font-body); text-align: center; cursor: pointer; }
+.tb-handle:hover, .tb-handle:focus-visible { background: var(--wb-card); outline: 2px solid var(--wb-amber); outline-offset: 1px; }
+.kb-body.tb-wide > .tb-handle { position: sticky; bottom: 0; z-index: 2; margin-top: 0; border-radius: 12px; box-shadow: 0 -6px 16px var(--shadow); }
 .kb-body.tb-wide > .kanban { display: none; }
 .kb-body.tb-wide > .perm-strip { max-height: none; overflow: visible; }
 .kb-body.tb-wide .ps-fold { display: none; }
@@ -933,7 +938,10 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
    first (their own scroll). 下を広げる: the cards their full height, the history a strip (its padding and a line). */
 .rb.rb-histtab:not(.rb-talking) { grid-template-rows: auto auto minmax(120px, 1fr) minmax(0, max-content) auto; }
 .rb.rb-histtab:not(.rb-talking) > .rb-hist { grid-row: 3; min-height: 0; }
-.rb.rb-histtab:not(.rb-talking) > .h-cards { grid-row: 4; }
+.rb.rb-histtab:not(.rb-talking) > .h-low { grid-area: 4 / 1; align-self: start; position: relative; z-index: 2; margin-top: -26px; }   /* in the cards' row, pulled up over the history's bottom edge: no row or gap of its own, the cards keep all their height */
+.rb.rb-histtab:not(.rb-talking):has(> .h-low:not([hidden])) > .rb-hist { padding-bottom: 44px; }   /* the newest line clears the handle */
+.rb.rb-histtab:not(.rb-talking):has(> .h-low:not([hidden])) .h-newer { bottom: 30px; }
+.rb.rb-histtab:not(.rb-talking) > .h-cards { grid-area: 4 / 1; }   /* the column too: two items in one row would open a second column */
 .rb.rb-histtab:not(.rb-talking) > .h-compose { grid-row: 5; }
 .rb.rb-histtab.rb-low:not(.rb-talking) { grid-template-rows: auto auto minmax(56px, 1fr) minmax(0, max-content) auto; }
 .rb.rb-low .h-cards { max-height: none; }
@@ -1325,14 +1333,16 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
    whole screen at 900 px or narrower. Pictures in the history: thumbnails and a large view. */
 .rb.rb-wide { position: fixed; top: 14px; left: var(--wide-left, 0px); right: 14px; bottom: 14px; z-index: 30; width: auto; max-height: none; }
 .rb.rb-wide-full { inset: 0; border-radius: 0; }
-.rb-wide-btn[hidden], .rb-low-btn[hidden] { display: none; }
+.rb-wide-btn[hidden] { display: none; }
 /* the tab row holds the tabs (the tablist) and, on its right, 広げる: the card's head keeps its width for the title.
    広げる comes first in the DOM (Tab: 広げる, 今の様子, 応答の履歴, then the panel) and is drawn on the right. */
 .rb-tablist { display: flex; gap: 4px; order: 1; }
 .rb-tabs .rb-wide-btn { order: 2; margin: 0 0 4px auto; align-self: center; padding: 3px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: 700 12px/1.5 var(--font-body); }
 .rb-tabs .rb-wide-btn[aria-pressed="true"] { border-color: var(--info); background: var(--info); color: var(--panel); }
-.rb-tabs .rb-low-btn { order: 3; margin: 0 0 4px 6px; align-self: center; padding: 3px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: 700 12px/1.5 var(--font-body); }
-.rb-tabs .rb-low-btn[aria-pressed="true"] { border-color: var(--info); background: var(--info); color: var(--panel); }
+/* the cards box's handle (55-history.js histSync): a row of its own on the box's top edge, outside the box's scroll */
+.h-low { display: block; box-sizing: border-box; width: 100%; height: 26px; padding: 3px 12px; border: 0; border-top: 1px solid var(--line); border-bottom: 1px dashed var(--info); background: var(--info-bg); color: var(--info); font: 700 12px/1.5 var(--font-body); text-align: center; cursor: pointer; }
+.h-low[hidden] { display: none; }
+.h-low:hover, .h-low:focus-visible { background: var(--bg); outline: 2px solid var(--info); outline-offset: -2px; }
 /* Wide, the head is one row (requester 10-19, issue #36): the mark and the name on the left, ‹ › 「← 3D に戻る」 and 退勤
    on the right; the name takes what the buttons leave. At the card's width it stays stacked, and so does the wide card
    at 900 px or narrower (.rb-wide-full), where one row would leave the name a few characters. */
@@ -1506,7 +1516,7 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 .rb-talk-icon { flex: none; }
 .rb-talk-n { min-width: 18px; padding: 0 5px; border-radius: 999px; background: var(--bad); color: #ffffff; font: 700 11px/18px var(--font-body); text-align: center; }
 .rb-talk-n[hidden] { display: none; }
-.rb.rb-talking > .rb-tabs, .rb.rb-talking > .rb-body, .rb.rb-talking > .h-compose { display: none !important; }
+.rb.rb-talking > .rb-tabs, .rb.rb-talking > .rb-body, .rb.rb-talking > .h-compose, .rb.rb-talking > .h-low { display: none !important; }
 .tk { grid-row: 2 / -1; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; position: relative; }
 .talk-head { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px 14px; border-bottom: 1px solid var(--line); }
 .talk-back { flex: none; }

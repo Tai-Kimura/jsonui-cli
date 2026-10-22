@@ -21,7 +21,7 @@ import pathlib
 import time
 
 import scenarios as S
-from common import DESKTOP, LAUNCH_ARGS, PHONE, Watch, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, PHONE, T, Watch, new_page, ready
 from live import step
 
 W0 = {"data.noteText": "香りが開いた", "api.addNote": "default", "count": 3, "rate": -2.5, "ok": True, "gone": None}
@@ -77,7 +77,7 @@ def judge(failures, key, st):
     check(failures, st["imgs"] == 0 and st["elements"] == 0 and st["pwned"] is None, f"{key}: <img onerror> is text: imgs {st['imgs']} elements {st['elements']} ran {st['pwned']}")
     check(failures, w3["pre"] and w3["sw"] > w3["cw"], f"{key}: a long line scrolls inside its block: {w3.get('sw')} > {w3.get('cw')}")
     check(failures, st["sw"] <= st["cw"] and st["docSW"] <= st["docCW"], f"{key}: the sheet never sideways: {st['sw']} {st['cw']} {st['docSW']} {st['docCW']}")
-    check(failures, t2["pre"] and t2["folded"] and t2["ch"] < t2["sh"] and t2["btn"] and "全部を見る" in t2["btn"], f"{key}: 22 lines folded with a toggle: {t2}")
+    check(failures, t2["pre"] and t2["folded"] and t2["ch"] < t2["sh"] and t2["btn"] == T("panel.bj.more", n=24), f"{key}: 24 lines folded with a toggle: {t2}")
     check(failures, w0["pre"] and not w0["folded"] and w0["btn"] is None, f"{key}: 8 lines not folded: {w0.get('folded')} {w0.get('btn')}")
     # not JSON: the plain text it was (no block, nothing added); one line where the column is wide enough (at 390 px a
     # narrow column wraps a sentence as it always did)
@@ -118,7 +118,7 @@ async def run_spec_branch_json(pw, out, failures, Server, before=False):
                 await page.wait_for_timeout(300)
                 opened = res[f"{width}-open"] = await page.evaluate(STATE_JS)
                 t2 = opened["rows"][2][1] if len(opened["rows"]) > 2 else {}
-                check(failures, t2.get("pre") and t2["ch"] >= t2["sh"] and t2["btn"] == "畳む", f"{width}: the toggle opens all of it: {t2}")
+                check(failures, t2.get("pre") and t2["ch"] >= t2["sh"] and t2["btn"] == T("panel.bj.fold"), f"{width}: the toggle opens all of it: {t2}")
             await page.close()
         if not before:
             check(failures, not watch.console and not watch.foreign, f"no console error, nothing outside the server: {watch.console[:3]} {watch.foreign[:3]}")
