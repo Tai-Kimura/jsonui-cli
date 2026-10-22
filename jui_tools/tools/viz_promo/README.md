@@ -37,6 +37,14 @@ e2e's machine lock, so it never runs beside a browser-test run.
   `captures/<lang>/5/` from its frame 90 on: chapter 5's own capture still covers 74–88 s, and its cost page starts
   after 77 s. Capturing 5 captures 5-json too.
 
+- **1b-board is the page beside 1b's terminal.** The promo shows chapter 1b split: the terminal (`captures/<lang>/1b/`)
+  on the left half and the viz page (`captures/<lang>/1b-board/`) on the right half, both taken at `SPLIT_VIEWPORT`
+  (1125x1012, shown at 900x810). The board is the real whiteboard of demo-shop's cart spec: before frame 0 the file is
+  left with its metadata only (`spec_reset`) and the sheet is opened from the spec list; then each `spec_write` is a
+  real Write of the real file with one more section, as demo-shop has it, with the hooks a Write sends around it. The
+  server reads the file (the hook's path and its watcher) and the open sheet fills in. Capturing 1b captures
+  1b-board too.
+
 ## Frames and the clock
 
 Frame 0 is the chapter's start; there are (end − start) × 30 frames, the bounds read from `jsonui-promo/src/timeline.json`

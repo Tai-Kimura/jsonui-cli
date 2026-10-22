@@ -35,8 +35,13 @@ ALL = TERM_CHAPTER_IDS + CHAPTER_IDS
 #: window segments inside a viz chapter, captured by term.py into a folder of their own: id -> (chapter, start, end,
 #: the demo-shop file shown). The promo shows the segment over its seconds and the chapter's frames after it.
 SEGMENTS = {"5-json": ("5", 74.0, 77.0, "docs/infra/load/weekend-campaign.json")}
-#: what run.py captures: the promo's chapters and the segments (a chapter brings its segments with it)
-CAPTURE_IDS = ALL + tuple(SEGMENTS)
+#: a terminal chapter shown split: its terminal on the left half, the viz page beside it on the right half, captured
+#: by capture.py into a folder of its own: id -> the chapter it sits beside. The promo frames both halves at the same
+#: size (its SPLIT layout), so the terminal (term.py) and the board are both taken at SPLIT_VIEWPORT.
+BOARDS = {"1b-board": "1b"}
+SPLIT_VIEWPORT = {"width": 1125, "height": 1012}   # 900 x 810 in the video, 1.25 x
+#: what run.py captures: the promo's chapters and the segments (a chapter brings its segments and board with it)
+CAPTURE_IDS = ALL + tuple(SEGMENTS) + tuple(BOARDS)
 #: the bounds the events below were written for; tests hold them to the promo's timeline.json
 BOUNDS = {"hook": (0, 4), "1a": (4, 16), "1b": (16, 32), "2": (32, 44), "3": (44, 54), "4": (54, 74), "5": (74, 88), "6": (88, 96)}
 
@@ -60,7 +65,7 @@ SUBAGENT = ("a3f19c2e8b7d4a601", "jsonui-test")
 #: the event kinds the driver knows (capture.Driver.fire)
 KINDS = frozenset({"start", "prompt", "tool", "tool_end", "perm", "ask_pending", "ask", "ask_answered", "denied", "idle", "stop",
                    "sub_start", "sub_stop", "talk", "tests_start", "tests_case", "tests_end", "settle", "door", "dbg", "click",
-                   "hover", "select", "wheel"})
+                   "hover", "select", "wheel", "spec_reset", "spec_write"})
 #: what a page event's target may name (capture.Driver.point)
 TARGETS = frozenset({"css", "text", "room_tag", "bubble", "session_row", "talk_row", "robot", "cost_day", "door"})
 
@@ -104,6 +109,7 @@ WORDS = {
                  "t3": "ブランチのテストが 12 件とも通りました"},
         "cases": ["カートが空のとき", "1 個入れたとき", "上限まで入れたとき", "在庫なしのとき", "通信に失敗したとき", "合計の表示"],
         "files": {"spec": "docs/screens/json/cart.spec.json", "readme": "README.md"},
+        "board_prompt": "カート画面の spec を書いて",
         "sub_done": "カートのテストを書き終えた",
         "room_readme": {"demo-admin": "demo-admin — 見本の管理画面（架空）\n", "demo-docs": "demo-docs — 見本のドキュメント（架空）\n",
                         "demo-api": "demo-api — 見本の API（架空）\n", "demo-mobile": "demo-mobile — 見本のスマホアプリ（架空）\n"},
@@ -141,6 +147,7 @@ WORDS = {
                  "t3": "All 12 branch tests pass"},
         "cases": ["empty cart", "one item", "up to the limit", "out of stock", "network failure", "total shown"],
         "files": {"spec": "docs/screens/json/cart.spec.json", "readme": "README.md"},
+        "board_prompt": "Write the cart screen's spec",
         "sub_done": "Finished writing the cart tests",
         "room_readme": {"demo-admin": "demo-admin: a sample admin console (fictional)\n", "demo-docs": "demo-docs: a sample docs site (fictional)\n",
                         "demo-api": "demo-api: a sample API (fictional)\n", "demo-mobile": "demo-mobile: a sample mobile app (fictional)\n"},
@@ -175,6 +182,7 @@ class Chapter:
     prelude: list
     events: list
     needs: tuple = ()          # features the chapter needs from the tree (capture.FEATURES)
+    viewport: dict | None = None   # the page's size when not the whole video's (a board: SPLIT_VIEWPORT)
 
 
 def E(at, kind, **args) -> Event:
@@ -337,6 +345,25 @@ def chapters(lang: str) -> dict:
         E(81.6, "click", target={"cost_day": "busiest"}, expect="cost_day"),
         E(82.6, "click", target={"css": "#sr-cost [data-src-act='play']"}),
     ], needs=("rooms", "server_room", "cost"))
+
+    # 1b-board (16–32, beside 1b's terminal): the cart screen's spec on the whiteboard, filling in as the spec owner
+    # writes it. The file starts with its metadata only (spec_reset); each spec_write is a real Write of the real file
+    # with one more section of the spec as demo-shop has it, which the server reads (the hook's file, and its watcher)
+    # and the open sheet shows. The sections come in the order the sheet shows them while the terminal's gates run.
+    spec = w["files"]["spec"]
+    board_prelude = [P("start", key="s01"), P("prompt", key="s01", text=w["board_prompt"]),
+                     P("spec_reset", room="demo-shop", rel=spec, keep=["type", "version", "metadata"]), P("settle"),
+                     P("dbg", call="press", css="#btn-side"),   # the side panel closed: the sheet takes the page
+                     P("dbg", call="openSpec", room="demo-shop", rel=spec, expect="board"), P("settle")]
+    out["1b-board"] = Chapter("1b-board", 16, 32, board_prelude, [
+        E(16.8, "spec_write", key="s01", room="demo-shop", rel=spec, add="structure"),
+        E(19.0, "spec_write", key="s01", room="demo-shop", rel=spec, add="stateManagement"),
+        E(21.4, "spec_write", key="s01", room="demo-shop", rel=spec, add="dataFlow"),
+        E(23.8, "spec_write", key="s01", room="demo-shop", rel=spec, add="userActions"),
+        E(25.8, "spec_write", key="s01", room="demo-shop", rel=spec, add="transitions"),
+        E(27.8, "spec_write", key="s01", room="demo-shop", rel=spec, add="branchContracts"),
+        E(30.4, "stop", key="s01"),
+    ], needs=("rooms",), viewport=SPLIT_VIEWPORT)
 
     # 6 (88–96): back to the whole floor
     out["6"] = Chapter("6", 88, 96, floor(w) + waits(w) + up_close("demo-shop"), [

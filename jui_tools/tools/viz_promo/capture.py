@@ -119,7 +119,13 @@ EXPECT = {
     "flow": "(id) => window.__dbg.srFlow().playing === id",
     "cost_month": "() => { const c = window.__dbg.srCost(); return !!c.month && !c.error; }",
     "cost_day": "() => !!window.__dbg.srCost().day",
+    "board": "() => window.__dbg.view().open.wb && !!document.querySelector('#wb-code section.sc')",
 }
+
+# the spec's index in the page's spec list (its room, its file) + 1, or null while it is not there
+FIND_SPEC_JS = """([pid, rel, path]) => { const i = window.__dbg.model().specs.findIndex((s) => s.project === pid
+    && (s.file === rel || s.file.endsWith('/' + rel) || rel.endsWith('/' + s.file) || s.file === path));
+  return i < 0 ? null : i + 1; }"""
 
 
 class PromoError(RuntimeError):
@@ -189,6 +195,7 @@ class Stage:
         self.open_tools: dict = {}
         self.n = 0
         self.runs: dict = {}
+        self.specs: dict = {}      # (room, rel) -> (the spec as demo-shop has it, the keys the file has now)
 
     # ---- the server ----
     def start(self):
@@ -248,6 +255,26 @@ class Stage:
     def use_id(self, key: str) -> str:
         self.n += 1
         return f"toolu_{key}{self.n:06d}"
+
+    # ---- a spec written section by section (a board) ----
+    def spec_reset(self, room: str, rel: str, keep: list):
+        """The room's spec as demo-shop has it is kept; the file is left with the `keep` keys only."""
+        path = self.rooms[room] / rel
+        full = json.loads(path.read_text(encoding="utf-8"))
+        self.specs[(room, rel)] = (full, [k for k in full if k in keep])
+        path.write_text(self.spec_text(full, self.specs[(room, rel)][1]), encoding="utf-8")
+
+    def spec_grow(self, room: str, rel: str, key: str):
+        """The spec's text with `key` added to what it has: (its path, the text)."""
+        full, has = self.specs[(room, rel)]
+        if key not in full:
+            raise PromoError(f"{rel} has no {key!r}")
+        has.append(key)
+        return str(self.rooms[room] / rel), self.spec_text(full, has)
+
+    @staticmethod
+    def spec_text(full: dict, keys: list) -> str:
+        return json.dumps({k: full[k] for k in full if k in keys}, ensure_ascii=False, indent=2) + "\n"
 
     # ---- transcripts and progress records ----
     def append(self, key: str, *records):
@@ -437,7 +464,7 @@ class Driver:
     async def fire(self, ev, advance: bool):
         a, k, st = ev.args, ev.kind, self.stage
         hook_kinds = {"start", "prompt", "tool", "tool_end", "perm", "ask_pending", "ask", "ask_answered", "denied", "idle",
-                      "stop", "sub_start", "sub_stop", "tests_start", "tests_end"}
+                      "stop", "sub_start", "sub_stop", "tests_start", "tests_end", "spec_write"}
         before = await self.seq() if k in hook_kinds else 0
         now = int(time.time() * 1000)
         if k == "start":
@@ -523,6 +550,17 @@ class Driver:
             tool, inp, uid = st.open_tools.pop(a["key"])
             st.send(st.body(a["key"], "PostToolUse", tool_name=tool, tool_input=inp, tool_use_id=uid,
                             tool_response={"stdout": f" Tests  {res.count('passed')} passed ({len(res)})", "stderr": ""}))
+        elif k == "spec_reset":
+            st.spec_reset(a["room"], a["rel"], a["keep"])
+        elif k == "spec_write":
+            # a real Write of the real file: the hook before, the file with one more section, the hook after
+            path, text = st.spec_grow(a["room"], a["rel"], a["add"])
+            uid = st.use_id(a["key"])
+            inp = {"file_path": path, "content": text}
+            st.send(st.body(a["key"], "PreToolUse", tool_name="Write", tool_input=inp, tool_use_id=uid))
+            Path(path).write_text(text, encoding="utf-8")
+            st.send(st.body(a["key"], "PostToolUse", tool_name="Write", tool_input=inp, tool_use_id=uid,
+                            tool_response={"type": "update", "filePath": path}, duration_ms=300))
         elif k == "settle":
             if advance:
                 await self.settle()
@@ -564,6 +602,17 @@ class Driver:
             if tag:
                 await self.move(tag)
             await self.page.evaluate("(id) => window.__dbg.srSelect(id)", a["node"])
+        elif call == "press":
+            # a button pressed without the cursor (a board's set-up before frame 0: nothing filmed moves to it)
+            await self.until("(c) => !!document.querySelector(c)", a["css"], f"the button {a['css']}", advance=True)
+            await self.page.evaluate("(c) => document.querySelector(c).click()", a["css"])
+        elif call == "openSpec":
+            # the spec's sheet on the whiteboard, as a person opens it: the board's button, then the spec's card
+            path = str(self.stage.rooms[a["room"]] / a["rel"])
+            i = await self.until(FIND_SPEC_JS, [self.project(a["room"]), a["rel"], path], f"the spec {a['rel']}", advance=True) - 1
+            await self.page.evaluate("() => document.getElementById('btn-specboard').click()")
+            await self.until(f"() => !!document.querySelector('.ov-card[data-idx=\"{i}\"]')", what="the spec's card", advance=True)
+            await self.page.evaluate(f"() => document.querySelector('.ov-card[data-idx=\"{i}\"]').click()")
         elif call == "srFlowSpeed":
             await self.page.evaluate("(s) => window.__dbg.srFlowSpeed(s)", a["speed"])
         elif call == "srCostPlayMs":
@@ -745,7 +794,8 @@ async def capture_chapter(pw, chapter, bounds: tuple, out_root: Path, lang: str,
         stage = Stage(lang, jui_root, demo_shop, keep=keep, name=chapter.id)
         stage.start()
         browser = await pw.chromium.launch(args=LAUNCH_ARGS)
-        ctx = await browser.new_context(viewport=VIEWPORT, device_scale_factor=1, color_scheme=theme, reduced_motion="no-preference")
+        viewport = chapter.viewport or VIEWPORT
+        ctx = await browser.new_context(viewport=viewport, device_scale_factor=1, color_scheme=theme, reduced_motion="no-preference")
         page = await ctx.new_page()
         watch = Watch(origin=stage.url)
         watch.attach(page, chapter.id)
@@ -757,6 +807,8 @@ async def capture_chapter(pw, chapter, bounds: tuple, out_root: Path, lang: str,
         await page.add_init_script(SEEDED_RANDOM_JS)
         await page.clock.pause_at(t0 + 1)
         drv = Driver(page, stage, lang, watch, sky_time)
+        if chapter.viewport:   # a board has no press: the cursor waits off the page
+            drv.cursor = [viewport["width"] + 60.0, viewport["height"] + 60.0]
         await drv.boot(chapter.needs)
         await drv.prelude(chapter.prelude)
         res["frames"] = await drv.capture(chapter.events, start, end, out)

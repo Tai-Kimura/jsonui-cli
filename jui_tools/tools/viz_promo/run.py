@@ -29,7 +29,7 @@ TOOLS = Path(__file__).resolve().parent.parent
 if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))   # viz_promo is a package under tools/ (viz_e2e has a rooms.py and a run.py too)
 
-from viz_promo.timeline import ALL, CAPTURE_IDS, SEGMENTS, TERM_CHAPTER_IDS, chapters, check_bounds, promo_timeline  # noqa: E402
+from viz_promo.timeline import ALL, BOARDS, CAPTURE_IDS, SEGMENTS, TERM_CHAPTER_IDS, chapters, check_bounds, promo_timeline  # noqa: E402
 
 PROMO = Path.home() / "resource" / "jsonui-promo"
 DEMO_SHOP = Path.home() / "resource" / "jsonui-demo-shop"
@@ -58,6 +58,9 @@ def parse(argv=None):
     for seg, (chapter, *_rest) in SEGMENTS.items():
         if chapter in a.chapters and seg not in a.chapters:
             a.chapters.insert(a.chapters.index(chapter), seg)
+    for board, chapter in BOARDS.items():
+        if chapter in a.chapters and board not in a.chapters:
+            a.chapters.insert(a.chapters.index(chapter) + 1, board)
     if not (a.jui_root / "jui_tools" / "bin" / "jui").is_file():
         ap.error(f"--jui-root {a.jui_root}: no jui_tools/bin/jui there")
     a.out = a.out or a.promo / "public" / "captures"
@@ -94,6 +97,9 @@ async def main_async(a) -> int:
                 r = await capture_term(pw, cid, SEGMENTS[cid][1:3], a.out, a.lang, a.jui_root, a.demo_shop, keep=a.keep)
             elif cid in TERM_CHAPTER_IDS:
                 r = await capture_term(pw, cid, promo[cid], a.out, a.lang, a.jui_root, a.demo_shop, keep=a.keep)
+            elif cid in BOARDS:
+                r = await capture_chapter(pw, script[cid], promo[BOARDS[cid]], a.out, a.lang, a.jui_root, a.demo_shop, theme=a.theme,
+                                          sky_time=None if a.sky_time == "real" else a.sky_time, keep=a.keep)
             else:
                 r = await capture_chapter(pw, script[cid], promo[cid], a.out, a.lang, a.jui_root, a.demo_shop, theme=a.theme,
                                           sky_time=None if a.sky_time == "real" else a.sky_time, keep=a.keep)

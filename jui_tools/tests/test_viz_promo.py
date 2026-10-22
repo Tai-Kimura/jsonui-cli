@@ -33,7 +33,7 @@ def all_chapters():
 
 def test_every_event_is_inside_its_chapter_and_the_preludes_are_untimed():
     for lang, c in all_chapters():
-        assert (c.start, c.end) == T.BOUNDS[c.id], (lang, c.id)
+        assert (c.start, c.end) == T.BOUNDS[T.BOARDS.get(c.id, c.id)], (lang, c.id)   # a board: its chapter's
         for ev in c.events:
             assert ev.at is not None and c.start <= ev.at < c.end, (lang, c.id, ev)
             if ev.kind == "wheel":
@@ -44,8 +44,23 @@ def test_every_event_is_inside_its_chapter_and_the_preludes_are_untimed():
 
 
 def test_the_chapters_are_the_promos_viz_chapters():
-    assert set(T.chapters("ja")) == set(T.CHAPTER_IDS)
+    assert set(T.chapters("ja")) == set(T.CHAPTER_IDS) | set(T.BOARDS)
     assert set(T.BOUNDS) == set(T.CHAPTER_IDS) | set(T.TERM_CHAPTER_IDS)
+    assert set(T.BOARDS.values()) <= set(T.TERM_CHAPTER_IDS)
+
+
+def test_a_board_writes_its_spec_section_by_section_in_the_sheets_order():
+    """1b-board: the file starts with its metadata; each write adds one section, each once, in the order the sheet
+    shows them (30-source-live.js SPEC_KEYS), and the board is taken at the split's size."""
+    order = ["structure", "stateManagement", "dataFlow", "userActions", "transitions", "branchContracts"]
+    for lang in ("ja", "en"):
+        c = T.chapters(lang)["1b-board"]
+        reset = [ev for ev in c.prelude if ev.kind == "spec_reset"]
+        assert len(reset) == 1 and reset[0].args["keep"] == ["type", "version", "metadata"], lang
+        adds = [ev.args["add"] for ev in c.events if ev.kind == "spec_write"]
+        assert adds == order, (lang, adds)
+        assert c.viewport == T.SPLIT_VIEWPORT
+        assert any(ev.kind == "dbg" and ev.args.get("call") == "openSpec" for ev in c.prelude), lang
 
 
 def test_every_kind_target_and_session_is_one_the_driver_knows():

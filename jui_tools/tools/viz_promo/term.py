@@ -29,7 +29,7 @@ import tempfile
 from pathlib import Path
 
 from viz_promo.rooms import cleanup, copy_demo_shop
-from viz_promo.timeline import SEGMENTS, frame_count, frame_time
+from viz_promo.timeline import BOARDS, SEGMENTS, SPLIT_VIEWPORT, frame_count, frame_time
 
 PROMPT = "demo-shop $ "
 ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
@@ -114,7 +114,7 @@ def read_files(shop: Path, html_doc: str | None) -> list:
 
 STYLE = """
 :root { --bg: #0d1117; --panel: #161b22; --line: #30363d; --text: #e6edf3; --sub: #8b949e; --accent: #58a6ff; --ok: #3fb950; --gen: #d29922; }
-html, body { margin: 0; width: 1920px; height: 1080px; background: var(--bg); color: var(--text); overflow: hidden; }
+html, body { margin: 0; width: 100vw; height: 100vh; background: var(--bg); color: var(--text); overflow: hidden; }
 body { font: 24px/1.45 Menlo, "SF Mono", Monaco, "Hiragino Sans", monospace; }
 .win { position: absolute; inset: 0; display: flex; flex-direction: column; }
 .tabs { display: flex; gap: 2px; background: var(--panel); border-bottom: 1px solid var(--line); height: 54px; align-items: stretch; padding-left: 12px; }
@@ -247,7 +247,9 @@ async def capture_term(pw, chapter_id: str, bounds: tuple, out_root: Path, lang:
         doc = page_html(chapter_id, data, start, end)
         browser = await pw.chromium.launch()
         try:
-            page = await browser.new_page(viewport={"width": 1920, "height": 1080}, device_scale_factor=1)
+            # a chapter shown beside its board takes the board's size (the promo's split frames them alike)
+            split = chapter_id in BOARDS.values()
+            page = await browser.new_page(viewport=SPLIT_VIEWPORT if split else {"width": 1920, "height": 1080}, device_scale_factor=1)
             await page.set_content(doc)
             await page.evaluate("() => document.fonts.ready")
             out.mkdir(parents=True, exist_ok=True)
