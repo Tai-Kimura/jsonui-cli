@@ -265,7 +265,7 @@ def read_route(path: Path) -> tuple | None:
 
 def build_mock_definition(doc: OpenApiDoc, op: Operation) -> dict:
     """Build a fresh mock definition (all scenarios) for one operation."""
-    schema, content_type = doc.success_schema(op)
+    media, content_type = doc.success_media(op)
     success_code = _first_success_code(op)
 
     default_scenario: dict = {"status": success_code}
@@ -273,8 +273,9 @@ def build_mock_definition(doc: OpenApiDoc, op: Operation) -> dict:
         # Non-JSON success response (PDF/CSV/ZIP/...): author supplies a file.
         default_scenario["contentType"] = content_type
         default_scenario["bodyFile"] = None
-    elif schema is not None:
-        default_scenario["body"] = doc.sample_for_schema(schema)
+    elif media is not None and (media.get("schema") is not None
+                                or doc.media_example(media)[0]):
+        default_scenario["body"] = doc.body_for_media(media)
     elif content_type is None and success_code == 204:
         pass  # no body
     else:
@@ -293,10 +294,12 @@ def build_mock_definition(doc: OpenApiDoc, op: Operation) -> dict:
 
     # Synthesize error scenarios from declared 4xx/5xx responses.
     for code in doc.error_codes(op):
-        err_schema, err_ct = _error_schema(doc, op, code)
+        err_media, err_ct = _response_media(op, code)
         scen = {"status": int(code)}
-        if err_ct == "application/json" and err_schema is not None:
-            scen["body"] = doc.sample_for_schema(err_schema)
+        if err_ct == "application/json" and (
+                err_media.get("schema") is not None
+                or doc.media_example(err_media)[0]):
+            scen["body"] = doc.body_for_media(err_media)
         else:
             scen["body"] = {"detail": f"HTTP {code}"}
         scenarios[f"error_{code}"] = scen
@@ -321,12 +324,9 @@ def _first_success_code(op: Operation) -> int:
     return 200
 
 
-def _error_schema(doc: OpenApiDoc, op: Operation, code: str):
-    return _response_schema(op, code)
-
-
-def _response_schema(op: Operation, code):
-    """(schema, content_type) for one declared status code, or (None, None).
+def _response_media(op: Operation, code):
+    """(media_type_object, content_type) for one declared status code, or
+    (None, None).
 
     Falls back to the `default` response, which OpenAPI allows in place of an
     explicit code.
@@ -337,11 +337,17 @@ def _response_schema(op: Operation, code):
     resp = resp or {}
     content = resp.get("content") or {}
     if "application/json" in content:
-        return content["application/json"].get("schema"), "application/json"
+        return content["application/json"] or {}, "application/json"
     if content:
         ctype = next(iter(content.keys()))
-        return content[ctype].get("schema"), ctype
+        return content[ctype] or {}, ctype
     return None, None
+
+
+def _response_schema(op: Operation, code):
+    """(schema, content_type) for one declared status code, or (None, None)."""
+    media, ctype = _response_media(op, code)
+    return (media.get("schema") if media is not None else None), ctype
 
 
 def _empty_variant(body: dict):

@@ -165,16 +165,21 @@ class OpenApiDoc:
         if _depth > _MAX_DEPTH or (ref is not None and ref in _seen):
             return _stop_value(self.resolve_schema(schema, _depth))
         if ref is not None:
+            # An example written beside the `$ref` is the one this use of the
+            # shared schema was given (OpenAPI 3.1 allows it there); resolving
+            # first would drop it for the referenced schema's own, or none.
+            found, value = _schema_example(schema)
+            if found:
+                return value
             _seen = _seen + (ref,)
         schema = self.resolve_schema(schema, _depth)
         if not isinstance(schema, dict):
             return None
 
         # Prefer explicit examples when present.
-        if "example" in schema:
-            return schema["example"]
-        if "examples" in schema and isinstance(schema["examples"], list) and schema["examples"]:
-            return schema["examples"][0]
+        found, value = _schema_example(schema)
+        if found:
+            return value
         if "default" in schema:
             return schema["default"]
         if "enum" in schema and isinstance(schema["enum"], list) and schema["enum"]:
@@ -194,10 +199,42 @@ class OpenApiDoc:
             return [item] if item is not None else []
         return _primitive_sample(schema, stype)
 
-    def success_schema(self, op: Operation):
-        """Pick the 2xx JSON response schema for an operation, if any.
+    def media_example(self, media) -> tuple[bool, object]:
+        """`(found, value)` for the example a media type object carries.
 
-        Returns (schema_or_None, content_type). content_type is None when the
+        `example` first, then the first of `examples` that holds a `value`
+        (a `$ref` into `components/examples` is followed; an entry with only
+        an `externalValue` is skipped — nothing is fetched). This is where
+        OpenAPI 3 puts a response's example as often as on the schema, and
+        a body synthesised from the types instead reads `0`, `"string"` and
+        the first enum value: below a declared `minimum`, and a "nothing
+        wrong" response showing every warning flag set.
+        """
+        if not isinstance(media, dict):
+            return False, None
+        if "example" in media:
+            return True, media["example"]
+        examples = media.get("examples")
+        if isinstance(examples, dict):
+            for entry in examples.values():
+                if isinstance(entry, dict) and "$ref" in entry:
+                    entry = self._resolve_ref(entry["$ref"])
+                if isinstance(entry, dict) and "value" in entry:
+                    return True, entry["value"]
+        return False, None
+
+    def body_for_media(self, media):
+        """The body a scenario serves for one media type object: its own
+        example (`media_example`), else one built from its schema."""
+        found, value = self.media_example(media)
+        if found:
+            return value
+        return self.sample_for_schema((media or {}).get("schema"))
+
+    def success_media(self, op: Operation):
+        """Pick the 2xx media type object for an operation, if any.
+
+        Returns (media_or_None, content_type). content_type is None when the
         response has no body; non-JSON when the success response is e.g. a PDF.
         """
         for code in sorted(op.responses.keys()):
@@ -207,15 +244,36 @@ class OpenApiDoc:
                 if not content:
                     return None, None
                 if "application/json" in content:
-                    return content["application/json"].get("schema"), "application/json"
+                    return content["application/json"] or {}, "application/json"
                 # first non-JSON content type (PDF/CSV/ZIP/...)
                 ctype = next(iter(content.keys()))
-                return content[ctype].get("schema"), ctype
+                return content[ctype] or {}, ctype
         return None, None
+
+    def success_schema(self, op: Operation):
+        """Pick the 2xx JSON response schema for an operation, if any.
+
+        Returns (schema_or_None, content_type), as `success_media` does.
+        """
+        media, ctype = self.success_media(op)
+        return (media.get("schema") if media is not None else None), ctype
 
     def error_codes(self, op: Operation) -> list[str]:
         """Declared 4xx/5xx status codes for this operation."""
         return sorted(c for c in op.responses if c[:1] in ("4", "5") and c.isdigit())
+
+
+def _schema_example(schema) -> tuple[bool, object]:
+    """`(found, value)` for a schema's own `example`, else the first of its
+    `examples` list (JSON Schema's form, OpenAPI 3.1)."""
+    if not isinstance(schema, dict):
+        return False, None
+    if "example" in schema:
+        return True, schema["example"]
+    examples = schema.get("examples")
+    if isinstance(examples, list) and examples:
+        return True, examples[0]
+    return False, None
 
 
 def _stop_value(schema):
