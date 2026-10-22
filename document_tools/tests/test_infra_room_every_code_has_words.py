@@ -2,7 +2,8 @@
 2026-10-22-doc-validate-infra-config-exclude-prints-only-its-code: a bad infra.exclude entry printed
 `jui.config.json: config.exclude  [config.exclude]`, the same for a missing folder and a path outside the project).
 
-The codes are gathered from the source of the three modules room.read gathers problems from (room, model, flows), so
+The codes are gathered from the source of the modules room.read gathers problems from (room, model, flows, and
+migration for the plans; ticket 2026-10-22-viz-infra-migration-plan), so
 a new code with no words of its own is red here, not mute on the terminal. A code still without words says its message.
 """
 from __future__ import annotations
@@ -19,8 +20,8 @@ import pytest
 from jsonui_doc_cli.infra import model as M, room as R
 
 INFRA = Path(R.__file__).resolve().parent
-SOURCES = {name: (INFRA / f"{name}.py").read_text(encoding="utf-8") for name in ("room", "model", "flows")}
-LITERAL = re.compile(r'(?:_problem\([^,()]+,[^,()]+,|\.err\([^,()]+,)\s*"([a-z_]+(?:\.[a-z_]+)*)"')
+SOURCES = {name: (INFRA / f"{name}.py").read_text(encoding="utf-8") for name in ("room", "model", "flows", "migration")}
+LITERAL = re.compile(r'(?:\b_p(?:roblem)?\([^,()]+,[^,()]+,|\.err\([^,()]+,)\s*"([a-z_]+(?:\.[a-z_]+)*)"')
 WHERE = "docs/infra/main.json"
 MESSAGE = "the message document_tools wrote"
 
@@ -51,14 +52,16 @@ def _problems(code: str) -> list[dict]:
 def test_the_codes_are_gathered_from_every_place_that_makes_one():
     """Each call that makes a problem names its code as written, but the two that pass one along (the secret's kind,
     a flow's err) — so the list below is the whole of what the read can say."""
-    calls = sum(len(re.findall(r"(?<!def )(?:\b_problem|\.err)\(", t)) for t in SOURCES.values())
-    passed_along = ['_problem(name, path, f"secret.{kind}",', "_problem(self.name, path, code, message, severity)"]
+    calls = sum(len(re.findall(r"(?<!def )(?:\b_p(?:roblem)?|\.err)\(", t)) for t in SOURCES.values())
+    passed_along = ['_problem(name, path, f"secret.{kind}",', "_problem(self.name, path, code, message, severity)",
+                    "M._problem(file, path, code, message, severity)", '_p(where, path, f"secret.{kind}",']
     assert all(any(s in t for t in SOURCES.values()) for s in passed_along)
     named = sum(len(LITERAL.findall(t)) for t in SOURCES.values())
-    assert calls == named + 2, "a problem made with a code that is not written out: add it to this arm"
+    assert calls == named + len(passed_along), "a problem made with a code that is not written out: add it to this arm"
     codes = _codes()
     assert {"config.exclude", "environment.outside", "environment.none", "spec.ha"} <= codes   # the ticket's family
     assert set(R.FLOW_JA) <= codes and len(codes) >= 45
+    assert set(R.MIGRATION_JA) <= codes
 
 
 @pytest.mark.parametrize("code", sorted(_codes()))

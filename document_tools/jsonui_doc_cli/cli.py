@@ -2348,7 +2348,8 @@ def cmd_validate_infra(args):
     them, each checked against the schema and the shapes of secrets, then merged. Exit 0: no error; 1: errors
     (warnings alone are 0; also when every file was refused); 2: nothing could be read (the reason)."""
     from .infra import room as infra_room
-    result = infra_room.read(Path(args.root))
+    only = getattr(args, "migration", None)
+    result = infra_room.read(Path(args.root), plans=only or True)
     if args.json:
         out = {k: v for k, v in result.items() if k not in ("groups", "nodes", "edges")}
         if result.get("ok"):
@@ -2366,9 +2367,18 @@ def cmd_validate_infra(args):
         errs = sum(1 for p in result["problems"] if p["severity"] == "error")
         print(f"infra: {result['dir']}: {len(result['files'])} file(s) used, {len(result['nodes'])} nodes, "
               f"{len(result['edges'])} edges, {len(result['environments'])} environment(s); {errs} error(s)")
+        for m in result.get("migrations", []):        # only when the room has a plan: otherwise the output is as before
+            for p in m["problems"]:
+                print(f"{p['severity'].upper()} {p['short']}  [{p['code']}]")
+            c = m["counts"]
+            print(f"migration {m['name']}: {m['dir']}: " + (f"{len(m['steps'])} step(s), {c['added']} added, "
+                  f"{c['replaced']} replaced, {c['removed']} removed, {c['edgesAdded']} edge(s) added, "
+                  f"{c['edgesRemoved']} removed; " if m["steps"] else "not used; ")
+                  + f"{sum(1 for p in m['problems'] if p['severity'] == 'error')} error(s)")
     if not result["ok"]:
         return 1 if result["reason"] == "invalid" else 2
-    return 1 if any(p["severity"] == "error" for p in result["problems"]) else 0
+    plans_bad = any(not m["ok"] for m in result.get("migrations", []))
+    return 1 if plans_bad or any(p["severity"] == "error" for p in result["problems"]) else 0
 
 
 def _print_side(kind: str, result: dict, summary: str) -> None:
@@ -2431,6 +2441,8 @@ def cmd_cost_infra(args):
     """The cost simulator's month (or one day) for a room's load scenario, as jui viz's コスト shows it, without viz
     (infra/cost/run.py). Exit 0: simulated; 1: simulated, but a load definition has an error (that file is left out);
     2: nothing could be simulated (the room, the load folder, the scenario or the date)."""
+    if getattr(args, "migration", None):
+        return _cost_migration(args)
     from .infra.cost import run as cost_run
     code, out = cost_run.reply(Path(args.root), args.scenario, args.date, args.by)
     if args.json:
@@ -2479,6 +2491,41 @@ def cmd_cost_infra(args):
     if out["problems"]["count"] > len(out["problems"]["first"]):
         print(f"  ... {out['problems']['count'] - len(out['problems']['first'])} more load problem(s): "
               "jsonui-doc validate infra-load")
+    return code
+
+
+def _cost_migration(args):
+    """cost infra --migration: the old month, the new and the difference (infra/cost/diff.py)."""
+    from .infra.cost import diff as cost_diff
+    code, out = cost_diff.reply(Path(args.root), args.migration, args.scenario, args.account)
+    if args.json:
+        print(json.dumps(out, ensure_ascii=False, indent=2))
+        return code
+    if not out["ok"]:
+        print(f"cost infra: cannot simulate ({out['reason']}): {out['message']}", file=sys.stderr)
+        for p in out.get("problems", []):
+            print(f"  {p['severity'].upper()} {p.get('file') or ''} {p['path']}: {p['message']}  [{p['code']}]",
+                  file=sys.stderr)
+        return code
+
+    def signed(v: float) -> str:
+        return ("+" if v >= 0 else "-") + _usd(abs(v))
+    print(f"cost infra: {out['dir']}: migration {out['migration']}, scenario {out['scenario']}")
+    print(f"  old {_usd(out['old']['usd'])} -> new {_usd(out['new']['usd'])} a month ({signed(out['diff']['usd'])}; "
+          "USD, on demand)")
+    if out["account"]:
+        a = out["account"]
+        print(f"  account: old {_usd(a['old'])} -> new {_usd(a['new'])} ({signed(a['diff'])})")
+    for s in out["steps"]:
+        what = s["node"] or "edges"
+        print(f"  step {s['index']} {what}: " + (f"{_usd(s['usd'])} ({signed(s['diff'])})" if s["usd"] is not None else "not priced"))
+    moved = [r for r in out["byNode"] if r["diff"] or r["change"] != "same"]
+    for r in moved[:20]:
+        print(f"    {r['node']:<28} {r['change']:<9} {_usd(r['old'])} -> {_usd(r['new'])} ({signed(r['diff'])})")
+    print("  by provider: " + ", ".join(f"{r['provider'] or 'none'} {signed(r['diff'])}" for r in out["byProvider"]))
+    for label, words in (("noRule", "no rule"), ("loadUndefined", "load undefined"), ("noPrice", "no price")):
+        if out["new"][label]:
+            print(f"  new model, {words}: " + ", ".join(out["new"][label][:8]))
     return code
 
 
@@ -2635,6 +2682,8 @@ def main():
         help="The project root (the folder with jui.config.json); default: the current folder"
     )
     validate_infra_parser.add_argument("--json", action="store_true", help="Print the result as JSON")
+    validate_infra_parser.add_argument("--migration", metavar="PLAN",
+                                       help="Check this migration plan only (default: every plan in the migrations folder)")
     for side, what in (("infra-load", "the cost simulator's load definitions (<infra.dir>/load, or infra.load_dir)"),
                        ("infra-prices", "the cost simulator's price files (<infra.dir>/prices, or infra.prices_dir)")):
         side_parser = validate_subparsers.add_parser(side, help=f"Validate {what}")
@@ -2685,6 +2734,10 @@ def main():
     cost_infra_parser.add_argument("--by", choices=("provider", "node"), default="provider",
                                    help="How the month's days are stacked (default: provider)")
     cost_infra_parser.add_argument("--json", action="store_true", help="Print the result as JSON")
+    cost_infra_parser.add_argument("--migration", metavar="PLAN",
+                                   help="A migration plan: the old month, the new and the difference, by node and provider")
+    cost_infra_parser.add_argument("--account", action="store_true",
+                                   help="With --migration: the account's month too (its environments priced together)")
 
     # Rules command
     rules_parser = subparsers.add_parser(

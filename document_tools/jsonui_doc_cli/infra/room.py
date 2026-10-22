@@ -142,6 +142,13 @@ COST_EMPTY_JA = {"service": "（service 無し）", "region": "（region 無し�
 TYPE_JA = {"object": "オブジェクト", "array": "配列", "string": "文字列", "integer": "整数", "number": "数",
            "boolean": "真偽値（true・false）", "null": "null"}
 
+#: one per problem code a migration plan gives (migration.CODES; test_infra_migration: a code with no words is red)
+MIGRATION_JA = {"migration.remove_missing": "で消すものが、旧の構成にありません",
+                "migration.duplicate": "に、同じものが 2 度書かれています（先の物を使います）",
+                "migration.both": "のものが、changes にも書かれています（消さずに差し替えます）",
+                "migration.order_unknown": "の order に、この計画が変えも消しもしないノードがあります",
+                "migration.edge_end": "の辺の端が、新の構成のノードにありません（この辺は足しません）",
+                "migration.no_plan": "という計画がありません"}
 
 #: how many folders infra.exclude may name
 EXCLUDE_MAX = 50
@@ -211,6 +218,9 @@ class Words:
     def spec_ha(self, where: str, path: str) -> str:
         return f"{where}: {path} の spec は Multi-AZ と言いますが ha は言いません（費用と 3D は ha を読みます: ha: multi-az と書いてください）"
 
+    def migration(self, where: str, path: str, code: str) -> str:
+        return f"{where}: {path} {MIGRATION_JA[code]}（{code}）"
+
     def model_too_big(self, folder: str, what: str) -> str:
         return f"{folder}: 部屋のモデルが上限を超えています（{what}）"
 
@@ -272,6 +282,10 @@ def short(p: dict, folder: str, words: Words = DEFAULT_WORDS) -> str:
         return words.spec_duplicate(where, p["path"])
     if code in FLOW_JA:
         return words.flow(where, p["path"], code)
+    if code in MIGRATION_JA:
+        return words.migration(where, p["path"], code)
+    if code == "config.migrations_dir":
+        return words.said("side_path", key="migrations_dir")
     if code == "model.too_big":
         return words.model_too_big(folder, p["path"].lstrip("/"))
     if code == "read.too_large":
@@ -616,10 +630,11 @@ def counts(root: Path) -> dict:
     return {"files": len(listed), "dir": folder}
 
 
-def read(root: Path, is_room: bool = True, words: Words = DEFAULT_WORDS) -> dict:
+def read(root: Path, is_room: bool = True, words: Words = DEFAULT_WORDS, plans: bool | str = False) -> dict:
     """The room's model as the page takes it (§5.2): {ok, version, dir, files, environments, groups, nodes, edges,
-    problems, icons, readMs}, or {ok: False, reason, message} when nothing could be read. Blocking: call it off the
-    event loop."""
+    problems, icons, readMs}, or {ok: False, reason, message} when nothing could be read. ``plans``: True, the room's
+    migration plans too (migration.report: "migrations", only when the room has one); a name, that plan alone.
+    Blocking: call it off the event loop."""
     t0 = time.monotonic()
     root = Path(root)
     try:
@@ -683,5 +698,16 @@ def read(root: Path, is_room: bool = True, words: Words = DEFAULT_WORDS) -> dict
         p["short"] = short(p, folder, words)
     out = {"ok": True, "dir": folder}
     out.update(model)
-    out.update(problems=problems, icons=icons, readMs=int((time.monotonic() - t0) * 1000))
+    out.update(problems=problems, icons=icons)
+    if plans:
+        from . import migration as MG
+        try:
+            got = MG.report(root, files, problems, None if plans is True else plans, folder, words)
+        except Refused as r:          # infra.migrations_dir is not a path inside the room
+            got = [{"name": "", "dir": "", "ok": False, "steps": [], "counts": {},
+                    "problems": [dict(M._problem(CONFIG_NAME, "/infra/migrations_dir", "config.migrations_dir", r.message),
+                                      short=r.line(folder, words))]}]
+        if got is not None:
+            out["migrations"] = got
+    out["readMs"] = int((time.monotonic() - t0) * 1000)
     return out
