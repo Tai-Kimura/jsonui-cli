@@ -306,26 +306,26 @@ def chapters(lang: str) -> dict:
         E(53.0, "click", target={"css": "#rb [data-tk-peer]"}, expect="card:s02"),
     ], needs=("rooms",))
 
-    # 4 (54–74): the server room as 2.3.19 draws it — the whole model wide, flow "payment" played slowly across the
-    # regions (the light runs through the cables), its two branches chosen, then the camera comes in slowly on the
-    # shop's group until each node stands as a model of what it is, and flow "order" plays among the models.
-    # The wide shot is the shop's group framed (its focus) and pulled back 3.4 x (dist ~39: the regions around it in
-    # view); the dolly brings it to ~9.5, where 30 or fewer nodes are in view and the models come (SR.detail.enter).
+    # 4 (54–74): the server room as 2.3.19 draws it, small to large (requester 10-22: start close, where the light's
+    # way is easy to follow, then pull back to the large system). Close on the shop's group (its focus, then a little
+    # nearer: its nodes stand as models), flow "order" at 0.5x among them, its first branch taken; at 1x its second;
+    # then the camera pulls back steadily (eased, 6.8 x) until the whole system is in view, and flow "payment" runs
+    # across the regions at 2x to the end.
     sr_prelude = up_close("demo-shop") + [P("door"), P("dbg", call="srSelectGroup", group="shop-core"),
                                           P("click", target={"css": "#sr-board [data-sr-act='focus']"}),
-                                          P("dbg", call="srZoom", factor=3.4), P("settle")]
-    # a step of a flow takes moveMs + nodeMs (900 + 450) over the speed: at 0.5x the payment flow reaches its first
-    # branch 9 s after its press (63.4, under 「分かれ道は、自分で選べる」), its second 3.6 s after that (67.0), and
-    # its end at ~72.4; the order flow, pressed up close at 71.9, runs its first moves among the models to the end
+                                          P("dbg", call="srZoom", factor=0.82), P("settle")]
+    # order: 1.8 s to its first branch, 3.6 s to its second, 5.4 s to its end (at 1x); payment: 4.5 s to its first
     choice = "(c) => !!document.querySelector(`#sr-choices:not([hidden]) [data-sr-choice=\"${c}\"]`)"
     out["4"] = Chapter("4", 54, 74, floor(w) + sr_prelude + [P("dbg", call="srFlowSpeed", speed=0.5)], [
-        E(54.1, "dbg", call="srSelect", node="api", expect="flowlist:payment"),
-        E(54.4, "click", target={"css": "#sr-board [data-sr-flow='payment']"}, expect="flow:payment"),
-        E(63.4, "click", target={"css": "#sr-choices [data-sr-choice='pass']"}, ready=choice, arg="pass"),
-        E(67.0, "click", target={"css": "#sr-choices [data-sr-choice='ok']"}, ready=choice, arg="ok"),
-        E(67.3, "dolly", factor=0.244, dur=4.0),
-        E(71.4, "dbg", call="srSelect", node="browser", expect="flowlist:order"),
-        E(71.9, "click", target={"css": "#sr-board [data-sr-flow='order']"}, expect="flow:order"),
+        E(54.1, "dbg", call="srSelect", node="browser", expect="flowlist:order"),
+        E(54.4, "click", target={"css": "#sr-board [data-sr-flow='order']"}, expect="flow:order"),
+        E(58.0, "click", target={"css": "#sr-choices [data-sr-choice='hit']"}, ready=choice, arg="hit"),
+        E(58.3, "dbg", call="srFlowSpeed", speed=1),
+        E(61.9, "click", target={"css": "#sr-choices [data-sr-choice='in']"}, ready=choice, arg="in"),
+        E(62.5, "dolly", factor=6.8, dur=7.5),
+        E(70.2, "dbg", call="srSelect", node="api", expect="flowlist:payment"),
+        E(70.4, "dbg", call="srFlowSpeed", speed=2),
+        E(70.7, "click", target={"css": "#sr-board [data-sr-flow='payment']"}, expect="flow:payment"),
     ], needs=("rooms", "server_room", "flows"))
 
     # 5 (74–88): the cost simulator. 74–77 is the load definition in the editor (term.py, captures/<lang>/5-json:

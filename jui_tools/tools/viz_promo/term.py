@@ -34,17 +34,38 @@ from viz_promo.timeline import BOARDS, SEGMENTS, SPLIT_VIEWPORT, frame_count, fr
 PROMPT = "demo-shop $ "
 ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 
-# (what the window shows as typed, the launcher under --jui-root and its arguments, a line to keep in view)
+# 1b's story (requester 10-22: the message is that the spec and the implementation do not drift apart, and that a
+# drift is caught): the copy starts with one drift made before the window opens (DRIFT: the cart layout binds a name
+# its spec does not declare, and verify.external is "gate", so verify fails on it); verify finds it, the layout is
+# restored, verify passes, then the hand-written parts' contract tests and the doc check.
+# (what the window shows as typed, the launcher under --jui-root and its arguments — or "!" and a command on the
+# PATH —, a line to keep in view)
 GATES = (
-    ("jui build", ("jui_tools/bin/jui", "build"), None),
+    ("jui verify --fail-on-diff", ("jui_tools/bin/jui", "verify", "--fail-on-diff"), r"binding `"),
+    ("git restore docs/screens/layouts/cart.json", ("!git", "restore", "docs/screens/layouts/cart.json"), None),
     ("jui verify --fail-on-diff", ("jui_tools/bin/jui", "verify", "--fail-on-diff"), r"checked against the spec's declarations"),
-    ("jui lint-strings", ("jui_tools/bin/jui", "lint-strings"), None),
     ("jsonui-test generate branch-tests --check --out-dir web/tests/unit/generated --harness-dir web/tests/unit/branch-harness",
      ("test_tools/jsonui-test", "generate", "branch-tests", "--check", "--out-dir", "web/tests/unit/generated",
       "--harness-dir", "web/tests/unit/branch-harness"), None),
-    ("jsonui-test validate tests", ("test_tools/jsonui-test", "validate", "tests"), None),
     ("jsonui-doc check", ("document_tools/jsonui-doc", "check"), None),
 )
+# the drift: (the layout, the binding as the spec declares it, the name the layout binds instead)
+DRIFT = ("docs/screens/layouts/cart.json", "@{totalText}", "@{totalPrice}")
+
+
+def make_drift(shop: Path) -> None:
+    """The copy's one drift, made before the window opens and left uncommitted (git restore takes it back): the layout
+    binds a name the spec does not declare, and verify.external is "gate" so `verify --fail-on-diff` fails on it."""
+    rel, was, now = DRIFT
+    layout = shop / rel
+    text = layout.read_text(encoding="utf-8")
+    if text.count(was) != 1:
+        raise RuntimeError(f"{rel}: expected {was} once to drift it")
+    layout.write_text(text.replace(was, now), encoding="utf-8")
+    config = shop / "jui.config.json"
+    data = json.loads(config.read_text(encoding="utf-8"))
+    data.setdefault("verify", {})["external"] = "gate"
+    config.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 # 1a: the files opened, in order (relative to demo-shop), with the seconds each stays
 # 4–8 s under "the spec is the source; the rest is generated", 8–11.4 s the hand-written body under "you hand-write
@@ -78,10 +99,15 @@ def run_gates(jui_root: Path, shop: Path, home: Path) -> list:
     env.update(HOME=str(home), NO_COLOR="1", COLUMNS="110")
     out = []
     for shown, (launcher, *args), keep in GATES:
-        exe = Path(jui_root) / launcher
-        argv = [sys.executable, str(exe), *args]
+        if launcher.startswith("!"):   # a command on the PATH (git), run as it is
+            argv = [launcher[1:], *args]
+            shown_argv = argv
+        else:
+            exe = Path(jui_root) / launcher
+            argv = [sys.executable, str(exe), *args]
+            shown_argv = [str(exe), *args]
         p = subprocess.run(argv, cwd=shop, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=900)
-        out.append({"shown": shown, "argv": [str(exe), *args], "code": p.returncode, "output": clean(p.stdout, shop), "keep": keep})
+        out.append({"shown": shown, "argv": shown_argv, "code": p.returncode, "output": clean(p.stdout, shop), "keep": keep})
     return out
 
 
@@ -246,6 +272,7 @@ async def capture_term(pw, chapter_id: str, bounds: tuple, out_root: Path, lang:
         shop = copy_demo_shop(base / "work" / "demo-shop", lang, demo_shop)
         if chapter_id == "1b":
             (base / "home").mkdir()
+            make_drift(shop)
             data = run_gates(jui_root, shop, base / "home")
             res["gates"] = [{k: g[k] for k in ("shown", "argv", "code")} for g in data]
         elif chapter_id == "1a":

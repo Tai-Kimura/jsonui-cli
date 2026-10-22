@@ -183,12 +183,28 @@ def test_the_gates_and_files_are_there():
     from viz_promo import term
     root = Path(__file__).resolve().parents[2]
     for shown, (launcher, *_), _keep in term.GATES:
+        if launcher.startswith("!"):
+            assert shown.split()[0] == launcher[1:]
+            continue
         assert (root / launcher).is_file(), launcher
         assert shown.split()[0] == Path(launcher).name
     assert abs(sum(sec for _, sec in term.GENERATED + term.HAND_WRITTEN) + term.SPEC_HTML[2] - (T.BOUNDS["1a"][1] - T.BOUNDS["1a"][0])) < 1e-9
-    assert "verify" in term.GATES[1][0] and term.GATES[1][2]
+    # verify finds the drift, the layout is restored, verify passes (requester 10-22: drift caught is the message)
+    assert [g[0].split()[:2] for g in term.GATES[:3]] == [["jui", "verify"], ["git", "restore"], ["jui", "verify"]]
+    assert term.GATES[1][1][-1] == term.DRIFT[0] and term.GATES[0][2] and term.GATES[2][2]
     branch = [g for g in term.GATES if "branch-tests" in g[0]]
-    assert len(term.GATES) == 6 and len(branch) == 1 and "-p" not in branch[0][1], "branch-tests on the web only"
+    assert len(term.GATES) == 5 and len(branch) == 1 and "-p" not in branch[0][1], "branch-tests on the web only"
+
+
+def test_the_drift_is_one_undeclared_binding_and_a_gated_verify(tmp_path):
+    from viz_promo import term
+    rel, was, now = term.DRIFT
+    (tmp_path / rel).parent.mkdir(parents=True)
+    (tmp_path / rel).write_text('{"text": "%s"}' % was)
+    (tmp_path / "jui.config.json").write_text('{"verify": {"x": 1}}')
+    term.make_drift(tmp_path)
+    assert now in (tmp_path / rel).read_text() and was not in (tmp_path / rel).read_text()
+    assert json.loads((tmp_path / "jui.config.json").read_text())["verify"] == {"x": 1, "external": "gate"}
 
 
 def test_1a_ends_on_the_spec_document_held_long_enough_to_read(tmp_path):
@@ -254,22 +270,23 @@ def test_a_flows_time_counts_moves_nodes_and_the_longest_lane():
 
 
 @pytest.mark.skipif(not (DEMO_SHOP / "docs" / "infra" / "system.json").is_file(), reason="the demo-shop workdir is not on this machine")
-def test_chapter_4s_payment_flow_takes_its_branches_wide_then_the_camera_comes_in():
-    """2.3.19's room: the payment flow plays in the wide shot and its choices are pressed as their branches come (a
-    press that waits long shows a stopped light); the camera comes in once both are taken, and the order flow is
-    pressed up close after it (it runs to the chapter's end among the models)."""
+def test_chapter_4_starts_close_on_the_order_flow_then_pulls_back_to_the_whole_system():
+    """2.3.19's room, small to large: the order flow plays up close and its two choices are pressed as their branches
+    come (a press that waits long shows a stopped light), then the camera pulls back once both are taken, and the
+    payment flow is pressed in the wide view."""
     flows = {f["id"]: f for f in json.loads((DEMO_SHOP / "docs" / "infra" / "system.json").read_text(encoding="utf-8"))["flows"]}
     for lang in T.WORDS:
         ch = T.chapters(lang)["4"]
-        pay = T.flow_budget(ch, flows["payment"])
-        assert [p for p, _ in pay["choices"]] == ["pass", "ok"], pay
-        scheduled = {ev.args["arg"]: ev.at for ev in ch.events if ev.args.get("arg") in ("pass", "ok")}
-        for pick, fired in pay["choices"]:
-            assert abs(fired - scheduled[pick]) <= 0.5, f"{lang}: {pick} fired at {fired}, written for {scheduled[pick]}: {pay}"
+        # the speed changes after the first choice: the second branch is 3.6 s at 1x after it
+        first = T.flow_budget(ch, flows["order"])
+        assert [p for p, _ in first["choices"]][:1] == ["hit"] and abs(first["choices"][0][1] - 58.0) <= 0.5, first
+        hit = first["choices"][0][1]
+        second = next(ev.at for ev in ch.events if ev.args.get("arg") == "in")
+        assert abs(hit + 3.6 - second) <= 0.5, (hit, second)
         dolly = next(ev for ev in ch.events if ev.kind == "dolly")
-        assert dolly.at > pay["choices"][-1][1] and dolly.at + dolly.args["dur"] <= ch.end and 0 < dolly.args["factor"] < 1
-        order = next(ev.at for ev in ch.events if ev.kind == "click" and "data-sr-flow='order'" in ev.args["target"]["css"])
-        assert order >= dolly.at + dolly.args["dur"], "the order flow plays up close"
+        assert dolly.at > second and dolly.at + dolly.args["dur"] <= ch.end and dolly.args["factor"] > 1
+        pay = next(ev.at for ev in ch.events if ev.kind == "click" and "data-sr-flow='payment'" in ev.args["target"]["css"])
+        assert pay >= dolly.at + dolly.args["dur"], "the payment flow plays in the wide view"
 
 
 FAKE_LOCK = """import json, os

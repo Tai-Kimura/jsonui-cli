@@ -31,6 +31,9 @@ e2e's machine lock, so it never runs beside a browser-test run.
   verify, lint-strings, web branch-tests --check, validate, doc check) and shows what they printed in that copy, with
   colour codes taken out and the copy's absolute path written relative to it. The prompt is `demo-shop $`.
   `gates.json` beside the frames keeps each command and its output.
+  1b starts with one drift made in the copy before the window opens (`term.DRIFT`: the cart layout binds `totalPrice`,
+  which its spec does not declare, and `verify.external` is `"gate"`), so the first `jui verify --fail-on-diff` reports
+  the finding and fails; `git restore` takes the layout back and the second verify passes.
 - **5-json is a window segment.** Chapter 5 opens on the load definition (`docs/infra/load/weekend-campaign.json` of
   the copy; for `--lang en` the copy's file is `tools/make_load.py --lang en`'s output) in the editor window, 74–77 s,
   captured to `captures/<lang>/5-json/` (90 frames, frame 0 = 74 s). The promo frames it as a window, then shows
