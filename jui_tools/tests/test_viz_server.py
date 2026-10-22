@@ -190,8 +190,11 @@ def test_the_page_names_its_css_and_script_by_their_content(tmp_path, monkeypatc
     web.mkdir()
     (web / "index.html").write_text('<meta name="jui-viz-token" content="__JUI_VIZ_TOKEN__">'
                                     '<link rel="stylesheet" href="/app.css"><script type="module" src="/boot.js"></script>')
-    (web / "app.css").write_text("b { color: red; }")
+    (web / "debug.html").write_text('<meta name="jui-viz-token" content="__JUI_VIZ_TOKEN__"><script type="module" src="/debug.js"></script>')
+    long = "/* " + "a long head the same in both versions " * 8 + "*/\n"   # past any short prefix of the file
+    (web / "app.css").write_text(long + "b { color: red; }")
     (web / "boot.js").write_text("export {};")
+    (web / "debug.js").write_text("export {};")
     monkeypatch.setattr(srv, "web_root", lambda: web)
 
     def h(name):
@@ -204,9 +207,11 @@ def test_the_page_names_its_css_and_script_by_their_content(tmp_path, monkeypatc
             body = await (await client.get("/", headers=_host(ctx))).text()
             assert f'href="/app.css?v={h("app.css")}"' in body and f'src="/boot.js?v={h("boot.js")}"' in body, body
             css = await client.get(f"/app.css?v={h('app.css')}", headers=_host(ctx))
-            assert css.status == 200 and await css.text() == "b { color: red; }"
+            assert css.status == 200 and (await css.text()).endswith("b { color: red; }")
+            dbg = await (await client.get("/debug", headers=_host(ctx))).text()
+            assert f'src="/debug.js?v={h("debug.js")}"' in dbg, dbg
             before = re.search(r'/app\.css\?v=(\w+)', body).group(1)
-            (web / "app.css").write_text("b { color: blue; }")
+            (web / "app.css").write_text(long + "b { color: rex; }")   # one letter at the end: the update the ticket was
             after = re.search(r'/app\.css\?v=(\w+)', await (await client.get("/", headers=_host(ctx))).text()).group(1)
             assert before != after == h("app.css")
         finally:
