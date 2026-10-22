@@ -103,7 +103,9 @@ SOURCES = {
     "flow-zoom": ["data-flow-zoom", "String(wb.flowFit)"],
 }
 # lines that read a state and set none
-READS = ["popEl.querySelector('[role=\"option\"][aria-selected=\"true\"]')"]
+READS = ["popEl.querySelector('[role=\"option\"][aria-selected=\"true\"]')",
+         # the side list finds the open spec's row to bring it into view (wbSideShowOpen): its look is .ws-item's
+         "wbSideList.querySelector('.ws-item[aria-current=\"true\"]')"]
 
 READ = """([sel, attr, home, made]) => {
   let el = sel ? document.querySelector(sel) : null, wrap = null;
