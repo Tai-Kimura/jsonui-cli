@@ -2350,15 +2350,20 @@ def _ensure_impl_imports(platform: str, impl_path: Path, lines: list[str], args)
     (ticket jui-g-project-new-screen-stubs-do-not-compile): the scaffold is written
     once, by `jui g project`, before the API sync has written the models it names,
     so it never got their imports — the Protocol does, regenerated every build.
-    Only import lines are added; nothing else in the author's file changes.
+    Only import lines are added; nothing else in the author's file changes. A line
+    is added only for a name the file's body uses: an old Impl may hold some of
+    the spec's methods only, and the rest would be unused imports its linter
+    reports (measured on a consumer: 38 of 108 lines).
     Returns whether the file changed (written unless --dry-run)."""
-    from ..core.impl_updater import ensure_kotlin_import, ensure_ts_imports, kotlin_has_simple_name
+    from ..core.impl_updater import (ensure_kotlin_import, ensure_ts_imports, import_line_name,
+                                     kotlin_has_simple_name, name_used_in_body)
     if not lines or not impl_path.exists():
         return False
     try:
         current = impl_path.read_text(encoding="utf-8")
     except OSError:
         return False
+    lines = [line for line in lines if (name := import_line_name(line)) and name_used_in_body(current, name)]
     if platform == "android":
         updated = current
         for line in lines:
@@ -2895,10 +2900,11 @@ def _sync_viewmodel_protocols(
                         # they existed and has no import for them.
                         type_imports = getattr(generator, "viewmodel_impl_imports", None)
                         if callable(type_imports):
-                            from ..core.impl_updater import kotlin_has_simple_name
+                            from ..core.impl_updater import kotlin_has_simple_name, name_used_in_body
                             for line in type_imports(spec):
                                 fqn = line[len("import "):].strip()
-                                if not kotlin_has_simple_name(updated, fqn):
+                                if (name_used_in_body(updated, fqn.rsplit(".", 1)[-1])
+                                        and not kotlin_has_simple_name(updated, fqn)):
                                     updated = ensure_kotlin_import(updated, fqn)
                         method_names = [m.name for m in sync_result.methods
                                         if m.name not in narrowed_spec_methods]

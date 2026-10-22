@@ -247,6 +247,32 @@ def ensure_ts_imports(source: str, lines: list[str]) -> str:
     return f"{source[:head]}{block}\n{source[head:]}"
 
 
+_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
+_LINE_COMMENT_RE = re.compile(r"//[^\n]*")
+
+
+def name_used_in_body(source: str, name: str) -> bool:
+    """*name* appears as a word in the file outside its ``package`` / ``import``
+    lines and its comments: an import for it would be used. An old Impl may hold
+    only some of the spec's methods, and an import for a type no method of the
+    file names is an unused import the author's linter reports."""
+    body = _BLOCK_COMMENT_RE.sub(" ", source)
+    body = _LINE_COMMENT_RE.sub(" ", body)
+    body = "\n".join(line for line in body.splitlines()
+                     if not re.match(r"^\s*(?:import|package)\b", line))
+    return re.search(rf"(?<![\w$.]){re.escape(name)}(?![\w$])", body) is not None
+
+
+def import_line_name(line: str) -> str | None:
+    """The one name a Kotlin (``import a.b.Name``) or TypeScript
+    (``import type { Name } from "…"``) import line brings in."""
+    m = _TS_NAMED_IMPORT_RE.match(line)
+    if m:
+        return m.group(1)
+    m = re.match(r"^import[ \t]+(\S+)[ \t]*$", line)
+    return m.group(1).rsplit(".", 1)[-1] if m else None
+
+
 def kotlin_has_simple_name(source: str, fqn: str) -> bool:
     """The file already imports a type of that simple name (from any package,
     or under an alias) or declares one: importing *fqn* too would clash."""

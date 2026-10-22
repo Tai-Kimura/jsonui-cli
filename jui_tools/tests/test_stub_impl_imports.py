@@ -53,7 +53,7 @@ def test_the_sync_adds_only_imports_and_a_second_run_changes_nothing(tmp_path):
     assert _ensure_impl_imports("android", impl, lines, ARGS) is True
     after = impl.read_text(encoding="utf-8")
     assert after == body.replace("import javax.inject.Inject\n",
-                                 "import javax.inject.Inject\n" + "\n".join(lines) + "\n")
+                                 "import javax.inject.Inject\nimport com.example.model.StubStartResult\n")
     assert _ensure_impl_imports("android", impl, lines, ARGS) is False and impl.read_text(encoding="utf-8") == after
     assert _ensure_impl_imports("ios", impl, lines, ARGS) is False   # Swift: one module, nothing to import
     dry = tmp_path / "Dry.kt"
@@ -95,3 +95,33 @@ def test_the_sync_leaves_a_name_the_impl_already_has_from_elsewhere(tmp_path):
     ts = tmp_path / "X.ts"
     ts.write_text('import { StubItem } from "@/legacy";\n', encoding="utf-8")
     assert _ensure_impl_imports("web", ts, ['import type { StubItem } from "@/model/StubModels";'], ARGS) is False
+
+
+def test_a_type_only_a_method_the_impl_lacks_names_is_not_imported(tmp_path):
+    """An old Impl that holds some of the spec's methods only: the types of the others would be unused imports
+    (measured on a consumer: 38 of 108 added lines, each a no-unused-vars warning in the author's file)."""
+    kt = tmp_path / "Repo.kt"
+    kt.write_text("package a.repository\n\nimport javax.inject.Inject\n\nclass Repo {\n"
+                  "    // returns a StubItem one day\n    suspend fun list(): List<StubItem> = TODO()\n}\n", encoding="utf-8")
+    assert _ensure_impl_imports("android", kt, ["import a.model.StubItem", "import a.model.StubStartResult"], ARGS) is True
+    text = kt.read_text(encoding="utf-8")
+    assert "import a.model.StubItem\n" in text and "StubStartResult" not in text
+    ts = tmp_path / "repo.ts"
+    ts.write_text('import { ApiClient } from "@/core/network/apiClient";\n\nexport class Repo {\n'
+                  '  /* Batch is for later */\n  async list(): Promise<Item[]> { throw new Error(""); }\n}\n', encoding="utf-8")
+    assert _ensure_impl_imports("web", ts, ['import type { Item } from "@/models/Item";',
+                                            'import type { Batch } from "@/models/Batch";'], ARGS) is True
+    text = ts.read_text(encoding="utf-8")
+    assert 'import type { Item } from "@/models/Item";' in text and "@/models/Batch" not in text
+
+
+def test_a_type_the_body_names_is_imported_and_a_qualified_use_needs_none(tmp_path):
+    kt = tmp_path / "Uc.kt"
+    kt.write_text("package a.usecase\n\nclass Uc {\n    suspend fun start(): StubStartResult = TODO()\n"
+                  "    val other: a.model.StubItem? = null\n}\n", encoding="utf-8")
+    assert _ensure_impl_imports("android", kt, ["import a.model.StubStartResult", "import a.model.StubItem"], ARGS) is True
+    text = kt.read_text(encoding="utf-8")
+    assert "import a.model.StubStartResult\n" in text and "import a.model.StubItem" not in text
+    nothing = tmp_path / "None.kt"
+    nothing.write_text("package a\n\nclass N\n", encoding="utf-8")
+    assert _ensure_impl_imports("android", nothing, ["import a.model.StubItem"], ARGS) is False
