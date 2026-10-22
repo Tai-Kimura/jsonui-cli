@@ -71,9 +71,9 @@ BILLS_MAX = 60
 UNPRICED_MAX = 20
 ENDED_LINGER_MS = 60_000
 #: the hooks after which a session no longer waits for input (Notification idle_prompt set it): a prompt, a tool, its end
+INPUT_WAIT_ENDS = frozenset({"UserPromptSubmit", "PreToolUse", "SessionEnd", "SessionStart"})
 #: The events the --stop hook runs on (hooks_installer.STOP_EVENTS, the plugin's hooks.json)
 STOP_EVENTS = frozenset({"PreToolUse", "PostToolUse"})
-INPUT_WAIT_ENDS = frozenset({"UserPromptSubmit", "PreToolUse", "SessionEnd", "SessionStart"})
 # Waiting on background work (requester, 10-18): a session whose Stop listed background_tasks keeps its light on
 # until the work ends — the next Stop without any, SessionEnd, or no background shell left under its process
 # (check_background). Only when its process cannot be watched (no pid, or ps has not answered for

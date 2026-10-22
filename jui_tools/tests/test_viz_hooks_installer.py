@@ -73,6 +73,19 @@ def test_install_into_no_file_then_uninstall_leaves_an_empty_object(home):
     assert _read() == {}
 
 
+@pytest.mark.parametrize("left", ["PreToolUse", "PostToolUse"])
+def test_status_says_no_stop_when_the_stop_hook_is_on_one_of_its_two_events_only(home, left):
+    """The --stop hook removed by hand from one event (or an install from a half-done version): status's stop is false."""
+    hi.install(python=PY)
+    data = _read()
+    (gone,) = [e for e in hi.STOP_EVENTS if e != left]
+    data["hooks"][gone] = [g for g in data["hooks"][gone]
+                           if not any(str(h.get("command", "")).endswith(" --stop") for h in g["hooks"])]
+    _write(data)
+    assert any(str(h.get("command", "")).endswith(" --stop") for g in _read()["hooks"][left] for h in g["hooks"])
+    assert hi.status()["stop"] is False
+
+
 def test_install_twice_is_the_same_and_uninstall_restores_the_value(home):
     before = {
         "model": "x",
