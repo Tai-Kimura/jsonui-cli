@@ -230,14 +230,19 @@ async def run_room_roster(pw, out, failures, jt=None):
         check(failures, row["lamp"] == idle_lamp, f"the row is the main's: its own lamp (idle), the subagent's wait marked beside it: {row['lamp']} vs idle {idle_lamp}")
         await page.click(f"#roster-list [data-roster-check='{SID[5]}']")
 
-        # 6c. a spirit's bubble goes with its robot
-        hook(6, hook_event_name="PreToolUse", tool_name="Skill", tool_input={"skill": "code-review", "args": ""}, tool_use_id="toolu_sk6")
-        await until(page, f"() => {{ const b = window.__dbg.roster().bots.find((x) => x.id === '{rid[6]}'); return b && b.spiritBubble === 'visible'; }}", "the spirit's bubble", timeout=30000, why=RO)
+        # 6c. a spirit's bubble goes with its robot. The robot is hidden first and the skill comes after: a bubble lives
+        # SPIRIT.bubbleSec (4 s) once the spirit stands, and standing can take long on a loaded machine (its model is
+        # read then), so waiting for it shown and hiding the robot after raced its end (02:32, load 18). Here the bubble
+        # is alive while the robot is hidden, and the page must have drawn it hidden: "hidden" is only ever written
+        # by the code that hides it (a bubble drawn reads "visible", one never placed reads "visible" too).
         await page.click(f"#roster-list [data-roster-check='{SID[6]}']")
-        await page.wait_for_timeout(400)
-        s = res["spirit"] = await page.evaluate(RO)
+        await until(page, f"() => {{ const b = window.__dbg.roster().bots.find((x) => x.id === '{rid[6]}'); return b && !b.root; }}", "the spirit's robot hidden", timeout=5000, why=RO)
+        hook(6, hook_event_name="PreToolUse", tool_name="Skill", tool_input={"skill": "code-review", "args": ""}, tool_use_id="toolu_sk6")
+        s = res["spirit"] = await until(page, f"() => {{ const s = window.__dbg.roster(), b = s.bots.find((x) => x.id === '{rid[6]}'), sp = window.__dbg.spirit('{rid[6]}');"
+                                              f" return b && b.spiritBubble !== null && sp && sp.phase === 'shown' ? s : null; }}",
+                                        "the hidden robot's spirit standing, its bubble alive", timeout=60000, why=f"() => window.__dbg.spirit('{rid[6]}')")
         b6 = next(b for b in s["bots"] if b["id"] == rid[6])
-        check(failures, not b6["root"] and b6["spiritBubble"] in (None, "hidden"), f"hidden, its spirit's bubble goes too: {b6}")
+        check(failures, not b6["root"] and b6["spiritBubble"] == "hidden", f"hidden, its spirit's bubble is not drawn: {b6}")
         await page.click(f"#roster-list [data-roster-check='{SID[6]}']")
 
         # 6d. a game: one player hidden ends it for the other too
