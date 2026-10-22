@@ -151,7 +151,7 @@ module SjuiTools
 
           # ---- ColorMode enum ----
           lines << '    /// Color modes discovered in colors.json. Add a new top-level mode object to colors.json to grow this list.'
-          lines << '    public enum ColorMode: String, CaseIterable {'
+          lines << '    public enum ColorMode: String, CaseIterable, Sendable {'
           @modes.each do |mode|
             case_name = swift_enum_case(mode)
             if case_name == mode
@@ -193,11 +193,16 @@ module SjuiTools
           lines << ''
 
           # ---- Mutable state + observers ----
-          lines << '    private static var _currentMode: ColorMode = fallbackMode'
-          lines << '    private static var _followSystemMode: Bool = true'
-          lines << '    private static var _observers: [UUID: () -> Void] = [:]'
+          # The mode's state is not actor-protected (it never was): said so, or Swift 6 without
+          # MainActor refuses the statics (ticket 2026-10-23-sjui-swift6-nonisolated-colormanager-and-binding-dict).
+          # The default is the case itself — under MainActor isolation `fallbackMode` is main-actor state.
+          lines << "    nonisolated(unsafe) private static var _currentMode: ColorMode = .#{swift_enum_case(@fallback_mode)}"
+          lines << '    nonisolated(unsafe) private static var _followSystemMode: Bool = true'
+          lines << '    nonisolated(unsafe) private static var _observers: [UUID: () -> Void] = [:]'
           lines << ''
           lines << '    public static var currentMode: ColorMode { _currentMode }'
+          # Changing the mode reaches UIKit and the Observable: the main actor's (a colour lookup is not).
+          lines << '    @MainActor'
           lines << '    public static var followSystemMode: Bool {'
           lines << '        get { _followSystemMode }'
           lines << '        set {'
@@ -207,6 +212,7 @@ module SjuiTools
           lines << '    }'
           lines << ''
           lines << '    /// Switch the active color mode and notify subscribers + Observable.'
+          lines << '    @MainActor'
           lines << '    public static func setMode(_ mode: ColorMode) {'
           lines << '        guard _currentMode != mode else { return }'
           lines << '        _currentMode = mode'
@@ -227,6 +233,7 @@ module SjuiTools
           lines << '    /// `applySystemMode(from:)` with the owning view/scene trait collection —'
           lines << '    /// this no-argument overload falls back to walking the active window scene'
           lines << '    /// (UIScreen.main was deprecated in iOS 16).'
+          lines << '    @MainActor'
           lines << '    public static func applySystemMode() {'
           lines << '        #if canImport(UIKit)'
           lines << '        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }'
@@ -239,6 +246,7 @@ module SjuiTools
           lines << '    /// Explicit entry point — pass the trait collection of the owning view/scene.'
           lines << '    /// SwiftUI: use `.onChange(of: colorScheme)` and call this with a cached'
           lines << '    /// `UITraitCollection` or feed the mode directly via `setMode(_:)`.'
+          lines << '    @MainActor'
           lines << '    public static func applySystemMode(from traits: UITraitCollection) {'
           lines << '        #if canImport(UIKit)'
           lines << '        if let mapped = systemModeMapping[traits.userInterfaceStyle] {'
@@ -251,6 +259,7 @@ module SjuiTools
           # ---- Observable wrapper for SwiftUI ----
           lines << '    /// SwiftUI-friendly wrapper. Inject via `.environmentObject(ColorManager.Observable.shared)`'
           lines << '    /// and observe `@EnvironmentObject var theme: ColorManager.Observable` in any View.'
+          lines << '    @MainActor'
           lines << '    public final class Observable: ObservableObject {'
           lines << '        public static let shared = Observable()'
           lines << '        @Published public private(set) var currentMode: ColorMode = ColorManager.fallbackMode'

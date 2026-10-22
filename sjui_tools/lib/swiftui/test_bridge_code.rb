@@ -58,7 +58,9 @@ module SjuiTools
         lines << "    // Requires SwiftJsonUI >= #{MIN_LIBRARY_VERSION} (test bridge)"
         lines << '    mutating func applyTestInitialState(_ values: [String: Any]) -> [JsonUIRejectedKey] {'
         lines << '        var rejected: [JsonUIRejectedKey] = []'
-        lines << '        for (key, value) in values {'
+        # With no field the switch has no case to read the value: `_`, or swiftc warns
+        # "immutable value 'value' was never used" on every layout without data.
+        lines << (props.empty? ? '        for (key, _) in values {' : '        for (key, value) in values {')
         lines << '            switch key {'
         props.each do |prop|
           lines << "            case #{swift_string(prop[:name])}:"

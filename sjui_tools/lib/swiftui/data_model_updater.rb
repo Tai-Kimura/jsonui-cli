@@ -288,7 +288,10 @@ module SjuiTools
         content += "\n"
         content += "    // Convert properties to dictionary for Dynamic mode\n"
         content += "    func toDictionary() -> [String: Any] {\n"
-        content += "        var dict: [String: Any] = [:]\n"
+        # A layout without data adds nothing: `let`, or swiftc warns
+        # "variable 'dict' was never mutated" (ticket sjui-data-struct-empty-layout-swift-warnings).
+        adds_to_dict = !data_properties.empty? || !extra_onclick_actions.empty?
+        content += "        #{adds_to_dict ? 'var' : 'let'} dict: [String: Any] = [:]\n"
 
         # Add data properties
         if !data_properties.empty?
@@ -335,7 +338,7 @@ module SjuiTools
         content += "    // Convert properties to binding dictionary for Dynamic mode reactivity\n"
         content += "    // SwiftUI.Binding<T> values enable automatic re-rendering on changes\n"
         content += "    func toDictionary(binding dataBinding: SwiftUI.Binding<#{view_name}Data>) -> [String: Any] {\n"
-        content += "        var dict: [String: Any] = [:]\n"
+        content += "        #{adds_to_dict ? 'var' : 'let'} dict: [String: Any] = [:]\n"
 
         if !data_properties.empty?
           content += "        \n"
@@ -376,18 +379,20 @@ module SjuiTools
                 else '""'
               end
 
+              # Through the field's own Binding (`dataBinding.<name>`), never closures over
+              # `dataBinding`: a Data with a callback field is not Sendable, and Binding(get:set:)'s
+              # @Sendable closures capturing it warned once per accessor in Swift 6 without MainActor
+              # (ticket 2026-10-23-sjui-swift6-nonisolated-colormanager-and-binding-dict).
               if is_optional
                 content += "        if #{name} != nil {\n"
+                content += "            let #{name}Field = dataBinding.#{name}\n"
                 content += "            dict[\"#{name}\"] = SwiftUI.Binding<#{binding_type}>(\n"
-                content += "                get: { dataBinding.wrappedValue.#{name} ?? #{default_for_type} },\n"
-                content += "                set: { dataBinding.wrappedValue.#{name} = $0 }\n"
+                content += "                get: { #{name}Field.wrappedValue ?? #{default_for_type} },\n"
+                content += "                set: { #{name}Field.wrappedValue = $0 }\n"
                 content += "            )\n"
                 content += "        }\n"
               else
-                content += "        dict[\"#{name}\"] = SwiftUI.Binding<#{binding_type}>(\n"
-                content += "            get: { dataBinding.wrappedValue.#{name} },\n"
-                content += "            set: { dataBinding.wrappedValue.#{name} = $0 }\n"
-                content += "        )\n"
+                content += "        dict[\"#{name}\"] = dataBinding.#{name}\n"
               end
             else
               # Non-bindable type (custom struct, array, etc.): keep as plain value
