@@ -1222,7 +1222,7 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 .room-solo[hidden] { display: none; }
 /* the room's robot list (53-roster.js): at the 3D's right; left of the robot card when the page is wide enough for both,
    under it when not (the card is what was asked for last); at the foot of the 3D on a narrow page, folded by a press */
-.roster { position: absolute; top: var(--roster-top, 12px); right: 12px; z-index: 4; display: grid; grid-template-rows: auto auto minmax(0, 1fr); width: 248px; max-height: calc(100% - 24px); overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); box-shadow: 0 4px 16px var(--shadow); font-size: 13px; }
+.roster { position: absolute; top: var(--roster-top, 12px); right: 12px; z-index: 4; display: grid; grid-template-rows: auto auto minmax(0, 1fr); width: 248px; max-height: var(--roster-max, calc(100% - 24px)); overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); box-shadow: 0 4px 16px var(--shadow); font-size: 13px; }
 .roster[hidden] { display: none; }
 @media (min-width: 1300px) { .scene:has(.rb.show) .roster { right: calc(min(420px, 100% - 28px) + 26px); } }
 .roster-head { display: flex; align-items: center; gap: 6px; padding: 8px 8px 6px 12px; border-bottom: 1px solid var(--line); }
@@ -1247,7 +1247,7 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 .roster-name:disabled { cursor: default; }
 .roster-nm { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 @media (max-width: 900px) {   /* the room's name box keeps the top: the list at the foot, as tall as the room below the box leaves */
-  .roster { top: auto; bottom: 12px; width: min(248px, calc(100% - 24px)); max-height: calc(100% - 76px); }
+  .roster { top: auto; bottom: 12px; width: min(248px, calc(100% - 24px)); max-height: var(--roster-max, calc(100% - 76px)); }
 }
 .roster-lamp { width: 10px; height: 10px; border-radius: 50%; background: var(--lamp); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2); }
 /* the notifications and the question window's settings (2.3.6) */

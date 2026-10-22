@@ -231,9 +231,14 @@ function spiritBadge(R, skill) {
 /* The model's bubble, for bubble.showSec after the spirit appears: its words and their ruby (<ruby>/<rt>, the words
    as text only), its tail at who says them — the spirit's head (its "bubbleAnchor" node, else the top of the figure)
    or the robot's (then it rides in the tag's column, over the badge). */
+/* A bubble's time (b.showSec, else SPIRIT.bubbleSec) runs from the first frame it is drawn (spiritBubbleSeen), not from the
+   spirit standing (the gate, 10-23): a spirit that stood while its bubble could not be drawn — the spirit too small or
+   far (spiritNear), off the page, its robot hidden by the room's list, the building — used its time up unseen, and the
+   bubble was gone before anyone could read it. */
+function spiritBubbleSeen(S) { if (S && S.bubbleSeenAt == null) S.bubbleSeenAt = vizNow(); }
 function spiritBubble(R, S) {
   const b = S.bubble;
-  const showing = b && S.phase === 'shown' && vizNow() - (S.shownAt || (S.shownAt = vizNow())) < (b.showSec || SPIRIT.bubbleSec) * 1000;
+  const showing = b && S.phase === 'shown' && (S.bubbleSeenAt == null || vizNow() - S.bubbleSeenAt < (b.showSec || SPIRIT.bubbleSec) * 1000);
   if (!showing) { if (S.bubbleEl) S.bubbleEl.hidden = true; return; }
   if (!S.bubbleEl) {
     const el = document.createElement('div');
@@ -618,7 +623,7 @@ function spiritPlaceBubbles() {
     const p = spiritHead(R, R.spirit).project(camera);
     if (p.z > 1 || p.z < -1) { el.style.visibility = 'hidden'; continue; }
     if (!el._size || el._size.text !== el.textContent) el._size = { text: el.textContent, w: el.offsetWidth, h: el.offsetHeight };
-    list.push({ el, x: ((p.x + 1) / 2) * W, y: ((1 - p.y) / 2) * H, z: p.z });
+    list.push({ el, S: R.spirit, x: ((p.x + 1) / 2) * W, y: ((1 - p.y) / 2) * H, z: p.z });
   }
   const placed = [...(TAGS.placed || [])];
   for (const it of list.sort((a, b) => a.z - b.z)) {
@@ -631,6 +636,7 @@ function spiritPlaceBubbles() {
     }
     placed.push({ x0, x1, y0: bottom - h, y1: bottom });
     it.el.style.visibility = 'visible';
+    spiritBubbleSeen(it.S);
     it.el.style.transform = `translate(${it.x.toFixed(1)}px, ${bottom.toFixed(1)}px) translate(-50%, -100%)`;
   }
 }

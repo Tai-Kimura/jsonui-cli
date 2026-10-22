@@ -2989,6 +2989,7 @@ function placeRobotTags(dt = 1 / 60) {
     for (const e of it.extras) {   // the badge, then a bubble aimed at the robot: each just above the one under it
       above += BILL.gap;
       e.style.visibility = 'visible';
+      if (it.R.spirit && e === it.R.spirit.bubbleEl) spiritBubbleSeen(it.R.spirit);   // its time runs from now (45-spirits.js)
       e.style.zIndex = zi;
       e.style.transform = `translate(${it.x.toFixed(1)}px, ${(it.y - it.R.tagDy - above).toFixed(1)}px) translate(-50%, -100%)`;
       above += e._size.h;

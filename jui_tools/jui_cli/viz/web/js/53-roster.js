@@ -17,7 +17,10 @@ const ROSTER = { off: new Map(), sig: '', max: 200, placedAt: 0, placeMs: 250 };
 // the boards drawn over the 3D (each shown by showOverlay): the whiteboard (a spec, and ボードで全部見る), the task board,
 // the server room, the data server, the bills
 const ROSTER_BOARDS = ['wb', 'tb', 'sr', 'ds', 'pr'];
-const rosterUnderBoard = () => ROSTER_BOARDS.some((id) => { const el = document.getElementById(id); return !!el && el._showing === true; });
+// and every dialog that takes the whole page (aria-modal: the full-screen log, the call, the server room) — the gate,
+// 10-23: the list stayed up over the log (the floor buttons go under it)
+const rosterUnderBoard = () => ROSTER_BOARDS.some((id) => { const el = document.getElementById(id); return !!el && el._showing === true; })
+  || !!document.querySelector('[role="dialog"][aria-modal="true"]:not([hidden])');
 const rosterMainDef = (def) => (def.kind === 'sub' && DEF[def.mainLabel] ? DEF[def.mainLabel] : def);
 const rosterKeyOf = (def) => def.sessionId || def.realId || def.id;
 function rosterOff(room) {
@@ -87,12 +90,27 @@ function rosterSync(solo) {
   alert.hidden = !waiting;
   setText(alert, waiting ? tl('roster.waiting', { n: waiting }) : '');
 }
-/* Under the source's error line when it shows (it holds the 3D's top right too); the narrow page's list sits at the foot. */
+/* The fixed parts over the 3D that share its column (the gate, 10-23: the list's fold button lay on the floor buttons,
+   a room's view on a building of three floors): the room's name box, the floor buttons, the source's error line, the
+   building's legend and weather, the empty room's note. Any of them shown in the list's column and in the 3D's upper
+   half keeps the list below it; the list is as tall as what is left. On a narrow page the list sits at the foot, so
+   only its height gives way. */
+const ROSTER_AROUND = ['room-solo', 'floor-nav', 'live-error', 'tower-legend', 'tower-weather', 'live-empty'];
 function rosterPlace(box) {
-  const err = document.getElementById('live-error'), scene = document.getElementById('scene');
-  const top = err && !err.hidden && scene ? Math.round(err.getBoundingClientRect().bottom - scene.getBoundingClientRect().top) + 6 : 12;
-  box.style.setProperty('--roster-top', `${Math.max(12, top)}px`);
+  const scene = document.getElementById('scene');
+  if (!scene) return;
+  const S = scene.getBoundingClientRect(), r = box.getBoundingClientRect();
+  let clear = S.top + 12;   // the page y the list's top stays under
+  for (const id of ROSTER_AROUND) {
+    const el = document.getElementById(id);
+    if (!el || el.hidden) continue;
+    const o = el.getBoundingClientRect();
+    if (o.width && o.height && o.left < r.right && r.left < o.right && o.top < S.top + S.height / 2) clear = Math.max(clear, o.bottom + 6);
+  }
+  if (!rosterNarrow()) box.style.setProperty('--roster-top', `${Math.round(clear - S.top)}px`);
+  box.style.setProperty('--roster-max', `${Math.max(48, Math.round(S.bottom - 12 - clear))}px`);
 }
+const rosterNarrow = () => !!(window.matchMedia && window.matchMedia('(max-width: 900px)').matches);   // app.css: the list at the foot
 function rosterSet(room, key, on) {
   const off = rosterOff(room);
   if (on) off.delete(key); else off.add(key);

@@ -1,6 +1,7 @@
 /* ---------- browser-test hook (appended only when the server runs with JUI_VIZ_E2E=1) ---------- */
 // The e2e scripts press the 3D boards through these, as the prototype's agent-test.html did.
 // Demo: setSim(seconds) jumps the script. Live: setSim(factor) sets the replay speed instead (25-net.js).
+const SPIRIT_DBG = { delay: 0 };   // spiritLoadDelay's wait (ms)
 window.__dbg = {
   // the server room (ticket 2026-10-20-jui-viz-server-room): the door's press, the keypad, the bubble, the view
   sr: () => {
@@ -341,7 +342,15 @@ window.__dbg = {
     const alert = document.getElementById('roster-alert');
     return { shown: !!box && !box.hidden, solo, rows, bots, alert: alert && !alert.hidden ? alert.textContent : null, count: (document.getElementById('roster-count') || {}).textContent || '',
       folded: !!box && box.classList.contains('roster-folded'), rect: rect(box), err: rect(document.getElementById('live-error')), soloBox: rect(document.getElementById('room-solo')), card: rect(document.querySelector('#rb.show')),
-      scene: rect(document.getElementById('scene')), ring: selRing.visible, permChip: (($('chip-perm') || {}).hidden === false) ? $('chip-perm').textContent : null, saved: solo ? readPref(`roster:${solo}`, '') : '' }; },
+      scene: rect(document.getElementById('scene')), ring: selRing.visible, floorNav: rect(document.getElementById('floor-nav')),
+      // every control shown on the page that the list lies on (the live suite's floor check, OVERLAP_JS, asks the same)
+      hits: (() => { if (!box || box.hidden) return []; const vis = (el) => { if (!el || el.closest('[hidden]')) return false; const st = getComputedStyle(el);
+          if (st.display === 'none' || st.visibility === 'hidden') return false; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+        const a = box.getBoundingClientRect();
+        return [...document.querySelectorAll('button, input, select, textarea, a[href], [role="option"], [role="dialog"], [tabindex]:not([tabindex="-1"])')]
+          .filter((el) => vis(el) && !box.contains(el) && !el.closest('.tags'))
+          .filter((el) => { const b = el.getBoundingClientRect(); return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom; })
+          .map((el) => el.id || el.className || el.tagName); })(), permChip: (($('chip-perm') || {}).hidden === false) ? $('chip-perm').textContent : null, saved: solo ? readPref(`roster:${solo}`, '') : '' }; },
   // robots' name tags as drawn (10-19): the screen rect of each visible one, and placeRobotTags' cost
   tags: () => robots.filter((R) => R.tag.style.visibility !== 'hidden' && !R.tag.hidden && !tagsEl.hidden).map((R) => {
     const b = R.tag.getBoundingClientRect(); return { id: R.def.id, text: R.tag.textContent, x0: b.left, x1: b.right, y0: b.top, y1: b.bottom }; }),
@@ -599,7 +608,10 @@ window.__dbg = {
   },
   spiritsStanding: () => robots.filter((x) => x.spirit && x.spirit.figure).length,
   mainDraw: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles }),   // the last frame's
-  spiritHide: (what) => { SPIRIT.hide = what || null; },   // the frame-cost samples: what to leave out (45-spirits.js)
+  spiritHide: (what) => { SPIRIT.hide = what || null; },
+  // a slow model read, as on a loaded machine (the room's list arm): each spirit's models come ms later
+  spiritLoadDelay: (ms) => { if (!spiritLoad.slowed) { const read = spiritLoad; spiritLoad = async (m) => { const got = await read(m);
+      await new Promise((r) => setTimeout(r, SPIRIT_DBG.delay)); return got; }; spiritLoad.slowed = true; } SPIRIT_DBG.delay = ms || 0; return SPIRIT_DBG.delay; },   // the frame-cost samples: what to leave out (45-spirits.js)
   projectName: (id) => (PROJECT[id] ? PROJECT[id].name : null),
   // where a robot stands in the 3D (the room under it) and whether it is still walking
   robotAt: (id) => { const R = robots.find((x) => x.def.id === id); if (!R) return null; const q = R.robot.root.position;

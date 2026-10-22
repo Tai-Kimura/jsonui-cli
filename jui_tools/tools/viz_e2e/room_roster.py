@@ -14,8 +14,10 @@ The real `jui viz serve` in a throwaway HOME and the real forward.py; nine sessi
   - a robot's spirit's bubble goes with it; a game it plays ends for its partner too;
   - every board drawn over the 3D (the whiteboard, the task board, the bills, the data server, the server room) hides
     the list while it is open, the header's waiting chip staying; closed, the list is back;
-  - the list keeps off the room's name box, inside the 3D, at 1920, 1440 and 390 px wide; with a robot's card open on a
-    wide page it sits left of the card.
+  - the list lies on no control of the page (the floor buttons, the name box, a robot's card...) and keeps off the
+    source's error line, inside the 3D, at 1920, 1440, 1280, 1024 and 390 px wide: seven sessions in other folders
+    make eight rooms, two floors, so the floor buttons are up in the room's view as on a real machine (the gate,
+    10-23: the list's fold button lay on them).
 Stills for the requester: all shown and some hidden, at each width.
 """
 
@@ -24,6 +26,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import time
@@ -38,6 +41,7 @@ ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI
 N = 9
 # each its own first letter, so the numbers the page gives them are short ones (the last one comes later)
 SID = [f"{c}0e20000-0000-4000-8000-{0x7000 + i:012x}" for i, c in enumerate("123456789a")]
+OTHER = [f"b{i}e20000-0000-4000-8000-{0x7100 + i:012x}" for i in range(7)]   # one session each in seven other folders
 RO = "() => window.__dbg.roster()"
 WIDE = {"viewport": {"width": 1920, "height": 1080}, "device_scale_factor": 1}
 MID = {"viewport": {"width": 1440, "height": 900}, "device_scale_factor": 1}
@@ -70,6 +74,22 @@ async def run_room_roster(pw, out, failures, jt=None):
     CWD = home / "work" / "roster-app"
     _room(CWD, True)
     _write(home / "work", _examples(jt), "aws-three-tier", "roster-app")
+    # a spirit with a bubble for code-review, always: the two bundled spirits are drawn by weight and gear-giant has no
+    # bubble, so half the runs had none to look at (the gate, 10-23). A model naming the skill is the one taken
+    # (spiritPick); the person's own models live here (as spirits.py makes them)
+    own = home / ".local" / "state" / "jui-viz" / "spirits" / "scholar"
+    shutil.copytree(jt / "jui_cli" / "viz" / "web" / "spirits" / "ink-scholar", own)
+    spec = json.loads((own / "spirit.json").read_text(encoding="utf-8"))
+    spec["skills"] = ["code-review"]
+    (own / "spirit.json").write_text(json.dumps(spec, ensure_ascii=False), encoding="utf-8")
+    # the sources' error line down: the session files' folder there, and an adb that sees no device. The line holds the
+    # 3D's top right, as the floor buttons do, and taller: up, keeping off it kept the list off them too, and the arm for
+    # the floor buttons proved nothing (the gate met them with the line down). It is brought up later for its own arm.
+    (home / ".claude" / "sessions").mkdir(parents=True, exist_ok=True)
+    adb = home / "Library" / "Android" / "sdk" / "platform-tools" / "adb"
+    adb.parent.mkdir(parents=True, exist_ok=True)
+    adb.write_text("#!/bin/sh\nprintf 'List of devices attached\\n\\n'\n")
+    adb.chmod(0o755)
     port = free_port()
     base_env = {k: v for k, v in os.environ.items() if k not in ISOLATE}
     log = open(out / "serve.log", "w")
@@ -102,7 +122,14 @@ async def run_room_roster(pw, out, failures, jt=None):
         await until(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", "connected")
         for i in range(N):
             hook(i, hook_event_name="SessionStart", source="startup")
-        await until(page, f"() => window.__dbg.robots.length >= {N}", f"{N} robots", timeout=40000, why="() => window.__dbg.settleInfo()")
+        for i, sid in enumerate(OTHER):
+            body = {"session_id": sid, "cwd": f"/work/roster-other-{i}", "transcript_path": f"{home}/o-{i}.jsonl", "permission_mode": "default",
+                    "hook_event_name": "SessionStart", "source": "startup"}
+            subprocess.run([sys.executable, "-I", "-S", str(forward)], input=json.dumps(body).encode(), capture_output=True, env=dict(base_env, HOME=str(home)), timeout=10)
+        # the room's robots (a robot is built for the floor drawn only: the other folders' may be on another floor), and the
+        # building on two floors
+        await until(page, f"(sids) => sids.every((s) => window.__dbg.robots.some((R) => R.def.sessionId === s)) && window.__dbg.floors().floors.length >= 2",
+                    f"{N} robots, two floors", arg=SID[:N], timeout=60000, why="() => ({ floors: window.__dbg.floors(), settle: window.__dbg.settleInfo() })")
         ids = await page.evaluate("() => Object.fromEntries(window.__dbg.robots.map((R) => [R.def.sessionId, R.def.id]))")
         rid = [ids[s] for s in SID[:N]]
         room = await page.evaluate("(id) => window.__dbg.robots.find((R) => R.def.id === id).def.room", rid[0])
@@ -116,8 +143,8 @@ async def run_room_roster(pw, out, failures, jt=None):
         s = res["floor"] = await page.evaluate(RO)
         check(failures, not s["shown"], f"on the floor the list is not shown: {s['shown']}")
 
-        async def enter():
-            await page.click(f".tag.room[data-set-project='{room}']")
+        async def enter():   # as the project menu does: the room may be on another floor than the one shown
+            await page.evaluate("(id) => window.__dbg.setProject(id)", room)
             await until(page, f"() => window.__dbg.solo() === '{room}'", "the room's view")
             await until(page, f"() => window.__dbg.roster().rows.length >= {N}", "a row per session", timeout=15000, why=RO)
         await enter()
@@ -158,7 +185,9 @@ async def run_room_roster(pw, out, failures, jt=None):
         # it is back; the header's chip still says a robot waits
         # the bills: the settings' 単価 button (the header's chip shows only while a model has no price)
         OPEN = {"wb": "#btn-specboard", "tb": "#chip-perm", "pr": "() => { const b = document.getElementById('prices-open'); if (!b) return false; b.click(); return true; }",
-                "ds": "() => window.__dbg.pressRack()", "sr": f"() => window.__dbg.srEnter('{room}')"}
+                "ds": "() => window.__dbg.pressRack()", "sr": f"() => window.__dbg.srEnter('{room}')",
+                # the page-wide dialogs (aria-modal): the full-screen log, the room's call
+                "log-overlay": "#btn-log", "call": "#room-call"}
         await until(page, "() => window.__dbg.props && window.__dbg.props().uses.dataServer && window.__dbg.sr().door", "the room's rack and door", timeout=20000,
                     why="() => ({ props: window.__dbg.props && window.__dbg.props(), sr: window.__dbg.sr() })")
         for board, opener in OPEN.items():
@@ -230,20 +259,39 @@ async def run_room_roster(pw, out, failures, jt=None):
         check(failures, row["lamp"] == idle_lamp, f"the row is the main's: its own lamp (idle), the subagent's wait marked beside it: {row['lamp']} vs idle {idle_lamp}")
         await page.click(f"#roster-list [data-roster-check='{SID[5]}']")
 
-        # 6c. a spirit's bubble goes with its robot. The robot is hidden first and the skill comes after: a bubble lives
-        # SPIRIT.bubbleSec (4 s) once the spirit stands, and standing can take long on a loaded machine (its model is
-        # read then), so waiting for it shown and hiding the robot after raced its end (02:32, load 18). Here the bubble
-        # is alive while the robot is hidden, and the page must have drawn it hidden: "hidden" is only ever written
-        # by the code that hides it (a bubble drawn reads "visible", one never placed reads "visible" too).
+        # 6c. a spirit's bubble: placed hidden while its robot is hidden, and its time runs from the frame it is first drawn
+        # (the gate, 10-23: it ran from the spirit standing, so a bubble that could not be drawn then - its robot hidden,
+        # the spirit far or off the page - was gone before anyone saw it). The model read is slowed (3 s, a loaded machine),
+        # the robot hidden, the skill called; the spirit stands and 5 s pass, more than a bubble's 4; shown again, the
+        # bubble must be drawn, and stay about 4 s from then. Every write the page makes to the bubble is kept with its
+        # time (a MutationObserver on the tags), so the arm reads what was drawn, not a sample of it.
+        await page.evaluate("() => window.__dbg.spiritLoadDelay(3000)")
         await page.click(f"#roster-list [data-roster-check='{SID[6]}']")
         await until(page, f"() => {{ const b = window.__dbg.roster().bots.find((x) => x.id === '{rid[6]}'); return b && !b.root; }}", "the spirit's robot hidden", timeout=5000, why=RO)
+        await page.evaluate("""(id) => { window.__spiritLog = [];
+          const note = (t) => window.__spiritLog.push({ t: performance.now(), vis: t.style.visibility || '', hidden: t.hidden });
+          window.__spiritObs = new MutationObserver((ms) => { for (const m of ms) {
+            const els = m.type === 'childList' ? [...m.addedNodes] : [m.target];
+            for (const t of els) if (t.dataset && t.dataset.spiritBubble === id) note(t); } });
+          window.__spiritObs.observe(document.getElementById('tags'), { subtree: true, childList: true, attributes: true, attributeFilter: ['style', 'hidden'] }); }""", rid[6])
         hook(6, hook_event_name="PreToolUse", tool_name="Skill", tool_input={"skill": "code-review", "args": ""}, tool_use_id="toolu_sk6")
-        s = res["spirit"] = await until(page, f"() => {{ const s = window.__dbg.roster(), b = s.bots.find((x) => x.id === '{rid[6]}'), sp = window.__dbg.spirit('{rid[6]}');"
-                                              f" return b && b.spiritBubble !== null && sp && sp.phase === 'shown' ? s : null; }}",
-                                        "the hidden robot's spirit standing, its bubble alive", timeout=60000, why=f"() => window.__dbg.spirit('{rid[6]}')")
-        b6 = next(b for b in s["bots"] if b["id"] == rid[6])
-        check(failures, not b6["root"] and b6["spiritBubble"] == "hidden", f"hidden, its spirit's bubble is not drawn: {b6}")
+        await until(page, f"() => {{ const s = window.__dbg.spirit('{rid[6]}'); return s && s.phase === 'shown'; }}", "the hidden robot's spirit standing", timeout=60000,
+                    why=f"() => window.__dbg.spirit('{rid[6]}')")
+        sp = res["spiritModel"] = await page.evaluate(f"() => window.__dbg.spirit('{rid[6]}')")
+        check(failures, sp["model"] == "own/scholar", f"the spirit is the one with a bubble (else the arms below prove nothing): {sp['model']}")
+        await page.wait_for_timeout(5000)
+        log = res["spiritHiddenLog"] = await page.evaluate("() => window.__spiritLog.slice()")
+        drawn = [e for e in log if e["vis"] == "visible" and not e["hidden"]]
+        check(failures, any(e["vis"] == "hidden" for e in log) and not drawn, f"its robot hidden, the spirit's bubble is placed hidden and never drawn: {log[:6]}")
         await page.click(f"#roster-list [data-roster-check='{SID[6]}']")
+        await until(page, "() => window.__spiritLog.some((e) => e.vis === 'visible' && !e.hidden)", "the bubble drawn once its robot is back", timeout=15000,
+                    why=f"() => ({{ spirit: window.__dbg.spirit('{rid[6]}'), log: window.__spiritLog.slice(-4) }})")
+        await until(page, "() => { const L = window.__spiritLog, i = L.findIndex((e) => e.vis === 'visible' && !e.hidden); return i >= 0 && L.slice(i).some((e) => e.hidden); }",
+                    "the bubble's time over", timeout=20000, why="() => window.__spiritLog.slice(-4)")
+        life = res["spiritLife"] = await page.evaluate("""() => { window.__spiritObs.disconnect(); const L = window.__spiritLog, i = L.findIndex((e) => e.vis === 'visible' && !e.hidden);
+          const end = L.slice(i).find((e) => e.hidden); return { drawnFor: Math.round(end.t - L[i].t), events: L.length }; }""")
+        check(failures, 3500 <= life["drawnFor"] <= 7000, f"shown again, the bubble is drawn about 4 s from its first drawn frame: {life}")
+        await page.evaluate("() => window.__dbg.spiritLoadDelay(0)")
 
         # 6d. a game: one player hidden ends it for the other too
         await page.evaluate("() => window.__dbg.play({ p: 1, idleMs: 0, restMaxSec: 0, solo: { p: 0 } })")
@@ -260,26 +308,70 @@ async def run_room_roster(pw, out, failures, jt=None):
         await page.evaluate("() => window.__dbg.play({ p: 0, endAll: true })")
         await page.click("[data-roster-bulk='all']")
 
-        # 7. the place on the page: off the name box, inside the 3D; left of a robot's card on a wide page
+        # 7. the place on the page: on no control (the floor buttons up: two floors), off the error line, inside the 3D,
+        # at each width; with a robot's card open on a wide page, beside it
         for i in (0, 3):
             await page.click(f"#roster-list [data-roster-check='{SID[i]}']")
-        await page.wait_for_timeout(400)
-        s = res["place1920"] = await page.evaluate(RO)
-        check(failures, _apart(s["rect"], s["soloBox"]) and _apart(s["rect"], s["err"]) and _inside(s["rect"], s["scene"]),
-              f"1920: the list off the name box and the source's error line, inside the 3D: {s['rect']} {s['soloBox']} {s['err']} {s['scene']}")
+
+        async def placed(pg, label, card=False):
+            await pg.wait_for_timeout(600)   # rosterPlace runs each quarter second
+            s = res[f"place-{label}"] = await pg.evaluate(RO)
+            check(failures, s["shown"] and s["hits"] == [] and _apart(s["rect"], s["err"]) and _apart(s["rect"], s["soloBox"]) and _apart(s["rect"], s["floorNav"])
+                  and _inside(s["rect"], s["scene"]) and (not card or s["card"]),
+                  f"{label}: the list on no control, off the error line, inside the 3D: rect {s['rect']} hits {s['hits']} floors {s['floorNav']} name {s['soloBox']} err {s['err']} card {s['card']}")
+            return s
+        await until(page, "() => !window.__dbg.roster().err", "the sources' error line down", timeout=30000, why=RO)
+        s = await placed(page, "1920")
+        check(failures, s["floorNav"] is not None and s["err"] is None,
+              f"1920: the floor buttons up and the error line down in the room's view (else the arm above proves nothing): {s['floorNav']} {s['err']}")
+        await page.screenshot(path=str(out / "1920-floors.png"))
         await page.click(f"#roster-list [data-roster-open='{rid[1]}']")
-        s = res["card1920"] = await until(page, "() => { const s = window.__dbg.roster(); return s.card ? s : null; }", "a robot's card", timeout=8000, why=RO)
-        await page.wait_for_timeout(400)
-        s = res["card1920"] = await page.evaluate(RO)
-        check(failures, _apart(s["rect"], s["card"]) and _inside(s["rect"], s["scene"]), f"1920 with a card open: the list beside it: {s['rect']} {s['card']}")
+        await until(page, "() => window.__dbg.roster().card", "a robot's card", timeout=8000, why=RO)
+        await placed(page, "1920-card", card=True)
         await page.screenshot(path=str(out / "1920-card.png"))
         await page.keyboard.press("Escape")
+        for w, h in ((1440, 900), (1280, 800), (1024, 768)):
+            await page.set_viewport_size({"width": w, "height": h})
+            # the floor buttons come back once the card's camera has returned: measured with them up
+            await until(page, "() => window.__dbg.roster().floorNav", f"{w}: the floor buttons up", timeout=10000, why=RO)
+            await placed(page, str(w))
+            await page.screenshot(path=str(out / f"{w}-some-hidden.png"))
+        # the error line up: a server's sources say what they lack once, when it starts, so a second server with a HOME
+        # lacking both (no session files' folder, no adb) shows it; two sessions in this room, the list keeps off it
+        home2 = out / "home-error-line"
+        (home2 / ".local" / "state" / "jui-viz").mkdir(parents=True, exist_ok=True)
+        port2 = free_port()
+        srv2 = subprocess.Popen([sys.executable, str(jt / "bin" / "jui"), "viz", "serve", "--port", str(port2)], stdout=open(out / "serve2.log", "w"),
+                                stderr=subprocess.STDOUT, env=dict(base_env, HOME=str(home2), JUI_VIZ_E2E="1"))
+        try:
+            for _ in range(400):
+                try:
+                    urllib.request.urlopen(f"http://127.0.0.1:{port2}/health", timeout=1).read()
+                    break
+                except OSError:
+                    time.sleep(0.1)
+            for i in (0, 1):
+                body = {"session_id": SID[i], "cwd": str(CWD), "transcript_path": f"{home2}/t-{i}.jsonl", "permission_mode": "default",
+                        "hook_event_name": "SessionStart", "source": "startup"}
+                subprocess.run([sys.executable, "-I", "-S", str(forward)], input=json.dumps(body).encode(), capture_output=True, env=dict(base_env, HOME=str(home2)), timeout=10)
+            page2 = await new_page(browser, Watch(origin=f"http://127.0.0.1:{port2}"), f"{name}-error-line", **WIDE)
+            await page2.goto(f"http://127.0.0.1:{port2}/")
+            await ready(page2)
+            await until(page2, "() => window.__dbg.robots.length >= 2", "two robots on the second server", timeout=40000)
+            room2 = await page2.evaluate("() => window.__dbg.robots[0].def.room")
+            await page2.evaluate("(id) => window.__dbg.setProject(id)", room2)
+            await until(page2, "() => { const s = window.__dbg.roster(); return s.shown && s.err; }", "the list and the error line up", timeout=30000, why=RO)
+            s = await placed(page2, "1920-error-line")
+            check(failures, s["err"] is not None, f"1920: the error line is up (else the arm above proves nothing): {s['err']}")
+            await page2.screenshot(path=str(out / "1920-error-line.png"))
+            await page2.close()
+        finally:
+            srv2.send_signal(2)
+            try:
+                srv2.wait(10)
+            except subprocess.TimeoutExpired:
+                srv2.kill()
         await page.set_viewport_size(MID["viewport"])
-        await page.wait_for_timeout(500)
-        s = res["place1440"] = await page.evaluate(RO)
-        check(failures, s["shown"] and _apart(s["rect"], s["soloBox"]) and _apart(s["rect"], s["err"]) and _inside(s["rect"], s["scene"]),
-              f"1440: off the name box and the error line, inside the 3D: {s['rect']} {s['soloBox']} {s['err']} {s['scene']}")
-        await page.screenshot(path=str(out / "1440-some-hidden.png"))
         await page.click("[data-roster-bulk='all']")
         await page.wait_for_timeout(300)
         await page.screenshot(path=str(out / "1440-all.png"))
@@ -290,15 +382,12 @@ async def run_room_roster(pw, out, failures, jt=None):
         await until(phone, f"() => window.__dbg.robots.length >= {N}", "robots on the phone", timeout=40000)
         await phone.evaluate("(id) => window.__dbg.setProject(id)", room)
         await until(phone, "() => window.__dbg.roster().shown", "the list on the phone", timeout=10000)
-        await phone.wait_for_timeout(500)
-        s = res["fold390"] = await phone.evaluate(RO)
-        check(failures, s["folded"] and s["rect"] and s["rect"][3] - s["rect"][1] < 60 and _apart(s["rect"], s["soloBox"]) and _inside(s["rect"], s["scene"]),
-              f"390: opens folded to its head, off the name box, inside the 3D: {s['rect']} {s['soloBox']} {s['scene']}")
+        s = await placed(phone, "390-folded")
+        check(failures, s["folded"] and s["rect"] and s["rect"][3] - s["rect"][1] < 60, f"390: opens folded to its head: {s['rect']}")
         await phone.screenshot(path=str(out / "390-folded.png"))
         await phone.click("#roster-fold")
-        await phone.wait_for_timeout(300)
-        s = res["place390"] = await phone.evaluate(RO)
-        check(failures, not s["folded"] and _apart(s["rect"], s["soloBox"]) and _inside(s["rect"], s["scene"]), f"390 opened: off the name box, inside the 3D: {s['rect']} {s['soloBox']} {s['scene']}")
+        s = await placed(phone, "390-open")
+        check(failures, not s["folded"], f"390: opened: {s['folded']}")
         await phone.screenshot(path=str(out / "390-open.png"))
         res["seconds"] = round(time.monotonic() - t0, 1)
     finally:

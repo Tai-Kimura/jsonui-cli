@@ -339,7 +339,7 @@ async def scenario_work(browser, srv, out, failures, res):
 
 OVERLAP_JS = """() => { const vis = (el) => { if (!el || el.closest('[hidden]')) return false; const st = getComputedStyle(el);
     if (st.display === 'none' || st.visibility === 'hidden') return false; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
-  const mine = ['floor-nav', 'tower-legend'].map((id) => document.getElementById(id)).filter(vis);
+  const mine = ['floor-nav', 'tower-legend', 'roster'].map((id) => document.getElementById(id)).filter(vis);   // roster: a room's robot list (53-roster.js)
   const others = [...document.querySelectorAll('button, input, select, textarea, a[href], [role="option"], [role="dialog"], [tabindex]:not([tabindex="-1"])')]
     .filter((el) => vis(el) && !mine.some((m) => m.contains(el)) && !el.closest('.tags'));
   const hits = [];
