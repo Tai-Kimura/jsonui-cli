@@ -52,6 +52,15 @@ def _examples(jt: pathlib.Path) -> dict:
     return mod.all_examples()
 
 
+def _with_loop(examples: dict) -> dict:
+    """The multi-provider room with one edge more, web -> kv: a triangle with api (web -> api -> kv), so a reach every step
+    on holds an edge between two nodes already reached (the arm for the loop's closing edge; the example is a tree)."""
+    doc = examples["multi-provider/docs/infra/system.json"]
+    if not any(e["from"] == "web" and e["to"] == "kv" for e in doc["edges"]):
+        doc["edges"].append({"from": "web", "to": "kv", "protocol": "https"})
+    return examples
+
+
 def _write(base: pathlib.Path, examples: dict, name: str, dest: str) -> pathlib.Path:
     for rel, data in examples.items():
         if rel.split("/")[0] != name:
@@ -329,12 +338,32 @@ async def run_cables_and_reach(page, out, failures, res):
     await page.evaluate("() => window.__dbg.srZoom(1.5)")
     ink_back = res["cableInkBack"] = await page.evaluate("() => ({ ...window.__dbg.srCableInk(), lod: window.__dbg.sr().lod })")
     await page.screenshot(path=str(out / "cables-focus.png"))
+    # up close (これに寄る on the node): wider than pulled back, as wide as 0.08 units up to 7 px; closer still, never past 7
+    await page.click("#sr-board [data-sr-act='focus']")
+    ink_near = res["cableInkNear"] = await page.evaluate("() => ({ ...window.__dbg.srCableInk(), lod: window.__dbg.sr().lod, cellPx: window.__dbg.sr().cellPx })")
+    await page.screenshot(path=str(out / "cables-near.png"))
+    await page.evaluate("() => window.__dbg.srZoom(0.4)")
+    ink_closer = res["cableInkCloser"] = await page.evaluate("() => ({ ...window.__dbg.srCableInk(), cellPx: window.__dbg.sr().cellPx })")
+    # a cable with one end behind the camera (put a third of the way along it, looking at its far end), and one with an end
+    # in the camera's own plane (right under it, looking level along the cable: the end's page position divides by 0):
+    # cut at the near plane, still drawn, as wide as a cable
+    near_end, far_end = ink_near["ends"]
+    up = lambda v: [v[0], v[1] + 0.5, v[2]]
+    at = [near_end[c] + (far_end[c] - near_end[c]) * 0.35 + (0.5 if c == 1 else 0) for c in range(3)]
+    ink_cut = res["cableInkCut"] = await page.evaluate("([p, t]) => window.__dbg.srCamInk(p, t)", [at, far_end])
+    ink_on = res["cableInkOn"] = await page.evaluate("([p, t]) => window.__dbg.srCamInk(p, t)", [up(near_end), up(far_end)])
     await page.select_option("#sr-lines", "all")
     await page.click("#sr-fit")
     res["cableWidths"] = widths
     check(failures, widths["plain"] >= 2 and widths["cross"] >= 2 and widths["focus"] >= 3 and widths["bundle"] >= 2, f"every cable layer is at least 2 px wide on the page: {widths}")
     check(failures, ink["cables"] >= 1 and ink["len"] > 50 and ink["width"] >= 2.5, f"the strong cables are drawn wide, in pixels: {ink}")
     check(failures, ink_back["lod"] == "near" and ink_back["width"] >= 2.5, f"pulled back, still as wide on the page: {ink_back}")
+    check(failures, widths["cross"] > widths["plain"], f"a cable across clouds is wider than one within a cloud: {widths}")
+    check(failures, ink_near["lod"] == "near" and ink_near["len"] > 50 and ink_near["width"] >= ink["width"] * 1.4 and ink_near["width"] <= 7.5,
+          f"up close the strong cables are wider than pulled back, up to 7 px: {ink_near} vs {ink}")
+    check(failures, ink_closer["len"] > 50 and ink_closer["width"] <= 7.5, f"closer still, no wider than 7 px: {ink_closer}")
+    check(failures, 300 < ink_cut["ink"] < ink_cut["page"] * 0.2 and ink_cut["width"] <= 7.5, f"a cable running behind the camera is still drawn, as wide as a cable: {ink_cut}")
+    check(failures, 300 < ink_on["ink"] < ink_on["page"] * 0.2 and (ink_on["width"] or 99) <= 7.5, f"a cable with an end in the camera's plane is still drawn, as wide as a cable: {ink_on}")
     # 2. one step: the node and what an edge joins it to, either way; the rest faint; the camera on all of them
     await page.evaluate("(id) => window.__dbg.srSelect(id)", pick)
     before = (await page.evaluate("() => window.__dbg.srReach()"))["cam"]
@@ -356,6 +385,10 @@ async def run_cables_and_reach(page, out, failures, res):
     await page.screenshot(path=str(out / "reach-all.png"))
     check(failures, ra["on"] and ra["hops"] == "all" and set(ra["ids"]) == every and set(ra["faint"]) == drawn - every and set(ra["inView"]) == every,
           f"every step: all it reaches, the rest faint, all in view: {sorted(ra['ids'])} want {sorted(every)}")
+    # every edge between the nodes it reached is strong, a loop's closing edge too (one between two nodes already reached)
+    inner = sum(1 for a, b in edges if a in every and b in every)
+    check(failures, inner > len(every) - 1, f"the room's reach has a loop (else the next arm proves nothing): {inner} edges, {len(every)} nodes")
+    check(failures, ra["focus"] == inner, f"every step: every edge among what it reached drawn strong: {ra['focus']} want {inner}")
     # 4. Esc: as it was, the camera too; the room stays
     await page.keyboard.press("Escape")
     re_ = res["reachEsc"] = await page.evaluate("() => ({ ...window.__dbg.srReach(), open: window.__dbg.sr().open })")
@@ -383,7 +416,7 @@ async def run_server_room(pw, out, failures):
     home = out / "home"
     (home / ".local" / "state" / "jui-viz").mkdir(parents=True, exist_ok=True)
     jt = pathlib.Path(__file__).resolve().parents[2]
-    ex = _examples(jt)
+    ex = _with_loop(_examples(jt))
     # a spec value with markup in it (the schema takes it: only a page's esc keeps it text — the independent check's SE1)
     for n in ex["aws-three-tier/docs/infra/main.json"]["nodes"]:
         if n["id"] == "db-prod":

@@ -54,10 +54,21 @@ window.__dbg = {
     gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
     const f = V.focusLines.material.uniforms.uColor.value.clone().convertLinearToSRGB(), want = [f.r * 255, f.g * 255, f.b * 255];
     let ink = 0; for (let i = 0; i < px.length; i += 4) if (Math.abs(px[i] - want[0]) + Math.abs(px[i + 1] - want[1]) + Math.abs(px[i + 2] - want[2]) < 60) ink++;
-    const a = new THREE.Vector3(), b = new THREE.Vector3();
+    // the length on the page of what is in view only (64 steps a cable, a step counted when both its ends are on the page)
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), on = (v) => v.z > -1 && v.z < 1 && Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1;
     let len = 0; for (let i = 0; i < srCableCount(V.focusLines); i++) {
-      const [p, q] = srCableGet(V.focusLines, i); a.fromArray(p).project(V.camera); b.fromArray(q).project(V.camera); len += Math.hypot((a.x - b.x) * w / 2, (a.y - b.y) * h / 2); }
-    return { ink, len: Math.round(len), width: len ? +(ink / len).toFixed(2) : null, cables: srCableCount(V.focusLines) }; },
+      const [p, q] = srCableGet(V.focusLines, i), P = new THREE.Vector3().fromArray(p), Q = new THREE.Vector3().fromArray(q);
+      for (let k = 0; k < 64; k++) {
+        a.lerpVectors(P, Q, k / 64).project(V.camera); b.lerpVectors(P, Q, (k + 1) / 64).project(V.camera);
+        if (on(a) && on(b)) len += Math.hypot((a.x - b.x) * w / 2, (a.y - b.y) * h / 2);
+      } }
+    return { ink, len: Math.round(len), width: len ? +(ink / len).toFixed(2) : null, cables: srCableCount(V.focusLines), page: w * h,
+      ends: srCableCount(V.focusLines) ? srCableGet(V.focusLines, 0) : null }; },
+  // the camera put at a point looking at another (the arms: a cable with one end behind it)
+  // the camera put at a point looking at another, as it is (no controls' limits), and the strong cables measured at once,
+  // before the next frame's controls move it (the arms: a cable with an end behind the camera, or on it)
+  srCamInk: (pos, target) => { const V = SR.view; if (!V) return null; V.camera.position.fromArray(pos); V.camera.lookAt(new THREE.Vector3().fromArray(target));
+    V.camera.updateMatrixWorld(); return window.__dbg.srCableInk(); },
   srReachPress: () => { const b = document.querySelector('#sr-board [data-sr-act="reach"]'); if (b) b.click(); return !!b; },
   srReachHopsSet: (v) => { const sel = document.querySelector('#sr-board [data-sr-reach-hops]'); if (!sel) return false; sel.value = v; sel.dispatchEvent(new Event('change', { bubbles: true })); return true; },
   srEdgesOf: (id) => (SR.view ? SR.view.L.edges.filter((e) => e.from === id || e.to === id).length : null),
