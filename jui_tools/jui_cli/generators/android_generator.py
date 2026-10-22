@@ -130,6 +130,44 @@ class AndroidGenerator:
         """
         return self._build_imports(spec_types or [], set(names or []), current_package)
 
+    def viewmodel_type_imports(self, spec: ScreenSpec, current_package: str,
+                               names: list[str] | None = None) -> list[str]:
+        """The imports a ViewModel's Protocol and Impl both need: the types its
+        vars and methods name (an app type such as ``Screen`` or a model the
+        API sync writes) and its ``{Name}Data``.
+
+        The Data class is imported from where kjui always writes it
+        (``<package>.data``) when the symbol index does not know it yet:
+        ``jui g project`` runs before any ``jui build``, so on a new screen
+        the Data file does not exist and the scaffold read
+        ``Unresolved reference '<Name>Data'`` (ticket
+        jui-g-project-new-screen-stubs-do-not-compile)."""
+        data_class = f"{spec.name}Data"
+        vm = spec.view_model
+        types: list[str] = []
+        for m in vm.methods:
+            types += [p.type for p in m.params] + ([m.return_type] if m.return_type else [])
+        types += [v.type for v in vm.vars]
+        imports = self._imports_for_names(spec_types=types, names=[data_class, *(names or [])],
+                                          current_package=current_package)
+        if not any(line.endswith(f".{data_class}") for line in imports):
+            data_pkg = f"{self._package}.data"
+            if data_pkg != current_package:
+                imports.append(f"import {data_pkg}.{data_class}")
+        return imports
+
+    def viewmodel_impl_imports(self, spec: ScreenSpec) -> list[str]:
+        """What `jui build` makes sure a ViewModel Impl imports (build_cmd's sync)."""
+        return self.viewmodel_type_imports(spec, current_package=self._viewmodel_impl_package())
+
+    def usecase_impl_imports(self, name: str, uc: UseCaseDef) -> list[str]:
+        """The type imports a fresh UseCase Impl carries (`jui build` adds them to an old one)."""
+        return self._imports_for_methods(uc.methods, current_package=f"{self._package}.usecase")
+
+    def repository_impl_imports(self, name: str, repo: RepositoryDef) -> list[str]:
+        """The type imports a fresh Repository Impl carries (`jui build` adds them to an old one)."""
+        return self._imports_for_methods(repo.methods, current_package=f"{self._package}.repository")
+
     def _build_imports(
         self,
         spec_types: list[str],
@@ -318,20 +356,7 @@ class AndroidGenerator:
         # emitted. Without this, Protocol declarations reference types like
         # `ItemImage` / `Candidate` without any import and the Kotlin
         # compiler fails with "Unresolved reference".
-        vm = spec.view_model
-        proto_types: list[str] = []
-        for m in vm.methods:
-            for p in m.params:
-                proto_types.append(p.type)
-            if m.return_type:
-                proto_types.append(m.return_type)
-        for v in vm.vars:
-            proto_types.append(v.type)
-        imports = self._imports_for_names(
-            spec_types=proto_types,
-            names=[data_class],
-            current_package=pkg,
-        )
+        imports = self.viewmodel_type_imports(spec, current_package=pkg)
         # The Compose convention emits `val data: StateFlow<XData>` on the
         # Impl side (kjui's ViewModel template + every project mirror).
         # Declaring `val data: XData` on the Protocol forces a type
@@ -382,8 +407,8 @@ class AndroidGenerator:
         has_uc = any(uc.name == uc_name for uc in spec.use_cases)
 
         pkg = self._viewmodel_impl_package()
-        names = [data_class, f"{spec.name}ViewModelProtocol"]
-        imports = self._imports_for_names(names=names, current_package=pkg)
+        imports = self.viewmodel_type_imports(spec, current_package=pkg,
+                                              names=[f"{spec.name}ViewModelProtocol"])
         if has_uc:
             uc_import = f"import {self._package}.usecase.{uc_name}"
             if uc_import not in imports:
@@ -460,6 +485,12 @@ class AndroidGenerator:
             "        _data = parentFlow",
             "    }",
             "",
+            # kjui build writes updateData here (and its `update` import);
+            # without the pair it warns and a UI test's initialState cannot
+            # reach the screen.
+            "    // >>> GENERATED_CODE_START",
+            "    // >>> GENERATED_CODE_END",
+            "",
             "    // >>> GENERATED_DISPLAY_LOGIC_START",
             "    // >>> GENERATED_DISPLAY_LOGIC_END",
             "",
@@ -525,7 +556,10 @@ class AndroidGenerator:
         keyword = "val" if var.read_only else "var"
         prefix = "override "
         if init is None:
-            return f"    {prefix}{keyword} {var.name}: {type_str}"
+            # readOnly, or not observable, with no default: a bare property
+            # does not compile ("property must be initialized"); the same
+            # TODO the observable branch hands the author.
+            init = f'TODO("initialize {var.name}: no default is declared for {var.type}")'
         return f"    {prefix}{keyword} {var.name}: {type_str} = {init}"
 
     # --- Repository ---

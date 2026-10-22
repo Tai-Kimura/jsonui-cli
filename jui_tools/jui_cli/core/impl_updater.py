@@ -205,6 +205,62 @@ _KOTLIN_PACKAGE_RE = re.compile(r"^package[ \t]+(\S+)[ \t]*$", re.MULTILINE)
 _KOTLIN_IMPORT_RE = re.compile(r"^import[ \t]+(\S+)[ \t]*$", re.MULTILINE)
 
 
+_TS_IMPORT_LINE_RE = re.compile(r"^import[^\n]*;[ \t]*$", re.MULTILINE)
+
+
+_TS_NAMED_IMPORT_RE = re.compile(r"^import\s+(?:type\s+)?\{\s*([A-Za-z_$][\w$]*)\s*\}")
+
+
+def _ts_has_name(source: str, name: str) -> bool:
+    """The file already imports or declares *name* (any module, any form)."""
+    word = re.compile(rf"\b{re.escape(name)}\b")
+    imports = "\n".join(m.group(0) for m in re.finditer(r"^import[^;]*;", source, re.MULTILINE))
+    declared = re.search(rf"^\s*(?:export\s+)?(?:declare\s+)?(?:interface|type|class|enum)\s+{re.escape(name)}\b",
+                         source, re.MULTILINE)
+    return bool(word.search(imports) or declared)
+
+
+def ensure_ts_imports(source: str, lines: list[str]) -> str:
+    """Insert each missing TypeScript import line after the last existing import,
+    or after the file's leading comment lines when it has none. A line naming one
+    type (``import type { X } from "…"``) is skipped when the file already imports
+    or declares ``X`` some other way: a second binding of a name does not compile."""
+    def wanted(line: str) -> bool:
+        if not line or line in source.splitlines():
+            return False
+        m = _TS_NAMED_IMPORT_RE.match(line)
+        return not (m and _ts_has_name(source, m.group(1)))
+    missing = [line for line in lines if wanted(line)]
+    if not missing:
+        return source
+    block = "\n".join(missing)
+    last = None
+    for m in _TS_IMPORT_LINE_RE.finditer(source):
+        last = m
+    if last is not None:
+        return f"{source[:last.end()]}\n{block}{source[last.end():]}"
+    head = 0
+    for line in source.splitlines(keepends=True):
+        if not line.lstrip().startswith("//"):
+            break
+        head += len(line)
+    return f"{source[:head]}{block}\n{source[head:]}"
+
+
+def kotlin_has_simple_name(source: str, fqn: str) -> bool:
+    """The file already imports a type of that simple name (from any package,
+    or under an alias) or declares one: importing *fqn* too would clash."""
+    name = fqn.rsplit(".", 1)[-1]
+    for m in _KOTLIN_IMPORT_RE.finditer(source):
+        imported = m.group(1)
+        if imported != fqn and imported.rsplit(".", 1)[-1] == name:
+            return True
+    if re.search(rf"^import[ \t]+\S+[ \t]+as[ \t]+{re.escape(name)}\b", source, re.MULTILINE):
+        return True
+    return bool(re.search(rf"^\s*(?:\w+\s+)*(?:class|interface|object|typealias)\s+{re.escape(name)}\b",
+                          source, re.MULTILINE))
+
+
 def ensure_kotlin_import(source: str, fqn: str) -> str:
     """Insert ``import <fqn>`` into a Kotlin source file if missing.
 

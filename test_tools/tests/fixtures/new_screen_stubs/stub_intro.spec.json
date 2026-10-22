@@ -1,0 +1,167 @@
+{
+  "type": "screen_spec",
+  "version": "1.0",
+  "metadata": {
+    "name": "StubIntro",
+    "displayName": "StubIntro",
+    "description": "StubIntro: the shape of a consumer screen whose stubs did not compile",
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "layoutFile": "stub_intro"
+  },
+  "structure": {
+    "layout": {
+      "root": "root",
+      "children": []
+    },
+    "components": [
+      {
+        "id": "root",
+        "type": "View",
+        "description": "root"
+      }
+    ]
+  },
+  "stateManagement": {
+    "uiVariables": [
+      {
+        "name": "agree",
+        "type": "Bool",
+        "default": false,
+        "binding": "twoWay",
+        "description": "agreed, two-way"
+      }
+    ]
+  },
+  "dataFlow": {
+    "viewModel": {
+      "vars": [
+        {
+          "name": "isRetry",
+          "type": "Bool",
+          "readOnly": true
+        },
+        {
+          "name": "termsURL",
+          "type": "URL",
+          "readOnly": true,
+          "platforms": [
+            "ios"
+          ]
+        },
+        {
+          "name": "homeURL",
+          "type": "URL"
+        },
+        {
+          "name": "toastMessage",
+          "type": "String?",
+          "optional": true
+        },
+        {
+          "name": "count",
+          "type": "Int"
+        },
+        {
+          "name": "ratio",
+          "type": "Double"
+        },
+        {
+          "name": "title",
+          "type": "String"
+        },
+        {
+          "name": "tags",
+          "type": "[String]"
+        },
+        {
+          "name": "item",
+          "type": "StubItem"
+        },
+        {
+          "name": "pick",
+          "type": "StubItem?",
+          "optional": true
+        },
+        {
+          "name": "onOpenUrl",
+          "type": "(String) -> Void",
+          "optional": true
+        },
+        {
+          "name": "lastSeen",
+          "type": "Date",
+          "observable": false
+        }
+      ],
+      "methods": [
+        {
+          "name": "onAgreeTap"
+        },
+        {
+          "name": "onPick",
+          "params": [
+            {
+              "name": "index",
+              "type": "Int"
+            }
+          ]
+        }
+      ]
+    },
+    "useCases": [
+      {
+        "name": "StubIntroUseCase",
+        "repositories": [
+          "StubRepository"
+        ],
+        "methods": [
+          {
+            "name": "start",
+            "params": [
+              {
+                "name": "version",
+                "type": "Int"
+              }
+            ],
+            "returnType": "StubStartResult",
+            "isAsync": true
+          },
+          {
+            "name": "items",
+            "params": [],
+            "returnType": "[StubItem]",
+            "isAsync": true
+          }
+        ]
+      }
+    ],
+    "repositories": [
+      {
+        "name": "StubRepository",
+        "methods": [
+          {
+            "name": "fetchItem",
+            "params": [
+              {
+                "name": "id",
+                "type": "String"
+              }
+            ],
+            "returnType": "StubItem",
+            "isAsync": true
+          },
+          {
+            "name": "list",
+            "params": [],
+            "returnType": "[StubItem]",
+            "isAsync": true
+          }
+        ]
+      }
+    ]
+  }
+}

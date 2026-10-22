@@ -2345,6 +2345,37 @@ def _platform_generator(project_root, platform: str, pconfig: dict, type_mapper)
     return None
 
 
+def _ensure_impl_imports(platform: str, impl_path: Path, lines: list[str], args) -> bool:
+    """Add to a UseCase / Repository Impl the import lines a fresh one would carry
+    (ticket jui-g-project-new-screen-stubs-do-not-compile): the scaffold is written
+    once, by `jui g project`, before the API sync has written the models it names,
+    so it never got their imports — the Protocol does, regenerated every build.
+    Only import lines are added; nothing else in the author's file changes.
+    Returns whether the file changed (written unless --dry-run)."""
+    from ..core.impl_updater import ensure_kotlin_import, ensure_ts_imports, kotlin_has_simple_name
+    if not lines or not impl_path.exists():
+        return False
+    try:
+        current = impl_path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    if platform == "android":
+        updated = current
+        for line in lines:
+            fqn = line[len("import "):].strip() if line.startswith("import ") else ""
+            if fqn and not kotlin_has_simple_name(updated, fqn):
+                updated = ensure_kotlin_import(updated, fqn)
+    elif platform == "web":
+        updated = ensure_ts_imports(current, lines)
+    else:
+        return False
+    if updated == current:
+        return False
+    if not getattr(args, "dry_run", False):
+        impl_path.write_text(updated, encoding="utf-8")
+    return True
+
+
 def _sync_usecase_protocols(
     config_mgr: ConfigManager,
     config: dict,
@@ -2407,13 +2438,20 @@ def _sync_usecase_protocols(
                 if not m.platforms or platform in m.platforms]
         return replace(definition, methods=kept)
 
-    writes = 0
+    writes = impl_writes = 0
     unowned: list[str] = []
     for platform, pconfig in platforms.items():
         generator = _platform_generator(
             config_mgr.project_root, platform, pconfig, type_mapper)
         if generator is None:
             continue
+        impl_imports = getattr(generator, "usecase_impl_imports", None)
+        if callable(impl_imports):
+            for uc_name, uc_def in aggregated.use_cases.items():
+                filtered = _for_platform(uc_def, platform)
+                if filtered.methods and _ensure_impl_imports(
+                        platform, generator.usecase_impl_path(uc_name), impl_imports(uc_name, filtered), args):
+                    impl_writes += 1
         if not getattr(generator, "has_separate_protocol", True):
             continue
         for uc_name, uc_def in aggregated.use_cases.items():
@@ -2453,8 +2491,8 @@ def _sync_usecase_protocols(
     for path in unowned:
         print(f"WARNING: {path} has no @generated banner — UseCase protocol "
               f"left untouched; the spec's declarations are NOT reaching it")
-    if writes:
-        print(f"UseCase protocol sync: updated {writes} protocol(s)")
+    if writes or impl_writes:
+        print(f"UseCase protocol sync: updated {writes} protocol(s), {impl_writes} impl file(s)")
     return True
 
 
@@ -2513,13 +2551,20 @@ def _sync_repository_protocols(
                 if not m.platforms or platform in m.platforms]
         return replace(definition, methods=kept)
 
-    writes = 0
+    writes = impl_writes = 0
     unowned: list[str] = []
     for platform, pconfig in platforms.items():
         generator = _platform_generator(
             config_mgr.project_root, platform, pconfig, type_mapper)
         if generator is None:
             continue
+        impl_imports = getattr(generator, "repository_impl_imports", None)
+        if callable(impl_imports):
+            for repo_name, repo_def in aggregated.repositories.items():
+                filtered = _for_platform(repo_def, platform)
+                if filtered.methods and _ensure_impl_imports(
+                        platform, generator.repository_impl_path(repo_name), impl_imports(repo_name, filtered), args):
+                    impl_writes += 1
         if not getattr(generator, "has_separate_protocol", True):
             continue
         for repo_name, repo_def in aggregated.repositories.items():
@@ -2559,8 +2604,8 @@ def _sync_repository_protocols(
     for path in unowned:
         print(f"WARNING: {path} has no @generated banner — Repository protocol "
               f"left untouched; the spec's declarations are NOT reaching it")
-    if writes:
-        print(f"Repository protocol sync: updated {writes} protocol(s)")
+    if writes or impl_writes:
+        print(f"Repository protocol sync: updated {writes} protocol(s), {impl_writes} impl file(s)")
     return True
 
 
@@ -2844,6 +2889,17 @@ def _sync_viewmodel_protocols(
                             updated = ensure_kotlin_import(
                                 updated, proto_fqn_fn(spec.name),
                             )
+                        # The types the Protocol names (its Data class, an app
+                        # type such as Screen, a model the API sync wrote after
+                        # `jui g project`): the scaffold was written before
+                        # they existed and has no import for them.
+                        type_imports = getattr(generator, "viewmodel_impl_imports", None)
+                        if callable(type_imports):
+                            from ..core.impl_updater import kotlin_has_simple_name
+                            for line in type_imports(spec):
+                                fqn = line[len("import "):].strip()
+                                if not kotlin_has_simple_name(updated, fqn):
+                                    updated = ensure_kotlin_import(updated, fqn)
                         method_names = [m.name for m in sync_result.methods
                                         if m.name not in narrowed_spec_methods]
                         # `data` is hard-coded on the Protocol's first line

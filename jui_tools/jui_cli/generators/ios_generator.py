@@ -206,13 +206,27 @@ class IosGenerator:
         return "\n".join(lines)
 
     def _var_impl_declaration(self, var: VarDef) -> str:
-        """Impl-side var declaration. Observable vars get ``@Published``."""
+        """Impl-side var declaration. Observable vars get ``@Published``.
+
+        Each shape is one swiftc accepts as written (ticket
+        jui-g-project-new-screen-stubs-do-not-compile, measured with Xcode
+        27.2 in Swift 5, Swift 6 and Swift 6 with MainActor isolation):
+
+        - ``readOnly`` is a plain ``let``: a property wrapper only goes on a
+          ``var``, and the Protocol's ``{ get }`` is met by a ``let``.
+        - A type with no default (``URL``, an app type, a closure) gets the
+          initializer the Kotlin scaffold has, saying what to fill in. Left
+          bare, ``init()`` assigned nothing and the class did not compile;
+          the scaffold is written once and is the author's to edit.
+        """
         type_str = _swift_optional(self._map_type(var.type), var.optional)
-        prefix = "@Published " if var.observable else ""
+        prefix = "@Published " if var.observable and not var.read_only else ""
         keyword = "let" if var.read_only else "var"
         init = self._var_default_value(var)
+        if init is None and type_str.endswith("?") and keyword == "var":
+            return f"    {prefix}{keyword} {var.name}: {type_str}"   # Swift's implicit nil
         if init is None:
-            return f"    {prefix}{keyword} {var.name}: {type_str}"
+            init = f'{{ fatalError("initialize {var.name}: no default is declared for {var.type}") }}()'
         return f"    {prefix}{keyword} {var.name}: {type_str} = {init}"
 
     # --- Repository ---
@@ -284,7 +298,10 @@ class IosGenerator:
             "import UIKit",
             "import SwiftUI",
             "",
-            "@MainActor",
+            # Not @MainActor: a ViewModel that is not on the main actor creates
+            # its UseCase in a stored property's default value, and swiftc
+            # refuses a main-actor initializer there in Swift 5 and Swift 6
+            # alike (it compiled only with MainActor as the default isolation).
             f"class {name}: {name}Protocol {{",
         ]
 

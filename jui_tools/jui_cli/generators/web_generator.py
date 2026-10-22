@@ -52,6 +52,17 @@ DEFAULT_API_ENDPOINTS_MODULE = "@/core/network/apiEndpoints"
 
 VIEWMODEL_BASE_OWNER = {"web": "rjui_tools"}
 
+#: Names a signature may use that need no import (TypeScript's own and the DOM's).
+TS_GLOBALS = frozenset({
+    "Promise", "Array", "ReadonlyArray", "Record", "Map", "Set", "Date", "Error", "Partial", "Required",
+    "Readonly", "Pick", "Omit", "Uint8Array", "ArrayBuffer", "Blob", "File", "URL", "Response", "Request",
+    "AsyncIterable", "AsyncGenerator", "Iterable", "Object", "String", "Number", "Boolean", "JSON",
+})
+_TS_IDENT = re.compile(r"\b([A-Z][A-Za-z0-9_]*)\b")
+_TS_EXPORT = re.compile(
+    r"^export\s+(?:declare\s+)?(?:default\s+)?(?:abstract\s+)?(?:interface|type|class|enum|const\s+enum)\s+([A-Z]\w*)",
+    re.MULTILINE)
+
 
 def owns_viewmodel_base(platform: str) -> bool:
     """True when jui_tools generates `<Name>ViewModelBase` for *platform*."""
@@ -87,6 +98,66 @@ class WebGenerator:
         # a mistake by whoever ran the generator.
         self._api_client_module = rjui_config.get("api_client_module")
         self._api_endpoints_module = rjui_config.get("api_endpoints_module")
+
+    def _ts_symbol_index(self) -> dict[str, str]:
+        """Exported type name -> its ``@/`` module, from the project's ``src``
+        (the API sync's models included). The first file to export a name
+        wins, in path order, so the answer is the same on every run."""
+        cached = getattr(self, "_symbols", None)
+        if cached is not None:
+            return cached
+        index: dict[str, str] = {}
+        src = self._root / "src"
+        if src.is_dir():
+            for f in sorted([*src.rglob("*.ts"), *src.rglob("*.tsx")]):
+                if "node_modules" in f.parts or f.name.endswith(".d.ts"):
+                    continue
+                try:
+                    text = f.read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError):
+                    continue
+                module = "@/" + f.relative_to(src).with_suffix("").as_posix()
+                module = module[: -len("/index")] if module.endswith("/index") else module
+                for m in _TS_EXPORT.finditer(text):
+                    index.setdefault(m.group(1), module)
+        self._symbols = index
+        return index
+
+    def type_imports(self, methods: list[MethodDef], own_module: str) -> list[str]:
+        """``import type`` lines for the app types the signatures name (a
+        model the API sync writes, a type the project declares): the
+        UseCase and Repository scaffolds named them with no import and did not
+        type-check (ticket jui-g-project-new-screen-stubs-do-not-compile).
+        The type map's web ``imports`` hint comes first; else the project's
+        own export. A name found nowhere gets no line (it may yet be written)."""
+        index = self._ts_symbol_index()
+        lines: list[str] = []
+        for method in methods:
+            for spec_type in [p.type for p in method.params] + ([method.return_type] if method.return_type else []):
+                hinted = self._type_mapper.resolve_imports(spec_type, "web")
+                rendered = self._type_mapper.resolve_class(spec_type, "web")
+                for name in _TS_IDENT.findall(rendered):
+                    if name in TS_GLOBALS:
+                        continue
+                    module = next((h for h in hinted if h.rsplit("/", 1)[-1] == name), None) or index.get(name)
+                    line = f'import type {{ {name} }} from "{module}";' if module and module != own_module else None
+                    if line and line not in lines:
+                        lines.append(line)
+        return lines
+
+    def usecase_impl_imports(self, name: str, uc: UseCaseDef) -> list[str]:
+        """The type imports a fresh UseCase carries (`jui build` adds them to an old one)."""
+        return self.type_imports(uc.methods, self.usecase_module(name))
+
+    def repository_impl_imports(self, name: str, repo: RepositoryDef) -> list[str]:
+        """The type imports a fresh Repository carries (`jui build` adds them to an old one)."""
+        return self.type_imports(repo.methods, self.repository_module(name))
+
+    def repository_module(self, name: str) -> str:
+        return f"@/repository/{name}"
+
+    def usecase_module(self, name: str) -> str:
+        return f"@/usecase/{name}"
 
     def _load_rjui_config(self) -> dict:
         """Read rjui.config.json if present."""
@@ -195,6 +266,7 @@ class WebGenerator:
         lines += [
             f'import {{ ApiClient, HttpMethod }} from "{client}";',
             f'import {{ ApiEndpoint }} from "{endpoints}";',
+            *self.type_imports(repo.methods, self.repository_module(name)),
             "",
             f"export class {name} {{",
         ]
@@ -216,6 +288,7 @@ class WebGenerator:
         imports = []
         for dep in uc.repositories:
             imports.append(f'import {{ {dep} }} from "@/repository/{dep}";')
+        imports += self.type_imports(uc.methods, self.usecase_module(name))
 
         lines = [f"// UseCase: {name}"] + imports + [
             "",

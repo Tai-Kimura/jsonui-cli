@@ -73,12 +73,14 @@ class AListHasAZeroValueOnEveryPlatform(unittest.TestCase):
         """Scope boundary, stated rather than left to be inferred.
 
         `Map(K,V)` declares no defaultValue, so it takes the same route as
-        any other type that cannot be synthesized. That is a decision, not
-        an oversight, and this test fails if someone quietly adds one.
+        any other type that cannot be synthesized: no `[:]` / `mapOf()` is
+        invented, and the declaration names what to fill in (ticket
+        jui-g-project-new-screen-stubs-do-not-compile — the bare one did not
+        compile on either face). This test fails if someone quietly adds one.
         """
         f = faces(var("index", "Map(String,Item)"))
-        self.assertEqual(f["ios"], "var index: [String: Item]")
-        self.assertEqual(f["android"], "override var index: Map<String, Item>")
+        self.assertEqual(f["ios"], 'var index: [String: Item] = { fatalError("initialize index: no default is declared for Map(String,Item)") }()')
+        self.assertEqual(f["android"], 'override var index: Map<String, Item> = TODO("initialize index: no default is declared for Map(String,Item)")')
 
 
 class KotlinInitializesWhatItDeclares(unittest.TestCase):
@@ -115,16 +117,30 @@ class KotlinInitializesWhatItDeclares(unittest.TestCase):
 
 
 class TheEndOfWhatCanBeSynthesized(unittest.TestCase):
-    """A custom type with no declared default: a bare declaration.
+    """A custom type with no declared default: no value is invented.
 
-    Both faces emit one and let the compiler ask the author, which works
-    because both files are scaffolds written once and editable afterwards.
+    It was a bare declaration on both faces, to let the compiler ask the
+    author — but a bare stored property is a scaffold that does not compile
+    (iOS: "return from initializer without initializing all stored
+    properties"; Kotlin: "property must be initialized"), and a scaffold that
+    does not compile stops every other file in the target too (a consumer, 2.3.19:
+    xcodebuild rc=65, 394 Kotlin errors; ticket
+    jui-g-project-new-screen-stubs-do-not-compile). So both faces now say it
+    the way the observable Kotlin one already did: a placeholder that names
+    the var and its type, still no value.
     """
 
     def test_neither_face_invents_a_value(self):
         f = faces(var("profile", "UserProfile"))
-        self.assertEqual(f["ios"], "var profile: UserProfile")
-        self.assertEqual(f["android"], "override var profile: UserProfile")
+        self.assertEqual(f["ios"], 'var profile: UserProfile = { fatalError("initialize profile: no default is declared for UserProfile") }()')
+        self.assertEqual(f["android"], 'override var profile: UserProfile = TODO("initialize profile: no default is declared for UserProfile")')
+        for decl in f.values():
+            self.assertNotIn("UserProfile()", decl)
+
+    def test_a_read_only_one_is_a_let_or_val_with_the_same_placeholder(self):
+        f = faces(var("profile", "UserProfile", read_only=True, observable=True))
+        self.assertEqual(f["ios"], 'let profile: UserProfile = { fatalError("initialize profile: no default is declared for UserProfile") }()')
+        self.assertEqual(f["android"], 'override val profile: UserProfile = TODO("initialize profile: no default is declared for UserProfile")')
 
 
 if __name__ == "__main__":
