@@ -1904,6 +1904,7 @@
   "sr.mig.kind.remove": "{node} を削除",
   "sr.mig.kind.replace": "{node} を差し替え",
   "sr.mig.kind.edges": "線のつなぎ替え",
+  "sr.mig.moved": "（この歩で動いたノード: {list}）",
   "sr.mig.old": "旧の構成",
   "sr.mig.title": "移管: {name}",
   "sr.mig.go": "移管",

@@ -1588,6 +1588,7 @@ button.talk-peer:focus-visible { outline: 2px solid var(--focus); outline-offset
 .sr-fp-chosen { display: grid; gap: 2px; width: 100%; margin: 0; padding-left: 22px; font-size: 12px; }   /* one choice a line, its number before it */
 .sr-mp-cost { font-variant-numeric: tabular-nums; }
 .sr-mp-unpriced { color: var(--bad); }
+.sr-mp-moved { color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 .sr-mp-now { font-size: 15px; font-variant-numeric: tabular-nums; }
 .sr-mp-now.sr-up, .sr-mp-delta.sr-up { color: var(--bad); }
 .sr-mp-now.sr-down, .sr-mp-delta.sr-down { color: var(--info); }

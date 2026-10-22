@@ -25,7 +25,7 @@
    Played through (the requester: 「もっとたくさんの移管をスムーズに」), a step is shorter than one stepped alone
    (SR_MIG.playMs) and the next begins as soon as one ends: nothing is rebuilt between them.
    While a plan is open the room's flows are not offered (they are the old model's). */
-const SR_MIG = { stepMs: 1600, playMs: 1050, countMs: 700, tagMs: 1800, speed: 1.0, P: null };
+const SR_MIG = { stepMs: 1600, playMs: 1050, speed: 1.0, P: null };
 const SR_MIG_KIND = { add: (node) => tl('sr.mig.kind.add', { node }), remove: (node) => tl('sr.mig.kind.remove', { node }),
   replace: (node) => tl('sr.mig.kind.replace', { node }), edges: () => tl('sr.mig.kind.edges') };
 const SR_MIG_DONE = { add: (s) => tl('sr.mig.log.add', { node: s.node }), remove: (s) => tl('sr.mig.log.remove', { node: s.node }),
@@ -167,6 +167,7 @@ function srMigStepOn() {
   const s = P.entry.steps[P.k];
   P.anim = { i: s.index, t: 0 };
   P.log.push(s.node || 'edges');
+  if (SR.view) srMigFxStart(SR.view, P, s);
   return true;
 }
 function srMigCost() {
@@ -341,7 +342,7 @@ function srMigTick(V, dt) {
       else if (P.state === 'step') P.state = 'pause';
       srMigApply(V, false);
       srMigLightsClear(V);
-      srMigFxStart(V, P, s);
+      if (P.fx) P.fx.left = 0;   // the count ends with its step
       srMigRenderBar();
       if (P.state === 'play' && srMigStepOn()) { srMigApply(V, false); srMigRenderBar(); }   // the next step from this same frame: no gap
       return;
@@ -365,29 +366,37 @@ function srMigVersions(V) {
   }
 }
 
-/* ---- a step that moves the month: the player's amount counts to the new one, the difference pops beside it, a tag
-   floats up over the node */
+/* ---- a step that moves the month, from its start (the tags and the player point at the same step: a tag stood at a
+   step's end lagged one behind the player when played through): the player's amount counts over the step to the new
+   one, the step's difference pops beside it, and over each node whose month moved in the step (a step's difference is
+   all of it: a free amount shared moves a neighbour too) a tag with that node's own difference floats up. */
 function srMigFxStart(V, P, s) {
+  srMigTagsClear(P);
   const C = P.cost;
+  P.fx = null;
   if (!C || !C.ok) return;
-  const to = C.steps[s.index - 1].usd, from = s.index > 1 ? C.steps[s.index - 2].usd : C.old.usd;
-  if (to === null || from === null || Math.abs(to - from) < 0.005) { P.fx = null; return; }
-  P.fx = { from, to, delta: to - from, left: reduceMotion ? 0 : SR_MIG.countMs, node: s.node };
-  if (s.node && !reduceMotion) {
+  const cs = C.steps[s.index - 1], to = cs.usd, from = s.index > 1 ? C.steps[s.index - 2].usd : C.old.usd;
+  if (to === null || from === null || Math.abs(to - from) < 0.005) return;
+  const ms = P.state === 'play' ? SR_MIG.playMs : SR_MIG.stepMs;
+  P.fx = { i: s.index, from, to, delta: to - from, left: reduceMotion ? 0 : ms, life: ms };
+  if (reduceMotion) return;
+  for (const mv of (cs.moved || []).slice(0, 4)) {
+    if (!V.L.pos.has(mv.node)) continue;     // an edge's own row (its transfer), not a node
     const el = document.createElement('div');
-    el.className = `sr-mig-tag ${to > from ? 'sr-up' : 'sr-down'}`;
-    el.dataset.srMigTag = s.node;
-    el.textContent = srMigSigned(to - from);
+    el.className = `sr-mig-tag ${mv.diff > 0 ? 'sr-up' : 'sr-down'}`;
+    el.dataset.srMigTag = mv.node;
+    el.dataset.srMigStep = String(s.index);
+    el.textContent = srMigSigned(mv.diff);
     $('sr-toasts').append(el);
-    P.tags.push({ el, at: s.node, left: SR_MIG.tagMs, life: SR_MIG.tagMs });
+    P.tags.push({ el, at: mv.node, left: ms, life: ms });
   }
 }
 function srMigFxTick(V, P, dt) {
   const step = dt * SR_MIG.speed;
   if (P.fx && P.fx.left > 0) {
     P.fx.left = Math.max(0, P.fx.left - step);
-    const k = 1 - P.fx.left / SR_MIG.countMs, e = 1 - (1 - k) ** 3, el = $('sr-mplayer').querySelector('[data-sr-mp-now]');
-    if (el) el.textContent = srcUsd(P.fx.from + (P.fx.to - P.fx.from) * e);
+    const k = 1 - P.fx.left / P.fx.life, e = 1 - (1 - k) ** 3, el = $('sr-mplayer').querySelector('[data-sr-mp-now]');
+    if (el) el.textContent = srMigUsd(P.fx.from + (P.fx.to - P.fx.from) * e);
   }
   const w = V.renderer.domElement.clientWidth, h = V.renderer.domElement.clientHeight;
   P.tags = P.tags.filter((x) => { x.left -= step; if (x.left > 0) return true; x.el.remove(); return false; });
@@ -415,8 +424,10 @@ function srMigRenderBar() {
     const nowUsd = P.k ? C.steps[P.k - 1].usd : C.old.usd, stepDiff = cur ? C.steps[cur.index - 1].diff : null;   // the step shown
     const fx = P.fx, counting = fx && fx.left > 0, shown = counting ? fx.from : nowUsd;
     const dir = stepDiff > 0 ? 'sr-up' : stepDiff < 0 ? 'sr-down' : '';
-    const nowCls = fx && P.k && fx.to === nowUsd ? (fx.delta > 0 ? 'sr-up' : 'sr-down') : '';
-    costHTML = `<span class="sr-mp-cost" data-sr-mp-cost>${esc(tl('sr.mig.cost.old', { old: srcUsd(C.old.usd) }))} → <b class="sr-mp-now ${esc(nowCls)}" data-sr-mp-now>${esc(srcUsd(shown))}</b> → ${esc(tl('sr.mig.cost.new', { new: srcUsd(C.new.usd) }))}${stepDiff !== null ? ` <b class="sr-mp-delta ${esc(dir)}" data-sr-mp-diff>${esc(tl('sr.mig.cost.step', { diff: srMigSigned(stepDiff) }))}</b>` : ''}</span>`;
+    const nowCls = fx ? (fx.delta > 0 ? 'sr-up' : 'sr-down') : '';
+    costHTML = `<span class="sr-mp-cost" data-sr-mp-cost>${esc(tl('sr.mig.cost.old', { old: srMigUsd(C.old.usd) }))} → <b class="sr-mp-now ${esc(nowCls)}" data-sr-mp-now>${esc(srMigUsd(shown))}</b> → ${esc(tl('sr.mig.cost.new', { new: srMigUsd(C.new.usd) }))}${stepDiff !== null ? ` <b class="sr-mp-delta ${esc(dir)}" data-sr-mp-diff>${esc(tl('sr.mig.cost.step', { diff: srMigSigned(stepDiff) }))}</b>` : ''}</span>`;
+    const moved = cur && C.steps[cur.index - 1].moved;
+    if (moved && moved.length > 1) costHTML += ` <small class="sr-mp-moved" data-sr-mp-moved>${esc(tl('sr.mig.moved', { list: moved.slice(0, 4).map((m) => `${m.node} ${srMigSigned(m.diff)}`).join(' · ') }))}</small>`;
     if (C.unpricedChanged && C.unpricedChanged.length) costHTML += ` <small class="sr-mp-unpriced" data-sr-mp-unpriced title="${esc(C.unpricedChanged.join(', '))}">${esc(tl('sr.mig.unpriced.bar', { n: C.unpricedChanged.length }))}</small>`;
   } else if (C && !C.ok) costHTML = `<span class="sr-fp-state">${esc(tl('sr.mig.cost.none'))}</span>`;
   setHTML(bar, `<b class="sr-fp-title">${esc(tl('sr.mig.title', { name: P.entry.name }))}</b>
@@ -428,7 +439,12 @@ function srMigRenderBar() {
 <span class="sr-fp-state" data-sr-mp-step>${esc(tl('sr.mig.at', { k: P.anim ? P.anim.i : P.k, n }))} · ${esc(what)}</span>
 ${costHTML}`);
 }
-function srMigSigned(v) { return `${v >= 0 ? '+' : '−'}${srcUsd(Math.abs(v))}`; }
+/* Dollars and cents, under $1 too (the cost view's own srcUsd gives four places there, for a meter's rate). */
+function srMigUsd(v) {
+  return v === null || v === undefined ? tl('cost.noprice')
+    : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
+}
+function srMigSigned(v) { return `${v >= 0 ? '+' : '−'}${srMigUsd(Math.abs(v))}`; }
 $('sr-mplayer').addEventListener('click', (e) => {
   const b = e.target.closest('[data-sr-mp]'), P = SR_MIG.P;
   if (!b || !P || b.tagName === 'SELECT') return;
@@ -448,10 +464,10 @@ $('sr-mplayer').addEventListener('change', (e) => { if (e.target.dataset.srMp ==
 function srMigCostHTML() {
   const P = SR_MIG.P, C = P && P.cost;
   if (!C || !C.ok) return '';
-  const rowsHTML = (list, key) => list.filter((r) => r.old || r.new || (r.change && r.change !== 'same')).slice(0, 15).map((r) => `<tr data-sr-mig-row="${esc(r[key])}"><th scope="row">${esc(r[key] || '—')}${SR_MIG_CHANGE[r.change] ? ` <small>${esc(SR_MIG_CHANGE[r.change])}</small>` : ''}${r.unpriced ? ` <small class="src-red" data-src-mig-unpriced>${esc(tl('sr.mig.unpriced.row'))}</small>` : ''}</th><td>${esc(srcUsd(r.old))}</td><td>${esc(srcUsd(r.new))}</td><td class="${r.diff > 0 ? 'src-up' : r.diff < 0 ? 'src-down' : ''}">${esc(srMigSigned(r.diff))}</td></tr>`).join('');
+  const rowsHTML = (list, key) => list.filter((r) => r.old || r.new || (r.change && r.change !== 'same')).slice(0, 15).map((r) => `<tr data-sr-mig-row="${esc(r[key])}"><th scope="row">${esc(r[key] || '—')}${SR_MIG_CHANGE[r.change] ? ` <small>${esc(SR_MIG_CHANGE[r.change])}</small>` : ''}${r.unpriced ? ` <small class="src-red" data-src-mig-unpriced>${esc(tl('sr.mig.unpriced.row'))}</small>` : ''}</th><td>${esc(srMigUsd(r.old))}</td><td>${esc(srMigUsd(r.new))}</td><td class="${r.diff > 0 ? 'src-up' : r.diff < 0 ? 'src-down' : ''}">${esc(srMigSigned(r.diff))}</td></tr>`).join('');
   const headHTML = `<thead><tr><th></th><th scope="col">${esc(tl('sr.mig.col.old'))}</th><th scope="col">${esc(tl('sr.mig.col.new'))}</th><th scope="col">${esc(tl('sr.mig.col.diff'))}</th></tr></thead>`;
   return `<section class="src-mig" data-src-mig><h3>${esc(tl('sr.mig.cost.title', { name: P.entry.name }))}</h3>
-<p>${esc(tl('sr.mig.cost', { old: srcUsd(C.old.usd), now: srcUsd(P.k ? C.steps[P.k - 1].usd : C.old.usd), new: srcUsd(C.new.usd) }))} <b>${esc(srMigSigned(C.diff.usd))}</b></p>
+<p>${esc(tl('sr.mig.cost', { old: srMigUsd(C.old.usd), now: srMigUsd(P.k ? C.steps[P.k - 1].usd : C.old.usd), new: srMigUsd(C.new.usd) }))} <b>${esc(srMigSigned(C.diff.usd))}</b></p>
 ${C.unpricedChanged && C.unpricedChanged.length ? `<p class="src-red" data-src-mig-unpriced-note>${esc(tl('sr.mig.unpriced.bar', { n: C.unpricedChanged.length }))}: ${esc(C.unpricedChanged.join(', '))}</p>` : ''}
 <table class="src-mig-t" data-src-mig-nodes>${headHTML}<tbody>${rowsHTML(C.byNode, 'node')}</tbody></table>
 <table class="src-mig-t" data-src-mig-clouds>${headHTML}<tbody>${rowsHTML(C.byProvider, 'provider')}</tbody></table></section>`;
@@ -463,5 +479,5 @@ function srMigTotalHTML() {
   const P = SR_MIG.P, C = P && P.cost;
   if (!P) return '';
   const now = C && C.ok ? (P.k ? C.steps[P.k - 1].usd : C.old.usd) : null;
-  return `<span class="src-mig-now" data-src-mig-now>${esc(tl('sr.mig.total.old'))}${now !== null ? ` · ${esc(tl('sr.mig.total.now', { k: P.k, n: P.entry.steps.length, usd: srcUsd(now) }))}` : ''}</span>`;
+  return `<span class="src-mig-now" data-src-mig-now>${esc(tl('sr.mig.total.old'))}${now !== null ? ` · ${esc(tl('sr.mig.total.now', { k: P.k, n: P.entry.steps.length, usd: srMigUsd(now) }))}` : ''}</span>`;
 }

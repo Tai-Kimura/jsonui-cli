@@ -25,6 +25,7 @@ edge's length from the line's positions), never from the plan's own lists alone.
 """
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import json
 import os
@@ -52,6 +53,21 @@ REMOVALS = {"version": 0, "nodes": ["mailer"], "edges": [{"from": "cdn", "to": "
 def check(failures, cond, text):
     if not cond:
         failures.append(f"sr-migration: {text}")
+
+
+class Sampler:
+    """__dbg.srMig() read every 40 ms while a step plays (what the player and the tags say at the same moments)."""
+
+    def __init__(self, page):
+        self.page, self.seen, self.on = page, [], True
+
+    async def run(self):
+        while self.on:
+            try:
+                self.seen.append(await self.page.evaluate(MIG))
+            except Exception:  # noqa: BLE001 - the page between two frames: the next read
+                pass
+            await asyncio.sleep(0.04)
 
 
 def _examples(jt: pathlib.Path) -> dict:
@@ -157,7 +173,7 @@ async def run_sr_migration(pw, out, failures):
               f"opened: the edge to come at length 0, the one to go whole: {m['lengths']}")
         check(failures, "cache-subnet" not in m["floors"] and "private-prod" in m["floors"], f"the new group's floor waits for its node: {m['floors']}")
         check(failures, m["specs"]["db-prod"].startswith("db.r6g.large"), f"the replaced node drawn as the old one: {m['specs']}")
-        usd = lambda v: page.evaluate("(v) => window.__dbg.srcUsd(v)", v)  # noqa: E731
+        usd = lambda v: page.evaluate("(v) => window.__dbg.srMigUsd(v)", v)  # noqa: E731
         unpriced = T("sr.mig.unpriced.bar", n=len(cli["unpricedChanged"]))
         check(failures, cli["unpricedChanged"] and unpriced in await page.inner_text("#sr-mplayer"),
               f"a changed node with no price is said on the player: {cli['unpricedChanged']} {unpriced!r}")
@@ -193,6 +209,8 @@ async def run_sr_migration(pw, out, failures):
         await page.click("#sr-board [data-sr-act='focus']")
         await page.wait_for_timeout(300)
         builds = (await page.evaluate(MIG))["builds"]
+        sampler = Sampler(page)
+        sampling = asyncio.create_task(sampler.run())
         await page.evaluate("() => { window.__dbg.srCamTrail(true); window.__dbg.srPixTrail(true); }")
         await page.click("#sr-mplayer [data-sr-mp='step']")
         await until(page, "() => { const m = window.__dbg.srMig(); return m.anim && m.anim.t > 0.1 && m.anim.t < 0.45 && m.sizes['db-prod'] < 0.9; }", "the old one shrinking", timeout=20000)
@@ -204,22 +222,26 @@ async def run_sr_migration(pw, out, failures):
         check(failures, m["specs"]["db-prod"].startswith("db.r6g.xlarge"), f"growing, it is the new one: {m['specs']}")
         check(failures, m["vers"]["db-prod"].get("old") == 0 and 0 < m["vers"]["db-prod"].get("new", 0) < 1, f"second half: the new version growing, the old gone: {m['vers']}")
         await until(page, "() => { const m = window.__dbg.srMig(); return m.k === 2 && !m.anim; }", "step 2 done", timeout=20000)
-        # the month moved: the amount counts to the new one, the difference pops, a tag floats over the node
-        seen = []
-        for _ in range(80):
-            x = await page.evaluate(MIG)
-            seen.append((x["now"], x["nowClass"], x["tags"]))
-            if x["now"] == await usd(cli["steps"][1]["usd"]) and len(seen) > 2:
-                break
-            await page.wait_for_timeout(40)
+        sampler.on = False
+        await sampling
+        seen = [x for x in sampler.seen if x.get("open")]
+        # the month moved: over the step the amount counts to the new one in the step's colour; over each node whose
+        # month moved in the step, a tag with that node's own difference, standing while the player shows that step
         frm, to = cli["steps"][0]["usd"], cli["steps"][1]["usd"]
-        between = [s for s, _c, _t in seen if s and min(frm, to) + 0.01 < float(s.replace("$", "").replace(",", "")) < max(frm, to) - 0.01]
-        check(failures, frm != to and between and seen[-1][0] == await usd(to), f"the amount counts from {frm} to {to}: {[s for s, _c, _t in seen]}")
+        nows = [x["now"] for x in seen if x["now"]]
+        between = [s for s in nows if min(frm, to) + 0.01 < float(s.replace("$", "").replace(",", "")) < max(frm, to) - 0.01]
+        final = (await page.evaluate(MIG))
+        check(failures, frm != to and between and final["now"] == await usd(to), f"the amount counts from {frm} to {to}: {nows[:3]} … {final['now']}")
         want_cls = "sr-up" if to > frm else "sr-down"
-        check(failures, want_cls in seen[-1][1], f"the amount in the step's colour ({want_cls}): {seen[-1][1]!r}")
-        tags = [tg for _s, _c, ts in seen for tg in ts]
-        signed = ("+" if to >= frm else "−") + await usd(abs(to - frm))
-        check(failures, any(tg["node"] == "db-prod" and tg["text"] == signed and tg["up"] == (to > frm) for tg in tags), f"a tag {signed} over db-prod: {tags[:3]}")
+        check(failures, want_cls in final["nowClass"], f"the amount in the step's colour ({want_cls}): {final['nowClass']!r}")
+        tags = {(tg["node"], tg["text"], tg["up"]) for x in seen for tg in x["tags"]}
+        want_tags = set()
+        for mv in cli["steps"][1]["moved"]:
+            if mv["node"] in final["drawnNodes"] or mv["node"] in final["sizes"]:
+                want_tags.add((mv["node"], ("+" if mv["diff"] >= 0 else "−") + await usd(abs(mv["diff"])), mv["diff"] > 0))
+        check(failures, want_tags and want_tags <= tags, f"a tag over each node that moved, its own difference: {sorted(want_tags)} vs {sorted(tags)}")
+        off = [(x["barStep"], [tg["step"] for tg in x["tags"]]) for x in seen if any(tg["step"] != x["barStep"] for tg in x["tags"])]
+        check(failures, not off, f"the tags stand for the step the player shows: {off[:3]}")
         trail = await page.evaluate("() => window.__dbg.srCamTrail(false)")
         pix = await page.evaluate("() => window.__dbg.srPixTrail(false)")
         jumps = [i for i in range(1, len(pix)) if max(abs(a - b) for a, b in zip(pix[i], pix[i - 1])) > 15]
@@ -275,6 +297,12 @@ async def run_sr_migration(pw, out, failures):
         want = next(r for r in cli["byNode"] if r["node"] == "db-prod")
         want_row = [await usd(want["old"]), await usd(want["new"]), ("+" if want["diff"] >= 0 else "−") + await usd(abs(want["diff"]))]
         check(failures, row == want_row, f"the cost view's db-prod row is the engine's: {row} vs {want_row}")
+        cells = await page.evaluate("() => [...document.querySelectorAll('[data-src-mig] td')].map((c) => c.textContent)")
+        import re
+        odd = [c for c in cells if not re.fullmatch(r"[+−]?\$[\d,]+\.\d{2}", c)]
+        check(failures, cells and not odd, f"the cost view's amounts in dollars and cents: {odd[:5]}")
+        small = await usd(0.2349)
+        check(failures, small == "$0.23", f"under a dollar too, two places (the cost view's other screens): {small!r}")
         marked = await page.evaluate("() => [...document.querySelectorAll('[data-src-mig-nodes] [data-src-mig-unpriced]')].map((s) => s.closest('[data-sr-mig-row]').dataset.srMigRow).sort()")
         want_marked = sorted(r["node"] for r in cli["byNode"] if r["unpriced"] and (r["old"] or r["new"] or r["change"] != "same"))[:15]
         check(failures, marked == want_marked and set(cli["unpricedChanged"]) <= set(marked), f"the rows with no price are marked: {marked} vs {want_marked}")
@@ -291,9 +319,15 @@ async def run_sr_migration(pw, out, failures):
               f"back to the start: the old model again: {m['sizes']} {m['lengths']} {m['specs']}")
         # played through from the start: the steps back to back (no frame without one), nothing built, the end the new model
         builds = m["builds"]
-        await page.evaluate("() => window.__dbg.srMigSpeed(5)")
+        await page.evaluate("() => window.__dbg.srMigSpeed(1)")
+        sampler = Sampler(page)
+        sampling = asyncio.create_task(sampler.run())
         await page.click("#sr-mplayer [data-sr-mp='toggle']")
         await until(page, "() => { const m = window.__dbg.srMig(); return m.state === 'done' && !m.anim; }", "played through from the start", timeout=30000)
+        sampler.on = False
+        await sampling
+        off = [(x["barStep"], [tg["step"] for tg in x["tags"]]) for x in sampler.seen if x.get("open") and any(tg["step"] != x["barStep"] for tg in x["tags"])]
+        check(failures, not off and any(x.get("tags") for x in sampler.seen), f"played through, the tags stand for the step the player shows: {off[:3]}")
         m = await page.evaluate(MIG)
         check(failures, m["idle"] == 0 and m["builds"] == builds and m["drawnNodes"] == m["newNodes"] and m["drawnEdges"] == m["newEdges"],
               f"played through from the start: idle frames {m['idle']}, builds {builds} → {m['builds']}, the end the new model {m['drawnNodes'] == m['newNodes'] and m['drawnEdges'] == m['newEdges']}")

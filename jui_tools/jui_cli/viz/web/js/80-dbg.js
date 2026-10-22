@@ -138,7 +138,9 @@ window.__dbg = {
     const nowEl = $('sr-mplayer').querySelector('[data-sr-mp-now]');
     return { open: true, plans, name: P.entry.name, k: P.k, specs, vers, builds: SR.builds || 0, idle: P.idle || 0, now: nowEl ? nowEl.textContent : null, nowClass: nowEl ? nowEl.className : '',
       fx: P.fx ? { from: P.fx.from, to: P.fx.to, delta: P.fx.delta } : null,
-      tags: [...document.querySelectorAll('#sr-toasts [data-sr-mig-tag]')].map((el) => ({ node: el.dataset.srMigTag, text: el.textContent, up: el.classList.contains('sr-up') })), n: P.entry.steps.length, state: P.state, anim: P.anim ? { i: P.anim.i, t: P.anim.t } : null,
+      tags: [...document.querySelectorAll('#sr-toasts [data-sr-mig-tag]')].map((el) => ({ node: el.dataset.srMigTag, step: Number(el.dataset.srMigStep), text: el.textContent, up: el.classList.contains('sr-up') })),
+      barStep: P.anim ? P.anim.i : P.k, barDiff: (($('sr-mplayer').querySelector('[data-sr-mp-diff]') || {}).textContent || ''),
+      moved: (($('sr-mplayer').querySelector('[data-sr-mp-moved]') || {}).textContent || ''), n: P.entry.steps.length, state: P.state, anim: P.anim ? { i: P.anim.i, t: P.anim.t } : null,
       log: P.log.slice(), sizes, lengths, models, shapes, lights: P.lights.size, floors: (V.migFloorShown || []).slice().sort(), drawnNodes, drawnEdges,
       newNodes: P.entry.model.nodes.filter((n) => srVisible(n, V.env) && (V.fold || !n.fold)).map((n) => n.id).sort(),
       newEdges: P.entry.model.edges.filter((e) => srVisible(e, V.env)).map(srMigKey).sort(),
@@ -147,7 +149,7 @@ window.__dbg = {
       bar: ($('sr-mplayer').querySelector('[data-sr-mp-cost]') || {}).textContent || '' };
   },
   srMigStart: (name) => srMigStart(name),
-  srcUsd: (v) => srcUsd(v),
+  srMigUsd: (v) => srMigUsd(v),   // the migration's money format (the e2e compares the engine's numbers as shown)
   // each frame's camera (position and target) while on: off gives what was kept (a rebuild must not move it a frame)
   // where 全体を見る puts the camera (position and target), without moving it
   srFitCamera: () => { const V = SR.view; if (!V) return null; const p = V.camera.position.clone(), q = V.controls.target.clone(); srFit(true);

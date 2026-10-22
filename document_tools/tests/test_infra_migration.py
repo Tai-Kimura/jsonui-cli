@@ -252,6 +252,14 @@ def test_the_difference_is_the_engines_months_of_the_old_and_the_new_each_on_its
     each = [E.month_totals(E.simulate(scenario, plan.model_at(k)[0], book))["usd"] for k in range(plan.last + 1)]
     assert [s["usd"] for s in out["steps"]] == pytest.approx(each[1:]) and each[0] != each[1]   # the first step moves it
     assert sum(r["diff"] for r in out["byProvider"]) == pytest.approx(out["diff"]["usd"])
+    # a step's difference is what moved in it, node by node; summed over the steps, a node's is its row's
+    for s in out["steps"]:
+        assert sum(m["diff"] for m in s["moved"]) == pytest.approx(s["diff"], abs=0.01)
+    by_steps: dict = {}
+    for s in out["steps"]:
+        for mv in s["moved"]:
+            by_steps[mv["node"]] = by_steps.get(mv["node"], 0.0) + mv["diff"]
+    assert {r["node"]: r["diff"] for r in out["byNode"] if abs(r["diff"]) >= 0.005} == pytest.approx(by_steps, abs=0.01)
 
 
 def test_a_plan_with_an_error_or_no_such_plan_is_not_priced(tmp_path, monkeypatch):
@@ -292,3 +300,18 @@ def test_a_changed_node_with_no_price_is_named(tmp_path, monkeypatch):
     unpriced = {r["node"] for r in out["byNode"] if r["unpriced"]}
     assert "cache-prod" in out["unpricedChanged"] and set(out["unpricedChanged"]) <= unpriced
     assert set(out["unpricedChanged"]) <= {s for k in ("noRule", "loadUndefined", "noPrice") for s in out["old"][k] + out["new"][k]}
+
+
+def test_a_steps_difference_is_all_that_moved_in_it(tmp_path, monkeypatch):
+    """Removing db-prod takes its edge's transfer (the load's edge api-prod>db-prod) with it: the step moves two rows,
+    and its difference is both (the video: a step's −$150.12 against the node's −$155.52 — a neighbour moved)."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    root = _priced_room(tmp_path)
+    (root / "docs/infra/migrations/move/changes.json").write_text(json.dumps({"version": 0}))
+    (root / "docs/infra/migrations/move/removals.json").write_text(json.dumps({"version": 0, "nodes": ["db-prod"]}))
+    _c, out = D.reply(root, "move")
+    step = out["steps"][0]
+    rows = {m["node"] for m in step["moved"]}
+    assert {"db-prod", "api-prod>db-prod"} <= rows
+    assert step["diff"] == pytest.approx(sum(m["diff"] for m in step["moved"]))
+    assert abs(step["diff"] - next(m["diff"] for m in step["moved"] if m["node"] == "db-prod")) > 0.5

@@ -114,13 +114,22 @@ def _reply(root: Path, plan_name: str, scenario: str | None, account: bool, env:
     models = [old_model] + [plan.model_at(k)[0] for k in range(1, plan.last + 1)]
     old, new = _month(root, chosen, models[0], book), _month(root, chosen, models[-1], book)
     change = {s["node"]: {"add": "added", "replace": "replaced", "remove": "removed"}[s["kind"]] for s in plan.steps if s["node"]}
-    steps, before = [], old["usd"]
+    steps, before = [], old
     for s in plan.steps:
-        usd = (new["usd"] if s["index"] == plan.last else _month(root, chosen, models[s["index"]], book)["usd"]) \
+        month = (new if s["index"] == plan.last else _month(root, chosen, models[s["index"]], book)) \
             if s["index"] <= MAX_STEPS or s["index"] == plan.last else None
+        usd = month["usd"] if month else None
+        # what moved in this step, node by node (a step's difference is all of it: a free amount shared, an edge's
+        # transfer, as well as the node the step changes); summed over the steps, a node's is its row's difference
+        moved = None
+        if month and before:
+            names = dict.fromkeys([*before["byNode"], *month["byNode"]])
+            moved = sorted(({"node": n, "diff": month["byNode"].get(n, 0.0) - before["byNode"].get(n, 0.0)} for n in names),
+                           key=lambda r: (-abs(r["diff"]), r["node"]))
+            moved = [r for r in moved if abs(r["diff"]) >= 0.005]
         steps.append({"index": s["index"], "node": s["node"], "usd": usd,
-                      "diff": None if usd is None or before is None else usd - before})
-        before = usd
+                      "diff": None if usd is None or before is None else usd - before["usd"], "moved": moved})
+        before = month
     acct = None
     if account:
         a_old, a_new = _account(root, models[0], chosen, book), _account(root, models[-1], chosen, book)

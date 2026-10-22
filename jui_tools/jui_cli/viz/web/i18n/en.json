@@ -1949,6 +1949,7 @@
   "sr.mig.kind.remove": "remove {node}",
   "sr.mig.kind.replace": "replace {node}",
   "sr.mig.kind.edges": "rewire lines",
+  "sr.mig.moved": "(moved in this step: {list})",
   "sr.mig.old": "the old model",
   "sr.mig.title": "Migrate: {name}",
   "sr.mig.go": "Migrate",
