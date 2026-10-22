@@ -484,8 +484,10 @@ window.__dbg = {
       const m = own.includes(sh.parent) ? sh.parent : own.find((x) => x.geometry === sh.geometry); if (!m) { lost++; continue; }
       covered.add(m);
       gap = Math.max(gap, off(sh, m));
-      const u = sh.material.userData;   // a glow's rim as drawn (its width times the mesh's scale in the figure) against the one wanted
-      if (u.reach) reach = Math.max(reach, Math.abs(u.width * (sh.getWorldScale(ws).x / fig) / u.reach - 1));
+      // a glow's rim as drawn (the shader's uWidth times the mesh's scale in the figure) against the one wanted; not
+      // compiled yet: 1 (as far off as it can be said)
+      const u = sh.material.userData, drawn = sh.material.spiritShader && sh.material.spiritShader.uniforms.uWidth.value;
+      if (u.reach) reach = Math.max(reach, Number.isFinite(drawn) ? Math.abs(drawn * (sh.getWorldScale(ws).x / fig) / u.reach - 1) : 1);
       if (sh.isSkinnedMesh && m.isSkinnedMesh) sh.skeleton.bones.forEach((bone, j) => { bones++; gap = Math.max(gap, off(bone, m.skeleton.bones[j])); });
     }
     const pose = own.reduce((t, m) => t + m.matrixWorld.elements.reduce((u, v) => u + v, 0)

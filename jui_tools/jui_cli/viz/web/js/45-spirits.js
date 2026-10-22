@@ -366,7 +366,8 @@ function spiritGlow(figure, g) {
     m.userData.base = g.opacity ?? 0.25;
     m.userData.reach = ((g.scale || 1.06) - 1) * half;   // the rim, in the figure's units: the same on every mesh
     m.userData.width = m.userData.reach / own;   // the same rim in the mesh's own units
-    m.onBeforeCompile = (sh) => {
+    m.onBeforeCompile = (sh) => {   // the shader kept on the material (not its userData: a clone copies that), for dbg
+      m.spiritShader = sh;
       sh.uniforms.uWidth = { value: m.userData.width };
       sh.vertexShader = 'uniform float uWidth;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  transformed += normal * uWidth;');
     };
