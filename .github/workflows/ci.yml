@@ -326,8 +326,25 @@ jobs:
       # it disappears into a green summary. The arm fails outright when `CI`
       # is set and tsc is missing, so a broken install is reported as a
       # failure rather than as four quiet skips.
+      #
+      # The install normally takes a second, but on 2026-10-22 a degraded npm
+      # registry held it silent for 6 minutes, twice, until the job's 15 ran
+      # out and cancelled the whole suite. So each attempt has its own limit
+      # (80s), there is one retry, and the step's timeout-minutes is the
+      # backstop: a stalled registry fails here in under 3 minutes and names
+      # this step, instead of eating the job's budget.
       - name: Install TypeScript (test_tools emitted-TS type-check)
-        run: npm ci --prefix rjui_tools/spec/support
+        timeout-minutes: 3
+        run: |
+          for attempt in 1 2; do
+            if timeout 80 npm ci --prefix rjui_tools/spec/support; then
+              exit 0
+            fi
+            echo "::warning::npm ci attempt ${attempt} failed or stalled (80s limit)"
+            sleep 5
+          done
+          echo "::error::npm ci did not finish in 2 attempts: the npm registry is likely degraded (status.npmjs.org)"
+          exit 1
       # `--ignore` because these files ask swiftc and kotlinc directly and
       # refuse to skip when `CI` is set; this image has neither, so they would
       # fail here for the absence of a toolchain rather than for anything
