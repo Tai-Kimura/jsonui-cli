@@ -250,6 +250,49 @@ async def run_hist_images(pw, out, failures):
         check(failures, res["copyTaken"] and mv == {"w": 200, "bad": False, "note": mv.get("note", "")} and not (sent_dir / "moved.png").exists(),
               f"a picture moved after it was sent still shows, from the copy taken when it was sent: copy {res['copyTaken']} {mv}")
 
+        # ---- the requester's row (10-23 01:52, 「なんか１文字づつ縦に表示されるんだけど、これ何？」; ticket 2026-10-23-viz-hist-io-value-
+        # one-char-wide): SendUserFile with two pictures, a long caption and long paths. The pictures and the caption took the
+        # IN label's column and pressed IN's value to one character a line. IN's value: half the row or more, 20 characters a
+        # line or more, a long path wrapped inside it (no sideways scroll)
+        long_dir = sent_dir / ("a-very-long-folder-name-with-no-break-" * 3)
+        long_dir.mkdir(exist_ok=True)
+        for k, rgb in enumerate(((200, 60, 60), (60, 60, 200))):
+            (long_dir / f"still-{k}.png").write_bytes(png(160, 100, rgb))
+        CAP = "タスクボードの上の欄の直し：前／たたんだ形（標準）／広げた形"
+        with open(st.paths[A], "a") as f:
+            f.write(json.dumps({"type": "assistant", "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "message": {
+                "id": "m-long", "role": "assistant", "content": [{"type": "tool_use", "id": "tu-long", "name": "SendUserFile",
+                                                               "input": {"files": [str(long_dir / "still-0.png"), str(long_dir / "still-1.png")], "caption": CAP}}]}},
+                               ensure_ascii=False) + "\n")
+        IO = """(cap) => { const d = [...document.querySelectorAll('[data-rb-hist] .h-tool')].find((x) => (x.querySelector('.h-sent-caption') || {}).textContent === cap);
+          if (!d) return null;
+          const io = d.querySelector('.h-io'), pre = io.querySelector('.h-code'), probe = document.createElement('span');
+          probe.className = 'h-code'; probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;padding:0'; probe.textContent = '0'.repeat(20);
+          io.appendChild(probe); const ch = probe.getBoundingClientRect().width / 20; probe.remove();
+          const cs = getComputedStyle(pre), inner = pre.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+          const cols = getComputedStyle(io).gridTemplateColumns.split(' ').map(parseFloat), em = parseFloat(getComputedStyle(io).fontSize);
+          return { preW: Math.round(pre.getBoundingClientRect().width), rowW: Math.round(d.getBoundingClientRect().width), perLine: Math.floor(inner / ch),
+                   sideways: pre.scrollWidth > pre.clientWidth + 1, keyEm: Math.round(cols[0] / em * 10) / 10, valueW: Math.round(cols[1] || 0) }; }"""
+        await wait(page, f"() => !!({IO})({json.dumps(CAP)})", timeout=20000, label="the long SendUserFile row")
+        await page.evaluate("(c) => [...document.querySelectorAll('[data-rb-hist] .h-tool')].find((x) => (x.querySelector('.h-sent-caption') || {}).textContent === c).scrollIntoView({ block: 'start' })", CAP)
+        await page.wait_for_timeout(800)
+        io = res["longIn"] = await page.evaluate(IO, CAP)
+        await page.screenshot(path=str(out / "sent-long-in.png"))
+        # and the label column is its labels' width (6em or less), the value column the rest (7 tenths of the row or more),
+        # narrow and full-screen alike (the requester: 「履歴の量聞き広げてる時は問題ないね」 — the label column took 4 tenths there too)
+        def io_ok(g, wide=False):   # full-screen keeps code unwrapped (.rb-wide .h-code): a long path scrolls inside its column there
+            return g["preW"] * 2 >= g["rowW"] and g["perLine"] >= 20 and (wide or not g["sideways"]) and g["keyEm"] <= 6 and g["valueW"] * 10 >= g["rowW"] * 7
+        check(failures, io_ok(io), f"SendUserFile with two pictures and a long caption, narrow: IN's value 7 tenths of the row, 20 characters a line or more, wrapped; the labels 6em or less: {io}")
+        await page.click("#rb [data-rb-wide]")
+        await page.wait_for_timeout(900)
+        await page.evaluate("(c) => [...document.querySelectorAll('[data-rb-hist] .h-tool')].find((x) => (x.querySelector('.h-sent-caption') || {}).textContent === c).scrollIntoView({ block: 'start' })", CAP)
+        await page.wait_for_timeout(400)
+        iow = res["longInWide"] = await page.evaluate(IO, CAP)
+        await page.screenshot(path=str(out / "sent-long-in-wide.png"))
+        check(failures, io_ok(iow, wide=True), f"the same row with the card full-screen: the labels 6em or less, the value 7 tenths of the row: {iow}")
+        await page.click("#rb [data-rb-wide]")
+        await page.wait_for_timeout(600)
+
         await page.close()
         for scheme in ("light", "dark"):
             ph = await st.page(f"hist-images-phone-{scheme}", **dict(PHONE, color_scheme=scheme))

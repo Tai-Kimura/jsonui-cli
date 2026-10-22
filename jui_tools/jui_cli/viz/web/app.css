@@ -997,7 +997,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .h-md .h-list { padding-left: 1.3em; }
 .h-md .h-sub { margin-left: 1.2em; }
 .h-md code { padding: 0 3px; border-radius: 4px; background: var(--chip); font: 500 12px/1.5 var(--font-mono); }
-.h-code { margin: 0; padding: 6px 8px; overflow-x: auto; border-radius: 6px; background: var(--bg); font: 500 12px/1.5 var(--font-mono); white-space: pre-wrap; }
+.h-code { margin: 0; padding: 6px 8px; overflow-x: auto; border-radius: 6px; background: var(--bg); font: 500 12px/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }   /* a path or a URL with no break wraps inside the column */
 .h-code code { padding: 0; background: none; }
 .h-code-err { color: var(--warn); }
 .h-quote { padding-left: 10px; border-left: 3px solid var(--line); color: var(--ink-soft); }
@@ -1053,6 +1053,10 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .h-older { display: block; margin: 4px auto 10px; }
 .h-imgmark { flex: none; padding: 0 6px; border: 1px solid var(--info); border-radius: 3px; color: var(--info); font-size: 11px; line-height: 1.5; white-space: nowrap; }
 .h-io { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 8px; padding: 0 8px 8px; }
+/* what comes after the IN / OUT pairs — a sent file's pictures, caption and names, an OUT's pictures — spans both columns:
+   in the label's column alone it widened that column to its own width and pressed the values to one character a line
+   (requester 10-23: 「なんか１文字づつ縦に表示されるんだけど、これ何？」; ticket 2026-10-23-viz-hist-io-value-one-char-wide) */
+.h-io > .h-sent, .h-io > .h-imgs { grid-column: 1 / -1; }
 .h-io-k { color: var(--ink-soft); font: 700 11px/1.9 var(--font-mono); }
 .h-peer { border-left: 3px solid var(--info); }
 .h-peer > .h-plain, .h-harness > .h-plain { padding: 0 8px 8px; }
