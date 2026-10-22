@@ -106,6 +106,10 @@ function drawMermaid(el, text) {
 const ROLE_JA = { main: tl('core.role.main'), define: tl('core.role.define'), ground: tl('core.role.ground'), implement: tl('core.role.implement'), navigation: tl('core.role.navigation'), test: tl('core.role.test'), debug: tl('core.role.debug'), other: tl('core.role.other') };
 const SECTIONS = [tl('core.sec.metadata'), tl('core.sec.structure'), tl('core.sec.state'), tl('core.sec.data'), tl('core.sec.actions'), tl('core.sec.transitions'), tl('core.sec.branches')];
 const sumImpl = (arr) => arr.slice(1, 6).reduce((a, b) => a + b, 0);
+/* The spec lists' order (ticket 2026-10-23-viz-spec-list-not-recent-first): the spec that moved on last first
+   (advancedAt, the server's: its write, its Layout's write, its newest test result), then the order SPECS has (room,
+   then file). On [spec, index] pairs: the panel, the board and its side list sort with this one, inside their groups. */
+function specNewer(a, b) { return (b[0].advancedAt || 0) - (a[0].advancedAt || 0) || a[1] - b[1]; }
 const BUCKETS = [['live', tl('core.bucket.live')], ['partial', tl('core.bucket.partial')], ['todo', tl('core.bucket.todo')], ['done', tl('core.bucket.done')]];
 const bucketCounts = (specs) => Object.fromEntries(BUCKETS.map(([b]) => [b, specs.filter((s) => s.bucket === b).length]));
 const activeSec = (s) => (s.writingIdx >= 0 ? s.writingIdx : s.implIdx >= 0 ? s.implIdx : s.testIdx);

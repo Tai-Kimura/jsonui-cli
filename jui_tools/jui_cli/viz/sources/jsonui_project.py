@@ -38,6 +38,8 @@ from pathlib import Path
 from ...core.document_tools_import import distribution_root
 
 SECTIONS = ("metadata", "structure", "stateManagement", "dataFlow", "userActions", "transitions", "branchContracts")
+#: a spec's prose in YAML (shared/core/spec_texts.py TEXTS_SUFFIX): watched, so an edit to it reads the spec again
+TEXTS_SUFFIX = ".texts.yaml"
 METADATA_FIELDS = ("name", "displayName", "description", "platforms", "layoutFile")
 SKIP_DIRS = {"node_modules", "build", ".git", "DerivedData", "Pods", ".gradle", "dist", ".next"}
 WRITING_MS = 10_000
@@ -442,15 +444,22 @@ class JsonUIProject:
         entry.broken = False
         changed = []
         for key in SECTIONS:
-            h = section_hash(data, key)
+            h = section_hash(data, key)   # the JSON as written: a texts file edited alone changes no section
             if not initial and entry.hashes.get(key) not in (None, h):
                 changed.append(key)
                 entry.writing_until[key] = at + WRITING_MS
             entry.hashes[key] = h
-        entry.data = data
+        entry.data = with_texts(data, path)
         if by:
             entry.by, entry.by_until = by, at + WRITING_MS
         return changed
+
+    def reload_texts(self, path: Path, at: int) -> None:
+        """A texts file (``*.texts.yaml``) changed: every spec of the app whose folder holds it reads its prose again
+        (a reference may name a file other than its paired one, relative to the spec's folder)."""
+        for entry in list(self.specs.values()):
+            if entry.source is not None and path.is_relative_to(entry.source.spec_dir):
+                self.reload_spec(entry.path, at, by=None, source=entry.source)
 
     def load_tests(self) -> None:
         """Every test file under each app's test folder (jsonui-test's rule: test.testDir, recursive)."""
@@ -668,6 +677,7 @@ class JsonUIProject:
                 state = "writing" if writing else ("written" if items else "empty")
                 sections.append({"key": key, "state": state, "items": items})
             impl = self.impl(data, entry.source, entry.path)
+            layout = self.layout_path(data, entry.source, entry.path)
             layout_name = meta.get("layoutFile") if isinstance(meta.get("layoutFile"), str) else None
             test_cases = entry.source.test_cases if entry.source else {}
             cases = test_cases.get(stem, 0) + (test_cases.get(layout_name, 0) if layout_name and layout_name != stem else 0)
@@ -677,7 +687,7 @@ class JsonUIProject:
             if result.get("latest"):
                 tests["at"] = result["latest"]
                 # mtime moves on a git checkout too, so this can only say "may be stale" (10-18).
-                if self._changed_after(result["latest"], entry.path, self.layout_path(data, entry.source, entry.path)):
+                if self._changed_after(result["latest"], entry.path, layout):
                     tests["maybeStale"] = True
             by = entry.by if entry.by_until > at else None
             written_any = any(s["items"] for s in sections)
@@ -693,11 +703,35 @@ class JsonUIProject:
                 "file": os.path.relpath(entry.path, self.root),
                 "sections": sections, "impl": impl, "tests": tests, "bucket": bucket,
                 "updatedAt": at,
+                # when it last moved on (ticket 2026-10-23-viz-spec-list-not-recent-first): the newest of the spec's
+                # write, its Layout's write and its newest test result; the lists put the newest first
+                "advancedAt": max(_mtime_ms(entry.path), _mtime_ms(layout), result.get("lastAt") or 0),
             }
             if by:
                 item["by"] = by
             out.append(item)
         return out
+
+
+def _mtime_ms(path: Path | None) -> int:
+    try:
+        return int(path.stat().st_mtime * 1000) if path is not None else 0
+    except OSError:
+        return 0
+
+
+def with_texts(data: dict, path: Path) -> dict:
+    """``data`` with its ``{"md": ...}`` prose read from the texts file (shared/core/spec_texts.py), as every other
+    reader of a spec does (ticket 2026-10-23-viz-spec-sheet-shows-md-reference-raw). One it cannot read stays a
+    reference, and the sheet says so; without shared/core the spec is kept as written."""
+    from ...core import shared_core
+    texts = shared_core.load("spec_texts")
+    if texts is None:
+        return data
+    try:
+        return texts.resolve_spec_texts(data, path).data
+    except Exception:   # a texts file the resolver refuses outright (no PyYAML): the references stay, named on the sheet
+        return data
 
 
 def watch(project: JsonUIProject, on_change):
@@ -720,7 +754,7 @@ def watch(project: JsonUIProject, on_change):
                 return
             raw = getattr(event, "dest_path", "") or event.src_path
             path = raw if isinstance(raw, str) else raw.decode()
-            if not path.endswith(".json") or SKIP_DIRS.intersection(Path(path).parts):
+            if not path.endswith((".json", TEXTS_SUFFIX)) or SKIP_DIRS.intersection(Path(path).parts):
                 return
             on_change(path)
 

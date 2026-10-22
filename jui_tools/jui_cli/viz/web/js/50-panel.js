@@ -146,7 +146,7 @@ function renderPanel(model) {
   const scopedSpecs = model.specs.filter((x) => inScope(x.project)), counts = bucketCounts(scopedSpecs);
   [...specFilterEl.children].forEach((b) => setText(b.lastElementChild, String(b.dataset.f === 'all' ? scopedSpecs.length : counts[b.dataset.f])));
   const roomOrder = Object.fromEntries(ROOMS.map((r, k) => [r.id, k]));
-  const shown = model.specs.map((s, i) => [s, i]).filter(([s]) => inScope(s.project) && (specFilter === 'all' || s.bucket === specFilter)).sort((a, b) => roomOrder[a[0].project] - roomOrder[b[0].project] || a[1] - b[1]);
+  const shown = model.specs.map((s, i) => [s, i]).filter(([s]) => inScope(s.project) && (specFilter === 'all' || s.bucket === specFilter)).sort((a, b) => roomOrder[a[0].project] - roomOrder[b[0].project] || specNewer(a, b));
   const multi = new Set(shown.map(([x]) => x.project)).size > 1;
   keyed(specListEl, JSON.stringify([UI.project, specFilter, scopedSpecs.length, shown.map(([x, i]) => `${i}:${x.bucket}:${x.by || ''}:${x.name}`)]), () => (shown.length
     ? shown.map(([x, i], k) => `${multi && (k === 0 || shown[k - 1][0].project !== x.project) ? `<li class="sl-group">${esc(PROJECT[x.project].name)}<b>${shown.filter(([y]) => y.project === x.project).length}</b></li>` : ''}<li><button type="button" class="spec-row b-${esc(x.bucket)}" data-idx="${i}" data-fk="sp-${i}"${roleVar(x)}><span class="nm">${esc(x.name)}</span><span class="stx"></span>${x.by ? pill(x.by, DEF[x.by].role) : ''}${SEGS}</button></li>`).join('')
@@ -749,6 +749,7 @@ function openWhiteboard(i, opener, board) {
   if (i >= 0 && !inScope(SPECS[i].project)) setProject(SPECS[i].project, { camera: false });
   if (i >= 0 && !inApp(SPECS[i])) wb.app = 'all';
   wb.idx = i; wb.lastActive = null; wb.board = board || null;
+  wbSideList._shownFor = undefined;   // opened (again): its row is brought into view (wbSideShowOpen)
   if (wb.open) {
     if (opener) zoom.opener = opener;
     $('wb-follow').checked = true;
@@ -784,7 +785,7 @@ function renderWhiteboard(model, force) {
 function renderWbSide(model) {
   const q = wb.q, apps = wbApps(model);
   const match = (s) => inScope(s.project) && inApp(s) && (!q || `${s.name} ${s.screen} ${s.file} ${PROJECT[s.project].name}`.toLowerCase().includes(q));
-  const groups = BUCKETS.map(([b, label]) => [label, model.specs.map((s, i) => [s, i]).filter(([s]) => s.bucket === b && match(s))]).filter(([, items]) => items.length);
+  const groups = BUCKETS.map(([b, label]) => [label, model.specs.map((s, i) => [s, i]).filter(([s]) => s.bucket === b && match(s)).sort(specNewer)]).filter(([, items]) => items.length);
   const n = model.specs.filter((s) => inScope(s.project) && inApp(s)).length;
   keyed(wbSideList, JSON.stringify([UI.project, q, wb.idx, wb.app, apps, groups.map(([label, items]) => [label, items.map(([s, i]) => `${i}:${s.by || ''}:${s.name}`)])]), () => {
     const total = apps.reduce((k, [, c]) => k + c, 0);
@@ -794,6 +795,19 @@ function renderWbSide(model) {
     return allHTML + (bodyHTML || `<p class="ws-none">${esc(tl('panel.ws.none'))}</p>`);
   });
   wbSideList.querySelectorAll('.ws-item:not(.ws-all)').forEach((b) => { const x = model.specs[+b.dataset.idx]; setText(b.lastElementChild, UI.project === 'all' ? `${PROJECT[x.project].name} · ${x.status.text}` : x.status.text); });
+  wbSideShowOpen();
+}
+/* The open spec's row in view (ticket 2026-10-23-viz-whiteboard-list-not-scrolled-to-opened-spec): every way of opening
+   one — the panel, a board card, this list, a robot, the URL, the follow — ends in wb.idx and this list's redraw, so it
+   is done here, once per spec opened. Only the list scrolls (never the page); a list not shown waits until it is. */
+function wbSideShowOpen() {
+  if (wbSideList._shownFor === wb.idx) return;
+  const row = wbSideList.querySelector('.ws-item[aria-current="true"]');
+  if (!row || !row.offsetParent) return;
+  const box = wbSideList.getBoundingClientRect(), r = row.getBoundingClientRect();
+  if (r.top < box.top) wbSideList.scrollTop -= box.top - r.top + 8;
+  else if (r.bottom > box.bottom) wbSideList.scrollTop += r.bottom - box.bottom + 8;
+  wbSideList._shownFor = wb.idx;
 }
 
 /* Colours of the spec sheet (2.3.5, requester 10-19: "遷移のところの遷移先が白の太字見にくい 色少しつけてみやすくしてほしい。
@@ -910,10 +924,10 @@ function renderOverview(model) {
   setHead(title, tl('panel.ov.file', { where, n: inS.length }), 'st-busy', tl('panel.ov.counts', { live: c.live, partial: c.partial, todo: c.todo, done: c.done }), '');
   wbNav.hidden = true; $('wb-follow-label').hidden = true;
   wbHelpMode(true);
-  const sig = JSON.stringify(['ov', UI.project, wb.app, model.specs.map((s) => `${s.bucket}:${s.by || ''}`)]);
+  const sig = JSON.stringify(['ov', UI.project, wb.app, model.specs.map((s) => `${s.bucket}:${s.by || ''}:${s.advancedAt || 0}`)]);
   if (wbCode._sig !== sig) {
     wbCode.innerHTML = !inS.length ? `<p class="sc-ph ov-none">${esc(tl('panel.ov.none', { scope: scopeLabel() }))}</p>` : BUCKETS.map(([b, label]) => {
-      const items = model.specs.map((s, i) => [s, i]).filter(([s]) => s.bucket === b && inScope(s.project) && inApp(s));
+      const items = model.specs.map((s, i) => [s, i]).filter(([s]) => s.bucket === b && inScope(s.project) && inApp(s)).sort(specNewer);
       if (!items.length) return '';
       return `<section class="ov-group" aria-label="${esc(label)}"><h3>${esc(label)}<small>${items.length}</small></h3><div class="ov-grid">${items.map(([s, i]) => `<button type="button" class="ov-card b-${esc(s.bucket)}" data-idx="${i}"${roleVar(s)}><span class="ov-top"><strong>${esc(s.name)}</strong><span class="state"></span></span><code class="ov-file">${UI.project === 'all' ? `${esc(PROJECT[s.project].name)} · ` : ''}${esc(s.file)}</code><span class="ov-who"></span><span class="ov-secs">${SEGS}<span class="ov-labels" aria-hidden="true">${SECTIONS.map((x) => `<span>${esc(x)}</span>`).join('')}</span></span><span class="ov-sum"></span></button>`).join('')}</div></section>`;
     }).join('');

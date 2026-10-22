@@ -16,7 +16,7 @@ from pathlib import Path
 
 from . import clockout, data_docs, gitbox, i18n, infra_docs, prices, robots
 from .rooms import Rooms, tilde
-from .sources.jsonui_project import JsonUIProject, test_dirs
+from .sources.jsonui_project import TEXTS_SUFFIX, JsonUIProject, test_dirs
 from .attachments import Attachments
 from .calls import CallBook, peer_name
 from .denials import DenialBook
@@ -581,7 +581,9 @@ class World:
         if target.suffix == ".json" and any(target.is_relative_to(d) for d in self._data_docs_dirs.get(project_id, ())):
             self._data_docs_due[project_id] = at   # counted off the loop once quiet (_data_docs_tick); read when pressed
             return
-        if target.name.endswith(".spec.json"):
+        if target.name.endswith(TEXTS_SUFFIX):
+            project.reload_texts(target, at)
+        elif target.name.endswith(".spec.json"):
             project.reload_spec(target, at, by)
             self._forget_ties()  # a spec's name and layoutFile decide which spec a test file reaches
             self._merge_due.add(project.project_id)
@@ -1640,6 +1642,7 @@ class World:
             statuses = [status for _, status, _ in cases.values()]
             results[spec_id] = {"passed": statuses.count("passed"), "failed": statuses.count("failed"),
                                 "running": "running" in statuses}
+            results[spec_id]["lastAt"] = max(t for t, _, _ in cases.values())   # the spec's newest result: it moved on
             saved_at = [t for t, _, saved in cases.values() if saved]
             if saved_at:  # a case shown from a file, not from this server's own run: how old it may be
                 results[spec_id]["latest"] = max(saved_at)

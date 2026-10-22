@@ -30,6 +30,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from . import i18n
+
 MAX_ITEMS = 300
 MAX_TEXT = 300
 #: A branch's when / then larger than this (as JSON) goes as text, cut like any other (ticket 2026-10-20-jui-viz-spec-branch-json-formatted).
@@ -68,6 +70,9 @@ def dataflow_mermaid(spec: dict) -> str:
 def _t(value) -> str:
     if value is None:
         return ""
+    if isinstance(value, dict) and "md" in value:
+        # prose in a texts file that could not be read (reload_spec resolves the rest): say so, never the raw JSON
+        return _t(i18n.tl("sheet.md.unread", ref=_t(value.get("md"))))
     text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
     text = " ".join(text.split())
     return text if len(text) <= MAX_TEXT else text[: MAX_TEXT - 1] + "…"

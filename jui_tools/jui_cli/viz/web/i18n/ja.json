@@ -2221,5 +2221,6 @@
   "srv.room.said.side_path": "{config}: infra.{name} は部屋の中の相対パスで書いてください",
   "srv.room.said.symlink": "{folder} は symlink を通るため読みません（部屋の中の本物のフォルダに置いてください）",
   "srv.room.said.no_infra_skipped": "{folder} に読める infra のファイル（*.json）がありません（普通のファイルでない物は読みません）",
-  "spirit.badge": "スキル使用中: {name}"
+  "spirit.badge": "スキル使用中: {name}",
+  "sheet.md.unread": "文のファイルから読めない: {ref}"
 }

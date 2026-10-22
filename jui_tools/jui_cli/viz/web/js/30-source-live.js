@@ -400,6 +400,7 @@ function liveSpecRow(x) {
   const row = {
     id: x.id, screen: String(x.name || ''), name: String(x.name || ''), project: x.projectId, file: String(x.file || ''),
     app: String(x.app || ''), specDir: String(x.specDir || ''),   // the app inside the room that holds the spec
+    advancedAt: Number.isFinite(x.advancedAt) ? x.advancedAt : 0,   // when it last moved on: the lists' order (specNewer)
     doc: prev && prev.docAt === x.updatedAt ? prev.doc : (prev ? prev.doc : null), docAt: prev ? prev.docAt : null, updatedAt: x.updatedAt,
     totals, related: prev && prev.doc ? (prev.doc.related || []) : [], written, implN, implPhase, writingIdx, measure, unmeasured,
     implIdx: by && writingIdx < 0 && x.bucket === 'live' && !tests.running && implN[1] < totals[1] ? 1 : -1,

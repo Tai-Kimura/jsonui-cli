@@ -575,7 +575,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .ws-group b { font-family: var(--font-mono); }
 .ws-item { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 0 8px; width: 100%; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--wb-ink); font: inherit; text-align: left; cursor: pointer; }
 .ws-item:hover { background: var(--wb-card); }
-.ws-item[aria-current="true"] { background: var(--wb-card); box-shadow: inset 0 0 0 2px var(--wb-ink); }
+.ws-item[aria-current="true"] { background: var(--wb-card); box-shadow: inset 4px 0 0 var(--wb-ink), inset 0 0 0 2px var(--wb-ink); }
 .ws-item .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--wb-faint); }
 .ws-item .nm { overflow: hidden; font: 700 12.5px/1.5 var(--font-body); text-overflow: ellipsis; white-space: nowrap; }
 .ws-item small { grid-column: 2 / -1; overflow: hidden; color: var(--wb-soft); font: 500 11px/1.4 var(--font-body); text-overflow: ellipsis; white-space: nowrap; }
