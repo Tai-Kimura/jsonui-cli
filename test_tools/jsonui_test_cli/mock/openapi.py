@@ -201,7 +201,7 @@ class OpenApiDoc:
 
     def empty_for_schema(self, schema, _depth: int = 0, _seen: tuple = ()):
         """The body of an empty result for a schema: every array [], every number 0 (its minimum when that is above 0),
-        every boolean false, a nullable field null, an enum its first value, a string its type's sample; objects
+        every boolean false, a nullable field null (an array stays []), an enum its first value, a string its type's sample; objects
         followed the same way. No example is read: a body built from one keeps its counts, totals and flags beside the
         array emptied (`results: []` beside `revoked: 1`), and which number goes with which array cannot be told from
         the example (ticket 2026-10-23-jui-test-mock-empty-scenario-keeps-counts-from-example)."""
@@ -214,6 +214,8 @@ class OpenApiDoc:
         if not isinstance(schema, dict):
             return None
         stype = schema.get("type")
+        if stype == "array" or (isinstance(stype, list) and "array" in stype):
+            return []   # an array is [], nullable or not: that is what an empty result of one is
         if isinstance(stype, list):   # OpenAPI 3.1: ["integer", "null"]
             if "null" in stype:
                 return None

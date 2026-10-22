@@ -111,6 +111,31 @@ class TestAFloorOnANumber:
         assert body["ratio"] > 0.5
 
 
+class TestTheTwoSpellings:
+    """OpenAPI 3.0 and 3.1 write an exclusive bound and a nullable body each its own way; both are read."""
+
+    def test_an_exclusive_minimum_the_3_0_way(self):
+        doc = OpenApiDoc({})
+        assert doc.empty_for_schema({"type": "integer", "minimum": 0, "exclusiveMinimum": True}) == 1
+        assert doc.empty_for_schema({"type": "integer", "minimum": 3, "exclusiveMinimum": True}) == 4
+
+    def test_an_exclusive_minimum_the_3_1_way(self):
+        assert OpenApiDoc({}).empty_for_schema({"type": "integer", "exclusiveMinimum": 0}) == 1
+
+    def test_a_nullable_array_body_the_3_1_way_has_an_empty_and_it_is_an_empty_array(self):
+        doc = _doc("X", {"schema": {"type": ["array", "null"], "items": {"$ref": "#/components/schemas/Result"}}, "example": [RESULT]})
+        assert _scenarios(doc)["empty"]["body"] == []
+
+    def test_a_nullable_array_body_the_3_0_way_too(self):
+        doc = _doc("X", {"schema": {"type": "array", "nullable": True, "items": {"$ref": "#/components/schemas/Result"}}, "example": [RESULT]})
+        assert _scenarios(doc)["empty"]["body"] == []
+
+    def test_a_nullable_array_field_is_an_empty_array(self):
+        doc = OpenApiDoc({})
+        body = doc.empty_for_schema({"type": "object", "properties": {"rows": {"type": ["array", "null"], "items": {"type": "integer"}}, "n": {"type": "integer"}}})
+        assert body == {"rows": [], "n": 0}
+
+
 class TestNoEmptyWhereThereIsNoArrayOnTop:
     def test_arrays_only_deeper(self):
         assert "empty" not in _scenarios(_doc("Item"))
