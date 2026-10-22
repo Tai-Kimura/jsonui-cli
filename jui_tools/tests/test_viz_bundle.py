@@ -704,7 +704,7 @@ JS_GLOBALS = {
     "IntersectionObserver", "TextEncoder", "TextDecoder", "Blob", "FileReader", "Image", "CSS",
     "Notification",   # the browser notifications (2.3.6, 50-panel.js notifyOut)
     "BroadcastChannel",   # the tabs tell each other whether their sound runs (2.3.6, 50-panel.js notifyAudioSay)
-    "Float32Array", "Uint8Array", "Uint16Array", "Int32Array",
+    "Float32Array", "Uint8Array", "Uint16Array", "Uint32Array", "Int32Array",
 }
 JS_KEYWORDS = {"if", "for", "while", "switch", "catch", "function", "return", "typeof", "new", "await", "async",
                "super", "import", "with", "do", "else", "in", "of", "delete", "void", "yield", "case", "throw"}
