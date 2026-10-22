@@ -469,3 +469,17 @@ def test_the_css_words_are_set_as_css_strings():
     got = css_vars({"css.hist.loading": "Loading…", "css.q": 'say "hi" \\ back\nnext', "status.idle": "Idle",
                     "css.n": {"one": "{n} x", "other": "{n} xs"}})
     assert got == {"--tl-hist-loading": '"Loading…"', "--tl-q": '"say \\"hi\\" \\\\ back\\A next"'}
+
+
+def test_the_rooms_players_say_step_not_ho():
+    """A step of the server room's players (a flow's, a migration's) and of a flow's check is ステップ, never 歩
+    (requester 10-23: 「12歩じゃなくて12ステップね歩ごとにのところもステップごとにに変えといて」; the flow's player beside it
+    the same, so the two never mix). 歩 as a verb (歩く, 歩かない) is a robot's walk, not a step."""
+    import json
+    import pathlib
+    import re
+    ja = json.loads((pathlib.Path(__file__).resolve().parents[1] / "jui_cli/viz/web/i18n/ja.json").read_text(encoding="utf-8"))
+    room = {k: v for k, v in ja.items() if k.startswith(("sr.", "srv.room."))}
+    assert {"sr.flow.step", "sr.flow.back", "srv.room.flow.discontinuous"} <= set(room)
+    ho = {k: v for k, v in room.items() if re.search(r"歩(?![かきくけこい])", json.dumps(v, ensure_ascii=False))}   # a plural's forms too
+    assert not ho, ho

@@ -134,3 +134,13 @@ def test_validate_infra_says_the_model_codes_that_had_no_words(tmp_path):
         f"ERROR {WHERE}: /nodes/0 は、入れ物（親の group・辺の両端）のどの環境にも無いため外します  [environment.none]",
         f"WARNING {WHERE}: /nodes/1/spec/0 の spec は Multi-AZ と言いますが ha は言いません（費用と 3D は ha を読みます: "
         "ha: multi-az と書いてください）  [spec.ha]"]
+
+
+def test_a_flows_and_a_plans_step_is_said_step_not_ho():
+    """The room's Japanese words say ステップ for a step (a flow's request and response, a plan's), never 歩 (requester
+    10-23); 歩 as a verb (歩かない: a link not walked into) stays."""
+    import re
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[1] / "jsonui_doc_cli" / "infra" / "room.py").read_text(encoding="utf-8")
+    assert "2 ステップ" in src
+    assert not re.findall(r".{0,20}歩(?![かきくけこい]).{0,10}", src)
