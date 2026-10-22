@@ -58,6 +58,21 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": [
+              "-I",
+              "-S",
+              "${CLAUDE_PLUGIN_ROOT}/scripts/forward.py",
+              "--stop"
+            ],
+            "timeout": 3
+          }
+        ]
       }
     ],
     "PreToolUse": [

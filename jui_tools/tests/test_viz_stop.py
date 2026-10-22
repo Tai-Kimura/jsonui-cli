@@ -1,10 +1,12 @@
 """The page's 停止 (2.3.20, jui-viz 1.3.0): POST /api/stop raises a stop request for one session, and its synchronous
 --stop hook (forward.py --stop, PreToolUse / PostToolUse) hands it out as {"continue": false} at the next tool
-boundary, once. Ticket 2026-10-22-viz-no-way-to-stop-a-session-from-the-page.
+boundary, and at every later one of that turn; the same hook on the next UserPromptSubmit takes it away. Ticket
+2026-10-22-viz-no-way-to-stop-a-session-from-the-page.
 
 Measured 10-22 (Claude Code 2.1.307, isolated): from PreToolUse the call still runs, then the turn ends
-(terminal_reason hook_stopped) and no Stop hook comes; the next prompt is taken as usual. So the request is taken
-when it is handed out, and the turn is ended by the server at that call's PostToolUse.
+(terminal_reason hook_stopped) and no Stop hook comes; from PostToolUse no further model call is made, but the next
+call of the same response still ran (its PreToolUse and PostToolUse too); the next prompt is taken as usual. So the
+turn stays stopped until the next prompt, and the server ends it at each such call's PostToolUse.
 """
 from __future__ import annotations
 
@@ -141,7 +143,11 @@ def test_a_slow_viz_prints_nothing_within_about_a_second(tmp_path):
     assert rc == 0 and out == b"" and err == b"" and 0.6 < sec < 2.0
 
 
-def test_once_handed_out_the_request_is_gone(tmp_path):
+def _prompt(sid: str = "s1") -> dict:
+    return {"hook_event_name": "UserPromptSubmit", "session_id": sid, "cwd": "/work/app", "prompt": "next"}
+
+
+def test_handed_out_at_the_first_boundary_and_answered_the_same_until_the_next_prompt(tmp_path):
     async def body(rig):
         await rig.press({"sessionId": "s1"})
         first = (await rig.hook(_tool("PreToolUse", "b1")))[1]
@@ -150,13 +156,56 @@ def test_once_handed_out_the_request_is_gone(tmp_path):
         after = _session(rig.world)
         second = (await rig.hook(_tool("PostToolUse", "b1")))[1]
         third = (await rig.hook(_tool("PreToolUse", "b2")))[1]
-        return first, after, second, third, rig.world
-    first, after, second, third, world = _run(tmp_path, body)
-    assert json.loads(first) == STOP and second == b"" and third == b""
-    assert "stopAt" not in after and "haltOn" not in after and after["stoppedAt"] > 0
+        again = await rig.press({"sessionId": "s1"})                  # pressed again while it stops: nothing new
+        prompt = (await rig.hook(_prompt()))[1]                        # the next prompt's synchronous --stop
+        fourth = (await rig.hook(_tool("PreToolUse", "b3")))[1]
+        return first, after, second, third, again, prompt, fourth, _session(rig.world), rig.world
+    first, after, second, third, again, prompt, fourth, last, world = _run(tmp_path, body)
+    assert json.loads(first) == STOP and json.loads(second) == STOP and json.loads(third) == STOP
+    assert "stopAt" not in after and after["stopTurn"] is True and after["stoppedAt"] > 0
     assert after["status"] == "idle"   # no Stop hook comes after hook_stopped: the server ends the turn
+    assert prompt == b"" and fourth == b"" and "stopTurn" not in last and "haltOn" not in last
     kinds = [e["kind"] for e in world.state.recent_events(50)]
     assert kinds.count("StopAsked") == 1 and kinds.count("Stopped") == 1
+
+
+def test_the_rest_of_the_stopped_response_runs_and_the_turn_ends_after_it_again(tmp_path):
+    """Measured 10-22: a PostToolUse continue:false lets the response's next call run; the page goes busy at its
+    PreToolUse and must not stay so (no Stop hook comes): the server ends the turn after that call too."""
+    async def body(rig):
+        rig.world.apply_hook(_tool("PreToolUse", "b1"), now_ms())
+        await rig.press({"sessionId": "s1"})
+        rig.world.apply_hook(_tool("PostToolUse", "b1"), now_ms())
+        first = (await rig.hook(_tool("PostToolUse", "b1")))[1]
+        rig.world.apply_hook(_tool("PreToolUse", "b2"), now_ms())     # echo two, the same response
+        busy = _session(rig.world)["status"]
+        again = await rig.press({"sessionId": "s1"})                   # pressed again while it still works: no new ask
+        second = (await rig.hook(_tool("PreToolUse", "b2")))[1]
+        rig.world.apply_hook(_tool("PostToolUse", "b2"), now_ms())
+        return first, busy, again, second, _session(rig.world), rig.world
+    first, busy, again, second, session, world = _run(tmp_path, body)
+    assert json.loads(first) == STOP and busy == "busy" and again[0] == 200 and json.loads(second) == STOP
+    assert session["status"] == "idle" and "haltOn" not in session and "stopAt" not in session
+    kinds = [e["kind"] for e in world.state.recent_events(50)]
+    assert kinds.count("StopAsked") == 1 and kinds.count("Stopped") == 1
+
+
+def test_a_late_async_prompt_never_lets_the_old_stop_stop_the_new_turn(tmp_path):
+    """The prompt's async forward may come after the new turn's first tool asks: the synchronous --stop of the
+    UserPromptSubmit has taken the stop away already, and the late forward changes nothing."""
+    async def body(rig):
+        await rig.press({"sessionId": "s1"})
+        rig.world.apply_hook(_tool("PreToolUse", "b1"), now_ms())
+        stopped = (await rig.hook(_tool("PostToolUse", "b1")))[1]
+        prompt = (await rig.hook(_prompt()))[1]                        # its async forward is not here yet
+        new = (await rig.hook(_tool("PreToolUse", "b2")))[1]          # the new turn's first tool
+        rig.world.apply_hook(_tool("PreToolUse", "b2"), now_ms())
+        rig.world.apply_hook(_prompt(), now_ms())                      # the late async forward of the prompt
+        later = (await rig.hook(_tool("PostToolUse", "b2")))[1]
+        return stopped, prompt, new, later, _session(rig.world)
+    stopped, prompt, new, later, session = _run(tmp_path, body)
+    assert json.loads(stopped) == STOP and prompt == b"" and new == b"" and later == b""
+    assert session["status"] == "busy" and not ({"stopAt", "stopTurn", "haltOn"} & set(session))
 
 
 # ---------------------------------------------------------------- where the request ends without a stop

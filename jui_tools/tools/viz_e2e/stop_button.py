@@ -7,10 +7,11 @@ older plugin). Neither has the relay, so the prompt box is disabled: the stop bu
 
 Checked: the button shows beside 送信 while the session works and not once it is idle; a press asks the server
 (stopAt) and the line says it stops once the tool now running has finished; a second press takes it back and the hook
-then prints nothing; asked again, the session's next --stop hook prints {"continue": false} once, the server ends the
-turn at that call's PostToolUse (no Stop hook comes), and the line says when it stopped; the session whose hook was
-never heard is asked all the same and the line says it may not stop. Dark and 390 px; no console error; nothing
-outside the server.
+then prints nothing; asked again, the session's next --stop hook prints {"continue": false}, and so does every later
+one of that turn, the server ends the turn at that call's PostToolUse (no Stop hook comes), and the line says when it
+stopped; the next prompt's synchronous --stop takes the stop away, so the new turn's first tool is not stopped; a
+subagent's card has no stop button (its box says to write to the main); the session whose hook was never heard is
+asked all the same and the line says it may not stop. Dark and 390 px; no console error; nothing outside the server.
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, ISOLATE, LAUNCH_ARGS, PHONE, T, Watch, dump, new_page, ready
+from common import DESKTOP, ISOLATE, LAUNCH_ARGS, PHONE, T, T_head, Watch, dump, new_page, ready
 
 S_NEW = "e2e00000-0000-4000-8000-0000000000f1"
 S_OLD = "e2e00000-0000-4000-8000-0000000000f2"
@@ -116,6 +117,7 @@ async def run_stop_button(pw, out, failures, video: pathlib.Path | None = None):
         check(stop_hook(S_NEW, "PreToolUse", "n0", "ls") == b"", "nothing asked: the hook prints nothing")
         tool(S_NEW, "PostToolUse", "n0", "ls")
         tool(S_NEW, "PreToolUse", "n1")   # npm test: running while the page asks
+        hook(S_NEW, {"hook_event_name": "SubagentStart", "agent_id": "agent-stop-sub", "agent_type": "Explore"})
         tool(S_OLD, "PreToolUse", "o1", "cat app.log")
         res["heard"] = {"new": snapshot_session(S_NEW).get("stopHook"), "old": snapshot_session(S_OLD).get("stopHook")}
         check(res["heard"] == {"new": True, "old": None}, f"the hook heard from one session only: {res['heard']}")
@@ -139,6 +141,17 @@ async def run_stop_button(pw, out, failures, video: pathlib.Path | None = None):
         res["title"] = await page.evaluate("() => document.querySelector('[data-h-stop]').title")
         check(res["title"] == T("hist.stop.title"), f"the button's title says where it stops: {res['title']!r}")
         await page.screenshot(path=str(out / "working.png"))
+        # a subagent's card: the same box (it says to write to the main), no stop button
+        sub = await page.evaluate("() => window.__dbg.robots.find((R) => R.def.kind === 'sub')?.def.id || null")
+        check(sub is not None, "the subagent's robot")
+        if sub:
+            await page.evaluate("(i) => window.__dbg.openRobot(i)", sub)
+            await wait(page, "(w) => { const c = document.querySelector('[data-h-compose]'); return !!c && !c.hidden && c.textContent.includes(w); }",
+                       arg=T_head("hist.why.sub", "main"), label="the subagent's box")
+            r = res["sub"] = await page.evaluate(STOP)
+            check(not r["shown"] and r["line"] == "", f"a subagent's card: no stop button: {r}")
+            await page.keyboard.press("Escape")
+            await open_robot(page, S_NEW)
 
         # 2. a press asks; a second press takes it back, and the hook prints nothing
         await page.click("[data-h-stop]")
@@ -156,7 +169,7 @@ async def run_stop_button(pw, out, failures, video: pathlib.Path | None = None):
         if pause:
             await pause(1500)
 
-        # 3. asked again: the next boundary stops it, once; the server ends the turn
+        # 3. asked again: the next boundary stops it, and every later one of the turn; the server ends the turn
         await page.click("[data-h-stop]")
         await wait(page, f"() => ({STOP})().phase === 'waiting'", label="asked again")
         if pause:
@@ -165,7 +178,7 @@ async def run_stop_button(pw, out, failures, video: pathlib.Path | None = None):
         got = stop_hook(S_NEW, "PreToolUse", "n2", "npm run build")
         res["handedOut"] = got.decode()
         check(json.loads(got or b"{}") == {"continue": False, "stopReason": T("stop.reason")}, f"the hook stops the session: {got!r}")
-        check(stop_hook(S_NEW, "PreToolUse", "n2", "npm run build") == b"", "handed out once")
+        check(stop_hook(S_NEW, "PreToolUse", "n2", "npm run build") == got, "the same answer at the turn's next boundary")
         tool(S_NEW, "PreToolUse", "n2", "npm run build")
         tool(S_NEW, "PostToolUse", "n2", "npm run build")   # the call still runs (measured), then the turn has ended
         # stoppedAt (the hook) and the idle status (that call's PostToolUse) may reach the page in two pushes
@@ -178,6 +191,10 @@ async def run_stop_button(pw, out, failures, video: pathlib.Path | None = None):
         await page.screenshot(path=str(out / "stopped.png"))
         if pause:
             await pause(3000)
+        # the next prompt: its synchronous --stop takes the stop away before the new turn's first tool asks
+        check(hook(S_NEW, {"hook_event_name": "UserPromptSubmit", "prompt": "続けて"}, "--stop") == b"", "the prompt's hook prints nothing")
+        check(stop_hook(S_NEW, "PreToolUse", "n3", "npm test") == b"", "the new turn's first tool is not stopped")
+        check(not ({"stopAt", "stopTurn"} & set(snapshot_session(S_NEW))), "the stop is gone with the new prompt")
 
         # 4. a session whose hook was never heard: asked all the same, the line says it may not stop
         await open_robot(page, S_OLD)

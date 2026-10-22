@@ -122,9 +122,10 @@ def our_ask_handler(python: str | None = None, forward: Path | None = None) -> d
 
 #: The synchronous PreToolUse / PostToolUse hook of the page's 停止 button (jui-viz 1.3.0): forward.py --stop gives up
 #: within about 1 s (STOP_CONNECT_SEC + STOP_READ_SEC), so this is only the last guard. The plugin's hooks.json carries
-#: the same value (test_viz_plugin).
+#: the same value (test_viz_plugin). On UserPromptSubmit it takes the last turn's stop away before the new turn's first
+#: tool asks (the async forward of the prompt may come after it).
 STOP_TIMEOUT_SEC = 3
-STOP_EVENTS = ("PreToolUse", "PostToolUse")
+STOP_EVENTS = ("UserPromptSubmit", "PreToolUse", "PostToolUse")
 
 
 def our_stop_handler(python: str | None = None, forward: Path | None = None) -> dict:
@@ -218,7 +219,7 @@ def add_ours(settings: dict, handler: dict, decide_handler: dict | None = None, 
         if event == "PreToolUse" and ask_handler is not None:
             groups.append({"matcher": "AskUserQuestion", "hooks": [ask_handler]})
         if event in STOP_EVENTS and stop_handler is not None:
-            groups.append({"matcher": "*", "hooks": [stop_handler]})
+            groups.append({"matcher": "*", "hooks": [stop_handler]} if event in TOOL_EVENTS else {"hooks": [stop_handler]})
     return out
 
 

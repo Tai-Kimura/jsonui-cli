@@ -59,11 +59,13 @@ def test_install_into_no_file_then_uninstall_leaves_an_empty_object(home):
             (ask,) = groups[1]["hooks"]
             assert hi.is_ours(ask) and ask["command"].endswith(" --ask") and "async" not in ask
             assert ask["timeout"] == hi.ASK_TIMEOUT_SEC > 300
-        elif event != "PostToolUse":
+        elif event not in hi.STOP_EVENTS:
             assert len(groups) == 1
         if event in hi.STOP_EVENTS:
-            # 2.3.20: the page's 停止 — a synchronous item on every tool call, cut short (forward.py gives up within 1 s)
-            assert groups[-1]["matcher"] == "*" and len(groups) == (3 if event == "PreToolUse" else 2)
+            # 2.3.20: the page's 停止 — a synchronous item on every tool call and on the prompt, cut short (forward.py
+            # gives up within 1 s)
+            assert groups[-1].get("matcher") == ("*" if event in hi.TOOL_EVENTS else None)
+            assert len(groups) == (3 if event == "PreToolUse" else 2)
             (stop,) = groups[-1]["hooks"]
             assert hi.is_ours(stop) and stop["command"].endswith(" --stop") and "async" not in stop
             assert stop["timeout"] == hi.STOP_TIMEOUT_SEC <= 3
@@ -73,16 +75,17 @@ def test_install_into_no_file_then_uninstall_leaves_an_empty_object(home):
     assert _read() == {}
 
 
-@pytest.mark.parametrize("left", ["PreToolUse", "PostToolUse"])
-def test_status_says_no_stop_when_the_stop_hook_is_on_one_of_its_two_events_only(home, left):
+@pytest.mark.parametrize("gone", hi.STOP_EVENTS)
+def test_status_says_no_stop_when_the_stop_hook_is_missing_from_one_of_its_events(home, gone):
     """The --stop hook removed by hand from one event (or an install from a half-done version): status's stop is false."""
     hi.install(python=PY)
     data = _read()
-    (gone,) = [e for e in hi.STOP_EVENTS if e != left]
     data["hooks"][gone] = [g for g in data["hooks"][gone]
                            if not any(str(h.get("command", "")).endswith(" --stop") for h in g["hooks"])]
     _write(data)
-    assert any(str(h.get("command", "")).endswith(" --stop") for g in _read()["hooks"][left] for h in g["hooks"])
+    for left in hi.STOP_EVENTS:
+        assert any(str(h.get("command", "")).endswith(" --stop") for g in _read()["hooks"][left] for h in g["hooks"]) \
+            == (left != gone)
     assert hi.status()["stop"] is False
 
 

@@ -143,7 +143,7 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   （片方だけ直すと赤）。中身を変えたら `plugin.json` の `version` を上げる（上げないと利用者の版が動かない）。
   プラグインが有効な環境では `jui viz hooks install` は二重の転送を避けて止まる。
 - **フック**（`hooks_installer.py`、プラグインを使わない環境の代わり）: `~/.claude/settings.json` に 18 イベントの async の転送と、
-  PermissionRequest の同期の `forward.py --decide`（P6）と、PreToolUse・PostToolUse の同期の `forward.py --stop`（2.3.20）を足す。自分のものの見分けは「python で、
+  PermissionRequest の同期の `forward.py --decide`（P6）と、UserPromptSubmit・PreToolUse・PostToolUse の同期の `forward.py --stop`（2.3.20）を足す。自分のものの見分けは「python で、
   引数が `jui_cli/viz/forward.py` で終わる」だけ。読めない JSON には書かない、バックアップ 10 個、
   stat を読む前と後に取る、書く直前に変わっていたら読み直す。`env` に `JSONUI_TEST_PROGRESS_DIR`。
 - **許可**（`permissions.py`、`channel.py`）: 段階 A（PermissionRequest でカード）、B（MCP チャンネル
@@ -177,9 +177,11 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   同期の `forward.py --stop`（PreToolUse・PostToolUse、timeout 3、接続 0.3 s・返事 0.7 s で諦めて何も出さない）が
   `{"continue": false, "stopReason": …}` を返す。中継もチャンネルも要らない。受け口の確かめは `/api/prompt` と同じ。
   測った形（10-22、Claude Code 2.1.307、隔離）: PreToolUse で返すと、その呼び出しは走ってから止まる（`terminal_reason: hook_stopped`）。
-  止まった回に Stop のフックは来ない。次の入力は普通に受ける。なので、要求は渡した時に消し（主のロボットの呼び出しだけ。
-  サブエージェントには同じ返事をして要求は残す）、ターンはその呼び出しの PostToolUse でサーバーが終える。Stop・新しいプロンプト・
-  セッションの終わりでも要求は消える。`--stop` が一度も聞こえていないセッション（古いプラグイン）も頼めるが、ページは止まらないかもしれないと言う。
+  PostToolUse で返すと、モデルへの次の呼び出しは無いが、同じ応答に入っていた次の呼び出しは走った。どちらも Stop のフックは来ず、
+  次の入力は普通に受ける。なので、主のロボットの最初の区切りで要求を渡し（`stopAt` → `stopTurn`、Stopped を 1 回）、
+  そのターンの後の区切りにも同じ返事をする。ターンは、その呼び出しの PostToolUse ごとにサーバーが終える。サブエージェントには
+  同じ返事をして要求は残す。止めたターンは、次のプロンプトの同期の `--stop`（UserPromptSubmit）で消す。プロンプトの async の
+  転送は新しいターンの最初の道具より後に着くことがあるので、そちらには頼らない。Stop・セッションの終わりでも、まだ渡していない要求は消える。`--stop` が一度も聞こえていないセッション（古いプラグイン）も頼めるが、ページは止まらないかもしれないと言う。
 - **退勤**（`server.py` の `POST /api/session/end`、`clockout.py`、`ingest.clock_out`、`50-panel.js` の CLOCK）:
   ロボットのカードの「退勤…」から、確認（ロボット・セッションの title・フォルダ・クライアント、既定のフォーカスはやめる）の後に、
   そのセッションの claude へ SIGTERM を 1 回。使えるのはターミナルで起動したセッション（登録簿の `entrypoint` が `cli`）だけで、
