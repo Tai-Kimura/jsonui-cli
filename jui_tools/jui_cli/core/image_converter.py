@@ -156,14 +156,15 @@ class ImageConverter:
                 miter = p.get("stroke-miterlimit")
                 if miter:
                     stroke_attr += f'\n        android:strokeMiterLimit="{miter}"'
-                stroke_alpha = p.get("stroke-opacity")
-                if stroke_alpha and stroke_alpha != "1":
-                    stroke_attr += f'\n        android:strokeAlpha="{stroke_alpha}"'
+                # opacity (the element's and every enclosing group's, multiplied) is on the line as on the fill
+                stroke_alpha = _opacity(p.get("stroke-opacity")) * p["_opacity"]
+                if stroke_alpha != 1:
+                    stroke_attr += f'\n        android:strokeAlpha="{_alpha(stroke_alpha)}"'
 
-            fill_alpha = p.get("fill-opacity", p.get("opacity", ""))
             alpha_attr = ""
-            if fill_alpha and fill_alpha != "1":
-                alpha_attr = f'\n        android:fillAlpha="{fill_alpha}"'
+            fill_alpha = _opacity(p.get("fill-opacity")) * p["_opacity"]
+            if fill != "none" and fill_alpha != 1:
+                alpha_attr = f'\n        android:fillAlpha="{_alpha(fill_alpha)}"'
 
             lines.append("    <path")
             lines.append(f'        android:pathData="{p["d"]}"'
@@ -299,9 +300,16 @@ def _collect_paths(
     out: list[dict[str, str]],
     parent_attrs: dict[str, str] | None = None,
 ) -> None:
-    """Recursively collect <path> elements with their attributes."""
+    """Recursively collect <path> elements with their attributes.
+
+    The paint properties are inherited (a child's own value replaces its parent's), read from the presentation
+    attribute or from ``style`` (which wins, as in SVG). ``opacity`` is not inherited but applies to everything inside:
+    an element's ``_opacity`` is its own times every enclosing group's (ticket jui-svg-opacity-not-applied-to-stroke).
+    """
     tag = _local_tag(element.tag)
     attrs = dict(parent_attrs or {})
+    attrs.setdefault("_opacity", 1.0)
+    style = _style_props(element)
 
     # Inherit fill/stroke from parent
     for attr in (
@@ -311,13 +319,15 @@ def _collect_paths(
         "stroke-linecap",
         "stroke-linejoin",
         "stroke-miterlimit",
-        "opacity",
         "fill-opacity",
         "stroke-opacity",
     ):
-        val = element.get(attr)
+        val = style.get(attr) or element.get(attr)
         if val:
             attrs[attr] = val
+    own = style.get("opacity") or element.get("opacity")
+    if own:
+        attrs["_opacity"] = attrs["_opacity"] * _opacity(own)
 
     if tag == "path":
         d = element.get("d", "")
@@ -396,6 +406,34 @@ def _collect_paths(
     # Recurse into children (g, svg, defs, etc.)
     for child in element:
         _collect_paths(child, ns, out, attrs)
+
+
+def _style_props(element: ET.Element) -> dict[str, str]:
+    """An element's ``style="a: b; c: d"`` as {a: b, c: d} (names lower-cased; ``!important`` dropped)."""
+    out: dict[str, str] = {}
+    for decl in (element.get("style") or "").split(";"):
+        name, sep, value = decl.partition(":")
+        value = value.replace("!important", "").strip()
+        if sep and name.strip() and value:
+            out[name.strip().lower()] = value
+    return out
+
+
+def _opacity(value: str | None) -> float:
+    """An SVG opacity (``0.5`` or ``50%``), clamped to 0..1; missing or unreadable: 1."""
+    if not value:
+        return 1.0
+    v = value.strip()
+    try:
+        x = float(v[:-1]) / 100 if v.endswith("%") else float(v)
+    except ValueError:
+        return 1.0
+    return min(1.0, max(0.0, x)) if x == x else 1.0
+
+
+def _alpha(x: float) -> str:
+    """An alpha for the vector drawable: at most 4 decimals, no trailing zeros (0.55, 0.385, 0)."""
+    return format(round(x, 4), "g")
 
 
 def _local_tag(tag: str) -> str:
