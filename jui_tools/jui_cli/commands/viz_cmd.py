@@ -706,6 +706,8 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     world = World(ctx.state, config.toolInputMaxChars, session_start=transcripts.session_start(claude_home() / "projects"))
     world.transcript_path = transcripts.transcript_path(claude_home() / "projects")
     world.history_reader = history.reader(claude_home() / "projects")
+    from ..viz.sent_copies import SentCopies
+    world.sent_copies = SentCopies()   # the pictures SendUserFile sends, copied when the call is made (viz/sent_copies.py)
     from ..viz import prices as prices_mod
     world.prices = prices_mod.PriceBook()
     from ..viz.attachments import Attachments

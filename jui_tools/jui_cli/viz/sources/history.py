@@ -401,10 +401,15 @@ def _sent_media(path: str) -> str | None:
     return SENT_IMAGE_EXT.get(ext)
 
 
-def _sent_path(fd: int, off, n) -> tuple[int, str]:
-    """The n-th path a SendUserFile call in the assistant record at byte off names, resolved as it is read: none with a
-    ".." part, a relative one from the record's cwd. (200, path), else (status, reason). The one place this rule is
-    (sent_file_at reads the picture, sent_reveal_at shows the file in Finder)."""
+def sent_files(inp) -> list[str]:
+    """The files one SendUserFile call's input names, as items_of counts them (at most SENT_FILES_MAX)."""
+    files = inp.get("files") if isinstance(inp, dict) else None
+    return [f for f in files if isinstance(f, str)][:SENT_FILES_MAX] if isinstance(files, list) else []
+
+
+def _sent_call(fd: int, off, n) -> tuple[int, object]:
+    """The n-th file the SendUserFile calls in the assistant record at byte off name: (200, (path as written, the
+    record, the call's tool_use id, the file's place in that call)), else (status, reason)."""
     if not isinstance(n, int) or isinstance(n, bool) or n < 0:
         return 404, "no such file"
     status, rec = _line_at(fd, off, SENT_LINE_MAX)
@@ -414,19 +419,42 @@ def _sent_path(fd: int, off, n) -> tuple[int, str]:
     files: list = []
     for b in msg.get("content") if isinstance(msg, dict) and isinstance(msg.get("content"), list) else []:
         if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "SendUserFile":
-            inp = b.get("input") if isinstance(b.get("input"), dict) else {}
-            files += [f for f in inp.get("files") or [] if isinstance(f, str)][:SENT_FILES_MAX]   # every call's, in order (items_of counts so)
+            use = b.get("id") if isinstance(b.get("id"), str) else ""
+            files += [(f, use, i) for i, f in enumerate(sent_files(b.get("input")))]   # every call's, in order (items_of counts so)
     if n >= len(files):
         return 404, "no such file"
-    return _resolve(files[n], rec)
+    path, use, i = files[n]
+    return 200, (path, rec, use, i)
+
+
+def _sent_path(fd: int, off, n) -> tuple[int, str]:
+    """The n-th path a SendUserFile call in the assistant record at byte off names, resolved as it is read: none with a
+    ".." part, a relative one from the record's cwd. (200, path), else (status, reason). The one place this rule is
+    (sent_file_at reads the picture, sent_reveal_at shows the file in Finder)."""
+    status, got = _sent_call(fd, off, n)
+    if status != 200:
+        return status, got
+    return _resolve(got[0], got[1])
+
+
+def sent_ref_at(fd: int, off, n) -> tuple[int, object]:
+    """The call and place of the n-th file a SendUserFile call in the assistant record at byte off sent: (200, (tool_use
+    id, place in that call)) — what its copy is kept under (viz/sent_copies.py) —, else (status, reason)."""
+    status, got = _sent_call(fd, off, n)
+    return (status, got) if status != 200 else (200, (got[2], got[3]))
 
 
 def _resolve(path: str, rec: dict) -> tuple[int, str]:
     """A path a record names, as it is read or shown: none with a ".." part, a relative one from the record's cwd."""
+    return resolve_in(path, rec.get("cwd"))
+
+
+def resolve_in(path: str, cwd) -> tuple[int, str]:
+    """A path as it is read or shown: none with a ".." part, a relative one from cwd (an absolute one). The hook's
+    SendUserFile (viz/sent_copies.py) resolves with the hook's cwd, the history with the record's."""
     if ".." in Path(path).parts:
         return 403, "not this path"
     if not os.path.isabs(path):
-        cwd = rec.get("cwd")
         if not isinstance(cwd, str) or not os.path.isabs(cwd):
             return 404, "no such file"
         path = os.path.join(cwd, path)
@@ -489,6 +517,13 @@ def sent_file_at(fd: int, off, n) -> tuple[int, object]:
     status, path = _sent_path(fd, off, n)
     if status != 200:
         return status, path
+    return read_sent_picture(path)
+
+
+def read_sent_picture(path: str) -> tuple[int, object]:
+    """One resolved path read as a sent picture: the last part no symlink (O_NOFOLLOW), a regular file of at most
+    SENT_FILE_MAX whose name and first bytes are both a picture's (no SVG). (200, (media, bytes)); (404, "gone") when it
+    is not there; else (status, reason). The history's read and the copy taken when the call is made both use it."""
     media = _sent_media(path)
     if media is None:
         return 415, "not a picture"
@@ -744,6 +779,19 @@ def reader(projects: Path) -> Callable[..., dict | None]:
                 os.close(fd)
         return 404, "no transcript"
 
+    def sent_ref(session_id: str, cwd: str | None, given: str | None, agent_id: str | None, agent_given: str | None,
+                 off, n) -> tuple[int, object]:
+        """The call and place of one file a SendUserFile call of the same transcript sent (sent_ref_at)."""
+        for path in paths(session_id, cwd, given, agent_id, agent_given):
+            fd = safe_open(projects, path)
+            if fd is None:
+                continue
+            try:
+                return sent_ref_at(fd, off, n)
+            finally:
+                os.close(fd)
+        return 404, "no transcript"
+
     def sent_reveal(session_id: str, cwd: str | None, given: str | None, agent_id: str | None, agent_given: str | None,
                     off, n) -> tuple[int, str]:
         """The path of one file a SendUserFile call of the same transcript sent, to show in Finder (sent_reveal_at)."""
@@ -772,6 +820,7 @@ def reader(projects: Path) -> Callable[..., dict | None]:
 
     read.image = image
     read.sent_file = sent_file
+    read.sent_ref = sent_ref
     read.sent_reveal = sent_reveal
     read.tool_reveal = tool_reveal
     return read

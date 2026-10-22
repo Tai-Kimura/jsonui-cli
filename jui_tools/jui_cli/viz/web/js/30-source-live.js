@@ -264,8 +264,8 @@ const SOURCE = {
     } catch (err) { return { ok: false, status: 0, error: tl('live.offline') }; }
   },
   /* One picture the robot's session sent with SendUserFile (POST /api/history-file: the robot, the call's record and
-     the file's place in it — never a path; under the prompt's checks). A Blob, or { gone: true } when the file is no
-     longer there. */
+     the file's place in it — never a path; under the prompt's checks). A Blob — the copy taken when it was sent, else its
+     file —, or { gone: true, why } when neither is there (why: the copy could not be taken; viz/sent_copies.py). */
   async historyFile(label, ref) {
     try {
       const res = await fetch('/api/history-file', {
@@ -274,7 +274,7 @@ const SOURCE = {
         body: JSON.stringify({ agentId: (DEF[label] && DEF[label].realId) || label, off: ref.off, n: ref.n }),
       });
       if (!res.ok) return { ok: false, status: res.status, error: (await res.text()).trim() };
-      if ((res.headers.get('Content-Type') || '').startsWith('application/json')) return { ok: false, gone: !!(await res.json()).gone, status: 200 };
+      if ((res.headers.get('Content-Type') || '').startsWith('application/json')) { const j = await res.json(); return { ok: false, gone: !!j.gone, why: typeof j.why === 'string' ? j.why : '', status: 200 }; }
       return { ok: true, blob: await res.blob() };
     } catch (err) { return { ok: false, status: 0, error: tl('live.offline') }; }
   },

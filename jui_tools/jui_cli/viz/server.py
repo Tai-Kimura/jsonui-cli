@@ -778,7 +778,9 @@ def make_app(ctx: ServerContext) -> web.Application:
         """One picture a session sent with SendUserFile, for the 応答の履歴 (ticket 2026-10-20-jui-viz-history-
         senduserfile-image-no-thumb): {"agentId", "off", "n"} names the robot, the call's record and the file in it —
         never a path; the server reads only the path that call holds (sources/history.sent_file_at). The checks of
-        /api/prompt. A file no longer there is {"gone": true} with 200 (a 404 is a console error on every look)."""
+        /api/prompt. A file no longer there is {"gone": true} with 200 (a 404 is a console error on every look); with
+        "why" when its copy could not be taken when it was sent (viz/sent_copies.py: too-large, not-picture, gone,
+        unreadable)."""
         refused = prompt_checks(request, ctx)
         if refused is not None:
             log(f"refused: /api/history-file ({refused.text.strip()})")
@@ -792,8 +794,9 @@ def make_app(ctx: ServerContext) -> web.Application:
         if ctx.world is None:
             return web.Response(status=503, text="no world\n")
         status, got = await asyncio.get_running_loop().run_in_executor(None, ctx.world.history_file, agent_id, off, n)
-        if status == 404 and got == "gone":
-            return web.json_response({"gone": True}, headers={"Cache-Control": "no-store"})
+        if status == 404 and isinstance(got, str) and (got == "gone" or got.startswith("gone:")):
+            why = got.split(":", 1)[1] if ":" in got else ""
+            return web.json_response({"gone": True, **({"why": why} if why else {})}, headers={"Cache-Control": "no-store"})
         if status != 200:
             return web.Response(status=status, text=f"{got}\n")
         media, data = got

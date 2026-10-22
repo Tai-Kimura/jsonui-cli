@@ -916,13 +916,15 @@ function histImgsDrop() {
   for (const v of HIST.imgs.values()) v.then((g) => { if (g.url) URL.revokeObjectURL(g.url); });
   HIST.imgs.clear();
 }
+/* A sent picture gone with no copy: why the copy was not taken when it was sent (viz/sent_copies.py). */
+const HIST_GONE_WHY = { 'too-large': tl('hist.img.err.gone.big'), 'not-picture': tl('hist.img.err.gone.format'), gone: tl('hist.img.err.gone.before'), unreadable: tl('hist.img.err.gone.read') };
 function histImgGet(ref) {
   const key = histImgKey(ref);
   if (!HIST.imgs.has(key)) {
     const id = HIST.id;
     const asked = ref.attach ? SOURCE.attachImage(ref.attach) : ref.sent ? SOURCE.historyFile(id, ref.sent) : SOURCE.historyImage(id, ref);
     HIST.imgs.set(key, asked.then((got) => (got.ok ? { url: URL.createObjectURL(got.blob) }
-      : { error: got.gone ? tl('hist.img.err.gone') : got.status === 413 ? tl('hist.img.err.big') : got.status === 415 ? tl('hist.img.err.format') : tl('hist.img.err.read', { error: got.status || got.error }) })));
+      : { error: got.gone ? (HIST_GONE_WHY[got.why] || tl('hist.img.err.gone')) : got.status === 413 ? tl('hist.img.err.big') : got.status === 415 ? tl('hist.img.err.format') : tl('hist.img.err.read', { error: got.status || got.error }) })));
   }
   return HIST.imgs.get(key);
 }

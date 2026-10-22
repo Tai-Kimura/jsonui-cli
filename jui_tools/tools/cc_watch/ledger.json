@@ -36,6 +36,7 @@
         "jui_tools/jui_cli/viz/forward.py",
         "jui_tools/jui_cli/viz/hooks_installer.py",
         "jui_tools/jui_cli/viz/ingest.py",
+        "jui_tools/jui_cli/viz/sent_copies.py",
         "jui_tools/jui_cli/viz/recorder.py",
         "jui_tools/jui_cli/viz/server.py",
         "jui_tools/jui_cli/viz/permissions.py",
@@ -58,7 +59,7 @@
     {
       "id": "tool-names",
       "name": "ツールの名前（AskUserQuestion、Bash・Edit・Write ほか、mcp__<server>__<tool>）と AskUserQuestion の入力",
-      "relies_on": "the tool names viz keys on to pick a robot's pose, a question card, a permission card; the mcp__ prefix; AskUserQuestion's tool_input (questions, options)",
+      "relies_on": "the tool names viz keys on to pick a robot's pose, a question card, a permission card; the mcp__ prefix; AskUserQuestion's tool_input (questions, options); SendUserFile's tool_input.files (the paths it sends) and its tool_use_id, on PreToolUse / PostToolUse with the hook's cwd (viz/sent_copies.py copies the pictures then)",
       "probe": "tool_names",
       "impact": "viz: ロボットの姿勢がずれる、質問のカードと許可のカードが出ない",
       "files": [
@@ -68,6 +69,7 @@
         "jui_tools/jui_cli/viz/permissions.py",
         "jui_tools/jui_cli/viz/forward.py",
         "jui_tools/jui_cli/viz/ingest.py",
+        "jui_tools/jui_cli/viz/sent_copies.py",
         "jui_tools/jui_cli/viz/web/js/30-source-live.js",
         "jui_tools/jui_cli/viz/web/js/50-panel.js",
         "jui_tools/jui_cli/viz/web/js/60-log.js",

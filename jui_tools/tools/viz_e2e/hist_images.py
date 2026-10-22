@@ -18,7 +18,7 @@ import time
 from common import PHONE, dump
 import json
 
-from hist_wide import A, GONE, Stage, check as _check, png, wait
+from hist_wide import A, CWD_A, GONE, Stage, check as _check, png, wait
 
 LIGHT = """() => { const d = [...document.querySelectorAll('[role="dialog"][aria-modal="true"]')].find((x) => x.offsetWidth);
   if (!d) return null; const i = d.querySelector('img');
@@ -220,6 +220,35 @@ async def run_hist_images(pw, out, failures):
               f"a press on the Write row's notes.md shows that file, the row stays closed: {shown2} {wl}")
         await page.evaluate("() => [...document.querySelectorAll('[data-rb-hist] .h-tool')].find((x) => x.querySelector('summary .h-tname').textContent === 'Read').scrollIntoView({ block: 'center' })")
         await page.screenshot(path=str(out / "closed-row-mark.png"))
+
+        # ---- a picture sent, then moved (ticket 2026-10-23-viz-sent-pictures-gone-when-the-file-moves; requester: 「画像見えない /
+        # claude codeのアプリからなら見えるからバグだと思う」): its hook copies it when the call is made, so after the file moved
+        # the history still shows it, read from the copy in the viz home
+        (sent_dir / "moved.png").write_bytes(png(200, 120, (40, 90, 200)))
+        st.hook(A, CWD_A, hook_event_name="PreToolUse", tool_name="SendUserFile", tool_use_id="tu-moved",
+                tool_input={"files": [str(sent_dir / "moved.png")], "caption": "動かした見本", "status": "normal"})
+        copy = pathlib.Path(st.home) / ".local" / "state" / "jui-viz" / "sent" / "tu-moved-0.png"
+        for _ in range(50):
+            if copy.exists():
+                break
+            await page.wait_for_timeout(100)
+        res["copyTaken"] = copy.exists()
+        (sent_dir / "moved.png").rename(sent_dir / "moved-away.png")
+        with open(st.paths[A], "a") as f:
+            f.write(json.dumps({"type": "assistant", "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "message": {
+                "id": "m-moved", "role": "assistant", "content": [{"type": "tool_use", "id": "tu-moved", "name": "SendUserFile",
+                                                                "input": {"files": [str(sent_dir / "moved.png")], "caption": "動かした見本", "status": "normal"}}]}},
+                               ensure_ascii=False) + "\n")
+        MOVED = """() => { const b = [...document.querySelectorAll('[data-rb-hist] .h-sent')].find((x) => (x.querySelector('.h-sent-caption') || {}).textContent === '動かした見本');
+          if (!b) return null; const t = b.querySelector('.h-thumb'), i = t && t.querySelector('img');
+          return t ? { w: i.naturalWidth, bad: t.classList.contains('h-thumb-bad'), note: (t.querySelector('.h-thumb-note') || {}).textContent || '' } : { none: true }; }"""
+        await wait(page, f"() => !!({MOVED})()", timeout=20000, label="the moved picture's row")
+        await page.evaluate("() => [...document.querySelectorAll('[data-rb-hist] .h-sent')].pop().scrollIntoView({ block: 'center' })")
+        await wait(page, f"() => {{ const g = ({MOVED})(); return g && (g.w > 0 || g.bad); }}", timeout=15000, label="the moved picture's thumbnail")
+        mv = res["moved"] = await page.evaluate(MOVED)
+        await page.screenshot(path=str(out / "sent-moved.png"))
+        check(failures, res["copyTaken"] and mv == {"w": 200, "bad": False, "note": mv.get("note", "")} and not (sent_dir / "moved.png").exists(),
+              f"a picture moved after it was sent still shows, from the copy taken when it was sent: copy {res['copyTaken']} {mv}")
 
         await page.close()
         for scheme in ("light", "dark"):

@@ -9,6 +9,7 @@ Design: 03 (fields), 04 §1–§4 (slices, robot states, rooms).
 from __future__ import annotations
 
 import re
+import threading
 import time
 from typing import Any
 
@@ -24,6 +25,7 @@ from .permissions import PROMPTS_QUEUED_MAX, PermissionBook
 from .questions import QuestionBook
 from .sources import devices as devices_mod
 from .sources import launch, processes
+from .sources.history import sent_files as history_sent_files
 from .sources.tasks import TaskBook
 from .sources.test_progress import ProgressBook
 from .state import VizState
@@ -108,6 +110,9 @@ QUESTION_TOOL = "AskUserQuestion"
 #: guessed: no hook says it). A forked skill runs in a subagent that starts within SKILL_FORK_MS of the call: the skill
 #: moves to it (the call names no agent; its agentId comes only with the result).
 SKILL_TOOL = "Skill"
+#: A file sent to the person (ticket 2026-10-23-viz-sent-pictures-gone-when-the-file-moves): its pictures are copied when
+#: the call is made (viz/sent_copies.py), so the history still shows them after the file moves.
+SENT_TOOL = "SendUserFile"
 SKILL_MAX_MS = 30 * 60_000
 SKILL_FORK_MS = 5_000
 SKILL_NAME = re.compile(r"[A-Za-z0-9_.:-]{1,128}")
@@ -193,6 +198,7 @@ class World:
         self.transcript_path = None
         # session id, cwd, transcript path, agent id, agent transcript path -> the 応答の履歴 tab (sources/history.py)
         self.history_reader = None
+        self.sent_copies = None   # viz/sent_copies.SentCopies, set by the server (a World made in a test copies nothing)
         self._agent_paths: dict[str, str] = {}   # subagent id -> the hook's agent_transcript_path
         self._paths: dict[str, tuple[str | None, str | None]] = {}
         self._tails: dict = {}
@@ -651,6 +657,10 @@ class World:
         use_id = _s(payload.get("tool_use_id"))
         cat = "tool" if kind in TOOL_EVENTS else "session"
         text = kind
+        if tool == SENT_TOOL and use_id and kind in ("PreToolUse", "PostToolUse") and self.sent_copies is not None:
+            # the files are read off this thread (up to 20 of 15 MB); a copy already taken is not taken again
+            threading.Thread(target=self.sent_copies.take, args=(use_id, history_sent_files(tool_input), payload.get("cwd")),
+                             name="viz-sent-copy", daemon=True).start()
 
         if kind == "SessionStart":
             if _s(payload.get("model")):
@@ -1811,17 +1821,31 @@ class World:
         return image(sid, cwd, given, None, None, off, n)
 
     def history_file(self, agent_id, off, n) -> tuple[int, object]:
-        """One file a SendUserFile call of this robot's transcript sent (sources/history.sent_file_at), read from disk:
-        (200, (media, bytes)), (404, "gone"), or (status, reason)."""
+        """One picture a SendUserFile call of this robot's transcript sent: its copy taken when the call was made
+        (viz/sent_copies.py), else read from its path (sources/history.sent_file_at) and copied then. (200, (media,
+        bytes)), (404, "gone") or (404, "gone:<why>") when neither is there and the copy could not be taken, or (status,
+        reason)."""
         agent = self.agents.get(agent_id) if isinstance(agent_id, str) else None
         sent_file = getattr(self.history_reader, "sent_file", None)
+        sent_ref = getattr(self.history_reader, "sent_ref", None)
         if agent is None or sent_file is None:
             return 404, "no such file"
         sid = agent["sessionId"]
         cwd, given = self._paths.get(sid, (None, None))
-        if agent["kind"] == "sub":
-            return sent_file(sid, cwd, given, agent_id, self._agent_paths.get(agent_id), off, n)
-        return sent_file(sid, cwd, given, None, None, off, n)
+        where = (sid, cwd, given, agent_id, self._agent_paths.get(agent_id)) if agent["kind"] == "sub" else (sid, cwd, given, None, None)
+        ref = sent_ref(*where, off, n) if sent_ref is not None and self.sent_copies is not None else (404, "")
+        if ref[0] == 200:
+            status, got = self.sent_copies.read(*ref[1])
+            if status == 200:
+                return status, got
+        status, got = sent_file(*where, off, n)
+        if ref[0] == 200 and status == 200:
+            self.sent_copies.keep(*ref[1], *got)
+        elif ref[0] == 200 and status == 404 and got == "gone":
+            why = self.sent_copies.read(*ref[1])[1]
+            if why:
+                return 404, f"gone:{why}"
+        return status, got
 
     def history_reveal(self, agent_id, off, n) -> tuple[int, str]:
         """The path of one file a SendUserFile call of this robot's transcript sent, to show in Finder
