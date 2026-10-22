@@ -292,6 +292,23 @@ async def run_hist_images(pw, out, failures):
         check(failures, io_ok(iow, wide=True), f"the same row with the card full-screen: the labels 6em or less, the value 7 tenths of the row: {iow}")
         await page.click("#rb [data-rb-wide]")
         await page.wait_for_timeout(600)
+        # an OUT with a picture (the Read of an image above): its pictures span the two columns too, so the labels stay their
+        # own width and the values keep the row
+        OUTIMG = """() => { const d = [...document.querySelectorAll('[data-rb-hist] .h-tool')].find((x) => x.querySelector('summary .h-tname').textContent === 'Read' && x.querySelector('.h-io > .h-imgs'));
+          if (!d) return null; d.open = true; d.scrollIntoView({ block: 'start' });
+          const io = d.querySelector('.h-io'), cols = getComputedStyle(io).gridTemplateColumns.split(' ').map(parseFloat), em = parseFloat(getComputedStyle(io).fontSize);
+          return { rowW: Math.round(d.getBoundingClientRect().width), keyEm: Math.round(cols[0] / em * 10) / 10, valueW: Math.round(cols[1] || 0), cols: cols.length }; }"""
+        for wide in (False, True):
+            if wide:
+                await page.click("#rb [data-rb-wide]")
+                await page.wait_for_timeout(900)
+            await wait(page, f"() => !!({OUTIMG})()", timeout=10000, label="the Read row with its picture")
+            await page.wait_for_timeout(300)
+            oi = res["outImg" + ("Wide" if wide else "")] = await page.evaluate(OUTIMG)
+            check(failures, oi["cols"] == 2 and oi["keyEm"] <= 6 and oi["valueW"] * 10 >= oi["rowW"] * 7,
+                  f"{'full-screen' if wide else 'narrow'}: a Read whose OUT has a picture: the labels 6em or less, the value 7 tenths of the row: {oi}")
+        await page.click("#rb [data-rb-wide]")
+        await page.wait_for_timeout(600)
 
         await page.close()
         for scheme in ("light", "dark"):
