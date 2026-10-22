@@ -1692,6 +1692,65 @@ fun main() {
 """
 
 
+#: an integer enum in every place a DTO holds one (straight, nullable, inline, in a list, a map's value) beside a
+#: string enum: the wire is the number (ticket jui-api-model-kotlin-integer-enum-serialized-as-string)
+ENUM_SCHEMAS = {
+    "Days": {"type": "integer", "enum": [0, 30, 60]},
+    "Kind": {"type": "string", "enum": ["conversation_id", "b"]},
+    "Holder": {"type": "object", "required": ["days", "kind", "inline_days", "list", "map"],
+               "properties": {
+                   "days": {"$ref": "#/components/schemas/Days"},
+                   "maybe": {"allOf": [{"$ref": "#/components/schemas/Days"}], "nullable": True},
+                   "inline_days": {"type": "integer", "enum": [1, 7]},
+                   "list": {"type": "array", "items": {"$ref": "#/components/schemas/Days"}},
+                   "map": {"type": "object", "additionalProperties": {"$ref": "#/components/schemas/Days"}},
+                   "kind": {"$ref": "#/components/schemas/Kind"}}},
+}
+WIRE = '{"days":30,"maybe":60,"inline_days":7,"list":[0,30],"map":{"a":60},"kind":"conversation_id"}'
+
+KOTLINX_ENUM_HARNESS = """
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import com.example.app.model.generated.*
+
+fun main() {
+    val wire = \"\"\"__WIRE__\"\"\"
+    val v = Json.decodeFromString<HolderDto>(wire)
+    check(v.days == Days.VALUE_30 && v.maybe == Days.VALUE_60 && v.list == listOf(Days.VALUE_0, Days.VALUE_30)) { "read: $v" }
+    check(v.map == mapOf("a" to Days.VALUE_60) && v.kind == Kind.CONVERSATION_ID) { "read: $v" }
+    val out = Json.encodeToString(v)
+    check(Json.parseToJsonElement(out) == Json.parseToJsonElement(wire)) { "wrote: $out" }
+    val missing = runCatching { Json.decodeFromString<HolderDto>(wire.replace("\\"days\\":30", "\\"days\\":31")) }
+    check(missing.isFailure) { "31 is no case: $missing" }
+    println("KOTLINX_ENUM_OK $out")
+}
+""".replace("__WIRE__", WIRE)
+
+MOSHI_ENUM_HARNESS = """
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.Types
+import com.example.app.model.generated.*
+
+fun main() {
+    val moshi = Moshi.Builder().build()
+    val days = moshi.adapter(Days::class.java)
+    check(days.fromJson("30") == Days.VALUE_30 && days.toJson(Days.VALUE_30) == "30") { "Days" }
+    check(days.fromJson("null") == null && days.toJson(null) == "null") { "Days null" }
+    check(runCatching { days.fromJson("31") }.isFailure) { "31 is no case" }
+    val inline = moshi.adapter(HolderInlineDays::class.java)
+    check(inline.fromJson("7") == HolderInlineDays.VALUE_7 && inline.toJson(HolderInlineDays.VALUE_7) == "7") { "inline" }
+    val list = moshi.adapter<List<Days>>(Types.newParameterizedType(List::class.java, Days::class.java))
+    check(list.toJson(list.fromJson("[0,30]")) == "[0,30]") { "list" }
+    val map = moshi.adapter<Map<String, Days>>(Types.newParameterizedType(Map::class.java, String::class.java, Days::class.java))
+    check(map.toJson(map.fromJson("{\\"a\\":60}")) == "{\\"a\\":60}") { "map" }
+    val kind = moshi.adapter(Kind::class.java)
+    check(kind.fromJson("\\"conversation_id\\"") == Kind.CONVERSATION_ID && kind.toJson(Kind.B) == "\\"b\\"") { "Kind" }
+    println("MOSHI_ENUM_OK")
+}
+"""
+
+
 class GeneratedKotlinCompilesTests(unittest.TestCase):
     """The DTOs reach a compiler (ticket
     jui-android-api-model-kotlinx-compile-arm-uncovered): kotlinx with the
@@ -1725,8 +1784,8 @@ class GeneratedKotlinCompilesTests(unittest.TestCase):
         # the plugin is the compiler's own version, or the compiler refuses it
         self.assertEqual(pinned[self.PLUGIN], self.version)
 
-    def _emit(self, out: Path, serializer: str, formats: bool) -> list[str]:
-        doc = parse_swagger(_doc(COMPILE_SCHEMAS), "test.json")
+    def _emit(self, out: Path, serializer: str, formats: bool, schemas: dict | None = None) -> list[str]:
+        doc = parse_swagger(_doc(schemas or COMPILE_SCHEMAS), "test.json")
         gen = AndroidApiModelGenerator(AndroidApiPlatformConfig(
             sources_root=out, serializer=serializer, format_mapping=formats))
         sources: dict[str, str] = {}
@@ -1780,6 +1839,36 @@ class GeneratedKotlinCompilesTests(unittest.TestCase):
             t = Path(tmp)
             self._compile(t, self._emit(t / "src", "kotlinx", formats=True), target, plugin=True)
 
+    def test_kotlinx_reads_and_writes_an_integer_enum_as_its_number(self):
+        """The wire's numbers in every place a DTO holds an integer enum, read and written back the same."""
+        target = [self.jars[n] for n in self.SERIALIZATION]
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            paths = self._emit(t / "src", "kotlinx", formats=False, schemas=ENUM_SCHEMAS)
+            (t / "Main.kt").write_text(KOTLINX_ENUM_HARNESS, encoding="utf-8")
+            self._compile(t, paths + [str(t / "Main.kt")], target, plugin=True)
+            run = subprocess.run([self.java, "-cp", ":".join([str(t / "classes"), self.stdlib, *target]),
+                                  "MainKt"], capture_output=True, text=True, timeout=120)
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertIn("KOTLINX_ENUM_OK", run.stdout)
+
+    def test_moshi_reads_and_writes_its_enums_by_their_wire(self):
+        """moshi finds an integer enum's adapter and reads a string enum's @Json name (its own EnumJsonAdapter)."""
+        okio = _pinned_jar_of(("com.squareup.okio", "okio-jvm"))
+        if okio is None:
+            self.skipTest("okio-jvm is not in the Gradle cache at the pinned version")
+        target = [self.jars[self.MOSHI], okio]
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            paths = [p for p in self._emit(t / "src", "moshi", formats=False, schemas=ENUM_SCHEMAS)
+                     if not p.endswith(("HolderDto.kt", "Holder.kt"))]   # the DTO's adapter is codegen's (KSP)
+            (t / "Main.kt").write_text(MOSHI_ENUM_HARNESS, encoding="utf-8")
+            self._compile(t, paths + [str(t / "Main.kt")], target, plugin=False)
+            run = subprocess.run([self.java, "-cp", ":".join([str(t / "classes"), self.stdlib, *target]),
+                                  "MainKt"], capture_output=True, text=True, timeout=120)
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertIn("MOSHI_ENUM_OK", run.stdout)
+
     def test_moshi_compiles(self):
         with tempfile.TemporaryDirectory() as tmp:
             t = Path(tmp)
@@ -1787,5 +1876,39 @@ class GeneratedKotlinCompilesTests(unittest.TestCase):
                           [self.jars[self.MOSHI]], plugin=False)
 
 
+def _pinned_jar_of(name: tuple[str, str]) -> str | None:
+    from tests.test_api_model_enum_case_names import _pinned, _pinned_jar
+    return _pinned_jar(Path(os.environ.get("GRADLE_USER_HOME", Path.home() / ".gradle")), *name, _pinned())
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class EnumWireTextTests(unittest.TestCase):
+    """What the compile arms run, said in the emitted text too (they need the pinned jars; moshi's codegen, KSP, is
+    measured by hand only: it refuses @JsonClass(generateAdapter = true) on an enum unless generator is set —
+    ticket 2026-10-23-api-model-moshi-enums-unreadable)."""
+
+    def _enum(self, serializer: str, name: str) -> str:
+        doc = parse_swagger(_doc(ENUM_SCHEMAS), "test.json")
+        gen = _gen(Path(tempfile.gettempdir()), serializer)
+        return gen.generate_enum_source(next(e for e in doc.enums if e.name == name), doc)
+
+    def test_kotlinx_integer_enum_is_its_number(self):
+        src = self._enum("kotlinx", "Days")
+        self.assertIn("@Serializable(with = DaysSerializer::class)\nenum class Days(val wire: Int)", src)
+        self.assertIn("PrimitiveKind.INT", src)
+        self.assertIn("encoder.encodeInt(value.wire)", src)
+        self.assertNotIn("@SerialName", src)
+
+    def test_moshi_string_enum_has_its_wire_names_and_no_json_class(self):
+        src = self._enum("moshi", "Kind")
+        self.assertIn('@Json(name = "conversation_id") CONVERSATION_ID("conversation_id"),', src)
+        self.assertNotIn("@JsonClass", src)
+
+    def test_moshi_integer_enum_has_its_adapter_and_codegen_stays_away(self):
+        src = self._enum("moshi", "Days")
+        self.assertIn('@JsonClass(generateAdapter = true, generator = "jui")\nenum class Days(val wire: Int)', src)
+        self.assertIn("class DaysJsonAdapter : JsonAdapter<Days>()", src)
+        self.assertIn("writer.value(value?.wire)", src)

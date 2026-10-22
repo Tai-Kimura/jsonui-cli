@@ -296,6 +296,43 @@ class AndroidApiModelGenerator:
             return base
         return []
 
+    def _enum_imports(self, enum: EnumDef) -> list[str]:
+        """An enum's imports: the DTO's, and for an integer enum what its serializer uses."""
+        numeric = enum.kind != PrimitiveKind.STRING
+        if self._config.serializer == "kotlinx" and numeric:
+            return [
+                "import kotlinx.serialization.KSerializer",
+                "import kotlinx.serialization.SerializationException",
+                "import kotlinx.serialization.Serializable",
+                "import kotlinx.serialization.descriptors.PrimitiveKind",
+                "import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor",
+                "import kotlinx.serialization.descriptors.SerialDescriptor",
+                "import kotlinx.serialization.encoding.Decoder",
+                "import kotlinx.serialization.encoding.Encoder",
+            ]
+        if self._config.serializer == "moshi":
+            if numeric:
+                return [
+                    "import com.squareup.moshi.JsonAdapter",
+                    "import com.squareup.moshi.JsonClass",
+                    "import com.squareup.moshi.JsonDataException",
+                    "import com.squareup.moshi.JsonReader",
+                    "import com.squareup.moshi.JsonWriter",
+                ]
+            return ["import com.squareup.moshi.Json"]
+        return self._dto_imports()
+
+    def _enum_annotations(self, enum: EnumDef) -> list[str]:
+        """kotlinx: @Serializable (an integer enum with its serializer). moshi: none for a string enum (moshi's own
+        EnumJsonAdapter reads it; its codegen refuses @JsonClass on an enum), and for an integer enum the adapter
+        written beside it (generator = "jui": moshi's codegen leaves it alone, and moshi finds <Name>JsonAdapter)."""
+        numeric = enum.kind != PrimitiveKind.STRING
+        if self._config.serializer == "kotlinx":
+            return [f"@Serializable(with = {enum.name}Serializer::class)"] if numeric else ["@Serializable"]
+        if self._config.serializer == "moshi":
+            return ['@JsonClass(generateAdapter = true, generator = "jui")'] if numeric else []
+        return self._dto_class_annotations()
+
     def _dto_class_annotations(
         self,
         *,
@@ -603,16 +640,15 @@ class AndroidApiModelGenerator:
         lines: list[str] = []
         lines.append(f"package {self._dto_package()}")
         lines.append("")
-        for imp in self._dto_imports():
-            lines.append(imp)
-        if self._dto_imports():
+        imports = self._enum_imports(enum)
+        lines.extend(imports)
+        if imports:
             lines.append("")
         if enum.description:
             lines.extend(_kdoc_lines(enum.description))
         if enum.deprecated:
             lines.append('@Deprecated("enum marked deprecated")')
-        for ann in self._dto_class_annotations():
-            lines.append(ann)
+        lines.extend(self._enum_annotations(enum))
 
         # kotlinx.serialization default-serializes enum cases by their
         # Kotlin name (e.g. ``CONVERSATION_ID``), but swaggers expect the
@@ -621,7 +657,7 @@ class AndroidApiModelGenerator:
         # constructor-stored ``wire`` property is correct. Emit the
         # rename annotation whenever the case identifier diverges from the
         # raw value.
-        use_serial_name = self._config.serializer == "kotlinx"
+        ser = self._config.serializer
         if enum.kind == PrimitiveKind.STRING:
             lines.append(f"enum class {enum.name}(val wire: String) {{")
             cases = list(zip(enum.case_names, enum.string_values))
@@ -633,8 +669,10 @@ class AndroidApiModelGenerator:
                 ident = escape_keyword(_kotlin_enum_case(case_name), language="kotlin")
                 suffix = "," if i < len(cases) - 1 else ";"
                 ident_bare = ident.strip("`")
-                if use_serial_name and ident_bare != raw:
+                if ser == "kotlinx" and ident_bare != raw:
                     lines.append(f'    @SerialName("{raw}") {ident}("{raw}"){suffix}')
+                elif ser == "moshi" and ident_bare != raw:   # moshi's EnumJsonAdapter reads a constant's @Json name
+                    lines.append(f'    @Json(name = "{raw}") {ident}("{raw}"){suffix}')
                 else:
                     lines.append(f'    {ident}("{raw}"){suffix}')
             lines.append("}")
@@ -648,11 +686,15 @@ class AndroidApiModelGenerator:
             for i, (case_name, raw_int) in enumerate(cases_int):
                 ident = escape_keyword(_kotlin_enum_case(case_name), language="kotlin")
                 suffix = "," if i < len(cases_int) - 1 else ";"
-                if use_serial_name:
-                    lines.append(f'    @SerialName("{raw_int}") {ident}({raw_int}){suffix}')
-                else:
-                    lines.append(f"    {ident}({raw_int}){suffix}")
+                lines.append(f"    {ident}({raw_int}){suffix}")
             lines.append("}")
+            # The wire is the number (ticket jui-api-model-kotlin-integer-enum-serialized-as-string): kotlinx reads
+            # an enum by its case's name as a string, moshi's EnumJsonAdapter likewise, so each gets a serializer
+            # that reads and writes `wire` as an Int.
+            if ser == "kotlinx":
+                lines.extend(_kotlinx_int_enum_serializer(enum.name, self._dto_package()))
+            elif ser == "moshi":
+                lines.extend(_moshi_int_enum_adapter(enum.name))
 
         body = "\n".join(lines)
         return f"{header}\n\n{body}\n\n{footer}\n"
@@ -954,6 +996,41 @@ def _kdoc_lines(text: str) -> list[str]:
 
 def _kotlin_property_name(field: FieldDef) -> str:
     return escape_keyword(snake_to_camel(field.wire_name), language="kotlin")
+
+
+def _kotlinx_int_enum_serializer(name: str, package: str) -> list[str]:
+    """kotlinx: an integer enum read and written as its wire number."""
+    return [
+        "",
+        f"object {name}Serializer : KSerializer<{name}> {{",
+        f'    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("{package}.{name}", PrimitiveKind.INT)',
+        "",
+        f"    override fun serialize(encoder: Encoder, value: {name}) = encoder.encodeInt(value.wire)",
+        "",
+        f"    override fun deserialize(decoder: Decoder): {name} {{",
+        "        val wire = decoder.decodeInt()",
+        f'        return {name}.entries.firstOrNull {{ it.wire == wire }} ?: throw SerializationException("{name}: no case for $wire")',
+        "    }",
+        "}",
+    ]
+
+
+def _moshi_int_enum_adapter(name: str) -> list[str]:
+    """moshi: an integer enum read and written as its wire number (found by moshi as <Name>JsonAdapter, which moshi
+    wraps in nullSafe() itself: a null never reaches it)."""
+    return [
+        "",
+        f"class {name}JsonAdapter : JsonAdapter<{name}>() {{",
+        f"    override fun fromJson(reader: JsonReader): {name}? {{",
+        "        val wire = reader.nextInt()",
+        f'        return {name}.entries.firstOrNull {{ it.wire == wire }} ?: throw JsonDataException("{name}: no case for $wire at ${{reader.path}}")',
+        "    }",
+        "",
+        f"    override fun toJson(writer: JsonWriter, value: {name}?) {{",
+        "        writer.value(value?.wire)",
+        "    }",
+        "}",
+    ]
 
 
 def _kotlin_enum_case(case_name: str) -> str:
