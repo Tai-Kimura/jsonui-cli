@@ -1956,6 +1956,7 @@
   "sr.mig.reset": "Back to the start",
   "sr.mig.stop": "Close (back to the current model)",
   "sr.mig.at": "step {k} of {n}",
+  "sr.mig.step": "One step forward",
   "sr.mig.cost": "old {old} → now {now} → new {new}",
   "sr.mig.cost.old": "old {old}",
   "sr.mig.cost.new": "new {new}",

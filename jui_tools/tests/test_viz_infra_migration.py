@@ -85,3 +85,18 @@ def test_the_account_is_chosen_as_the_cost_view_chooses_it(tmp_path):
 def test_migration_refuses_what_is_not_a_name(tmp_path):
     assert infra_cost.migration(tmp_path, 1, "../x")[1]["reason"] == "bad_request"
     assert infra_cost.migration(tmp_path, 1, "ok", scenario="../x")[1]["reason"] == "bad_request"
+
+
+def test_the_japanese_words_of_a_migration_say_step_not_ho():
+    """A migration's step is ステップ in Japanese, never 歩 (requester 10-23: 「12歩じゃなくて12ステップね歩ごとにのところも
+    ステップごとにに変えといて」): every ja word the player, its log and the room's migration problems read."""
+    import pathlib
+    import re
+    web = pathlib.Path(i18n.__file__).resolve().parent / "web"
+    ja = json.loads((web / "i18n" / "ja.json").read_text(encoding="utf-8"))
+    used = set(re.findall(r"tl\('([\w.]+)'", (web / "js" / "59-sr-migration.js").read_text(encoding="utf-8")))
+    keys = used | {k for k in ja if k.startswith(("sr.mig.", "srv.room.migration"))}
+    assert len(keys) >= 40 and "sr.mig.at" in keys and "sr.mig.step" in keys, sorted(keys)
+    ho = {k: ja[k] for k in sorted(keys) if k in ja and "歩" in ja[k]}
+    assert not ho, ho
+    assert ja["sr.mig.at"].endswith("ステップ") and "ステップ" in ja["sr.mig.cost.step"] + ja["sr.mig.total.now"]

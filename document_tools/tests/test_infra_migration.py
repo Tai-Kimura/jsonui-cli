@@ -315,3 +315,13 @@ def test_a_steps_difference_is_all_that_moved_in_it(tmp_path, monkeypatch):
     assert {"db-prod", "api-prod>db-prod"} <= rows
     assert step["diff"] == pytest.approx(sum(m["diff"] for m in step["moved"]))
     assert abs(step["diff"] - next(m["diff"] for m in step["moved"] if m["node"] == "db-prod")) > 0.5
+
+
+
+def test_the_japanese_words_of_a_migration_say_step_not_ho():
+    """A plan's problems in Japanese say ステップ, never 歩 (requester 10-23: 「12歩じゃなくて12ステップね歩ごとにのところも
+    ステップごとにに変えといて」), every code."""
+    assert set(R.MIGRATION_JA) >= {c for c in MG.CODES if c.startswith("migration.")}
+    for code in R.MIGRATION_JA:
+        assert "歩" not in R.MIGRATION_JA[code], code
+        assert "歩" not in R.DEFAULT_WORDS.migration("x", "docs/infra/migrations/p/changes.json", code), code

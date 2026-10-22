@@ -17,7 +17,7 @@
    - a floor of a group the new model has alone comes with its first node; one the new model has not goes at the end.
    play / pause, one step on, back to the start, stop (the old room again), the speed — the flows' player's buttons.
    The month's cost, when the room has load definitions (infra.cost.diff: the engine's months of the old model, of the
-   model after each step and of the new, each priced on its own): 旧 → 今の歩 → 新 on the player, with the step's
+   model after each step and of the new, each priced on its own): 旧 → 今のステップ → 新 on the player, with the step's
    difference; the コスト view lists 旧 · 新 · 差 by node and by cloud. A step that moves the month says so where the eye
    is (the requester 10-22: 「コストが変わるところが少し変化が薄くてわかりづらい」): the amount on the player counts to the
    new one, the step's difference pops beside it (warm when it rises, cool when it falls), and a tag with it floats up
@@ -439,7 +439,7 @@ function srMigRenderBar() {
   } else if (C && !C.ok) costHTML = `<span class="sr-fp-state">${esc(tl('sr.mig.cost.none'))}</span>`;
   setHTML(bar, `<b class="sr-fp-title">${esc(tl('sr.mig.title', { name: P.entry.name }))}</b>
 <button type="button" class="wb-btn" data-sr-mp="toggle" aria-label="${esc(playing ? tl('sr.flow.pause') : tl('sr.mig.go'))}">${playing ? '⏸' : '▶'}</button>
-<button type="button" class="wb-btn" data-sr-mp="step" aria-label="${esc(tl('sr.flow.step'))}"${P.k >= n ? ' disabled' : ''}>⏭</button>
+<button type="button" class="wb-btn" data-sr-mp="step" aria-label="${esc(tl('sr.mig.step'))}"${P.k >= n ? ' disabled' : ''}>⏭</button>
 <button type="button" class="wb-btn" data-sr-mp="reset" aria-label="${esc(tl('sr.mig.reset'))}"${P.k || P.anim ? '' : ' disabled'}>⏮</button>
 <button type="button" class="wb-btn" data-sr-mp="stop" aria-label="${esc(tl('sr.mig.stop'))}">■</button>
 <label>${esc(tl('sr.flow.speed'))} <select data-sr-mp="speed">${SR_FLOW_SPEEDS.map((s) => `<option value="${esc(String(s))}"${s === SR_MIG.speed ? ' selected' : ''}>${esc(s.toFixed(1))}×</option>`).join('')}</select></label>
