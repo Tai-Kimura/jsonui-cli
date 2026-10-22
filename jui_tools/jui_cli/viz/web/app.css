@@ -15,6 +15,7 @@ body { margin: 0; }
   --tag-bg: rgba(255, 255, 255, 0.94);
   --focus: #2f6fd8;
   --ok: #1d8f4e;
+  --switch-on: #146c3a;
   --ok-bg: #dcf3e5;
   --warn: #9a6200;
   --warn-bg: #fff0d1;
@@ -79,6 +80,7 @@ body { margin: 0; }
     --tag-bg: rgba(17, 31, 52, 0.94);
     --focus: #7ab4ff;
     --ok: #5ad893;
+    --switch-on: #5ad893;
     --ok-bg: #123a2a;
     --warn: #ffc65c;
     --warn-bg: #3a2b0c;
@@ -138,6 +140,7 @@ body { margin: 0; }
   --tag-bg: rgba(17, 31, 52, 0.94);
   --focus: #7ab4ff;
   --ok: #5ad893;
+  --switch-on: #5ad893;
   --ok-bg: #123a2a;
   --warn: #ffc65c;
   --warn-bg: #3a2b0c;
@@ -498,6 +501,10 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .log-open-float { position: fixed; right: 16px; bottom: 14px; z-index: 30; }
 .log-open-float[hidden] { display: none; }
 .ticker-btn, .log-close, .wb-btn { padding: 4px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: 700 12px/1.5 var(--font-body); white-space: nowrap; cursor: pointer; }
+/* On is drawn, never only said (requester 10-22: 「どっち選択してるのかわからない」): a pressed button is filled with the ink,
+   3:1 or more from its off look in both themes (tools/viz_e2e/selected_look.py measures the whole family). */
+.wb-btn[aria-pressed="true"], .controls button[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--panel); }
+.wb .wb-btn[aria-pressed="true"] { border-color: var(--wb-ink); background: var(--wb-ink); color: var(--wb-bg); }
 
 .log-overlay {
   position: fixed;
@@ -568,7 +575,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .ws-group b { font-family: var(--font-mono); }
 .ws-item { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 0 8px; width: 100%; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--wb-ink); font: inherit; text-align: left; cursor: pointer; }
 .ws-item:hover { background: var(--wb-card); }
-.ws-item[aria-current="true"] { background: var(--wb-card); box-shadow: inset 0 0 0 1.5px var(--wb-ink); }
+.ws-item[aria-current="true"] { background: var(--wb-card); box-shadow: inset 0 0 0 2px var(--wb-ink); }
 .ws-item .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--wb-faint); }
 .ws-item .nm { overflow: hidden; font: 700 12.5px/1.5 var(--font-body); text-overflow: ellipsis; white-space: nowrap; }
 .ws-item small { grid-column: 2 / -1; overflow: hidden; color: var(--wb-soft); font: 500 11px/1.4 var(--font-body); text-overflow: ellipsis; white-space: nowrap; }
@@ -1211,7 +1218,7 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 .tower-weather[hidden] { display: none; }
 .tw-switch { display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px 4px 6px; border: 1px solid var(--line); border-radius: 999px; background: var(--chip); color: var(--ink); font: 700 12.5px/1.4 var(--font-body); cursor: pointer; }
 .tw-switch::before { content: ''; width: 26px; height: 14px; border-radius: 7px; background: var(--line); box-shadow: inset 0 0 0 2px var(--panel); transition: background 0.15s; }
-.tw-switch[aria-checked="true"]::before { background: var(--ok); }
+.tw-switch[aria-checked="true"]::before { background: var(--switch-on); }
 .tw-switch[aria-busy="true"] { opacity: 0.6; cursor: progress; }
 .tw-note { margin: 6px 0 0; font: 600 12px/1.5 var(--font-body); color: var(--ink-soft); }
 .tw-note[data-error] { color: var(--warn); }
@@ -1266,9 +1273,9 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
    広げる comes first in the DOM (Tab: 広げる, 今の様子, 応答の履歴, then the panel) and is drawn on the right. */
 .rb-tablist { display: flex; gap: 4px; order: 1; }
 .rb-tabs .rb-wide-btn { order: 2; margin: 0 0 4px auto; align-self: center; padding: 3px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: 700 12px/1.5 var(--font-body); }
-.rb-tabs .rb-wide-btn[aria-pressed="true"] { border-color: var(--info); background: var(--info-bg); color: var(--info); }
+.rb-tabs .rb-wide-btn[aria-pressed="true"] { border-color: var(--info); background: var(--info); color: var(--panel); }
 .rb-tabs .rb-low-btn { order: 3; margin: 0 0 4px 6px; align-self: center; padding: 3px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: 700 12px/1.5 var(--font-body); }
-.rb-tabs .rb-low-btn[aria-pressed="true"] { border-color: var(--info); background: var(--info-bg); color: var(--info); }
+.rb-tabs .rb-low-btn[aria-pressed="true"] { border-color: var(--info); background: var(--info); color: var(--panel); }
 /* Wide, the head is one row (requester 10-19, issue #36): the mark and the name on the left, ‹ › 「← 3D に戻る」 and 退勤
    on the right; the name takes what the buttons leave. At the card's width it stays stacked, and so does the wide card
    at 900 px or narrower (.rb-wide-full), where one row would leave the name a few characters. */
@@ -1438,7 +1445,7 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
   --talk-in-code-bg: #0a1a33; --talk-in-line: #2f4a72; --talk-in-warn: #fdba74;
 }
 .rb-talk { position: relative; display: inline-flex; align-items: center; gap: 5px; background: var(--panel); color: var(--ink); }
-.rb-talk[aria-pressed="true"] { border-color: var(--info); background: var(--info-bg); color: var(--info); }
+.rb-talk[aria-pressed="true"] { border-color: var(--info); background: var(--info); color: var(--panel); }
 .rb-talk-icon { flex: none; }
 .rb-talk-n { min-width: 18px; padding: 0 5px; border-radius: 999px; background: var(--bad); color: #ffffff; font: 700 11px/18px var(--font-body); text-align: center; }
 .rb-talk-n[hidden] { display: none; }
@@ -1615,7 +1622,7 @@ button.talk-peer:focus-visible { outline: 2px solid var(--focus); outline-offset
 .sr-line-cross { border-top: 2px dashed #d63fb0; }
 .sr-meta, .sr-hint { margin: 0; color: var(--ink-soft); }
 .sr-prov { display: inline-flex; align-items: center; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--ink); font: 500 12.5px/1.5 var(--font-body); cursor: pointer; }
-.sr-prov[aria-pressed="true"] { border-color: var(--info); background: var(--info-bg); color: var(--info); font-weight: 700; }
+.sr-prov[aria-pressed="true"] { border-color: var(--info); background: var(--info); color: var(--panel); font-weight: 700; }
 .sr-legend li { margin: 2px 0; }
 .sr-acts { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
 .sr-problems li { padding: 2px 0; border-bottom: 1px solid var(--line); }

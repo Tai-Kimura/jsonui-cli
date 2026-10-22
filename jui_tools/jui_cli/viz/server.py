@@ -26,6 +26,7 @@ Routes (design: dev-guide, 05 §3):
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -110,6 +111,20 @@ def _read_web(name: str) -> bytes | None:
         return node.read_bytes()
     except (OSError, ValueError):
         return None
+
+
+#: the files the page names in its own HTML: each named with its content's hash (?v=), so a page served after an update
+#: asks for the new file under a new name, never for one a browser kept (10-22: the new app.js ran with an app.css from
+#: 2.3.13, five versions before — the talk's tabs and 3D / コスト looked alike, the cost page was dark)
+STAMPED = ("app.css", "boot.js", "debug.js")
+
+
+def _stamped(html: str) -> str:
+    for name in STAMPED:
+        raw = _read_web(name)
+        if raw is not None:
+            html = html.replace(f'"/{name}"', f'"/{name}?v={hashlib.sha256(raw).hexdigest()[:16]}"')
+    return html
 
 
 def _importmap_hashes(html: str) -> list[str]:
@@ -231,7 +246,7 @@ def make_app(ctx: ServerContext) -> web.Application:
     security.install_headers(app, ctx.port, hashes)
 
     def _with_token(html: str) -> web.Response:
-        body = i18n.page_html(html.replace(TOKEN_PLACEHOLDER, ctx.token), i18n.active())
+        body = i18n.page_html(_stamped(html).replace(TOKEN_PLACEHOLDER, ctx.token), i18n.active())
         response = web.Response(text=body, content_type="text/html")
         response.headers["Cache-Control"] = "no-store"
         return response

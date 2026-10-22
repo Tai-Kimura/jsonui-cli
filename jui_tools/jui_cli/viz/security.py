@@ -95,5 +95,8 @@ def install_headers(app: web.Application, port: int, script_hashes: Iterable[str
         response.headers["Content-Security-Policy"] = policy
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
+        # Nothing is kept by the browser unless its route says otherwise: a page opened again after an update
+        # once ran the new app.js with an app.css from before it (requester 10-22: the talk's tabs, 3D / コスト).
+        response.headers.setdefault("Cache-Control", "no-store")
 
     app.on_response_prepare.append(add)

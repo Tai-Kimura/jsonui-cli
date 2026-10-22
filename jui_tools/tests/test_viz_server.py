@@ -153,6 +153,68 @@ def test_static_serves_web_files_and_refuses_paths_out_of_it():
     _run(main())
 
 
+def test_no_file_of_the_page_is_kept_by_the_browser():
+    """Every file the page loads is fetched again on every load: a page opened again after an update once ran the new
+    app.js with an app.css from before it, and the selected tab looked like the other (10-22)."""
+    from jui_cli.viz.server import web_root
+
+    root = web_root()
+    files = sorted("/" + f.relative_to(root).as_posix() for f in root.rglob("*")
+                   if f.is_file() and f.suffix != ".html" and not any(x.startswith(".") for x in f.relative_to(root).parts))
+    assert {"/app.css", "/boot.js", "/i18n/en.json", "/vendor/three-0.160.0/three.module.min.js"} <= set(files)
+    assert any(f.endswith(".glb") for f in files) and any(f.startswith("/fonts/") for f in files)
+
+    async def main():
+        ctx = _ctx()
+        client = await _client(ctx)
+        try:
+            for path in files + ["/", "/debug", "/app.js", "/app.js?mode=demo", "/health", "/nope.js"]:
+                res = await client.get(path, headers=_host(ctx))
+                assert res.headers.get("Cache-Control") == "no-store", (path, res.status, res.headers.get("Cache-Control"))
+        finally:
+            await client.close()
+
+    _run(main())
+
+
+def test_the_page_names_its_css_and_script_by_their_content(tmp_path, monkeypatch):
+    """A browser that kept an app.css never gets to use it for a page after an update: the page asks for
+    /app.css?v=<the file's hash>, a new name whenever the file changes (10-22: an app.css five versions old ran with
+    the new app.js)."""
+    import hashlib
+    import re
+
+    from jui_cli.viz import server as srv
+
+    web = tmp_path / "web"
+    web.mkdir()
+    (web / "index.html").write_text('<meta name="jui-viz-token" content="__JUI_VIZ_TOKEN__">'
+                                    '<link rel="stylesheet" href="/app.css"><script type="module" src="/boot.js"></script>')
+    (web / "app.css").write_text("b { color: red; }")
+    (web / "boot.js").write_text("export {};")
+    monkeypatch.setattr(srv, "web_root", lambda: web)
+
+    def h(name):
+        return hashlib.sha256((web / name).read_bytes()).hexdigest()[:16]
+
+    async def main():
+        ctx = _ctx()
+        client = await _client(ctx)
+        try:
+            body = await (await client.get("/", headers=_host(ctx))).text()
+            assert f'href="/app.css?v={h("app.css")}"' in body and f'src="/boot.js?v={h("boot.js")}"' in body, body
+            css = await client.get(f"/app.css?v={h('app.css')}", headers=_host(ctx))
+            assert css.status == 200 and await css.text() == "b { color: red; }"
+            before = re.search(r'/app\.css\?v=(\w+)', body).group(1)
+            (web / "app.css").write_text("b { color: blue; }")
+            after = re.search(r'/app\.css\?v=(\w+)', await (await client.get("/", headers=_host(ctx))).text()).group(1)
+            assert before != after == h("app.css")
+        finally:
+            await client.close()
+
+    _run(main())
+
+
 def test_static_reaches_a_folder_with_a_dot_in_its_name(tmp_path, monkeypatch):
     """vendor/three-0.160.0/ was refused by a pattern that allowed no dot in
     folder names, and the page could not load three.js (d2, 10-18)."""
