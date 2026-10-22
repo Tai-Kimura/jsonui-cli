@@ -275,42 +275,36 @@ def chapters(lang: str) -> dict:
         E(2.8, "tool_end", key="s01"),
     ])
 
-    # 2 (32–44): rooms, lamps, the three bubbles; a bubble pressed opens its card; a robot pressed: its card and its
-    # test run, the 3D comes to it
+    # 2 (32–44): the robots show what each session is doing (requester 10-22: 「ロボットの動きで状況が理解できるのがメイン機能」
+    # 「テスト中かどうかがわかったり」). In on the shop's room: robots typing, reading, thinking (a prompt and no tool yet);
+    # one starts its tests, its card shows the run case by case (one fails), then one stops and waits for input.
     out["2"] = Chapter("2", 32, 44, floor(w), [
         E(32.8, "click", target={"room_tag": "demo-shop"}, expect="solo:demo-shop"),
-        E(34.0, "perm", key="s03", command=w["perm_cmd"], description=w["perm_desc"]),
-        E(34.8, "ask_pending", key="s05", question=w["ask_short"], use_id="toolu_e1ask0"),
-        E(35.6, "idle", key="s07"),
-        E(36.2, "sub_start", key="s04"),
-        E(37.2, "click", target={"bubble": "s03"}, expect="picked:s03"),
-        E(38.0, "tests_start", key="s02", run="r1", command="cd web && npx vitest run tests/unit/generated"),
-        E(38.4, "tests_case", run="r1", case=0, status="passed"),
-        E(38.8, "tests_case", run="r1", case=1, status="passed"),
-        E(39.0, "click", target={"robot": "s02"}, expect="card:s02"),
-        E(39.4, "tests_case", run="r1", case=2, status="passed"),
-        E(39.9, "tests_case", run="r1", case=3, status="passed"),
-        E(40.4, "tests_case", run="r1", case=4, status="passed"),
-        E(40.9, "tests_case", run="r1", case=5, status="passed"),
-        E(41.3, "tests_end", key="s02", run="r1"),
-        E(42.6, "sub_stop", key="s04"),
+        E(35.2, "tests_start", key="s02", run="r1", command="cd web && npx vitest run tests/unit/generated"),
+        E(35.6, "click", target={"robot": "s02"}, expect="card:s02"),
+        E(36.2, "tests_case", run="r1", case=0, status="passed"),
+        E(36.7, "tests_case", run="r1", case=1, status="passed"),
+        E(37.2, "tests_case", run="r1", case=2, status="passed"),
+        E(37.7, "tests_case", run="r1", case=3, status="failed"),
+        E(38.3, "tests_case", run="r1", case=4, status="passed"),
+        E(38.8, "tests_case", run="r1", case=5, status="passed"),
+        E(39.4, "tests_end", key="s02", run="r1"),
+        E(40.6, "idle", key="s07"),
+        E(41.4, "click", target={"session_row": "s07"}, expect="card:s07"),
     ], needs=("rooms",))
 
-    # 3 (44–54): a question answered in the browser (forward.py --ask really waits), the stopped call's card, the talk
-    talk_prelude = [P("talk", frm="s01", to="s02", text=w["talk"]["t1"], ago=90), P("talk", frm="s02", to="s01", text=w["talk"]["t2"], ago=60)]
+    # 3 (44–54): a permission answered in the browser, briefly (requester: 「許可の紹介はサラッとでいい」), then the
+    # sessions' talk as a chat (2.3.14): the spec owner's card, its talk with the test runner, two messages arriving.
+    talk_prelude = [P("talk", frm="s01", to="s02", text=w["talk"]["t1"], ago=90)]
     out["3"] = Chapter("3", 44, 54, floor(w) + talk_prelude + up_close("demo-shop"), [
-        E(44.3, "ask", key="s05", question=q, use_id="toolu_e1ask1", expect="qcard"),
-        E(45.3, "click", target={"bubble": "s05"}, expect="picked:s05"),
-        E(46.4, "click", target={"css": ".qcard.q-open label", "text": w["answer"]}),
-        E(47.3, "click", target={"css": ".qcard.q-open [data-qsend]"}),
-        E(47.6, "ask_answered", key="s05", use_id="toolu_e1ask1", expect="qdone"),
-        E(48.6, "denied", key="s08", command=w["denied_cmd"], reason=w["denied_reason"], n=301, expect="dcard"),
-        E(49.3, "hover", target={"css": "[data-dcard]"}),
-        E(50.1, "click", target={"session_row": "s01"}, expect="card:s01"),
-        E(50.8, "click", target={"css": "#rb [data-rb-talk]"}, expect="talk"),
-        E(51.5, "click", target={"talk_row": "s02"}),
-        E(52.2, "talk", frm="s02", to="s01", text=w["talk"]["t3"]),
-        E(53.0, "click", target={"css": "#rb [data-tk-peer]"}, expect="card:s02"),
+        E(44.2, "perm", key="s03", command=w["perm_cmd"], description=w["perm_desc"]),
+        E(44.8, "click", target={"bubble": "s03"}, expect="picked:s03"),
+        E(46.0, "click", target={"css": ".pa-allow[data-do='allow']"}),
+        E(47.2, "click", target={"robot": "s01"}, expect="card:s01"),
+        E(47.9, "click", target={"css": "#rb [data-rb-talk]"}, expect="talk"),
+        E(48.6, "click", target={"talk_row": "s02"}),
+        E(49.4, "talk", frm="s02", to="s01", text=w["talk"]["t2"]),
+        E(51.4, "talk", frm="s02", to="s01", text=w["talk"]["t3"]),
     ], needs=("rooms",))
 
     # 4 (54–74): the server room as 2.3.19 draws it, small to large (requester 10-22: start close, where the light's
