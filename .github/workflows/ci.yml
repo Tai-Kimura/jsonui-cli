@@ -106,7 +106,11 @@ jobs:
   # ------------------------------------------------------------------ #
   python-suite:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 25, not 15: the four suites take about 12 minutes on a good day (2.3.19: 12m10s), and setup alone
+    # took 7m13s on 2026-10-22 — Playwright's --with-deps pulled 25.9 MB of apt packages at 79.9 kB/s
+    # (5m25s; 17s the run before), and the SVG converters' apt-get was slow the same way — so the job was
+    # cancelled inside its unit tests. A slow mirror is not a failing suite.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       # 🔻 THE FOUR CROSS-REPO ARMS RAN NOWHERE BUT ONE DEVELOPER TREE.
@@ -553,6 +557,12 @@ jobs:
       - name: Install jui_tools (the new-screen scaffold arms run jui)
         working-directory: jui_tools
         run: python -m pip install -e .
+      # `jui init` runs this checkout's sjui / kjui / rjui (the arm puts their bin first on PATH), and every one of
+      # them refuses a ruby under 3.2 — this runner's own is 2.6. The floor, as ruby-suites runs it; the bundled
+      # gems it ships with (rexml for kjui) are all `init` loads, so no bundle install.
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
       - name: New-screen scaffold arms (two faces, real compilers)
         working-directory: test_tools
         run: |

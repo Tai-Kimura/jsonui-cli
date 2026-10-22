@@ -64,8 +64,15 @@ for sync in (b._sync_viewmodel_protocols, b._sync_usecase_protocols, b._sync_rep
 """
 
 
+#: This checkout's platform tools, put first on PATH for `jui init` (which runs `sjui init`, `kjui init`, `rjui
+#: init` by name): the arm tests this tree's tools, and a CI runner has none of its own on PATH — the arm went red
+#: there with "'sjui' not found in PATH" while green on a machine that had them installed.
+TOOL_BINS = [REPO / f"{tool}_tools" / "bin" for tool in ("sjui", "kjui", "rjui")]
+
+
 def _run(cmd: list[str], cwd: Path) -> None:
     env = {k: v for k, v in os.environ.items() if not k.startswith("JUI_VIZ")}
+    env["PATH"] = os.pathsep.join([*map(str, TOOL_BINS), env.get("PATH", "")])
     run = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=600, env=env)
     assert run.returncode == 0, f"{' '.join(map(str, cmd[:3]))} … rc={run.returncode}\n{(run.stdout + run.stderr)[-3000:]}"
 
