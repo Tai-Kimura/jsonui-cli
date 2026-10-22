@@ -705,7 +705,7 @@ class JsonUIProject:
                 "updatedAt": at,
                 # when it last moved on (ticket 2026-10-23-viz-spec-list-not-recent-first): the newest of the spec's
                 # write, its Layout's write and its newest test result; the lists put the newest first
-                "advancedAt": max(_mtime_ms(entry.path), _mtime_ms(layout), result.get("lastAt") or 0),
+                **_advanced(_mtime_ms(entry.path), _mtime_ms(layout), result.get("lastAt") or 0),
             }
             if by:
                 item["by"] = by
@@ -718,6 +718,13 @@ def _mtime_ms(path: Path | None) -> int:
         return int(path.stat().st_mtime * 1000) if path is not None else 0
     except OSError:
         return 0
+
+
+def _advanced(spec: int, layout: int, test: int) -> dict:
+    """advancedAt and what moved it (advancedBy: spec / layout / test), for the lists' order and the time beside each
+    spec's share (ticket 2026-10-23-viz-spec-no-last-updated-time). A tie names the first of spec, layout, test."""
+    at, by = max((spec, "spec"), (layout, "layout"), (test, "test"), key=lambda x: x[0])
+    return {"advancedAt": at, "advancedBy": by} if at else {"advancedAt": 0}
 
 
 def with_texts(data: dict, path: Path) -> dict:

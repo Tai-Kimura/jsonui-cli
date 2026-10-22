@@ -110,6 +110,27 @@ const sumImpl = (arr) => arr.slice(1, 6).reduce((a, b) => a + b, 0);
    (advancedAt, the server's: its write, its Layout's write, its newest test result), then the order SPECS has (room,
    then file). On [spec, index] pairs: the panel, the board and its side list sort with this one, inside their groups. */
 function specNewer(a, b) { return (b[0].advancedAt || 0) - (a[0].advancedAt || 0) || a[1] - b[1]; }
+/* When a spec last moved on, beside its share wherever the share is shown (ticket 2026-10-23-viz-spec-no-last-updated-time):
+   the same advancedAt specNewer sorts by, so the order and the times agree, in the reader's clock — 12:34 today,
+   昨日 12:34, else 10/21 12:34. The title has the whole time and what moved it (the spec, its Layout, a test result).
+   null when the server sent none (the demo). */
+function specWhen(s, now = new Date()) {
+  if (!(s.advancedAt > 0)) return null;
+  const p2 = (n) => String(n).padStart(2, '0');
+  const d = new Date(s.advancedAt), time = `${p2(d.getHours())}:${p2(d.getMinutes())}`;
+  const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime(), days = Math.round((day(now) - day(d)) / 86400000);
+  const text = days === 0 ? tl('spec.when.today', { time }) : days === 1 ? tl('spec.when.yesterday', { time })
+    : tl('spec.when.older', { date: `${d.getMonth() + 1}/${d.getDate()}`, time });
+  const full = `${d.getFullYear()}/${p2(d.getMonth() + 1)}/${p2(d.getDate())} ${time}:${p2(d.getSeconds())}`;
+  const what = s.advancedBy === 'layout' ? tl('spec.when.by.layout') : s.advancedBy === 'test' ? tl('spec.when.by.test') : tl('spec.when.by.spec');
+  return { text, title: tl('spec.when.title', { full, what }) };
+}
+/* A spec's share (s.status.text) with that time beside it: { text, title } for every place the share is shown. */
+function specStatus(s, prefix = '') {
+  const w = specWhen(s), text = `${prefix}${s.status.text}`;
+  return w ? { text: tl('spec.when.beside', { status: text, when: w.text }), title: w.title } : { text, title: '' };
+}
+function paintStatus(el, st) { setText(el, st.text); if (el.title !== st.title) el.title = st.title; }
 const BUCKETS = [['live', tl('core.bucket.live')], ['partial', tl('core.bucket.partial')], ['todo', tl('core.bucket.todo')], ['done', tl('core.bucket.done')]];
 const bucketCounts = (specs) => Object.fromEntries(BUCKETS.map(([b]) => [b, specs.filter((s) => s.bucket === b).length]));
 const activeSec = (s) => (s.writingIdx >= 0 ? s.writingIdx : s.implIdx >= 0 ? s.implIdx : s.testIdx);

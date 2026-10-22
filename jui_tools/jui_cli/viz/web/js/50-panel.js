@@ -151,7 +151,7 @@ function renderPanel(model) {
   keyed(specListEl, JSON.stringify([UI.project, specFilter, scopedSpecs.length, shown.map(([x, i]) => `${i}:${x.bucket}:${x.by || ''}:${x.name}`)]), () => (shown.length
     ? shown.map(([x, i], k) => `${multi && (k === 0 || shown[k - 1][0].project !== x.project) ? `<li class="sl-group">${esc(PROJECT[x.project].name)}<b>${shown.filter(([y]) => y.project === x.project).length}</b></li>` : ''}<li><button type="button" class="spec-row b-${esc(x.bucket)}" data-idx="${i}" data-fk="sp-${i}"${roleVar(x)}><span class="nm">${esc(x.name)}</span><span class="stx"></span>${x.by ? pill(x.by, DEF[x.by].role) : ''}${SEGS}</button></li>`).join('')
     : `<li class="empty-note">${!scopedSpecs.length ? esc(tl('panel.spec.none.scope', { scope: scopeLabel() })) : specFilter === 'live' ? esc(tl('panel.spec.none.live')) : esc(tl('panel.spec.none.state'))}</li>`));
-  specListEl.querySelectorAll('.spec-row').forEach((b) => { const s = model.specs[+b.dataset.idx]; setText(b.querySelector('.stx'), s.status.text); paintSegs(b.querySelector('.segs'), s); });
+  specListEl.querySelectorAll('.spec-row').forEach((b) => { const s = model.specs[+b.dataset.idx]; paintStatus(b.querySelector('.stx'), specStatus(s)); paintSegs(b.querySelector('.segs'), s); });
 
   const T = model.tests, n = CASES.length;
   const pPct = (T.passed / n) * 100, rPct = T.runningIdx >= 0 ? 100 / n : 0;
@@ -794,7 +794,7 @@ function renderWbSide(model) {
     const bodyHTML = groups.map(([label, items]) => `<p class="ws-group"><span>${esc(label)}</span><b>${items.length}</b></p>${items.map(([s, i]) => `<button type="button" class="ws-item b-${esc(s.bucket)}" data-idx="${i}" data-fk="ws-${i}" aria-current="${wb.idx === i}"${roleVar(s)}><span class="dot" aria-hidden="true"></span><span class="nm">${esc(s.name)}</span>${s.by ? pill(s.by, DEF[s.by].role) : '<span></span>'}<small></small></button>`).join('')}`).join('');
     return allHTML + (bodyHTML || `<p class="ws-none">${esc(tl('panel.ws.none'))}</p>`);
   });
-  wbSideList.querySelectorAll('.ws-item:not(.ws-all)').forEach((b) => { const x = model.specs[+b.dataset.idx]; setText(b.lastElementChild, UI.project === 'all' ? `${PROJECT[x.project].name} · ${x.status.text}` : x.status.text); });
+  wbSideList.querySelectorAll('.ws-item:not(.ws-all)').forEach((b) => { const x = model.specs[+b.dataset.idx]; paintStatus(b.lastElementChild, specStatus(x, UI.project === 'all' ? `${PROJECT[x.project].name} · ` : '')); });
   wbSideShowOpen();
 }
 /* The open spec's row in view (ticket 2026-10-23-viz-whiteboard-list-not-scrolled-to-opened-spec): every way of opening
@@ -904,7 +904,7 @@ function setHead(title, file, stCls, stText, whoHTML) {
   setText($('wb-file'), file);
   const st = $('wb-status'), cls = `state ${stCls}`;
   if (st.className !== cls) st.className = cls;
-  setText(st, stText);
+  paintStatus(st, typeof stText === 'object' ? stText : { text: stText, title: '' });   // a spec's: with its time (specStatus)
   setHTML($('wb-who'), whoHTML);
 }
 function specSummary(s) {
@@ -936,7 +936,7 @@ function renderOverview(model) {
   wbCode.querySelectorAll('.ov-card').forEach((card) => {
     const s = model.specs[+card.dataset.idx], st = card.querySelector('.state'), cls = `state ${STATUS_CLASS[s.status.kind]}`;
     if (st.className !== cls) st.className = cls;
-    setText(st, s.status.text);
+    paintStatus(st, specStatus(s));
     setHTML(card.querySelector('.ov-who'), s.by ? `${robotWho(s.by)}<span>${esc(robotState[s.by].act)}</span>` : `<span>${esc(s.note)}</span>`);
     paintSegs(card.querySelector('.segs'), s);
     setText(card.querySelector('.ov-sum'), specSummary(s));
@@ -1030,7 +1030,21 @@ function wfTree(nodes) {
    sideways inside itself; over BJ_FOLD lines it is folded, 「全部を見る」 opens it (kept open across redraws). Anything
    else stays the one line of text it was. */
 const BJ_FOLD = 12;
-const bjCell = (v, i, j) => (v !== null && typeof v === 'object' ? `<td class="bj-cell" data-bj="${esc(i)}:${esc(j)}"></td>` : `<td>${esc(v)}</td>`);
+const bjCell = (v, i, j, prose = esc) => (isProse(v) ? `<td>${prose(v)}</td>` : v !== null && typeof v === 'object' ? `<td class="bj-cell" data-bj="${esc(i)}:${esc(j)}"></td>` : `<td>${esc(v)}</td>`);
+/* Prose from a texts file ({markdown}, ticket 2026-10-23-viz-spec-sheet-shows-md-reference-raw): every prose field of
+   the sheet — the description, a part's, an event's, a step's, a transition's condition, a branch's note, an API's
+   notes — is drawn the one way, by the history's histMarkdown (text nodes only, so a < stays a character; only
+   http(s) links, opened in a new tab). The sheet's HTML holds a placeholder per field (its text's hash in it, so a
+   changed text is a changed sheet), filled after it is set. */
+const isProse = (v) => !!v && typeof v === 'object' && typeof v.markdown === 'string';
+function proseHash(t) { let h = 5381; for (let k = 0; k < t.length; k += 1) h = ((h * 33) ^ t.charCodeAt(k)) >>> 0; return h.toString(36); }
+function fillProse(root, texts) {
+  for (const el of root.querySelectorAll('[data-md]')) {
+    if (el.firstChild) continue;   // filled before, the sheet's HTML unchanged
+    const t = texts[+el.dataset.md];
+    if (typeof t === 'string') el.append(histMarkdown(t));
+  }
+}
 const BJ_OPEN = new Set();
 function jsonBlock(v, key) {
   const text = JSON.stringify(v, null, 2), lines = text.split('\n').length;
@@ -1076,7 +1090,7 @@ function renderSheet(model, force) {
   if (SOURCE.mode === 'live') {
     liveWantSheet(s);
     if (!d) {
-      setHead(s.name, s.file, STATUS_CLASS[s.status.kind], s.status.text, s.by ? robotWho(s.by) : '');
+      setHead(s.name, s.file, STATUS_CLASS[s.status.kind], specStatus(s), s.by ? robotWho(s.by) : '');
       wbNav.hidden = false; $('wb-follow-label').hidden = false;
       setHTML($('wb-legend'), SHEET_LEGEND_LIVE); wbHelpMode(false);
       renderNav(s);
@@ -1086,8 +1100,8 @@ function renderSheet(model, force) {
       return;
     }
   }
-  if (SOURCE.mode === 'live') setHead(s.name, s.file, STATUS_CLASS[s.status.kind], s.status.text, s.by ? robotWho(s.by) : '');
-  else setHead(tl('panel.sheet.head', { name: s.name, screen: s.screen }), `docs/screens/json/${s.file}`, STATUS_CLASS[s.status.kind], s.status.text, s.by ? pill(s.by, DEF[s.by].role) : '');
+  if (SOURCE.mode === 'live') setHead(s.name, s.file, STATUS_CLASS[s.status.kind], specStatus(s), s.by ? robotWho(s.by) : '');
+  else setHead(tl('panel.sheet.head', { name: s.name, screen: s.screen }), `docs/screens/json/${s.file}`, STATUS_CLASS[s.status.kind], specStatus(s), s.by ? pill(s.by, DEF[s.by].role) : '');
   wbNav.hidden = false; $('wb-follow-label').hidden = false;
   setHTML($('wb-legend'), SOURCE.mode === 'live' ? SHEET_LEGEND_LIVE : SHEET_LEGEND); wbHelpMode(false);
   renderNav(s);
@@ -1099,14 +1113,20 @@ function renderSheet(model, force) {
   // イベント and 操作: one table (tickets 2026-10-20-jui-viz-spec-events-as-table), the look of the variables above it.
   // Its columns are the spec's own fields, nothing read out of the text; an event's name in one unbroken line.
   const nameTable = (heads, bodyHTML) => `<table class="vt nt"><thead><tr><th><span class="sr">${esc(tl('panel.th.state'))}</span></th>${heads.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${bodyHTML}</tbody></table>`;
-  const nameCells = (cells, named) => cells.map((c, j) => `<td class="${j === 0 && named ? 'mono nt-name' : 'nt-desc'}">${esc(c)}</td>`).join('');
+  const nameCells = (cells, named) => cells.map((c, j) => `<td class="${j === 0 && named ? 'mono nt-name' : 'nt-desc'}">${j === 0 && named ? esc(c) : prose(c)}</td>`).join('');
   const tr = (m, key, cellsHTML) => `<tr class="${esc(m[2])}"${actAttr(m[2], key)}><td class="mk ${esc(m[1])}">${esc(m[0])}</td>${cellsHTML}</tr>`;
   // The first n items of a section; while it is being written the newest one is highlighted instead of marked.
   const pick = (k, arr, n, fresh) => arr.slice(0, n).map((x, i) => [x, i, fresh ? ['', '', i === n - 1 ? 'is-new' : ''] : markOf(s, model, k, i)]);
+  const mdTexts = [];
+  const prose = (v) => {
+    if (!isProse(v)) return esc(v);
+    const k = mdTexts.push(v.markdown) - 1;
+    return `<span class="sc-md" data-md="${k}" data-mdh="${esc(proseHash(v.markdown))}"></span>`;
+  };
   const bodies = [
     (w) => {
       const m = d.metadata;
-      const rows = [[tl('panel.meta.name'), `${esc(m.displayName)}${esc(tl('panel.meta.open'))}<span class="mono">${esc(m.name)}</span>${esc(tl('panel.meta.close'))}`], [tl('panel.meta.description'), esc(m.description)], [tl('panel.meta.platforms'), m.platforms.map((p) => `<span class="bdg">${PLATFORM_JA[p] || esc(p)}</span>`).join(' ')], [tl('panel.meta.layout'), m.layoutFile ? `<code>docs/screens/layouts/${esc(m.layoutFile)}.json</code>` : ''], [tl('panel.meta.created'), esc(m.createdAt)]].filter(([, v]) => v !== '');
+      const rows = [[tl('panel.meta.name'), `${esc(m.displayName)}${esc(tl('panel.meta.open'))}<span class="mono">${esc(m.name)}</span>${esc(tl('panel.meta.close'))}`], [tl('panel.meta.description'), prose(m.description)], [tl('panel.meta.platforms'), m.platforms.map((p) => `<span class="bdg">${PLATFORM_JA[p] || esc(p)}</span>`).join(' ')], [tl('panel.meta.layout'), m.layoutFile ? `<code>docs/screens/layouts/${esc(m.layoutFile)}.json</code>` : ''], [tl('panel.meta.created'), esc(m.createdAt)]].filter(([, v]) => v !== '');
       return `<dl class="kv">${rows.slice(0, reveal(rows.length, w)).map(([a, bHTML]) => `<dt>${esc(a)}</dt><dd>${bHTML}</dd>`).join('')}</dl>`;
     },
     (w, writing) => {
@@ -1114,7 +1134,7 @@ function renderSheet(model, force) {
       const items = pick(1, d.components, Math.min(COMP_MAX, compAll), writing);
       const moreHTML = compAll > COMP_MAX ? `<p class="sc-note">${esc(tl('panel.comp.more', { n: compAll - COMP_MAX, max: COMP_MAX }))}</p>` : '';
       const wfState = (m) => (writing ? (m[2] === 'is-new' ? 'writing' : 'defined') : !s.implPhase ? 'defined' : m[1] === 'm-done' ? 'done' : m[1] === 'm-doing' ? 'doing' : 'todo');
-      const rowText = (type, id, desc) => `<span class="tp">${esc(TYPE_JA[type] || type)}</span> <span class="id">${esc(id)}</span> <span class="desc">${esc(desc)}</span>`;
+      const rowText = (type, id, desc) => `<span class="tp">${esc(TYPE_JA[type] || type)}</span> <span class="id">${esc(id)}</span> <span class="desc">${prose(desc)}</span>`;
       let rowsHTML, wfHTML;
       if (hasDepths(d.components)) {
         // a tree: the list indented by depth with its lines, the phone frame's boxes nested
@@ -1145,7 +1165,7 @@ function renderSheet(model, force) {
       const apiN = Math.max(0, shown - M - 2);
       let apisHTML = '';
       if (shown > M + 1 && !d.apis.length) apisHTML = `<div class="farrow" aria-hidden="true">↓</div><div class="fbox"><p class="fb-h">API</p><p class="sc-ph">${esc(tl('panel.fb.noapi'))}</p></div>`;
-      else if (apiN > 0) apisHTML = `<div class="farrow" aria-hidden="true">↓</div><div class="fbox"><p class="fb-h">API</p><ul class="rows">${d.apis.slice(0, apiN).map(([op, method, path]) => `<li class="api"><span class="http http-${esc(method)}">${esc(method)}</span><code>${esc(path)}</code><span class="desc">${esc(op)}</span></li>`).join('')}</ul></div>`;
+      else if (apiN > 0) apisHTML = `<div class="farrow" aria-hidden="true">↓</div><div class="fbox"><p class="fb-h">API</p><ul class="rows">${d.apis.slice(0, apiN).map(([op, method, path]) => `<li class="api"><span class="http http-${esc(method)}">${esc(method)}</span><code>${esc(path)}</code><span class="desc">${prose(op)}</span></li>`).join('')}</ul></div>`;
       const boxesHTML = `<div class="flow"><div class="fbox"><p class="fb-h">ViewModel</p><ul class="rows">${methodsHTML}</ul>${varsHTML}</div>${reposHTML}${apisHTML}</div>`;
       // 2.3.5: the diagram the spec page draws (Mermaid), the boxes under it with what it does not say; while the
       // section is being written, the boxes alone (they grow as it is written)
@@ -1158,9 +1178,9 @@ function renderSheet(model, force) {
       return nameTable(dest ? [tl('panel.th.action'), tl('panel.th.result'), tl('panel.th.dest')] : [tl('panel.th.action'), tl('panel.th.result')], pick(4, d.userActions, reveal(d.userActions.length, w), writing)
         .map(([[a, p, to], i, m]) => tr(m, `a${i}`, nameCells(dest ? [a, p, to || ''] : [a, p], false))).join(''));
     },
-    (w, writing) => `<ul class="rows">${pick(5, d.transitions, reveal(d.transitions.length, w), writing).map(([[trig, dest, how], i, m]) => li(m, `t${i}`, `${esc(trig)}<span class="to">→</span>${transitionTag(dest, how)}`)).join('')}</ul>`,
+    (w, writing) => `<ul class="rows">${pick(5, d.transitions, reveal(d.transitions.length, w), writing).map(([[trig, dest, how], i, m]) => li(m, `t${i}`, `${prose(trig)}<span class="to">→</span>${transitionTag(dest, how)}`)).join('')}</ul>`,
     (w, writing) => {
-      const rowsHTML = pick(6, d.branches, reveal(d.branches.length, w), writing).map(([[method, when, then], i, m]) => tr(m, `b${i}`, `<td class="mono">${esc(method)}</td>${bjCell(when, i, 1)}${bjCell(then, i, 2)}`)).join('');
+      const rowsHTML = pick(6, d.branches, reveal(d.branches.length, w), writing).map(([[method, when, then], i, m]) => tr(m, `b${i}`, `<td class="mono">${esc(method)}</td>${bjCell(when, i, 1, prose)}${bjCell(then, i, 2, prose)}`)).join('');
       const sheetNoteHTML = s.id === 'cart' && model.t >= 18 ? `<p class="sc-note">${esc(tl('panel.bt.note', { passed: T.passed }))}</p>` : '';
       return `<table class="vt bt"><thead><tr><th><span class="sr">${esc(tl('panel.th.state'))}</span></th><th>${esc(tl('panel.th.method'))}</th><th>${esc(tl('panel.th.condition'))}</th><th>${esc(tl('panel.th.result'))}</th></tr></thead><tbody>${rowsHTML}</tbody></table>${sheetNoteHTML}`;
     },
@@ -1186,6 +1206,7 @@ function renderSheet(model, force) {
   }).join('');
   setHTML(wbCode, sheetHTML);
   fillBranchJSON(wbCode, d.branches, s.id);
+  fillProse(wbCode, mdTexts);
   const mmd = wbCode.querySelector('[data-flow-mmd]');
   if (mmd) drawMermaid(mmd, d.flowMermaid).then((svg) => flowZoomApply(svg));
 
@@ -1344,7 +1365,7 @@ ${who ? `<dt>${esc(tl('panel.td.now'))}</dt><dd data-live-act="${esc(who)}"></dd
 ${base ? `<dt>${esc(tl('panel.td.dep'))}</dt><dd>${base.blockedBy ? `<button type="button" class="link-btn" data-open="${esc(base.list)}#${esc(base.blockedBy)}" data-fk="tbd-dep">${esc(tl('panel.td.ref', { id: base.blockedBy, subject: TASK_BY_KEY[`${base.list}#${base.blockedBy}`].subject }))}</button>${x && x.blocked ? esc(tl('panel.td.dep.wait')) : ''}` : esc(tl('panel.none'))}</dd>` : ''}
 ${base ? `<dt>${esc(tl('panel.td.next'))}</dt><dd>${blocks.length ? blocks.map((q) => `<button type="button" class="link-btn" data-open="${esc(q.list)}#${esc(q.id)}" data-fk="tbd-b${esc(q.id)}">${esc(tl('panel.td.ref', { id: q.id, subject: q.subject }))}</button>`).join(' ') : esc(tl('panel.none'))}</dd>` : ''}
 ${times ? `<dt>${esc(tl('panel.td.times'))}</dt><dd>${esc(times)}</dd>` : ''}
-${spec ? `<dt>spec</dt><dd><button type="button" class="link-btn" data-spec-open="${specIdx}" data-fk="tbd-spec">${esc(tl('panel.td.spec.open', { name: spec.name, screen: spec.screen }))}</button><span class="state ${STATUS_CLASS[spec.status.kind]}">${esc(spec.status.text)}</span></dd>` : ''}
+${spec ? `<dt>spec</dt><dd><button type="button" class="link-btn" data-spec-open="${specIdx}" data-fk="tbd-spec">${esc(tl('panel.td.spec.open', { name: spec.name, screen: spec.screen }))}</button><span class="state ${STATUS_CLASS[spec.status.kind]}" title="${esc(specStatus(spec).title)}">${esc(specStatus(spec).text)}</span></dd>` : ''}
 </dl>
 ${histHTML ? `<h4>${esc(tl('panel.td.perm.hist'))}</h4><ul class="tbd-list">${histHTML}</ul>` : ''}
 ${who ? `<h4>${esc(tl('panel.td.recent', { who }))}</h4><ul class="tbd-list" data-recent="${esc(who)}"></ul>` : ''}
@@ -1822,7 +1843,8 @@ ${subs.length ? `<section class="rb-sec" aria-labelledby="rb-h-subs"><h3 id="rb-
   if (looksEl) { looksEl.hidden = !causes.length; if (causes.length) setText(looksEl, HEAVY_LEGEND); }
   if (spec) {
     const k = activeSec(spec);
-    setText(rbEl.querySelector('[data-rb-specnow]'), `${spec.status.text}${k >= 0 ? ` · ${SECTIONS[k]}` : ''}`);
+    const st = specStatus(spec);
+    paintStatus(rbEl.querySelector('[data-rb-specnow]'), { text: `${st.text}${k >= 0 ? ` · ${SECTIONS[k]}` : ''}`, title: st.title });
     paintSegs(rbEl.querySelector('.rb-segs .segs'), spec);
   }
   if ((SOURCE.mode === 'demo' && id === 'a2')) {

@@ -975,6 +975,10 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .h-table th, .h-table td { padding: 3px 6px; border: 1px solid var(--line); text-align: left; }
 .h-table th, .h-table td { min-width: 6em; }   /* a many-column table scrolls sideways (.h-tablewrap) instead of folding every cell to one character */
 .h-md a { color: var(--info); }
+/* a spec's prose from its texts file, on the whiteboard's sheet (fillProse) */
+.sc-md { display: block; }
+.sc-md .h-md { gap: 4px; }
+.sc-md .h-md a { color: inherit; text-decoration: underline; }
 .h-img { color: var(--ink-soft); font-style: italic; }
 .h-tool, .h-peer, .h-harness { border-radius: 8px; background: var(--bg); }
 .h-tool summary, .h-peer summary, .h-harness summary { display: flex; gap: 8px; align-items: baseline; min-width: 0; padding: 5px 8px; cursor: pointer; font-size: 12.5px; }

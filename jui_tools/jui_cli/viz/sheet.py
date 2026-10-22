@@ -34,6 +34,9 @@ from . import i18n
 
 MAX_ITEMS = 300
 MAX_TEXT = 300
+#: prose from a texts file, sent as Markdown with its lines (ticket 2026-10-23-viz-spec-sheet-shows-md-reference-raw):
+#: cut longer than this, at a line's end where one is near
+MD_MAX = 4_000
 #: A branch's when / then larger than this (as JSON) goes as text, cut like any other (ticket 2026-10-20-jui-viz-spec-branch-json-formatted).
 MAX_JSON = 20_000
 #: Mermaid's own default maxTextSize: a longer diagram is not drawn (the page shows the boxes instead).
@@ -76,6 +79,18 @@ def _t(value) -> str:
     text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
     text = " ".join(text.split())
     return text if len(text) <= MAX_TEXT else text[: MAX_TEXT - 1] + "…"
+
+
+def _p(value):
+    """A prose field (shared/core/spec_texts.py TEXT_KEYS): {"markdown": text} when it came from a texts file (a
+    MarkdownText: the page draws it as Markdown, its lines kept), else the one line _t makes of it."""
+    if isinstance(value, str) and type(value).__name__ == "MarkdownText":
+        text = str(value).strip()
+        if len(text) > MD_MAX:
+            cut = text.rfind("\n", MD_MAX // 2, MD_MAX)
+            text = text[: cut if cut > 0 else MD_MAX].rstrip() + "\n\n…"
+        return {"markdown": text}
+    return _t(value)
 
 
 def _json_or_text(value):
@@ -145,7 +160,7 @@ def _listed_tree(listed: list[dict], layout: dict) -> list[list]:
         for kid in top:
             visit(kid, 0)
     order += [(c, 0) for c in listed if id(c) not in seen]
-    return [[_t(c.get("type")), _t(c.get("id")), _t(c.get("description")), depth] for c, depth in order]
+    return [[_t(c.get("type")), _t(c.get("id")), _p(c.get("description")), depth] for c, depth in order]
 
 
 def build_doc(spec: dict, layout_nodes: list[dict], related_exists: list[bool], impl: dict) -> dict:
@@ -166,7 +181,7 @@ def build_doc(spec: dict, layout_nodes: list[dict], related_exists: list[bool], 
     apis = []
     for api in _list(df.get("apiEndpoints")):
         if isinstance(api, dict):
-            apis.append([_t(api.get("operationId") or api.get("notes") or ""), _t(api.get("method")), _t(api.get("path"))])
+            apis.append([_p(api.get("operationId") or api.get("notes") or ""), _t(api.get("method")), _t(api.get("path"))])
 
     branches = []
     methods = _d(_d(spec.get("branchContracts")).get("methods"))
@@ -175,7 +190,7 @@ def build_doc(spec: dict, layout_nodes: list[dict], related_exists: list[bool], 
             if not isinstance(entry, dict):
                 continue
             if "note" in entry:
-                branches.append([_t(method), "note", _t(entry.get("note"))])
+                branches.append([_t(method), "note", _p(entry.get("note"))])
             else:
                 branches.append([_t(method), _json_or_text(entry.get("when")), _json_or_text(entry.get("then"))])
 
@@ -187,7 +202,7 @@ def build_doc(spec: dict, layout_nodes: list[dict], related_exists: list[bool], 
     return {
         "metadata": {
             "name": _t(meta.get("name")), "displayName": _t(meta.get("displayName")),
-            "description": _t(meta.get("description")),
+            "description": _p(meta.get("description")),
             "platforms": [_t(p) for p in _list(meta.get("platforms"))],
             "layoutFile": _t(meta.get("layoutFile")),
         },
@@ -195,17 +210,17 @@ def build_doc(spec: dict, layout_nodes: list[dict], related_exists: list[bool], 
         "layoutChildren": layout_children,
         "uiVariables": [[_t(v.get("name")), _t(v.get("type")), _t(v.get("initial", v.get("initialValue")))]
                         for v in _list(sm.get("uiVariables")) if isinstance(v, dict)],
-        "eventHandlers": [[_t(e.get("name")), _t(e.get("description"))]
+        "eventHandlers": [[_t(e.get("name")), _p(e.get("description"))]
                           for e in _list(sm.get("eventHandlers")) if isinstance(e, dict)],
         "vmMethods": [_name(m) for m in _list(vm.get("methods"))],
         "vmVars": [_name(v) for v in _list(vm.get("vars"))],
         "repositories": [_name(r) for r in _list(df.get("repositories"))],
         "apis": apis,
         # the third: where it goes (userAction.destination; "" when the spec says none), its own column on the sheet
-        "userActions": [[_t(a.get("action")), _t(a.get("processing")), _t(a.get("destination"))]
+        "userActions": [[_t(a.get("action")), _p(a.get("processing")), _t(a.get("destination"))]
                         for a in _list(spec.get("userActions")) if isinstance(a, dict)],
         # the third: how it moves (type / method: push, sheet, dismiss …), for the page's colours (2.3.5)
-        "transitions": [[_t(t.get("trigger") or t.get("condition")), _t(t.get("destination")), _t(t.get("type") or t.get("method") or "")]
+        "transitions": [[_p(t.get("trigger") or t.get("condition")), _t(t.get("destination")), _t(t.get("type") or t.get("method") or "")]
                         for t in _list(spec.get("transitions")) if isinstance(t, dict)],
         "branches": branches,
         "related": related,

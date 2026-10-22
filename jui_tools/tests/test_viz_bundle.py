@@ -188,6 +188,7 @@ BUILDERS = {
         "bjCell",   # 2.3.7: a branch's JSON cell, an empty placeholder (ticket 2026-10-20-jui-viz-spec-branch-json-formatted)
         "nameTable", "nameCells",   # 2.3.7: イベント・操作 as one table (ticket 2026-10-20-jui-viz-spec-events-as-table)
         "rowText", "wfTree", "levelHTML",   # 2.3.7: the 構造's row text and its nested boxes (ticket 2026-10-20-jui-viz-spec-structure-shows-no-nesting)
+        "prose",   # 2.3.20: a prose field, esc()'d or a Markdown placeholder (ticket 2026-10-23-viz-spec-sheet-shows-md-reference-raw)
         "rbMovedHTML",   # the card's mark when its robot moved and the view did not follow (ticket 2026-10-21-jui-viz-camera-does-not-follow-robot-walking-rooms)
     },
     "51-denials.js": {"denialHTML"},   # a call stopped by auto mode (ticket 2026-10-20-jui-viz-auto-mode-denial-approve-from-page)

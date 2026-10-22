@@ -2271,5 +2271,13 @@
   "srv.room.said.symlink": "{folder} is reached through a symlink, so it is not read (put it in a real folder inside the room)",
   "srv.room.said.no_infra_skipped": "No readable infra files (*.json) in {folder} (what is not a regular file is not read)",
   "spirit.badge": "Using skill: {name}",
-  "sheet.md.unread": "Not readable from the texts file: {ref}"
+  "sheet.md.unread": "Not readable from the texts file: {ref}",
+  "spec.when.today": "{time}",
+  "spec.when.yesterday": "Yesterday {time}",
+  "spec.when.older": "{date} {time}",
+  "spec.when.beside": "{status} · {when}",
+  "spec.when.title": "Last updated {full} ({what})",
+  "spec.when.by.spec": "the spec written",
+  "spec.when.by.layout": "the Layout written",
+  "spec.when.by.test": "a test result"
 }

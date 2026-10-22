@@ -139,7 +139,7 @@ function drawSpecTile(ctx, P, ST, s, x, y, w, h, now, g) {
     drawRolePill(ctx, role, s.by, px, py, g.pillW, g.pillH, g.pillFont, g.pillH * 0.72);
   }
   ctx.font = `700 ${g.status}px ${FONT_BODY}`; ctx.fillStyle = todo ? P.todoInk : ST[s.status.kind][1];
-  fitText(ctx, s.status.text, x + g.pad, y + g.statusY, w - g.pad * 2);
+  fitText(ctx, specStatus(s).text, x + g.pad, y + g.statusY, w - g.pad * 2);   // with its time (specWhen)
   const act = role ? activeSec(s) : -1, sy = y + h - g.segBottom - g.segH;
   for (let k = 0; k < 7; k++) {
     const st = secState(s, k), sx = x + g.pad + k * (sw + g.segGap);
@@ -352,14 +352,14 @@ function redrawBoards(model, now, force) {
   if (SOURCE.mode === 'live') { liveRedrawBoards(model, now, force); return; }
   const theme = isDark() ? 'd' : 'l';
   const blink = model.specs.some((s) => s.writingIdx >= 0 && s.by) ? Math.floor(now * 2.5) % 2 : 0;
-  const spec = theme + blink + model.specs.map((s) => [s.bucket, s.status.text, s.by, s.written.map((w) => Math.round(w * 50)).join(), s.implN.join(), activeSec(s)].join('|')).join(';');
+  const spec = theme + blink + model.specs.map((s) => [s.bucket, specStatus(s).text, s.by, s.written.map((w) => Math.round(w * 50)).join(), s.implN.join(), activeSec(s)].join('|')).join(';');
   const test = model.tests.statusText + model.tests.rows.map((r) => r.status + (r.step || '')).join();
   const task = theme + model.pending.map((p) => p.id).join() + model.tasks.map((x) => x.key + x.col + (x.perm ? '!' : '')).join();
   if (force || spec !== boardSig.spec) { drawSpecBoard(model, now); boardSig.spec = spec; }
   if (force || test !== boardSig.test) { drawTestBoard(model); boardSig.test = test; }
   if (force || task !== boardSig.task) { drawTaskBoard(model); boardSig.task = task; }
   for (const pb of PBOARDS) {
-    const sig = theme + blink + pb.specs.map((i) => { const s = model.specs[i]; return [s.status.text, s.by, s.written.map((w) => Math.round(w * 50)).join(), s.implN.join(), activeSec(s)].join('|'); }).join(';')
+    const sig = theme + blink + pb.specs.map((i) => { const s = model.specs[i]; return [specStatus(s).text, s.by, s.written.map((w) => Math.round(w * 50)).join(), s.implN.join(), activeSec(s)].join('|'); }).join(';')
       + model.tasks.filter((x) => PROJECT_OF[x.list] === pb.project).map((x) => x.key + x.col + (x.perm ? '!' : '')).join() + model.pending.map((p) => p.id).join();
     if (force || sig !== pb.sig) { drawProjectBoard(pb, model, now); pb.sig = sig; }
   }
@@ -2125,7 +2125,7 @@ function liveRedrawBoards(model, now, force) {
     const robotsIn = ROBOT_DEFS.filter((d) => d.room === id).length;
     R.pb.specs = model.specs.map((s, i) => [s, i]).filter(([s]) => s.project === id).map(([, i]) => i);
     const blink = R.pb.specs.some((i) => model.specs[i].writingIdx >= 0 && model.specs[i].by) ? Math.floor(now * 2.5) % 2 : 0;
-    const specSig = R.pb.specs.map((i) => { const x = model.specs[i]; return [x.bucket, x.status.text, x.by, x.written.map((v) => Math.round(v * 50)).join(), x.implN.join(), activeSec(x)].join('|'); }).join(';');
+    const specSig = R.pb.specs.map((i) => { const x = model.specs[i]; return [x.bucket, specStatus(x).text, x.by, x.written.map((v) => Math.round(v * 50)).join(), x.implN.join(), activeSec(x)].join('|'); }).join(';');
     const sig = theme + blink + robotsIn + SESSIONS.filter((s) => s.project === id).length + pend + tasks.map((x) => x.key + x.col).join() + specSig;
     if (force || sig !== R.pb.sig) { if (R.pb.big) drawBigSpecBoard(R.pb, model, now); else drawProjectBoard(R.pb, model, now); R.pb.sig = sig; }
     const taskSig = theme + pend + tasks.map((x) => x.key + x.col + (x.perm ? '!' : '')).join();

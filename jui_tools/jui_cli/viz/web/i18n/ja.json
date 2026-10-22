@@ -2222,5 +2222,13 @@
   "srv.room.said.symlink": "{folder} は symlink を通るため読みません（部屋の中の本物のフォルダに置いてください）",
   "srv.room.said.no_infra_skipped": "{folder} に読める infra のファイル（*.json）がありません（普通のファイルでない物は読みません）",
   "spirit.badge": "スキル使用中: {name}",
-  "sheet.md.unread": "文のファイルから読めない: {ref}"
+  "sheet.md.unread": "文のファイルから読めない: {ref}",
+  "spec.when.today": "{time}",
+  "spec.when.yesterday": "昨日 {time}",
+  "spec.when.older": "{date} {time}",
+  "spec.when.beside": "{status} · {when}",
+  "spec.when.title": "最終更新 {full}（{what}）",
+  "spec.when.by.spec": "spec の書き込み",
+  "spec.when.by.layout": "Layout の書き込み",
+  "spec.when.by.test": "テストの結果"
 }

@@ -401,6 +401,7 @@ function liveSpecRow(x) {
     id: x.id, screen: String(x.name || ''), name: String(x.name || ''), project: x.projectId, file: String(x.file || ''),
     app: String(x.app || ''), specDir: String(x.specDir || ''),   // the app inside the room that holds the spec
     advancedAt: Number.isFinite(x.advancedAt) ? x.advancedAt : 0,   // when it last moved on: the lists' order (specNewer)
+    advancedBy: typeof x.advancedBy === 'string' ? x.advancedBy : '',   // what moved it: spec / layout / test (specWhen)
     doc: prev && prev.docAt === x.updatedAt ? prev.doc : (prev ? prev.doc : null), docAt: prev ? prev.docAt : null, updatedAt: x.updatedAt,
     totals, related: prev && prev.doc ? (prev.doc.related || []) : [], written, implN, implPhase, writingIdx, measure, unmeasured,
     implIdx: by && writingIdx < 0 && x.bucket === 'live' && !tests.running && implN[1] < totals[1] ? 1 : -1,
@@ -429,6 +430,8 @@ function liveWantSheet(row) {
   LIVE.sheetAsked[row.id] = { at: row.updatedAt, t: Date.now() };
   netRequest('spec.sheet', { specId: row.id }).then((ack) => { if (!ack.ok) LIVE.sheetFailed[row.id] = ack.error || tl('live.unknown'); });
 }
+/* A prose field as the server sent it: {markdown} (from a texts file, drawn as Markdown by the sheet) kept, else text. */
+function sheetProse(v) { return v && typeof v === 'object' && typeof v.markdown === 'string' ? { markdown: v.markdown } : String(v ?? ''); }
 function liveSheet(msg) {
   const row = LIVE.specRows[msg.specId];
   if (!row || !msg.cards || typeof msg.cards !== 'object') return;
@@ -436,7 +439,7 @@ function liveSheet(msg) {
   const arr = (v) => (Array.isArray(v) ? v : []);
   const meta = d.metadata && typeof d.metadata === 'object' ? d.metadata : {};
   row.doc = {
-    metadata: { name: String(meta.name || ''), displayName: String(meta.displayName || row.name), description: String(meta.description || ''), platforms: arr(meta.platforms).map(String), layoutFile: String(meta.layoutFile || ''), createdAt: String(meta.createdAt || '') },
+    metadata: { name: String(meta.name || ''), displayName: String(meta.displayName || row.name), description: sheetProse(meta.description), platforms: arr(meta.platforms).map(String), layoutFile: String(meta.layoutFile || ''), createdAt: String(meta.createdAt || '') },
     components: arr(d.components), layoutChildren: arr(d.layoutChildren), uiVariables: arr(d.uiVariables), eventHandlers: arr(d.eventHandlers),
     vmMethods: arr(d.vmMethods), vmVars: arr(d.vmVars), repositories: arr(d.repositories), apis: arr(d.apis),
     userActions: arr(d.userActions), transitions: arr(d.transitions), branches: arr(d.branches), related: arr(d.related),
