@@ -133,9 +133,7 @@ function srMigRebuild(first) {
   const V = SR.view, P = SR_MIG.P;
   if (P) SR.model = srMigUnion(SR.migBase, P.entry, P.k, P.half);
   if (!V) return;
-  const pos = V.camera.position.clone(), target = V.controls.target.clone();
-  srBuild();
-  if (!first) { const W = SR.view; W.camera.position.copy(pos); W.controls.target.copy(target); W.controls.update(); }
+  srBuild(first ? undefined : { pos: V.camera.position.clone(), target: V.controls.target.clone() });   // no frame from the fit camera
 }
 function srMigReset() {
   const P = SR_MIG.P;
@@ -322,6 +320,7 @@ function srMigRenderBar() {
   if (C && C.ok) {
     const nowUsd = P.k ? C.steps[P.k - 1].usd : C.old.usd, stepDiff = cur ? C.steps[cur.index - 1].diff : null;   // the step shown
     costHTML = `<span class="sr-mp-cost" data-sr-mp-cost>${esc(tl('sr.mig.cost', { old: srcUsd(C.old.usd), now: srcUsd(nowUsd), new: srcUsd(C.new.usd) }))}${stepDiff !== null ? ` <b data-sr-mp-diff>${esc(tl('sr.mig.cost.step', { diff: srMigSigned(stepDiff) }))}</b>` : ''}</span>`;
+    if (C.unpricedChanged && C.unpricedChanged.length) costHTML += ` <small class="sr-mp-unpriced" data-sr-mp-unpriced title="${esc(C.unpricedChanged.join(', '))}">${esc(tl('sr.mig.unpriced.bar', { n: C.unpricedChanged.length }))}</small>`;
   } else if (C && !C.ok) costHTML = `<span class="sr-fp-state">${esc(tl('sr.mig.cost.none'))}</span>`;
   setHTML(bar, `<b class="sr-fp-title">${esc(tl('sr.mig.title', { name: P.entry.name }))}</b>
 <button type="button" class="wb-btn" data-sr-mp="toggle" aria-label="${esc(playing ? tl('sr.flow.pause') : tl('sr.mig.go'))}">${playing ? '⏸' : '▶'}</button>
@@ -352,10 +351,20 @@ $('sr-mplayer').addEventListener('change', (e) => { if (e.target.dataset.srMp ==
 function srMigCostHTML() {
   const P = SR_MIG.P, C = P && P.cost;
   if (!C || !C.ok) return '';
-  const rowsHTML = (list, key) => list.filter((r) => r.old || r.new || (r.change && r.change !== 'same')).slice(0, 15).map((r) => `<tr data-sr-mig-row="${esc(r[key])}"><th scope="row">${esc(r[key] || '—')}${SR_MIG_CHANGE[r.change] ? ` <small>${esc(SR_MIG_CHANGE[r.change])}</small>` : ''}</th><td>${esc(srcUsd(r.old))}</td><td>${esc(srcUsd(r.new))}</td><td class="${r.diff > 0 ? 'src-up' : r.diff < 0 ? 'src-down' : ''}">${esc(srMigSigned(r.diff))}</td></tr>`).join('');
+  const rowsHTML = (list, key) => list.filter((r) => r.old || r.new || (r.change && r.change !== 'same')).slice(0, 15).map((r) => `<tr data-sr-mig-row="${esc(r[key])}"><th scope="row">${esc(r[key] || '—')}${SR_MIG_CHANGE[r.change] ? ` <small>${esc(SR_MIG_CHANGE[r.change])}</small>` : ''}${r.unpriced ? ` <small class="src-red" data-src-mig-unpriced>${esc(tl('sr.mig.unpriced.row'))}</small>` : ''}</th><td>${esc(srcUsd(r.old))}</td><td>${esc(srcUsd(r.new))}</td><td class="${r.diff > 0 ? 'src-up' : r.diff < 0 ? 'src-down' : ''}">${esc(srMigSigned(r.diff))}</td></tr>`).join('');
   const headHTML = `<thead><tr><th></th><th scope="col">${esc(tl('sr.mig.col.old'))}</th><th scope="col">${esc(tl('sr.mig.col.new'))}</th><th scope="col">${esc(tl('sr.mig.col.diff'))}</th></tr></thead>`;
   return `<section class="src-mig" data-src-mig><h3>${esc(tl('sr.mig.cost.title', { name: P.entry.name }))}</h3>
 <p>${esc(tl('sr.mig.cost', { old: srcUsd(C.old.usd), now: srcUsd(P.k ? C.steps[P.k - 1].usd : C.old.usd), new: srcUsd(C.new.usd) }))} <b>${esc(srMigSigned(C.diff.usd))}</b></p>
+${C.unpricedChanged && C.unpricedChanged.length ? `<p class="src-red" data-src-mig-unpriced-note>${esc(tl('sr.mig.unpriced.bar', { n: C.unpricedChanged.length }))}: ${esc(C.unpricedChanged.join(', '))}</p>` : ''}
 <table class="src-mig-t" data-src-mig-nodes>${headHTML}<tbody>${rowsHTML(C.byNode, 'node')}</tbody></table>
 <table class="src-mig-t" data-src-mig-clouds>${headHTML}<tbody>${rowsHTML(C.byProvider, 'provider')}</tbody></table></section>`;
+}
+
+/* The cost view's big number is the room's own model (the old one while a plan is open): said so, with the month of
+   the step the player is at. */
+function srMigTotalHTML() {
+  const P = SR_MIG.P, C = P && P.cost;
+  if (!P) return '';
+  const now = C && C.ok ? (P.k ? C.steps[P.k - 1].usd : C.old.usd) : null;
+  return `<span class="src-mig-now" data-src-mig-now>${esc(tl('sr.mig.total.old'))}${now !== null ? ` · ${esc(tl('sr.mig.total.now', { k: P.k, n: P.entry.steps.length, usd: srcUsd(now) }))}` : ''}</span>`;
 }

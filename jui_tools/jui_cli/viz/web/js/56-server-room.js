@@ -459,7 +459,9 @@ function srDispose() {
   $('sr-labels').innerHTML = '';
   SR.view = null;
 }
-function srBuild() {
+/* keep: {pos, target} — the camera the view had (the theme, a migration step): set before the first frame is drawn,
+   so the fit view is never seen in between. */
+function srBuild(keep) {
   const t0 = srNow();
   srDispose();
   const model = SR.model, env = $('sr-env').value || '', fold = $('sr-fold').checked;
@@ -593,6 +595,7 @@ function srBuild() {
   srLinesMode(V);
   srFocusLines(V);
   srFit(true);
+  if (keep) { camera.position.copy(keep.pos); controls.target.copy(keep.target); controls.update(); }
   srCounts(L);
   cv.onpointerdown = (e) => { V.downAt = [e.clientX, e.clientY]; };
   cv.onpointermove = (e) => {   // the pointed node's cables, strong (at most every 60 ms)
@@ -614,6 +617,7 @@ function srBuild() {
     if (V.last) { V.frames.push(t - V.last); if (V.frames.length > 240) V.frames.shift(); }
     V.last = t;
     controls.update();
+    if (SR.camTrail) SR.camTrail.push(camera.position.toArray().concat(controls.target.toArray()));   // the e2e: each frame's camera
     srLod(V);
     srFlowTick(V, dt);
     srMigTick(V, dt);
@@ -1022,10 +1026,8 @@ function srRenderLog() {
 function srRetheme() {
   const V = SR.view;
   if (SR.phase !== 'open' || !V || V.dark === isDark()) return;
-  const pos = V.camera.position.clone(), target = V.controls.target.clone();
-  srBuild();
+  srBuild({ pos: V.camera.position.clone(), target: V.controls.target.clone() });
   const W = SR.view;
-  W.camera.position.copy(pos); W.controls.target.copy(target); W.controls.update();
   srLog(tl('sr.log.theme', { theme: W.dark ? tl('sr.theme.dark') : tl('sr.theme.light') }));
 }
 if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', srRetheme);

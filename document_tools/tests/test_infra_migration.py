@@ -262,3 +262,33 @@ def test_a_plan_with_an_error_or_no_such_plan_is_not_priced(tmp_path, monkeypatc
     assert D.reply(root, "none")[1]["reason"] == "no_plan"
     rc, out = _cli("cost", "infra", str(root), "--migration", "none", "--json")
     assert rc == 2 and json.loads(out)["reason"] == "no_plan"
+
+
+def test_a_load_row_for_a_node_the_plan_adds_counts_once_it_is_there(tmp_path, monkeypatch):
+    """The scenario's rows are read against each step's model: a row for the added node prices it in the new month (and
+    the step that adds it), and is no warning of the room's own load definitions while a plan adds that node."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    root = _priced_room(tmp_path)
+    load_dir = root / "docs/infra/load"
+    for f in load_dir.glob("*.json"):
+        doc = json.loads(f.read_text())
+        doc["loads"].append({"node": "cache-prod", "quantities": {"ecpu": {"amount": 1000, "per": "second"}, "storage_gb": 1}})
+        f.write_text(json.dumps(doc))
+    base = _priced_room(tmp_path / "b")
+    _c, without = D.reply(base, "move")
+    code, out = D.reply(root, "move")
+    assert code == 0 and not [p for p in L.read(root)["problems"] if p["code"] == "load.node_missing"]
+    added = next(r for r in out["byNode"] if r["node"] == "cache-prod")
+    assert added["old"] == 0 and added["new"] > 0 and "cache-prod" not in out["unpricedChanged"]
+    assert out["new"]["usd"] > without["new"]["usd"] and out["old"]["usd"] == without["old"]["usd"]
+    # with no plan adding it, the same row is the warning it was
+    (root / "docs/infra/migrations/move/changes.json").write_text(json.dumps({"version": 0}))
+    assert [p["node"] for p in L.read(root)["problems"] if p["code"] == "load.node_missing"] == ["cache-prod"] * 2
+
+
+def test_a_changed_node_with_no_price_is_named(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    _c, out = D.reply(_priced_room(tmp_path), "move")
+    unpriced = {r["node"] for r in out["byNode"] if r["unpriced"]}
+    assert "cache-prod" in out["unpricedChanged"] and set(out["unpricedChanged"]) <= unpriced
+    assert set(out["unpricedChanged"]) <= {s for k in ("noRule", "loadUndefined", "noPrice") for s in out["old"][k] + out["new"][k]}

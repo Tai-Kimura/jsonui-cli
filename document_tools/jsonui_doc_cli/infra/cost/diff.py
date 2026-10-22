@@ -2,9 +2,11 @@
 2026-10-22-viz-infra-migration-plan, the requester 10-22: 「コストの差の表示は欲しいね」).
 
 Nothing new is priced: the old model and the model after each step of the plan (migration.Plan.model_at) are each
-simulated with the same engine, the same scenario and the same price book as `cost infra`, and the reply is their
+simulated with the same engine, the same scenario (its rows read against that model, so a row for a node the plan
+adds counts once the node is there) and the same price book as `cost infra`, and the reply is their
 months side by side — old, new, new - old, by node and by provider, and the total after every step with the step's
-own difference. With account, each model's account (its environments' scenarios priced with one total, as viz's
+own difference. A node the plan changes whose month is not all priced (no price, no rule, no load) is named
+(unpricedChanged, and "unpriced" on its row): the difference leaves its part out. With account, each model's account (its environments' scenarios priced with one total, as viz's
 コスト chooses them) is given too.
 
 reply() -> (exit code, reply): 0 priced; 1 priced, but a load definition has an error; 2 nothing priced (the room,
@@ -38,8 +40,16 @@ def account_scenarios(scenarios: list[dict], model: dict, chosen: dict) -> tuple
     return available, picked, missing
 
 
-def _month(scenario: dict, model: dict, book) -> dict:
-    """{usd, byNode, byProvider} of one simulated month."""
+def _scenarios(root: Path, model: dict) -> list[dict]:
+    """The room's load definitions read against ``model`` (a row for a node the plan adds counts once it is there)."""
+    got = L.read(root, model=dict(model, ok=True))
+    return got["scenarios"] if got.get("ok") else []
+
+
+def _month(root: Path, chosen: dict, model: dict, book) -> dict:
+    """{usd, byNode, byProvider, noRule, loadUndefined, noPrice, unpriced} of one simulated month: the chosen scenario
+    as read against this model."""
+    scenario = next((s for s in _scenarios(root, model) if s["id"] == chosen["id"]), chosen)
     t = E.month_totals(E.simulate(scenario, model, book))
     by_node: dict[str, float] = {}
     by_prov: dict[str, float] = {}
@@ -48,20 +58,27 @@ def _month(scenario: dict, model: dict, book) -> dict:
             by_node[n] = by_node.get(n, 0.0) + v
         for p, v in d["byProvider"].items():
             by_prov[p] = by_prov.get(p, 0.0) + v
+    no_price = sorted({x["node"] for x in t["noPrice"]})
     return {"usd": t["usd"], "byNode": by_node, "byProvider": by_prov, "noRule": t["noRule"],
-            "loadUndefined": t["loadUndefined"], "noPrice": sorted({x["node"] for x in t["noPrice"]})}
+            "loadUndefined": t["loadUndefined"], "noPrice": no_price,
+            "unpriced": set(t["noRule"]) | set(t["loadUndefined"]) | set(no_price)}
 
 
-def _account(scenarios: list[dict], model: dict, chosen: dict, book) -> float | None:
+def _account(root: Path, model: dict, chosen: dict, book) -> float | None:
+    scenarios = _scenarios(root, model)
+    chosen = next((s for s in scenarios if s["id"] == chosen["id"]), chosen)
     available, picked, _missing = account_scenarios(scenarios, model, chosen)
     if not available:
         return None
     return E.account_totals(E.simulate_account(picked, model, book))["usd"]
 
 
-def _rows(old: dict, new: dict, key: str, change: dict | None = None) -> list[dict]:
+def _rows(old: dict, new: dict, key: str, change: dict | None = None, unpriced: set | None = None) -> list[dict]:
+    """Old, new and the difference by ``key``; with ``unpriced`` (by node), whether a part of the node has no price, no
+    rule or no load in either month (its 0 is not its cost)."""
     names = list(dict.fromkeys([*old, *new, *(change or {})]))
     rows = [{key: n, **({"change": (change or {}).get(n, "same")} if change is not None else {}),
+             **({"unpriced": n in unpriced} if unpriced is not None else {}),
              "old": old.get(n, 0.0), "new": new.get(n, 0.0), "diff": new.get(n, 0.0) - old.get(n, 0.0)} for n in names]
     return sorted(rows, key=lambda r: (-abs(r["diff"]), r[key]))
 
@@ -95,18 +112,18 @@ def _reply(root: Path, plan_name: str, scenario: str | None, account: bool, env:
                    "problems": [_problem(p) for p in plan_problems[:FIRST]]}
     book, warnings = PB.load(root, env)
     models = [old_model] + [plan.model_at(k)[0] for k in range(1, plan.last + 1)]
-    old, new = _month(chosen, models[0], book), _month(chosen, models[-1], book)
+    old, new = _month(root, chosen, models[0], book), _month(root, chosen, models[-1], book)
     change = {s["node"]: {"add": "added", "replace": "replaced", "remove": "removed"}[s["kind"]] for s in plan.steps if s["node"]}
     steps, before = [], old["usd"]
     for s in plan.steps:
-        usd = (new["usd"] if s["index"] == plan.last else _month(chosen, models[s["index"]], book)["usd"]) \
+        usd = (new["usd"] if s["index"] == plan.last else _month(root, chosen, models[s["index"]], book)["usd"]) \
             if s["index"] <= MAX_STEPS or s["index"] == plan.last else None
         steps.append({"index": s["index"], "node": s["node"], "usd": usd,
                       "diff": None if usd is None or before is None else usd - before})
         before = usd
     acct = None
     if account:
-        a_old, a_new = _account(scenarios, models[0], chosen, book), _account(scenarios, models[-1], chosen, book)
+        a_old, a_new = _account(root, models[0], chosen, book), _account(root, models[-1], chosen, book)
         if a_old is None or a_new is None:
             return _refuse("no_account", "the account needs two environments or more, each with a load definition "
                                          "(in the old model and in the new)")
@@ -115,9 +132,12 @@ def _reply(root: Path, plan_name: str, scenario: str | None, account: bool, env:
     out = {"ok": True, "dir": loads["dir"], "migration": plan_name, "scenario": chosen["id"],
            "scenarios": [{"id": s["id"], "label": s["label"], "file": s["file"], "month": s["month"],
                           "environment": s["environment"]} for s in scenarios],
-           "old": {"usd": old["usd"]}, "new": {"usd": new["usd"], "noRule": new["noRule"], "loadUndefined": new["loadUndefined"],
-                   "noPrice": new["noPrice"]}, "diff": {"usd": new["usd"] - old["usd"]},
-           "byNode": _rows(old["byNode"], new["byNode"], "node", change),
+           "old": {k: old[k] for k in ("usd", "noRule", "loadUndefined", "noPrice")},
+           "new": {k: new[k] for k in ("usd", "noRule", "loadUndefined", "noPrice")}, "diff": {"usd": new["usd"] - old["usd"]},
+           # the nodes the plan changes whose month is not all priced (no price, no rule, no load) in the old or the new:
+           # the difference leaves their part out
+           "unpricedChanged": sorted(n for n in change if n in old["unpriced"] | new["unpriced"]),
+           "byNode": _rows(old["byNode"], new["byNode"], "node", change, old["unpriced"] | new["unpriced"]),
            "byProvider": _rows(old["byProvider"], new["byProvider"], "provider"),
            "steps": steps, "account": acct,
            "problems": {"count": len(problems), "errors": sum(1 for p in problems if p["severity"] == "error"),

@@ -135,11 +135,16 @@ window.__dbg = {
       newNodes: P.entry.model.nodes.filter((n) => srVisible(n, V.env) && (V.fold || !n.fold)).map((n) => n.id).sort(),
       newEdges: P.entry.model.edges.filter((e) => srVisible(e, V.env)).map(srMigKey).sort(),
       newGroups: P.entry.model.groups.filter((g) => srVisible(g, V.env)).map((g) => g.id).sort(),
-      cost: P.cost ? (P.cost.ok ? { old: P.cost.old.usd, new: P.cost.new.usd, diff: P.cost.diff.usd, steps: P.cost.steps.map((s) => s.usd) } : { ok: false }) : null,
+      cost: P.cost ? (P.cost.ok ? { old: P.cost.old.usd, new: P.cost.new.usd, diff: P.cost.diff.usd, steps: P.cost.steps.map((s) => s.usd), unpricedChanged: P.cost.unpricedChanged } : { ok: false }) : null,
       bar: ($('sr-mplayer').querySelector('[data-sr-mp-cost]') || {}).textContent || '' };
   },
   srMigStart: (name) => srMigStart(name),
-  srcUsd: (v) => srcUsd(v),   // the cost view's own money format (the e2e compares the engine's numbers as shown)
+  srcUsd: (v) => srcUsd(v),
+  // each frame's camera (position and target) while on: off gives what was kept (a rebuild must not move it a frame)
+  // where 全体を見る puts the camera (position and target), without moving it
+  srFitCamera: () => { const V = SR.view; if (!V) return null; const p = V.camera.position.clone(), q = V.controls.target.clone(); srFit(true);
+    const out = V.camera.position.toArray().concat(V.controls.target.toArray()); V.camera.position.copy(p); V.controls.target.copy(q); V.controls.update(); return out; },
+  srCamTrail: (on) => { const got = SR.camTrail || []; SR.camTrail = on ? [] : null; return got; },   // the cost view's own money format (the e2e compares the engine's numbers as shown)
   srMigSpeed: (s) => { SR_MIG.speed = s; srMigRenderBar(); return SR_MIG.speed; },
   srLabelRects: () => [...document.querySelectorAll('#sr-labels .sr-label:not([hidden])')].map((s) => { const r = s.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom].map(Math.round); }),
   // a robot of the room up close moved onto the line from the camera to the door, at a robot's height: it then stands in

@@ -196,11 +196,11 @@ BUILDERS = {
     "53-roster.js": {"rosterRowHTML"},   # the room's robot list (ticket 2026-10-23-viz-room-robot-list-show-hide)   # the デバイス pane (ticket 2026-10-20-jui-viz-device-panel-machine-load-and-emulators)
     "52-data-docs.js": {"dsContentHTML", "dsEndpointHTML", "dsEpHTML", "dsApiHTML", "dsTableHTML", "dsDbHTML"},
     "59-sr-flows.js": {"srFlowBoardHTML"},   # the flows a chosen node starts, on the server room's board (its item 7)
-    "59-sr-migration.js": {"srMigBoardHTML", "srMigCostHTML", "rowsHTML"},   # the plans on the board, 旧 · 新 · 差 on コスト
+    "59-sr-migration.js": {"srMigBoardHTML", "srMigCostHTML", "rowsHTML", "srMigTotalHTML"},   # the plans on the board, 旧 · 新 · 差 on コスト
     "56-server-cost.js": {"srcSummary", "srcAccountHTML", "srcMonthSvg", "srcRow", "srcDayHtml", "srcPicked"},   # the cost simulator's month and day
 }
 # Builders a part may call that another part defines (each checked where it is defined).
-SHARED_BUILDERS = {"pill", "histOffHTML", "srFlowBoardHTML", "srMigBoardHTML", "srMigCostHTML"}
+SHARED_BUILDERS = {"pill", "histOffHTML", "srFlowBoardHTML", "srMigBoardHTML", "srMigCostHTML", "srMigTotalHTML"}
 BUILDER_TABLES = {"bodies": "the sheet's section renderers, each a template checked here"}
 # Lookups into tables the page defines as literals (class names, labels, colours, icons).
 CONST_TABLES = {"ROLES", "ROLE_INK", "CASE_ICON", "COL_HINT", "COL_STATE", "EXACT_LABEL", "PLATFORM_JA",

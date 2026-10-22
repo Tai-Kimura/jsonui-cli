@@ -594,12 +594,15 @@ def normalize(name: str, doc: dict, model: dict) -> tuple[dict, list[dict]]:
 
 # ---------------------------------------------------------------- the room's load definitions
 
-def read(root: Path, words: R.Words = R.DEFAULT_WORDS) -> dict:
+def read(root: Path, words: R.Words = R.DEFAULT_WORDS, model: dict | None = None) -> dict:
     """Every load definition of the room against its model: {ok, dir, files, scenarios, problems}, or {ok: False,
     reason, message, short} when the model or the folder cannot be read. Each problem has its line in ``words``'
-    language (short), as the model's have. Blocking: call it off the event loop."""
+    language (short), as the model's have. ``model``: another model to read them against (a migration plan's model
+    after a step, infra/cost/diff.py: a row for a node the plan adds is used there, and left out against the room's
+    own model). Blocking: call it off the event loop."""
     root = Path(root)
-    model = R.read(root, words=words)
+    own = model is None
+    model = R.read(root, words=words) if own else model
     if not model.get("ok"):
         return {"ok": False, "reason": model.get("reason", "invalid"), "message": "the infra model cannot be read: "
                 + model.get("message", ""), "short": model.get("short"), "problems": model.get("problems", [])}
@@ -624,6 +627,10 @@ def read(root: Path, words: R.Words = R.DEFAULT_WORDS) -> dict:
         problems += found
         scenarios.append(scenario)
         used.append(name)
+    if own:            # a row for a node one of the room's migration plans adds waits for the plan (cost/diff.py)
+        from . import migration as MG
+        planned = MG.planned_nodes(root)
+        problems = [p for p in problems if not (p["code"] == "load.node_missing" and p.get("node") in planned)]
     for p in problems:
         p["short"] = R.short(p, folder, words)
     return {"ok": True, "dir": folder, "files": used, "scenarios": scenarios, "problems": problems}

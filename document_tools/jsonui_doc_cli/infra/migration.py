@@ -86,6 +86,25 @@ def plan_names(root: Path, mig: str) -> list[str]:
         os.close(fd)
 
 
+def planned_nodes(root: Path) -> set[str]:
+    """The ids of the nodes the room's plans add or put in place (their changes.json, as written; a plan that cannot be
+    read gives none): a load row for one is not a mistake of the room's own load definitions."""
+    try:
+        mig = folder(Path(root))
+    except R.Refused:
+        return set()
+    out: set[str] = set()
+    for name in plan_names(Path(root), mig):
+        raw = R.read_capped(Path(root), f"{mig}/{name}/changes.json", R.LIMITS["file_bytes"])
+        try:
+            data = json.loads(raw.decode("utf-8-sig")) if isinstance(raw, bytes) else {}
+        except (ValueError, UnicodeDecodeError, RecursionError):
+            continue
+        nodes = data.get("nodes") if isinstance(data, dict) else None
+        out |= {n["id"] for n in nodes or [] if isinstance(n, dict) and isinstance(n.get("id"), str)}
+    return out
+
+
 def _p(file: str, path: str, code: str, message: str, severity: str = "error") -> dict:
     return M._problem(file, path, code, message, severity)
 

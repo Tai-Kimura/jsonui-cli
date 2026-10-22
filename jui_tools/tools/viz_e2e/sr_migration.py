@@ -13,8 +13,10 @@ edge's length from the line's positions), never from the plan's own lists alone.
   * replace: the old version shrinks (its spec still the old one), then the new one (the new spec) grows
   * remove: its edge shrinks to its middle, then the node shrinks away; the edge removed alone goes at the last step
   * the end: what is drawn is the new model, node for node and edge for edge
-  * the cost: 旧 → 今 → 新 on the player from the engine's months, the step shown with its own difference; the コスト
-    view's 旧 · 新 · 差 table
+  * replace redraws the room with the camera held: no frame from the fit camera between
+  * the cost: 旧 → 今 → 新 on the player from the engine's months, the step shown with its own difference, the changed
+    nodes with no price said; the コスト view's 旧 · 新 · 差 table (rows with no price marked) and its big number said
+    to be the old model's, with the month at the step the player is at
   * back to the start: the old model again; stop: the room's own model (its flows offered again)
   * a room with no plan: no plan on the board
 """
@@ -152,6 +154,9 @@ async def run_sr_migration(pw, out, failures):
         check(failures, "cache-subnet" not in m["floors"] and "private-prod" in m["floors"], f"the new group's floor waits for its node: {m['floors']}")
         check(failures, m["specs"]["db-prod"].startswith("db.r6g.large"), f"the replaced node drawn as the old one: {m['specs']}")
         usd = lambda v: page.evaluate("(v) => window.__dbg.srcUsd(v)", v)  # noqa: E731
+        unpriced = T("sr.mig.unpriced.bar", n=len(cli["unpricedChanged"]))
+        check(failures, cli["unpricedChanged"] and unpriced in await page.inner_text("#sr-mplayer"),
+              f"a changed node with no price is said on the player: {cli['unpricedChanged']} {unpriced!r}")
         bar_old = T("sr.mig.cost", old=await usd(cli["old"]["usd"]), now=await usd(cli["old"]["usd"]), new=await usd(cli["new"]["usd"]))
         check(failures, m["bar"].startswith(bar_old), f"the player's cost is the engine's old and new: {m['bar']!r} vs {bar_old!r}")
 
@@ -166,7 +171,13 @@ async def run_sr_migration(pw, out, failures):
         check(failures, m["sizes"]["cache-prod"] == 1 and m["lengths"]["api-prod->cache-prod"] == 1 and m["lights"] == 0 and "cache-subnet" in m["floors"],
               f"added: the node and its edge whole, no light left, its floor drawn: {m['sizes']} {m['lengths']} {m['lights']} {m['floors']}")
 
-        # replace: the old one shrinks (old spec), then the new one grows (new spec)
+        # replace: the old one shrinks (old spec), then the new one grows (new spec); the room drawn again on the way
+        # with the camera where it was, not one frame from elsewhere (the fit view flashed for two frames: the video)
+        # moved in on the node first: the fit camera is then somewhere else (at the fit view the two are one place)
+        await page.evaluate("() => window.__dbg.srSelect('db-prod')")
+        await page.click("#sr-board [data-sr-act='focus']")
+        await page.wait_for_timeout(300)
+        await page.evaluate("() => window.__dbg.srCamTrail(true)")
         await page.click("#sr-mplayer [data-sr-mp='step']")
         await until(page, "() => { const m = window.__dbg.srMig(); return m.anim && m.anim.t > 0.1 && m.anim.t < 0.45 && m.sizes['db-prod'] < 0.9; }", "the old one shrinking", timeout=20000)
         m = await page.evaluate(MIG)
@@ -175,6 +186,11 @@ async def run_sr_migration(pw, out, failures):
         m = await page.evaluate(MIG)
         check(failures, m["specs"]["db-prod"].startswith("db.r6g.xlarge"), f"growing, it is the new one: {m['specs']}")
         await until(page, "() => { const m = window.__dbg.srMig(); return m.k === 2 && !m.anim; }", "step 2 done", timeout=20000)
+        trail = await page.evaluate("() => window.__dbg.srCamTrail(false)")
+        moved = [i for i, c in enumerate(trail) if max(abs(a - b) for a, b in zip(c, trail[0])) > 1e-6]
+        fit = await page.evaluate("() => { const t = window.__dbg.srFitCamera(); return t; }")
+        check(failures, max(abs(a - b) for a, b in zip(fit, trail[0])) > 1.0, f"the arm stands away from the fit camera: {fit} vs {trail[0]}")
+        check(failures, len(trail) > 10 and not moved, f"the camera held through the replace's redraw: {len(trail)} frames, moved at {moved[:5]} {trail[moved[0]] if moved else ''} vs {trail[0] if trail else ''}")
         m = await page.evaluate(MIG)
         check(failures, m["sizes"]["db-prod"] == 1 and m["lengths"].get("api-prod->db-prod", 1) == 1, f"replaced: whole, its edges kept: {m['sizes']} {m['lengths']}")
 
@@ -210,6 +226,12 @@ async def run_sr_migration(pw, out, failures):
         want = next(r for r in cli["byNode"] if r["node"] == "db-prod")
         want_row = [await usd(want["old"]), await usd(want["new"]), ("+" if want["diff"] >= 0 else "−") + await usd(abs(want["diff"]))]
         check(failures, row == want_row, f"the cost view's db-prod row is the engine's: {row} vs {want_row}")
+        marked = await page.evaluate("() => [...document.querySelectorAll('[data-src-mig-nodes] [data-src-mig-unpriced]')].map((s) => s.closest('[data-sr-mig-row]').dataset.srMigRow).sort()")
+        want_marked = sorted(r["node"] for r in cli["byNode"] if r["unpriced"] and (r["old"] or r["new"] or r["change"] != "same"))[:15]
+        check(failures, marked == want_marked and set(cli["unpricedChanged"]) <= set(marked), f"the rows with no price are marked: {marked} vs {want_marked}")
+        now = await page.inner_text("[data-src-mig-now]")
+        want_now = T("sr.mig.total.old") + " · " + T("sr.mig.total.now", k=m["n"], n=m["n"], usd=await usd(cli["new"]["usd"]))
+        check(failures, now == want_now, f"the big number says it is the old model's, and the month now: {now!r} vs {want_now!r}")
         await page.click("#sr-mode-3d")
 
         # back to the start, then stop
