@@ -29,7 +29,7 @@ TOOLS = Path(__file__).resolve().parent.parent
 if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))   # viz_promo is a package under tools/ (viz_e2e has a rooms.py and a run.py too)
 
-from viz_promo.timeline import ALL, BOARDS, CAPTURE_IDS, SEGMENTS, TERM_CHAPTER_IDS, chapters, check_bounds, promo_timeline  # noqa: E402
+from viz_promo.timeline import ALL, BOARDS, CAPTURE_IDS, SEGMENTS, STANDALONE, TERM_CHAPTER_IDS, chapters, check_bounds, promo_timeline  # noqa: E402
 
 PROMO = Path.home() / "resource" / "jsonui-promo"
 DEMO_SHOP = Path.home() / "resource" / "jsonui-demo-shop"
@@ -97,6 +97,9 @@ async def main_async(a) -> int:
                 r = await capture_term(pw, cid, SEGMENTS[cid][1:3], a.out, a.lang, a.jui_root, a.demo_shop, keep=a.keep)
             elif cid in TERM_CHAPTER_IDS:
                 r = await capture_term(pw, cid, promo[cid], a.out, a.lang, a.jui_root, a.demo_shop, keep=a.keep)
+            elif cid in STANDALONE:
+                r = await capture_chapter(pw, script[cid], STANDALONE[cid], a.out, a.lang, a.jui_root, a.demo_shop, theme=a.theme,
+                                          sky_time=None if a.sky_time == "real" else a.sky_time, keep=a.keep)
             elif cid in BOARDS:
                 r = await capture_chapter(pw, script[cid], promo[BOARDS[cid]], a.out, a.lang, a.jui_root, a.demo_shop, theme=a.theme,
                                           sky_time=None if a.sky_time == "real" else a.sky_time, keep=a.keep)

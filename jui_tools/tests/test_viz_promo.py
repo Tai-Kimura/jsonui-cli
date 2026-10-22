@@ -33,7 +33,8 @@ def all_chapters():
 
 def test_every_event_is_inside_its_chapter_and_the_preludes_are_untimed():
     for lang, c in all_chapters():
-        assert (c.start, c.end) == T.BOUNDS[T.BOARDS.get(c.id, c.id)], (lang, c.id)   # a board: its chapter's
+        bounds = T.STANDALONE[c.id] if c.id in T.STANDALONE else T.BOUNDS[T.BOARDS.get(c.id, c.id)]   # a board: its chapter's
+        assert (c.start, c.end) == bounds, (lang, c.id)
         for ev in c.events:
             assert ev.at is not None and c.start <= ev.at < c.end, (lang, c.id, ev)
             if ev.kind == "wheel":
@@ -44,7 +45,7 @@ def test_every_event_is_inside_its_chapter_and_the_preludes_are_untimed():
 
 
 def test_the_chapters_are_the_promos_viz_chapters():
-    assert set(T.chapters("ja")) == set(T.CHAPTER_IDS) | set(T.BOARDS)
+    assert set(T.chapters("ja")) == set(T.CHAPTER_IDS) | set(T.BOARDS) | set(T.STANDALONE)
     assert set(T.BOUNDS) == set(T.CHAPTER_IDS) | set(T.TERM_CHAPTER_IDS)
     assert set(T.BOARDS.values()) <= set(T.TERM_CHAPTER_IDS)
 

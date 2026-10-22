@@ -65,6 +65,7 @@ FEATURES = {
     "cost": ("jui_cli/viz/web/js/56-server-cost.js",
              "() => !!(window.__dbg && window.__dbg.srCost) && !!document.getElementById('sr-mode-cost')"),
     "i18n": ("jui_cli/viz/i18n.py", None),
+    "migration": ("jui_cli/viz/web/js/59-sr-migration.js", "() => !!(window.__dbg && window.__dbg.srMig)"),
 }
 
 # Math.random from a fixed seed (mulberry32): the page's idle choices (a robot's break, a game, a glance) are drawn
@@ -119,6 +120,9 @@ EXPECT = {
     "flow": "(id) => window.__dbg.srFlow().playing === id",
     "cost_month": "() => { const c = window.__dbg.srCost(); return !!c.month && !c.error; }",
     "cost_day": "() => !!window.__dbg.srCost().day",
+    "migopen": "() => window.__dbg.srMig().open",
+    "migcost": "() => { const m = window.__dbg.srMig(); return m.open && !!m.cost; }",
+    "migtable": "() => !!document.querySelector('[data-src-mig]')",
     "board": "() => window.__dbg.view().open.wb && !!document.querySelector('#wb-code section.sc')",
 }
 
@@ -162,7 +166,9 @@ class Stage:
         # one fixed folder per language and chapter under /tmp (no user name in any path the page could show): a
         # room's id is the sha1 of its path and seeds where its desks stand, so a random folder moved the robots
         # between two captures of the same chapter
-        self.base = (Path("/tmp") / "jui-promo" / f"{lang}-{name}").resolve()
+        # JUI_PROMO_BASE moves it (a capture's own scratch folder, where no other cleanup reaches); the page shows
+        # the rooms as ~/work/<room> either way
+        self.base = (Path(os.environ.get("JUI_PROMO_BASE") or "/tmp/jui-promo") / f"{lang}-{name}").resolve()
         cleanup(self.base)
         self.base.mkdir(parents=True)
         self.home = self.base / "home"
@@ -613,6 +619,10 @@ class Driver:
             await self.page.evaluate("() => document.getElementById('btn-specboard').click()")
             await self.until(f"() => !!document.querySelector('.ov-card[data-idx=\"{i}\"]')", what="the spec's card", advance=True)
             await self.page.evaluate(f"() => document.querySelector('.ov-card[data-idx=\"{i}\"]').click()")
+        elif call == "noop":   # only its expect: a wait before frame 0
+            pass
+        elif call == "srMigSpeed":
+            await self.page.evaluate("(s) => window.__dbg.srMigSpeed(s)", a["speed"])
         elif call == "srZoom":
             await self.page.evaluate("(k) => window.__dbg.srZoom(k)", a["factor"])
         elif call == "srFlowSpeed":
