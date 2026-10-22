@@ -65,7 +65,7 @@ SUBAGENT = ("a3f19c2e8b7d4a601", "jsonui-test")
 #: the event kinds the driver knows (capture.Driver.fire)
 KINDS = frozenset({"start", "prompt", "tool", "tool_end", "perm", "ask_pending", "ask", "ask_answered", "denied", "idle", "stop",
                    "sub_start", "sub_stop", "talk", "tests_start", "tests_case", "tests_end", "settle", "door", "dbg", "click",
-                   "hover", "select", "wheel", "spec_reset", "spec_write"})
+                   "hover", "select", "wheel", "spec_reset", "spec_write", "dolly"})
 #: what a page event's target may name (capture.Driver.point)
 TARGETS = frozenset({"css", "text", "room_tag", "bubble", "session_row", "talk_row", "robot", "cost_day", "door"})
 
@@ -306,34 +306,26 @@ def chapters(lang: str) -> dict:
         E(53.0, "click", target={"css": "#rb [data-tk-peer]"}, expect="card:s02"),
     ], needs=("rooms",))
 
-    # 4 (54–74): the server room — the small group up close, flow "order" (a branch, a step back, the other branch),
-    # then the camera pulls back and flow "payment" plays across the regions
+    # 4 (54–74): the server room as 2.3.19 draws it — the whole model wide, flow "payment" played slowly across the
+    # regions (the light runs through the cables), its two branches chosen, then the camera comes in slowly on the
+    # shop's group until each node stands as a model of what it is, and flow "order" plays among the models.
+    # The wide shot is the shop's group framed (its focus) and pulled back 3.4 x (dist ~39: the regions around it in
+    # view); the dolly brings it to ~9.5, where 30 or fewer nodes are in view and the models come (SR.detail.enter).
     sr_prelude = up_close("demo-shop") + [P("door"), P("dbg", call="srSelectGroup", group="shop-core"),
-                                          P("click", target={"css": "#sr-board [data-sr-act='focus']"}), P("settle")]
-    # a step of a flow takes moveMs + nodeMs (900 + 450) over the speed: at 2x the order flow's two branches fall in
-    # 57–67, as the plan's beats want (the bar shows the speed it plays at)
+                                          P("click", target={"css": "#sr-board [data-sr-act='focus']"}),
+                                          P("dbg", call="srZoom", factor=3.4), P("settle")]
+    # a step of a flow takes moveMs + nodeMs (900 + 450) over the speed: at 0.5x the payment flow reaches its first
+    # branch 9 s after its press (63.4, under 「分かれ道は、自分で選べる」), its second 3.6 s after that (67.0), and
+    # its end at ~72.4; the order flow, pressed up close at 71.9, runs its first moves among the models to the end
     choice = "(c) => !!document.querySelector(`#sr-choices:not([hidden]) [data-sr-choice=\"${c}\"]`)"
-    out["4"] = Chapter("4", 54, 74, floor(w) + sr_prelude + [P("dbg", call="srFlowSpeed", speed=2)], [
-        E(56.6, "dbg", call="srSelect", node="browser", expect="flowlist:order"),
-        E(57.4, "click", target={"css": "#sr-board [data-sr-flow='order']"}, expect="flow:order"),
-        E(59.4, "click", target={"css": "#sr-choices [data-sr-choice='hit']"}, ready=choice, arg="hit"),
-        E(62.6, "click", target={"css": "#sr-choices [data-sr-choice='in']"}, ready=choice, arg="in"),
-        # back to the branch: a press per step taken since 'in' until 'in' is off the list, then ▶ on to the branch
-        # (each at most once; the rest dropped when 'out' is chosen)
-        E(63.4, "click", target={"css": "#sr-player [data-sr-fp='back']"}, ready=BACK_READY, group="back", until=66.4),
-        E(64.0, "click", target={"css": "#sr-player [data-sr-fp='back']"}, ready=BACK_READY, group="back", until=66.4),
-        E(64.6, "click", target={"css": "#sr-player [data-sr-fp='back']"}, ready=BACK_READY, group="back", until=66.4),
-        E(64.6, "click", target={"css": "#sr-player [data-sr-fp='toggle']"}, ready=PLAY_READY, group="back", until=66.6),
-        E(65.6, "click", target={"css": "#sr-choices [data-sr-choice='out']"}, ready=choice, arg="out", ends="back"),
-        # the camera pulls back to the whole model (全体を見る): every node of the payment flow, and its choices over
-        # payment-api, on the screen (after the wheel alone payment-api was off it and the press on 通る missed)
-        E(67.0, "click", target={"css": "#sr-fit"}),
-        E(68.2, "select", target={"css": "#sr-player [data-sr-fp='speed']"}, value="5"),
-        # at 5x a move takes 0.18 s: the payment flow's ten moves and two presses end by ~72 s (flow_budget, tested)
-        E(68.9, "dbg", call="srSelect", node="api", expect="flowlist:payment"),
-        E(69.5, "click", target={"css": "#sr-board [data-sr-flow='payment']"}, expect="flow:payment"),
-        E(70.5, "click", target={"css": "#sr-choices [data-sr-choice='pass']"}, ready=choice, arg="pass"),
-        E(71.3, "click", target={"css": "#sr-choices [data-sr-choice='ok']"}, ready=choice, arg="ok"),
+    out["4"] = Chapter("4", 54, 74, floor(w) + sr_prelude + [P("dbg", call="srFlowSpeed", speed=0.5)], [
+        E(54.1, "dbg", call="srSelect", node="api", expect="flowlist:payment"),
+        E(54.4, "click", target={"css": "#sr-board [data-sr-flow='payment']"}, expect="flow:payment"),
+        E(63.4, "click", target={"css": "#sr-choices [data-sr-choice='pass']"}, ready=choice, arg="pass"),
+        E(67.0, "click", target={"css": "#sr-choices [data-sr-choice='ok']"}, ready=choice, arg="ok"),
+        E(67.3, "dolly", factor=0.244, dur=4.0),
+        E(71.4, "dbg", call="srSelect", node="browser", expect="flowlist:order"),
+        E(71.9, "click", target={"css": "#sr-board [data-sr-flow='order']"}, expect="flow:order"),
     ], needs=("rooms", "server_room", "flows"))
 
     # 5 (74–88): the cost simulator. 74–77 is the load definition in the editor (term.py, captures/<lang>/5-json:

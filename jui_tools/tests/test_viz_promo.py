@@ -254,20 +254,22 @@ def test_a_flows_time_counts_moves_nodes_and_the_longest_lane():
 
 
 @pytest.mark.skipif(not (DEMO_SHOP / "docs" / "infra" / "system.json").is_file(), reason="the demo-shop workdir is not on this machine")
-def test_chapter_4s_payment_flow_ends_inside_the_chapter():
-    """The payment flow as the script plays it (its speed, its presses) must reach its end with time to spare, and its
-    choices must not wait long on their branches (a press that waits runs into the next one)."""
+def test_chapter_4s_payment_flow_takes_its_branches_wide_then_the_camera_comes_in():
+    """2.3.19's room: the payment flow plays in the wide shot and its choices are pressed as their branches come (a
+    press that waits long shows a stopped light); the camera comes in once both are taken, and the order flow is
+    pressed up close after it (it runs to the chapter's end among the models)."""
     flows = {f["id"]: f for f in json.loads((DEMO_SHOP / "docs" / "infra" / "system.json").read_text(encoding="utf-8"))["flows"]}
     for lang in T.WORDS:
         ch = T.chapters(lang)["4"]
         pay = T.flow_budget(ch, flows["payment"])
         assert [p for p, _ in pay["choices"]] == ["pass", "ok"], pay
-        assert pay["end"] <= ch.end - 1.0, f"{lang}: the payment flow ends at {pay['end']} s, the chapter at {ch.end} s: {pay}"
         scheduled = {ev.args["arg"]: ev.at for ev in ch.events if ev.args.get("arg") in ("pass", "ok")}
         for pick, fired in pay["choices"]:
-            assert fired - scheduled[pick] <= 0.5, f"{lang}: {pick} waits {fired - scheduled[pick]:.2f} s for its branch: {pay}"
-        order = T.flow_budget(ch, flows["order"])
-        assert order["choices"][0][1] - 59.4 <= 0.5 and order["press"] < pay["press"], order
+            assert abs(fired - scheduled[pick]) <= 0.5, f"{lang}: {pick} fired at {fired}, written for {scheduled[pick]}: {pay}"
+        dolly = next(ev for ev in ch.events if ev.kind == "dolly")
+        assert dolly.at > pay["choices"][-1][1] and dolly.at + dolly.args["dur"] <= ch.end and 0 < dolly.args["factor"] < 1
+        order = next(ev.at for ev in ch.events if ev.kind == "click" and "data-sr-flow='order'" in ev.args["target"]["css"])
+        assert order >= dolly.at + dolly.args["dur"], "the order flow plays up close"
 
 
 FAKE_LOCK = """import json, os

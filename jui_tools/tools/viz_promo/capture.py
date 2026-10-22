@@ -579,7 +579,7 @@ class Driver:
                 await self.page.mouse.click(at[0], at[1])
             elif k == "select":
                 await self.page.select_option(a["target"]["css"], a["value"])
-        elif k == "wheel":
+        elif k in ("wheel", "dolly"):
             pass   # the frames move it (capture); a prelude has none
         else:
             raise PromoError(f"unknown event kind {k!r}")
@@ -613,6 +613,8 @@ class Driver:
             await self.page.evaluate("() => document.getElementById('btn-specboard').click()")
             await self.until(f"() => !!document.querySelector('.ov-card[data-idx=\"{i}\"]')", what="the spec's card", advance=True)
             await self.page.evaluate(f"() => document.querySelector('.ov-card[data-idx=\"{i}\"]').click()")
+        elif call == "srZoom":
+            await self.page.evaluate("(k) => window.__dbg.srZoom(k)", a["factor"])
         elif call == "srFlowSpeed":
             await self.page.evaluate("(s) => window.__dbg.srFlowSpeed(s)", a["speed"])
         elif call == "srCostPlayMs":
@@ -693,6 +695,7 @@ class Driver:
         pending = sorted(events, key=lambda e: e.at)
         glides: dict = {}      # id(event) -> (t0, from, to)
         wheels: list = []      # [t0, t1, dy per frame, point]
+        dollies: list = []     # [first frame, frames, the camera's whole distance factor] (the server room's camera, srZoom)
         stop = asyncio.Event()
         keeper = asyncio.create_task(self.keep_present(stop))
         # the prelude let the page's clock fall behind the server's: Date set to now (no timer fires), so the times
@@ -737,7 +740,11 @@ class Driver:
                         continue
                     if page_event:
                         self.last_press = t
-                    if ev.kind == "wheel":
+                    if ev.kind == "dolly":
+                        frames = max(1, int(round(ev.args["dur"] * FPS)))
+                        dollies.append([i, frames, ev.args["factor"]])
+                        self.log.append({"kind": "dolly", "at": ev.at, "frame": i})
+                    elif ev.kind == "wheel":
                         frames = max(1, int(round(ev.args["dur"] * FPS)))
                         to = glides.get(id(ev), (0, 0, self.cursor))[2]
                         self.cursor = list(to)
@@ -756,6 +763,12 @@ class Driver:
                 for wh in wheels:
                     if wh[0] <= t < wh[1]:
                         await self.page.mouse.wheel(0, wh[2])
+                for first, frames, factor in dollies:   # eased: slow out of the wide shot and slow into the close one
+                    j = i - first
+                    if 0 <= j < frames:
+                        ease = lambda x: x * x * (3 - 2 * x)  # noqa: E731
+                        step = factor ** (ease((j + 1) / frames) - ease(j / frames))
+                        await self.page.evaluate("(k) => window.__dbg.srZoom(k)", step)
                 await self.page.screenshot(path=str(out / f"{i:05d}.png"))
                 self.frames_done = i + 1
                 # the page's clock: this frame's share of a second, exact over every 30 frames
