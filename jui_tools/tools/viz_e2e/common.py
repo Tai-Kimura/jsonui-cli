@@ -9,7 +9,11 @@ from __future__ import annotations
 import contextlib
 import datetime
 import json
+import os
 import re
+import signal
+import subprocess
+import time
 import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -84,7 +88,9 @@ def suite_guard(name: str, failures: list, out: Path | None = None):
     """Run one suite's block in run.py: an exception out of it (a wait's WaitTimeout, a crash) becomes one FAIL line
     and the run goes on to the next suite (ticket 2026-10-20-jui-viz-e2e-one-suite-exception-stops-the-run: one
     timeout in props ended the whole run with a traceback, no FAIL line, and no later suite ran). The traceback is
-    kept in <out>/<name>-traceback.txt. KeyboardInterrupt still stops the run."""
+    kept in <out>/<name>-traceback.txt. KeyboardInterrupt still stops the run. However it ends, the processes the suite
+    started and left running are stopped (stop_children_since)."""
+    before = _children()
     try:
         yield
     except Exception as e:  # noqa: BLE001 - every exception, so the next suite runs
@@ -96,6 +102,45 @@ def suite_guard(name: str, failures: list, out: Path | None = None):
                 (Path(out) / f"{name}-traceback.txt").write_text(traceback.format_exc())
             except OSError:
                 pass
+    finally:
+        left = stop_children_since(before)
+        if left:
+            print(f"  {name}: stopped {len(left)} process(es) the suite left: {', '.join(left)}", flush=True)
+
+
+def _children() -> dict[int, str]:
+    """This process's own children now: pid -> command."""
+    try:
+        rows = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,stat=,command="], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    me, out = os.getpid(), {}
+    for line in rows.splitlines():
+        parts = line.split(None, 3)
+        if len(parts) == 4 and parts[1] == str(me) and not parts[2].startswith("Z") and not parts[3].startswith("ps -A"):
+            out[int(parts[0])] = parts[3]
+    return out
+
+
+def stop_children_since(before: dict[int, str], wait_s: float = 10.0) -> list[str]:
+    """Stop the children born since ``before`` that are still running — a suite's jui viz serve, fake server or
+    stand-in left by a failure between its start and its try, or by a wait that timed out (one serve ran on from
+    10-22 18:46 with its parent gone): INT first (the server ends as on Ctrl-C), KILL after ``wait_s``. Each is a
+    child this run started (its parent is this process), never anything else on the machine."""
+    left = {pid: cmd for pid, cmd in _children().items() if pid not in before}
+    for pid in left:
+        with contextlib.suppress(ProcessLookupError):
+            os.kill(pid, signal.SIGINT)
+    end = time.monotonic() + wait_s
+    while left and time.monotonic() < end and any(p in _children() for p in left):
+        time.sleep(0.2)
+    for pid in [p for p in left if p in _children()]:
+        with contextlib.suppress(ProcessLookupError):
+            os.kill(pid, signal.SIGKILL)
+    for pid in left:   # reap: no zombie left behind (a Popen that waits later gets ECHILD and is done)
+        with contextlib.suppress(ChildProcessError, OSError):
+            os.waitpid(pid, os.WNOHANG)
+    return [f"{pid} {cmd[:80]}" for pid, cmd in left.items()]
 
 
 LAUNCH_ARGS = ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"]
