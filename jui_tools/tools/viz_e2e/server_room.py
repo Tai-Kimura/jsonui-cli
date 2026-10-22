@@ -224,13 +224,16 @@ async def run_flows(page, out, failures, res):
     fl["lightPxFar"] = far["lightPx"]
     check(failures, far["lightPx"] >= 6.5, f"pulled back, a moving light is drawn at least 7 px in radius: {far['lightPx']}")
     # the light is in the cable, not a ball on it (ticket 2026-10-22-viz-server-room-palette-and-light-flow): no sphere in the
-    # flow's layer, each light the cable's two shader layers, and its head going the length of its cable while it plays
-    # (past 0.6 of it: a head held near its start is not a light that flows)
-    later = await until(page, f"() => {{ const f = ({FLOW})(); return f.lightHead !== null && f.lightHead >= 0.6 ? f : null; }}", "search: the head along its cable",
-                        timeout=10000, why=FLOW)
-    fl["cableLight"] = {"spheres": (far["spheres"], later["spheres"]), "materials": sorted(set(later["lightMaterials"])), "head": (far["lightHead"], later["lightHead"])}
+    # flow's layer, each light the cable's two shader layers, and its head going along its cable while it plays: seen part
+    # way (between 0.1 and 0.6 of it), then past 0.6 — a head held near its start, or one that jumps to the end, is not a
+    # light that flows
+    mid = await until(page, f"() => {{ const f = ({FLOW})(); return f.lightHead !== null && f.lightHead > 0.1 && f.lightHead < 0.6 ? f : null; }}",
+                      "search: the head part way along its cable", timeout=10000, why=FLOW)
+    later = await until(page, f"(h) => {{ const f = ({FLOW})(); return f.lightHead !== null && f.lightHead >= 0.6 && f.lightHead > h ? f : null; }}",
+                        "search: the head past 0.6 of its cable", arg=mid["lightHead"], timeout=10000, why=FLOW)
+    fl["cableLight"] = {"spheres": (far["spheres"], later["spheres"]), "materials": sorted(set(later["lightMaterials"])), "head": (mid["lightHead"], later["lightHead"])}
     check(failures, fl["cableLight"]["spheres"] == (0, 0) and fl["cableLight"]["materials"] == ["ShaderMaterial:uHead+ShaderMaterial:uHead"]
-          and 0 <= far["lightHead"] <= 1 and 0.6 <= later["lightHead"] <= 1,
+          and 0.1 < mid["lightHead"] < 0.6 <= later["lightHead"] <= 1,
           f"the flow's light runs through its cable (a head in the cable's shader), no ball travels: {fl['cableLight']}")
     await page.evaluate("() => window.__dbg.srZoom(1 / 8)")
     # a schedule's flow: its mark and its schedule as written
@@ -429,16 +432,29 @@ async def run_server_room(pw, out, failures):
         s = res["opened"] = await page.evaluate(SR)
         check(failures, s["bubble"] is None and (s["shown"] or {}).get("nodes", 0) > 0 and s["stats"]["edges"] > 0, f"open: the model drawn, the bubble gone: {s['shown']}")
         check(failures, s["lod"] == "near" and s["layers"] == {"near": True, "far": False}, f"open up close: the floors and shapes, not the far boxes over them: {s['lod']} {s['layers']}")
+        # one cloud, one colour (ticket 2026-10-22-viz-server-room-palette-and-light-flow §1): the legend's chip of each cloud is
+        # the colour its nodes are drawn in (the cost's key is held to the same below)
+        colors = res["colors"] = await page.evaluate("() => window.__dbg.srColors()")
+        node_of = {}
+        for _id, (prov, hexc) in colors["nodes"].items():
+            if prov:
+                node_of.setdefault(prov, set()).add(hexc)
+        chip_hex = {prov: "#%02x%02x%02x" % tuple(round(x) for x in _rgb(c)) for prov, c in colors["chips"].items()}
+        check(failures, node_of and all(len(v) == 1 for v in node_of.values()) and all(chip_hex.get(p_) in v for p_, v in node_of.items()),
+              f"each cloud's nodes are one colour and its legend chip is that colour: nodes {node_of} chips {chip_hex}")
         # up close in a small room (ticket 2026-10-22-viz-server-room-palette-and-light-flow §3): every node in view stands as
         # its kind's model, the shapes by service under them still pickable but not drawn
         await page.evaluate("() => window.__dbg.srZoom(0.8)")
         md = await until(page, "() => { const d = window.__dbg.srDetail(); return d && d.detail && d.inViewIds.length && d.inViewIds.every((i) => d.models[i]) ? d : null; }",
                          "the small room up close: a model per node in view", timeout=10000,
                          why="() => { const d = window.__dbg.srDetail(); return d && [d.detail, d.inViewIds, d.models]; }")
-        res["models"] = {"inView": md["inViewIds"], "models": md["models"], "kinds": md["kinds"], "drawn": md["detailDrawn"], "picks": sorted(set(md["picks"]))}
+        mcol = await page.evaluate("() => window.__dbg.srColors()")
+        res["models"] = {"inView": md["inViewIds"], "models": md["models"], "kinds": md["kinds"], "drawn": md["detailDrawn"], "picks": sorted(set(md["picks"])),
+                         "colors": {i: (mcol["models"].get(i), mcol["nodes"][i][1]) for i in md["inViewIds"]}}
         check(failures, {i: md["models"][i] for i in md["inViewIds"]} == md["kinds"] and len(set(md["kinds"].values())) >= 5
-              and not any(md["detailDrawn"]) and md["picks"] and len(md["models"]) <= md["modelMax"],
-              f"a small room up close: every node in view is its kind's model, the shapes under them pick but are not drawn: {res['models']}")
+              and not any(md["detailDrawn"]) and md["picks"] and len(md["models"]) <= md["modelMax"]
+              and all(a_ == b_ for a_, b_ in res["models"]["colors"].values()),
+              f"a small room up close: every node in view is its kind's model in its node's colour, the shapes under them pick but are not drawn: {res['models']}")
         await page.click("#sr-fit")
 
         # 2c. the cost simulator (plan L-C): 3D / コスト, the scenarios, the month, a day played, its breakdown and the red
@@ -447,6 +463,13 @@ async def run_server_room(pw, out, failures):
         await until(page, "() => { const c = window.__dbg.srCost(); return c.month && c.month.bars === c.month.days; }", "the month drawn", timeout=20000)
         c = res["costMonth"] = await page.evaluate(COST)
         chips = dict(c["month"]["chips"])
+        # the month by cloud: each cloud's key in the cost is the colour its nodes are drawn in (one cloud, one colour)
+        keys = await page.evaluate("() => [...document.querySelectorAll('#sr-cost .src-key')].filter((k) => k.querySelector('i')).map((k) => [k.textContent.trim(), getComputedStyle(k.querySelector('i')).backgroundColor])")
+        key_hex = {label: "#%02x%02x%02x" % tuple(round(x) for x in _rgb(bg)) for label, bg in keys}
+        res["costKeyColors"] = {p_: (key_hex.get(p_), sorted(v)) for p_, v in node_of.items()}
+        check(failures, c["month"]["by"] == "provider" and any(p_ in key_hex for p_ in node_of)
+              and all(key_hex[p_] in v for p_, v in node_of.items() if p_ in key_hex),
+              f"the cost by cloud: each cloud's key is its nodes' colour: {res['costKeyColors']}")
         check(failures, c["paused"] and not c["raf"] and c["month"]["days"] == 30 and c["month"]["total"].startswith("$"),
               f"コスト: the 3D paused, the month's 30 days and its sum: {c}")
         # the box is the 3D's (ticket 2026-10-21-jui-viz-cost-view-box-zoom-takes-the-clicks): 範囲で寄る off, an Option + drag

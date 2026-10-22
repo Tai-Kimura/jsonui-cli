@@ -48,6 +48,13 @@ window.__dbg = {
       models: V.models ? Object.fromEntries([...V.models].map(([id, g]) => [id, g.userData.kind])) : {}, modelMax: SR_MODEL.max,
       inViewIds: (V.inViewIds || []), kinds: Object.fromEntries((V.inViewIds || []).map((id) => [id, srModelKind(V.L.pos.get(id).n)])),
       detailDrawn: V.nodeMeshes.detail.map((m) => m.material.visible) }; },
+  // the colours as drawn (sRGB hex): each node's instanced shape with its cloud, the legend's chips, and up close each
+  // model's own colour (its tone-0 parts) — one cloud is one colour wherever it is shown
+  srColors: () => { const V = SR.view; if (!V) return null; const c = new THREE.Color(), nodes = {}, models = {};
+    for (const mesh of V.nodeMeshes.simple) mesh.userData.nodes.forEach((id, i) => { mesh.getColorAt(i, c); const n = V.L.pos.get(id).n; nodes[id] = [n.providerResolved || n.provider || null, `#${c.getHexString()}`]; });
+    if (V.models) for (const [id, g] of V.models) { const part = g.children.find((x) => x.userData.tone === 0); models[id] = part ? `#${part.material.color.getHexString()}` : null; }
+    const chips = Object.fromEntries([...document.querySelectorAll('#sr-board .sr-prov')].filter((b) => b.querySelector('.sr-chip')).map((b) => [b.dataset.srProv, getComputedStyle(b.querySelector('.sr-chip')).backgroundColor]));
+    return { nodes, models, chips }; },
   srTagOf: (id) => { const n = SR.model && (SR.model.nodes || []).find((x) => x.id === id); return n ? srDetailText(n) : null; },   // a node's tag up close
   // a flow playing (59-sr-flows.js): what it is at, what it said, what it waits for
   srFlow: () => { const P = SR_FLOW.player, V = SR.view; return { starts: V && V.flowStarts ? V.flowStarts.slice() : [], speed: SR_FLOW.speed, auto: SR_FLOW.auto,

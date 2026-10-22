@@ -88,7 +88,7 @@ function srModelParts() {
     key: [[new T.TorusGeometry(0.24, 0.08, 8, 20), -0.45, 0, 0, 0], [box(0.75, 0.12, 0.12), 0.1, 0, 0, 0], [box(0.08, 0.2, 0.1), 0.3, -0.13, 0, 1], [box(0.08, 0.14, 0.1), 0.42, -0.1, 0, 1]],
     clock: [[cyl(0.52, 0.16, 28), 0, 0.05, 0, 0, [Math.PI / 2, 0, 0]], [cyl(0.44, 0.02, 28), 0, 0.05, 0.09, 2, [Math.PI / 2, 0, 0]],
       [box(0.05, 0.32, 0.03), 0, 0.18, 0.11, 1], [box(0.24, 0.05, 0.03), 0.1, 0.05, 0.11, 1], [box(0.5, 0.1, 0.3), 0, -0.55, 0, 1]],
-    envelope: [[box(1.1, 0.7, 0.12), 0, 0, 0, 2], [box(0.78, 0.06, 0.14), -0.2, 0.12, 0, 1, [0, 0, -0.56]], [box(0.78, 0.06, 0.14), 0.2, 0.12, 0, 1, [0, 0, 0.56]]],
+    envelope: [[box(1.1, 0.7, 0.12), 0, 0, 0, 0], [box(0.78, 0.06, 0.14), -0.2, 0.12, 0, 2, [0, 0, -0.56]], [box(0.78, 0.06, 0.14), 0.2, 0.12, 0, 2, [0, 0, 0.56]]],
     gauge: [[new T.TorusGeometry(0.45, 0.09, 8, 28, Math.PI), 0, -0.05, 0, 0], [box(0.06, 0.45, 0.06), 0.1, 0.12, 0.05, 2, [0, 0, -0.5]], [cyl(0.08, 0.1, 12), 0, -0.05, 0.05, 1, [Math.PI / 2, 0, 0]],
       [box(1.05, 0.08, 0.3), 0, -0.1, 0, 1]],
     cloud: [[new T.SphereGeometry(0.34, 16, 12), -0.3, -0.05, 0, 0], [new T.SphereGeometry(0.44, 16, 12), 0.05, 0.1, 0, 0], [new T.SphereGeometry(0.3, 16, 12), 0.38, -0.08, 0, 0],
@@ -115,6 +115,7 @@ function srModelBuild(V, p) {
   const kind = srModelKind(p.n), hex = srProviderColor(p.n.providerResolved || p.n.provider, 'node', 0, V.dark), g = new THREE.Group();
   for (const [geo, x, y, z, tone, rot] of srModelParts()[kind]) {
     const m = new THREE.Mesh(geo, srModelMaterial(V, hex, tone));
+    m.userData.tone = tone;
     m.position.set(x, y, z);
     if (rot) m.rotation.set(rot[0], rot[1], rot[2]);
     g.add(m);
