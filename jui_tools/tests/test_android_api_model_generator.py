@@ -1722,7 +1722,7 @@ fun main() {
     val out = Json.encodeToString(v)
     check(Json.parseToJsonElement(out) == Json.parseToJsonElement(wire)) { "wrote: $out" }
     val missing = runCatching { Json.decodeFromString<HolderDto>(wire.replace("\\"days\\":30", "\\"days\\":31")) }
-    check(missing.isFailure) { "31 is no case: $missing" }
+    check(missing.exceptionOrNull() is kotlinx.serialization.SerializationException) { "31 is no case, a SerializationException: $missing" }
     println("KOTLINX_ENUM_OK $out")
 }
 """.replace("__WIRE__", WIRE)
@@ -1737,7 +1737,8 @@ fun main() {
     val days = moshi.adapter(Days::class.java)
     check(days.fromJson("30") == Days.VALUE_30 && days.toJson(Days.VALUE_30) == "30") { "Days" }
     check(days.fromJson("null") == null && days.toJson(null) == "null") { "Days null" }
-    check(runCatching { days.fromJson("31") }.isFailure) { "31 is no case" }
+    val missing = runCatching { days.fromJson("31") }
+    check(missing.exceptionOrNull() is com.squareup.moshi.JsonDataException) { "31 is no case, a JsonDataException: $missing" }
     val inline = moshi.adapter(HolderInlineDays::class.java)
     check(inline.fromJson("7") == HolderInlineDays.VALUE_7 && inline.toJson(HolderInlineDays.VALUE_7) == "7") { "inline" }
     val list = moshi.adapter<List<Days>>(Types.newParameterizedType(List::class.java, Days::class.java))
