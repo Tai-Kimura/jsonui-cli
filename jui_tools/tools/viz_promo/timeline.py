@@ -43,7 +43,7 @@ SPLIT_VIEWPORT = {"width": 1125, "height": 1012}   # 900 x 810 in the video, 1.2
 #: standalone clips, not chapters of the promo: id -> (start, end) of the clip's own clock (its Remotion composition
 #: reads the same bounds). "mig": the server room's migration plan played (2.3.20, ticket
 #: 2026-10-22-viz-infra-migration-plan), shown to the requester on its own before it joins the promo.
-STANDALONE = {"mig": (0.0, 38.0)}
+STANDALONE = {"mig": (0.0, 40.0)}
 #: what run.py captures: the promo's chapters and the segments (a chapter brings its segments and board with it)
 CAPTURE_IDS = ALL + tuple(SEGMENTS) + tuple(BOARDS) + tuple(STANDALONE)
 #: the bounds the events below were written for; tests hold them to the promo's timeline.json
@@ -333,9 +333,10 @@ def chapters(lang: str) -> dict:
     # touch the AWS groups on the left (search, payments, analytics, admin) and the two Azure groups on the right, so
     # the camera frames the AWS account (its focus: every changed node in view; too many nodes for the models) and
     # comes in a little while it plays. ▶ once at 0.5x: each step 2.1 s, back to back, the month's cost counting and a
-    # ±$ tag over each changed node; the Azure floors go at the end. Then the cost view (its total says the old month
-    # and the steps taken) and its old / new / difference tables.
-    out["mig"] = Chapter("mig", 0, 38, floor(w) + up_close("demo-shop") + [
+    # ±$ tag over each changed node; the Azure floors go at the end. Step 3 moves two nodes (two tags, and the bar
+    # names both): the player is paused 1.7 s in its middle so they can be read, then played on. Then the cost view
+    # (its total says the old month and the steps taken) and its old / new / difference tables.
+    out["mig"] = Chapter("mig", 0, 40, floor(w) + up_close("demo-shop") + [
         P("door"),
         P("click", target={"css": f"#sr-board [data-sr-mig='{MIG_PLAN}']"}, expect="migopen"),
         P("dbg", call="srSelectGroup", group="aws"),
@@ -345,8 +346,10 @@ def chapters(lang: str) -> dict:
         P("dbg", call="noop", expect="migcost"),
     ], [
         E(3.0, "click", target={"css": MIG_BTN.format("toggle")}),
-        E(3.2, "dolly", factor=0.85, dur=24.0),
-        E(29.6, "click", target={"css": "#sr-mode-cost"}, expect="migtable"),
+        E(3.2, "dolly", factor=0.85, dur=26.0),
+        E(8.4, "click", target={"css": MIG_BTN.format("toggle")}),
+        E(10.1, "click", target={"css": MIG_BTN.format("toggle")}),
+        E(31.4, "click", target={"css": "#sr-mode-cost"}, expect="migtable"),
     ], needs=("rooms", "server_room", "migration"))
 
     # 5 (74–88): the cost simulator. 74–77 is the load definition in the editor (term.py, captures/<lang>/5-json:
