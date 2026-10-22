@@ -1266,6 +1266,16 @@
   "sr.sel.engine": "Engine",
   "sr.sel.spec": "Spec",
   "sr.act.focus": "Zoom to this",
+  "sr.act.reach": "Show everything connected",
+  "sr.reach.hops": "Steps to follow",
+  "sr.reach.hops.one": "1 step",
+  "sr.reach.hops.all": "All the way",
+  "sr.reach.shown": {
+    "one": "Showing {n} connected node (press again or Esc to go back)",
+    "other": "Showing {n} connected nodes (press again or Esc to go back)"
+  },
+  "sr.log.reach": "Showed what connects to {node}: {n} ({hops})",
+  "sr.log.reach.end": "Stopped showing the connected nodes",
   "sr.edge.cross": "cross-provider",
   "sr.grp.title": "Selected group",
   "sr.grp.nodes": "Nodes inside",

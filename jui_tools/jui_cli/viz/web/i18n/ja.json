@@ -1247,6 +1247,15 @@
   "sr.sel.engine": "エンジン",
   "sr.sel.spec": "スペック",
   "sr.act.focus": "これに寄る",
+  "sr.act.reach": "つながっている物を全部見せる",
+  "sr.reach.hops": "たどる段",
+  "sr.reach.hops.one": "1 段",
+  "sr.reach.hops.all": "全部たどる",
+  "sr.reach.shown": {
+    "other": "つながる物 {n} 個を見せています（もう一度押すか Esc で戻る）"
+  },
+  "sr.log.reach": "{node} につながる物を見せた: {n} 個（{hops}）",
+  "sr.log.reach.end": "つながる物の表示をやめた",
   "sr.edge.cross": "跨ぐ",
   "sr.grp.title": "選んだ group",
   "sr.grp.nodes": "中の node",

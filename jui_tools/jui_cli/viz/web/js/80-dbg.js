@@ -32,9 +32,34 @@ window.__dbg = {
     plainVisible: V.plainLines.visible, crossVisible: V.crossLines.visible,
     far: { plainOpacity: V.farPlain.material.opacity, crossOpacity: V.farCross.material.opacity, plainVisible: V.farPlain.visible, crossVisible: V.farCross.visible,
       // how many bundles each layer draws (two points a line): a "not seen" on an empty layer would prove nothing
-      plainCount: (V.farPlain.geometry.attributes.position || { count: 0 }).count / 2, crossCount: (V.farCross.geometry.attributes.position || { count: 0 }).count / 2 },
+      plainCount: srCableCount(V.farPlain), crossCount: srCableCount(V.farCross) },
+    // how wide a cable is on the page at least (px), each layer: SR_CABLE through the shader's uniform
+    px: { plain: V.plainLines.material.uniforms.uPx.value, cross: V.crossLines.material.uniforms.uPx.value, focus: V.focusLines.material.uniforms.uPx.value, bundle: V.farPlain.material.uniforms.uPx.value },
     boardSelected: !!document.querySelector('#sr-board .sr-sel'), focus: V.focusCount || 0, selected: SR.selected } : null; },
   srSelect: (id) => { srSelect(id); return SR.view ? SR.view.focusCount || 0 : null; },
+  // つながっている物を全部見せる: what it holds, each drawn node's colour now (faint or not), the strong cables, the camera
+  srReach: () => { const V = SR.view; if (!V) return null; const c = new THREE.Color(), k = new THREE.Color(), faint = [], full = [];
+    // faint: drawn in another colour than the one the shape was kept with (no colour kept: as drawn at the build)
+    for (const mesh of V.nodeSets[V.detail ? 'detail' : 'simple'].children) if (mesh.instanceColor) mesh.userData.nodes.forEach((id, i) => {
+      mesh.getColorAt(i, c); const base = mesh.userData.baseColors; (base && !k.fromArray(base, i * 3).equals(c) ? faint : full).push(id); });
+    const R = SR.reach;
+    const v = new THREE.Vector3(), inView = R ? [...R.ids].filter((id) => { const p = V.L.pos.get(id); if (!p) return false; v.set(p.x, p.y + 0.75, p.z).project(V.camera); return Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1 && v.z < 1; }) : [];
+    return { on: !!R, id: R ? R.id : null, hops: SR.reachHops, inView, edgesAll: V.L.edges.map((e) => [e.from, e.to]), drawn: V.L.nodes.map((n) => [n.id, n.label || n.id]), ids: R ? [...R.ids] : [], edges: R ? R.edges.size : 0, focus: V.focusCount || 0, faint, full,
+      plainOpacity: V.plainLines.material.opacity, pressed: (document.querySelector('#sr-board [data-sr-act="reach"]') || {}).ariaPressed || null,
+      cam: [...V.camera.position.toArray(), ...V.controls.target.toArray()].map((x) => +x.toFixed(3)), labels: [...document.querySelectorAll('#sr-labels .sr-label:not([hidden])')].map((l) => l.textContent) }; },
+  // how wide the strong cables are drawn, in drawn pixels: a frame drawn now and read back whole, the pixels near the focus
+  // colour counted, over the strong cables' length on the page (device px). A 1 px line comes out near 1.
+  srCableInk: () => { const V = SR.view; if (!V) return null; V.renderer.render(V.scene, V.camera);
+    const gl = V.renderer.getContext(), w = gl.drawingBufferWidth, h = gl.drawingBufferHeight, px = new Uint8Array(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    const f = V.focusLines.material.uniforms.uColor.value.clone().convertLinearToSRGB(), want = [f.r * 255, f.g * 255, f.b * 255];
+    let ink = 0; for (let i = 0; i < px.length; i += 4) if (Math.abs(px[i] - want[0]) + Math.abs(px[i + 1] - want[1]) + Math.abs(px[i + 2] - want[2]) < 60) ink++;
+    const a = new THREE.Vector3(), b = new THREE.Vector3();
+    let len = 0; for (let i = 0; i < srCableCount(V.focusLines); i++) {
+      const [p, q] = srCableGet(V.focusLines, i); a.fromArray(p).project(V.camera); b.fromArray(q).project(V.camera); len += Math.hypot((a.x - b.x) * w / 2, (a.y - b.y) * h / 2); }
+    return { ink, len: Math.round(len), width: len ? +(ink / len).toFixed(2) : null, cables: srCableCount(V.focusLines) }; },
+  srReachPress: () => { const b = document.querySelector('#sr-board [data-sr-act="reach"]'); if (b) b.click(); return !!b; },
+  srReachHopsSet: (v) => { const sel = document.querySelector('#sr-board [data-sr-reach-hops]'); if (!sel) return false; sel.value = v; sel.dispatchEvent(new Event('change', { bubbles: true })); return true; },
   srEdgesOf: (id) => (SR.view ? SR.view.L.edges.filter((e) => e.from === id || e.to === id).length : null),
   // up close (the server room ticket §5): the look, how many nodes are in view, each drawn node's shape in the set shown,
   // and the tags given out; the thresholds may be set for an arm
@@ -116,7 +141,7 @@ window.__dbg = {
   srBox: () => ({ armed: SR.box.armed, drawing: !!SR.box.drag, shown: !$('sr-box').hidden, last: SR.view ? SR.view.lastBox || null : null }),
   srZoom: (factor) => { const V = SR.view; if (!V) return null; const d = V.camera.position.clone().sub(V.controls.target).multiplyScalar(factor); V.camera.position.copy(V.controls.target).add(d); V.controls.update(); return +srCellPx(V).toFixed(2); },
   srEnter: (project) => srEnter(project, null),
-  srCross: () => { const V = SR.view; return V ? { drawn: V.crossLines.geometry.attributes.position.count / 2, dashed: !!V.crossLines.material.isLineDashedMaterial, plain: V.plainLines.geometry.attributes.position.count / 2 } : null; },
+  srCross: () => { const V = SR.view; return V ? { drawn: srCableCount(V.crossLines), dashed: V.crossLines.material.uniforms.uDash.value > 0, plain: srCableCount(V.plainLines) } : null; },
   // the browser notifications (2.3.6): what this tab has looked at, its switches, the board and the card open now
   notifySeen: () => [...NOTIFY.seen],
   notifyBased: () => NOTIFY.based.perm && NOTIFY.based.ask,

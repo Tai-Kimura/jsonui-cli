@@ -148,6 +148,7 @@ function srModelsSync(V, ids) {
     const p = V.L.pos.get(id);
     if (!p || p.hiddenIn) continue;
     const g = srModelBuild(V, p);
+    if (SR.reach) srReachTint(g);   // つながっている物を全部見せる: one out of it comes in faint (56-server-room.js)
     V.modelLayer.add(g); V.models.set(id, g);
   }
 }

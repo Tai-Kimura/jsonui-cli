@@ -295,6 +295,87 @@ async def run_flows(page, out, failures, res):
     await until(page, "() => { const c = window.__dbg.srCost(); return c.mode === '3d' && !c.paused; }", "the 3D after コスト")
 
 
+def _reach_walk(edges, start, hops):
+    """The nodes joined to start by an edge either way, hops steps on (None: until nothing new) — the arms' own walk."""
+    seen, front, d = {start}, [start], 0
+    while front and (hops is None or d < hops):
+        nxt = []
+        for x in front:
+            for a, b in edges:
+                for y in ((b,) if a == x else ()) + ((a,) if b == x else ()):
+                    if y not in seen:
+                        seen.add(y)
+                        nxt.append(y)
+        front, d = nxt, d + 1
+    return seen
+
+
+async def run_cables_and_reach(page, out, failures, res):
+    """The cables' width on the page and つながっている物を全部見せる (ticket 2026-10-22-viz-sr-cables-too-thin-and-no-show-neighbours)."""
+    await page.click("#sr-fit")
+    base = await page.evaluate("() => window.__dbg.srReach()")
+    edges = [tuple(e) for e in base["edgesAll"]]
+    drawn = {i for i, _ in base["drawn"]}
+    # a node whose every-step reach is larger than its one-step reach, else "all" proves nothing
+    pick = max(sorted(drawn), key=lambda i: (len(_reach_walk(edges, i, None)) > len(_reach_walk(edges, i, 1)), len(_reach_walk(edges, i, 1))))
+    one, every = _reach_walk(edges, pick, 1), _reach_walk(edges, pick, None)
+    res["reachPick"] = {"node": pick, "one": sorted(one), "all": sorted(every)}
+    check(failures, len(every) > len(one) > 1, f"the room has a node with neighbours and neighbours' neighbours: {res['reachPick']}")
+    # 1. the cables: wide on the page, measured in drawn pixels (the strong layer alone shown)
+    widths = await page.evaluate("() => window.__dbg.srLines().px")
+    await page.evaluate("(id) => window.__dbg.srSelect(id)", pick)
+    await page.select_option("#sr-lines", "focus")
+    ink = res["cableInk"] = await page.evaluate("() => window.__dbg.srCableInk()")
+    await page.evaluate("() => window.__dbg.srZoom(1.5)")
+    ink_back = res["cableInkBack"] = await page.evaluate("() => ({ ...window.__dbg.srCableInk(), lod: window.__dbg.sr().lod })")
+    await page.screenshot(path=str(out / "cables-focus.png"))
+    await page.select_option("#sr-lines", "all")
+    await page.click("#sr-fit")
+    res["cableWidths"] = widths
+    check(failures, widths["plain"] >= 2 and widths["cross"] >= 2 and widths["focus"] >= 3 and widths["bundle"] >= 2, f"every cable layer is at least 2 px wide on the page: {widths}")
+    check(failures, ink["cables"] >= 1 and ink["len"] > 50 and ink["width"] >= 2.5, f"the strong cables are drawn wide, in pixels: {ink}")
+    check(failures, ink_back["lod"] == "near" and ink_back["width"] >= 2.5, f"pulled back, still as wide on the page: {ink_back}")
+    # 2. one step: the node and what an edge joins it to, either way; the rest faint; the camera on all of them
+    await page.evaluate("(id) => window.__dbg.srSelect(id)", pick)
+    before = (await page.evaluate("() => window.__dbg.srReach()"))["cam"]
+    await page.evaluate("() => window.__dbg.srReachHopsSet('1')")
+    await page.evaluate("() => window.__dbg.srReachPress()")
+    r1 = res["reach1"] = await page.evaluate("() => window.__dbg.srReach()")
+    await page.screenshot(path=str(out / "reach-one.png"))
+    faint_names = {name for i, name in base["drawn"] if i not in one}
+    check(failures, r1["on"] and r1["pressed"] == "true" and set(r1["ids"]) == one, f"one step: the node and every node joined to it, in and out: {r1['ids']} want {sorted(one)}")
+    check(failures, set(r1["faint"]) == drawn - one and one <= set(r1["full"]), f"one step: the rest faint, what it holds as drawn: faint {sorted(r1['faint'])}")
+    check(failures, r1["focus"] == sum(1 for a, b in edges if pick in (a, b)), f"one step: its cables strong: {r1['focus']}")
+    check(failures, r1["cam"] != before and set(r1["inView"]) == one, f"one step: the camera moved until all of it is in view: {r1['inView']}")
+    tagged = {t.split(" · ")[0].split(" ×")[0] for t in r1["labels"]}   # up close a tag is "name · service · spec"
+    check(failures, not (tagged & (faint_names - {n for i, n in base["drawn"] if i in one})), f"one step: no tag on a faint node: {r1['labels']}")
+    check(failures, r1["plainOpacity"] <= 0.06, f"one step: the other cables fainter still: {r1['plainOpacity']}")
+    # 3. every step on
+    await page.evaluate("() => window.__dbg.srReachHopsSet('all')")
+    ra = res["reachAll"] = await page.evaluate("() => window.__dbg.srReach()")
+    await page.screenshot(path=str(out / "reach-all.png"))
+    check(failures, ra["on"] and ra["hops"] == "all" and set(ra["ids"]) == every and set(ra["faint"]) == drawn - every and set(ra["inView"]) == every,
+          f"every step: all it reaches, the rest faint, all in view: {sorted(ra['ids'])} want {sorted(every)}")
+    # 4. Esc: as it was, the camera too; the room stays
+    await page.keyboard.press("Escape")
+    re_ = res["reachEsc"] = await page.evaluate("() => ({ ...window.__dbg.srReach(), open: window.__dbg.sr().open })")
+    check(failures, re_["open"] and not re_["on"] and re_["faint"] == [] and re_["pressed"] == "false" and re_["plainOpacity"] > 0.06
+          and all(abs(a - b) < 1e-3 for a, b in zip(re_["cam"], before)), f"Esc: nothing faint, the camera where it was, the room open: {re_}")
+    # 5. pressed again does the same; another node chosen ends it where the camera is
+    await page.evaluate("() => window.__dbg.srReachPress()")
+    await page.evaluate("() => window.__dbg.srReachPress()")
+    rt = res["reachToggle"] = await page.evaluate("() => window.__dbg.srReach()")
+    check(failures, not rt["on"] and rt["faint"] == [] and all(abs(a - b) < 1e-3 for a, b in zip(rt["cam"], before)), f"pressed again: as it was: {rt}")
+    await page.evaluate("() => window.__dbg.srReachPress()")
+    shown_cam = (await page.evaluate("() => window.__dbg.srReach()"))["cam"]
+    other = next(i for i in sorted(drawn) if i != pick)
+    await page.evaluate("(id) => window.__dbg.srSelect(id)", other)
+    ro = res["reachOther"] = await page.evaluate("() => window.__dbg.srReach()")
+    check(failures, not ro["on"] and ro["faint"] == [] and ro["cam"] == shown_cam, f"another node chosen: nothing faint, the camera stays: {ro}")
+    await page.evaluate("() => window.__dbg.srSelect(null)")
+    await page.click("#sr-fit")
+
+
 async def run_server_room(pw, out, failures):
     from run import free_port
     out = pathlib.Path(out) / "server-room"
@@ -910,6 +991,7 @@ async def run_server_room(pw, out, failures):
         check(failures, not ln["cross"]["plainVisible"] and ln["cross"]["crossVisible"] and ln["cross"]["focus"] == want, f"crossing lines only: {ln['cross']}")
         check(failures, not ln["focus"]["plainVisible"] and not ln["focus"]["crossVisible"] and ln["focus"]["focus"] == want, f"the chosen node's lines only: {ln['focus']}")
         await page.screenshot(path=str(out / "multi-light.png"))
+        await run_cables_and_reach(page, out, failures, res)
         await run_flows(page, out, failures, res)
         await page.keyboard.press("Escape")
         await up_close("icons")

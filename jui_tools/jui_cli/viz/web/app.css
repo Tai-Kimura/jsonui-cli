@@ -1625,6 +1625,8 @@ button.talk-peer:focus-visible { outline: 2px solid var(--focus); outline-offset
 .sr-prov[aria-pressed="true"] { border-color: var(--info); background: var(--info); color: var(--panel); font-weight: 700; }
 .sr-legend li { margin: 2px 0; }
 .sr-acts { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.sr-acts .sr-reach[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--panel); }
+.sr-acts .sr-reach-hops { font: inherit; font-size: 12px; }
 .sr-problems li { padding: 2px 0; border-bottom: 1px solid var(--line); }
 .sr-log { max-height: 30vh; overflow: auto; padding: 6px 12px; border-top: 1px solid var(--line); background: var(--panel); font: 12px/1.5 var(--font-mono); }
 .sr-log[hidden] { display: none; }

@@ -213,9 +213,8 @@ function srFlowHints(P, b) {
     const a = srFlowPos(V, first.from), z = srFlowPos(V, first.to);
     if (a && z) arr.push(a.x, a.y, a.z, z.x, z.y, z.z);
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
-  const lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: SR_PAL[V.dark ? 'dark' : 'light'].light, transparent: true, opacity: 0.45 }));
+  // a strip as wide as the cables (56-server-room.js srCables), in the light's colour: a 1 px line was lost beside them
+  const lines = srCables(arr, { color: SR_PAL[V.dark ? 'dark' : 'light'].light, opacity: 0.45, px: SR_CABLE.focus });
   lines.userData.hints = arr.length / 6;
   V.flowLayer.add(lines);
   P.hints = lines;
@@ -228,7 +227,7 @@ function srFlowChoose(id) {
   P.chosen.push(`${b.label} → ${c.label}`);
   P.branch = null;
   $('sr-choices').hidden = true;
-  if (P.hints) { SR.view.flowLayer.remove(P.hints); P.hints.geometry.dispose(); P.hints = null; }
+  if (P.hints) { SR.view.flowLayer.remove(P.hints); P.hints.geometry.dispose(); P.hints.material.dispose(); P.hints = null; }
   if (c.goto) {
     const next = srFlowsOf(SR.view).find((f) => f.id === c.goto);
     if (next) {
@@ -251,7 +250,7 @@ function srFlowBack() {
   const s = P.history.pop();
   P.flow = s.flow; P.frames = s.frames; P.pos = s.pos; P.chosen = s.chosen;
   P.branch = null; $('sr-choices').hidden = true;
-  if (P.hints) { SR.view.flowLayer.remove(P.hints); P.hints = null; }
+  if (P.hints) { SR.view.flowLayer.remove(P.hints); P.hints.geometry.dispose(); P.hints.material.dispose(); P.hints = null; }
   for (const d of P.lights) { SR.view.flowLayer.remove(d); if (d.userData.flowLight) srFlowLightDispose(d); }
   P.lights = []; P.anim = null; P.state = 'pause';
   srFlowRenderBar();

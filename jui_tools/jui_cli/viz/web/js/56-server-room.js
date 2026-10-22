@@ -20,7 +20,8 @@
    - layout: every group a floor holding its child groups and its nodes, packed in rows (sizes bottom-up, places top-
      down), so 2,000 nodes still fit one view; a node is a cell.
    - shapes: one InstancedMesh per shape (category → shape, srShape), the colour the provider's; one InstancedMesh for
-     all the floors; the cables two LineSegments (within a provider: solid; across providers: dashed magenta, higher).
+     all the floors; the cables two sets of strips (within a provider: solid; across providers: dashed magenta, higher),
+     each at least SR_CABLE px wide on the page however far the camera is (srCables).
    - far (a node smaller than SR.lod.far px on the page): the top groups are boxes, the cables bundled between them
      (one line per pair, its count in the board), the labels the boxes' only; near again past SR.lod.near px.
    - labels: a pool of SR.labels.max on the page, given each tenth of a second to the nearest things in view.
@@ -33,6 +34,9 @@
      the simple ones past SR.detail.leave (between the two it stays as it was). There, each node in view stands as a model of what
      it does (56-sr-models.js); the shapes by service under it still take the press.
    - a node's spec (§4): the board's 選んだもの lists it, the keys the IaC tables know with a name in words.
+   - つながっている物を全部見せる (ticket 2026-10-22-viz-sr-cables-too-thin-and-no-show-neighbours): beside これに寄る; the
+     chosen node and every node an edge joins it to (in and out; one step, or every step on) drawn as they are, the rest
+     faint, their cables strong, the camera moved until all of them are in view; pressed again or Esc, as it was (srReach).
    Measured for the ticket: the first draw, the frame time far and near, the memory (SR.stats). */
 const SR = {
   phase: 'idle', project: null, seq: 0, t0: 0, until: 0, why: '', full: '', opener: null, model: null, view: null, log: [],
@@ -45,6 +49,8 @@ const SR = {
   only: new Set(),   // the clouds chosen on the board's legend (2.3.9, item 3; empty: all)
   // a box drawn to move in on (2.3.11 item 6): Option + drag, or 範囲で寄る then one drag; fit is how much of the page it fills
   box: { armed: false, drag: null }, boxFit: 0.92,
+  // つながっている物を全部見せる: {id, hops, ids, edges, cam} while shown; how many steps it follows (1, or 'all'); how faint the rest
+  reach: null, reachHops: 1, reachFade: 0.82, reachLineOpacity: 0.05, reachFit: 0.7,   // reachFit: what it holds fills this much of the page, its tags inside
 };
 const srEl = $('sr'), srBubbleEl = $('sr-bubble');
 function srNow() { return performance.now(); }
@@ -254,6 +260,88 @@ function srProviderColor(p, role = 'node', level = 0, dark = isDark()) {
 const srVisible = (x, env) => !env || !Array.isArray(x.environments) || !x.environments.length || x.environments.includes(env);
 function srEnvs(model) { return (model.environments || []).map((e) => (typeof e === 'string' ? { id: e, label: e } : { id: e.id, label: e.label || e.id })); }
 
+/* The cables (ticket 2026-10-22-viz-sr-cables-too-thin-and-no-show-neighbours; requester: 「ノード同士を繋ぐ線が細すぎて
+   みづらい」). A WebGL line is one pixel whatever is asked, so a cable is a strip: four corners per segment,
+   pushed apart on the page by SR_CABLE_SHADER — at least `px` wide (pulled back) and, up close, as wide as
+   `world` units up to `max` px, like the flows' light (59-sr-flows.js srFlowLightKeepSize) whose core is a little wider, so a light
+   still reads as running inside its cable. A segment with an end behind the camera is cut at the near plane; one of
+   length 0 (a migration step's edge before it grows) draws nothing. srCableSet / srCableGet / srCableDone move one
+   segment's ends (59-sr-migration.js): the order is the one srBuild laid them in. */
+// px: the least width on the page by layer; world: the width up close (units); max: the most on the page — a cable running
+// past the camera would otherwise fill the page, and draw every pixel of it
+const SR_CABLE = { plain: 2.2, cross: 2.8, focus: 4, bundle: 2.6, world: 0.08, max: 7 };
+const SR_CABLE_SHADER = {
+  vertex: `attribute vec3 cableStart; attribute vec3 cableEnd; uniform vec2 uRes; uniform float uPx, uWorld, uMax; varying float vDist;
+    void main() {
+      vec4 a = modelViewMatrix * vec4(cableStart, 1.0), b = modelViewMatrix * vec4(cableEnd, 1.0);
+      float len = distance(cableStart, cableEnd);
+      float near = -projectionMatrix[3][2] / (projectionMatrix[2][2] - 1.0);   // the near plane's z (the camera looks down -z)
+      if (a.z > near && b.z > near) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vDist = 0.0; return; }
+      if (a.z > near) a = mix(b, a, (b.z - near) / (b.z - a.z) * 0.999);
+      if (b.z > near) b = mix(a, b, (a.z - near) / (a.z - b.z) * 0.999);
+      vec4 ca = projectionMatrix * a, cb = projectionMatrix * b;
+      vec2 sa = ca.xy / ca.w * uRes, sb = cb.xy / cb.w * uRes, d = sb - sa;
+      float dl = length(d);
+      vec2 dir = dl > 1e-5 ? d / dl : vec2(1.0, 0.0), nrm = vec2(-dir.y, dir.x);
+      vec4 c = position.y < 0.5 ? ca : cb;
+      float w = len > 1e-6 ? clamp(uWorld * projectionMatrix[1][1] * uRes.y / c.w, uPx, max(uPx, uMax)) : 0.0;
+      c.xy += nrm * position.x * w / uRes * c.w;
+      vDist = position.y * len;
+      gl_Position = c;
+    }`,
+  fragment: `uniform vec3 uColor; uniform float uOpacity, uDash, uGap; varying float vDist;
+    void main() {
+      if (uDash > 0.0 && mod(vDist, uDash + uGap) > uDash) discard;
+      gl_FragColor = vec4(uColor, uOpacity);
+      #include <colorspace_fragment>
+    }`,   // the colour as the old lines drew it: uColor is linear (THREE.Color), the page sRGB
+};
+/* A set of cables from [ax, ay, az, bx, by, bz, ...]: `px` the least width on the page, `dash`/`gap` world units (0: solid). */
+function srCables(arr, { color, opacity = 1, px = SR_CABLE.plain, dash = 0, gap = 0 }) {
+  const g = new THREE.BufferGeometry();
+  srCableFill(g, arr);
+  const m = new THREE.ShaderMaterial({ vertexShader: SR_CABLE_SHADER.vertex, fragmentShader: SR_CABLE_SHADER.fragment, transparent: opacity < 1, depthWrite: opacity >= 1, side: THREE.DoubleSide,   // the corners' winding is the page's, whichever way the cable runs
+    uniforms: { uColor: { value: new THREE.Color(color) }, uOpacity: { value: opacity }, uRes: { value: new THREE.Vector2(1, 1) }, uPx: { value: px },
+      uWorld: { value: SR_CABLE.world }, uMax: { value: SR_CABLE.max }, uDash: { value: dash }, uGap: { value: gap } } });
+  m.opacity = opacity;   // read as a LineBasicMaterial's was (the board, the e2e); the shader reads uOpacity
+  const mesh = new THREE.Mesh(g, m);
+  mesh.frustumCulled = false;   // the strips are placed by the shader: the box three would cull by is the corners'
+  mesh.userData.cables = true; mesh.userData.dashed = dash > 0;
+  mesh.onBeforeRender = (renderer) => renderer.getSize(m.uniforms.uRes.value).multiplyScalar(0.5);   // half the page: NDC 1 is this many px
+  return mesh;
+}
+/* Four corners a cable, each carrying both its ends. Not instanced: measured in the e2e's software GL, up close in the
+   2,000-node room, 5,000 instanced strips made a frame's p90 56 ms (17 with the old lines); written out, 20. */
+function srCableFill(g, arr) {
+  const n = arr.length / 6, corner = new Float32Array(n * 12), st = new Float32Array(n * 12), en = new Float32Array(n * 12), idx = new Uint32Array(n * 6);
+  for (let i = 0; i < n; i++) {
+    corner.set([-0.5, 0, 0, 0.5, 0, 0, -0.5, 1, 0, 0.5, 1, 0], i * 12);
+    for (let k = 0; k < 4; k++) for (let c = 0; c < 3; c++) { st[i * 12 + k * 3 + c] = arr[i * 6 + c]; en[i * 12 + k * 3 + c] = arr[i * 6 + 3 + c]; }
+    idx.set([0, 1, 2, 2, 1, 3].map((x) => i * 4 + x), i * 6);
+  }
+  g.setAttribute('position', new THREE.BufferAttribute(corner, 3));
+  g.setAttribute('cableStart', new THREE.BufferAttribute(st, 3));
+  g.setAttribute('cableEnd', new THREE.BufferAttribute(en, 3));
+  g.setIndex(new THREE.BufferAttribute(idx, 1));
+  g.userData.cables = n;
+}
+/* A set's cables all made again (the strong layer: the pressed, the pointed, the reach). */
+function srCablesRefill(mesh, arr) {
+  mesh.geometry.dispose();
+  mesh.geometry = new THREE.BufferGeometry();
+  srCableFill(mesh.geometry, arr);
+}
+const srCableCount = (mesh) => mesh.geometry.userData.cables;
+function srCableSet(mesh, j, a, b) {
+  const st = mesh.geometry.getAttribute('cableStart').array, en = mesh.geometry.getAttribute('cableEnd').array;
+  for (let k = 0; k < 4; k++) for (let c = 0; c < 3; c++) { st[j * 12 + k * 3 + c] = a[c]; en[j * 12 + k * 3 + c] = b[c]; }
+}
+function srCableGet(mesh, j) {
+  const st = mesh.geometry.getAttribute('cableStart').array, en = mesh.geometry.getAttribute('cableEnd').array;
+  return [[st[j * 12], st[j * 12 + 1], st[j * 12 + 2]], [en[j * 12], en[j * 12 + 1], en[j * 12 + 2]]];
+}
+function srCableDone(mesh) { for (const k of ['cableStart', 'cableEnd']) mesh.geometry.getAttribute(k).needsUpdate = true; }
+
 /* Places every group and node (sizes bottom-up, places top-down); the external nodes on a strip in front. */
 function srLayout(model, env, showFold, closed = new Set(), only = new Set()) {
   const groups = new Map();
@@ -345,6 +433,7 @@ function srShow(model) {
 function srClose() {
   if (SR.phase !== 'open') return;
   SR.phase = 'idle';
+  SR.reach = null;
   srBoxEnd();
   srBoxArm(false);
   if (typeof srCostReset === 'function') srCostReset();
@@ -364,6 +453,7 @@ function srDispose() {
   V.scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { for (const m of [].concat(o.material)) { if (m.map) m.map.dispose(); m.dispose(); } } });
   V.renderer.dispose();
   for (const url of V.iconUrls) URL.revokeObjectURL(url);
+  if (V.reachMats) for (const m of V.reachMats.values()) m.dispose();   // a faint copy not on a model now is in no scene
   $('sr-labels').innerHTML = '';
   SR.view = null;
 }
@@ -446,12 +536,11 @@ function srBuild() {
     const a = L.pos.get(e.from), b = L.pos.get(e.to), crossing = !!e.crossProvider, y = crossing ? 2.6 : 1.7;
     (crossing ? cross : plain).push(a.x, y, a.z, b.x, y, b.z);
   }
-  const lines = (arr, mat) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3)); const l = new THREE.LineSegments(g, mat); if (mat.isLineDashedMaterial) l.computeLineDistances(); return l; };
-  V.plainLines = lines(plain, new THREE.LineBasicMaterial({ color: PAL.plain, transparent: true, opacity: SR.plainOpacity }));
-  V.crossLines = lines(cross, new THREE.LineDashedMaterial({ color: PAL.cross, dashSize: 0.5, gapSize: 0.3, transparent: true, opacity: SR.crossOpacity }));
-  // the strong layer: the pressed and the pointed node's cables (srFocusLines fills it)
-  V.focusLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: PAL.focus }));
-  V.focusCross = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: PAL.cross }));
+  V.plainLines = srCables(plain, { color: PAL.plain, opacity: SR.plainOpacity, px: SR_CABLE.plain });
+  V.crossLines = srCables(cross, { color: PAL.cross, opacity: SR.crossOpacity, px: SR_CABLE.cross, dash: 0.5, gap: 0.3 });
+  // the strong layer: the pressed, the pointed node's and the reach's cables (srFocusLines fills it)
+  V.focusLines = srCables([], { color: PAL.focus, px: SR_CABLE.focus });
+  V.focusCross = srCables([], { color: PAL.cross, px: SR_CABLE.focus });
   V.focusLines.renderOrder = V.focusCross.renderOrder = 2;
   V.near.add(V.plainLines, V.crossLines, V.focusLines, V.focusCross);
   // far: the top groups as boxes, the cables bundled between them
@@ -482,8 +571,8 @@ function srBuild() {
   }
   V.bundles = [...bundles.values()];
   // the far view's bundles: as faint as the near cables, and the lines switch holds there too (the independent verification of item 1)
-  V.farPlain = lines(bp, new THREE.LineBasicMaterial({ color: PAL.plain, transparent: true, opacity: SR.plainOpacity }));
-  V.farCross = lines(bc, new THREE.LineDashedMaterial({ color: PAL.cross, dashSize: 1.2, gapSize: 0.7, transparent: true, opacity: SR.crossOpacity }));
+  V.farPlain = srCables(bp, { color: PAL.plain, opacity: SR.plainOpacity, px: SR_CABLE.bundle });
+  V.farCross = srCables(bc, { color: PAL.cross, opacity: SR.crossOpacity, px: SR_CABLE.bundle, dash: 1.2, gap: 0.7 });
   V.far.add(V.farPlain, V.farCross);
   // the external strip's sign
   if (L.ext.length) {
@@ -512,6 +601,7 @@ function srBuild() {
   };
   cv.onpointerleave = () => { if (SR.hover) { SR.hover = null; srFocusLines(V); } };
   cv.onpointerup = (e) => { if (V.downAt && Math.hypot(e.clientX - V.downAt[0], e.clientY - V.downAt[1]) < 5) srPick(e); V.downAt = null; };
+  srReachAfterBuild(V);
   srFlowBuild(V);          // 59-sr-flows.js: the cones over the nodes that start a flow
   const loop = () => {   // the cost view over the stage pauses it (SR.paused, 56-server-cost.js): no frame drawn meanwhile
     if (SR.paused) { V.raf = 0; return; }
@@ -571,7 +661,7 @@ function srPlaceLabels(V) {
     for (const G of V.L.tops) consider(G.x + G.w / 2, G.boxH + 0.8, G.z + G.d / 2, `${G.g.label || G.g.id} · ${G.nodeCount}`, 'group', 1);
   } else {
     for (const G of V.L.floors) if (G.g.id) consider(G.x + 0.6, 0.2 + G.level * 0.06, G.z + 0.5, G.g.label || G.g.id, 'group', 0.6);
-    for (const p of V.L.pos.values()) if (!p.hiddenIn) consider(p.x, p.y + 1.9, p.z, `${p.n.label || p.n.id}${p.n.count > 1 ? ` ×${p.n.count}` : ''}`, p.external ? 'external' : 'node', 1, p.n);
+    for (const p of V.L.pos.values()) if (!p.hiddenIn && !(SR.reach && !SR.reach.ids.has(p.n.id))) consider(p.x, p.y + 1.9, p.z, `${p.n.label || p.n.id}${p.n.count > 1 ? ` ×${p.n.count}` : ''}`, p.external ? 'external' : 'node', 1, p.n);
   }
   // up close (§5): how many nodes are in view decides the look, with room between going in and coming back
   const inView = out.filter((o) => o.n).length;
@@ -651,25 +741,23 @@ function srPick(e) {
   srSelect(h && h.ud.nodes ? h.ud.nodes[h.i] : null, h && h.ud.groups ? h.ud.groups[h.i] || null : null);
 }
 function srSelect(node, group = null) {
+  if (SR.reach && node !== SR.reach.id) srReachEnd(false);   // another node chosen: the faint rest goes, the camera stays
   SR.selected = node; SR.selectedGroup = node ? null : group;
   if (SR.view) srFocusLines(SR.view);
   srRenderBoard();
 }
 /* The strong layer: every cable of the pressed node and of the pointed one (both ends drawn). */
 function srFocusLines(V) {
-  const ids = new Set([SR.selected, SR.hover].filter(Boolean)), plain = [], cross = [];
-  if (ids.size) {
+  const ids = new Set([SR.selected, SR.hover].filter(Boolean)), plain = [], cross = [], reach = SR.reach ? SR.reach.edges : null;
+  if (ids.size || reach) {
     for (const e of V.L.edges) {
-      if (!ids.has(e.from) && !ids.has(e.to)) continue;
+      if (!ids.has(e.from) && !ids.has(e.to) && !(reach && reach.has(e))) continue;
       const a = V.L.pos.get(e.from), b = V.L.pos.get(e.to), y = e.crossProvider ? 2.62 : 1.72;
       (e.crossProvider ? cross : plain).push(a.x, y, a.z, b.x, y, b.z);
     }
   }
-  for (const [layer, arr] of [[V.focusLines, plain], [V.focusCross, cross]]) {
-    layer.geometry.dispose();
-    layer.geometry = new THREE.BufferGeometry();
-    layer.geometry.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
-  }
+  srCablesRefill(V.focusLines, plain);
+  srCablesRefill(V.focusCross, cross);
   V.focusCount = (plain.length + cross.length) / 6;
 }
 /* The lines switch: all (faint) / crossing ones only / the chosen node's only. */
@@ -729,6 +817,23 @@ function srBoxDraw() {
   el.style.transform = `translate(${Math.min(D.x0, D.x1)}px, ${Math.min(D.y0, D.y1)}px)`;
   el.style.width = `${Math.abs(D.x1 - D.x0)}px`; el.style.height = `${Math.abs(D.y1 - D.y0)}px`;
 }
+/* The camera, its direction kept, on the middle of these points and as near as lets all of them fill k of the page. */
+function srFrameOn(V, pts, k = SR.boxFit) {
+  const dir = V.camera.position.clone().sub(V.controls.target).normalize(), now = V.camera.position.distanceTo(V.controls.target);
+  const { minDistance: lo0, maxDistance: hi0 } = V.controls;
+  const place = (d) => { V.camera.position.copy(V.controls.target).addScaledVector(dir, d); V.camera.updateMatrixWorld(); };
+  const c = pts.reduce((a, v) => a.add(v), new THREE.Vector3()).divideScalar(pts.length);
+  V.controls.target.set(c.x, 0, c.z);
+  const fits = (d) => {
+    place(d);
+    return pts.every((v) => { const q = v.clone().project(V.camera); return q.z > -1 && q.z < 1 && Math.abs(q.x) <= k && Math.abs(q.y) <= k; });
+  };
+  let lo = lo0, hi = Math.max(now, lo0);
+  while (!fits(hi) && hi < hi0) hi = Math.min(hi0, hi * 2);
+  if (fits(lo)) hi = lo;
+  else for (let i = 0; i < 32 && hi - lo > 0.01; i++) { const m = (lo + hi) / 2; if (fits(m)) hi = m; else lo = m; }
+  place(hi);
+}
 /* What the box can hold: near the nodes drawn, far the top groups' boxes ([id, point]). */
 function srBoxPoints(V) {
   if (V.lod === 'far') return V.L.tops.map((G) => [G.g.id, new THREE.Vector3(G.x + G.w / 2, G.boxH / 2, G.z + G.d / 2)]);
@@ -749,20 +854,8 @@ function srZoomToBox(x0, y0, x1, y1) {
   const dir = V.camera.position.clone().sub(V.controls.target).normalize(), now = V.camera.position.distanceTo(V.controls.target);
   const { minDistance: lo0, maxDistance: hi0 } = V.controls;
   const place = (d) => { V.camera.position.copy(V.controls.target).addScaledVector(dir, d); V.camera.updateMatrixWorld(); };
-  if (held.length) {
-    const c = held.reduce((a, [, v]) => a.add(v), new THREE.Vector3()).divideScalar(held.length);
-    V.controls.target.set(c.x, 0, c.z);
-    const k = SR.boxFit;
-    const fits = (d) => {
-      place(d);
-      return held.every(([, v]) => { const q = v.clone().project(V.camera); return q.z > -1 && q.z < 1 && Math.abs(q.x) <= k && Math.abs(q.y) <= k; });
-    };
-    let lo = lo0, hi = Math.max(now, lo0);
-    while (!fits(hi) && hi < hi0) hi = Math.min(hi0, hi * 2);
-    if (fits(lo)) hi = lo;
-    else for (let i = 0; i < 32 && hi - lo > 0.01; i++) { const m = (lo + hi) / 2; if (fits(m)) hi = m; else lo = m; }
-    place(hi);
-  } else {   // nothing in it: its middle on the floor, as much nearer as the box is smaller than the page
+  if (held.length) srFrameOn(V, held.map(([, v]) => v));
+  else {   // nothing in it: its middle on the floor, as much nearer as the box is smaller than the page
     const ray = new THREE.Raycaster(), at = new THREE.Vector3();
     ray.setFromCamera(new THREE.Vector2(((l + r) / 2 / w) * 2 - 1, -((t + b) / 2 / h) * 2 + 1), V.camera);
     if (ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), at)) V.controls.target.copy(at);
@@ -773,6 +866,111 @@ function srZoomToBox(x0, y0, x1, y1) {
   V.controls.update();
   V.lastBox = { held: held.map(([id]) => id), lod: V.lod };
   srLog(tl('sr.box.log', { kind: V.lastBox.lod === 'far' ? 'group' : 'node', n: held.length }));
+}
+
+/* ---- つながっている物を全部見せる (requester 10-22: 「繋がってるものを全て表示のメニューが欲しい。選択したノードによるのと
+   同じ感じで。」) ---- */
+/* The nodes an edge joins to `id` (either way), `hops` steps on (1, or 'all': until nothing new), and the edges walked. */
+function srReachOf(L, id, hops) {
+  const adj = new Map();
+  for (const e of L.edges) for (const [x, y] of [[e.from, e.to], [e.to, e.from]]) (adj.get(x) || adj.set(x, []).get(x)).push([y, e]);
+  const ids = new Set([id]), edges = new Set();
+  let front = [id];
+  for (let d = 0; front.length && (hops === 'all' || d < hops); d++) {
+    const next = [];
+    for (const x of front) for (const [y, e] of adj.get(x) || []) { edges.add(e); if (!ids.has(y)) { ids.add(y); next.push(y); } }
+    front = next;
+  }
+  return { ids, edges };
+}
+function srReachPoints(V) {
+  return [...SR.reach.ids].map((id) => V.L.pos.get(id)).filter(Boolean).map((p) => new THREE.Vector3(p.x, p.y + 0.75, p.z));
+}
+/* Shown: what it holds, the camera on all of it. Pressed again: as it was, the camera too. */
+function srReachToggle() {
+  const V = SR.view;
+  if (SR.reach) { srReachEnd(true); return; }
+  if (!V || !SR.selected || !V.L.pos.has(SR.selected)) return;
+  SR.reach = { id: SR.selected, hops: SR.reachHops, ...srReachOf(V.L, SR.selected, SR.reachHops),
+    cam: { pos: V.camera.position.clone(), target: V.controls.target.clone() } };
+  srReachDraw(V);
+  srFrameOn(V, srReachPoints(V), SR.reachFit);
+  V.controls.update();
+  srLog(tl('sr.log.reach', { node: SR.selected, n: SR.reach.ids.size - 1, hops: tl(SR.reach.hops === 'all' ? 'sr.reach.hops.all' : 'sr.reach.hops.one') }));
+  srRenderBoard();
+}
+function srReachEnd(back) {
+  const R = SR.reach, V = SR.view;
+  if (!R) return;
+  SR.reach = null;
+  if (V) {
+    srReachDraw(V);
+    if (back) { V.camera.position.copy(R.cam.pos); V.controls.target.copy(R.cam.target); V.controls.update(); }
+  }
+  srLog(tl('sr.log.reach.end'));
+  srRenderBoard();
+}
+/* The steps changed while shown: walked again, the camera on what it holds now (going back, still to where it was). */
+function srReachHops(hops) {
+  SR.reachHops = hops;
+  const V = SR.view, R = SR.reach;
+  if (!R || !V) return;
+  Object.assign(R, { hops }, srReachOf(V.L, R.id, hops));
+  srReachDraw(V);
+  srFrameOn(V, srReachPoints(V), SR.reachFit);
+  V.controls.update();
+  srLog(tl('sr.log.reach', { node: R.id, n: R.ids.size - 1, hops: tl(hops === 'all' ? 'sr.reach.hops.all' : 'sr.reach.hops.one') }));
+  srRenderBoard();
+}
+/* A new build (the theme, an environment, a cloud chosen): still shown when its node is still drawn, walked in the new
+   layout; the camera stays where the build put it. */
+function srReachAfterBuild(V) {
+  const R = SR.reach;
+  if (!R) return;
+  if (!V.L.pos.has(R.id) || V.L.pos.get(R.id).hiddenIn) { SR.reach = null; return; }
+  Object.assign(R, srReachOf(V.L, R.id, R.hops));
+  srReachDraw(V);
+}
+/* The rest faint (the shapes, the models up close, the cables), or all as drawn again. A shape's own colour is kept the
+   first time and put back from there, so what any other part of the room set (a migration's new versions) is not lost. */
+function srReachDraw(V) {
+  const R = SR.reach, bg = new THREE.Color(V.scene.background), c = new THREE.Color();
+  for (const mesh of [...V.nodeMeshes.simple, ...V.nodeMeshes.detail]) {
+    if (!mesh.instanceColor) continue;
+    if (!mesh.userData.baseColors) mesh.userData.baseColors = mesh.instanceColor.array.slice();
+    const base = mesh.userData.baseColors;
+    mesh.userData.nodes.forEach((id, i) => {
+      c.fromArray(base, i * 3);
+      if (R && !R.ids.has(id)) c.lerp(bg, SR.reachFade);
+      mesh.setColorAt(i, c);
+    });
+    mesh.instanceColor.needsUpdate = true;
+    if (!R) mesh.userData.baseColors = null;
+  }
+  if (V.models) for (const g of V.models.values()) srReachTint(g);
+  const faint = !!R;
+  for (const [m, o] of [[V.plainLines, SR.plainOpacity], [V.crossLines, SR.crossOpacity], [V.farPlain, SR.plainOpacity], [V.farCross, SR.crossOpacity]]) {
+    m.material.opacity = m.material.uniforms.uOpacity.value = faint ? Math.min(o, SR.reachLineOpacity) : o;
+  }
+  srFocusLines(V);
+  srPlaceLabels(V);   // the faint ones' tags go now, not at the next tenth of a second
+}
+/* A model up close: faint while out of what is shown. The models share a material per colour (56-sr-models.js
+   srModelMaterial), so a faint one gets a faint copy of it, made once a view, never a change to the shared one. */
+function srReachTint(g) {
+  const V = SR.view, out = !!SR.reach && !SR.reach.ids.has(g.userData.node);
+  if (!V) return;
+  V.reachMats = V.reachMats || new Map();
+  g.traverse((o) => {
+    if (!o.isMesh) return;
+    const base = o.userData.reachBase || (o.userData.reachBase = o.material);
+    if (out && !V.reachMats.has(base)) {
+      const f = base.clone();
+      f.transparent = true; f.opacity = base.opacity * (1 - SR.reachFade); f.depthWrite = false;
+      V.reachMats.set(base, f);
+    }
+    o.material = out ? V.reachMats.get(base) : base;
+  });
 }
 
 /* ---- the board and the log ---- */
@@ -799,7 +997,8 @@ function srRenderBoard() {
 <li><span class="sr-line"></span>${esc(tl('sr.board.line.same'))}</li><li><span class="sr-line sr-line-cross"></span>${esc(tl('sr.board.line.cross'))}</li></ul>
 ${sel ? `<h3 data-sr-sel-head>${esc(tl('sr.sel.title'))}</h3><dl class="sr-sel"><dt>id</dt><dd>${esc(sel.id)}</dd><dt>${esc(tl('sr.sel.name'))}</dt><dd>${esc(sel.label || '')}</dd><dt>${esc(tl('sr.sel.kind'))}</dt><dd>${esc(sel.category)}</dd><dt>provider</dt><dd>${esc(sel.providerResolved || sel.provider || '')}${sel.service ? ` · ${esc(sel.service)}` : ''}</dd>${sel.count > 1 ? `<dt>${esc(tl('sr.sel.count'))}</dt><dd>${esc(String(sel.count))}</dd>` : ''}${sel.engine ? `<dt>${esc(tl('sr.sel.engine'))}</dt><dd>${esc(sel.engine)}</dd>` : ''}</dl>${srFlowBoardHTML(sel.id)}
 ${Array.isArray(sel.spec) && sel.spec.length ? `<h3>${esc(tl('sr.sel.spec'))}</h3><table class="sr-spec" data-sr-spec><tbody>${sel.spec.map((x) => `<tr><th scope="row">${SR_SPEC_NAME[x.key] ? `${esc(SR_SPEC_NAME[x.key])} <small>${esc(x.key)}</small>` : esc(x.key)}</th><td>${esc(x.value)}</td></tr>`).join('')}</tbody></table>` : ''}
-<p class="sr-acts"><button type="button" class="wb-btn" data-sr-act="focus">${esc(tl('sr.act.focus'))}</button></p>
+<p class="sr-acts"><button type="button" class="wb-btn" data-sr-act="focus">${esc(tl('sr.act.focus'))}</button> <button type="button" class="wb-btn sr-reach" data-sr-act="reach" aria-pressed="${SR.reach ? 'true' : 'false'}">${esc(tl('sr.act.reach'))}</button> <select class="sr-reach-hops" data-sr-reach-hops aria-label="${esc(tl('sr.reach.hops'))}"><option value="1"${SR.reachHops === 1 ? ' selected' : ''}>${esc(tl('sr.reach.hops.one'))}</option><option value="all"${SR.reachHops === 'all' ? ' selected' : ''}>${esc(tl('sr.reach.hops.all'))}</option></select></p>
+${SR.reach ? `<p class="sr-hint" data-sr-reach-said>${esc(tl('sr.reach.shown', { n: SR.reach.ids.size - 1 }))}</p>` : ''}
 <ul class="sr-edges">${edgesOf.map((e) => `<li>${esc(e.from)} → ${esc(e.to)}${e.protocol ? ` <small>${esc(e.protocol)}</small>` : ''}${e.crossProvider ? ` <b>${esc(tl('sr.edge.cross'))}</b>` : ''}</li>`).join('')}</ul>`
     : grp ? `<h3>${esc(tl('sr.grp.title'))}</h3><dl class="sr-sel"><dt>id</dt><dd>${esc(grp.id)}</dd><dt>${esc(tl('sr.sel.name'))}</dt><dd>${esc(grp.label || '')}</dd><dt>${esc(tl('sr.sel.kind'))}</dt><dd>${esc(grp.kind || '')}</dd><dt>provider</dt><dd>${esc(grp.providerResolved || grp.provider || '')}</dd><dt>${esc(tl('sr.grp.nodes'))}</dt><dd>${esc(String(inGroup ? srCountNodes(inGroup) : 0))}</dd></dl>
 <p class="sr-acts"><button type="button" class="wb-btn" data-sr-act="focus">${esc(tl('sr.act.focus'))}</button> <button type="button" class="wb-btn" data-sr-act="toggle" data-sr-group="${esc(grp.id)}">${esc(SR.closed.has(grp.id) ? tl('sr.grp.open') : tl('sr.grp.close'))}</button></p>`
@@ -880,7 +1079,12 @@ $('sr-board').addEventListener('click', (e) => {
   const b = e.target.closest('[data-sr-act]');
   if (!b) return;
   if (b.dataset.srAct === 'focus') srFocusSelected();
+  else if (b.dataset.srAct === 'reach') srReachToggle();
   else if (b.dataset.srAct === 'toggle') srToggleGroup(b.dataset.srGroup);
+});
+$('sr-board').addEventListener('change', (e) => {
+  const h = e.target.closest('[data-sr-reach-hops]');
+  if (h) srReachHops(h.value === 'all' ? 'all' : 1);
 });
 $('sr-env').addEventListener('change', () => { srLog(tl('sr.log.env', { env: $('sr-env').value || tl('sr.env.unset') })); srBuild(); });
 $('sr-fold').addEventListener('change', () => { srLog($('sr-fold').checked ? tl('sr.log.fold.shown') : tl('sr.log.fold.folded')); srBuild(); });
@@ -895,6 +1099,7 @@ for (const [btn, el] of [['sr-board-btn', 'sr-board'], ['sr-log-btn', 'sr-log']]
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (SR.phase === 'open' && (SR.box.drag || SR.box.armed)) { e.preventDefault(); e.stopPropagation(); srBoxEnd(); srBoxArm(false); return; }   // the box only, the room stays
+  if (SR.phase === 'open' && SR.reach) { e.preventDefault(); e.stopPropagation(); srReachEnd(true); return; }   // what was shown only, the room stays
   if (SR.phase === 'loading') { e.preventDefault(); e.stopPropagation(); srCancel(); return; }
   if (SR.phase === 'open') { e.preventDefault(); e.stopPropagation(); srClose(); }
 }, true);
