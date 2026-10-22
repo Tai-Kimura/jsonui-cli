@@ -133,6 +133,34 @@ def test_the_words_reach_reads_and_screens(tmp_path, language):
     assert got["short"] == "No infra files (*.json) in docs/infra"
 
 
+def test_the_four_codes_that_had_no_words_reach_the_english_page(tmp_path, language, monkeypatch):
+    """Through infra_docs (what the page reads), under en: config.exclude (too_many with its limit), environment.outside,
+    environment.none and spec.ha each say their case, and a code with no words yet keeps its message and its code
+    (ticket 2026-10-22-doc-validate-infra-config-exclude-prints-only-its-code)."""
+    from jui_cli.viz import infra_docs
+    language("en")
+    model = {"version": 0, "environments": [{"id": "prod", "kind": "production"}, {"id": "dev", "kind": "development"}],
+             "groups": [{"id": "g", "kind": "logical", "environments": ["prod"]}],
+             "nodes": [{"id": "a", "category": "compute.vm", "group": "g", "environments": ["dev"]},
+                       {"id": "db", "category": "database.relational", "spec": [{"key": "deployment", "value": "Multi-AZ"}]}]}
+    (tmp_path / "docs" / "infra").mkdir(parents=True)
+    (tmp_path / "docs" / "infra" / "main.json").write_text(json.dumps(model), encoding="utf-8")
+    (tmp_path / "kept").mkdir()
+    exclude = ["kept"] * (room.EXCLUDE_MAX + 1)
+    (tmp_path / "jui.config.json").write_text(json.dumps({"infra": {"exclude": exclude}}), encoding="utf-8")
+    new = {"file": room.CONFIG_NAME, "path": "/infra", "code": "something.new", "message": "a new message",
+           "severity": "warning"}
+    real = room.exclude_problems
+    monkeypatch.setattr(room, "exclude_problems", lambda root, infra: real(root, infra) + [dict(new)])
+    status, got = infra_docs.read(tmp_path)
+    assert status == 200 and got["ok"], got
+    short = {p["code"]: p["short"] for p in got["problems"]}
+    assert sorted(short) == ["config.exclude", "environment.none", "environment.outside", "something.new", "spec.ha"]
+    assert {c: s for c, s in short.items() if s.endswith(f": {c}") or JAPANESE.search(s)} == {}
+    assert f"more than {room.EXCLUDE_MAX} folders" in short["config.exclude"]
+    assert short["something.new"] == "jui.config.json: a new message (something.new)"
+
+
 def _japanese(o, at="") -> set:
     """Where a reply has Japanese letters, by path."""
     if isinstance(o, dict):
