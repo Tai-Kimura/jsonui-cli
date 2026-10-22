@@ -58,6 +58,22 @@
         <span class="rs-name" id="room-solo-name" aria-live="polite"></span>
         <button type="button" class="fn-btn" id="room-call" hidden aria-haspopup="dialog">{{tl:page.room.call}}呼び出し{{/tl}}</button>
       </div>
+      <section class="roster" id="roster" aria-labelledby="roster-h" hidden>
+        <div class="roster-head">
+          <h2 id="roster-h">{{tl:page.roster.title}}この部屋のロボット{{/tl}}</h2>
+          <span class="roster-count" id="roster-count"></span>
+          <button type="button" class="roster-fold" id="roster-fold" aria-expanded="true" aria-controls="roster-body" aria-label="{{tl:page.roster.fold}}一覧をたたむ・開く{{/tl}}"></button>
+        </div>
+        <p class="roster-alert-line" id="roster-alert" role="status" hidden></p>
+        <div class="roster-body" id="roster-body">
+          <div class="roster-bulk" role="group" aria-label="{{tl:page.roster.bulk}}まとめて切り替える{{/tl}}">
+            <button type="button" class="fn-btn" data-roster-bulk="all">{{tl:page.roster.all}}全部{{/tl}}</button>
+            <button type="button" class="fn-btn" data-roster-bulk="busy" title="{{tl:page.roster.busy.title}}待っているものも含めて、手が空いていないロボットだけ{{/tl}}">{{tl:page.roster.busy}}作業中だけ{{/tl}}</button>
+            <button type="button" class="fn-btn" data-roster-bulk="none">{{tl:page.roster.none}}なし{{/tl}}</button>
+          </div>
+          <ul class="roster-list" id="roster-list"></ul>
+        </div>
+      </section>
       <ul class="tower-legend" id="tower-legend" aria-label="{{tl:page.legend.aria}}窓の見方{{/tl}}" hidden>
         <li><span class="tl-win tl-work" aria-hidden="true">▶</span>{{tl:page.legend.busy}}作業中 — 明かりがつき、ロボットが動く{{/tl}}</li>
         <li><span class="tl-win tl-work" aria-hidden="true">…</span>{{tl:page.legend.thinking}}考え中 — 明かりがつき、あごに手を当てている{{/tl}}</li>

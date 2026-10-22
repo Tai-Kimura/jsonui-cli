@@ -309,6 +309,7 @@
     "jui_tools/jui_cli/viz/web/js/56-sr-models.js": "サーバールームのノードを寄った時だけ種類のモデルで描く（ページの描画だけ）。56-server-room.js が読んだモデルの category・service だけを読み、CLI・フックの形は読まない",
     "jui_tools/jui_cli/viz/web/js/56-server-cost.js": "コストのシミュレーターの画面（ページの描画だけ）。サーバーの /api/infra-cost を読むだけで、CLI・フックの形は読まない",
     "jui_tools/jui_cli/viz/infra_docs.py": "部屋の docs/infra（宣言されたインフラの構成）と部屋の中のアイコンを document_tools の infra.room で読むだけ。CLI・フック・transcript の形は読まない",
+    "jui_tools/jui_cli/viz/web/js/53-roster.js": "部屋の中のロボットの一覧とチェック（ページの描画だけ）。ページの robots・robotState・waitKindOf と、ブラウザの localStorage を読むだけで、CLI・フックの形は読まない",
     "jui_tools/jui_cli/viz/web/js/53-waits.js": "返事待ちのロボットの 3D の印（吹き出し・ランプ・ポーズ）。サーバーの slice（state・asking・inputWaitAt）とページの札だけを読み、CLI の形は読まない。idle_prompt の形はサーバー（ingest.py、hooks の項目）の側",
     "jui_tools/jui_cli/viz/web/js/59-sr-flows.js": "サーバールームの flow の再生（辺の中を流れる光・トースト・分かれ道・速さ）。サーバーの /api/infra-docs が返すモデルの flows だけを読み、CLI・フックの形は読まない",
     "jui_tools/jui_cli/viz/infra_cost.py": "コストのシミュレーター: 部屋の負荷定義・単価のファイル・モデルを document_tools の infra.load・infra.cost で読み、計算と画面の形を作らせるだけ。CLI・フック・transcript の形は読まない",

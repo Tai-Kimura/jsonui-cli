@@ -278,6 +278,17 @@ window.__dbg = {
     return { n: out.length, best: best ? best.slice(0, 2) : null, bestOff: best ? +best[2].toFixed(1) : null, tag: [w, h] };
   },
   solo: () => (SOURCE.mode === 'live' ? liveSolo() : null),
+  // the room's robot list (53-roster.js): its rows as the page shows them, the room's robots as the 3D draws them, where
+  // the list and the room's name box sit, and what this browser keeps for the room
+  roster: () => { const box = document.getElementById('roster'), solo = SOURCE.mode === 'live' ? liveSolo() : null, rect = (el) => { if (!el || el.hidden) return null; const r = el.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom].map(Math.round); };
+    const rows = [...document.querySelectorAll('#roster-list .roster-row')].map((li) => ({ key: li.dataset.rosterKey, id: li.dataset.robot, on: li.querySelector('.roster-check').checked,
+      wait: li.dataset.wait || null, alert: li.classList.contains('roster-alert'), name: li.querySelector('.roster-nm').textContent, lamp: li.querySelector('.roster-lamp').style.getPropertyValue('--lamp') }));
+    const bots = solo ? robots.filter((R) => R.def.room === solo).map((R) => ({ id: R.def.id, sid: R.def.sessionId, kind: R.def.kind, root: R.robot.root.visible,
+      tag: R.tag.style.visibility || '', desk: !!(R.robot.desk && R.robot.desk.visible), busy: !!(R.play || R.solo || R.brk) })) : [];
+    const alert = document.getElementById('roster-alert');
+    return { shown: !!box && !box.hidden, solo, rows, bots, alert: alert && !alert.hidden ? alert.textContent : null, count: (document.getElementById('roster-count') || {}).textContent || '',
+      folded: !!box && box.classList.contains('roster-folded'), rect: rect(box), err: rect(document.getElementById('live-error')), soloBox: rect(document.getElementById('room-solo')), card: rect(document.querySelector('#rb.show')),
+      scene: rect(document.getElementById('scene')), ring: selRing.visible, saved: solo ? readPref(`roster:${solo}`, '') : '' }; },
   // robots' name tags as drawn (10-19): the screen rect of each visible one, and placeRobotTags' cost
   tags: () => robots.filter((R) => R.tag.style.visibility !== 'hidden' && !R.tag.hidden && !tagsEl.hidden).map((R) => {
     const b = R.tag.getBoundingClientRect(); return { id: R.def.id, text: R.tag.textContent, x0: b.left, x1: b.right, y0: b.top, y1: b.bottom }; }),

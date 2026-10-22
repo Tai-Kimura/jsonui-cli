@@ -614,6 +614,7 @@ function spiritPlaceBubbles() {
   for (const R of robots) {
     const el = R.spirit && R.spirit.bubbleEl;
     if (!el || el.hidden || el.dataset.target !== 'spirit') continue;
+    if (!R.robot.root.visible) { el.style.visibility = 'hidden'; continue; }   // its robot hidden (the room's list, another room)
     const p = spiritHead(R, R.spirit).project(camera);
     if (p.z > 1 || p.z < -1) { el.style.visibility = 'hidden'; continue; }
     if (!el._size || el._size.text !== el.textContent) el._size = { text: el.textContent, w: el.offsetWidth, h: el.offsetHeight };

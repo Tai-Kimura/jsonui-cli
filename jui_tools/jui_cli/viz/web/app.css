@@ -1185,6 +1185,36 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 /* one room at a time (requester, 10-18): the room picked fills the view, the way back sits at the top left */
 .room-solo { position: absolute; left: 12px; top: 12px; z-index: 6; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 24px); padding: 4px 10px 4px 4px; border-radius: 10px; background: var(--panel); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12); }
 .room-solo[hidden] { display: none; }
+/* the room's robot list (53-roster.js): at the 3D's right; left of the robot card when the page is wide enough for both,
+   under it when not (the card is what was asked for last); at the foot of the 3D on a narrow page, folded by a press */
+.roster { position: absolute; top: var(--roster-top, 12px); right: 12px; z-index: 4; display: grid; grid-template-rows: auto auto minmax(0, 1fr); width: 248px; max-height: calc(100% - 24px); overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); box-shadow: 0 4px 16px var(--shadow); font-size: 13px; }
+.roster[hidden] { display: none; }
+@media (min-width: 1300px) { .scene:has(.rb.show) .roster { right: calc(min(420px, 100% - 28px) + 26px); } }
+.roster-head { display: flex; align-items: center; gap: 6px; padding: 8px 8px 6px 12px; border-bottom: 1px solid var(--line); }
+.roster-head h2 { margin: 0; font-size: 13px; font-weight: 700; }
+.roster-count { margin-left: auto; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.roster-fold { width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); cursor: pointer; }
+.roster-fold::before { content: "▾"; }
+.roster-folded .roster-fold::before { content: "▸"; }
+.roster-folded .roster-body { display: none; }
+.roster-alert-line { margin: 0; padding: 6px 12px; background: var(--warn-bg); color: var(--ink); font-weight: 700; }
+.roster-body { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
+.roster-bulk { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 8px; }
+.roster-bulk .fn-btn { padding: 2px 8px; font-size: 12px; }
+.roster-list { margin: 0; padding: 0 0 6px; overflow-y: auto; list-style: none; }
+.roster-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 2px 6px; padding: 3px 8px; }
+.roster-row .roster-wait { grid-column: 2 / 4; justify-self: start; padding: 0 6px; border-radius: 6px; background: var(--warn-bg); color: var(--warn); font-size: 11px; font-weight: 700; }
+.roster-off .roster-name { opacity: 0.55; }
+.roster-alert { background: var(--warn-bg); box-shadow: inset 3px 0 0 var(--warn); }
+.roster-alert .roster-name { opacity: 1; }
+.roster-check { width: 16px; height: 16px; margin: 0; }
+.roster-name { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 2px 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.roster-name:disabled { cursor: default; }
+.roster-nm { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+@media (max-width: 900px) {   /* the room's name box keeps the top: the list at the foot, as tall as the room below the box leaves */
+  .roster { top: auto; bottom: 12px; width: min(248px, calc(100% - 24px)); max-height: calc(100% - 76px); }
+}
+.roster-lamp { width: 10px; height: 10px; border-radius: 50%; background: var(--lamp); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2); }
 /* the notifications and the question window's settings (2.3.6) */
 .notify-pop { position: fixed; top: 52px; right: 12px; z-index: 55; width: min(380px, calc(100vw - 24px)); display: grid; gap: 8px; padding: 14px 16px; border-radius: 12px; background: var(--panel); color: var(--ink); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3); font: 13px/1.5 var(--font-body); }
 .notify-pop[hidden] { display: none; }

@@ -1011,13 +1011,15 @@ function playMove(G, left, nowSec) {
   }
 }
 const playIdle = (R, st, now) => R.def.kind === 'main' && st.state === 'idle' && Number.isFinite(st.since) && st.since > 0
-  && now - st.since >= PLAY.idleMs && !LIVE.leaving[R.def.id] && !R.robot.call && !R.path.length && !R.playBack && !R.play && !R.solo && !R.brk && !R.shred && !R.git;   // nothing starts on the way to the shredder or the git box (2.3.4)
+  && now - st.since >= PLAY.idleMs && !LIVE.leaving[R.def.id] && !R.robot.call && !R.path.length && !R.playBack && !R.play && !R.solo && !R.brk && !R.shred && !R.git
+  && !rosterHides(R);   // hidden by the room's list: no game, nap or break played out where it cannot be seen (53-roster.js)   // nothing starts on the way to the shredder or the git box (2.3.4)
 /* Why a robot stops (null: it does not): the reasons the requester's "walked up and went back" can be told by. Only a
    desk in another room stops it now; a desk that moves within the room (another session came or went and the room
    was laid out again — common with many sessions) no longer does: it walks back to the new desk afterwards. */
 function playStopReason(R, st, room, since) {
   if (!robots.includes(R)) return 'gone';
   if (LIVE.leaving[R.def.id]) return 'leaving';
+  if (rosterHides(R)) return 'hidden';   // unchecked in the room's list: its partner is not left playing with no one
   if (R.robot.call) return 'call';
   if (st.state !== 'idle') return `state:${st.state}`;
   if (st.since !== since) return 'updated';
@@ -1209,9 +1211,10 @@ function liveSoloSync() {
   const solo = liveSolo();
   for (const [id, R] of Object.entries(LIVE3D.rooms)) { const on = !solo || id === solo; R.group.visible = on; R.rt.el.hidden = !!solo; }   // alone, its name is in the box
   for (const R of robots) {
-    const p = R.robot.root.position, on = !solo || R.def.room === solo || roomAtPoint([p.x, p.z]) === solo;
+    const p = R.robot.root.position, on = (!solo || R.def.room === solo || roomAtPoint([p.x, p.z]) === solo) && !rosterHides(R);   // unchecked in the room's list (53-roster.js)
     R.robot.root.visible = on; R.tag.hidden = !on;
   }
+  rosterSync(solo);
   const box = document.getElementById('room-solo');
   if (!box) return;
   box.hidden = !solo || !has3D || TOWER.on || zoom.zoomed || ds.open || pr.open;   // the data server's sheet covers it (2.3.5)
@@ -3050,7 +3053,7 @@ function update3D(model, nowSec, dt) {
     camera.updateProjectionMatrix();
   }
   const sel = rbState.id && robots.find((x) => x.def.id === rbState.id);
-  selRing.visible = !!sel;
+  selRing.visible = !!sel && sel.robot.root.visible;   // a robot hidden by the room's list leaves no ring
   if (sel) {
     selRing.position.set(sel.robot.root.position.x, 0.03, sel.robot.root.position.z);
     selRing.material.color.set(ROLES[sel.def.role].color);

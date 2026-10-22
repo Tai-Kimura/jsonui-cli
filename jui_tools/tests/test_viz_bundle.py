@@ -28,9 +28,9 @@ def web_text(*parts):
 
 def test_each_mode_is_its_parts_in_order():
     assert bundle.parts("demo", e2e=False) == ("05-i18n.js", "10-robot-core.js", "20-core.js", "30-source-demo.js", "31-talk-demo-data.js",
-                                               "40-scene.js", "45-spirits.js", "50-panel.js", "51-denials.js", "52-data-docs.js", "53-waits.js", "53-devices.js", "54-bills.js", "55-history.js", "56-server-room.js", "56-sr-models.js", "56-server-cost.js", "57-fulltext.js", "58-talk.js", "59-sr-flows.js", "60-log.js", "70-main.js")
+                                               "40-scene.js", "45-spirits.js", "50-panel.js", "51-denials.js", "52-data-docs.js", "53-waits.js", "53-roster.js", "53-devices.js", "54-bills.js", "55-history.js", "56-server-room.js", "56-sr-models.js", "56-server-cost.js", "57-fulltext.js", "58-talk.js", "59-sr-flows.js", "60-log.js", "70-main.js")
     assert bundle.parts("live", e2e=False) == ("05-i18n.js", "10-robot-core.js", "20-core.js", "25-net.js", "30-source-live.js",
-                                               "40-scene.js", "45-spirits.js", "50-panel.js", "51-denials.js", "52-data-docs.js", "53-waits.js", "53-devices.js", "54-bills.js", "55-history.js", "56-server-room.js", "56-sr-models.js", "56-server-cost.js", "57-fulltext.js", "58-talk.js", "59-sr-flows.js", "60-log.js", "70-main.js")
+                                               "40-scene.js", "45-spirits.js", "50-panel.js", "51-denials.js", "52-data-docs.js", "53-waits.js", "53-roster.js", "53-devices.js", "54-bills.js", "55-history.js", "56-server-room.js", "56-sr-models.js", "56-server-cost.js", "57-fulltext.js", "58-talk.js", "59-sr-flows.js", "60-log.js", "70-main.js")
 
 
 def test_build_joins_the_parts_in_that_order_with_a_marker_each():
@@ -192,7 +192,8 @@ BUILDERS = {
         "rbMovedHTML",   # the card's mark when its robot moved and the view did not follow (ticket 2026-10-21-jui-viz-camera-does-not-follow-robot-walking-rooms)
     },
     "51-denials.js": {"denialHTML"},   # a call stopped by auto mode (ticket 2026-10-20-jui-viz-auto-mode-denial-approve-from-page)
-    "53-devices.js": {"devWhoHTML", "devRowHTML", "devLoadHTML"},   # the デバイス pane (ticket 2026-10-20-jui-viz-device-panel-machine-load-and-emulators)
+    "53-devices.js": {"devWhoHTML", "devRowHTML", "devLoadHTML"},
+    "53-roster.js": {"rosterRowHTML"},   # the room's robot list (ticket 2026-10-23-viz-room-robot-list-show-hide)   # the デバイス pane (ticket 2026-10-20-jui-viz-device-panel-machine-load-and-emulators)
     "52-data-docs.js": {"dsContentHTML", "dsEndpointHTML", "dsEpHTML", "dsApiHTML", "dsTableHTML", "dsDbHTML"},
     "59-sr-flows.js": {"srFlowBoardHTML"},   # the flows a chosen node starts, on the server room's board (its item 7)
     "56-server-cost.js": {"srcSummary", "srcAccountHTML", "srcMonthSvg", "srcRow", "srcDayHtml", "srcPicked"},   # the cost simulator's month and day
