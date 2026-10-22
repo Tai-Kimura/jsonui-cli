@@ -43,7 +43,7 @@ SPLIT_VIEWPORT = {"width": 1125, "height": 1012}   # 900 x 810 in the video, 1.2
 #: standalone clips, not chapters of the promo: id -> (start, end) of the clip's own clock (its Remotion composition
 #: reads the same bounds). "mig": the server room's migration plan played (2.3.20, ticket
 #: 2026-10-22-viz-infra-migration-plan), shown to the requester on its own before it joins the promo.
-STANDALONE = {"mig": (0.0, 28.0)}
+STANDALONE = {"mig": (0.0, 30.0)}
 #: what run.py captures: the promo's chapters and the segments (a chapter brings its segments and board with it)
 CAPTURE_IDS = ALL + tuple(SEGMENTS) + tuple(BOARDS) + tuple(STANDALONE)
 #: the bounds the events below were written for; tests hold them to the promo's timeline.json
@@ -339,9 +339,9 @@ def chapters(lang: str) -> dict:
     # frame 0 (the old layout and the player, 0 / 3 steps), then the camera goes to the API (its focus, pulled back a
     # little: the gateway that comes, the flags table that goes and the API itself in view, and few enough nodes that
     # they stand as models), the selection let go. At 0.5x a step's animation is 3.2 s; each is pressed on its own and
-    # held: the add (3.0), the replace (7.6, the month's cost changes on the player), the remove (12.2). Then the cost
-    # view's old / new / difference tables, held to the end.
-    out["mig"] = Chapter("mig", 0, 28, floor(w) + up_close("demo-shop") + [
+    # held 2 s, the month's cost on the player moving at each: the add (3.0), the replace (8.2), the remove (13.4).
+    # Then the cost view (its total says the old month and the steps taken) and its old / new / difference tables.
+    out["mig"] = Chapter("mig", 0, 30, floor(w) + up_close("demo-shop") + [
         P("door"),
         P("click", target={"css": f"#sr-board [data-sr-mig='{MIG_PLAN}']"}, expect="migopen"),
         P("dbg", call="srSelect", node="api"),
@@ -352,9 +352,9 @@ def chapters(lang: str) -> dict:
         P("dbg", call="noop", expect="migcost"),
     ], [
         E(3.0, "click", target={"css": MIG_BTN.format("step")}),
-        E(7.6, "click", target={"css": MIG_BTN.format("step")}),
-        E(12.2, "click", target={"css": MIG_BTN.format("step")}),
-        E(17.6, "click", target={"css": "#sr-mode-cost"}, expect="migtable"),
+        E(8.2, "click", target={"css": MIG_BTN.format("step")}),
+        E(13.4, "click", target={"css": MIG_BTN.format("step")}),
+        E(19.2, "click", target={"css": "#sr-mode-cost"}, expect="migtable"),
     ], needs=("rooms", "server_room", "migration"))
 
     # 5 (74–88): the cost simulator. 74–77 is the load definition in the editor (term.py, captures/<lang>/5-json:
