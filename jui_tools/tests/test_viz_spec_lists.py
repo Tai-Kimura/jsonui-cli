@@ -238,6 +238,25 @@ def test_an_edit_to_the_texts_file_alone_reads_the_spec_again(tmp_path):
     assert sheet_for(project, sid)["metadata"]["description"] == {"markdown": "書き直した説明"}
 
 
+def test_an_edit_to_a_shared_texts_file_another_spec_names_reads_that_spec_again(tmp_path):
+    """A reference may name a file other than its paired one (`shared.texts.yaml#key`, relative to the spec's
+    folder): editing that file alone reaches every spec of the app that names it, not only a `<spec>.texts.yaml`."""
+    root = make_project(tmp_path)
+    spec = _spec("Login")
+    spec["metadata"]["description"] = {"md": "shared.texts.yaml#login.description"}
+    (root / "docs/screens/json/auth/login.spec.json").write_text(json.dumps(spec, ensure_ascii=False))
+    shared = root / "docs/screens/json/auth/shared.texts.yaml"
+    shared.write_text("login:\n  description: 共通の説明\n")
+    world = World(VizState())
+    world.apply_hook({"session_id": "s1", "cwd": str(root), "hook_event_name": "SessionStart"}, 0)
+    project = next(iter(world.jsonui.values()))
+    sid = next(k for k in project.specs if k.endswith("login.spec.json"))
+    assert sheet_for(project, sid)["metadata"]["description"] == {"markdown": "共通の説明"}
+    shared.write_text("login:\n  description: 書き直した共通の説明\n")
+    world.file_changed(project.project_id, str(shared), 100)
+    assert sheet_for(project, sid)["metadata"]["description"] == {"markdown": "書き直した共通の説明"}
+
+
 def test_the_watcher_passes_a_texts_file_on(tmp_path, monkeypatch):
     project = JsonUIProject(make_project(tmp_path), "p")
     handlers = []
