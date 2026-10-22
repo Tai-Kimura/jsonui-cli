@@ -48,6 +48,18 @@ def test_a_picture_is_copied_when_sent_and_read_back_after_the_file_moved(tmp_pa
     folder = tmp_path / "viz-home" / "sent"
     assert sorted(p.name for p in folder.iterdir()) == ["toolu_01A-0.png", "toolu_01A-2.gif"]
     assert oct(folder.stat().st_mode & 0o777) == "0o700" and oct((folder / "toolu_01A-0.png").stat().st_mode & 0o777) == "0o600"
+    assert oct(folder.parent.stat().st_mode & 0o777) == "0o700"     # the viz home it made: people's pictures, this user's only
+
+
+def test_a_copy_over_the_cap_in_the_folder_is_not_read(tmp_path, monkeypatch):
+    """What sent/ holds under a copy's name is read only up to SENT_FILE_MAX, as the history reads a file."""
+    d, st = _pics(tmp_path), _store(tmp_path)
+    assert st.take("toolu_01F", [str(d / "a.png")], CWD) == ["copied"]
+    (tmp_path / "viz-home" / "sent" / "toolu_01F-0.png").write_bytes(PNG + b"\0" * 64)   # grown after it was written
+    monkeypatch.setattr(SC, "SENT_FILE_MAX", len(PNG) + 32)
+    assert st.read("toolu_01F", 0) == (404, "unreadable")
+    monkeypatch.setattr(SC, "SENT_FILE_MAX", len(PNG) + 64)
+    assert st.read("toolu_01F", 0)[0] == 200                         # the control: at the cap it is read
 
 
 def test_the_copy_is_what_was_sent_and_is_taken_once(tmp_path):
