@@ -57,19 +57,26 @@ class InitLayoutsDirTests(unittest.TestCase):
             cmd_init(args)
         return json.loads((self.root / "jui.config.json").read_text())
 
+    def _expected(self, config: dict, name: str) -> str:
+        """Where the face's own tool reads the layouts, when it wrote its config here (its
+        init ran); the default otherwise (ticket 2026-10-23-jui-init-ios-layouts-dir-not-where-sjui-reads)."""
+        from jui_cli.core.platform_dirs import tool_read_dirs
+        reads = tool_read_dirs(name, self.root / config["platforms"][name]["root"])
+        return reads["layouts"] if reads and reads.get("layouts") else DEFAULT_LAYOUTS_DIR[name]
+
     def test_every_platform_gets_a_layouts_dir(self):
         config = self._init(ios="./ios", android="./android", web="./web")
-        for name, expected in DEFAULT_LAYOUTS_DIR.items():
+        for name in DEFAULT_LAYOUTS_DIR:
             with self.subTest(platform=name):
                 self.assertEqual(
-                    expected, config["platforms"][name].get("layoutsDir"),
+                    self._expected(config, name), config["platforms"][name].get("layoutsDir"),
                     "a platform without layoutsDir has every distribution "
                     "step skip it silently",
                 )
 
     def test_a_single_platform_project_gets_one_too(self):
         config = self._init(web="./web")
-        self.assertEqual(DEFAULT_LAYOUTS_DIR["web"],
+        self.assertEqual(self._expected(config, "web"),
                          config["platforms"]["web"]["layoutsDir"])
 
     def test_migrate_guesses_from_the_same_map(self):

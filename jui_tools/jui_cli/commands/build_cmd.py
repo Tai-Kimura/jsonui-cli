@@ -327,6 +327,24 @@ def cmd_build(args: argparse.Namespace) -> int:
     if axes_ok is False:
         return 1
 
+    # Hard gate: each face's tool reads the Layouts and Styles from where this
+    # build distributes them (platform_dirs.py; ticket
+    # 2026-10-23-jui-init-ios-layouts-dir-not-where-sjui-reads). Otherwise it
+    # builds from a folder nothing writes — "Layouts directory not found", or
+    # an older copy, silently.
+    with clock.stage("platform layouts dir agreement"):
+        from ..core.platform_dirs import disagreements
+        built = {p: c for p, c in platforms.items()
+                 if not (getattr(args, "ios_only", False) and p != "ios")
+                 and not (getattr(args, "android_only", False) and p != "android")
+                 and not (getattr(args, "web_only", False) and p != "web")}
+        dir_problems = disagreements(config_mgr.project_root, built)
+    if dir_problems:
+        print("\nERROR [platform dirs]:")
+        for line in dir_problems:
+            print(f"  - {line}")
+        return 1
+
     # Hard gate: no two nodes under one id once includes expand (design U8).
     with clock.stage("layout id uniqueness"):
         ids_ok = _check_layout_id_uniqueness(config_mgr, platforms)

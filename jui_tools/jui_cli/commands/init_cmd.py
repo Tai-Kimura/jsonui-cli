@@ -151,6 +151,15 @@ def cmd_init(args: argparse.Namespace) -> int:
             print(f"\n[ERROR] jui init: {label} did not run — {reason}")
         print("You can run these commands manually.")
 
+    # Each face's layoutsDir is where its own tool reads the layouts: the tool
+    # wrote its config just now (sjui's source_directory is the project's own
+    # folder), and `jui build` distributes to layoutsDir. iOS's default
+    # ("Layouts") was never where sjui reads, so the face was never built
+    # (ticket 2026-10-23-jui-init-ios-layouts-dir-not-where-sjui-reads).
+    from ..core.platform_dirs import derive_layouts_dirs
+    if derive_layouts_dirs(project_root, config["platforms"]):
+        config_mgr.save(config)
+
     # Copy platform tools (sjui_tools / kjui_tools / rjui_tools) from the home
     # install into each platform root. Generated custom converter files use
     # `require_relative ../base_converter` and therefore need a project-local
