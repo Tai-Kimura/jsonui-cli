@@ -26,6 +26,9 @@ SKUS_IN = ["claude-haiku-5-5", "claude-haiku-5-5-cache-read", "claude-haiku-5-5-
            "claude-sonnet-5-5-cache-read", "claude-sonnet-5-5-cache-write", "claude-haiku-5-5-batch"]
 SKUS_OUT = ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-haiku-5-5-batch"]
 DAY = "2027-06-11"
+BARS = "() => Object.fromEntries([...document.querySelectorAll('#sr-cost .src-row[data-src-node]')].filter((r) => r.querySelector('.src-fill'))" \
+       ".map((r) => { const f = r.querySelector('.src-fill').getBoundingClientRect(), b = r.querySelector('.src-bar').getBoundingClientRect();" \
+       " return [r.dataset.srcNode, { w: f.width, right: f.right, barW: b.width, barRight: b.right }]; }))"
 ROW = "(id) => { const r = document.querySelector(`#sr-cost [data-src-node='${id}']`); if (!r) return null;" \
       " const p = r.querySelector('[data-src-parts]'), b = r.querySelector('button[data-src-more]'), bar = r.querySelector('.src-bar');" \
       " return { usd: r.querySelector('.src-usd').textContent, barWords: bar.textContent, barW: bar.getBoundingClientRect().width," \
@@ -50,22 +53,35 @@ def _room(root: pathlib.Path):
              "nodes": [{"id": "llm", "category": "external.saas", "label": "Anthropic（1 番目・夜間は Batch API）", "provider": "anthropic",
                         "service": "messages", "group": "providers", "managed_by": "external", "environments": ["production"]},
                        {"id": "mail", "category": "external.saas", "label": "メール", "provider": "acme", "service": "mail",
+                        "group": "providers", "managed_by": "external", "environments": ["production"]},
+                       {"id": "search", "category": "external.saas", "label": "検索", "provider": "acme", "service": "search",
+                        "group": "providers", "managed_by": "external", "environments": ["production"]},
+                       {"id": "night", "category": "external.saas", "label": "夜だけの送り先", "provider": "acme", "service": "night",
                         "group": "providers", "managed_by": "external", "environments": ["production"]}],
              "edges": [{"id": "e1", "from": "llm", "to": "mail", "protocol": "https", "port": 443}]}
     row = {"service": "messages", "region": "global", "unit": "token", "per_units": 1000000, "effective": "2026-10-22", "source": "manual"}
     prices = [dict(row, provider="anthropic", sku=f"{s}:input-tokens", price_usd=1.0 + i / 10) for i, s in enumerate(SKUS_IN)]
     prices += [dict(row, provider="anthropic", sku=f"{s}:output-tokens", price_usd=5.0) for s in SKUS_OUT]
     prices += [{"provider": "acme", "service": "mail", "sku": "requests", "region": "global", "unit": "request", "per_units": 1000,
-                "price_usd": 0.0001, "effective": "2026-10-22", "source": "manual"}]
+                "price_usd": 0.0001, "effective": "2026-10-22", "source": "manual"},
+               {"provider": "acme", "service": "search", "sku": "requests", "region": "global", "unit": "request", "per_units": 1000,
+                "price_usd": 0.28, "effective": "2026-10-22", "source": "manual"},
+               {"provider": "acme", "service": "night", "sku": "requests", "region": "global", "unit": "request", "per_units": 1000,
+                "price_usd": 1.0, "effective": "2026-10-22", "source": "manual"}]
     # a long label: the header's select made the server room 629 wide on 390
     load = {"version": 0, "id": "month", "label": "メディアに載った月（steady の月の 6/11 に 8 倍、その後 3 倍・2 倍・1.3 倍。数はすべて仮定）",
             "environment": "production", "month": "2027-06", "timezone": "Asia/Tokyo",
-            "currency": "USD", "profiles": {"flat": {"label": "平ら", "hourly": [1] * 24}},
+            "currency": "USD", "profiles": {"flat": {"label": "平ら", "hourly": [1] * 24},
+                         "five": {"label": "5 時に跳ねる", "hourly": [10 if h == 5 else 1 for h in range(24)]},
+                         "late": {"label": "23 時だけ", "hourly": [1 if h == 23 else 0 for h in range(24)]}},
             "week": {d: "flat" for d in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")},
             "loads": [{"node": "llm", "quantities": {"requests": {"amount": 51780, "per": "day"},
                                                      "input_tokens": {"by_sku": {s: 50000000 + i * 1000000 for i, s in enumerate(SKUS_IN)}, "per": "day"},
                                                      "output_tokens": {"by_sku": {s: 15000000 for s in SKUS_OUT}, "per": "day"}}},
-                      {"node": "mail", "quantities": {"requests": {"amount": 500, "per": "day"}}}]}
+                      {"node": "mail", "quantities": {"requests": {"amount": 500, "per": "day"}}},
+                      # under the model's tokens all day but at 05:00, when it is the dearest row: the bars' right end moves
+                      {"node": "search", "profile": "five", "quantities": {"requests": {"amount": 1000000, "per": "day"}}},
+                      {"node": "night", "profile": "late", "quantities": {"requests": {"amount": 1000, "per": "day"}}}]}   # 0 but at 23:00
     (infra / "main.json").write_text(json.dumps(model, ensure_ascii=False), encoding="utf-8")
     (infra / "prices" / "mine.json").write_text(json.dumps({"version": 0, "id": "mine", "prices": prices}, ensure_ascii=False), encoding="utf-8")
     (infra / "load" / "month.json").write_text(json.dumps(load, ensure_ascii=False), encoding="utf-8")
@@ -126,6 +142,17 @@ async def run_cost_rows(pw, out, failures):
         watch = Watch(origin=url)
         page = await new_page(browser, watch, "cost-rows", **DESKTOP)
         await page.emulate_media(color_scheme="dark", reduced_motion="no-preference")
+        replies: list = []
+
+        async def on_reply(r):
+            if "/api/infra-cost" in r.url:
+                try:
+                    j = await r.json()
+                    if j.get("day"):
+                        replies.append(j["day"])
+                except Exception:
+                    pass
+        page.on("response", on_reply)
         await _open_day(page, url)
 
         # 1. folded: the bar has no words, the words under it are two lines and cut, ▼ on their edge
@@ -172,10 +199,50 @@ async def run_cost_rows(pw, out, failures):
         check(failures, (await page.evaluate(ROW, "llm"))["expanded"] == "true" and (await page.text_content(allb)) == T("cost.less.all"), "every row open, ▲ to fold them")
         await page.click(allb)
         check(failures, (await page.evaluate(ROW, "llm"))["expanded"] == "false", "every row folded")
+
+        # 5. the bars' length (the requester 10-23: 「コスト一番大きいやつが右端まで届くようにした方が見やすいね」): the hour's
+        # dearest row reaches the bar's right end, the others by their ratio, under a cent still seen, 0 none; an hour
+        # with another dearest row moves them, easing
+        day = replies[-1]
+
+        async def lengths(k):
+            await page.evaluate(f"() => {{ const s = document.getElementById('src-hour'); s.value = '{k}'; s.dispatchEvent(new Event('input', {{ bubbles: true }})); }}")
+            await until(page, f"() => window.__dbg.srCost().day.hour === {k}", f"hour {k}")
+            await page.wait_for_timeout(700)   # past the 0.35 s ease
+            got = await page.evaluate(BARS)
+            usd = {n["node"]: n["hours"][k]["usd"] for n in day["nodes"] if not n.get("note")}
+            top = max(usd, key=usd.get)
+            return got, usd, top
+
+        for k in (0, 5):
+            got, usd, top = await lengths(k)
+            res[f"lengths{k}"] = {"got": got, "usd": usd, "top": top}
+            check(failures, abs(got[top]["right"] - got[top]["barRight"]) <= 1, f"{k}:00: the dearest row ({top}) reaches the right end: {got[top]}")
+            for node, u in usd.items():
+                want = got[node]["barW"] * u / usd[top]
+                if u >= 0.01:
+                    check(failures, abs(got[node]["w"] - want) <= 1, f"{k}:00: {node} by its ratio: {got[node]['w']:.1f} px, want {want:.1f}")
+                elif u > 0:
+                    check(failures, 1 <= got[node]["w"] <= 2.5, f"{k}:00: {node} under a cent is still seen: {got[node]['w']}")
+                else:
+                    check(failures, got[node]["w"] == 0, f"{k}:00: {node} at $0 has no bar: {got[node]['w']}")
+        check(failures, res["lengths0"]["usd"].get("night") == 0, f"the arm needs a row at $0: {res['lengths0']['usd'].get('night')}")
+        check(failures, res["lengths0"]["top"] == "llm" and res["lengths5"]["top"] == "search", f"the arm needs another dearest row at 05:00: {res['lengths0']['top']} / {res['lengths5']['top']}")
+        await page.evaluate("() => { const s = document.getElementById('src-hour'); s.value = '0'; s.dispatchEvent(new Event('input', { bubbles: true })); }")
+        await until(page, "() => window.__dbg.srCost().day.hour === 0", "hour 0 again")
+        await page.wait_for_timeout(700)
+        before = (await page.evaluate(BARS))["llm"]["w"]
+        await page.evaluate("() => { const s = document.getElementById('src-hour'); s.value = '5'; s.dispatchEvent(new Event('input', { bubbles: true })); }")
+        await page.wait_for_timeout(120)
+        mid = (await page.evaluate(BARS))["llm"]["w"]
+        await page.wait_for_timeout(700)
+        after = (await page.evaluate(BARS))["llm"]["w"]
+        check(failures, min(before, after) + 2 < mid < max(before, after) - 2, f"the length eases, not jumps: {before:.0f} → {mid:.0f} → {after:.0f}")
+        await page.screenshot(path=str(out / "lengths.png"))
         check(failures, not watch.console and not watch.foreign, f"no console error: {watch.console[:3]}")
         await page.close()
 
-        # 5. a phone: nothing past 390, the amount on the page, the bar the page's width
+        # 6. a phone: nothing past 390, the amount on the page, the bar the page's width
         phone = await new_page(browser, watch, "cost-rows-phone", **PHONE)
         await phone.emulate_media(color_scheme="dark")
         await _open_day(phone, url)

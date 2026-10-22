@@ -16,7 +16,7 @@ from tests.test_viz_bundle import _match, web_text
 
 STAND_IN = """
 const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
-const SRC = { open: new Set() };
+const SRC = { open: new Set(), fill: {} };
 const SRC_PER = { second: 'sec', minute: 'min', hour: 'h', day: 'day', month: 'mo' };
 const SRC_COLORS = ['#4e79a7', '#f28e2b', '#59a14f', '#e15759'];
 const srcNum = (v) => String(v);
@@ -68,7 +68,7 @@ def test_a_row_is_its_bar_over_every_meters_words_folded_with_its_button():
       return { folded, open }; })()""")
     for html in got.values():
         bar = re.search(r'<div class="src-bar">(.*?)</div>', html).group(1)
-        assert re.sub(r"<span[^>]*></span>", "", bar) == "", f"the bar holds no words: {bar}"
+        assert re.sub(r"<[^>]+>", "", bar) == "", f"the bar holds no words: {bar}"
         assert bar.count('class="src-seg"') == 4
         parts = re.search(r'<div class="src-parts[^"]*" id="src-parts-3" data-src-parts>(.*?)</div>', html).group(1)
         words = re.sub(r"<[^>]+>", "", parts)
@@ -76,6 +76,11 @@ def test_a_row_is_its_bar_over_every_meters_words_folded_with_its_button():
         assert "単価なし" in words and "&lt; $0.01" in words and "$1.22" in words, words
         assert html.index('class="src-bar"') < html.index("data-src-parts") < html.index('<button type="button" class="src-more"'), \
             "the bar over its words, the button on their lower edge"
+    # the row's bar is its amount against the hour's dearest (max 20 here), its meters share the row's own length
+    fill = re.search(r'class="src-fill src-some" data-src-fill="([\d.]+)"', got["folded"])
+    assert fill and abs(float(fill.group(1)) - 15.87 / 20 * 100) < 1e-3, fill and fill.group(1)
+    widths = [float(w) for w in re.findall(r'class="src-seg"[^>]*style="width:([\d.]+)%', got["folded"])]
+    assert abs(widths[1] - 1.2234 / 15.87 * 100) < 1e-3 and widths[0] == 0 and widths[3] == 0, widths
     assert 'class="src-parts" ' in got["folded"] and 'aria-expanded="false"' in got["folded"] and ">▼ 内訳を全部見る</button>" in got["folded"]
     assert re.search(r'data-src-more="llm" aria-controls="src-parts-3" aria-expanded="false" hidden>', got["folded"]), \
         "folded, the button waits for the words to be measured as cut"

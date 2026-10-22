@@ -14,7 +14,7 @@
    environment; a day is the chosen scenario's within that pricing. アカウントの合計 is the default (the requester 10-21:
    「合計で」): SRC.account stays null (the server's default) until one is pressed. */
 const SRC = { mode: '3d', seq: 0, scenario: null, by: 'provider', account: null, month: null, day: null, date: null, hour: 0, timer: 0,
-  playMs: 700, picked: null, error: '', open: new Set() };   // open: the rows whose meters are shown whole (広げる)
+  playMs: 700, picked: null, error: '', open: new Set(), fill: {} };   // fill: each row's bar length last drawn (%), to ease from   // open: the rows whose meters are shown whole (広げる)
 const srcEl = $('sr-cost');
 const SRC_PER = { second: 'sec', minute: 'min', hour: 'h', day: 'day', month: 'mo' };
 const SRC_COLORS = ['#4e79a7', '#f28e2b', '#59a14f', '#e15759', '#76b7b2', '#edc948', '#b07aa1', '#ff9da7', '#9c755f', '#bab0ac'];
@@ -50,7 +50,7 @@ function srcSetMode(mode) {
 }
 function srCostReset() {   // the server room closed (56-server-room.js srClose): back to 3D, nothing kept
   srcStop();
-  Object.assign(SRC, { mode: '3d', scenario: null, account: null, month: null, day: null, date: null, hour: 0, picked: null, error: '', open: new Set() });
+  Object.assign(SRC, { mode: '3d', scenario: null, account: null, month: null, day: null, date: null, hour: 0, picked: null, error: '', open: new Set(), fill: {} });
   SR.paused = false;
   $('sr-boxzoom').disabled = false;
   $('sr-mode-3d').setAttribute('aria-pressed', 'true');
@@ -87,7 +87,7 @@ async function srcOpenDay(date) {
   Object.assign(SRC, { date, day: got.day, hour: Math.min(SRC.hour, got.day.hours.length - 1), picked: null });
   srcRender();
 }
-function srcBackToMonth() { srcStop(); Object.assign(SRC, { date: null, day: null, picked: null }); srcRender(); }
+function srcBackToMonth() { srcStop(); Object.assign(SRC, { date: null, day: null, picked: null, fill: {} }); srcRender(); }
 
 /* ---- playing the day ---- */
 function srcPlay() {
@@ -172,19 +172,27 @@ function srcRow(n, k, max, i) {
   const over = hr.load && hr.load.overflow > 0;
   const marksHTML = (hr.atMax ? `<span class="src-flag" title="${esc(tl('cost.atmax'))}">⚑</span>` : '') + (hr.stepChanged ? `<span class="src-step" title="${esc(tl('cost.step'))}">◆</span>` : '');
   const color = (j) => SRC_COLORS[j % SRC_COLORS.length];
+  // the row's bar: its amount against the hour's dearest row (that one reaches the right end), its meters sharing it
+  const fill = max > 0 && hr.usd > 0 ? (hr.usd / max) * 100 : 0, from = SRC.fill[n.node] ?? fill;
   const segsHTML = hr.segments.map((sg, j) => {
-    const pct = max > 0 && sg.usd ? (sg.usd / max) * 100 : 0, text = srcSegText(sg);
+    const pct = hr.usd > 0 && sg.usd ? (sg.usd / hr.usd) * 100 : 0, text = srcSegText(sg);
     return `<span class="src-seg" tabindex="0" role="button" data-src-seg="${Number(j)}" style="width:${Number(pct.toFixed(3))}%;background:${esc(color(j))}" title="${esc(text)}" aria-label="${esc(text)}"></span>`;
   }).join('');
   const partsHTML = hr.segments.map((sg, j) => `<span class="src-part"><i style="background:${esc(color(j))}"></i>${esc(srcSegText(sg))}</span>`).join(' ');
   const open = SRC.open.has(n.node);
   const loadHTML = over ? `<span class="src-red" data-src-over>${esc(hr.load.label)} ${esc(srcNum(hr.load.served))} / ${esc(srcNum(hr.load.demand))} /${esc(SRC_PER[hr.load.per] || hr.load.per)}${esc(tl('cost.load.served'))}</span>` : '';
-  return `<div class="src-row${over ? ' src-overrow' : ''}" data-src-node="${esc(n.node)}"><div class="src-name">${esc(n.label)}<small>${esc(srcRunning(hr))}</small>${marksHTML}</div><div class="src-mid"><div class="src-bar">${segsHTML}</div>`
+  return `<div class="src-row${over ? ' src-overrow' : ''}" data-src-node="${esc(n.node)}"><div class="src-name">${esc(n.label)}<small>${esc(srcRunning(hr))}</small>${marksHTML}</div><div class="src-mid"><div class="src-bar"><span class="src-fill${hr.usd > 0 ? ' src-some' : ''}" data-src-fill="${Number(fill.toFixed(4))}" style="width:${Number(from.toFixed(4))}%">${segsHTML}</span></div>`
     + `<div class="src-words" data-src-more="${esc(n.node)}"><div class="src-parts${open ? ' open' : ''}" id="src-parts-${Number(i)}" data-src-parts>${partsHTML}</div>`
     + `<button type="button" class="src-more" data-src-more="${esc(n.node)}" aria-controls="src-parts-${Number(i)}" aria-expanded="${esc(String(open))}"${open ? '' : ' hidden'}>${esc(tl(open ? 'cost.less' : 'cost.more'))}</button></div></div>`
     + `<div class="src-usd">${esc(srcUsd(hr.usd))}${loadHTML ? `<br>${loadHTML}` : ''}</div></div>`;
 }
 /* 広げる only where the folded words are cut (measured after they are drawn); an open row keeps its たたむ. */
+/* Each bar eases from the length last drawn to this hour's (a new dearest row moves them all). */
+function srcFillGo() {
+  const fills = [...srcEl.querySelectorAll('[data-src-fill]')];
+  for (const f of fills) SRC.fill[f.closest('[data-src-node]').dataset.srcNode] = Number(f.dataset.srcFill);
+  requestAnimationFrame(() => { for (const f of fills) f.style.width = `${Number(f.dataset.srcFill)}%`; });
+}
 function srcMoreFit() {
   for (const b of srcEl.querySelectorAll('button[data-src-more]')) {
     const parts = b.parentElement.querySelector('[data-src-parts]');
@@ -196,7 +204,7 @@ function srcMoreFit() {
 }
 function srcDayHtml(D) {
   const k = SRC.hour, hourUsd = D.nodes.reduce((a, n) => a + (n.note ? 0 : n.hours[k].usd), 0) + (D.others.usd[k] || 0);
-  const max = Math.max(...D.nodes.flatMap((n) => (n.note ? [] : n.hours.map((h) => h.usd))), 0.0001);
+  const max = Math.max(...D.nodes.map((n) => (n.note ? 0 : n.hours[k].usd)), 0);   // the hour's dearest row: the bars' right end
   const rowsHTML = D.nodes.map((n, i) => srcRow(n, k, max, i)).join('')
     + (D.others.count ? `<div class="src-row src-noted"><div class="src-name">${esc(tl('cost.others', { n: Number(D.others.count) }))}</div><div class="src-mid"></div><div class="src-usd">${esc(srcUsd(D.others.usd[k]))}</div></div>` : '');
   const priced = D.nodes.filter((n) => !n.note), allOpen = priced.length > 0 && priced.every((n) => SRC.open.has(n.node));
@@ -224,7 +232,7 @@ function srcRender(status) {
   if (status) { setHTML(srcEl, `<p class="src-status">${esc(status)}</p>`); return; }
   if (SRC.error) { setHTML(srcEl, `<p class="src-status src-red">${esc(tl('cost.error', { why: SRC.error }))}</p>`); return; }
   if (!SRC.month) return;
-  if (SRC.day) { setHTML(srcEl, srcDayHtml(SRC.day)); srcMoreFit(); }
+  if (SRC.day) { setHTML(srcEl, srcDayHtml(SRC.day)); srcFillGo(); srcMoreFit(); }
   else setHTML(srcEl, `${srcSummary(SRC.month)}${srcMonthSvg(SRC.month)}`);
 }
 
