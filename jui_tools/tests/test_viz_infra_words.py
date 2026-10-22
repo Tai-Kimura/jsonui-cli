@@ -54,8 +54,11 @@ def _room_lines(words) -> dict[str, str]:
         "spec_duplicate": words.spec_duplicate(WHERE, "/nodes/2/spec"),
         "model_too_big": words.model_too_big(FOLDER, "nodes"), "file_too_large": words.file_too_large(WHERE, 4),
         "unreadable": words.unreadable(WHERE), "not_regular": words.not_regular(WHERE, "fifo"),
-        "icon": words.icon("/icons/service:aws/lambda"), "other": words.other(WHERE, "something.new"),
+        "icon": words.icon("/icons/service:aws/lambda"), "other": words.other(WHERE, "something.new", "a message"),
+        "environment_outside": words.environment_outside(WHERE, "/nodes/0/environments"),
+        "environment_none": words.environment_none(WHERE, "/nodes/0"), "spec_ha": words.spec_ha(WHERE, "/nodes/0/spec/0"),
     }
+    lines.update({f"exclude.{w}": words.exclude(room.CONFIG_NAME, "/infra/exclude/0", w) for w in room.EXCLUDE_JA})
     lines.update({f"secret.{k}": words.secret(WHERE, "/nodes/0/x", k) for k in room.SECRET_JA})
     lines.update({f"flow:{c}": words.flow(WHERE, "/flows/0", c) for c in room.FLOW_JA})
     lines.update({f"refused.{r}": words.refused(r, FOLDER) for r in REFUSED})
@@ -87,23 +90,26 @@ def test_the_keys_are_closed_both_ways():
     have = {f"srv.cost.q.{q}" for q in load.quantities()} | {f"srv.cost.meter.{m.replace('-', '_')}" for m in view.METER_LABELS}
     have |= {f"srv.room.secret.{k}" for k in room.SECRET_JA} | {f"srv.room.{c}" for c in room.FLOW_JA}
     have |= {f"srv.room.refused.{r}" for r in REFUSED} | {f"srv.room.said.{k}" for k in SAID}
-    families = ("srv.cost.q.", "srv.cost.meter.", "srv.room.secret.", "srv.room.flow.", "srv.room.refused.", "srv.room.said.")
+    have |= {f"srv.room.exclude.{w}" for w in room.EXCLUDE_JA}
+    families = ("srv.cost.q.", "srv.cost.meter.", "srv.room.secret.", "srv.room.flow.", "srv.room.refused.", "srv.room.said.",
+                "srv.room.exclude.")
     assert sorted(k for k in ja if k.startswith(families) and k not in have) == []
     assert sorted(k for k in have if k not in ja) == []
     assert (set(infra_words.QUANTITY), set(infra_words.METER), set(infra_words.SECRET), set(infra_words.FLOW),
-            set(infra_words.REFUSED), set(infra_words.SAID)) == (set(load.quantities()), set(view.METER_LABELS),
-                                                                  set(room.SECRET_JA), set(room.FLOW_JA), set(REFUSED), set(SAID))
+            set(infra_words.REFUSED), set(infra_words.SAID), set(infra_words.EXCLUDE)) == (
+        set(load.quantities()), set(view.METER_LABELS), set(room.SECRET_JA), set(room.FLOW_JA), set(REFUSED), set(SAID),
+        set(room.EXCLUDE_JA))
 
 
 def test_under_ja_the_lines_are_document_tools_own_letter_for_letter(language):
     language("ja")
-    assert _room_lines(infra_words.RoomWords(room.LIMITS)) == _room_lines(room.DEFAULT_WORDS)
+    assert _room_lines(infra_words.RoomWords(room.LIMITS, room.EXCLUDE_MAX)) == _room_lines(room.DEFAULT_WORDS)
     assert _cost_lines(infra_words.CostLabels()) == _cost_lines(view.DEFAULT_LABELS)
 
 
 def test_under_en_no_line_has_a_japanese_letter(language):
     language("en")
-    lines = {**_room_lines(infra_words.RoomWords(room.LIMITS)), **_cost_lines(infra_words.CostLabels())}
+    lines = {**_room_lines(infra_words.RoomWords(room.LIMITS, room.EXCLUDE_MAX)), **_cost_lines(infra_words.CostLabels())}
     assert {k: v for k, v in lines.items() if JAPANESE.search(v)} == {}
     assert {k: v for k, v in lines.items() if "{" in v and k != "said.infra_object"} == {}   # every slot filled
 

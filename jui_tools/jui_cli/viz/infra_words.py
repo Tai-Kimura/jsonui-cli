@@ -68,6 +68,13 @@ FLOW = {
     "flow.schedule.trigger": "srv.room.flow.schedule.trigger"
 }
 
+#: a way an infra.exclude entry is wrong (room.EXCLUDE_JA)
+EXCLUDE = {
+    "not_a_list": "srv.room.exclude.not_a_list", "not_inside": "srv.room.exclude.not_inside",
+    "no_folder": "srv.room.exclude.no_folder", "outside_link": "srv.room.exclude.outside_link",
+    "too_many": "srv.room.exclude.too_many"
+}
+
 #: a refusal's line
 REFUSED = {
     "not_a_room": "srv.room.refused.not_a_room", "no_infra": "srv.room.refused.no_infra",
@@ -87,8 +94,8 @@ SAID = {
 class RoomWords:
     """infra/room.py Words, from the table."""
 
-    def __init__(self, limits: dict) -> None:
-        self.limits = limits
+    def __init__(self, limits: dict, exclude_max: int) -> None:
+        self.limits, self.exclude_max = limits, exclude_max
 
     def json_line(self, where, line):
         return i18n.tl("srv.room.json.line", where=where, line=line)
@@ -111,6 +118,18 @@ class RoomWords:
     def flow(self, where, path, code):
         return i18n.tl("srv.room.flow", where=where, path=path, why=i18n.tl(FLOW[code]), code=code)
 
+    def exclude(self, where, path, why):
+        return i18n.tl(EXCLUDE[why], where=where, path=path, n=self.exclude_max)
+
+    def environment_outside(self, where, path):
+        return i18n.tl("srv.room.environment.outside", where=where, path=path)
+
+    def environment_none(self, where, path):
+        return i18n.tl("srv.room.environment.none", where=where, path=path)
+
+    def spec_ha(self, where, path):
+        return i18n.tl("srv.room.spec.ha", where=where, path=path)
+
     def model_too_big(self, folder, what):
         return i18n.tl("srv.room.model.too_big", folder=folder, what=what)
 
@@ -126,8 +145,8 @@ class RoomWords:
     def icon(self, path):
         return i18n.tl("srv.room.icon", config=CONFIG_NAME, path=path)
 
-    def other(self, where, code):
-        return f"{where}: {code}"
+    def other(self, where, code, message):
+        return i18n.tl("srv.room.other", where=where, message=message, code=code)
 
     def refused(self, reason, folder):
         if reason not in REFUSED:

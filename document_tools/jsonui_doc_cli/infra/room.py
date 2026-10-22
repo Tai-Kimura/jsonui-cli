@@ -48,6 +48,16 @@ FLOW_JA = {"flow.node.missing": "が、この flow と一緒に描かれない n
            "flow.id.duplicate": "の id が、ほかの flow と重なっています",
            "flow.schedule.trigger": "の schedule は、trigger が schedule の時だけ書けます"}
 
+#: how many folders infra.exclude may name
+EXCLUDE_MAX = 50
+
+#: one per way an infra.exclude entry is wrong (a config.exclude problem's "why"; test_infra_room: a why with no words is red)
+EXCLUDE_JA = {"not_a_list": "infra.exclude はフォルダ（プロジェクトの中の相対パス）の一覧で書いてください",
+              "not_inside": "はプロジェクトの中の相対パスで書いてください（\"..\"・絶対パス・URL は書けません）",
+              "no_folder": "のフォルダがプロジェクトにありません（何も外しません）",
+              "outside_link": "はプロジェクトの外のフォルダへの link です（もともと歩かないので、外す物がありません）",
+              "too_many": f"infra.exclude のフォルダが {EXCLUDE_MAX} 個を超えています（超えた分は外しません）"}
+
 
 class Words:
     """The lines the page shows for what a room's read found (boundary §5.2): a problem's, a refusal's. These defaults
@@ -77,6 +87,18 @@ class Words:
     def flow(self, where: str, path: str, code: str) -> str:
         return f"{where}: {path} の flow {FLOW_JA[code]}（{code}）"
 
+    def exclude(self, where: str, path: str, why: str) -> str:
+        return f"{where}: {EXCLUDE_JA[why]}" if why in ("not_a_list", "too_many") else f"{where}: {path} {EXCLUDE_JA[why]}"
+
+    def environment_outside(self, where: str, path: str) -> str:
+        return f"{where}: {path} が、入れ物（親の group・辺の両端）に無い環境を名指ししています"
+
+    def environment_none(self, where: str, path: str) -> str:
+        return f"{where}: {path} は、入れ物（親の group・辺の両端）のどの環境にも無いため外します"
+
+    def spec_ha(self, where: str, path: str) -> str:
+        return f"{where}: {path} の spec は Multi-AZ と言いますが ha は言いません（費用と 3D は ha を読みます: ha: multi-az と書いてください）"
+
     def model_too_big(self, folder: str, what: str) -> str:
         return f"{folder}: 部屋のモデルが上限を超えています（{what}）"
 
@@ -92,8 +114,9 @@ class Words:
     def icon(self, path: str) -> str:
         return f"{CONFIG_NAME}: {path} のアイコンが使えません"
 
-    def other(self, where: str, code: str) -> str:
-        return f"{where}: {code}"
+    def other(self, where: str, code: str, message: str) -> str:
+        """A code with no words of its own yet: its message, as document_tools wrote it (never the code alone)."""
+        return f"{where}: {message}（{code}）"
 
     def refused(self, reason: str, folder: str) -> str:
         return {"not_a_room": "この部屋は読めません",
@@ -145,7 +168,15 @@ def short(p: dict, folder: str, words: Words = DEFAULT_WORDS) -> str:
         return words.not_regular(where, p["message"].split(",")[0])
     if code in ("config.icon", "read.icon"):
         return words.icon(p["path"])
-    return words.other(where, code)
+    if code == "config.exclude" and p.get("why") in EXCLUDE_JA:
+        return words.exclude(where, p["path"], p["why"])
+    if code == "environment.outside":
+        return words.environment_outside(where, p["path"])
+    if code == "environment.none":
+        return words.environment_none(where, p["path"])
+    if code == "spec.ha":
+        return words.spec_ha(where, p["path"])
+    return words.other(where, code, p.get("message") or "")
 
 
 def _short_refused(reason: str, folder: str, words: Words = DEFAULT_WORDS) -> str:
@@ -340,8 +371,9 @@ def infra_config(root: Path) -> tuple[str, dict[str, str], list[dict]]:
     return folder, icons, problems + exclude_problems(root, infra)
 
 
-#: how many folders infra.exclude may name
-EXCLUDE_MAX = 50
+def _exclude_problem(where: str, why: str, message: str, severity: str = "error") -> dict:
+    """A config.exclude problem; ``why`` (one of EXCLUDE_JA) says which way the entry is wrong, for its line."""
+    return dict(M._problem(CONFIG_NAME, where, "config.exclude", message, severity), why=why)
 
 
 def _exclude_entries(root: Path, infra: dict | None) -> tuple[list[str], list[dict]]:
@@ -350,32 +382,32 @@ def _exclude_entries(root: Path, infra: dict | None) -> tuple[list[str], list[di
     if raw is None:
         return [], []
     if not isinstance(raw, list):
-        return [], [M._problem(CONFIG_NAME, "/infra/exclude", "config.exclude",
-                               "infra.exclude must be a list of folders (relative paths inside the project)")]
+        return [], [_exclude_problem("/infra/exclude", "not_a_list",
+                                     "infra.exclude must be a list of folders (relative paths inside the project)")]
     out, problems = [], []
     real_root = root.resolve()
     for i, item in enumerate(raw[:EXCLUDE_MAX]):
         where = f"/infra/exclude/{i}"
         rel = item.rstrip("/") if isinstance(item, str) else item
         if not _rel_ok(rel):
-            problems.append(M._problem(CONFIG_NAME, where, "config.exclude",
-                                       'must be a relative path inside the project (no "..", no absolute path, no URL)'))
+            problems.append(_exclude_problem(where, "not_inside",
+                                             'must be a relative path inside the project (no "..", no absolute path, no URL)'))
             continue
         target = root / rel
         if not target.is_dir():
-            problems.append(M._problem(CONFIG_NAME, where, "config.exclude",
-                                       f"{rel}: no such folder in the project: nothing is left out for it", "warning"))
+            problems.append(_exclude_problem(where, "no_folder",
+                                             f"{rel}: no such folder in the project: nothing is left out for it", "warning"))
             continue
         try:
             target.resolve().relative_to(real_root)
         except ValueError:
-            problems.append(M._problem(CONFIG_NAME, where, "config.exclude",
-                                       f"{rel}: a link to a folder outside the project: never walked, nothing to leave out"))
+            problems.append(_exclude_problem(where, "outside_link",
+                                             f"{rel}: a link to a folder outside the project: never walked, nothing to leave out"))
             continue
         out.append(rel)
     if len(raw) > EXCLUDE_MAX:
-        problems.append(M._problem(CONFIG_NAME, "/infra/exclude", "config.exclude",
-                                   f"more than {EXCLUDE_MAX} folders: the rest are not left out"))
+        problems.append(_exclude_problem("/infra/exclude", "too_many",
+                                         f"more than {EXCLUDE_MAX} folders: the rest are not left out"))
     return out, problems
 
 
