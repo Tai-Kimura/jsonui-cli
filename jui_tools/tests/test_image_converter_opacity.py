@@ -35,6 +35,7 @@ def _alphas(body: str) -> list[tuple[str | None, str | None]]:
 L = '<line x1="0" y1="0" x2="9" y2="9" stroke="#123456"{}/>'
 R = '<rect width="4" height="4" fill="#ff0000" stroke="#00ff00"{}/>'
 L_HALF, R_08, R_09 = L.format(' opacity="0.5"'), R.format(' opacity="0.8"'), R.format(' fill-opacity="0.9"')
+L_07 = L.format(' opacity="0.7"')
 
 CASES = {   # how it is written: (svg body, [(fillAlpha, strokeAlpha)] per path)
     "opacity on a stroke-only element": (L.format(' opacity="0.7"'), [(None, "0.7")]),
@@ -57,6 +58,11 @@ CASES = {   # how it is written: (svg body, [(fillAlpha, strokeAlpha)] per path)
     "opacity 1 writes nothing": (R.format(' opacity="1"'), [(None, None)]),
     "opacity 0": (L.format(' opacity="0"'), [(None, "0")]),
     "out of range is clamped": (L.format(' opacity="1.5"'), [(None, None)]),
+    "a product's third decimal is kept": (f'<g opacity="0.55">{L_07}</g>', [(None, "0.385")]),
+    "an unreadable opacity is 1, not 0": (L.format(' opacity="abc"'), [(None, None)]),
+    "an empty opacity is 1": (L.format(' opacity=""'), [(None, None)]),
+    "a style name in capitals": (L.format(' style="Opacity: 0.5"'), [(None, "0.5")]),
+    "a style value with !important": (L.format(' style="opacity: 0.5 !important"'), [(None, "0.5")]),
     "no fill, no fillAlpha": ('<polyline points="0,0 9,9" fill="none" stroke="#8A5A2E" opacity="0.7"/>', [(None, "0.7")]),
 }
 
