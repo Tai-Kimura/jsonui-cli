@@ -185,20 +185,25 @@ def test_the_gates_and_files_are_there():
     for shown, (launcher, *_), _keep in term.GATES:
         assert (root / launcher).is_file(), launcher
         assert shown.split()[0] == Path(launcher).name
-    assert sum(sec for _, sec in term.GENERATED + term.HAND_WRITTEN) + term.SPEC_HTML[2] <= T.BOUNDS["1a"][1] - T.BOUNDS["1a"][0]
+    assert abs(sum(sec for _, sec in term.GENERATED + term.HAND_WRITTEN) + term.SPEC_HTML[2] - (T.BOUNDS["1a"][1] - T.BOUNDS["1a"][0])) < 1e-9
     assert "verify" in term.GATES[1][0] and term.GATES[1][2]
     branch = [g for g in term.GATES if "branch-tests" in g[0]]
     assert len(term.GATES) == 6 and len(branch) == 1 and "-p" not in branch[0][1], "branch-tests on the web only"
 
 
-def test_1a_puts_the_spec_document_before_the_hand_written_body(tmp_path):
+def test_1a_ends_on_the_spec_document_held_long_enough_to_read(tmp_path):
+    """The spec document comes last, under the subtitle "you fix the spec" (12–16 s), for at least 4 s, and stops
+    at its parts (requester 10-22: it went by too fast to read)."""
     from viz_promo import term
     for rel, _ in term.GENERATED + term.HAND_WRITTEN:
         (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / rel).write_text("// @generated\n" if "Generated" in rel or rel.endswith(".json") else "body\n")
     files = term.read_files(tmp_path, "<html><body>doc</body></html>")
-    assert [f["path"] for f in files][-2:] == [term.SPEC_HTML[1], term.HAND_WRITTEN[0][0]]
-    assert files[-2]["html"].startswith("<html>") and not files[-1]["generated"]
+    assert [f["path"] for f in files][-2:] == [term.HAND_WRITTEN[0][0], term.SPEC_HTML[1]]
+    assert files[-1]["html"].startswith("<html>") and not files[-2]["generated"]
+    assert files[-1]["sec"] >= 4.0 and files[-1]["stops"]
+    start = T.BOUNDS["1a"][1] - files[-1]["sec"]
+    assert start <= 12.0, "the spec document is on screen for the whole of the 12–16 s subtitle"
     assert "html" not in files[0]
 
 

@@ -47,19 +47,23 @@ GATES = (
 )
 
 # 1a: the files opened, in order (relative to demo-shop), with the seconds each stays
+# 4–8 s under "the spec is the source; the rest is generated", 8–11.4 s the hand-written body under "you hand-write
+# only the minimum", then the spec document to the chapter's end under "you fix the spec" (requester 10-22: the spec
+# document went by too fast to read — it now stays 4.6 s and stops at each part)
 GENERATED = (
-    ("docs/screens/json/cart.spec.json", 1.5),
-    ("docs/screens/layouts/cart.json", 1.0),
-    ("ios/ios/View/Cart/CartGeneratedView.swift", 1.0),
-    ("android/app/src/main/kotlin/com/example/demoshop/views/cart/CartGeneratedView.kt", 1.0),
-    ("web/src/generated/components/Cart.tsx", 1.0),
-    ("ios/ios/ViewModel/Protocol/CartViewModelProtocol.swift", 0.9),
-    ("ios/ios/Model/Generated/CartLineDto.swift", 0.9),
-    ("ios/Tests/Generated/CartBranchesTest.swift", 0.9),
+    ("docs/screens/json/cart.spec.json", 0.8),
+    ("docs/screens/layouts/cart.json", 0.5),
+    ("ios/ios/View/Cart/CartGeneratedView.swift", 0.5),
+    ("android/app/src/main/kotlin/com/example/demoshop/views/cart/CartGeneratedView.kt", 0.5),
+    ("web/src/generated/components/Cart.tsx", 0.5),
+    ("ios/ios/ViewModel/Protocol/CartViewModelProtocol.swift", 0.4),
+    ("ios/ios/Model/Generated/CartLineDto.swift", 0.4),
+    ("ios/Tests/Generated/CartBranchesTest.swift", 0.4),
 )
-# the spec document: (the spec it is made from, the name it is shown as, seconds)
-SPEC_HTML = ("docs/screens/json/cart.spec.json", "cart.html", 1.3)
-HAND_WRITTEN = (("ios/ios/ViewModel/CartViewModel.swift", 2.5),)
+HAND_WRITTEN = (("ios/ios/ViewModel/CartViewModel.swift", 3.4),)
+# the spec document: (the spec it is made from, the name it is shown as, seconds, the headings it stops at after its
+# top — the overview, the screen's structure, the table of its parts — each reached in a short glide, then held)
+SPEC_HTML = ("docs/screens/json/cart.spec.json", "cart.html", 4.6, ("Screen Structure", "UI Components"))
 
 
 def clean(text: str, root: Path) -> str:
@@ -105,11 +109,12 @@ def editor_file(shop: Path, rel: str, sec: float) -> dict:
 
 
 def read_files(shop: Path, html_doc: str | None) -> list:
-    """1a's files in order; the spec document after the generated ones, rendered (html)."""
-    files = [editor_file(shop, rel, sec) for rel, sec in GENERATED]
+    """1a's files in order: the generated ones, the hand-written body, then the spec document, rendered (html)."""
+    files = [editor_file(shop, rel, sec) for rel, sec in GENERATED + HAND_WRITTEN]
     if html_doc is not None:
-        files.append({"path": SPEC_HTML[1], "sec": SPEC_HTML[2], "html": html_doc, "text": "", "generated": True})
-    return files + [editor_file(shop, rel, sec) for rel, sec in HAND_WRITTEN]
+        files.append({"path": SPEC_HTML[1], "sec": SPEC_HTML[2], "html": html_doc, "text": "", "generated": True,
+                      "stops": list(SPEC_HTML[3])})
+    return files
 
 
 STYLE = """
@@ -159,9 +164,19 @@ window.render = (t) => {
   let at = t - T0, i = 0;
   while (i < FILES.length - 1 && at >= FILES[i].sec) { at -= FILES[i].sec; i += 1; }
   if (i !== shown) open(i);
-  if (FILES[i].html !== undefined) {   // the document scrolls inside its frame
-    const d = document.getElementById('doc'), w = d && d.contentWindow, k = Math.min(1, Math.max(0, (at - 0.3) / Math.max(0.1, FILES[i].sec - 0.3)));
-    if (w && w.document && w.document.documentElement) w.scrollTo(0, Math.round((w.document.documentElement.scrollHeight - 960) * 0.5 * k * k * (3 - 2 * k)));
+  if (FILES[i].html !== undefined) {   // the document: its top, then each heading in stops, a glide to it and a hold
+    const d = document.getElementById('doc'), w = d && d.contentWindow;
+    if (w && w.document && w.document.documentElement) {
+      const heads = [...w.document.querySelectorAll('h1, h2, h3')];
+      const ys = [0];
+      for (const s of FILES[i].stops || []) {
+        const h = heads.find((e) => e.textContent.trim().startsWith(s));
+        ys.push(h ? Math.max(0, Math.round(h.getBoundingClientRect().top + w.scrollY - 16)) : ys[ys.length - 1]);
+      }
+      const seg = FILES[i].sec / ys.length, n = Math.min(ys.length - 1, Math.floor(at / seg));
+      const m = Math.min(1, (at - n * seg) / (seg * 0.35)), e = m * m * (3 - 2 * m);
+      w.scrollTo(0, n === 0 ? 0 : Math.round(ys[n - 1] + (ys[n] - ys[n - 1]) * e));
+    }
     lines.style.transform = '';
     return;
   }
