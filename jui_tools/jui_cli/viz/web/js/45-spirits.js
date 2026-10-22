@@ -316,6 +316,27 @@ function spiritGhostShader(object, spec) {
   object.traverse((o) => { if (o.isMesh) { o.material = mat; o.renderOrder = 2; } });
   return mat;
 }
+/* The meshes an outline or a glow goes round: each mesh but the shells, and none under a node named fx_… (a flat card,
+   a flame: a shell drawn from behind shows there as dark or tinted slivers, not as a rim). */
+function spiritShellable(object) {
+  const out = [];
+  const walk = (o, skip) => {
+    skip = skip || /^fx_/.test(o.name || '');
+    if (o.isMesh && !skip && !o.userData.spiritOutline && !o.userData.spiritGlow) out.push(o);
+    for (const c of o.children) walk(c, skip);
+  };
+  walk(object, false);
+  return out;
+}
+/* A shell of the mesh: its geometry again (and, skinned, its skeleton) as its child at no offset, so whatever moves the
+   mesh (its own node in a clip, the bones) moves the shell with it. */
+function spiritShell(mesh, material, flag, renderOrder) {
+  const shell = mesh.clone(false);
+  shell.position.set(0, 0, 0); shell.quaternion.identity(); shell.scale.set(1, 1, 1);
+  shell.material = material; shell.renderOrder = renderOrder; shell.userData = { [flag]: true };
+  mesh.add(shell);
+  return shell;
+}
 /* The outline: each mesh again, pushed out along its normals by width and drawn from behind, in the outline's colour. */
 function spiritOutline(object, spec) {
   const o = spec.outline;
@@ -326,11 +347,30 @@ function spiritOutline(object, spec) {
     sh.vertexShader = 'uniform float uWidth;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  transformed += normal * uWidth;');
   };
   mat.userData.base = 1; mat.userData.outline = true;
-  const meshes = []; object.traverse((x) => { if (x.isMesh) meshes.push(x); });
-  for (const mesh of meshes) {
-    const shell = mesh.clone(false); shell.material = mat; shell.renderOrder = 1; shell.userData.spiritOutline = true;
-    mesh.parent.add(shell);
+  for (const mesh of spiritShellable(object)) spiritShell(mesh, mat, 'spiritOutline', 1);
+}
+
+/* effects.glow: a shell on each of the figure's meshes the outline goes round (spiritShell: the mixer that moves the
+   figure moves it too). It grows along the normals before skinning, as the outline does: scale 1.03 is a rim of 3% of
+   half the figure's longest side, whatever the mesh's own scale. */
+const spiritGlowBox = new THREE.Box3(), spiritGlowV = new THREE.Vector3(), spiritGlowW = new THREE.Vector3();
+function spiritGlow(figure, g) {
+  figure.updateMatrixWorld(true);
+  const figureScale = figure.getWorldScale(spiritGlowW).x || 1;
+  const size = spiritGlowBox.setFromObject(figure).getSize(spiritGlowV);
+  const half = Math.max(size.x, size.y, size.z) / 2 / figureScale;
+  const shells = [];
+  for (const mesh of spiritShellable(figure)) {
+    const own = (mesh.getWorldScale(spiritGlowW).x || figureScale) / figureScale;   // the mesh's scale in the figure's
+    const m = new THREE.MeshBasicMaterial({ color: g.color || '#ffffff', transparent: true, opacity: 0, depthWrite: false, side: THREE.BackSide });
+    m.userData.base = g.opacity ?? 0.25;
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.uWidth = { value: ((g.scale || 1.06) - 1) * half / own };
+      sh.vertexShader = 'uniform float uWidth;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  transformed += normal * uWidth;');
+    };
+    shells.push(spiritShell(mesh, m, 'spiritGlow', 0));
   }
+  return shells;
 }
 
 /* ---------- what spirit.json's robot says: its eyes and its pose ---------- */
@@ -346,10 +386,10 @@ function spiritPose(r, p, t) {
 }
 
 /* ---------- the effects the page draws (spirit.json effects, shouts) ----------
-   Each in a group of its own on the robot's root (it moves and scales with the robot), at most SPIRIT_FX.pool sprites
-   for the sparks and shouts (made once, never more). With reduced motion: the aura and the glow stand still, and no
-   sparks, lightning, afterimages or shouts. */
-const SPIRIT_FX = { pool: 24, sparkLife: 1.6, shoutLife: 1.1 };
+   Each in a group of its own on the robot's root (it moves and scales with the robot), every sprite and mesh made once
+   at the start (the sparks' pool as many as rate × sparkLife shows, at most sparkMax). With reduced motion: the aura
+   and the glow stand still, and no sparks, lightning, afterimages or shouts. */
+const SPIRIT_FX = { sparkLife: 1.6, sparkMax: 64, shoutLife: 1.1, tongues: 24, cores: 8, boltSegs: 7, boltSec: 0.15 };
 let spiritDot = null;
 function spiritDotTex() {
   if (spiritDot) return spiritDot;
@@ -360,6 +400,32 @@ function spiritDotTex() {
   spiritDot = new THREE.CanvasTexture(c);
   return spiritDot;
 }
+/* The aura's flame (white, coloured by its material): a tongue, bright at its foot and gone at its tip, and the
+   envelope round the robot with flame points along its top (both in the page's canvas, made once). */
+let spiritFlame = null;
+function spiritFlameTex() {
+  if (spiritFlame) return spiritFlame;
+  const tongue = makeCanvas(128, 256), x = tongue.getContext('2d');
+  const g = x.createLinearGradient(0, 256, 0, 0);
+  g.addColorStop(0, 'rgba(255,255,255,0.95)'); g.addColorStop(0.45, 'rgba(255,255,255,0.75)'); g.addColorStop(0.85, 'rgba(255,255,255,0.3)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = g; x.beginPath(); x.moveTo(64, 0);
+  x.bezierCurveTo(96, 70, 124, 150, 112, 200); x.bezierCurveTo(100, 250, 28, 250, 16, 200); x.bezierCurveTo(4, 150, 32, 70, 64, 0); x.fill();
+  const env = makeCanvas(256, 320), y = env.getContext('2d');
+  const r = y.createRadialGradient(128, 210, 20, 128, 190, 150);
+  r.addColorStop(0, 'rgba(255,255,255,0.5)'); r.addColorStop(0.55, 'rgba(255,255,255,0.45)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+  y.fillStyle = r; y.beginPath(); y.moveTo(30, 310);
+  const tips = [[24, 150], [52, 70], [78, 110], [100, 30], [128, 80], [156, 26], [178, 108], [204, 66], [232, 148]];
+  y.quadraticCurveTo(0, 220, tips[0][0], tips[0][1]);
+  for (let i = 1; i < tips.length; i++) { const [px, py] = tips[i - 1], [qx, qy] = tips[i]; y.quadraticCurveTo((px + qx) / 2, Math.max(py, qy) + 40, qx, qy); }
+  y.quadraticCurveTo(256, 220, 226, 310); y.closePath(); y.fill();
+  spiritFlame = { tongue: texFrom(tongue), envelope: texFrom(env) };
+  return spiritFlame;
+}
+const spiritUnitCyl = new THREE.CylinderGeometry(1, 1, 1, 6, 1).translate(0, 0.5, 0).rotateX(Math.PI / 2);   // from 0 to +z, one long
+const spiritBoltA = new THREE.Vector3(), spiritBoltB = new THREE.Vector3();
+function spiritLimb(mesh, a, b, r) {   // a cylinder from a to b, r thick
+  mesh.position.copy(a); mesh.lookAt(b); mesh.scale.set(r, r, Math.max(1e-4, a.distanceTo(b)));
+}
 function spiritShoutTex(text, style = {}) {
   const c = document.createElement('canvas'); c.width = 256; c.height = 96;
   const g = c.getContext('2d');
@@ -369,41 +435,81 @@ function spiritShoutTex(text, style = {}) {
   g.fillStyle = style.fill || '#ffffff'; g.fillText(text, 128, 50);
   return new THREE.CanvasTexture(c);
 }
+/* effects.aura. style "flame" (the default): an envelope behind the robot with flame points along its top, tongues that
+   rise round it, stretch and die at three rates, and a few brighter ones at its foot. "column": the open cylinder of
+   before. size widens it, height lifts it, flicker speeds it (0: still), opacity is the whole. */
+function spiritAura(group, a) {
+  const h = a.height || 1.6, size = a.size || 1, color = new THREE.Color(a.color || '#ffd23a'), base = a.opacity ?? 0.35;
+  if (a.style === 'column') {
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide });
+    mat.userData.base = base;
+    const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.55 * size, 0.85 * size, h, 20, 1, true), mat);
+    cone.position.y = h / 2; group.add(cone);
+    return { style: 'column', mesh: cone, base, flicker: a.flicker ?? 1, width: 1.7 * size, h };
+  }
+  const T = spiritFlameTex();
+  const sprite = (map, tint, z, cx, cy) => {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map, color: tint, transparent: true, opacity: 0, depthWrite: false }));
+    sp.center.set(cx, cy); sp.position.z = z; group.add(sp); return sp;
+  };
+  const envelope = sprite(T.envelope, color, -0.45, 0.5, 0);
+  envelope.position.y = 0.1;
+  const tongues = [], white = color.clone().lerp(new THREE.Color('#ffffff'), 0.55);
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < SPIRIT_FX.tongues + SPIRIT_FX.cores; i++) {
+    const core = i >= SPIRIT_FX.tongues, ang = Math.PI * (0.03 + 0.94 * rnd());
+    const sp = sprite(T.tongue, core ? white : color, 0, 0.5, 0.15);
+    tongues.push({ sp, core, x: Math.cos(ang) * (core ? 0.35 : 0.66 + 0.2 * rnd()) * size, z: -0.2 - Math.sin(ang) * 0.35,
+      rate: (core ? 2 : [4, 5, 6][i % 3]) / 3, off: rnd(), w: (core ? 0.22 : 0.3 + 0.2 * rnd()) * size, hh: (core ? 0.45 : 0.7 + 0.4 * rnd()) * h / 1.6, k: i });
+  }
+  return { style: 'flame', envelope, tongues, base, flicker: a.flicker ?? 1, width: 1.6 * size, size, h };
+}
+function spiritAuraTick(A, t, k) {
+  const still = reduceMotion || !A.flicker, s = still ? 0 : t * A.flicker, TAU = Math.PI * 2;
+  if (A.style === 'column') {
+    A.mesh.material.opacity = A.base * k * (still ? 1 : 0.85 + Math.sin(s * 7) * 0.15);
+    if (!still) A.mesh.scale.set(1 + Math.sin(s * 5) * 0.04, 1 + Math.sin(s * 3.3) * 0.06, 1 + Math.sin(s * 4.1) * 0.04);
+    return;
+  }
+  A.envelope.material.opacity = A.base * k * (still ? 0.9 : 0.85 + 0.1 * Math.sin(TAU * 1.5 * s));
+  A.envelope.scale.set(2.3 * A.size * (1 + (still ? 0 : 0.03 * Math.sin(TAU * s))), A.h * 1.6 * (1 + (still ? 0 : 0.05 * Math.sin(TAU * 1.5 * s))), 1);
+  for (const F of A.tongues) {
+    const p = still ? (F.off * 0.8 + 0.1) : (s * F.rate + F.off) % 1, flick = still ? 1 : 1 + 0.15 * Math.sin(TAU * 2 * s + F.k);
+    F.sp.position.set(F.x * (1 - 0.3 * p) + (still ? 0 : 0.05 * Math.sin(TAU * 0.75 * s + F.k)), 0.25 + p * A.h * (F.core ? 0.35 : 0.65), F.z);
+    F.sp.scale.set(F.w * (1 - 0.4 * p) * flick, F.hh * (0.7 + 0.5 * Math.sin(Math.PI * p)) * flick, 1);
+    F.sp.material.opacity = A.base * k * Math.sin(Math.PI * Math.min(1, p * 1.2)) * (F.core ? 1.6 : 1.9);
+  }
+}
 function spiritFxStart(R, S, gltfs) {
   const spec = S.model.spec || {}, fx = spec.effects || {}, r = R.robot;
   const group = new THREE.Group(); r.root.add(group); S.holders.push(group);
   const F = S.fx = { group, sparks: [], shouts: [], clones: [], next: 0, nextShout: 0, nextBolt: 0, t: 0 };
-  if (fx.aura) {
-    const a = fx.aura, h = a.height || 1.6;
-    const mat = new THREE.MeshBasicMaterial({ color: a.color || '#ffd23a', transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide });
-    mat.userData.base = a.opacity ?? 0.35;
-    const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.85, h, 20, 1, true), mat);
-    cone.position.y = h / 2; group.add(cone); F.aura = { mesh: cone, flicker: a.flicker ?? 1 };
-  }
-  if (fx.glow && S.figure) {
-    const g = fx.glow;
-    const shell = SkeletonUtils.clone(S.figure);
-    const mat = new THREE.MeshBasicMaterial({ color: g.color || '#ffffff', transparent: true, opacity: 0, depthWrite: false, side: THREE.BackSide });
-    mat.userData.base = g.opacity ?? 0.25;
-    shell.traverse((o) => { if (o.isMesh) o.material = mat; });
-    shell.scale.multiplyScalar(g.scale || 1.06);
-    S.figure.parent.add(shell); F.glow = shell;
-  }
+  if (fx.aura) F.aura = spiritAura(group, fx.aura);
+  if (fx.glow && S.figure) F.glow = spiritGlow(S.figure, fx.glow);
   if (fx.sparks) {
     const mat = new THREE.SpriteMaterial({ map: spiritDotTex(), color: fx.sparks.color || '#ffffff', transparent: true, depthWrite: false });
-    for (let i = 0; i < SPIRIT_FX.pool; i++) { const sp = new THREE.Sprite(mat.clone()); sp.visible = false; sp.scale.setScalar(0.12); group.add(sp); F.sparks.push({ sp, age: 99 }); }
+    const pool = Math.min(SPIRIT_FX.sparkMax, Math.ceil((fx.sparks.rate || 0) * SPIRIT_FX.sparkLife));   // all rate shows, no more
+    F.sparkSize = fx.sparks.size || 0.12; F.sparkSpread = F.aura ? F.aura.width : 1.2;
+    for (let i = 0; i < pool; i++) { const sp = new THREE.Sprite(mat.clone()); sp.visible = false; sp.scale.setScalar(F.sparkSize); group.add(sp); F.sparks.push({ sp, age: 99 }); }
   }
-  if (fx.lightning) {
-    const mat = new THREE.LineBasicMaterial({ color: fx.lightning.color || '#bfefff', transparent: true, opacity: 0 });
-    F.bolt = new THREE.Line(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 7 }, () => new THREE.Vector3())), mat);
-    group.add(F.bolt);
+  if (fx.lightning) {   // each bolt a ribbon: a thin bright core in a wider glow, segment by segment
+    const L = fx.lightning;
+    const core = new THREE.MeshBasicMaterial({ color: '#f4fbff', transparent: true, opacity: 0, depthWrite: false });
+    const glow = new THREE.MeshBasicMaterial({ color: L.color || '#bfefff', transparent: true, opacity: 0, depthWrite: false });
+    core.userData.base = glow.userData.base = 1;   // spiritDrop disposes them
+    F.bolts = Array.from({ length: L.count || 1 }, () => Array.from({ length: SPIRIT_FX.boltSegs }, () => {
+      const c = new THREE.Mesh(spiritUnitCyl, core), g = new THREE.Mesh(spiritUnitCyl, glow);
+      c.renderOrder = 5; g.renderOrder = 4; group.add(c, g); return [c, g];
+    }));
+    F.bolt = { core, glow, length: L.length || 2.2 };
   }
   if (fx.afterimage && S.figure && S.clips && S.clips.length && !reduceMotion) {
     const n = fx.afterimage.count || 2, spread = fx.afterimage.spreadDeg ?? 12;
     for (let i = 1; i <= n; i++) {
       const c = SkeletonUtils.clone(S.figure);
-      const shells = []; c.traverse((o) => { if (o.isMesh && o.material.userData && o.material.userData.outline) shells.push(o); });
-      for (const o of shells) o.parent.remove(o);   // a faint copy draws no outline
+      const shells = []; c.traverse((o) => { if (o.isMesh && (o.userData.spiritGlow || (o.material.userData && o.material.userData.outline))) shells.push(o); });
+      for (const o of shells) o.parent.remove(o);   // a faint copy draws no outline and no glow
       c.traverse((o) => { if (o.isMesh) o.material = [].concat(o.material).map((m) => { const x = m.clone(); if (x.uniforms) x.uniforms = THREE.UniformsUtils.clone(m.uniforms); return x; })[0]; });
       c.rotation.y = THREE.MathUtils.degToRad(spread * (i % 2 ? i : -i) / 2);
       S.figure.parent.add(c);
@@ -426,11 +532,8 @@ function spiritFxTick(R, S, dt, k) {
   if (!F) return;
   F.t += dt;
   const fx = (S.model.spec || {}).effects || {};
-  if (F.aura) {
-    const m = F.aura.mesh.material; m.opacity = m.userData.base * k * (reduceMotion ? 1 : 0.85 + Math.sin(F.t * 7 * F.aura.flicker) * 0.15);
-    if (!reduceMotion) F.aura.mesh.scale.set(1 + Math.sin(F.t * 5) * 0.04, 1 + Math.sin(F.t * 3.3) * 0.06, 1 + Math.sin(F.t * 4.1) * 0.04);
-  }
-  if (F.glow) F.glow.traverse((o) => { if (o.isMesh) o.material.opacity = o.material.userData.base * k; });
+  if (F.aura) spiritAuraTick(F.aura, F.t, k);
+  for (const o of F.glow || []) o.material.opacity = o.material.userData.base * k;
   if (reduceMotion) return;
   if (F.sparks.length && fx.sparks.rate) {
     F.next -= dt;
@@ -438,24 +541,33 @@ function spiritFxTick(R, S, dt, k) {
       F.next += 1 / fx.sparks.rate;
       const s = F.sparks.find((x) => x.age >= SPIRIT_FX.sparkLife);
       if (!s) break;
-      s.age = 0; s.sp.position.set((Math.random() - 0.5) * 1.2, 0.2 + Math.random() * 0.6, -0.4 + (Math.random() - 0.5) * 0.8);
+      s.age = 0; s.sp.position.set((Math.random() - 0.5) * F.sparkSpread, 0.2 + Math.random() * 0.6, -0.4 + (Math.random() - 0.5) * 0.8);
     }
     for (const s of F.sparks) {
       s.age += dt;
       const live = s.age < SPIRIT_FX.sparkLife;
       s.sp.visible = live && k > 0.05;
-      if (live) { s.sp.position.y += dt * (fx.sparks.rise || 0.8); s.sp.material.opacity = k * (1 - s.age / SPIRIT_FX.sparkLife); }
+      if (live) { s.sp.position.y += dt * (fx.sparks.rise || 0.8); s.sp.material.opacity = k * (1 - s.age / SPIRIT_FX.sparkLife);
+        s.sp.scale.setScalar(F.sparkSize * (0.7 + 0.3 * Math.sin(s.age * 9 + s.sp.id))); }
     }
   }
   if (F.bolt) {
     F.nextBolt -= dt;
-    const m = F.bolt.material;
-    if (F.nextBolt <= 0) {
+    if (F.nextBolt <= 0) {   // new bolts: each from high on a side of the robot, zigzagging down its length
       F.nextBolt = fx.lightning.everySec || 2.5;
-      const pts = []; for (let i = 0; i < 7; i++) pts.push(new THREE.Vector3((Math.random() - 0.5) * 0.7 + (i % 2 ? 0.25 : -0.25), 2.6 - i * 0.36, -0.5));
-      F.bolt.geometry.setFromPoints(pts); F.boltAt = F.t;
+      const step = F.bolt.length / SPIRIT_FX.boltSegs, a = spiritBoltA, b = spiritBoltB;
+      F.bolts.forEach((segs, i) => {
+        const side = i % 2 ? -1 : 1;
+        a.set(side * (0.35 + 0.35 * Math.random()), 0.6 + F.bolt.length, -0.3 + (Math.random() - 0.5) * 0.4);
+        for (const [c, g] of segs) {
+          b.set(a.x + (Math.random() - 0.5) * 0.5 * step * 2, a.y - step, a.z + (Math.random() - 0.5) * 0.1);
+          spiritLimb(c, a, b, 0.014); spiritLimb(g, a, b, 0.045); a.copy(b);
+        }
+      });
+      F.boltAt = F.t;
     }
-    m.opacity = F.boltAt !== undefined && F.t - F.boltAt < 0.15 ? k : 0;
+    const on = F.boltAt !== undefined && F.t - F.boltAt < SPIRIT_FX.boltSec ? k : 0;
+    F.bolt.core.opacity = on; F.bolt.glow.opacity = on * 0.45;
   }
   for (const cl of F.clones) {   // the afterimages: the loop a little behind, fainter
     if (!cl.action && S.mixer) {
@@ -527,7 +639,7 @@ function spiritLod() {
   standing.forEach((R, i) => {
     const full = i < SPIRIT.fullFx, F = R.spirit.fx;
     for (const cl of F.clones) cl.c.visible = full;
-    if (F.glow) F.glow.visible = full;
+    for (const o of F.glow || []) o.visible = full;
     if (R.spirit.full !== full) R.spirit.figure.traverse((o) => { if (o.userData.spiritOutline) o.visible = full; });   // the outline too
     R.spirit.full = full;
   });

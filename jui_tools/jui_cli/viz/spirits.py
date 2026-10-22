@@ -60,6 +60,7 @@ BUBBLE_FONTS = ("gothic", "mincho")
 BUBBLE_TAILS = ("left", "right")
 CLIP_SLOTS = ("appear", "loop", "leave")
 MATERIAL_KINDS = ("ghost", "plain")
+AURA_STYLES = ("flame", "column")
 
 #: glTF extensions the page cannot read: they need a Worker and WASM, which the viz page's CSP does not allow
 REFUSED_EXTENSIONS = ("KHR_draco_mesh_compression", "KHR_texture_basisu", "EXT_meshopt_compression")
@@ -77,9 +78,13 @@ _INT = lambda lo, hi: ("int", lo, hi)  # noqa: E731
 
 #: the effects the page draws (spirit.json effects.<name>), with the fields each takes
 EFFECTS = {
-    "aura": {"color": "color", "height": _NUM(0.2, 4), "opacity": _NUM(0, 1), "flicker": _NUM(0, 4)},
-    "sparks": {"color": "color", "rate": _NUM(0, 40), "rise": _NUM(0.1, 4)},
-    "lightning": {"color": "color", "everySec": _NUM(0.3, 30)},
+    # style: "flame" (the default: an envelope with flame points and rising tongues) or "column" (an open cylinder)
+    "aura": {"color": "color", "style": ("enum", AURA_STYLES), "size": _NUM(0.3, 3), "height": _NUM(0.2, 4),
+             "opacity": _NUM(0, 1), "flicker": _NUM(0, 4)},
+    # the pool holds as many as rate shows (rate × 1.6 s of life): rate 40 is 64 at once
+    "sparks": {"color": "color", "rate": _NUM(0, 40), "rise": _NUM(0.1, 4), "size": _NUM(0.05, 0.3)},
+    # count bolts at a time, each a ribbon length tall
+    "lightning": {"color": "color", "everySec": _NUM(0.3, 30), "count": _INT(1, 4), "length": _NUM(0.5, 4)},
     "afterimage": {"count": _INT(1, 4), "spreadDeg": _NUM(0, 60)},
     "glow": {"color": "color", "opacity": _NUM(0, 1), "scale": _NUM(1, 1.5)},
 }

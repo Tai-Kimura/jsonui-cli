@@ -1,9 +1,10 @@
 """The skill spirit in the page (ticket 2026-10-21-jui-viz-skill-spirit). Runs with `--only spirits`.
 
-The real `jui viz serve` in a throwaway HOME on a free port and the real forward.py. The HOME holds two models of the
+The real `jui viz serve` in a throwaway HOME on a free port and the real forward.py. The HOME holds four models of the
 person's own (copies of the bundled originals, each naming one skill, so the choice is known): "scholar" for
-code-review (a bubble with ruby, glasses on the head), "gears" for band-test (it hides the band), and "textured" for
-tex-test (a quad with an embedded PNG). Checked:
+code-review (a bubble with ruby, glasses on the head), "gears" for band-test (it hides the band; a glow, a flame aura,
+sparks at rate 40 and three bolts added), "textured" for tex-test (a quad with an embedded PNG) and "skinned" for
+glow-test (a skinned strip, a turning square and an fx_ card, with an outline and a glow). Checked:
   * a Skill call: the robot's spirit loads, appears and stands (the figure and its parts on the robot), the badge says
     the skill, the bubble shows the model's words and ruby aimed at the spirit, the tag moves to the cheek
   * the scholar's ghost look, narrow eyes and the book's pose, its sparks; the gears' three afterimages, shouts and
@@ -11,6 +12,9 @@ tex-test (a quad with an embedded PNG). Checked:
   * another session's skill hides its robot's band; the turn's Stop takes the spirit, the parts, the effects and the
     badge off and gives the band, the eyes and the pose back
   * an embedded texture is read (GLTFLoader's blob: URL under the page's CSP) and its picture loaded
+  * the outline and effects.glow are posed as the figure, frame by frame: on the gears' turning gears and on "skinned"
+    (glow-test: a strip whose bones its loop clip swings, a square whose own node turns), and never on an fx_ node
+  * the gears' effects: a flame aura (an envelope and rising tongues), rate 40's 64 sparks, three bolts with width
   * five robots with a skill: four spirits stand at most, and their bubbles cross neither each other nor the tags
   * the frames' cost with 0 to 4 spirits (measured on a third page and written to the results, not judged)
   * reduced motion (a second page): the spirit stands still, no sparks, afterimages or shouts
@@ -58,6 +62,15 @@ async def wait(page, js, timeout=20000, label="", arg=None):
         raise RuntimeError(f"waiting for {label or js[:90]}: {str(e).splitlines()[0]}") from None
 
 
+async def seen(page, js, arg, timeout=10000) -> bool:
+    """Whether js comes true within timeout (a check, not a stop: the arms after it still run)."""
+    try:
+        await page.wait_for_function(js, arg=arg, timeout=timeout, polling=200)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _textured_glb() -> bytes:
     """A quad with an embedded PNG texture (a 4x4 picture), written by hand: the bundled originals hold no texture, and
     GLTFLoader reads an embedded one through a blob: URL the page's CSP must let it read."""
@@ -87,6 +100,60 @@ def _textured_glb() -> bytes:
     return struct.pack("<III", 0x46546C67, 2, 12 + len(body)) + body
 
 
+def _skinned_glb() -> bytes:
+    """A strip two units tall, skinned to two bones (its top row to the second); a square beside it whose own node turns
+    ("spinner"); and a flat card under a node named fx_card. The loop clip swings the second bone and turns the spinner
+    (written by hand: the bundled originals move their nodes, not bones, and have no fx_ node)."""
+    import math
+    import struct
+    rows = (0.0, 1.0, 2.0)
+    square = lambda: struct.pack("<12f", -0.2, -0.2, 0, 0.2, -0.2, 0, 0.2, 0.2, 0, -0.2, 0.2, 0)  # noqa: E731
+    flat = lambda: struct.pack("<12f", *[0, 0, 1] * 4)  # noqa: E731
+    quat = lambda axis, a: tuple(math.sin(a / 2) * c for c in axis) + (math.cos(a / 2),)  # noqa: E731
+    parts = [
+        struct.pack("<18f", *[c for y in rows for c in (-0.3, y, 0, 0.3, y, 0)]),                          # 0 strip pos
+        struct.pack("<18f", *[0, 0, 1] * 6),                                                                # 1 strip nrm
+        struct.pack("<24H", *[c for y in rows for c in ((0, 0, 0, 0) if y < 2 else (1, 0, 0, 0)) * 2]),     # 2 joints
+        struct.pack("<24f", *[1, 0, 0, 0] * 6),                                                             # 3 weights
+        struct.pack("<12H", 0, 1, 3, 0, 3, 2, 2, 3, 5, 2, 5, 4),                                            # 4 strip idx
+        struct.pack("<32f", *(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1), *(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, -1, 0, 1)),  # 5 ibm
+        struct.pack("<3f", 0, 0.5, 1),                                                                      # 6 times
+        struct.pack("<12f", *quat((0, 0, 1), -0.6), *quat((0, 0, 1), 0.6), *quat((0, 0, 1), -0.6)),         # 7 bone1 turns
+        struct.pack("<12f", *quat((0, 1, 0), 0), *quat((0, 1, 0), 1.5), *quat((0, 1, 0), 3.0)),             # 8 spinner turns
+        square(), flat(), struct.pack("<6H", 0, 1, 2, 0, 2, 3),                                             # 9-11 spinner
+        square(), flat(), struct.pack("<6H", 0, 1, 2, 0, 2, 3),                                             # 12-14 the fx_ card
+    ]
+    views, at = [], 0
+    for b in parts:
+        views.append({"buffer": 0, "byteOffset": at, "byteLength": len(b)})
+        at += len(b)
+    acc = lambda v, ct, n, t, **k: {"bufferView": v, "componentType": ct, "count": n, "type": t, **k}  # noqa: E731
+    sq = lambda v: acc(v, 5126, 4, "VEC3", min=[-0.2, -0.2, 0], max=[0.2, 0.2, 0])  # noqa: E731
+    doc = {"asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0, 2, 3, 4]}],
+           "nodes": [{"name": "bone0", "children": [1]}, {"name": "bone1", "translation": [0, 1, 0]},
+                     {"name": "strip", "mesh": 0, "skin": 0},
+                     {"name": "spinner", "mesh": 1, "translation": [0.8, 1, 0]},
+                     {"name": "fx_card", "mesh": 2, "translation": [-0.8, 1, 0]}],
+           "skins": [{"joints": [0, 1], "inverseBindMatrices": 5}],
+           "meshes": [{"primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1, "JOINTS_0": 2, "WEIGHTS_0": 3}, "indices": 4}]},
+                      {"primitives": [{"attributes": {"POSITION": 9, "NORMAL": 10}, "indices": 11}]},
+                      {"primitives": [{"attributes": {"POSITION": 12, "NORMAL": 13}, "indices": 14}]}],
+           "accessors": [acc(0, 5126, 6, "VEC3", min=[-0.3, 0, 0], max=[0.3, 2, 0]), acc(1, 5126, 6, "VEC3"),
+                         acc(2, 5123, 6, "VEC4"), acc(3, 5126, 6, "VEC4"), acc(4, 5123, 12, "SCALAR"),
+                         acc(5, 5126, 2, "MAT4"), acc(6, 5126, 3, "SCALAR", min=[0], max=[1]), acc(7, 5126, 3, "VEC4"),
+                         acc(8, 5126, 3, "VEC4"), sq(9), acc(10, 5126, 4, "VEC3"), acc(11, 5123, 6, "SCALAR"),
+                         sq(12), acc(13, 5126, 4, "VEC3"), acc(14, 5123, 6, "SCALAR")],
+           "animations": [{"name": "loop", "samplers": [{"input": 6, "output": 7}, {"input": 6, "output": 8}],
+                           "channels": [{"sampler": 0, "target": {"node": 1, "path": "rotation"}},
+                                        {"sampler": 1, "target": {"node": 3, "path": "rotation"}}]}],
+           "bufferViews": views, "buffers": [{"byteLength": at}]}
+    js = json.dumps(doc).encode()
+    js += b" " * (-len(js) % 4)
+    blob = b"".join(parts)
+    body = struct.pack("<II", len(js), 0x4E4F534A) + js + struct.pack("<II", len(blob), 0x004E4942) + blob
+    return struct.pack("<III", 0x46546C67, 2, 12 + len(body)) + body
+
+
 def _own_models(home: pathlib.Path, jt: pathlib.Path):
     """Three models of the person's own: the bundled originals, copied, each naming one skill, and a textured quad."""
     bundled = jt / "jui_cli" / "viz" / "web" / "spirits"
@@ -95,11 +162,21 @@ def _own_models(home: pathlib.Path, jt: pathlib.Path):
         shutil.copytree(bundled / src, own / name)
         spec = json.loads((own / name / "spirit.json").read_text(encoding="utf-8"))
         spec["skills"] = [skill]
+        if name == "gears":   # a glow on its turning gears, a flame aura, sparks at their most, three bolts at a time
+            spec["effects"]["glow"] = {"color": "#ffd060", "opacity": 0.3, "scale": 1.03}
+            spec["effects"]["aura"] = {"color": "#ffd23a", "height": 2, "opacity": 0.4}
+            spec["effects"]["sparks"] = {**spec["effects"]["sparks"], "rate": 40, "size": 0.18}
+            spec["effects"]["lightning"] = {"count": 3, "everySec": 0.3}
         (own / name / "spirit.json").write_text(json.dumps(spec, ensure_ascii=False), encoding="utf-8")
     (own / "textured").mkdir()
     (own / "textured" / "spirit.glb").write_bytes(_textured_glb())
     (own / "textured" / "spirit.json").write_text(json.dumps({"version": 1, "skills": ["tex-test"],
                                                                "spirit": {"file": "spirit.glb", "opacity": 0.8}}), encoding="utf-8")
+    (own / "skinned").mkdir()
+    (own / "skinned" / "spirit.glb").write_bytes(_skinned_glb())
+    (own / "skinned" / "spirit.json").write_text(json.dumps({"version": 1, "skills": ["glow-test"], "spirit": {"file": "spirit.glb", "outline": {"color": "#101010", "width": 0.02}},
+                                                              "effects": {"glow": {"color": "#ff6a10", "opacity": 0.3, "scale": 1.03}}}),
+                                                  encoding="utf-8")
 
 
 async def run_spirits(pw, out, failures):
@@ -152,6 +229,21 @@ async def run_spirits(pw, out, failures):
         res["who"] = who
         state = "(l) => window.__dbg.spirit(l)"
 
+        async def shells_follow(k, kind, what):
+            """The outline's or the glow's shells are posed as the figure: twice, 0.5 s apart, each shell's world matrix
+            (and its bones') is its mesh's, while the figure itself has moved; every mesh has one but those under an fx_
+            node (tickets 2026-10-22-viz-spirit-glow-scales-about-root and -aura-too-weak)."""
+            a = await page.evaluate("([l, k]) => window.__dbg.spiritShells(l, k)", [who[k], kind])
+            await page.wait_for_timeout(500)
+            b = await page.evaluate("([l, k]) => window.__dbg.spiritShells(l, k)", [who[k], kind])
+            res["steps"].append({"step": f"{k} {kind}", "a": a, "b": b})
+            check(a and b and a["shells"] > 0 and a["gap"] < 1e-3 and b["gap"] < 1e-3 and not a["lost"],
+                  f"{what}: posed as the figure: {a} -> {b}")
+            check(a and b and b["mixerTime"] > a["mixerTime"] and abs(b["pose"] - a["pose"]) > 1e-3,
+                  f"{what}: the figure moved between the two looks: {a} -> {b}")
+            check(a and a["bare"] == 0 and a["onFx"] == 0, f"{what}: one on each mesh, none under an fx_ node: {a}")
+            return b
+
         # a skill: the spirit stands, the parts are on, the badge and the bubble say what the model says
         skill("r1", "code-review", "u1")
         await wait(page, "(l) => { const s = window.__dbg.spirit(l); return s && s.phase === 'shown'; }", arg=who["r1"],
@@ -190,6 +282,22 @@ async def run_spirits(pw, out, failures):
         s2 = await page.evaluate(state, who["r2"])
         check(s2["fx"]["clones"] == 3 and s2["eyes"] == "sharp" and s2["pose"] == "type",
               f"the gears: three afterimages, sharp eyes, typing: {s2}")
+        await shells_follow("r2", "glow", "the gears' glow (turning gears)")
+        await shells_follow("r2", "outline", "the gears' outline (turning gears)")
+        # the flame aura: an envelope and 32 tongues that rise (their heights change) and show
+        a = await page.evaluate(state, who["r2"])
+        await page.wait_for_timeout(300)
+        b = await page.evaluate(state, who["r2"])
+        check(a["fx"]["auraStyle"] == "flame" and a["fx"]["tongues"] == 32 and a["fx"]["tongueY"] != b["fx"]["tongueY"]
+              and b["fx"]["tongueTop"] > 0.1, f"the gears' aura is flames that rise: {a['fx']} -> {b['fx']}")
+        # sparks at rate 40: a pool of 64, and more than the 24 of before alight at once
+        check(b["fx"]["sparkPool"] == 64, f"rate 40's pool holds 64 sparks: {b['fx']}")
+        check(await seen(page, "(l) => window.__dbg.spirit(l).fx.sparks > 24", who["r2"]),
+              "more than 24 of the gears' sparks alight at once (rate 40)")
+        # the lightning: three bolts, ribbons with width, shown in turn
+        check(b["fx"]["bolts"] == 3 and b["fx"]["boltWidth"] >= 0.03, f"three bolts, each a ribbon with width: {b['fx']}")
+        check(await seen(page, "(l) => window.__dbg.spirit(l).fx.boltShown", who["r2"]), "a bolt shown")
+        await page.screenshot(path=str(out / "gears-effects.png"))
         hook("r1", hook_event_name="Stop")
         hook("r2", hook_event_name="Stop")
         await wait(page, "(ls) => ls.every((l) => { const s = window.__dbg.spirit(l); return s && !s.phase && !s.badge && !s.skill; })",
@@ -209,6 +317,18 @@ async def run_spirits(pw, out, failures):
         res["steps"].append({"step": "r3 tex-test", **s3})
         check(s3["model"] == "own/textured" and s3["textures"] == {"maps": 1, "loaded": 1} and not s3["error"],
               f"the embedded texture is read and drawn: {s3}")
+        hook("r3", hook_event_name="Stop")
+        await wait(page, "(l) => !window.__dbg.spirit(l).phase", arg=who["r3"], label="r3 back to itself")
+
+        # a glow on a skinned figure: bound to the figure's own bones, it is posed as the figure is, frame by frame
+        skill("r3", "glow-test", "u4")
+        await wait(page, "(l) => { const s = window.__dbg.spirit(l); return s && s.phase === 'shown'; }", arg=who["r3"],
+                   timeout=30000, label="r3's skinned spirit standing")
+        for kind in ("glow", "outline"):
+            g = await shells_follow("r3", kind, f"the skinned model's {kind}")
+            check(g and g["bones"] > 0 and g["fxMeshes"] == 1 and g["shells"] == g["meshes"] - 1,
+                  f"the skinned model's {kind}: on the skinned strip (its bones) and the spinner, not the fx_ card: {g}")
+        await page.screenshot(path=str(out / "glow-skinned.png"))
         hook("r3", hook_event_name="Stop")
         await wait(page, "(l) => !window.__dbg.spirit(l).phase", arg=who["r3"], label="r3 back to itself")
 

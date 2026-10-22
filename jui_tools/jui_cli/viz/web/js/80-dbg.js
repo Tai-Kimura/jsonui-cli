@@ -438,6 +438,15 @@ window.__dbg = {
       mixerTime: S && S.mixer ? +S.mixer.time.toFixed(3) : null,
       bubbleBox: S && shown(S.bubbleEl) ? (({ left, top, right, bottom }) => ({ left, top, right, bottom }))(S.bubbleEl.getBoundingClientRect()) : null,
       fx: S && S.fx ? { aura: !!S.fx.aura, glow: !!S.fx.glow, bolt: !!S.fx.bolt, clones: S.fx.clones.length,
+        // the aura's look: its style, its flame tongues and their heights summed (they rise: it changes), its brightest
+        auraStyle: S.fx.aura ? S.fx.aura.style || 'column' : null, tongues: S.fx.aura && S.fx.aura.tongues ? S.fx.aura.tongues.length : 0,
+        tongueY: S.fx.aura && S.fx.aura.tongues ? +S.fx.aura.tongues.reduce((t, x) => t + x.sp.position.y, 0).toFixed(3) : null,
+        tongueTop: S.fx.aura && S.fx.aura.tongues ? +Math.max(...S.fx.aura.tongues.map((x) => x.sp.material.opacity)).toFixed(3) : null,
+        sparkPool: S.fx.sparks.length,
+        // the lightning: its bolts, each a ribbon of meshes (a core in a glow, so it has width), and whether one shows now
+        bolts: Array.isArray(S.fx.bolts) ? S.fx.bolts.length : (S.fx.bolt ? 1 : 0),
+        boltWidth: Array.isArray(S.fx.bolts) && S.fx.bolts[0] ? +S.fx.bolts[0][0][1].scale.x.toFixed(3) : 0,
+        boltShown: !!S.fx.bolt && (S.fx.bolt.glow ? S.fx.bolt.glow.opacity > 0 : S.fx.bolt.material.opacity > 0),
         sparks: S.fx.sparks.filter((x) => x.sp.visible).length, shouts: S.fx.shouts.filter((x) => x.sp.visible).length } : null,
       textures: (() => { let maps = 0, loaded = 0; if (S && S.figure) S.figure.traverse((o) => { if (!o.isMesh) return;
         for (const m of [].concat(o.material)) if (m.map) { maps++; const im = m.map.image; if (im && (im.width || im.naturalWidth)) loaded++; } });
@@ -445,6 +454,37 @@ window.__dbg = {
       badge: shown(R.skillEl) ? R.skillEl.textContent : null,
       bubble: S && shown(S.bubbleEl) ? { text: S.bubbleEl.textContent, ruby: (S.bubbleEl.querySelector('rt') || {}).textContent || null,
         target: S.bubbleEl.dataset.target } : null };
+  },
+  // the shells on the figure ('outline', or 'glow': effects.glow), each matched to the mesh it goes round (its parent,
+  // else the mesh sharing its geometry): how many, how many figure meshes have none and how many under an fx_… node
+  // have one, and the most any shell's world matrix (and, skinned, each bone's) differs from its mesh's now (0: posed
+  // as the figure is)
+  spiritShells: (id, kind) => {
+    const R = robots.find((x) => x.def.id === id), S = R && R.spirit;
+    if (!S || !S.figure) return null;
+    const isShell = (x) => x.userData.spiritOutline || x.userData.spiritGlow;
+    const own = [], fxOwn = new Set();
+    const walk = (o, fx) => { fx = fx || /^fx_/.test(o.name || ''); if (o.isMesh && !isShell(o)) { own.push(o); if (fx) fxOwn.add(o); } o.children.forEach((c) => walk(c, fx)); };
+    walk(S.figure, false);
+    const shells = [];
+    if (kind === 'glow') { const G = S.fx && S.fx.glow; if (!G) return null;
+      (Array.isArray(G) ? G : (() => { const l = []; G.traverse((x) => { if (x.isMesh && !x.userData.spiritOutline) l.push(x); }); return l; })()).forEach((x) => shells.push(x)); }
+    else S.figure.traverse((x) => { if (x.isMesh && x.userData.spiritOutline) shells.push(x); });
+    scene.updateMatrixWorld(true);
+    const off = (x, y) => Math.max(...x.matrixWorld.elements.map((v, k) => Math.abs(v - y.matrixWorld.elements[k])));
+    let gap = 0, bones = 0, lost = 0;
+    const covered = new Set();
+    for (const sh of shells) {
+      const m = own.includes(sh.parent) ? sh.parent : own.find((x) => x.geometry === sh.geometry); if (!m) { lost++; continue; }
+      covered.add(m);
+      gap = Math.max(gap, off(sh, m));
+      if (sh.isSkinnedMesh && m.isSkinnedMesh) sh.skeleton.bones.forEach((bone, j) => { bones++; gap = Math.max(gap, off(bone, m.skeleton.bones[j])); });
+    }
+    const pose = own.reduce((t, m) => t + m.matrixWorld.elements.reduce((u, v) => u + v, 0)
+      + (m.isSkinnedMesh ? m.skeleton.bones.reduce((u, x) => u + x.matrixWorld.elements.reduce((w, v) => w + v, 0), 0) : 0), 0);   // the figure's pose, summed: changes as it moves
+    return { shells: shells.length, meshes: own.length, fxMeshes: fxOwn.size, bare: own.filter((m) => !fxOwn.has(m) && !covered.has(m)).length,
+      onFx: [...fxOwn].filter((m) => covered.has(m)).length, lost, bones, gap: +gap.toFixed(4), pose: +pose.toFixed(4),
+      mixerTime: S.mixer ? +S.mixer.time.toFixed(3) : null };
   },
   spiritsStanding: () => robots.filter((x) => x.spirit && x.spirit.figure).length,
   mainDraw: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles }),   // the last frame's
