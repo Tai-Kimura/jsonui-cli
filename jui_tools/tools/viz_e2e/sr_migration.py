@@ -15,8 +15,9 @@ edge's length from the line's positions), never from the plan's own lists alone.
   * the end: what is drawn is the new model, node for node and edge for edge
   * a step builds nothing (a replaced node's new version is drawn from the start at size 0): the camera and each
     frame's colours hold through a replace; played through, the steps come back to back (no frame without one)
-  * a step that moves the month: the amount counts to the new one in the step's colour, a tag with the difference
-    floats over the node
+  * a step that moves the month: the amount counts to the new one in the step's colour, a tag with its own difference
+    floats over each node that moved (fn-a goes and fn-b, Lambda's free requests now its, moves too), the player lists
+    them; the tags always name the step the player shows
   * the cost: 旧 → 今 → 新 on the player from the engine's months, the step shown with its own difference, the changed
     nodes with no price said; the コスト view's 旧 · 新 · 差 table (rows with no price marked) and its big number said
     to be the old model's, with the month at the step the player is at
@@ -47,7 +48,14 @@ CHANGES = {"version": 0, "order": ["cache-prod", "db-prod", "mailer"],
                      {"id": "cache-prod", "category": "cache", "service": "elasticache.redis", "group": "cache-subnet",
                       "environments": ["production"]}],
            "edges": [{"from": "api-prod", "to": "cache-prod", "protocol": "redis"}]}
-REMOVALS = {"version": 0, "nodes": ["mailer"], "edges": [{"from": "cdn", "to": "assets"}]}
+REMOVALS = {"version": 0, "nodes": ["mailer", "fn-a"], "edges": [{"from": "cdn", "to": "assets"}]}
+# two functions of one account: Lambda's free requests go to the first in the model, so removing fn-a moves fn-b's month
+# in the same step (a neighbour that moved: its own tag, and the player's list of what moved)
+FUNCTIONS = {"version": 0, "nodes": [
+    {"id": f"fn-{x}", "category": "compute.function", "service": "lambda", "group": "private-prod", "environments": ["production"],
+     "spec": [{"key": "memory_mb", "value": "512"}]} for x in "ab"],
+    "edges": [{"from": "api-prod", "to": "fn-a"}, {"from": "api-prod", "to": "fn-b"}]}
+FUNCTION_LOAD = {"requests": {"amount": 0.6, "per": "second"}, "duration_ms": 200, "memory_mb": 512}
 
 
 def check(failures, cond, text):
@@ -98,6 +106,11 @@ async def run_sr_migration(pw, out, failures):
     ex = _examples(jt)
     work = home / "work"
     rooms = {"plan": _write(work, ex, "aws-three-tier", "sr-plan"), "none": _write(work, ex, "multi-provider", "sr-noplan")}
+    (rooms["plan"] / "docs" / "infra" / "functions.json").write_text(json.dumps(FUNCTIONS), encoding="utf-8")
+    for f in (rooms["plan"] / "docs" / "infra" / "load").glob("*.json"):
+        doc = json.loads(f.read_text(encoding="utf-8"))
+        doc["loads"] += [{"node": n, "quantities": FUNCTION_LOAD} for n in ("fn-a", "fn-b")]
+        f.write_text(json.dumps(doc), encoding="utf-8")
     mig = rooms["plan"] / "docs" / "infra" / "migrations"
     (mig / "move").mkdir(parents=True)
     (mig / "move" / "changes.json").write_text(json.dumps(CHANGES), encoding="utf-8")
@@ -265,6 +278,26 @@ async def run_sr_migration(pw, out, failures):
         m = await page.evaluate(MIG)
         check(failures, m["sizes"]["mailer"] == 0 and m["lengths"]["api-prod->mailer"] == 0 and m["lengths"]["cdn->assets"] == 1,
               f"removed: the node and its edge gone, the edge removed alone still there: {m['sizes']} {m['lengths']}")
+
+        # fn-a goes: fn-b moves in the same step (Lambda's free requests now its): a tag over each with its own difference,
+        # and the player lists both
+        step4 = next(s for s in cli["steps"] if s["node"] == "fn-a")
+        moved4 = {m["node"]: m["diff"] for m in step4["moved"]}
+        check(failures, set(moved4) == {"fn-a", "fn-b"}, f"the arm needs a neighbour that moves: {step4['moved']}")
+        sampler = Sampler(page)
+        sampling = asyncio.create_task(sampler.run())
+        await page.click("#sr-mplayer [data-sr-mp='step']")
+        await until(page, "() => { const m = window.__dbg.srMig(); return m.k === 4 && !m.anim; }", "step 4 done", timeout=20000)
+        sampler.on = False
+        await sampling
+        tags4 = {(tg["node"], tg["text"]) for x in sampler.seen if x.get("open") for tg in x["tags"] if tg["step"] == 4}
+        want4 = set()
+        for n, d in moved4.items():
+            want4.add((n, ("+" if d >= 0 else "−") + await usd(abs(d))))
+        check(failures, want4 <= tags4, f"a tag over each node that moved, the neighbour too: {sorted(want4)} vs {sorted(tags4)}")
+        listed = [x["moved"] for x in sampler.seen if x.get("open") and x["barStep"] == 4 and x["moved"]]
+        want_list = T("sr.mig.moved", list=" · ".join([f"{m['node']} {('+' if m['diff'] >= 0 else '−') + await usd(abs(m['diff']))}" for m in step4["moved"][:4]]))
+        check(failures, listed and listed[0] == want_list, f"the player lists what moved in the step: {listed[:1]} vs {want_list!r}")
 
         # the rest played: the end is the new model
         await page.evaluate("() => window.__dbg.srMigSpeed(3)")
