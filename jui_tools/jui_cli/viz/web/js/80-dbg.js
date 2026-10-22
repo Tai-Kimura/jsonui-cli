@@ -443,6 +443,8 @@ window.__dbg = {
         tongueY: S.fx.aura && S.fx.aura.tongues ? +S.fx.aura.tongues.reduce((t, x) => t + x.sp.position.y, 0).toFixed(3) : null,
         tongueTop: S.fx.aura && S.fx.aura.tongues ? +Math.max(...S.fx.aura.tongues.map((x) => x.sp.material.opacity)).toFixed(3) : null,
         sparkPool: S.fx.sparks.length,
+        // outline and glow shells left in the afterimages (each is a copy of the figure: 0, a faint copy draws neither)
+        cloneShells: S.fx.clones.reduce((t, cl) => { let n = 0; cl.c.traverse((o) => { if (o.isMesh && (o.userData.spiritGlow || o.userData.spiritOutline)) n++; }); return t + n; }, 0),
         // the lightning: its bolts, each a ribbon of meshes (a core in a glow, so it has width), and whether one shows now
         bolts: Array.isArray(S.fx.bolts) ? S.fx.bolts.length : (S.fx.bolt ? 1 : 0),
         boltWidth: Array.isArray(S.fx.bolts) && S.fx.bolts[0] ? +S.fx.bolts[0][0][1].scale.x.toFixed(3) : 0,
@@ -461,7 +463,8 @@ window.__dbg = {
   // the shells on the figure ('outline', or 'glow': effects.glow), each matched to the mesh it goes round (its parent,
   // else the mesh sharing its geometry): how many, how many figure meshes have none and how many under an fx_… node
   // have one, and the most any shell's world matrix (and, skinned, each bone's) differs from its mesh's now (0: posed
-  // as the figure is)
+  // as the figure is); for the glow, the most its rim differs from the one wanted, in parts (0: the same on every mesh,
+  // whatever its own scale); how many are hidden (spiritLod)
   spiritShells: (id, kind) => {
     const R = robots.find((x) => x.def.id === id), S = R && R.spirit;
     if (!S || !S.figure) return null;
@@ -475,18 +478,21 @@ window.__dbg = {
     else S.figure.traverse((x) => { if (x.isMesh && x.userData.spiritOutline) shells.push(x); });
     scene.updateMatrixWorld(true);
     const off = (x, y) => Math.max(...x.matrixWorld.elements.map((v, k) => Math.abs(v - y.matrixWorld.elements[k])));
-    let gap = 0, bones = 0, lost = 0;
-    const covered = new Set();
+    let gap = 0, bones = 0, lost = 0, reach = 0;
+    const covered = new Set(), fig = S.figure.getWorldScale(new THREE.Vector3()).x || 1, ws = new THREE.Vector3();
     for (const sh of shells) {
       const m = own.includes(sh.parent) ? sh.parent : own.find((x) => x.geometry === sh.geometry); if (!m) { lost++; continue; }
       covered.add(m);
       gap = Math.max(gap, off(sh, m));
+      const u = sh.material.userData;   // a glow's rim as drawn (its width times the mesh's scale in the figure) against the one wanted
+      if (u.reach) reach = Math.max(reach, Math.abs(u.width * (sh.getWorldScale(ws).x / fig) / u.reach - 1));
       if (sh.isSkinnedMesh && m.isSkinnedMesh) sh.skeleton.bones.forEach((bone, j) => { bones++; gap = Math.max(gap, off(bone, m.skeleton.bones[j])); });
     }
     const pose = own.reduce((t, m) => t + m.matrixWorld.elements.reduce((u, v) => u + v, 0)
       + (m.isSkinnedMesh ? m.skeleton.bones.reduce((u, x) => u + x.matrixWorld.elements.reduce((w, v) => w + v, 0), 0) : 0), 0);   // the figure's pose, summed: changes as it moves
     return { shells: shells.length, meshes: own.length, fxMeshes: fxOwn.size, bare: own.filter((m) => !fxOwn.has(m) && !covered.has(m)).length,
       onFx: [...fxOwn].filter((m) => covered.has(m)).length, lost, bones, gap: +gap.toFixed(4), pose: +pose.toFixed(4),
+      reach: +reach.toFixed(4), hidden: shells.filter((x) => !x.visible).length,
       mixerTime: S.mixer ? +S.mixer.time.toFixed(3) : null };
   },
   spiritsStanding: () => robots.filter((x) => x.spirit && x.spirit.figure).length,

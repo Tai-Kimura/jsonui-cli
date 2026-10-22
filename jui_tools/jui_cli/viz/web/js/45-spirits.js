@@ -364,8 +364,10 @@ function spiritGlow(figure, g) {
     const own = (mesh.getWorldScale(spiritGlowW).x || figureScale) / figureScale;   // the mesh's scale in the figure's
     const m = new THREE.MeshBasicMaterial({ color: g.color || '#ffffff', transparent: true, opacity: 0, depthWrite: false, side: THREE.BackSide });
     m.userData.base = g.opacity ?? 0.25;
+    m.userData.reach = ((g.scale || 1.06) - 1) * half;   // the rim, in the figure's units: the same on every mesh
+    m.userData.width = m.userData.reach / own;   // the same rim in the mesh's own units
     m.onBeforeCompile = (sh) => {
-      sh.uniforms.uWidth = { value: ((g.scale || 1.06) - 1) * half / own };
+      sh.uniforms.uWidth = { value: m.userData.width };
       sh.vertexShader = 'uniform float uWidth;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  transformed += normal * uWidth;');
     };
     shells.push(spiritShell(mesh, m, 'spiritGlow', 0));

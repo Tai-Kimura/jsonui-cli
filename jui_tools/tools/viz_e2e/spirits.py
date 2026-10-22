@@ -13,7 +13,8 @@ glow-test (a skinned strip, a turning square and an fx_ card, with an outline an
     badge off and gives the band, the eyes and the pose back
   * an embedded texture is read (GLTFLoader's blob: URL under the page's CSP) and its picture loaded
   * the outline and effects.glow are posed as the figure, frame by frame: on the gears' turning gears and on "skinned"
-    (glow-test: a strip whose bones its loop clip swings, a square whose own node turns), and never on an fx_ node
+    (glow-test: a strip whose bones its loop clip swings, a square whose own node turns), and never on an fx_ node;
+    the glow's rim the same on a mesh scaled 2; none in the afterimages; hidden on a third spirit (past fullFx)
   * the gears' effects: a flame aura (an envelope and rising tongues), rate 40's 64 sparks, three bolts with width
   * five robots with a skill: four spirits stand at most, and their bubbles cross neither each other nor the tags
   * the frames' cost with 0 to 4 spirits (measured on a third page and written to the results, not judged)
@@ -102,7 +103,7 @@ def _textured_glb() -> bytes:
 
 def _skinned_glb() -> bytes:
     """A strip two units tall, skinned to two bones (its top row to the second); a square beside it whose own node turns
-    ("spinner"); and a flat card under a node named fx_card. The loop clip swings the second bone and turns the spinner
+    and is scaled 2 ("spinner"); and a flat card under a node named fx_card. The loop clip swings the second bone and turns the spinner
     (written by hand: the bundled originals move their nodes, not bones, and have no fx_ node)."""
     import math
     import struct
@@ -132,7 +133,7 @@ def _skinned_glb() -> bytes:
     doc = {"asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0, 2, 3, 4]}],
            "nodes": [{"name": "bone0", "children": [1]}, {"name": "bone1", "translation": [0, 1, 0]},
                      {"name": "strip", "mesh": 0, "skin": 0},
-                     {"name": "spinner", "mesh": 1, "translation": [0.8, 1, 0]},
+                     {"name": "spinner", "mesh": 1, "translation": [0.8, 1, 0], "scale": [2, 2, 2]},
                      {"name": "fx_card", "mesh": 2, "translation": [-0.8, 1, 0]}],
            "skins": [{"joints": [0, 1], "inverseBindMatrices": 5}],
            "meshes": [{"primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1, "JOINTS_0": 2, "WEIGHTS_0": 3}, "indices": 4}]},
@@ -282,6 +283,7 @@ async def run_spirits(pw, out, failures):
         s2 = await page.evaluate(state, who["r2"])
         check(s2["fx"]["clones"] == 3 and s2["eyes"] == "sharp" and s2["pose"] == "type",
               f"the gears: three afterimages, sharp eyes, typing: {s2}")
+        check(s2["fx"]["cloneShells"] == 0, f"the gears' afterimages carry no outline and no glow: {s2['fx']}")
         await shells_follow("r2", "glow", "the gears' glow (turning gears)")
         await shells_follow("r2", "outline", "the gears' outline (turning gears)")
         # the flame aura: an envelope and 32 tongues that rise (their heights change) and show
@@ -330,9 +332,27 @@ async def run_spirits(pw, out, failures):
             g = await shells_follow("r3", kind, f"the skinned model's {kind}")
             check(g and g["bones"] > 0 and g["fxMeshes"] == 1 and g["shells"] == g["meshes"] - 1,
                   f"the skinned model's {kind}: on the skinned strip (its bones) and the spinner, not the fx_ card: {g}")
+            if kind == "glow":
+                check(g and g["reach"] < 0.01, f"the skinned model's glow: the same rim on the strip and on the spinner (scaled 2): {g}")
         await page.screenshot(path=str(out / "glow-skinned.png"))
         hook("r3", hook_event_name="Stop")
         await wait(page, "(l) => !window.__dbg.spirit(l).phase", arg=who["r3"], label="r3 back to itself")
+
+        # three glows standing: the SPIRIT.fullFx (2) nearest the camera draw theirs, the third hides it
+        trio = [who[k] for k in ("r1", "r2", "r3")]
+        for i, k in enumerate(("r1", "r2", "r3")):
+            skill(k, "glow-test", f"g{i}")
+        await wait(page, "(ls) => ls.every((l) => { const s = window.__dbg.spirit(l); return s && s.phase === 'shown'; })",
+                   arg=trio, timeout=40000, label="three skinned spirits standing")
+        lod = "(ls) => ls.map((l) => window.__dbg.spiritShells(l, 'glow'))"
+        lod_ok = f"(ls) => {{ const g = ({lod})(ls); return g.filter((x) => x.hidden === 0).length === 2 && g.filter((x) => x.hidden === x.shells).length === 1; }}"
+        ok = await seen(page, lod_ok, trio)
+        g = await page.evaluate(lod, trio)
+        res["steps"].append({"step": "three glows", "glow": g})
+        check(ok, f"three glows: two drawn, the farthest hidden: {g}")
+        for k in ("r1", "r2", "r3"):
+            hook(k, hook_event_name="Stop")
+        await wait(page, "(ls) => ls.every((l) => !window.__dbg.spirit(l).phase)", arg=trio, label="r1-r3 back to themselves")
 
         # five skills at once: four spirits stand
         for i, k in enumerate(SIDS):
