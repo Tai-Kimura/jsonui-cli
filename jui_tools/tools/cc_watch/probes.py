@@ -209,6 +209,9 @@ TALK_KEEP = 40
 WEEK_KINDS = ("denied",)
 SEND_INPUT_KEYS = ["to", "message", "summary"]
 PEER_ORIGIN_KEYS = ["kind", "msg_id", "from", "verifiedPeerPid", "name", "body"]
+#: Keys the readers use when there and do without (talk.py: the sender by pid, else by from / name): whether any record
+#: carries one, not whether all do — its share went all -> some -> all on 10-21..23 with nothing broken.
+OPTIONAL_PEER_ORIGIN_KEYS = {"verifiedPeerPid"}
 CHILD_ORIGIN_KEYS = ["kind", "senderTaskId", "from", "body"]
 _ENVELOPE = re.compile(r'^<cross-session-message\b[^>]*\bfrom-name="[^"]*"[^>]*>\n')
 
@@ -358,6 +361,13 @@ def _all_any(items: list, test) -> str:
     return "all" if n == len(items) else "some" if n else "none"
 
 
+def _seen_any(items: list, key: str) -> str:
+    """'seen' (a record carries the key) / 'none' (records, none carries it) / 'unseen' (no record)."""
+    if not items:
+        return "unseen"
+    return "seen" if any(key in i for i in items) else "none"
+
+
 def talk_send_input(ctx: Context):
     """SendMessage's tool input as talk_records reads it: to, message (the body), summary."""
     if (s := _talk_skipped(ctx)) is not None:
@@ -392,7 +402,8 @@ def talk_origin(ctx: Context):
     peer = ctx._talk["peer"] + [a["origin"] for a in ctx._talk["queued"] if a["origin"].get("kind") == "peer" and not a["origin"].get("senderTaskId")]
     peer = [o for o in peer if "members" not in o]
     queued = ctx._talk["queued"]
-    return {"peer": {k: _all_any(peer, lambda o, k=k: k in o) for k in PEER_ORIGIN_KEYS},
+    return {"peer": {k: (_seen_any(peer, k) if k in OPTIONAL_PEER_ORIGIN_KEYS else _all_any(peer, lambda o, k=k: k in o))
+                     for k in PEER_ORIGIN_KEYS},
             "child": {k: _all_any(ctx._talk["child"], lambda o, k=k: k in o) for k in CHILD_ORIGIN_KEYS},
             "coordinator": "seen" if ctx._talk["coordinator"] or any(a["origin"].get("kind") == "coordinator" for a in queued) else "unseen",
             "queued_command": _all_any(queued, lambda a: isinstance(a.get("prompt"), str) and isinstance(a.get("origin"), dict))}

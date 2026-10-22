@@ -22,7 +22,8 @@ from cc_watch import watch as W  # noqa: E402
 GREEN = {
     "talk_send_input": {"to": "all", "message": "all", "summary": "seen"},
     "talk_msg_id": {"result_has_msg_id": True, "origin_has_msg_id": True, "uuid_like": "all", "both_sides": True},
-    "talk_origin": {"peer": {k: "all" for k in P.PEER_ORIGIN_KEYS}, "child": {k: "all" for k in P.CHILD_ORIGIN_KEYS},
+    "talk_origin": {"peer": {k: "seen" if k in P.OPTIONAL_PEER_ORIGIN_KEYS else "all" for k in P.PEER_ORIGIN_KEYS},
+                    "child": {k: "all" for k in P.CHILD_ORIGIN_KEYS},
                     "coordinator": "seen", "queued_command": "all"},
     "talk_envelope": {"cross_session": "all", "closed": "all", "agent_message": "seen"},
 }
@@ -83,13 +84,26 @@ def _rename(recs, kind, path, new):
     ("send", ["message", "content", 0, "input", "to"], "talk_send_input"),
     ("result", ["toolUseResult", "msg_id"], "talk_msg_id"),
     ("peer", ["origin", "msg_id"], "talk_origin"),
-    ("peer", ["origin", "verifiedPeerPid"], "talk_origin"),
     ("peer", ["origin", "body"], "talk_origin"),
     ("child", ["origin", "senderTaskId"], "talk_origin"),
 ])
 def test_a_renamed_field_changes_its_probe(tmp_path, kind, path, probe):
     recs = _rename(records(), kind, path, "renamed")
     assert shapes(folder(tmp_path, recs))[probe] != GREEN[probe]
+
+
+def test_an_optional_key_is_whether_any_record_carries_it(tmp_path):
+    """verifiedPeerPid: the readers use it when there and do without (talk.py), and its share went all -> some -> all on
+    10-21..23 with nothing broken. Gone from one record: the same shape; gone from every record: none, a change."""
+    one = records()
+    del one["peer"]["origin"]["verifiedPeerPid"]
+    assert shapes(folder(tmp_path / "one", one))["talk_origin"] == GREEN["talk_origin"]
+    every = records()
+    for kind in ("peer", "queued"):
+        origin = every[kind]["origin"] if kind == "peer" else every[kind]["attachment"]["origin"]
+        del origin["verifiedPeerPid"]
+    got = shapes(folder(tmp_path / "every", every))["talk_origin"]
+    assert got["peer"]["verifiedPeerPid"] == "none" and W.worse(GREEN["talk_origin"], got)
 
 
 def test_a_changed_envelope_changes_its_probe(tmp_path):
@@ -168,15 +182,15 @@ def test_a_commands_own_output_quoting_auto_mode_is_not_a_denial(tmp_path):
 
 def test_the_newest_records_are_kept_not_the_oldest(tmp_path, monkeypatch):
     """The window kept the last TALK_KEEP appended, and the newest file is read first: it kept the oldest files'
-    records. An old form (no verifiedPeerPid) in the oldest file decides nothing once newer records fill the keep."""
+    records. An old form (no name) in the oldest file decides nothing once newer records fill the keep."""
     monkeypatch.setattr(P, "TALK_KEEP", 2)
     peer = records()["peer"]
     old = json.loads(json.dumps(peer))
-    del old["origin"]["verifiedPeerPid"]
+    del old["origin"]["name"]
     projects = _files(tmp_path, [[old], [peer, peer]])
-    assert P.talk_origin(_ctx(projects))["peer"]["verifiedPeerPid"] == "all"
+    assert P.talk_origin(_ctx(projects))["peer"]["name"] == "all"
     projects2 = _files(tmp_path / "b", [[peer, peer], [old]])                   # the old form is the newest: seen
-    assert P.talk_origin(_ctx(projects2))["peer"]["verifiedPeerPid"] == "some"
+    assert P.talk_origin(_ctx(projects2))["peer"]["name"] == "some"
 
 
 def test_the_two_sides_pair_on_every_msg_id_of_the_window(tmp_path, monkeypatch):

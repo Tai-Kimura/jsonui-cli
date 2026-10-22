@@ -634,3 +634,45 @@ def test_the_hook_finds_the_repo_by_its_absolute_path_from_any_working_folder(tm
                        env={k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"})
     assert p.returncode == 0 and t.name in p.stdout, (p.stdout, p.stderr)
     assert not W.add_hook(settings, repo)                                 # the same hook, absolute or relative
+
+
+# ------------------------------------------------------------------ only a move toward worse is filed
+# (ticket 2026-10-23-cc-dependency-watch-red: the transcript probes count what this machine happened to do in the window,
+# and their shapes went back and forth on 10-22 and 10-23 with nothing broken; each move filed a ticket)
+
+
+@pytest.mark.parametrize("old,new,is_worse", [
+    ("all", "some", True), ("some", "none", True), ("all", "none", True), (True, False, True),
+    ("seen", "none", True), ({"a": "all"}, {}, True), ({"a": "x"}, {"a": "y"}, True), ({"a": 1}, None, True),
+    ("some", "all", False), ("none", "all", False), (False, True, False), ("none", "seen", False),
+    ("unseen", "all", False), ("all", "unseen", False), ("unseen", "seen", False), ("seen", "unseen", False),
+    (None, {"a": "all"}, False), ({"a": "all"}, {"a": "all", "b": "some"}, False), ("all", "all", False),
+])
+def test_worse_is_a_move_toward_broken_only(old, new, is_worse):
+    assert W.worse(old, new) is is_worse
+
+
+def test_the_moves_of_10_23_are_not_worse():
+    """The four probes the ticket of 10-23 named, as the watcher saved them that morning."""
+    moves = {
+        "auto_mode_denial": ({"known": "unseen", "no_verdict": "unseen", "reason": "unseen"},
+                             {"known": "all", "no_verdict": "seen", "reason": "all"}),
+        "skill_tool_shape": (None, {"forked": "seen", "input_skill": "all", "result_known": "all"}),
+        "talk_msg_id": ({"both_sides": False, "origin_has_msg_id": True, "result_has_msg_id": True, "uuid_like": "all"},
+                        {"both_sides": True, "origin_has_msg_id": True, "result_has_msg_id": True, "uuid_like": "all"}),
+    }
+    assert {k: W.worse(*v) for k, v in moves.items()} == dict.fromkeys(moves, False)
+
+
+def test_a_better_day_is_logged_and_files_nothing_a_worse_one_is_filed(world, monkeypatch):
+    repo, state, _temp, notified = world
+    shape = {"v": {"known": "unseen"}}
+    monkeypatch.setitem(P.PROBES, "auto_mode_denial", lambda ctx: dict(shape["v"]))
+    go(world, fake_cli(), fake_fetch("2.1.303"))                       # the baseline
+    shape["v"] = {"known": "all"}                                      # seen for the first time: better
+    r = go(world, fake_cli(), fake_fetch("2.1.303"))
+    assert r["changed"] == [] and r["improved"] == ["auto_mode_denial"] and tickets(repo) == [] and notified == []
+    assert json.loads((state / "shapes.json").read_text())["auto_mode_denial"] == {"known": "all"}   # the new baseline
+    shape["v"] = {"known": "some"}                                     # a wording the reader does not know: worse
+    r = go(world, fake_cli(), fake_fetch("2.1.303"))
+    assert r["changed"] == ["auto_mode_denial"] and len(tickets(repo)) == 1 and len(notified) == 1

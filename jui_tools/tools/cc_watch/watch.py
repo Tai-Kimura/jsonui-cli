@@ -346,6 +346,33 @@ def write_ticket(repo: Path, today: str, installed: str | None, latest: str | No
     return path
 
 
+#: The shape words of probes._all_any, worst first: a key every record has, some have, none has.
+_RANK = {"none": 0, "some": 1, "all": 2}
+#: "unseen": no record of the kind in the window — no evidence either way.
+_NO_EVIDENCE = "unseen"
+
+
+def worse(old, new) -> bool:
+    """Whether a probe's shape moved toward broken: all -> some -> none, true -> false, a key or a value gone, any
+    other value changed. Not worse: from / to "unseen" (no record of the kind in the window), toward all or true, a
+    probe or key seen for the first time (old None). An error shape is filed whatever it was before."""
+    if old == new or old is None:
+        return False
+    if new is None:
+        return True
+    if isinstance(old, dict) and isinstance(new, dict):
+        return any(worse(old.get(k), new.get(k)) for k in old.keys() | new.keys())
+    if _NO_EVIDENCE in (old, new):
+        return False
+    if old in _RANK and new in _RANK:
+        return _RANK[new] < _RANK[old]
+    if old == "seen" or new == "seen":
+        return new != "seen"
+    if isinstance(old, bool) and isinstance(new, bool):
+        return old and not new
+    return True
+
+
 def _last_installed(state: Path) -> str | None:
     """The version the last run found installed (watch.log's last line), None without one."""
     try:
@@ -384,12 +411,17 @@ def run(repo: Path, state: Path, live: bool, cli: str = "claude", runner=None, f
         shutil.rmtree(work, ignore_errors=True)
     saved_path = state / "shapes.json"
     saved = json.loads(saved_path.read_text()) if saved_path.exists() else None
-    changed = {} if saved is None else {k: (saved.get(k), v) for k, v in shapes.items() if saved.get(k) != v}
+    moved = {} if saved is None else {k: (saved.get(k), v) for k, v in shapes.items() if saved.get(k) != v}
+    # Only a move toward worse is a change to file. The transcript probes count what this machine happened to do in
+    # the window — no denial, no Skill call, no message read on both sides is "unseen" or false, not broken — and
+    # their shapes went back and forth on 10-22 and 10-23 with nothing broken (ticket 2026-10-23-cc-dependency-watch-red).
+    changed = {k: ov for k, ov in moved.items() if worse(*ov)}
     errors = {k: v for k, v in shapes.items() if isinstance(v, dict) and "error" in v}
     for k, v in errors.items():
         changed.setdefault(k, (saved.get(k) if saved else None, v))
     result = {"at": now.isoformat(timespec="seconds"), "installed": installed, "latest": latest,
               "changelog_lines": len(lines), "changed": sorted(changed), "baseline": saved is None,
+              "improved": sorted(set(moved) - set(changed)),   # moved toward better (or to / from no evidence): logged
               "session": session.result if session is not None else None}   # cost and tokens of the live run
     if changed:
         ticket = write_ticket(repo, today, installed, latest, changed, lines)
