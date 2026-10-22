@@ -84,33 +84,39 @@ def _rows(old: dict, new: dict, key: str, change: dict | None = None, unpriced: 
 
 
 def reply(root: Path | str, plan_name: str, scenario: str | None = None, account: bool = False,
-          env: dict | None = None) -> tuple[int, dict]:
+          env: dict | None = None, words: R.Words = R.DEFAULT_WORDS) -> tuple[int, dict]:
+    """``words``: the language of each problem's and refusal's line (short), as cost infra's reply has them."""
     try:
-        return _reply(Path(root), plan_name, scenario, account, env)
+        return _reply(Path(root), plan_name, scenario, account, env, words)
     except R.Refused as r:
-        return _refuse(r.reason, r.message)
+        code, out = _refuse(r.reason, r.message)
+        return code, dict(out, short=r.line("", words))
 
 
-def _reply(root: Path, plan_name: str, scenario: str | None, account: bool, env: dict | None) -> tuple[int, dict]:
-    loads = L.read(root)
+def _reply(root: Path, plan_name: str, scenario: str | None, account: bool, env: dict | None,
+           words: R.Words) -> tuple[int, dict]:
+    loads = L.read(root, words=words)
     if not loads.get("ok"):
         return 2, {"ok": False, "reason": loads.get("reason", "invalid"), "message": loads.get("message", ""),
+                   **({"short": loads["short"]} if loads.get("short") else {}),
                    "problems": [_problem(p) for p in loads.get("problems", [])[:FIRST]]}
     scenarios = loads["scenarios"]
     if not scenarios:
-        return _refuse("no_load", f"no usable load definition in {loads['dir']}")
+        code, out = _refuse("no_load", f"no usable load definition in {loads['dir']}")
+        return code, dict(out, dir=loads["dir"])
     chosen = next((s for s in scenarios if s["id"] == scenario), None) if scenario else scenarios[0]
     if chosen is None:
         return _refuse("no_scenario", f"no scenario {scenario!r}; there are: {', '.join(s['id'] for s in scenarios)}")
-    plan, plan_problems, old_model = MG.load(root, plan_name)
+    plan, plan_problems, old_model = MG.load(root, plan_name, words)
     if not old_model.get("ok"):
-        return _refuse(old_model.get("reason", "invalid"), old_model.get("message", ""))
+        code, out = _refuse(old_model.get("reason", "invalid"), old_model.get("message", ""))
+        return code, dict(out, **({"short": old_model["short"]} if old_model.get("short") else {}))
     if plan is None or MG.M.errors(plan_problems):
         no = any(p["code"] == "migration.no_plan" for p in plan_problems)
         return 2, {"ok": False, "reason": "no_plan" if no else "bad_plan",
                    "message": f"no plan {plan_name!r}" if no else f"the plan {plan_name!r} has errors: jsonui-doc validate infra --migration {plan_name}",
                    "problems": [_problem(p) for p in plan_problems[:FIRST]]}
-    book, warnings = PB.load(root, env)
+    book, warnings = PB.load(root, env, words=words)
     models = [old_model] + [plan.model_at(k)[0] for k in range(1, plan.last + 1)]
     old, new = _month(root, chosen, models[0], book), _month(root, chosen, models[-1], book)
     change = {s["node"]: {"add": "added", "replace": "replaced", "remove": "removed"}[s["kind"]] for s in plan.steps if s["node"]}

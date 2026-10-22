@@ -396,11 +396,11 @@ def report(root: Path, old_files: list[tuple[str, bytes]], old_problems: list[di
     return out
 
 
-def load(root: Path, name: str) -> tuple[Plan | None, list[dict], dict]:
+def load(root: Path, name: str, words: R.Words = R.DEFAULT_WORDS) -> tuple[Plan | None, list[dict], dict]:
     """(the plan named, its problems, the room's model as room.read gives it) for a reader that needs the model at
     each step (the cost simulator). The plan is None when the room has no such plan or it is left out; the room's
     model {ok: False, …} when the room cannot be read."""
-    old = R.read(Path(root), plans=name)
+    old = R.read(Path(root), words=words, plans=name)
     if not old.get("ok"):
         return None, [], old
     entry = (old.get("migrations") or [{}])[0]

@@ -176,7 +176,7 @@ function srMigCost() {
   const seq = ++P.costSeq;
   SOURCE.infraCost(SR.project, { seq, migration: P.entry.name }).then((got) => {
     if (SR_MIG.P !== P || seq !== P.costSeq) return;
-    P.cost = got && got.ok ? got : { ok: false, message: (got && (got.message || got.reason)) || '' };
+    P.cost = got && got.ok ? got : { ok: false, message: (got && (got.short || got.message || got.reason)) || '' };
     srMigRenderBar();
     if (typeof srcRender === 'function' && typeof SRC !== 'undefined' && SRC.mode === 'cost') srcRender();
   });
@@ -268,15 +268,13 @@ function srMigApply(V, all) {
     const st = srMigEdge(M.e);
     if (!all && Math.abs(M.v - st.v) < 1e-4 && M.mode === st.mode) { srMigLight(V, M, st); continue; }
     M.v = st.v; M.mode = st.mode;
-    const arr = M.line.geometry.attributes.position.array, o = M.j * 6, a = M.a, b = M.b;
-    for (let c = 0; c < 3; c++) {
-      if (st.mode === 'shrink') { const mid = (a[c] + b[c]) / 2; arr[o + c] = mid + (a[c] - mid) * st.v; arr[o + 3 + c] = mid + (b[c] - mid) * st.v; }
-      else { arr[o + c] = a[c]; arr[o + 3 + c] = a[c] + (b[c] - a[c]) * st.v; }
-    }
+    const a = M.a, b = M.b, mid = a.map((x, c) => (x + b[c]) / 2);   // going: to its middle; coming: out of its start
+    if (st.mode === 'shrink') srCableSet(M.line, M.j, a.map((x, c) => mid[c] + (x - mid[c]) * st.v), b.map((x, c) => mid[c] + (x - mid[c]) * st.v));
+    else srCableSet(M.line, M.j, a, a.map((x, c) => x + (b[c] - x) * st.v));
     lines.add(M.line);
     srMigLight(V, M, st);
   }
-  for (const l of lines) { l.geometry.attributes.position.needsUpdate = true; l.geometry.computeBoundingSphere(); if (l.material.isLineDashedMaterial) l.computeLineDistances(); }
+  for (const l of lines) srCableDone(l);
   srMigFloors(V);
 }
 /* An edge coming in: the flows' light at its head while it is drawn. */

@@ -2504,7 +2504,7 @@ def _cost_migration(args):
     if not out["ok"]:
         print(f"cost infra: cannot simulate ({out['reason']}): {out['message']}", file=sys.stderr)
         for p in out.get("problems", []):
-            print(f"  {p['severity'].upper()} {p.get('file') or ''} {p['path']}: {p['message']}  [{p['code']}]",
+            print(f"  {p['severity'].upper()} {p.get('short') or (p.get('file') or '') + ' ' + p['path'] + ': ' + p['message']}  [{p['code']}]",
                   file=sys.stderr)
         return code
 
@@ -2526,6 +2526,13 @@ def _cost_migration(args):
     for label, words in (("noRule", "no rule"), ("loadUndefined", "load undefined"), ("noPrice", "no price")):
         if out["new"][label]:
             print(f"  new model, {words}: " + ", ".join(out["new"][label][:8]))
+    for w in out["prices"]["warnings"]:   # as cost infra prints them: each its line (short)
+        print(f"  prices: {w}")
+    for p in out["problems"]["first"]:
+        print(f"  {p['severity'].upper()} {p.get('short') or p['file'] + ' ' + p['path'] + ': ' + p['message']}  [{p['code']}]")
+    if out["problems"]["count"] > len(out["problems"]["first"]):
+        print(f"  ... {out['problems']['count'] - len(out['problems']['first'])} more load problem(s): "
+              "jsonui-doc validate infra-load")
     return code
 
 

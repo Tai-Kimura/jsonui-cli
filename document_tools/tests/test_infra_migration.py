@@ -325,3 +325,23 @@ def test_the_japanese_words_of_a_migration_say_step_not_ho():
     for code in R.MIGRATION_JA:
         assert "歩" not in R.MIGRATION_JA[code], code
         assert "歩" not in R.DEFAULT_WORDS.migration("x", "docs/infra/migrations/p/changes.json", code), code
+
+
+def test_the_cli_says_a_plans_load_problems_and_price_notes_as_cost_infra_says_them(tmp_path, monkeypatch):
+    """cost infra --migration prints the load problems and the price notes cost infra prints, each by its line (short),
+    the same lines (2.3.20: cost infra's problems and notes are said in words)."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    root = _priced_room(tmp_path)
+    for f in (root / "docs/infra/load").glob("*.json"):
+        doc = json.loads(f.read_text())
+        doc["loads"].append({"node": "nowhere", "quantities": {"requests": {"amount": 1, "per": "second"}}})
+        f.write_text(json.dumps(doc))
+    said = [p for p in L.read(root)["problems"] if p["code"] == "load.node_missing" and p.get("node") == "nowhere"]
+    assert said and said[0]["short"]
+
+    def lines(*extra):
+        rc, out = _cli("cost", "infra", str(root), *extra)
+        return [x for x in out.splitlines() if x.startswith(("  WARNING", "  ERROR", "  prices:"))]
+    plain, plan = lines(), lines("--migration", "move")
+    assert plain and plan == plain
+    assert any(said[0]["short"] in x for x in plan)

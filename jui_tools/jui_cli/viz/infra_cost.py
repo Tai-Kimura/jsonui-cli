@@ -179,14 +179,20 @@ def migration(root: Path | str, seq, plan: str, scenario: str | None = None, acc
     document_tools' infra.cost.diff — the old month, the month after each step, the new, as cost infra --migration
     gives them — with the page's seq."""
     if not (isinstance(plan, str) and ID.match(plan)):
-        return _refuse(400, seq, "bad_request", "migration is a plan's name")
+        return _refuse(400, seq, "bad_request", "migration is a plan's name", i18n.tl("srv.cost.refused.migration"))
     if scenario is not None and not (isinstance(scenario, str) and ID.match(scenario)):
-        return _refuse(400, seq, "bad_request", "scenario is an id")
+        return _refuse(400, seq, "bad_request", "scenario is an id", i18n.tl("srv.cost.refused.scenario"))
     from ..core.document_tools_import import load_document_tools_module
-    diff = load_document_tools_module("infra.cost.diff")[0]
-    if diff is None:
-        return _refuse(500, seq, "unreadable", i18n.tl("srv.cost.no_tools"))
-    code, got = diff.reply(Path(root), plan, scenario, bool(account))
+    diff, room = load_document_tools_module("infra.cost.diff")[0], load_document_tools_module("infra.room")[0]
+    if diff is None or room is None:
+        return _refuse(500, seq, "unreadable", i18n.tl("srv.cost.no_tools"), i18n.tl("srv.cost.no_tools"))
+    code, got = diff.reply(Path(root), plan, scenario, bool(account), words=infra_words.RoomWords(room.LIMITS, room.EXCLUDE_MAX))
+    if not got.get("ok") and not got.get("short"):   # the refusals diff says in no words of its own: the page's
+        said = {"no_load": lambda: i18n.tl("srv.cost.refused.no_load", folder=got.get("dir", "")),
+                "no_scenario": lambda: i18n.tl("srv.cost.refused.no_scenario"),
+                "no_plan": lambda: i18n.tl("srv.cost.refused.no_plan", plan=plan),
+                "bad_plan": lambda: i18n.tl("srv.cost.refused.bad_plan", plan=plan)}.get(got.get("reason"))
+        got = dict(got, short=said() if said else got.get("message", ""))
     status = 200 if got.get("ok") else 404 if got.get("reason") in ("no_plan", "no_infra", "not_a_room", "no_load", "no_scenario") else 422
     return status, dict(got, seq=seq)
 

@@ -269,9 +269,12 @@ async def run_sr_migration(pw, out, failures):
         check(failures, m["sizes"]["db-prod"] == 1 and m["lengths"].get("api-prod->db-prod", 1) == 1, f"replaced: whole, its edges kept: {m['sizes']} {m['lengths']}")
 
         # remove: its edge shrinks to its middle, then the node goes; the bar's difference is this step's
+        sent_before = (await page.evaluate(MIG))["sent"]["api-prod->mailer"]
         await page.click("#sr-mplayer [data-sr-mp='step']")
         await until(page, "() => { const l = window.__dbg.srMig().lengths['api-prod->mailer']; return l > 0.05 && l < 0.95; }", "the edge going", timeout=20000)
         m = await page.evaluate(MIG)
+        check(failures, m["sent"]["api-prod->mailer"] > sent_before,   # the cables' ends written are drawn: handed to the GPU
+              f"the edge going is handed to the GPU as it shrinks: {sent_before} -> {m['sent']['api-prod->mailer']}")
         step_diff = T("sr.mig.cost.step", diff=("+" if cli["steps"][2]["diff"] >= 0 else "−") + await usd(abs(cli["steps"][2]["diff"])))
         check(failures, step_diff in m["bar"], f"the bar's difference is the step played: {m['bar']!r} lacks {step_diff!r}")
         await until(page, "() => { const s = window.__dbg.srMig().sizes['mailer']; return s > 0.05 && s < 0.95; }", "the node shrinking away", timeout=20000)

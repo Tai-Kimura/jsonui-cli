@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from jui_cli.core.document_tools_import import load_document_tools_module
 from jui_cli.viz import i18n, infra_cost, infra_docs
 from tests.test_viz_infra_docs import TOKEN, _room, _serve, _world
@@ -100,3 +102,28 @@ def test_the_japanese_words_of_a_migration_say_step_not_ho():
     ho = {k: ja[k] for k in sorted(keys) if k in ja and "歩" in ja[k]}
     assert not ho, ho
     assert ja["sr.mig.at"].endswith("ステップ") and "ステップ" in ja["sr.mig.cost.step"] + ja["sr.mig.total.now"]
+
+
+@pytest.mark.parametrize("lang", ["ja", "en"])
+def test_the_routes_lines_are_the_pages_language(tmp_path, lang):
+    """The migration's cost reply says its refusals and its load problems in the page's language, as the cost
+    view's reply does (short on each): no Japanese under en, the table's words under ja."""
+    import re
+    before = i18n.active()
+    i18n.activate(i18n.load(lang, use_env=False))
+    try:
+        root = _plan(tmp_path)
+        load = next((root / "docs/infra/load").glob("*.json"))
+        doc = json.loads(load.read_text(encoding="utf-8"))
+        doc["loads"].append({"node": "nowhere", "quantities": {"requests": {"amount": 1, "per": "second"}}})
+        load.write_text(json.dumps(doc), encoding="utf-8")
+        _s, got = infra_cost.migration(root, 1, "move")
+        missing = [p for p in got["problems"]["first"] if p["code"] == "load.node_missing"]
+        refusals = [infra_cost.migration(root, 1, "../x")[1], infra_cost.migration(root, 1, "nope")[1],
+                    infra_cost.migration(root, 1, "move", scenario="nope")[1]]
+        lines = [p["short"] for p in missing] + [r["short"] for r in refusals]
+        assert missing and all(lines), (missing, refusals)
+        ja = re.compile(r"[぀-ヿ一-鿿]")
+        assert all(bool(ja.search(x)) == (lang == "ja") for x in lines), lines
+    finally:
+        i18n.activate(before)

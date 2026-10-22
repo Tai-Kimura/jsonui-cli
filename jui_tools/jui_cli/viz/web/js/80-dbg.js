@@ -122,10 +122,11 @@ window.__dbg = {
       const s = Math.round(sc.x / it.sc.x * 1000) / 1000;
       sizes[id] = Math.max(sizes[id] || 0, s); (vers[id] = vers[id] || {})[it.ver] = Math.max((vers[id] || {})[it.ver] || 0, s);
     }
-    const lengths = {};
+    const lengths = {}, sent = {};   // sent: how many times each edge's cables were handed to the GPU (needsUpdate: version)
     for (const M of V.migEdges || []) {
-      const a = M.line.geometry.attributes.position.array, o = M.j * 6, full = Math.hypot(M.b[0] - M.a[0], M.b[2] - M.a[2]) || 1;
-      lengths[M.key] = Math.round(Math.hypot(a[o + 3] - a[o], a[o + 5] - a[o + 2]) / full * 1000) / 1000;
+      sent[M.key] = M.line.geometry.getAttribute('cableStart').version;
+      const [a, b] = srCableGet(M.line, M.j), full = Math.hypot(M.b[0] - M.a[0], M.b[2] - M.a[2]) || 1;
+      lengths[M.key] = Math.round(Math.hypot(b[0] - a[0], b[2] - a[2]) / full * 1000) / 1000;
     }
     const models = {};
     if (V.models) for (const g of V.models.values()) models[g.userData.node] = { kind: g.userData.kind, visible: g.visible };
@@ -141,7 +142,7 @@ window.__dbg = {
       tags: [...document.querySelectorAll('#sr-toasts [data-sr-mig-tag]')].map((el) => ({ node: el.dataset.srMigTag, step: Number(el.dataset.srMigStep), text: el.textContent, up: el.classList.contains('sr-up'), opacity: Number(el.style.opacity || 1), transform: el.style.transform })),
       barStep: P.anim ? P.anim.i : P.k, barDiff: (($('sr-mplayer').querySelector('[data-sr-mp-diff]') || {}).textContent || ''),
       moved: (($('sr-mplayer').querySelector('[data-sr-mp-moved]') || {}).textContent || ''), n: P.entry.steps.length, state: P.state, anim: P.anim ? { i: P.anim.i, t: P.anim.t } : null,
-      log: P.log.slice(), sizes, lengths, models, shapes, lights: P.lights.size, floors: (V.migFloorShown || []).slice().sort(), drawnNodes, drawnEdges,
+      log: P.log.slice(), sizes, lengths, sent, models, shapes, lights: P.lights.size, floors: (V.migFloorShown || []).slice().sort(), drawnNodes, drawnEdges,
       newNodes: P.entry.model.nodes.filter((n) => srVisible(n, V.env) && (V.fold || !n.fold)).map((n) => n.id).sort(),
       newEdges: P.entry.model.edges.filter((e) => srVisible(e, V.env)).map(srMigKey).sort(),
       newGroups: P.entry.model.groups.filter((g) => srVisible(g, V.env)).map((g) => g.id).sort(),
