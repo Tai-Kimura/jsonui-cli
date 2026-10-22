@@ -13,9 +13,11 @@ does not run. In both cases the run is green and the output is exactly what a
 project that never configured the thing would produce. Only A/B finds it.
 
 The set is a declaration, not logic: each key is read by exactly one tool
-(`test` by two), so nothing here can drift out of step with behaviour without
-a key being added somewhere and not added here — which the corpus check below
-turns into a failing test rather than a silent gap.
+(`test` by two). A key added to a reader and not here is a warning on every
+config that uses it — `infra` (read since 2.3.9), `db` and `build` (since 1.1.0) were, and the warning
+said the settings never arrived when they did. The readers' keys are collected
+from their code and held to this set (document_tools/tests/
+test_config_keys_readers.py), so that gap is a failing test.
 
 Keys beginning with `_` are notes. Two consumer configs already carry `_note`
 and `_comment`, and a config is a reasonable place to explain itself.
@@ -59,10 +61,12 @@ _JUI = frozenset({
     "spec_directory", "component_spec_directory", "layouts_directory",
     "styles_directory", "images_directory", "strings_file", "type_map_file",
     "document_tools_path", "lint", "verify", "test",
+    "build",                # build.normalizeLayouts (build_cmd._normalize_layouts_enabled)
 })
 
-#: Read by `jsonui-doc`.
-_DOC = frozenset({"checks", "databases"})
+#: Read by `jsonui-doc`. `infra`: the server room's folder, icons and exclude (infra/room.py, check/infra_check.py);
+#: `db`: the one database a project declared before `databases` (project_config.py reads it still).
+_DOC = frozenset({"checks", "databases", "infra", "db"})
 
 #: Read by `jsonui-test`.
 _TEST = frozenset({"mock", "test"})
