@@ -52,8 +52,12 @@ def per_hours() -> dict[str, float]:
     return dict(schema()["$defs"]["per"]["x-hours"])
 
 
-def _p(file: str, path: str, code: str, message: str, severity: str = "error", **where) -> dict:
+def _p(file: str, path: str, code: str, message: str, severity: str = "error", say: tuple | None = None,
+       **where) -> dict:
+    """A problem; say: (its words' key, the values they name), for a line in another language (room.SIDE_JA)."""
     out = M._problem(file, path, code, message, severity)
+    if say:
+        out["detail"] = {"keyword": say[0], **say[1]}
     out.update({k: v for k, v in where.items() if v is not None})
     return out
 
@@ -93,7 +97,7 @@ def check_timezone(name: str, doc: dict) -> list[dict]:
     try:
         ZoneInfo(tz)
     except (ZoneInfoNotFoundError, ValueError):
-        return [_p(name, "/timezone", "load.timezone", "not a timezone this machine knows", fn="check_timezone")]
+        return [_p(name, "/timezone", "load.timezone", "not a timezone this machine knows", say=("load.timezone", {}), fn="check_timezone")]
     return []
 
 
@@ -108,13 +112,13 @@ def check_dates(name: str, doc: dict) -> list[dict]:
             try:
                 date.fromisoformat(d)
             except ValueError:
-                out.append(_p(name, path, "load.date", "not a date of the calendar", fn="check_dates"))
+                out.append(_p(name, path, "load.date", "not a date of the calendar", say=("load.date.calendar", {}), fn="check_dates"))
                 continue
             if not d.startswith(month + "-"):
-                out.append(_p(name, path, "load.date", f"not in the month {month}", fn="check_dates"))
+                out.append(_p(name, path, "load.date", f"not in the month {month}", say=("load.date.month", {"month": month}), fn="check_dates"))
             if kind == "days":
                 if d in seen:
-                    out.append(_p(name, path, "load.date", "the same date twice in days", fn="check_dates"))
+                    out.append(_p(name, path, "load.date", "the same date twice in days", say=("load.date.twice", {}), fn="check_dates"))
                 seen.add(d)
     return out
 
@@ -125,7 +129,7 @@ def check_refs(name: str, doc: dict) -> list[dict]:
 
     def need(value, have, path, what):
         if value is not None and value not in have:
-            out.append(_p(name, path, "load.ref", f"names a {what} not defined in this file", fn="check_refs"))
+            out.append(_p(name, path, "load.ref", f"names a {what} not defined in this file", say=("load.ref", {"what": what}), fn="check_refs"))
     for d in DAYS:
         need(doc.get("week", {}).get(d), profiles, f"/week/{d}", "profile")
     for i, item in enumerate(doc.get("days", [])):
@@ -146,9 +150,9 @@ def check_schedules(name: str, doc: dict) -> list[dict]:
             path = f"/schedules/{M._seg(sname, schema())}/rules/{i}"
             if _minutes(rule["to"]) <= _minutes(rule["from"]):
                 out.append(_p(name, path, "load.rule", "ends at or before it starts (a rule past midnight is two rules)",
-                              fn="check_schedules"))
+                              say=("load.rule", {}), fn="check_schedules"))
             if "min" in rule and "max" in rule and rule["min"] > rule["max"]:
-                out.append(_p(name, path, "load.minmax", "min is above max", fn="check_schedules"))
+                out.append(_p(name, path, "load.minmax", "min is above max", say=("load.minmax", {}), fn="check_schedules"))
     return out
 
 
@@ -163,22 +167,22 @@ def check_autoscale(name: str, i: int, row: dict, sch: dict | None) -> list[dict
     if not a:
         return out
     if a["min"] > a["max"]:
-        out.append(_p(name, path, "load.minmax", "min is above max", fn="check_autoscale"))
+        out.append(_p(name, path, "load.minmax", "min is above max", say=("load.minmax", {}), fn="check_autoscale"))
     for j, rule in enumerate((sch or {}).get("rules", [])):
         lo, hi = rule.get("min", a["min"]), rule.get("max", a["max"])
         if lo > hi:
             out.append(_p(name, f"{path}", "load.minmax",
-                          f"min is above max in the hours of its schedule's rule {j}", fn="check_autoscale"))
+                          f"min is above max in the hours of its schedule's rule {j}", say=("load.minmax.rule", {"j": j}), fn="check_autoscale"))
     pi = a.get("per_instance")
     if pi is None and not row.get("vertical"):
         out.append(_p(name, path, "load.autoscale", "per_instance is required (it may be left out only with vertical, "
-                      "whose steps say what one instance takes)", fn="check_autoscale"))
+                      "whose steps say what one instance takes)", say=("load.autoscale.per_instance", {}), fn="check_autoscale"))
     elif pi is not None and not _flow_written(row, pi["quantity"]):
         out.append(_p(name, f"{path}/per_instance/quantity", "load.autoscale",
-                      "names no flow quantity this row writes", fn="check_autoscale", quantity=pi["quantity"]))
+                      "names no flow quantity this row writes", say=("load.flow_unwritten", {}), fn="check_autoscale", quantity=pi["quantity"]))
     elif pi is not None and row.get("vertical") and pi["quantity"] != row["vertical"].get("quantity"):
         out.append(_p(name, f"{path}/per_instance/quantity", "load.autoscale",
-                      "with vertical, the quantity must be vertical's", fn="check_autoscale", quantity=pi["quantity"]))
+                      "with vertical, the quantity must be vertical's", say=("load.autoscale.vertical", {}), fn="check_autoscale", quantity=pi["quantity"]))
     return out
 
 
@@ -198,29 +202,29 @@ def check_vertical(name: str, i: int, row: dict, sch: dict | None) -> list[dict]
         return out
     skus = [s["sku"] for s in v["ladder"]]
     if len(set(skus)) != len(skus):
-        out.append(_p(name, f"{path}/ladder", "load.ladder", "the same sku twice", fn="check_vertical"))
+        out.append(_p(name, f"{path}/ladder", "load.ladder", "the same sku twice", say=("load.ladder.duplicate", {}), fn="check_vertical"))
     for k, step in enumerate(v["ladder"]):
         if "amount" not in step and "vcpu" not in step and "memory_gb" not in step:
             out.append(_p(name, f"{path}/ladder/{k}", "load.ladder", "says neither amount nor vcpu / memory_gb",
-                          fn="check_vertical"))
+                          say=("load.ladder.amount", {}), fn="check_vertical"))
         elif k and not _grows(v["ladder"][k - 1], step):
             out.append(_p(name, f"{path}/ladder/{k}", "load.ladder", "not bigger than the step before it",
-                          fn="check_vertical"))
+                          say=("load.ladder.grow", {}), fn="check_vertical"))
     for end in ("min", "max"):
         if end in v and v[end] not in skus:
-            out.append(_p(name, f"{path}/{end}", "load.ladder", "not a step of the ladder", fn="check_vertical"))
+            out.append(_p(name, f"{path}/{end}", "load.ladder", "not a step of the ladder", say=("load.ladder.not_step", {}), fn="check_vertical"))
     if v.get("min") in skus and v.get("max") in skus and skus.index(v["min"]) > skus.index(v["max"]):
-        out.append(_p(name, path, "load.minmax", "min's step is above max's", fn="check_vertical"))
+        out.append(_p(name, path, "load.minmax", "min's step is above max's", say=("load.minmax.step", {}), fn="check_vertical"))
     if any("amount" in s for s in v["ladder"]):
         if "quantity" not in v:
-            out.append(_p(name, path, "load.ladder", "the steps say amounts: quantity is required", fn="check_vertical"))
+            out.append(_p(name, path, "load.ladder", "the steps say amounts: quantity is required", say=("load.ladder.quantity", {}), fn="check_vertical"))
         elif not _flow_written(row, v["quantity"]):
             out.append(_p(name, f"{path}/quantity", "load.ladder", "names no flow quantity this row writes",
-                          fn="check_vertical", quantity=v["quantity"]))
+                          say=("load.flow_unwritten", {}), fn="check_vertical", quantity=v["quantity"]))
     for j, rule in enumerate((sch or {}).get("rules", [])):
         if "sku" in rule and rule["sku"] not in skus:
             out.append(_p(name, path, "load.ladder", f"its schedule's rule {j} names a sku not in the ladder",
-                          fn="check_vertical"))
+                          say=("load.ladder.rule", {"j": j}), fn="check_vertical"))
     return out
 
 
@@ -229,14 +233,14 @@ def check_rows(name: str, doc: dict) -> list[dict]:
     schedules = doc.get("schedules", {})
     for i, row in enumerate(doc.get("loads", [])):
         if ("node" in row) == ("nodes" in row):
-            out.append(_p(name, f"/loads/{i}", "load.target", "needs exactly one of node and nodes", fn="check_rows"))
+            out.append(_p(name, f"/loads/{i}", "load.target", "needs exactly one of node and nodes", say=("load.target.node", {}), fn="check_rows"))
         sch = schedules.get(row.get("schedule"))
         out += check_autoscale(name, i, row, sch) + check_vertical(name, i, row, sch)
     for i, row in enumerate(doc.get("edges", [])):
         by_id, by_ends, any_end = "edge" in row, "from" in row and "to" in row, "from" in row or "to" in row
         if not ((by_id and not any_end) or (by_ends and not by_id)):
             out.append(_p(name, f"/edges/{i}", "load.target", "needs the edge's id, or both from and to",
-                          fn="check_rows"))
+                          say=("load.target.edge", {}), fn="check_rows"))
     return out
 
 
@@ -317,10 +321,10 @@ def environment_of(name: str, doc: dict, model: dict) -> tuple[str, list[dict]]:
     if want is None:
         return envs[0], ([_p(name, "/environment", "load.environment",
                              f"not given and the model has {len(envs)} environments: the first is used", "warning",
-                             fn="environment_of")] if len(envs) > 1 else [])
+                             say=("load.environment.none", {"n": len(envs)}), fn="environment_of")] if len(envs) > 1 else [])
     if want not in envs:
         return envs[0], [_p(name, "/environment", "load.environment",
-                            "not an environment of the model: the first is used", "warning", fn="environment_of")]
+                            "not an environment of the model: the first is used", "warning", say=("load.environment.unknown", {}), fn="environment_of")]
     return want, []
 
 
@@ -359,30 +363,30 @@ def assign_rows(name: str, doc: dict, env: str, model: dict) -> tuple[dict[str, 
             nid = row["node"]
             if nid not in nodes_all:
                 out.append(_p(name, f"/loads/{i}/node", "load.node_missing", "names a node the model does not have: "
-                              "this row is left out", "warning", fn="assign_rows", node=nid))
+                              "this row is left out", "warning", say=("load.node_missing", {}), fn="assign_rows", node=nid))
                 continue
             if env not in nodes_all[nid]["environments"]:
                 out.append(_p(name, f"/loads/{i}/node", "load.not_in_environment",
                               "the node is not in this scenario's environment: this row is left out", "warning",
-                              fn="assign_rows", node=nid))
+                              say=("load.not_in_environment", {}), fn="assign_rows", node=nid))
                 continue
             targets, own = [nid], True
         else:
             targets, own = [n["id"] for n in select(row["nodes"], in_env, groups)], False
             if not targets:
                 out.append(_p(name, f"/loads/{i}/nodes", "load.select_none", "matches no node of the environment",
-                              "warning", fn="assign_rows"))
+                              "warning", say=("load.select_none", {}), fn="assign_rows"))
         for nid in targets:
             prev = got.get(nid)
             if prev is not None and prev[2] and not own:      # a node's own row beats a selector's
                 out.append(_p(name, f"/loads/{i}", "load.overlap", f"the node has its own row {prev[0]}: that one is "
                               "used (one row applies to a node, and a node's own row beats a selector's)", "warning",
-                              fn="assign_rows", node=nid))
+                              say=("load.overlap.own", {"row": prev[0]}), fn="assign_rows", node=nid))
                 continue
             if prev is not None:
                 out.append(_p(name, f"/loads/{i}", "load.overlap", f"the node already has row {prev[0]}: this later "
                               f"row is used and row {prev[0]} counts for nothing (one row applies to a node: put all of "
-                              "the node's quantities in one row)", "warning", fn="assign_rows", node=nid))
+                              "the node's quantities in one row)", "warning", say=("load.overlap.later", {"row": prev[0]}), fn="assign_rows", node=nid))
             got[nid] = (i, row, own)
     return {k: (i, r) for k, (i, r, _o) in got.items()}, out
 
@@ -401,7 +405,7 @@ def check_multi_az_sku(name: str, i: int, row: dict, schedule: dict | None) -> l
         if isinstance(sku, str) and sku.lower().endswith(":multi-az"):
             return [_p(name, path, "load.sku.multi_az", f"the sku {sku!r} is written with :multi-az: write the plain "
                        "sku and ha: multi-az on the node (the cost adds :multi-az to the instance and the storage from "
-                       "ha; by hand the storage stays single-AZ)", "warning", fn="check_multi_az_sku",
+                       "ha; by hand the storage stays single-AZ)", "warning", say=("load.sku.multi_az", {"sku": sku}), fn="check_multi_az_sku",
                        node=row.get("node"))]
     return []
 
@@ -416,13 +420,13 @@ def check_against_rule(name: str, i: int, row: dict, node: dict) -> list[dict]:
         if q not in rule.reads:
             out.append(_p(name, f"/loads/{i}/quantities/{q}", "load.quantity_unused",
                           f"a {node['category']} node does not read {q} ({rule.id})", "warning",
-                          fn="check_against_rule", node=node["id"], quantity=q))
+                          say=("load.quantity_unused", {"category": node["category"], "quantity": q, "rule": rule.id}), fn="check_against_rule", node=node["id"], quantity=q))
     if not rule.hourly:
         for k in ("schedule", "autoscale", "vertical"):
             if k in row:
                 out.append(_p(name, f"/loads/{i}/{k}", "load.schedule_unused",
                               f"a {node['category']} node is not billed by the hour ({rule.id}): {k} changes nothing",
-                              "warning", fn="check_against_rule", node=node["id"]))
+                              "warning", say=("load.schedule_unused", {"category": node["category"], "rule": rule.id, "field": k}), fn="check_against_rule", node=node["id"]))
     return out
 
 
@@ -437,11 +441,11 @@ def resolve_edges(name: str, doc: dict, env: str, model: dict) -> tuple[list[tup
             hits = [e for e in edges if e["from"] == row["from"] and e["to"] == row["to"]]
         if not hits:
             out.append(_p(name, f"/edges/{i}", "load.edge_missing", "names an edge the model does not have in this "
-                          "environment: this row is left out", "warning", fn="resolve_edges"))
+                          "environment: this row is left out", "warning", say=("load.edge_missing", {}), fn="resolve_edges"))
             continue
         if len(hits) > 1:
             out.append(_p(name, f"/edges/{i}", "load.edge_ambiguous", f"{len(hits)} edges join these nodes: the first "
-                          "is used (name it by its id)", "warning", fn="resolve_edges"))
+                          "is used (name it by its id)", "warning", say=("load.edge_ambiguous", {"n": len(hits)}), fn="resolve_edges"))
         found.append((i, row, hits[0]))
     return found, out
 
@@ -546,7 +550,7 @@ def check_stopped(name: str, i: int, node_id: str, quantities_: dict, mult: list
     h = hours[stopped[0]]
     return [_p(name, f"/loads/{i}", "load.while_stopped",
                f"{len(stopped)} hour(s) carry {', '.join(flows)} while the node runs 0 (first {h['date']} "
-               f"{h['hour']:02d}:00)", "warning", fn="check_stopped", node=node_id, quantity=flows[0],
+               f"{h['hour']:02d}:00)", "warning", say=("load.while_stopped", {"n": len(stopped), "flows": ", ".join(flows), "date": h["date"], "hour": f"{h['hour']:02d}"}), fn="check_stopped", node=node_id, quantity=flows[0],
                hour=f"{h['date']}T{h['hour']:02d}")]
 
 
@@ -590,19 +594,21 @@ def normalize(name: str, doc: dict, model: dict) -> tuple[dict, list[dict]]:
 
 # ---------------------------------------------------------------- the room's load definitions
 
-def read(root: Path) -> dict:
+def read(root: Path, words: R.Words = R.DEFAULT_WORDS) -> dict:
     """Every load definition of the room against its model: {ok, dir, files, scenarios, problems}, or {ok: False,
-    reason, message} when the model or the folder cannot be read. Blocking: call it off the event loop."""
+    reason, message, short} when the model or the folder cannot be read. Each problem has its line in ``words``'
+    language (short), as the model's have. Blocking: call it off the event loop."""
     root = Path(root)
-    model = R.read(root)
+    model = R.read(root, words=words)
     if not model.get("ok"):
         return {"ok": False, "reason": model.get("reason", "invalid"), "message": "the infra model cannot be read: "
-                + model.get("message", ""), "problems": model.get("problems", [])}
+                + model.get("message", ""), "short": model.get("short"), "problems": model.get("problems", [])}
+    folder = ""
     try:
         folder = R.side_dir(root, "load_dir")
         files, problems = R.read_json_folder(root, folder)
     except R.Refused as r:
-        return {"ok": False, "reason": r.reason, "message": r.message, "problems": []}
+        return {"ok": False, "reason": r.reason, "message": r.message, "short": r.line(folder, words), "problems": []}
     scenarios, used, ids = [], [], {}
     for name, raw in files:
         doc, found = check_file(name, raw)
@@ -611,11 +617,13 @@ def read(root: Path) -> dict:
             continue
         if doc["id"] in ids:
             problems.append(_p(name, "/id", "id.duplicate", f"scenario id is already used in {ids[doc['id']]}",
-                               fn="read"))
+                               say=("load.id.duplicate", {"file": ids[doc["id"]]}), fn="read"))
             continue
         ids[doc["id"]] = name
         scenario, found = normalize(name, doc, model)
         problems += found
         scenarios.append(scenario)
         used.append(name)
+    for p in problems:
+        p["short"] = R.short(p, folder, words)
     return {"ok": True, "dir": folder, "files": used, "scenarios": scenarios, "problems": problems}

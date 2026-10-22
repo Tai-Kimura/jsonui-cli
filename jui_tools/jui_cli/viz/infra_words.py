@@ -81,6 +81,41 @@ SCHEMA = {
     "maxProperties": "srv.room.schema.maxProperties"
 }
 
+#: a load definition's or a price file's problem, by its words key (room.SIDE_JA)
+SIDE = {
+    "load.timezone": "srv.room.side.load.timezone", "load.date.calendar": "srv.room.side.load.date.calendar",
+    "load.date.month": "srv.room.side.load.date.month", "load.date.twice": "srv.room.side.load.date.twice",
+    "load.ref": "srv.room.side.load.ref", "load.rule": "srv.room.side.load.rule",
+    "load.minmax": "srv.room.side.load.minmax", "load.minmax.rule": "srv.room.side.load.minmax.rule",
+    "load.minmax.step": "srv.room.side.load.minmax.step",
+    "load.autoscale.per_instance": "srv.room.side.load.autoscale.per_instance",
+    "load.autoscale.vertical": "srv.room.side.load.autoscale.vertical",
+    "load.flow_unwritten": "srv.room.side.load.flow_unwritten",
+    "load.ladder.duplicate": "srv.room.side.load.ladder.duplicate",
+    "load.ladder.amount": "srv.room.side.load.ladder.amount", "load.ladder.grow": "srv.room.side.load.ladder.grow",
+    "load.ladder.not_step": "srv.room.side.load.ladder.not_step",
+    "load.ladder.quantity": "srv.room.side.load.ladder.quantity",
+    "load.ladder.rule": "srv.room.side.load.ladder.rule", "load.target.node": "srv.room.side.load.target.node",
+    "load.target.edge": "srv.room.side.load.target.edge",
+    "load.environment.none": "srv.room.side.load.environment.none",
+    "load.environment.unknown": "srv.room.side.load.environment.unknown",
+    "load.node_missing": "srv.room.side.load.node_missing",
+    "load.not_in_environment": "srv.room.side.load.not_in_environment",
+    "load.select_none": "srv.room.side.load.select_none", "load.overlap.own": "srv.room.side.load.overlap.own",
+    "load.overlap.later": "srv.room.side.load.overlap.later", "load.sku.multi_az": "srv.room.side.load.sku.multi_az",
+    "load.quantity_unused": "srv.room.side.load.quantity_unused",
+    "load.schedule_unused": "srv.room.side.load.schedule_unused",
+    "load.edge_missing": "srv.room.side.load.edge_missing",
+    "load.edge_ambiguous": "srv.room.side.load.edge_ambiguous",
+    "load.while_stopped": "srv.room.side.load.while_stopped", "load.id.duplicate": "srv.room.side.load.id.duplicate",
+    "prices.row.exactly_one": "srv.room.side.prices.row.exactly_one",
+    "prices.row.effective": "srv.room.side.prices.row.effective",
+    "prices.row.tier_start": "srv.room.side.prices.row.tier_start",
+    "prices.row.tier_end": "srv.room.side.prices.row.tier_end",
+    "prices.row.tier_open": "srv.room.side.prices.row.tier_open",
+    "prices.row.tier_gap": "srv.room.side.prices.row.tier_gap", "prices.duplicate": "srv.room.side.prices.duplicate"
+}
+
 #: a JSON type's name (room.TYPE_JA)
 TYPE = {
     "object": "srv.room.type.object", "array": "srv.room.type.array", "string": "srv.room.type.string",
@@ -135,6 +170,9 @@ class RoomWords:
             name = lambda t: i18n.tl(TYPE[t]) if t in TYPE else t  # noqa: E731
             v.update(want=i18n.tl("srv.room.type.or").join(name(t) for t in v["want"]), found=name(v["found"]))
         return i18n.tl(SCHEMA[kw], where=where, path=path, **v)
+
+    def side(self, where, path, detail):
+        return i18n.tl(SIDE[detail["keyword"]], where=where, path=path, **{k: v for k, v in detail.items() if k != "keyword"})
 
     def reference(self, where, path, code):
         return i18n.tl("srv.room.reference", where=where, path=path, code=code)

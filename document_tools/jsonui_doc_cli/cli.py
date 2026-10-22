@@ -2372,10 +2372,9 @@ def cmd_validate_infra(args):
 
 
 def _print_side(kind: str, result: dict, summary: str) -> None:
-    for p in result["problems"]:
-        where = f"{p['file']} {p['path']}" if p.get("file") else p["path"]
+    for p in result["problems"]:   # the line validate infra prints for the model's (short: what is wrong, in words)
         extra = ", ".join(f"{k} {p[k]}" for k in ("node", "hour", "quantity") if p.get(k))
-        print(f"{p['severity'].upper()} {where}: {p['message']}  [{p['code']}{', ' + extra if extra else ''}]")
+        print(f"{p['severity'].upper()} {p['short']}  [{p['code']}{', ' + extra if extra else ''}]")
     print(summary)
 
 
@@ -2394,7 +2393,7 @@ def cmd_validate_infra_load(args):
                                 for s in result["scenarios"]]
         print(json.dumps(out, ensure_ascii=False, indent=2))
     elif not result["ok"]:
-        print(f"infra-load: cannot read ({result['reason']}): {result['message']}", file=sys.stderr)
+        print(f"infra-load: cannot read ({result['reason']}): {result.get('short') or result['message']}", file=sys.stderr)
     else:
         errs = sum(1 for p in result["problems"] if p["severity"] == "error")
         _print_side("infra-load", result, f"infra-load: {result['dir']}: {len(result['files'])} file(s) used, "
@@ -2414,7 +2413,7 @@ def cmd_validate_infra_prices(args):
             out["count"] = len(result["prices"])
         print(json.dumps(out, ensure_ascii=False, indent=2))
     elif not result["ok"]:
-        print(f"infra-prices: cannot read ({result['reason']}): {result['message']}", file=sys.stderr)
+        print(f"infra-prices: cannot read ({result['reason']}): {result.get('short') or result['message']}", file=sys.stderr)
     else:
         errs = sum(1 for p in result["problems"] if p["severity"] == "error")
         _print_side("infra-prices", result, f"infra-prices: {result['dir']}: {len(result['files'])} file(s) used, "
@@ -2440,7 +2439,7 @@ def cmd_cost_infra(args):
     if not out["ok"]:
         print(f"cost infra: cannot simulate ({out['reason']}): {out['message']}", file=sys.stderr)
         for p in out.get("problems", []):
-            print(f"  {p['severity'].upper()} {p.get('file') or ''} {p['path']}: {p['message']}  [{p['code']}]",
+            print(f"  {p['severity'].upper()} {p.get('short') or (p.get('file') or '') + ' ' + p['path'] + ': ' + p['message']}  [{p['code']}]",
                   file=sys.stderr)
         return code
     sc = next(s for s in out["scenarios"] if s["id"] == out["scenario"])
@@ -2476,7 +2475,7 @@ def cmd_cost_infra(args):
     for w in out["prices"]["warnings"]:
         print(f"  prices: {w}")
     for p in out["problems"]["first"]:
-        print(f"  {p['severity'].upper()} {p['file']} {p['path']}: {p['message']}  [{p['code']}]")
+        print(f"  {p['severity'].upper()} {p.get('short') or p['file'] + ' ' + p['path'] + ': ' + p['message']}  [{p['code']}]")
     if out["problems"]["count"] > len(out["problems"]["first"]):
         print(f"  ... {out['problems']['count'] - len(out['problems']['first'])} more load problem(s): "
               "jsonui-doc validate infra-load")

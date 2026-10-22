@@ -70,6 +70,50 @@ SCHEMA_JA = {"maxLength": "は {limit} 文字までです（今 {length} 文字�
              "minProperties": "は {limit} 項目以上です（今 {count} 項目）",
              "maxProperties": "は {limit} 項目までです（今 {count} 項目）"}
 
+#: one per words key a load definition's or a price file's problem says (load.py, prices.py: a problem's detail; the
+#: test_infra_side_words gate: a key with no words, or words no problem says, is red). The slots are the detail's
+SIDE_JA = {"load.timezone": "は、この機械が知らない timezone です",
+           "load.date.calendar": "は、暦にある日付ではありません",
+           "load.date.month": "は、{month} の月の日付ではありません",
+           "load.date.twice": "は、days に 2 度ある日付です",
+           "load.ref": "が、このファイルに無い {what} を指しています",
+           "load.rule": "の rule は、始まる時刻か、それより前に終わります（日をまたぐ rule は 2 つに分けてください）",
+           "load.minmax": "の min が max より大きいです",
+           "load.minmax.rule": "の min が、schedule の rule {j} の時間では max より大きいです",
+           "load.minmax.step": "の min の step が、max の step より上です",
+           "load.autoscale.per_instance": "に per_instance がありません（書かずに済むのは vertical の時だけです。その step が 1 台の受け持ちを言います）",
+           "load.autoscale.vertical": "は、vertical がある時は vertical の quantity でなければなりません",
+           "load.flow_unwritten": "が、この行の書く flow の量を指していません",
+           "load.ladder.duplicate": "に、同じ sku が 2 度あります",
+           "load.ladder.amount": "は、amount も vcpu・memory_gb も言っていません",
+           "load.ladder.grow": "は、1 つ前の step より大きくありません",
+           "load.ladder.not_step": "は、ladder の step ではありません",
+           "load.ladder.quantity": "の step が amount を言うので、quantity が要ります",
+           "load.ladder.rule": "の schedule の rule {j} が、ladder に無い sku を指しています",
+           "load.target.node": "には、node と nodes のどちらか 1 つが要ります",
+           "load.target.edge": "には、辺の id か、from と to の両方が要ります",
+           "load.environment.none": "が書かれておらず、モデルに環境が {n} 個あります（最初の環境を使います）",
+           "load.environment.unknown": "は、モデルの環境ではありません（最初の環境を使います）",
+           "load.node_missing": "が、モデルに無い node を指しています（この行は使いません）",
+           "load.not_in_environment": "の node は、この scenario の環境にありません（この行は使いません）",
+           "load.select_none": "は、環境のどの node にも当たりません",
+           "load.overlap.own": "の node には、自分の行 {row} があります（そちらを使います。1 つの node に効く行は 1 つで、node 自身の行が selector の行に勝ちます）",
+           "load.overlap.later": "の node には、もう行 {row} があります（後のこの行を使い、行 {row} は数えません。1 つの node に効く行は 1 つです。node の量は 1 行にまとめてください）",
+           "load.sku.multi_az": "の sku {sku} は :multi-az 付きです（素の sku を書き、node に ha: multi-az と書いてください。費用は ha から instance と storage に :multi-az を足します。手で書くと storage は single-AZ のままです）",
+           "load.quantity_unused": "は、{category} の node が読まない量です（{rule}）",
+           "load.schedule_unused": "は、時間で課金されない {category} の node では何も変えません（{rule}）",
+           "load.edge_missing": "が、この環境のモデルに無い辺を指しています（この行は使いません）",
+           "load.edge_ambiguous": "の node の間に、辺が {n} 本あります（最初の 1 本を使います。辺は id で指してください）",
+           "load.while_stopped": "で、node が 0 台の {n} 時間に {flows} が流れます（最初は {date} {hour}:00）",
+           "load.id.duplicate": "の scenario の id は、{file} でもう使われています",
+           "prices.row.exactly_one": "には、price_usd と tiers のどちらか 1 つが要ります（この行は使いません）",
+           "prices.row.effective": "の effective は、暦にある日付ではありません（この行は使いません）",
+           "prices.row.tier_start": "の最初の tier が 0 から始まりません（この行は使いません）",
+           "prices.row.tier_end": "の tier {k} は、始まる所か、それより前で終わります（この行は使いません）",
+           "prices.row.tier_open": "の tier {k} は、終わりが無いのに最後ではありません（この行は使いません）",
+           "prices.row.tier_gap": "の tier {next} が、tier {k} の終わる所から始まりません（この行は使いません）",
+           "prices.duplicate": "は、行 {row} と同じ価格です（先の行を使います）"}
+
 #: a JSON type's name, in a type line (SCHEMA_JA["type"])
 TYPE_JA = {"object": "オブジェクト", "array": "配列", "string": "文字列", "integer": "整数", "number": "数",
            "boolean": "真偽値（true・false）", "null": "null"}
@@ -111,6 +155,10 @@ class Words:
         if kw == "type":
             v.update(want="か".join(TYPE_JA.get(t, t) for t in v["want"]), found=TYPE_JA.get(v["found"], v["found"]))
         return f"{where}: {path} " + SCHEMA_JA[kw].format(**v)
+
+    def side(self, where: str, path: str, detail: dict) -> str:
+        """A load definition's or a price file's problem (SIDE_JA, by its detail's keyword)."""
+        return f"{where}: {path} " + SIDE_JA[detail["keyword"]].format(**detail)
 
     def reference(self, where: str, path: str, code: str) -> str:
         return f"{where}: {path} の参照が合いません（{code}）"
@@ -180,6 +228,8 @@ def short(p: dict, folder: str, words: Words = DEFAULT_WORDS) -> str:
     f = p.get("file") or ""
     where = f if f == CONFIG_NAME or not f else f"{folder}/{f}"
     code = p["code"]
+    if (p.get("detail") or {}).get("keyword") in SIDE_JA:
+        return words.side(where, p["path"], p["detail"])
     if code == "json":
         return words.json_line(where, p["line"]) if p.get("line") else words.json(where)
     if code.startswith("secret."):

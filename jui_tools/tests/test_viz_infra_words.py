@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import re
+import string
 from pathlib import Path
 
 import pytest
@@ -44,6 +45,10 @@ SCHEMA_DETAIL = {
 SCHEMA_DETAIL = {kw: {"keyword": kw, **d} for kw, d in SCHEMA_DETAIL.items()}
 
 
+def _slots(text: str) -> set[str]:
+    return {f for _, f, _, _ in string.Formatter().parse(text) if f}
+
+
 def _table(language: str) -> dict:
     return json.loads(web_text("i18n", f"{language}.json"))
 
@@ -73,6 +78,8 @@ def _room_lines(words) -> dict[str, str]:
     lines.update({f"schema.{kw}": words.schema(WHERE, "/nodes/0/x", d) for kw, d in SCHEMA_DETAIL.items()})
     lines.update({f"schema.type.{t}": words.schema(WHERE, "/nodes/0/x", {"keyword": "type", "want": [t, "null"], "found": t})
                   for t in room.TYPE_JA})
+    lines.update({f"side.{k}": words.side(WHERE, "/loads/0", {"keyword": k, **{f: f"<{f}>" for f in _slots(w)}})
+                  for k, w in room.SIDE_JA.items()})
     lines.update({f"exclude.{w}": words.exclude(room.CONFIG_NAME, "/infra/exclude/0", w) for w in room.EXCLUDE_JA})
     lines.update({f"secret.{k}": words.secret(WHERE, "/nodes/0/x", k) for k in room.SECRET_JA})
     lines.update({f"flow:{c}": words.flow(WHERE, "/flows/0", c) for c in room.FLOW_JA})
@@ -107,8 +114,9 @@ def test_the_keys_are_closed_both_ways():
     have |= {f"srv.room.refused.{r}" for r in REFUSED} | {f"srv.room.said.{k}" for k in SAID}
     have |= {f"srv.room.exclude.{w}" for w in room.EXCLUDE_JA}
     have |= {f"srv.room.schema.{kw}" for kw in room.SCHEMA_JA} | {f"srv.room.type.{t}" for t in room.TYPE_JA} | {"srv.room.type.or"}
+    have |= {f"srv.room.side.{k}" for k in room.SIDE_JA}
     families = ("srv.cost.q.", "srv.cost.meter.", "srv.room.secret.", "srv.room.flow.", "srv.room.refused.", "srv.room.said.",
-                "srv.room.exclude.", "srv.room.schema.", "srv.room.type.")
+                "srv.room.exclude.", "srv.room.schema.", "srv.room.type.", "srv.room.side.")
     assert sorted(k for k in ja if k.startswith(families) and k not in have) == []
     assert sorted(k for k in have if k not in ja) == []
     assert (set(infra_words.QUANTITY), set(infra_words.METER), set(infra_words.SECRET), set(infra_words.FLOW),
@@ -116,6 +124,7 @@ def test_the_keys_are_closed_both_ways():
             set(infra_words.TYPE)) == (
         set(load.quantities()), set(view.METER_LABELS), set(room.SECRET_JA), set(room.FLOW_JA), set(REFUSED), set(SAID),
         set(room.EXCLUDE_JA), set(room.SCHEMA_JA), set(room.TYPE_JA))
+    assert set(infra_words.SIDE) == set(room.SIDE_JA)
     assert set(SCHEMA_DETAIL) == set(room.SCHEMA_JA)
 
 
@@ -223,3 +232,34 @@ def test_a_schema_problem_says_what_is_wrong_on_the_page(tmp_path, language, lan
     (tmp_path / "docs" / "infra" / "main.json").write_text(json.dumps(model), encoding="utf-8")
     _status, got = infra_docs.read(tmp_path)
     assert [p["short"] for p in got["problems"]] == [want], got
+
+
+
+@pytest.mark.parametrize("lang", ["ja", "en"])
+def test_the_cost_screens_problems_are_in_the_pages_language(tmp_path, language, lang):
+    """コスト: a load definition's problem and a price file's are the table's lines in the page's language (they
+    were the English message on the Japanese page too: ticket 2026-10-22-infra-schema-errors-say-only-schema)."""
+    from jui_cli.viz import infra_cost as C
+    from tests.test_viz_infra_docs import _room
+    language(lang)
+    C.forget()
+    try:
+        root = _room(tmp_path, "aws-three-tier")
+        load = root / "docs/infra/load/ordinary.json"
+        doc = json.loads(load.read_text(encoding="utf-8"))
+        doc["loads"].append({"node": "nope", "quantities": {"requests": 1}})
+        load.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+        price = {"provider": "aws", "service": "s3", "sku": "get", "region": "ap-northeast-1", "unit": "request",
+                 "price_usd": 0.0004, "effective": "2026-10-01", "source": "manual"}
+        (root / "docs/infra/prices").mkdir(parents=True, exist_ok=True)
+        (root / "docs/infra/prices/p.json").write_text(json.dumps({"version": 0, "prices": [price, price]}), encoding="utf-8")
+        status, got = C.read(root, seq=1)
+    finally:
+        C.forget()
+    assert status == 200, got
+    line = [p["short"] for p in got["problems"]["first"] if p["code"] == "load.node_missing"]
+    warn = [w for w in got["prices"]["warnings"] if w.endswith("[prices.duplicate]")]
+    want = {"ja": ("が、モデルに無い node を指しています（この行は使いません）", "は、行 0 と同じ価格です（先の行を使います）"),
+            "en": ("names a node the model does not have (this row is left out)", "is the same price as row 0 (that one is kept)")}[lang]
+    assert len(line) == 1 and line[0].endswith(f"/loads/{len(doc['loads']) - 1}/node {want[0]}"), got["problems"]
+    assert warn == [f"docs/infra/prices/p.json: /prices/1 {want[1]} [prices.duplicate]"], got["prices"]

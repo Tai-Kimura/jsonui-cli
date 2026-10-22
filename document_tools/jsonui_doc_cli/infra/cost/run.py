@@ -30,7 +30,7 @@ def _refuse(reason: str, message: str) -> tuple[int, dict]:
 
 
 def _problem(p: dict) -> dict:
-    return {k: p.get(k) for k in ("file", "path", "code", "message", "severity", "node")}
+    return {k: p.get(k) for k in ("file", "path", "code", "message", "short", "severity", "node")}
 
 
 def reply(root: Path | str, scenario: str | None = None, date: str | None = None, by: str = "provider",

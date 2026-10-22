@@ -93,15 +93,16 @@ class Book:
         return None
 
 
-def load(root: Path | None = None, env: dict | None = None) -> tuple[Book, list[str]]:
-    """The book for a room: its price files (prices.read), the cache and the bundled table; and warnings."""
+def load(root: Path | None = None, env: dict | None = None, words=None) -> tuple[Book, list[str]]:
+    """The book for a room: its price files (prices.read), the cache and the bundled table; and warnings. A price
+    file's problem is its line in ``words``' language (prices.read's short; room.Words when None) and its code."""
     warnings: list[str] = []
     user: list[dict] = []
     if root is not None:
-        got = P.read(Path(root))
+        got = P.read(Path(root), **({"words": words} if words is not None else {}))
         if got.get("ok"):
             user = got["prices"]
-            warnings += [f"{p['file']} {p['path']}: {p['message']} [{p['code']}]" for p in got["problems"]]
+            warnings += [f"{p['short']} [{p['code']}]" for p in got["problems"]]
         else:
             warnings.append(f"the room's price files are not used ({got['reason']}): {got['message']}")
     cache, why = cache_rows(cache_dir(env))

@@ -85,7 +85,7 @@ def _simulate(m: dict, root: Path, scenario_id: str | None, account: bool | None
     """(status, error reply) or (None, (the loads' reply, the chosen scenario, the model, the result, warnings, the
     account: None, or (its scenarios, their results, the environments left out))). With account, the result is the
     chosen scenario's within the account's pricing; None: the account where it can be had."""
-    loads = m["load"].read(root)
+    loads = m["load"].read(root, words=infra_words.RoomWords(m["room"].LIMITS, m["room"].EXCLUDE_MAX))
     if not loads.get("ok"):
         return (404 if loads.get("reason") in ("no_infra", "not_a_room") else 422), loads
     scenarios = loads["scenarios"]
@@ -104,7 +104,7 @@ def _simulate(m: dict, root: Path, scenario_id: str | None, account: bool | None
         if kept is not None:
             _KEPT.move_to_end(key)
             return None, kept
-    book, warnings = m["pricebook"].load(root)
+    book, warnings = m["pricebook"].load(root, words=infra_words.RoomWords(m["room"].LIMITS, m["room"].EXCLUDE_MAX))
     acct = None
     if account:
         available, picked, missing = account_scenarios(scenarios, model, chosen)
@@ -161,7 +161,7 @@ def read(root: Path | str, seq=None, scenario: str | None = None, date: str | No
                  else m["view"].month_view(result, model, by, words=infra_words.CostLabels()),
                  "account": {"available": account_scenarios(loads["scenarios"], model, chosen)[0], "on": bool(acct),
                              **({"scenarios": [s["id"] for s in acct[0]], "missing": acct[2]} if acct else {})},
-                 "problems": {"count": len(problems), "first": [{k: p.get(k) for k in ("file", "path", "code", "message", "severity")}
+                 "problems": {"count": len(problems), "first": [{k: p.get(k) for k in ("file", "path", "code", "message", "short", "severity")}
                                                                  for p in problems[:20]]},
                  "prices": {"warnings": warnings[:20]}}
 

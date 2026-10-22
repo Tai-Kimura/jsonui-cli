@@ -74,7 +74,7 @@ async function srcLoad() {
   srcRender(tl('cost.loading'));
   const got = await srcAsk({ by: SRC.by });
   if (!got) return;
-  if (!got.ok) { SRC.error = got.message || got.reason || tl('cost.failed'); SRC.month = null; srcRender(); return; }
+  if (!got.ok) { SRC.error = got.short || got.message || got.reason || tl('cost.failed'); SRC.month = null; srcRender(); return; }
   SRC.scenario = got.scenario;
   SRC.month = { ...got.month, scenarios: got.scenarios, problems: got.problems, prices: got.prices, account: got.account };
   setHTML($('sr-scn'), got.scenarios.map((s) => `<option value="${esc(s.id)}"${s.id === got.scenario ? ' selected' : ''}>${esc(tl('cost.scn.option', { label: s.label, month: s.month }))}</option>`).join(''));
@@ -112,7 +112,7 @@ function srcSummary(M) {
     ['noRule', tl('cost.norule'), M.noRule.length, M.noRule],
     ['loadUndefined', tl('cost.noload'), M.loadUndefined.length, M.loadUndefined],
     ['overflow', tl('cost.overflow'), Object.keys(M.overflowHours).length, Object.entries(M.overflowHours).map(([n, h]) => tl('cost.overflow.item', { node: n, n: h }))],
-    ['problems', tl('cost.problems'), M.problems.count, M.problems.first.map((p) => `${p.file} ${p.path}: ${p.message}`)],
+    ['problems', tl('cost.problems'), M.problems.count, M.problems.first.map((p) => p.short || `${p.file} ${p.path}: ${p.message}`)],
     ['warnings', tl('cost.warnings'), M.warningCount, M.warnings.map(srcWarnText)],
   ];
   // the free amount is taken once per scenario (one environment): environments on one account each counted take it twice

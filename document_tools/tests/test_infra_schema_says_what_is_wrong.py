@@ -110,3 +110,25 @@ def test_a_token_quantity_is_one_of_its_forms():
     assert M.check_schema("lots", TOKENS, "/q", LS) == [("/q", "must be a number or an object (it is a string)")]
     assert [w.keyword for _, w in M.check_schema({"by_sku": {}}, TOKENS, "/q", LS)] == ["minProperties"]
     assert [w.keyword for _, w in M.check_schema({"by_sku": {"sonnet": -1}}, TOKENS, "/q", LS)] == ["minimum"]
+
+
+def test_a_null_is_named_null():
+    """A null where a list goes: the type found is null (in the detail and the line), not Python's NoneType."""
+    (path, why), = M.check_schema({"version": 0, "nodes": None})
+    p = M._problem("main.json", path, "schema", why)
+    assert p["detail"] == {"keyword": "type", "want": ["array"], "found": "null"}
+    assert R.short(p, "docs/infra") == "docs/infra/main.json: /nodes は配列です（今はnull）"
+
+
+def test_one_entry_is_singular_in_english():
+    assert _first("minProperties")[1] == "needs at least 1 entry (it has 0)"
+    assert M.check_schema({}, {"type": "object", "minProperties": 2}, "/x", MS)[0][1] == "needs at least 2 entries (it has 0)"
+
+
+@pytest.mark.parametrize("value,red", [("ab", True), ("abc", False), ("abcd", False)])
+def test_min_length_at_its_edge(value, red):
+    """minLength (no schema of the three has one yet): one short of the limit is red, the limit itself passes."""
+    found = M.check_schema(value, {"type": "string", "minLength": 3}, "/x", MS)
+    assert bool(found) is red
+    if red:
+        assert found[0][1] == "shorter than 3 characters (it has 2)"
