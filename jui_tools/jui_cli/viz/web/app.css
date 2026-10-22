@@ -1525,10 +1525,13 @@ button.talk-peer:focus-visible { outline: 2px solid var(--focus); outline-offset
 .talk-newer[hidden] { display: none; }
 
 /* the server room (ticket 2026-10-20-jui-viz-server-room, part B): the whole page under one view, a board and a log */
-.srm { position: fixed; inset: 0; z-index: 52;   /* over the log (50), under the notices (55) and the toast (60) */ display: grid; grid-template-rows: auto minmax(0, 1fr) auto; background: var(--bg); color: var(--ink); }
+.srm { position: fixed; inset: 0; z-index: 52;   /* over the log (50), under the notices (55) and the toast (60) */ display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);   /* the page's width, never the header's longest select (a phone: 629 on 390) */ background: var(--bg); color: var(--ink); }
 .srm[hidden] { display: none; }
 .sr-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
 .sr-head h2 { margin: 0; font: 700 16px/1.3 var(--font-body); }
+.sr-head select { min-width: 0; max-width: 100%; flex: 0 1 auto; }
+.sr-head .sr-ctl { max-width: 100%; min-width: 0; }
 .sr-room { color: var(--ink-soft); font: 500 13px/1.3 var(--font-mono); }
 .sr-ctl { display: inline-flex; align-items: center; gap: 4px; font: 13px/1.3 var(--font-body); }
 .sr-ctl select { padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); }
@@ -1585,15 +1588,30 @@ button.talk-peer:focus-visible { outline: 2px solid var(--focus); outline-offset
 .src-dayhead { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }
 .src-clock { font: 700 16px var(--font-mono); }
 .src-hoursum { color: var(--ink-soft); }
-.src-rows { display: grid; gap: 6px; }
-.src-row { display: grid; grid-template-columns: 200px minmax(0, 1fr) 150px; gap: 8px; align-items: center; }
+.src-rows { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.src-row > * { min-width: 0; }
+.src-row { display: grid; grid-template-columns: 200px minmax(0, 1fr) 150px; gap: 8px; align-items: start; }
 .src-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
 .src-name small { display: block; font-weight: 400; color: var(--ink-soft); }
-.src-bar { display: flex; align-items: center; min-height: 26px; background: var(--panel); border-radius: 4px; overflow: hidden; }
-.src-seg { display: block; height: 26px; padding: 0 4px; color: #fff; font: 11px/26px var(--font-mono); white-space: nowrap; overflow: hidden; cursor: pointer; }
+/* the bar on top across the column, the meters' words under it: two lines folded, the whole with 広げる */
+.src-mid { display: grid; gap: 3px; min-width: 0; }
+.src-bar { display: flex; align-items: center; height: 18px; background: var(--panel); border-radius: 4px; overflow: hidden; }
+.src-seg { display: block; height: 18px; cursor: pointer; }
 .src-seg:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
-.src-out { padding: 0 6px; color: var(--ink-soft); font: 11px var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.src-parts { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; color: var(--ink-soft); font: 11px/1.5 var(--font-mono); overflow-wrap: anywhere; }
+.src-parts.open { display: block; -webkit-line-clamp: unset; line-clamp: none; }
+.src-part { margin-right: 10px; }
+.src-part i { display: inline-block; width: 8px; height: 8px; margin-right: 4px; border-radius: 2px; }
+.src-words { display: grid; border-radius: 4px; }
+.src-words.src-cut { border: 1px solid var(--line); cursor: pointer; }
+.src-words.src-cut .src-parts { padding: 2px 6px; }
+.src-more { padding: 1px 6px; border: 0; border-top: 1px solid var(--line); border-radius: 0 0 4px 4px; background: var(--chip); color: var(--info); font: 600 12px/1.6 var(--font-body); text-align: left; cursor: pointer; }
+.src-more:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .src-usd { font-family: var(--font-mono); text-align: right; }
+@media (max-width: 600px) {   /* a phone: the name and the amount on one line, the bar and its words under them */
+  .src-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .src-mid { grid-column: 1 / -1; grid-row: 2; }
+}
 .src-red { color: #d62728; font-weight: 700; }
 .src-overrow .src-name { color: #d62728; }
 .src-noted .src-name, .src-notetext { color: var(--ink-soft); }
@@ -1610,6 +1628,11 @@ button.talk-peer:focus-visible { outline: 2px solid var(--focus); outline-offset
 .sr-label[data-kind="external"] { border: 1px dashed var(--ink-soft); }
 .sr-board { width: min(340px, 40vw); overflow: auto; padding: 10px 14px; border-left: 1px solid var(--line); background: var(--panel); font: 13px/1.5 var(--font-body); }
 .sr-board[hidden] { display: none; }
+@media (max-width: 600px) {   /* a phone: the board under the stage, the stage the page's width */
+  .sr-main { flex-direction: column; }
+  .sr-stage { flex: 1 1 60%; }
+  .sr-board { width: auto; max-height: 40%; border-left: 0; border-top: 1px solid var(--line); }
+}
 .sr-board h3 { margin: 10px 0 4px; font: 700 13px/1.3 var(--font-body); }
 .sr-board dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0; }
 .sr-board dt { color: var(--ink-soft); }

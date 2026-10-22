@@ -7,6 +7,14 @@ const clamp01 = (v) => Math.max(0, Math.min(1, v));
 const frac = (t, a, b) => clamp01((t - a) / (b - a));
 const pct = (v) => Math.round(v * 100);
 const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+/* An amount in dollars, one rule wherever the page shows one (10-23): to the cent, under $1 too ($0.79, not $0.7852);
+   under a cent "< $0.01" (never a $0.00 that is not 0); 0 is $0.00. signed: + on a rise (a difference); a fall always
+   has its −, the under-a-cent one too (−(< $0.01)). */
+function usdText(v, signed) {
+  const a = Math.abs(v), sign = v < 0 ? '−' : signed && v > 0 ? '+' : '';
+  if (a > 0 && a < 0.01) return sign ? sign + '(< $0.01)' : '< $0.01';
+  return sign + new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(a);
+}
 const ROLE_INK = { debug: '#2a2000' };   // dark ink where white would not read on the pill (debug's yellow)
 /* A role's pill: its background (ROLES[role].pill, else its colour) and its text (ROLE_INK, else white). One source for
    the HTML pills (pill()), the canvas ones (drawRolePill, the boards), the talk's marks and the phones' headers.

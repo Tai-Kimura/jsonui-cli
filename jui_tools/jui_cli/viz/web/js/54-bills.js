@@ -11,7 +11,7 @@ const BILL = { showMs: 4200, rise: 12, gap: 3, on: readPref('bills', 'on') !== '
 const BILL_ICON_HTML = '<svg class="bill-ico" viewBox="0 0 22 14" aria-hidden="true"><rect x="0.75" y="0.75" width="20.5" height="12.5" rx="2" /><circle cx="11" cy="7" r="3" /><path d="M3.5 4v6M18.5 4v6" /></svg>';
 function billMoney(usd) {
   if (usd < 0.01) return '< $0.01';
-  return usd < 100 ? `≈ $${usd.toFixed(2)}` : `≈ $${Math.round(usd).toLocaleString('en-US')}`;
+  return usd < 100 ? `≈ ${usdText(usd)}` : `≈ $${Math.round(usd).toLocaleString('en-US')}`;   // the page's rule (20-core.js), whole dollars from $100 (the bill is small)
 }
 function billTokens(n) { return n < 1000 ? `${n}` : n < 1e6 ? `${(n / 1000).toFixed(1)}k` : `${(n / 1e6).toFixed(2)}M`; }
 /* The text of a robot's bill from the responses it holds: their priced sum, "+ ?" when some had no price. */

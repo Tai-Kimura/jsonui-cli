@@ -14,15 +14,13 @@
    environment; a day is the chosen scenario's within that pricing. アカウントの合計 is the default (the requester 10-21:
    「合計で」): SRC.account stays null (the server's default) until one is pressed. */
 const SRC = { mode: '3d', seq: 0, scenario: null, by: 'provider', account: null, month: null, day: null, date: null, hour: 0, timer: 0,
-  playMs: 700, picked: null, error: '' };
+  playMs: 700, picked: null, error: '', open: new Set() };   // open: the rows whose meters are shown whole (広げる)
 const srcEl = $('sr-cost');
 const SRC_PER = { second: 'sec', minute: 'min', hour: 'h', day: 'day', month: 'mo' };
 const SRC_COLORS = ['#4e79a7', '#f28e2b', '#59a14f', '#e15759', '#76b7b2', '#edc948', '#b07aa1', '#ff9da7', '#9c755f', '#bab0ac'];
 
 function srcUsd(v) {
-  if (v === null || v === undefined) return tl('cost.noprice');
-  const digits = Math.abs(v) < 1 && v !== 0 ? 4 : 2;
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: digits }).format(v);
+  return v === null || v === undefined ? tl('cost.noprice') : usdText(v);
 }
 function srcNum(v) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: v !== 0 && Math.abs(v) < 10 ? 2 : 0 }).format(v);
@@ -52,7 +50,7 @@ function srcSetMode(mode) {
 }
 function srCostReset() {   // the server room closed (56-server-room.js srClose): back to 3D, nothing kept
   srcStop();
-  Object.assign(SRC, { mode: '3d', scenario: null, account: null, month: null, day: null, date: null, hour: 0, picked: null, error: '' });
+  Object.assign(SRC, { mode: '3d', scenario: null, account: null, month: null, day: null, date: null, hour: 0, picked: null, error: '', open: new Set() });
   SR.paused = false;
   $('sr-boxzoom').disabled = false;
   $('sr-mode-3d').setAttribute('aria-pressed', 'true');
@@ -165,34 +163,50 @@ function srcRunning(hr) {
   return hr.running ? tl('cost.running', { n: srcNum(hr.running) }) : '';
 }
 function srcSegText(sg) { return `${sg.label}${sg.rate ? ` ${srcRate(sg.rate)}` : ''} · ${srcUsd(sg.usd)}`; }
-function srcRow(n, k, max, barPx) {
+/* A row: the bar across the whole column (each meter's length its share), the meters' words under it, two lines folded
+   with 広げる for the rest (the requester 10-23: 「長い文章だと棒グラフの中に入り切らずに...になってる / 全文見るために広げるのボタンが
+   欲しい」「文字とグラフは縦並びにして」). */
+function srcRow(n, k, max, i) {
   const hr = n.hours[k];
-  if (n.note) return `<div class="src-row src-noted" data-src-node="${esc(n.node)}"><div class="src-name">${esc(n.label)}</div><div class="src-bar"><span class="src-notetext">${esc(n.note === 'no rule' ? tl('cost.norule') : tl('cost.noload'))}</span></div></div>`;
+  if (n.note) return `<div class="src-row src-noted" data-src-node="${esc(n.node)}"><div class="src-name">${esc(n.label)}</div><div class="src-mid"><span class="src-notetext">${esc(n.note === 'no rule' ? tl('cost.norule') : tl('cost.noload'))}</span></div></div>`;
   const over = hr.load && hr.load.overflow > 0;
   const marksHTML = (hr.atMax ? `<span class="src-flag" title="${esc(tl('cost.atmax'))}">⚑</span>` : '') + (hr.stepChanged ? `<span class="src-step" title="${esc(tl('cost.step'))}">◆</span>` : '');
-  const outside = [];
-  const segsHTML = hr.segments.map((sg, i) => {
+  const color = (j) => SRC_COLORS[j % SRC_COLORS.length];
+  const segsHTML = hr.segments.map((sg, j) => {
     const pct = max > 0 && sg.usd ? (sg.usd / max) * 100 : 0, text = srcSegText(sg);
-    const fits = pct / 100 * barPx >= text.length * 7 + 12;
-    if (!fits) outside.push(text);
-    return `<span class="src-seg" tabindex="0" role="button" data-src-seg="${i}" style="width:${Number(pct.toFixed(3))}%;background:${esc(SRC_COLORS[i % SRC_COLORS.length])}" title="${esc(text)}" aria-label="${esc(text)}">${fits ? esc(text) : ''}</span>`;
+    return `<span class="src-seg" tabindex="0" role="button" data-src-seg="${Number(j)}" style="width:${Number(pct.toFixed(3))}%;background:${esc(color(j))}" title="${esc(text)}" aria-label="${esc(text)}"></span>`;
   }).join('');
-  const noPrice = hr.segments.filter((sg) => sg.usd === null).map((sg) => `${sg.label}${sg.rate ? ` ${srcRate(sg.rate)}` : ''} · ${tl('cost.noprice')}`);
+  const partsHTML = hr.segments.map((sg, j) => `<span class="src-part"><i style="background:${esc(color(j))}"></i>${esc(srcSegText(sg))}</span>`).join(' ');
+  const open = SRC.open.has(n.node);
   const loadHTML = over ? `<span class="src-red" data-src-over>${esc(hr.load.label)} ${esc(srcNum(hr.load.served))} / ${esc(srcNum(hr.load.demand))} /${esc(SRC_PER[hr.load.per] || hr.load.per)}${esc(tl('cost.load.served'))}</span>` : '';
-  return `<div class="src-row${over ? ' src-overrow' : ''}" data-src-node="${esc(n.node)}"><div class="src-name">${esc(n.label)}<small>${esc(srcRunning(hr))}</small>${marksHTML}</div><div class="src-bar">${segsHTML}<span class="src-out">${esc([...outside, ...noPrice].join('　'))}</span></div><div class="src-usd">${esc(srcUsd(hr.usd))}${loadHTML ? `<br>${loadHTML}` : ''}</div></div>`;
+  return `<div class="src-row${over ? ' src-overrow' : ''}" data-src-node="${esc(n.node)}"><div class="src-name">${esc(n.label)}<small>${esc(srcRunning(hr))}</small>${marksHTML}</div><div class="src-mid"><div class="src-bar">${segsHTML}</div>`
+    + `<div class="src-words" data-src-more="${esc(n.node)}"><div class="src-parts${open ? ' open' : ''}" id="src-parts-${Number(i)}" data-src-parts>${partsHTML}</div>`
+    + `<button type="button" class="src-more" data-src-more="${esc(n.node)}" aria-controls="src-parts-${Number(i)}" aria-expanded="${esc(String(open))}"${open ? '' : ' hidden'}>${esc(tl(open ? 'cost.less' : 'cost.more'))}</button></div></div>`
+    + `<div class="src-usd">${esc(srcUsd(hr.usd))}${loadHTML ? `<br>${loadHTML}` : ''}</div></div>`;
+}
+/* 広げる only where the folded words are cut (measured after they are drawn); an open row keeps its たたむ. */
+function srcMoreFit() {
+  for (const b of srcEl.querySelectorAll('button[data-src-more]')) {
+    const parts = b.parentElement.querySelector('[data-src-parts]');
+    b.hidden = !(SRC.open.has(b.dataset.srcMore) || parts.scrollHeight > parts.clientHeight + 1);
+    b.parentElement.classList.toggle('src-cut', !b.hidden);   // the words themselves press too (the button is their edge)
+  }
+  const all = srcEl.querySelector("[data-src-act='more-all']");
+  if (all) all.hidden = !srcEl.querySelector('button[data-src-more]:not([hidden])');
 }
 function srcDayHtml(D) {
   const k = SRC.hour, hourUsd = D.nodes.reduce((a, n) => a + (n.note ? 0 : n.hours[k].usd), 0) + (D.others.usd[k] || 0);
   const max = Math.max(...D.nodes.flatMap((n) => (n.note ? [] : n.hours.map((h) => h.usd))), 0.0001);
-  const barPx = Math.max(160, srcEl.clientWidth - 420);
-  const rowsHTML = D.nodes.map((n) => srcRow(n, k, max, barPx)).join('')
-    + (D.others.count ? `<div class="src-row src-noted"><div class="src-name">${esc(tl('cost.others', { n: Number(D.others.count) }))}</div><div class="src-bar"></div><div class="src-usd">${esc(srcUsd(D.others.usd[k]))}</div></div>` : '');
+  const rowsHTML = D.nodes.map((n, i) => srcRow(n, k, max, i)).join('')
+    + (D.others.count ? `<div class="src-row src-noted"><div class="src-name">${esc(tl('cost.others', { n: Number(D.others.count) }))}</div><div class="src-mid"></div><div class="src-usd">${esc(srcUsd(D.others.usd[k]))}</div></div>` : '');
+  const priced = D.nodes.filter((n) => !n.note), allOpen = priced.length > 0 && priced.every((n) => SRC.open.has(n.node));
   const pickHTML = SRC.picked ? srcPicked(D) : '';
   const acctHTML = SRC.month && SRC.month.account && SRC.month.account.on ? `<span class="src-note" data-src-dayacct>${esc(tl('cost.account.day', { scenario: (SRC.month.scenarios.find((s) => s.scenario === SRC.scenario) || {}).label || SRC.scenario }))}</span>` : '';
   return `<div class="src-dayhead"><button type="button" class="wb-btn" data-src-act="month">${esc(tl('cost.back.month'))}</button><strong>${esc(D.date)}</strong>${acctHTML}
 <button type="button" class="wb-btn" data-src-act="${SRC.timer ? 'stop' : 'play'}"${reduceMotion ? ` disabled title="${esc(tl('cost.play.reduced'))}"` : ''}>${esc(SRC.timer ? tl('cost.stop') : tl('cost.play'))}</button>
 <label class="sr-ctl">${esc(tl('cost.hour'))} <input type="range" id="src-hour" min="0" max="${Number(D.hours.length - 1)}" value="${k}" step="1"></label><span class="src-clock" data-src-clock>${esc(String(D.hours[k]).padStart(2, '0'))}:00</span>
-<span class="src-hoursum">${esc(tl('cost.hoursum', { hour: srcUsd(hourUsd), day: srcUsd(D.usd) }))}</span></div>
+<span class="src-hoursum">${esc(tl('cost.hoursum', { hour: srcUsd(hourUsd), day: srcUsd(D.usd) }))}</span>
+<button type="button" class="wb-btn" data-src-act="more-all" aria-expanded="${esc(String(allOpen))}" hidden>${esc(tl(allOpen ? 'cost.less.all' : 'cost.more.all'))}</button></div>
 <div class="src-rows">${rowsHTML}</div>${pickHTML ? `<div class="src-price" data-src-price>${pickHTML}</div>` : `<p class="src-hint">${esc(tl('cost.day.hint'))}</p>`}`;
 }
 function srcPicked(D) {
@@ -210,13 +224,14 @@ function srcRender(status) {
   if (status) { setHTML(srcEl, `<p class="src-status">${esc(status)}</p>`); return; }
   if (SRC.error) { setHTML(srcEl, `<p class="src-status src-red">${esc(tl('cost.error', { why: SRC.error }))}</p>`); return; }
   if (!SRC.month) return;
-  if (SRC.day) setHTML(srcEl, srcDayHtml(SRC.day));
+  if (SRC.day) { setHTML(srcEl, srcDayHtml(SRC.day)); srcMoreFit(); }
   else setHTML(srcEl, `${srcSummary(SRC.month)}${srcMonthSvg(SRC.month)}`);
 }
 
 /* ---- wiring ---- */
 $('sr-mode-3d').addEventListener('click', () => srcSetMode('3d'));
 $('sr-mode-cost').addEventListener('click', () => srcSetMode('cost'));
+new ResizeObserver(() => { if (SRC.mode === 'cost' && SRC.day) srcMoreFit(); }).observe(srcEl);   // a narrower page cuts more words
 $('sr-scn').addEventListener('change', () => { SRC.scenario = $('sr-scn').value; Object.assign(SRC, { month: null, day: null }); srcLoad(); });
 srcEl.addEventListener('click', (e) => {
   const act = e.target.closest('[data-src-act]');
@@ -227,11 +242,24 @@ srcEl.addEventListener('click', (e) => {
       if (on !== !!(SRC.month && SRC.month.account.on)) { SRC.account = on; Object.assign(SRC, { month: null, day: null, date: null }); srcLoad(); }
     }
     else if (act.dataset.srcAct === 'play') srcPlay();
+    else if (act.dataset.srcAct === 'more-all') {
+      const ids = SRC.day.nodes.filter((n) => !n.note).map((n) => n.node);
+      SRC.open = ids.every((id) => SRC.open.has(id)) ? new Set() : new Set(ids);
+      srcRender();
+    }
     else { srcStop(); srcRender(); }
     return;
   }
   const day = e.target.closest('[data-src-date]');
   if (day) { SRC.hour = 0; srcOpenDay(day.dataset.srcDate); return; }
+  const more = e.target.closest('[data-src-more]');
+  if (more && !more.querySelector(':scope > button[data-src-more][hidden]')) {   // words that are not cut have nothing to show
+    const id = more.dataset.srcMore;
+    if (!SRC.open.delete(id)) SRC.open.add(id);
+    srcRender();
+    srcEl.querySelector(`button[data-src-more="${CSS.escape(id)}"]`)?.focus();   // the key that pressed it stays on it
+    return;
+  }
   const seg = e.target.closest('[data-src-seg]');
   if (seg) { SRC.picked = { node: seg.closest('[data-src-node]').dataset.srcNode, seg: Number(seg.dataset.srcSeg) }; srcRender(); }
 });
