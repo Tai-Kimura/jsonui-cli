@@ -151,6 +151,7 @@ window.__dbg = {
   },
   srMigStart: (name) => srMigStart(name),
   srMigUsd: (v) => srMigUsd(v),   // the migration's money format (the e2e compares the engine's numbers as shown)
+  srMigSigned: (v) => srMigSigned(v),   // a difference, signed, as shown
   // each frame's camera (position and target) while on: off gives what was kept (a rebuild must not move it a frame)
   // where 全体を見る puts the camera (position and target), without moving it
   srFitCamera: () => { const V = SR.view; if (!V) return null; const p = V.camera.position.clone(), q = V.controls.target.clone(); srFit(true);

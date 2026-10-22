@@ -188,6 +188,7 @@ async def run_sr_migration(pw, out, failures):
         check(failures, "cache-subnet" not in m["floors"] and "private-prod" in m["floors"], f"the new group's floor waits for its node: {m['floors']}")
         check(failures, m["specs"]["db-prod"].startswith("db.r6g.large"), f"the replaced node drawn as the old one: {m['specs']}")
         usd = lambda v: page.evaluate("(v) => window.__dbg.srMigUsd(v)", v)  # noqa: E731
+        signed = lambda v: page.evaluate("(v) => window.__dbg.srMigSigned(v)", v)  # noqa: E731
         unpriced = T("sr.mig.unpriced.bar", n=len(cli["unpricedChanged"]))
         check(failures, cli["unpricedChanged"] and unpriced in await page.inner_text("#sr-mplayer"),
               f"a changed node with no price is said on the player: {cli['unpricedChanged']} {unpriced!r}")
@@ -252,7 +253,7 @@ async def run_sr_migration(pw, out, failures):
         want_tags = set()
         for mv in cli["steps"][1]["moved"]:
             if mv["node"] in final["drawnNodes"] or mv["node"] in final["sizes"]:
-                want_tags.add((mv["node"], ("+" if mv["diff"] >= 0 else "−") + await usd(abs(mv["diff"])), mv["diff"] > 0))
+                want_tags.add((mv["node"], await signed(mv["diff"]), mv["diff"] > 0))
         check(failures, want_tags and want_tags <= tags, f"a tag over each node that moved, its own difference: {sorted(want_tags)} vs {sorted(tags)}")
         off = [(x["barStep"], [tg["step"] for tg in x["tags"]]) for x in seen if any(tg["step"] != x["barStep"] for tg in x["tags"])]
         check(failures, not off, f"the tags stand for the step the player shows: {off[:3]}")
@@ -275,7 +276,7 @@ async def run_sr_migration(pw, out, failures):
         m = await page.evaluate(MIG)
         check(failures, m["sent"]["api-prod->mailer"] > sent_before,   # the cables' ends written are drawn: handed to the GPU
               f"the edge going is handed to the GPU as it shrinks: {sent_before} -> {m['sent']['api-prod->mailer']}")
-        step_diff = T("sr.mig.cost.step", diff=("+" if cli["steps"][2]["diff"] >= 0 else "−") + await usd(abs(cli["steps"][2]["diff"])))
+        step_diff = T("sr.mig.cost.step", diff=await signed(cli["steps"][2]["diff"]))
         check(failures, step_diff in m["bar"], f"the bar's difference is the step played: {m['bar']!r} lacks {step_diff!r}")
         await until(page, "() => { const s = window.__dbg.srMig().sizes['mailer']; return s > 0.05 && s < 0.95; }", "the node shrinking away", timeout=20000)
         await until(page, "() => { const m = window.__dbg.srMig(); return m.k === 3 && !m.anim; }", "step 3 done", timeout=20000)
@@ -297,14 +298,14 @@ async def run_sr_migration(pw, out, failures):
         tags4 = {(tg["node"], tg["text"]) for x in sampler.seen if x.get("open") for tg in x["tags"] if tg["step"] == 4}
         want4 = set()
         for n, d in moved4.items():
-            want4.add((n, ("+" if d >= 0 else "−") + await usd(abs(d))))
+            want4.add((n, await signed(d)))
         check(failures, want4 <= tags4, f"a tag over each node that moved, the neighbour too: {sorted(want4)} vs {sorted(tags4)}")
         # stepped one at a time, the tags stay to be read until the next step
         await page.wait_for_timeout(1500)
         kept = [tg for tg in (await page.evaluate(MIG))["tags"] if tg["step"] == 4]
         check(failures, len(kept) == len(want4) and all(tg["opacity"] == 1 for tg in kept), f"a stepped step's tags stay, whole: {kept}")
         listed = [x["moved"] for x in sampler.seen if x.get("open") and x["barStep"] == 4 and x["moved"]]
-        want_list = T("sr.mig.moved", list=" · ".join([f"{m['node']} {('+' if m['diff'] >= 0 else '−') + await usd(abs(m['diff']))}" for m in step4["moved"][:4]]))
+        want_list = T("sr.mig.moved", list=" · ".join([f"{m['node']} {await signed(m['diff'])}" for m in step4["moved"][:4]]))
         check(failures, listed and listed[0] == want_list, f"the player lists what moved in the step: {listed[:1]} vs {want_list!r}")
 
         # the rest played: the end is the new model
@@ -336,11 +337,11 @@ async def run_sr_migration(pw, out, failures):
         await until(page, "() => !!document.querySelector('[data-src-mig]')", "the cost view's columns", timeout=30000)
         row = await page.evaluate("() => [...document.querySelectorAll('[data-src-mig-nodes] [data-sr-mig-row=\"db-prod\"] td')].map((c) => c.textContent)")
         want = next(r for r in cli["byNode"] if r["node"] == "db-prod")
-        want_row = [await usd(want["old"]), await usd(want["new"]), ("+" if want["diff"] >= 0 else "−") + await usd(abs(want["diff"]))]
+        want_row = [await usd(want["old"]), await usd(want["new"]), await signed(want["diff"])]
         check(failures, row == want_row, f"the cost view's db-prod row is the engine's: {row} vs {want_row}")
         cells = await page.evaluate("() => [...document.querySelectorAll('[data-src-mig] td')].map((c) => c.textContent)")
         import re
-        odd = [c for c in cells if not re.fullmatch(r"[+−]?\$[\d,]+\.\d{2}", c)]
+        odd = [c for c in cells if not re.fullmatch(r"[+−]?\$[\d,]+\.\d{2}|[+−]?\(?< \$0\.01\)?", c)]   # usdText: to the cent, under it "< $0.01"
         check(failures, cells and not odd, f"the cost view's amounts in dollars and cents: {odd[:5]}")
         small = await usd(0.2349)
         check(failures, small == "$0.23", f"under a dollar too, two places (the cost view's other screens): {small!r}")

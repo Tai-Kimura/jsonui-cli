@@ -445,11 +445,9 @@ function srMigRenderBar() {
 ${costHTML}`);
 }
 /* Dollars and cents, under $1 too (the cost view's own srcUsd gives four places there, for a meter's rate). */
-function srMigUsd(v) {
-  return v === null || v === undefined ? tl('cost.noprice')
-    : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
-}
-function srMigSigned(v) { return `${v >= 0 ? '+' : '−'}${srMigUsd(Math.abs(v))}`; }
+/* The page's one rule for an amount (usdText, 20-core.js): to the cent; no price said in words. */
+function srMigUsd(v) { return v === null || v === undefined ? tl('cost.noprice') : usdText(v); }
+function srMigSigned(v) { return v === null || v === undefined ? tl('cost.noprice') : usdText(v, true); }
 $('sr-mplayer').addEventListener('click', (e) => {
   const b = e.target.closest('[data-sr-mp]'), P = SR_MIG.P;
   if (!b || !P || b.tagName === 'SELECT') return;
