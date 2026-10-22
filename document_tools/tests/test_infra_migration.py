@@ -91,6 +91,21 @@ def test_an_edge_goes_with_the_node_it_ends_at(tmp_path):
     assert not [p for p in m["problems"] if p["code"] == "edge.missing"]
 
 
+
+def test_an_edge_whose_ends_both_go_goes_at_the_first_of_their_steps(tmp_path):
+    """lb->db ends at db (step 1) and at lb (step 2): it goes with db, at step 1 — never kept to step 2 with an end
+    gone (the steps between have no edge to a node that is not there)."""
+    root = _room(tmp_path, removals={"version": 0, "nodes": ["db", "lb"]})
+    m = _plan(root)
+    assert [s["node"] for s in m["steps"]] == ["db", "lb"]
+    assert "lb->db" in m["steps"][0]["edgesRemoved"] and "lb->db" not in m["steps"][1]["edgesRemoved"]
+    plan, _problems, _old = MG.load(root, "move")
+    for k in range(1, plan.last + 1):
+        model = plan.model_at(k)[0]
+        ids = set(_ids(model))
+        assert not [e for e in model["edges"] if e["from"] not in ids or e["to"] not in ids], k
+    assert "lb->db" not in _keys(plan.model_at(1)[0]) and "lb->db" in _keys(plan.model_at(0)[0])
+
 def test_a_replaced_nodes_edges_are_kept_unless_the_plan_names_them(tmp_path):
     changes = {"version": 0, "nodes": [{"id": "db", "category": "database.relational", "group": "vpc"}],
                "edges": [{"from": "lb", "to": "db", "protocol": "mysql"}]}
