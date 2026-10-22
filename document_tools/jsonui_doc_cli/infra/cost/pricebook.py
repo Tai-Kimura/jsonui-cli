@@ -10,7 +10,9 @@ import json
 import os
 from pathlib import Path
 
+from .. import model as M
 from .. import prices as P
+from .. import room as R
 
 LAYERS = ("user", "cache", "bundled")
 BUNDLED_PATH = Path(__file__).with_name("bundled-prices.json")
@@ -32,7 +34,7 @@ def cache_dir(env: dict | None = None) -> Path:
     return Path(home) / "cloud-prices"
 
 
-def cache_rows(folder: Path) -> tuple[list[dict], list[str]]:
+def cache_rows(folder: Path) -> tuple[list[dict], list["M.Why"]]:
     """The fetched prices' rows (every *.json below the folder, read as a price file) and why any file was not used.
     Written by fetch.py (L-B2); an empty or missing folder is no price and no warning. A file the index does not say
     this version wrote (another version's reading of the answer, or one the index does not name) is not used: the
@@ -53,12 +55,14 @@ def cache_rows(folder: Path) -> tuple[list[dict], list[str]]:
             continue
         doc, problems = P.read_file(f.name, f.read_bytes())
         if doc is None:
-            why.append(f"{f.relative_to(folder)}: not used ({problems[0]['code']})")
+            why.append(M.Why(f"{f.relative_to(folder)}: not used ({problems[0]['code']})", "prices.cache_unused",
+                             file=str(f.relative_to(folder)), code=problems[0]["code"]))
             continue
         rows += P.rows(str(f.relative_to(folder)), doc)[0]
     if others:
-        why.append(f"{others} fetched price file(s) were written by another jsonui-cli version (or the index does not "
-                   f"name them): not used until fetched again by {FE.WRITER}; the bundled prices stand in")
+        why.append(M.Why(f"{others} fetched price file(s) were written by another jsonui-cli version (or the index does "
+                         f"not name them): not used until fetched again by {FE.WRITER}; the bundled prices stand in",
+                         "prices.cache_other_version", n=others, writer=FE.WRITER))
     return rows, why
 
 
@@ -93,24 +97,26 @@ class Book:
         return None
 
 
-def load(root: Path | None = None, env: dict | None = None, words=None) -> tuple[Book, list[str]]:
-    """The book for a room: its price files (prices.read), the cache and the bundled table; and warnings. A price
-    file's problem is its line in ``words``' language (prices.read's short; room.Words when None) and its code."""
+def load(root: Path | None = None, env: dict | None = None, words: R.Words = R.DEFAULT_WORDS) -> tuple[Book, list[str]]:
+    """The book for a room: its price files (prices.read), the cache and the bundled table; and warnings, each its
+    line in ``words``' language (room.COST_JA; a price file's problem: prices.read's short) and its code."""
     warnings: list[str] = []
     user: list[dict] = []
     if root is not None:
-        got = P.read(Path(root), **({"words": words} if words is not None else {}))
+        got = P.read(Path(root), words=words)
         if got.get("ok"):
             user = got["prices"]
             warnings += [f"{p['short']} [{p['code']}]" for p in got["problems"]]
         else:
-            warnings.append(f"the room's price files are not used ({got['reason']}): {got['message']}")
+            warnings.append(words.cost({"keyword": "prices.room_unused", "reason": got["reason"], "line": got["short"]})
+                            + " [prices.room_unused]")
     cache, why = cache_rows(cache_dir(env))
     bundled = bundled_rows()
-    return Book(user, cache, bundled), warnings + why + free_dropped(user, bundled)
+    said = [words.cost({"keyword": w.keyword, **w.detail}) + f" [{w.keyword.removesuffix('.pool')}]" for w in why + free_dropped(user, bundled)]
+    return Book(user, cache, bundled), warnings + said
 
 
-def free_dropped(user: list[dict], bundled: list[dict]) -> list[str]:
+def free_dropped(user: list[dict], bundled: list[dict]) -> list["M.Why"]:
     """A room's price row with no free amount where the bundled row of the same price has one: the room's row wins, so
     that free amount is not taken (an egress row written by hand drops the account's 100 GB a month; ticket
     2026-10-21-agents-skills-mcp-for-server-room §2 C2). One warning per price."""
@@ -126,9 +132,11 @@ def free_dropped(user: list[dict], bundled: list[dict]) -> list[str]:
         seen.add(key)
         f = free[key]
         pool = f" from the account's pool {f['pool']}" if f.get("pool") else ""
-        out.append(f"{row.get('file')} /prices/{row.get('index')}: {'/'.join(key[:3])} has no free amount, but the "
-                   f"bundled price takes {f['amount']:g} {key[3]} a {f['period']}{pool} free; this row wins, so none is "
-                   f"taken (write free on it to keep it) [prices.free_dropped]")
+        out.append(M.Why(f"{row.get('file')} /prices/{row.get('index')}: {'/'.join(key[:3])} has no free amount, but the "
+                         f"bundled price takes {f['amount']:g} {key[3]} a {f['period']}{pool} free; this row wins, so none "
+                         f"is taken (write free on it to keep it)", "prices.free_dropped" + (".pool" if f.get("pool") else ""),
+                         file=row.get("file"), index=row.get("index"), price="/".join(key[:3]), amount=f"{f['amount']:g}",
+                         unit=key[3], pool=f.get("pool") or ""))
     return out
 
 

@@ -85,7 +85,7 @@ async function srcLoad() {
 async function srcOpenDay(date) {
   const got = await srcAsk({ date });
   if (!got) return;
-  if (!got.ok) { SRC.error = got.message || tl('cost.failed'); srcRender(); return; }
+  if (!got.ok) { SRC.error = got.short || got.message || tl('cost.failed'); srcRender(); return; }
   Object.assign(SRC, { date, day: got.day, hour: Math.min(SRC.hour, got.day.hours.length - 1), picked: null });
   srcRender();
 }
@@ -133,7 +133,7 @@ function srcAccountHTML(M) {
 /* An engine warning in one line: its message, and the rows it names (a row is an id or a {id}). */
 function srcWarnText(w) {
   const rows = Array.isArray(w.rows) ? w.rows.map((r) => (r && typeof r === 'object' ? String(r.id || r.sku || JSON.stringify(r)) : String(r))) : [];
-  return `${w.environment ? `${w.environment} · ` : ''}${w.node ? `${w.node} · ` : ''}${w.message}${rows.length ? tl('cost.warn.rows', { rows: rows.slice(0, 8).join(tl('cost.warn.sep')), more: rows.length > 8 ? tl('cost.warn.more', { n: rows.length - 8 }) : '' }) : ''}`;
+  return `${w.environment ? `${w.environment} · ` : ''}${w.node ? `${w.node} · ` : ''}${w.short || w.message}${rows.length ? tl('cost.warn.rows', { rows: rows.slice(0, 8).join(tl('cost.warn.sep')), more: rows.length > 8 ? tl('cost.warn.more', { n: rows.length - 8 }) : '' }) : ''}`;
 }
 function srcMonthSvg(M) {
   const w = Math.max(320, srcEl.clientWidth - 32), h = 260, padL = 56, padB = 28, padT = 18;

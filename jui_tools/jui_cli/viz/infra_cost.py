@@ -63,8 +63,9 @@ def _signature(root: Path, room, folders: list[str], cache: Path) -> tuple:
     return tuple(out)
 
 
-def _refuse(status: int, seq, reason: str, message: str) -> tuple[int, dict]:
-    return status, {"ok": False, "seq": seq, "reason": reason, "message": message}
+def _refuse(status: int, seq, reason: str, message: str, short: str) -> tuple[int, dict]:
+    """A refusal: its message (English, for a log) and its line in the page's language (short: what the page shows)."""
+    return status, {"ok": False, "seq": seq, "reason": reason, "message": message, "short": short}
 
 
 def account_scenarios(scenarios: list[dict], model: dict, chosen: dict) -> tuple[bool, list[dict], list[str]]:
@@ -90,10 +91,12 @@ def _simulate(m: dict, root: Path, scenario_id: str | None, account: bool | None
         return (404 if loads.get("reason") in ("no_infra", "not_a_room") else 422), loads
     scenarios = loads["scenarios"]
     if not scenarios:
-        return 404, {"ok": False, "reason": "no_load", "message": f"no load definition in {loads['dir']}"}
+        return 404, {"ok": False, "reason": "no_load", "message": f"no load definition in {loads['dir']}",
+                     "short": i18n.tl("srv.cost.refused.no_load", folder=loads["dir"])}
     chosen = next((s for s in scenarios if s["id"] == scenario_id), None) if scenario_id else scenarios[0]
     if chosen is None:
-        return 404, {"ok": False, "reason": "no_scenario", "message": "no such scenario"}
+        return 404, {"ok": False, "reason": "no_scenario", "message": "no such scenario",
+                     "short": i18n.tl("srv.cost.refused.no_scenario")}
     model = m["room"].read(root)
     if account is None:
         account = account_scenarios(scenarios, model, chosen)[0]
@@ -110,13 +113,17 @@ def _simulate(m: dict, root: Path, scenario_id: str | None, account: bool | None
         available, picked, missing = account_scenarios(scenarios, model, chosen)
         if not available:
             return 404, {"ok": False, "reason": "no_account",
-                         "message": "the account needs two environments or more, each with a load definition"}
+                         "message": "the account needs two environments or more, each with a load definition",
+                         "short": i18n.tl("srv.cost.refused.no_account")}
         results = m["engine"].simulate_account(picked, model, book)
         result = results[picked.index(chosen)]
         acct = (picked, results, missing)
     else:
         result = m["engine"].simulate(chosen, model, book)
     got = (loads, chosen, model, result, warnings, acct)
+    words = infra_words.RoomWords(m["room"].LIMITS, m["room"].EXCLUDE_MAX)
+    for w in result.warnings + [w for r in (acct[1] if acct else []) for w in r.warnings]:
+        w["short"] = m["room"].cost_short(w, words)   # each warning's line in the page's language (room.COST_JA)
     with _LOCK:
         _KEPT[key] = got
         while len(_KEPT) > KEEP:
@@ -130,20 +137,20 @@ def read(root: Path | str, seq=None, scenario: str | None = None, date: str | No
     {available, on, scenarios?, missing?}}; a date: {ok, seq, scenario, day} (with account, the chosen scenario's day
     priced within the account). account: true, false (one environment) or None (the account where it can be had)."""
     if account is not None and not isinstance(account, bool):
-        return _refuse(400, seq, "bad_request", "account is true, false or null")
+        return _refuse(400, seq, "bad_request", "account is true, false or null", i18n.tl("srv.cost.refused.account"))
     if scenario is not None and not (isinstance(scenario, str) and ID.match(scenario)):
-        return _refuse(400, seq, "bad_request", "scenario is an id")
+        return _refuse(400, seq, "bad_request", "scenario is an id", i18n.tl("srv.cost.refused.scenario"))
     if date is not None and not (isinstance(date, str) and DATE.match(date)):
-        return _refuse(400, seq, "bad_request", "date is YYYY-MM-DD")
+        return _refuse(400, seq, "bad_request", "date is YYYY-MM-DD", i18n.tl("srv.cost.refused.date"))
     if by not in ("provider", "node"):
-        return _refuse(400, seq, "bad_request", "by is provider or node")
+        return _refuse(400, seq, "bad_request", "by is provider or node", i18n.tl("srv.cost.refused.by"))
     m = _mods()
     if m is None:
-        return _refuse(500, seq, "unreadable", i18n.tl("srv.cost.no_tools"))
+        return _refuse(500, seq, "unreadable", i18n.tl("srv.cost.no_tools"), i18n.tl("srv.cost.no_tools"))
     try:
         status, got = _simulate(m, Path(root), scenario, account)
     except m["room"].Refused as r:
-        return _refuse(400, seq, r.reason, r.message)
+        return _refuse(400, seq, r.reason, r.message, r.line("", infra_words.RoomWords(m["room"].LIMITS, m["room"].EXCLUDE_MAX)))
     if status is not None:
         got = dict(got, seq=seq, ok=False)
         got.pop("scenarios", None)
@@ -151,7 +158,8 @@ def read(root: Path | str, seq=None, scenario: str | None = None, date: str | No
     loads, chosen, model, result, warnings, acct = got
     if date is not None:
         if not date.startswith(chosen["month"] + "-") or not any(h["date"] == date for h in chosen["hours"]):
-            return _refuse(400, seq, "bad_request", "the date is not in the scenario's month")
+            return _refuse(400, seq, "bad_request", "the date is not in the scenario's month",
+                           i18n.tl("srv.cost.refused.date_month"))
         return 200, {"ok": True, "seq": seq, "scenario": chosen["id"], "day": m["view"].day_view(result, model, date, words=infra_words.CostLabels())}
     problems = [p for p in loads["problems"] if p["severity"] in ("error", "warning")]
     return 200, {"ok": True, "seq": seq, "scenario": chosen["id"],

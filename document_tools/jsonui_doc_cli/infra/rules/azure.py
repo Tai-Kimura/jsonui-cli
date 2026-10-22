@@ -4,6 +4,7 @@ balancer by its rules' hours and the data it processes; a database's high availa
 size; the WAF of a node that does not say its kind priced as Application Gateway WAF v2's (and said)."""
 from __future__ import annotations
 
+from .. import model as M
 from ..cost import formulas as F
 from ..cost.azure_prices import DISK_TIERS
 from . import provider_rule
@@ -119,10 +120,11 @@ def waf(h: F.Hour) -> list[F.Meter]:
 def waf_notice(node, quantities, running):
     kind, said = waf_kind(node)
     if said:
-        return [("cost.waf_kind", f"WAF priced as {'Front Door' if kind == 'frontdoor' else 'Application Gateway'} "
-                                  f"WAF (the node's spec says so)")]
-    return [("cost.waf_kind", "WAF priced as Application Gateway WAF v2 (the node does not say its kind; spec kind: "
-                              "frontdoor to price a Front Door policy)")]
+        name = "Front Door" if kind == "frontdoor" else "Application Gateway"
+        return [("cost.waf_kind", M.Why(f"WAF priced as {name} WAF (the node's spec says so)", "cost.waf_kind.said",
+                                        kind=name))]
+    return [("cost.waf_kind", M.Why("WAF priced as Application Gateway WAF v2 (the node does not say its kind; spec "
+                                    "kind: frontdoor to price a Front Door policy)", "cost.waf_kind.default"))]
 
 
 def cdn(h: F.Hour) -> list[F.Meter]:

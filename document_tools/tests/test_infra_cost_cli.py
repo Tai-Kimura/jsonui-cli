@@ -34,11 +34,17 @@ def _engine(scenario_id: str):
     return E.simulate(sc, model, book), model
 
 
+def _no_short(month: dict) -> dict:
+    """The month without each warning's line (the CLI adds it: room.cost_short)."""
+    assert all(w["short"] == R.cost_short(w) for w in month["warnings"])
+    return dict(month, warnings=[{k: v for k, v in w.items() if k != "short"} for w in month["warnings"]])
+
+
 def test_the_month_is_the_engine_s_month_as_viz_shapes_it():
     code, out = RUN.reply(ROOM, env=NO_CACHE)
     result, model = _engine("ordinary")
     assert code == 0 and out["ok"] and out["scenario"] == "ordinary"
-    assert out["month"] == V.month_view(result, model, "provider")
+    assert _no_short(out["month"]) == V.month_view(result, model, "provider")
     assert [s["id"] for s in out["scenarios"]] == ["ordinary", "sale"]
     assert sum(t["usd"] for t in out["topNodes"]) <= out["month"]["usd"] + 1e-9
     assert out["topNodes"][0]["usd"] == max(t["usd"] for t in out["topNodes"])
@@ -47,7 +53,7 @@ def test_the_month_is_the_engine_s_month_as_viz_shapes_it():
 def test_a_scenario_by_node_and_a_day():
     code, out = RUN.reply(ROOM, "sale", by="node", env=NO_CACHE)
     result, model = _engine("sale")
-    assert code == 0 and out["month"] == V.month_view(result, model, "node")
+    assert code == 0 and _no_short(out["month"]) == V.month_view(result, model, "node")
     code, out = RUN.reply(ROOM, None, "2026-11-03", env=NO_CACHE)
     result, model = _engine("ordinary")
     assert code == 0 and "month" not in out and out["day"] == V.day_view(result, model, "2026-11-03")

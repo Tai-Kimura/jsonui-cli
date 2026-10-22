@@ -18,6 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .. import load as LD
+from .. import model as M
 from .. import rules as RULES
 from . import formulas as F
 from . import parts
@@ -58,7 +59,9 @@ class Result:
 
 def _warn(out: list, fn: str, message: str, node: str | None = None, hour: dict | None = None,
           meter: str | None = None, code: str | None = None, **extra) -> None:
-    w = {"fn": fn, "message": message, **({"code": code} if code else {}), **extra}
+    w = {"fn": fn, "message": str(message), **({"code": code} if code else {}), **extra}
+    if isinstance(message, M.Why):   # its words' key and values (room.COST_JA), for a line in the page's language
+        w["detail"] = {"keyword": message.keyword, **message.detail}
     if node:
         w["node"] = node
     if hour:
@@ -144,7 +147,8 @@ def meters_of(rule, node: dict, hour_ctx: F.Hour, warnings: list, hour: dict) ->
     try:
         return list(rule.cost(hour_ctx))
     except (KeyError, ValueError, TypeError, ZeroDivisionError) as exc:   # a rule's bug is a warning, not a crash
-        _warn(warnings, "meters_of", f"the rule {rule.id} failed ({type(exc).__name__}: {exc})", node["id"], hour)
+        _warn(warnings, "meters_of", M.Why(f"the rule {rule.id} failed ({type(exc).__name__}: {exc})", "cost.rule_failed",
+                                           rule=rule.id, error=type(exc).__name__), node["id"], hour)   # the words: no value
         return []
 
 
@@ -221,8 +225,10 @@ def run_node(row: dict, node: dict, rule, book: PB.Book, totals: dict, hours: li
             slot["amount"][k] += m.amount
             if usd is None:
                 if not m.optional and slot["priced"]:
-                    _warn(warnings, "price_meter", f"no price for {m.service or run.service or '(no service)'} {m.sku} ({m.unit}) in "
-                          f"{run.region or 'no region'}", node["id"], hour, m.name)
+                    _warn(warnings, "price_meter", M.Why(f"no price for {m.service or run.service or '(no service)'} {m.sku} "
+                                                          f"({m.unit}) in {run.region or 'no region'}", "cost.no_price",
+                                                          service=m.service or run.service or "", sku=m.sku, unit=m.unit,
+                                                          region=run.region or ""), node["id"], hour, m.name)
                 slot["priced"] = slot["priced"] and m.optional
                 slot["usd"][k] = None if not m.optional else 0.0
             else:
@@ -262,7 +268,8 @@ def run_edge(edge: dict, nodes: dict, book: PB.Book, totals: dict, hours: list[d
             slot["amount"][k] += m.amount
             if usd is None:
                 if slot["priced"]:
-                    _warn(warnings, "run_edge", f"no price for data-transfer {m.sku} in {ra or 'no region'}",
+                    _warn(warnings, "run_edge", M.Why(f"no price for data-transfer {m.sku} in {ra or 'no region'}",
+                                                       "cost.no_price.transfer", sku=m.sku, region=ra or ""),
                           run.node, hour, m.name)
                 slot["priced"] = False
                 slot["usd"][k] = None
@@ -304,7 +311,7 @@ def simulate(scenario: dict, model: dict, book: PB.Book, totals: dict | None = N
         if edge["from"] in nodes and edge["to"] in nodes:
             runs.append(run_edge(edge, nodes, book, totals, hours, on, warnings))
     if not account and totals.get(FREE_USED) and len(model.get("environments") or []) > 1:
-        _warn(warnings, "simulate", FREE_PER_SCENARIO, code="cost.free_per_scenario",
+        _warn(warnings, "simulate", M.Why(FREE_PER_SCENARIO, "cost.free_per_scenario"), code="cost.free_per_scenario",
               rows=sorted(totals[FREE_USED].values()))
     return Result(scenario=scenario["id"], month=scenario["month"], hours=hours, nodes=runs, warnings=warnings)
 
@@ -318,8 +325,9 @@ def simulate_account(scenarios: list[dict], model: dict, book: PB.Book) -> list[
     for s in scenarios:
         if scenarios and s["month"] != scenarios[0]["month"]:
             r = simulate(s, model, book)
-            _warn(r.warnings, "simulate_account", f"a scenario of {s['month']}, not {scenarios[0]['month']}: priced on its "
-                  "own, its free amounts not the account's", code="cost.account_other_month")
+            _warn(r.warnings, "simulate_account", M.Why(f"a scenario of {s['month']}, not {scenarios[0]['month']}: priced on "
+                  "its own, its free amounts not the account's", "cost.account_other_month", month=s["month"],
+                  first=scenarios[0]["month"]), code="cost.account_other_month")
         else:
             r = simulate(s, model, book, totals)
         out.append(r)

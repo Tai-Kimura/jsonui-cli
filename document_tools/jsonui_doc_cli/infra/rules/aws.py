@@ -6,6 +6,7 @@ from __future__ import annotations
 import re
 from functools import partial
 
+from .. import model as M
 from ..cost import formulas as F
 from . import provider_rule
 
@@ -123,18 +124,18 @@ def step_functions_notice(node: dict, quantities: dict, running: list) -> list[t
         return []
     if not _any(quantities, "requests"):
         return []
-    return [("cost.stepfunctions_no_transitions", f"{node['id']}: a Standard workflow is billed per state transition; "
-             "its load has requests and no state_transitions, so it is priced 0 (write state_transitions, or spec "
-             "workflow_type: express)")]
+    return [("cost.stepfunctions_no_transitions", M.Why(f"{node['id']}: a Standard workflow is billed per state "
+             "transition; its load has requests and no state_transitions, so it is priced 0 (write state_transitions, "
+             "or spec workflow_type: express)", "cost.stepfunctions_no_transitions"))]
 
 
 def app_runner_notice(node: dict, quantities: dict, running: list) -> list[tuple[str, str]]:
     """An hour with requests is counted active through the hour: say that it is the most it can be."""
     if not ("vcpu" in quantities and "memory_gb" in quantities and _any(quantities, "requests", running)):
         return []
-    return [("cost.apprunner_active_upper_bound", f"{node['id']}: each hour with requests is counted as active for "
-             "the whole hour (vCPU and memory); App Runner bills the seconds it processes requests, so this is the "
-             "most it can be")]
+    return [("cost.apprunner_active_upper_bound", M.Why(f"{node['id']}: each hour with requests is counted as active "
+             "for the whole hour (vCPU and memory); App Runner bills the seconds it processes requests, so this is the "
+             "most it can be", "cost.apprunner_active_upper_bound"))]
 
 
 def app_runner(h: F.Hour) -> list[F.Meter]:

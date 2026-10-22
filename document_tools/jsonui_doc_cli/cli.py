@@ -2469,7 +2469,7 @@ def cmd_cost_infra(args):
             if items:
                 print(f"  {label} ({len(items)}): " + ", ".join(items[:8]) + (" ..." if len(items) > 8 else ""))
         for w in m["warnings"][:10]:
-            print(f"  note: {w.get('message') if isinstance(w, dict) else w}")
+            print(f"  note: {(w.get('short') or w.get('message')) if isinstance(w, dict) else w}")
         if m["warningCount"] > 10:
             print(f"  ... {m['warningCount'] - 10} more note(s) (--json has them all)")
     for w in out["prices"]["warnings"]:

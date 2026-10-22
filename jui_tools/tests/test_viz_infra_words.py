@@ -80,6 +80,9 @@ def _room_lines(words) -> dict[str, str]:
                   for t in room.TYPE_JA})
     lines.update({f"side.{k}": words.side(WHERE, "/loads/0", {"keyword": k, **{f: f"<{f}>" for f in _slots(w)}})
                   for k, w in room.SIDE_JA.items()})
+    lines.update({f"cost.{k}": words.cost({"keyword": k, **{f: f"<{f}>" for f in _slots(w)}}) for k, w in room.COST_JA.items()})
+    lines.update({f"cost.empty.{k}": words.cost({"keyword": "cost.no_price", "service": "", "sku": "s", "unit": "u", "region": ""})
+                  for k in room.COST_EMPTY_JA})
     lines.update({f"exclude.{w}": words.exclude(room.CONFIG_NAME, "/infra/exclude/0", w) for w in room.EXCLUDE_JA})
     lines.update({f"secret.{k}": words.secret(WHERE, "/nodes/0/x", k) for k in room.SECRET_JA})
     lines.update({f"flow:{c}": words.flow(WHERE, "/flows/0", c) for c in room.FLOW_JA})
@@ -115,8 +118,9 @@ def test_the_keys_are_closed_both_ways():
     have |= {f"srv.room.exclude.{w}" for w in room.EXCLUDE_JA}
     have |= {f"srv.room.schema.{kw}" for kw in room.SCHEMA_JA} | {f"srv.room.type.{t}" for t in room.TYPE_JA} | {"srv.room.type.or"}
     have |= {f"srv.room.side.{k}" for k in room.SIDE_JA}
+    have |= {f"srv.room.cost.{k}" for k in room.COST_JA} | {f"srv.room.cost.empty.{k}" for k in room.COST_EMPTY_JA}
     families = ("srv.cost.q.", "srv.cost.meter.", "srv.room.secret.", "srv.room.flow.", "srv.room.refused.", "srv.room.said.",
-                "srv.room.exclude.", "srv.room.schema.", "srv.room.type.", "srv.room.side.")
+                "srv.room.exclude.", "srv.room.schema.", "srv.room.type.", "srv.room.side.", "srv.room.cost.")
     assert sorted(k for k in ja if k.startswith(families) and k not in have) == []
     assert sorted(k for k in have if k not in ja) == []
     assert (set(infra_words.QUANTITY), set(infra_words.METER), set(infra_words.SECRET), set(infra_words.FLOW),
@@ -125,6 +129,7 @@ def test_the_keys_are_closed_both_ways():
         set(load.quantities()), set(view.METER_LABELS), set(room.SECRET_JA), set(room.FLOW_JA), set(REFUSED), set(SAID),
         set(room.EXCLUDE_JA), set(room.SCHEMA_JA), set(room.TYPE_JA))
     assert set(infra_words.SIDE) == set(room.SIDE_JA)
+    assert (set(infra_words.COST), set(infra_words.COST_EMPTY)) == (set(room.COST_JA), set(room.COST_EMPTY_JA))
     assert set(SCHEMA_DETAIL) == set(room.SCHEMA_JA)
 
 
@@ -263,3 +268,59 @@ def test_the_cost_screens_problems_are_in_the_pages_language(tmp_path, language,
             "en": ("names a node the model does not have (this row is left out)", "is the same price as row 0 (that one is kept)")}[lang]
     assert len(line) == 1 and line[0].endswith(f"/loads/{len(doc['loads']) - 1}/node {want[0]}"), got["problems"]
     assert warn == [f"docs/infra/prices/p.json: /prices/1 {want[1]} [prices.duplicate]"], got["prices"]
+
+
+
+COST_JS = web_text("js", "56-server-cost.js")
+COST_PY = Path(__file__).resolve().parents[1] / "jui_cli" / "viz" / "infra_cost.py"
+
+
+def test_the_cost_screen_draws_each_servers_message_after_its_short():
+    """The closed list of what the cost screen draws from the server: a problem, a warning and a refusal, each its
+    short line first (the message, English, only for a reply that has none). A new place that draws a message bare is
+    red (ticket 2026-10-22-infra-schema-errors-say-only-schema)."""
+    drawn = re.findall(r"(\w+)\.message\b", COST_JS)
+    assert sorted(set(drawn)) == ["got", "p", "w"]
+    bare = [ln for ln in COST_JS.splitlines() for who in re.findall(r"(\w+)\.message\b", ln) if f"{who}.short ||" not in ln]
+    assert bare == []
+
+
+def test_every_refusal_of_the_cost_reply_has_its_line():
+    """Each refusal infra_cost makes (_refuse, or a reply dict with a reason) carries short, from the table."""
+    import ast
+    tree = ast.parse(COST_PY.read_text(encoding="utf-8"))
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and getattr(n.func, "id", None) == "_refuse"]
+    assert calls and [n.lineno for n in calls if len(n.args) != 5] == []
+    dicts = [n for n in ast.walk(tree) if isinstance(n, ast.Dict)
+             and {"reason", "ok"} <= {getattr(k, "value", None) for k in n.keys}]
+    assert [n.lineno for n in dicts if "short" not in {getattr(k, "value", None) for k in n.keys}] == []
+    used = set(re.findall(r'"(srv\.cost\.refused\.\w+)"', COST_PY.read_text(encoding="utf-8")))
+    assert used == {k for k in _table("ja") if k.startswith("srv.cost.refused.")}
+
+
+@pytest.mark.parametrize("lang", ["ja", "en"])
+def test_the_cost_screens_lines_are_the_pages_language(tmp_path, language, lang):
+    """What the screen draws (problems, warnings, a refusal) for a room with a load problem, a priced notice and a
+    missing price: every line is the table's, Japanese under ja and none under en."""
+    from jui_cli.viz import infra_cost as C
+    from tests.test_viz_infra_cost import _with_staging
+    from tests.test_viz_infra_docs import _room
+    language(lang)
+    C.forget()
+    try:
+        root = _with_staging(_room(tmp_path, "aws-three-tier"))
+        load = root / "docs/infra/load/ordinary.json"
+        doc = json.loads(load.read_text(encoding="utf-8"))
+        doc["loads"].append({"node": "nope", "quantities": {"requests": 1}})
+        load.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+        status, got = C.read(root, seq=1)
+        _s, refused = C.read(root, seq=2, scenario="nope")
+        _s, bad = C.read(root, seq=3, by="region")
+    finally:
+        C.forget()
+    assert status == 200, got
+    lines = [p["short"] for p in got["problems"]["first"]] + [w["short"] for w in got["month"]["warnings"]]
+    lines += [refused["short"], bad["short"]]
+    assert got["month"]["warnings"] and len(lines) >= 4, got
+    has = (lambda x: bool(JAPANESE.search(x))) if lang == "ja" else (lambda x: not JAPANESE.search(x))
+    assert [x for x in lines if not has(x) or "{" in x] == []

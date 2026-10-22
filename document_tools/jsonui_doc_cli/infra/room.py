@@ -114,6 +114,30 @@ SIDE_JA = {"load.timezone": "は、この機械が知らない timezone です",
            "prices.row.tier_gap": "の tier {next} が、tier {k} の終わる所から始まりません（この行は使いません）",
            "prices.duplicate": "は、行 {row} と同じ価格です（先の行を使います）"}
 
+#: one per words key the cost simulator says on its own (engine.py's warnings, a rule's notice in rules/, the price
+#: book's warnings in cost/pricebook.py; test_infra_side_words: closed both ways). A line names no value found: a
+#: rule's failure says its exception's type only. An empty service or region: COST_EMPTY_JA
+COST_JA = {"cost.rule_failed": "rule {rule} が失敗しました（{error}）",
+           "cost.no_price": "{service} {sku}（{unit}）の価格が、{region} にありません",
+           "cost.no_price.transfer": "data-transfer {sku} の価格が、{region} にありません",
+           "cost.free_per_scenario": "無料枠は scenario ごとに 1 回差し引きます。scenario は 1 つの環境なので、1 つのアカウントを分け合う環境（1 つの AWS アカウントの production と staging）は、それぞれがアカウントの無料枠を取り、合計はその分だけ低く出ます。1 回だけ取るには、アカウントとして見積もってください（simulate_account: scenario をまとめて 1 つの合計にします）",
+           "cost.account_other_month": "{first} ではなく {month} の scenario です。単独で見積もり、無料枠はアカウントのものを使いません",
+           "cost.stepfunctions_no_transitions": "Standard の workflow は state transition ごとに課金されます。load に requests があって state_transitions が無いので、0 と見積もります（state_transitions を書くか、spec に workflow_type: express と書いてください）",
+           "cost.apprunner_active_upper_bound": "requests のある時間は、その 1 時間ずっと動いていると数えます（vCPU とメモリ）。App Runner は requests を処理した秒だけ課金するので、これは上限です",
+           "cost.waf_kind.said": "WAF を {kind} の WAF として見積もります（node の spec がそう言っています）",
+           "cost.waf_kind.default": "WAF を Application Gateway WAF v2 として見積もります（node が種類を言っていません。Front Door の policy なら、spec に kind: frontdoor と書いてください）",
+           "cost.free_not_counted.run": "Cloud Run の月ごとの無料の vCPU 秒と GiB 秒（請求先アカウントごと）は、差し引いていません。Cloud Billing Catalog に載っておらず、そのページも読めなかったためです。vCPU とメモリは最初の 1 秒から見積もります（無料の 200 万 requests は数えています）",
+           "cost.free_not_counted.gke": "GKE のクラスタ管理料の月ごとの無料クレジット（請求先アカウントごと）は、差し引いていません。管理料は最初の 1 時間から見積もります",
+           "prices.cache_unused": "取ってきた価格のファイル {file} は使いません（{code}）",
+           "prices.cache_other_version": "取ってきた価格のファイル {n} 個は、別の版の jsonui-cli が書いたか、索引に名前がありません。{writer} がもう一度取ってくるまで使わず、同梱の価格を使います",
+           "prices.free_dropped": "{file} /prices/{index}: {price} には無料枠がありませんが、同梱の価格は 1 か月に {amount} {unit} を無料にします。この行が勝つので、無料枠は取りません（残すには、この行に free を書いてください）",
+           "prices.free_dropped.pool": "{file} /prices/{index}: {price} には無料枠がありませんが、同梱の価格は、アカウントの枠 {pool} から 1 か月に {amount} {unit} を無料にします。この行が勝つので、無料枠は取りません（残すには、この行に free を書いてください）",
+           "prices.room_unused": "部屋の価格のファイルを使いません（{reason}）: {line}"}
+
+#: an empty value in a cost line (COST_JA)
+COST_EMPTY_JA = {"service": "（service 無し）", "region": "（region 無し）"}
+
+
 #: a JSON type's name, in a type line (SCHEMA_JA["type"])
 TYPE_JA = {"object": "オブジェクト", "array": "配列", "string": "文字列", "integer": "整数", "number": "数",
            "boolean": "真偽値（true・false）", "null": "null"}
@@ -159,6 +183,12 @@ class Words:
     def side(self, where: str, path: str, detail: dict) -> str:
         """A load definition's or a price file's problem (SIDE_JA, by its detail's keyword)."""
         return f"{where}: {path} " + SIDE_JA[detail["keyword"]].format(**detail)
+
+    def cost(self, detail: dict) -> str:
+        """A line the cost simulator says on its own (COST_JA, by its detail's keyword); an empty service or region
+        named as COST_EMPTY_JA says."""
+        v = {k: (COST_EMPTY_JA[k] if x == "" and k in COST_EMPTY_JA else x) for k, x in detail.items()}
+        return COST_JA[detail["keyword"]].format(**v)
 
     def reference(self, where: str, path: str, code: str) -> str:
         return f"{where}: {path} の参照が合いません（{code}）"
@@ -261,6 +291,12 @@ def short(p: dict, folder: str, words: Words = DEFAULT_WORDS) -> str:
     if code == "spec.ha":
         return words.spec_ha(where, p["path"])
     return words.other(where, code, p.get("message") or "")
+
+
+def cost_short(w: dict, words: Words = DEFAULT_WORDS) -> str:
+    """A cost warning's line in ``words``' language: its words (COST_JA) when it has them, else its message."""
+    kw = (w.get("detail") or {}).get("keyword")
+    return words.cost(w["detail"]) if kw in COST_JA else w.get("message", "")
 
 
 def _short_refused(reason: str, folder: str, words: Words = DEFAULT_WORDS) -> str:

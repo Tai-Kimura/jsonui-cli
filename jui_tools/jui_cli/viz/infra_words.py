@@ -116,6 +116,30 @@ SIDE = {
     "prices.row.tier_gap": "srv.room.side.prices.row.tier_gap", "prices.duplicate": "srv.room.side.prices.duplicate"
 }
 
+#: a line the cost simulator says on its own, by its words key (room.COST_JA)
+COST = {
+    "cost.rule_failed": "srv.room.cost.cost.rule_failed", "cost.no_price": "srv.room.cost.cost.no_price",
+    "cost.no_price.transfer": "srv.room.cost.cost.no_price.transfer",
+    "cost.free_per_scenario": "srv.room.cost.cost.free_per_scenario",
+    "cost.account_other_month": "srv.room.cost.cost.account_other_month",
+    "cost.stepfunctions_no_transitions": "srv.room.cost.cost.stepfunctions_no_transitions",
+    "cost.apprunner_active_upper_bound": "srv.room.cost.cost.apprunner_active_upper_bound",
+    "cost.waf_kind.said": "srv.room.cost.cost.waf_kind.said",
+    "cost.waf_kind.default": "srv.room.cost.cost.waf_kind.default",
+    "cost.free_not_counted.run": "srv.room.cost.cost.free_not_counted.run",
+    "cost.free_not_counted.gke": "srv.room.cost.cost.free_not_counted.gke",
+    "prices.cache_unused": "srv.room.cost.prices.cache_unused",
+    "prices.cache_other_version": "srv.room.cost.prices.cache_other_version",
+    "prices.free_dropped": "srv.room.cost.prices.free_dropped",
+    "prices.free_dropped.pool": "srv.room.cost.prices.free_dropped.pool",
+    "prices.room_unused": "srv.room.cost.prices.room_unused"
+}
+
+#: an empty value in a cost line (room.COST_EMPTY_JA)
+COST_EMPTY = {
+    "service": "srv.room.cost.empty.service", "region": "srv.room.cost.empty.region"
+}
+
 #: a JSON type's name (room.TYPE_JA)
 TYPE = {
     "object": "srv.room.type.object", "array": "srv.room.type.array", "string": "srv.room.type.string",
@@ -173,6 +197,10 @@ class RoomWords:
 
     def side(self, where, path, detail):
         return i18n.tl(SIDE[detail["keyword"]], where=where, path=path, **{k: v for k, v in detail.items() if k != "keyword"})
+
+    def cost(self, detail):
+        v = {k: (i18n.tl(COST_EMPTY[k]) if x == "" and k in COST_EMPTY else x) for k, x in detail.items() if k != "keyword"}
+        return i18n.tl(COST[detail["keyword"]], **v)
 
     def reference(self, where, path, code):
         return i18n.tl("srv.room.reference", where=where, path=path, code=code)

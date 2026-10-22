@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import re
 
+from .. import model as M
 from ..cost import formulas as F
 from . import provider_rule
 
@@ -82,15 +83,16 @@ def memorystore(h: F.Hour) -> list[F.Meter]:
 
 def run_grant_notice(node, quantities, running):
     """Said, not silent: the free vCPU and memory a billing account gets a month is not taken off."""
-    return [("cost.free_not_counted", "Cloud Run's monthly free vCPU-seconds and GiB-seconds (per billing account) are "
-                                      "not taken off: the Cloud Billing Catalog does not list them and the page could "
-                                      "not be read — vCPU and memory are priced from the first second (the free 2 "
-                                      "million requests are counted)")]
+    return [("cost.free_not_counted", M.Why("Cloud Run's monthly free vCPU-seconds and GiB-seconds (per billing account) "
+                                            "are not taken off: the Cloud Billing Catalog does not list them and the page "
+                                            "could not be read — vCPU and memory are priced from the first second (the "
+                                            "free 2 million requests are counted)", "cost.free_not_counted.run"))]
 
 
 def gke_credit_notice(node, quantities, running):
-    return [("cost.free_not_counted", "GKE's monthly free credit for the cluster management fee (per billing account) "
-                                      "is not taken off: the fee is priced from the first hour")]
+    return [("cost.free_not_counted", M.Why("GKE's monthly free credit for the cluster management fee (per billing "
+                                            "account) is not taken off: the fee is priced from the first hour",
+                                            "cost.free_not_counted.gke"))]
 
 
 def kms(h: F.Hour) -> list[F.Meter]:

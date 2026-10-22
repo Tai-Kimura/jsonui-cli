@@ -74,6 +74,8 @@ def _reply(root: Path, scenario: str | None, date: str | None, by: str, env: dic
         out["day"] = V.day_view(result, model, date)
     else:
         out["month"] = V.month_view(result, model, by)
+        for w in out["month"]["warnings"]:   # each its line (the CLI prints it; room.COST_JA)
+            w["short"] = R.cost_short(w)
         totals = E.month_totals(result)
         by_node: dict[str, float] = {}
         for d in totals["days"]:

@@ -116,8 +116,9 @@ def _book_warnings(tmp_path, *rows) -> list[str]:
 
 def test_an_egress_row_without_free_says_the_account_s_100_gb_is_not_taken(tmp_path):
     [w] = _book_warnings(tmp_path, EGRESS)
-    assert w.startswith("p.json /prices/0: aws/data-transfer/egress has no free amount")
-    assert "100 GB a month from the account's pool aws:data-transfer-out free" in w and "write free on it" in w
+    assert w == ("p.json /prices/0: aws/data-transfer/egress には無料枠がありませんが、同梱の価格は、アカウントの枠 "
+                 "aws:data-transfer-out から 1 か月に 100 GB を無料にします。この行が勝つので、無料枠は取りません（残すには、"
+                 "この行に free を書いてください） [prices.free_dropped]")
 
 
 def test_a_row_that_keeps_the_free_amount_or_has_none_bundled_is_quiet(tmp_path):
@@ -132,4 +133,4 @@ def test_the_example_room_drops_no_free_amount():
 
 def test_one_warning_per_price_however_many_rows_drop_it(tmp_path):
     [w] = _book_warnings(tmp_path, EGRESS, dict(EGRESS, region="us-east-1"))
-    assert "aws/data-transfer/egress has no free amount" in w
+    assert w.startswith("p.json /prices/0: aws/data-transfer/egress には無料枠がありませんが")
