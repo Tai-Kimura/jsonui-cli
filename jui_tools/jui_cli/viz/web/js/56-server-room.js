@@ -30,7 +30,8 @@
      ノードが少なくなった時はどれが何のインスタンスかわかる程度に違いが欲しい」): near, with SR.detail.enter nodes or fewer
      in view, a second set of shapes by service (a function a slim pillar, a container a crate, a key-value store a
      tapered drum, a notification a pyramid...: srDetailShape) and tags of name · service · its main spec; back to
-     the simple ones past SR.detail.leave (between the two it stays as it was).
+     the simple ones past SR.detail.leave (between the two it stays as it was). There, each node in view stands as a model of what
+     it does (56-sr-models.js); the shapes by service under it still take the press.
    - a node's spec (§4): the board's 選んだもの lists it, the keys the IaC tables know with a name in words.
    Measured for the ticket: the first draw, the frame time far and near, the memory (SR.stats). */
 const SR = {
@@ -577,6 +578,8 @@ function srPlaceLabels(V) {
   V.inView = inView;
   const detail = V.lod === 'near' && inView > 0 && (V.detail ? inView <= SR.detail.leave : inView <= SR.detail.enter);
   if (detail !== V.detail) srSetDetail(V, detail);
+  V.inViewIds = out.filter((o) => o.n).map((o) => o.n.id);
+  srModelsSync(V, V.inViewIds);   // up close, the models of the nodes in view (56-sr-models.js)
   if (V.detail) for (const o of out) if (o.n) o.text = srDetailText(o.n);
   out.sort((a, b) => a.d - b.d);
   const groups = out.filter((o) => o.kind === 'group').slice(0, SR.labels.max - SR.labels.nodes);

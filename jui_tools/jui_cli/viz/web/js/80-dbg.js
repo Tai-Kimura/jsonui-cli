@@ -42,7 +42,12 @@ window.__dbg = {
     const shapesOf = (set) => { const o = {}; for (const m of V.nodeMeshes[set]) m.userData.nodes.forEach((id) => { o[id] = m.userData.shape; }); return o; };
     return { detail: V.detail, inView: V.inView ?? null, enter: SR.detail.enter, leave: SR.detail.leave, simple: shapesOf('simple'), byService: shapesOf('detail'),
       shown: { simple: V.nodeSets.simple.visible, detail: V.nodeSets.detail.visible }, picks: V.pick.filter((m) => m.userData.nodes).map((m) => m.userData.shape),
-      tags: [...document.querySelectorAll('#sr-labels .sr-label:not([hidden])')].filter((s) => s.dataset.kind !== 'group').map((s) => s.textContent) }; },
+      tags: [...document.querySelectorAll('#sr-labels .sr-label:not([hidden])')].filter((s) => s.dataset.kind !== 'group').map((s) => s.textContent),
+      // up close, the models standing (node → kind), what each node in view should be (srModelKind), the cap, and whether the
+      // shapes by service are drawn under them
+      models: V.models ? Object.fromEntries([...V.models].map(([id, g]) => [id, g.userData.kind])) : {}, modelMax: SR_MODEL.max,
+      inViewIds: (V.inViewIds || []), kinds: Object.fromEntries((V.inViewIds || []).map((id) => [id, srModelKind(V.L.pos.get(id).n)])),
+      detailDrawn: V.nodeMeshes.detail.map((m) => m.material.visible) }; },
   srTagOf: (id) => { const n = SR.model && (SR.model.nodes || []).find((x) => x.id === id); return n ? srDetailText(n) : null; },   // a node's tag up close
   // a flow playing (59-sr-flows.js): what it is at, what it said, what it waits for
   srFlow: () => { const P = SR_FLOW.player, V = SR.view; return { starts: V && V.flowStarts ? V.flowStarts.slice() : [], speed: SR_FLOW.speed, auto: SR_FLOW.auto,

@@ -429,6 +429,17 @@ async def run_server_room(pw, out, failures):
         s = res["opened"] = await page.evaluate(SR)
         check(failures, s["bubble"] is None and (s["shown"] or {}).get("nodes", 0) > 0 and s["stats"]["edges"] > 0, f"open: the model drawn, the bubble gone: {s['shown']}")
         check(failures, s["lod"] == "near" and s["layers"] == {"near": True, "far": False}, f"open up close: the floors and shapes, not the far boxes over them: {s['lod']} {s['layers']}")
+        # up close in a small room (ticket 2026-10-22-viz-server-room-palette-and-light-flow §3): every node in view stands as
+        # its kind's model, the shapes by service under them still pickable but not drawn
+        await page.evaluate("() => window.__dbg.srZoom(0.8)")
+        md = await until(page, "() => { const d = window.__dbg.srDetail(); return d && d.detail && d.inViewIds.length && d.inViewIds.every((i) => d.models[i]) ? d : null; }",
+                         "the small room up close: a model per node in view", timeout=10000,
+                         why="() => { const d = window.__dbg.srDetail(); return d && [d.detail, d.inViewIds, d.models]; }")
+        res["models"] = {"inView": md["inViewIds"], "models": md["models"], "kinds": md["kinds"], "drawn": md["detailDrawn"], "picks": sorted(set(md["picks"]))}
+        check(failures, {i: md["models"][i] for i in md["inViewIds"]} == md["kinds"] and len(set(md["kinds"].values())) >= 5
+              and not any(md["detailDrawn"]) and md["picks"] and len(md["models"]) <= md["modelMax"],
+              f"a small room up close: every node in view is its kind's model, the shapes under them pick but are not drawn: {res['models']}")
+        await page.click("#sr-fit")
 
         # 2c. the cost simulator (plan L-C): 3D / コスト, the scenarios, the month, a day played, its breakdown and the red
         COST = "() => window.__dbg.srCost()"
@@ -911,6 +922,12 @@ async def run_server_room(pw, out, failures):
         s, first = await frames("fit")
         res["large"] = {"stats": s["stats"], "fit": first}
         check(failures, s["stats"]["nodes"] >= 1500 and first["frameP90"] < FRAME_P90_MAX_MS, f"the large model is drawn and does not stall: {res['large']}")
+        # fit-all on the large room draws what it drew before the models (§3: 「引きになったら負荷が大きいので今の表示で」): the far
+        # boxes only — 3 draw calls, 12 triangles, as on 2.3.19 — and no model is made
+        fit_models = (await page.evaluate("() => window.__dbg.srDetail()"))["models"]
+        res["large"]["fitModels"] = len(fit_models)
+        check(failures, first["gpu"]["calls"] == 3 and first["gpu"]["triangles"] == 12 and fit_models == {},
+              f"the large room at fit-all: the far boxes alone, as before, and no model: {first['gpu']} models {len(fit_models)}")
         px_far = await page.evaluate("() => window.__dbg.srZoom(3)")
         await until(page, "() => window.__dbg.sr().lod === 'far'", "far", timeout=5000)
         await until(page, "() => window.__dbg.sr().labels > 0", "far labels", timeout=5000)
@@ -929,6 +946,8 @@ async def run_server_room(pw, out, failures):
         # up close (§5): many in view, the simple shapes; moved in on one Lambda, the shapes by service and tags with the
         # service; between the two thresholds it stays as it was; the whole view, simple again
         d0 = await page.evaluate("() => window.__dbg.srDetail()")
+        res["largeModels"] = {"many": len(d0["models"])}
+        check(failures, d0["models"] == {} and all(d0["detailDrawn"]), f"the large room, many in view: no model, the shapes as they were: {res['largeModels']}")
         fn = next(i for i, sh in d0["byService"].items() if sh == "pillar" and d0["simple"].get(i) == "rack")
         await page.evaluate("(id) => window.__dbg.srSelect(id)", fn)
         await page.click("#sr-board [data-sr-act='focus']")
@@ -954,6 +973,9 @@ async def run_server_room(pw, out, failures):
         await until(page, "() => window.__dbg.srDetail().detail", "back in detail", timeout=5000)
         await page.click("#sr-fit")
         d2 = await until(page, "() => { const d = window.__dbg.srDetail(); return d.detail ? null : d; }", "the whole view: simple again", timeout=10000)
+        res["largeModels"].update(close=[len(d1["models"]), sorted(set(d1["models"].values()))], whole=len(d2["models"]))
+        check(failures, d1["models"].get(fn) == "bolt" and all(d1["models"].get(i) == d1["kinds"][i] for i in d1["inViewIds"]) and d2["models"] == {},
+              f"the large room: moved in, each node in view its model (the Lambda a bolt); the whole view again, none: {res['largeModels']}")
         await page.evaluate("() => window.__dbg.srSelect(null)")
         def svc_tags(d):
             return [t for t in d["tags"] if " · " in t]
