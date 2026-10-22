@@ -646,6 +646,10 @@ def _parse_methods(methods_data: list, *, default_async: bool = True) -> list[Me
     return result
 
 
+#: The unread-key lines this run has already printed. See below.
+_CONFIG_KEYS_REPORTED: set[str] = set()
+
+
 def resolve_canonical_marks(spec_data: dict, spec_path) -> None:
     """Expand `@canonical` marks against the project's API canon.
 
@@ -675,6 +679,12 @@ def resolve_canonical_marks(spec_data: dict, spec_path) -> None:
         cwd = None
     context = canon.build_spec_canon_context(spec_path, extra_roots=(cwd,))
     for message in context.unknown_config_keys:
+        # Once per run: the context is built per spec, so a project with 38
+        # marked specs printed the same config's line 38 times. Each `jui`
+        # command is its own process, so the process is the run.
+        if message in _CONFIG_KEYS_REPORTED:
+            continue
+        _CONFIG_KEYS_REPORTED.add(message)
         print(f"WARNING: {message}")
     if context.unresolved_extends:
         raise CanonicalMarkError("; ".join(context.unresolved_extends))

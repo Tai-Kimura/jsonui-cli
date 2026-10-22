@@ -241,6 +241,10 @@ class SpecValidator:
         # specs of one project; the OpenAPI documents are read once.
         self._api_index_cache: dict[Path, dict[str, dict[str, str]]] = {}
         self._api_yaml_skip_reported: bool = False
+        # A config's unread keys are a fact about the config, not about each
+        # spec under it: `validate all` put the same line under every spec
+        # with a declared endpoint, so one key read as N warnings.
+        self._config_keys_reported: set[str] = set()
         self._custom_rules: CustomRules = custom_rules or CustomRules()
         self._build_effective_rules()
 
@@ -3552,6 +3556,9 @@ class SpecValidator:
             return
         self._report_yaml_shortfall(context, result)
         for message in getattr(context, "unknown_config_keys", ()):
+            if message in self._config_keys_reported:
+                continue
+            self._config_keys_reported.add(message)
             # A warning, not an error: an unrecognised key may be a setting a
             # future version reads, or a project's own note without the
             # underscore. A broken `extends` value is an error because it
