@@ -144,6 +144,19 @@ async def run_room_roster(pw, out, failures, jt=None):
         check(failures, not any(r["alert"] for r in s["rows"] if r["id"] != rid[3]), f"only its row is marked: {s['rows']}")
         await page.screenshot(path=str(out / "1920-hidden-waiting.png"))
 
+        # 2b. a board over the 3D hides the list (requester 10-23: 「ボード出してる時はbotの切り替えの表示も消していいよ」); closed,
+        # it is back; the header's chip still says a robot waits
+        for opener, board in (("#btn-specboard", "wb"), ("#chip-perm", "tb")):
+            await page.click(opener)
+            await until(page, f"() => !document.getElementById('{board}').hidden", f"the {board} board open", timeout=8000)
+            s = res[f"board-{board}"] = await until(page, "() => { const s = window.__dbg.roster(); return s.shown ? null : s; }", f"the list hidden under {board}", timeout=5000, why=RO)
+            check(failures, not s["shown"] and s["permChip"], f"{board} open: the list hidden, the header still says a robot waits: {s['shown']} {s['permChip']}")
+            if board == "wb":
+                await page.screenshot(path=str(out / "1920-board.png"))
+            await page.keyboard.press("Escape")
+            s = res[f"board-{board}-closed"] = await until(page, "() => { const s = window.__dbg.roster(); return s.shown ? s : null; }", f"the list back after {board}", timeout=8000, why=RO)
+            check(failures, s["shown"] and len(s["rows"]) == N, f"{board} closed: the list back: {s['shown']}")
+
         # 3. kept: a reload, the room again, the same three hidden
         await page.reload()
         await ready(page)

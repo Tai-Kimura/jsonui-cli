@@ -9,8 +9,15 @@
    - remembered per room in this browser (pref roster:<room>, the sessions hidden; a new one is shown);
    - 全部 / 作業中だけ (any state but idle and done: waiting is work the person is owed) / なし;
    - a hidden robot waiting on the person (waitKindOf: a permission, a question, input) is not lost: its row is marked
-     with what it waits for, and the list's head counts them. */
+     with what it waits for, and the list's head counts them;
+   - not over a board (requester 10-23 01:23: 「ボード出してる時はbotの切り替えの表示も消していいよ」): while one of
+     ROSTER_BOARDS is drawn over the 3D the list goes, and comes back with the 3D. The robot's card is not a board: it is
+     opened from the list. The header's waiting chips and the notifications are not the list's: they stay. */
 const ROSTER = { off: new Map(), sig: '', max: 200, placedAt: 0, placeMs: 250 };
+// the boards drawn over the 3D (each shown by showOverlay): the whiteboard (a spec, and ボードで全部見る), the task board,
+// the server room, the data server, the bills
+const ROSTER_BOARDS = ['wb', 'tb', 'sr', 'ds', 'pr'];
+const rosterUnderBoard = () => ROSTER_BOARDS.some((id) => { const el = document.getElementById(id); return !!el && el._showing === true; });
 const rosterMainDef = (def) => (def.kind === 'sub' && DEF[def.mainLabel] ? DEF[def.mainLabel] : def);
 const rosterKeyOf = (def) => def.sessionId || def.realId || def.id;
 function rosterOff(room) {
@@ -63,7 +70,7 @@ function rosterSync(solo) {
   const box = document.getElementById('roster');
   if (!box) return;
   // kept while a robot is zoomed on: a card is opened from the list, and the next row is pressed from there
-  const show = !!solo && has3D && !TOWER.on && !ds.open && !pr.open;
+  const show = !!solo && has3D && !TOWER.on && !ds.open && !pr.open && !rosterUnderBoard();
   box.hidden = !show;
   if (!show) { ROSTER.sig = ''; return; }
   const now = performance.now();

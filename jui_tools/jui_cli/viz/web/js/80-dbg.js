@@ -288,7 +288,7 @@ window.__dbg = {
     const alert = document.getElementById('roster-alert');
     return { shown: !!box && !box.hidden, solo, rows, bots, alert: alert && !alert.hidden ? alert.textContent : null, count: (document.getElementById('roster-count') || {}).textContent || '',
       folded: !!box && box.classList.contains('roster-folded'), rect: rect(box), err: rect(document.getElementById('live-error')), soloBox: rect(document.getElementById('room-solo')), card: rect(document.querySelector('#rb.show')),
-      scene: rect(document.getElementById('scene')), ring: selRing.visible, saved: solo ? readPref(`roster:${solo}`, '') : '' }; },
+      scene: rect(document.getElementById('scene')), ring: selRing.visible, permChip: (($('chip-perm') || {}).hidden === false) ? $('chip-perm').textContent : null, saved: solo ? readPref(`roster:${solo}`, '') : '' }; },
   // robots' name tags as drawn (10-19): the screen rect of each visible one, and placeRobotTags' cost
   tags: () => robots.filter((R) => R.tag.style.visibility !== 'hidden' && !R.tag.hidden && !tagsEl.hidden).map((R) => {
     const b = R.tag.getBoundingClientRect(); return { id: R.def.id, text: R.tag.textContent, x0: b.left, x1: b.right, y0: b.top, y1: b.bottom }; }),
