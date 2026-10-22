@@ -787,7 +787,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
    1fr one and their headers covered the permission strip's buttons; ticket 2026-10-20-jui-viz-board-kanban-header-covers-perm-strip).
    A hidden strip leaves an empty row of no height. The strip of calls stopped by auto mode (51-denials.js) has its own
    row too: without one it fell into an auto row after the columns. */
-.kb-body { position: relative; display: grid; grid-template-rows: auto auto auto auto minmax(0, 1fr); min-height: 0; }
+.kb-body { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto auto minmax(0, 1fr); min-height: 0; }   /* the column is the board's width: a folded strip's no-wrap line never widens it (2.3.20's gate: 390 px, the columns 8 px past the frame) */
 .kb-body > #q-strip { grid-row: 1; }
 .kb-body > #denied-strip { grid-row: 2; }
 .kb-body > #perm-strip { grid-row: 3; }
