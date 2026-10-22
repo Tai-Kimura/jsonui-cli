@@ -82,9 +82,12 @@ def test_the_schema_walker_reads_the_new_words_and_the_model_is_unchanged():
     assert M.check_schema({"day": {"hourly": [1] * 23}}, root["properties"]["profiles"], "/profiles", root)[0][0] \
         == "/profiles/<key>/hourly"                                               # a name is masked in a path
     # the model's schema reads as before: a word it does not have is still refused with its own message
-    assert M.check_schema({"version": 0, "x": 1}) == [("/<key>", "is not a field of the infra model v0")]
-    assert ("/x", "is not a field of the infra load v0") not in M.check_schema(_scenario(x=1), root=root)
-    assert M.check_schema(_scenario(x=1), root=root) == [("/<key>", "is not a field of the infra load v0")]
+    # (and the fields that may be written there: ticket 2026-10-22-infra-schema-errors-say-only-schema)
+    model_fields = ", ".join(M.schema()["properties"])
+    assert M.check_schema({"version": 0, "x": 1}) == [
+        ("/<key>", f"is not a field of the infra model v0 (the fields here: {model_fields})")]
+    assert [p for p, _ in M.check_schema(_scenario(x=1), root=root)] == ["/<key>"]
+    assert M.check_schema(_scenario(x=1), root=root)[0][1].startswith("is not a field of the infra load v0 (the fields here: ")
 
 
 def test_the_quantities_are_closed_with_one_unit_each_and_the_price_units_hold_them():

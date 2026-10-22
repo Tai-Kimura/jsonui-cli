@@ -68,6 +68,26 @@ FLOW = {
     "flow.schedule.trigger": "srv.room.flow.schedule.trigger"
 }
 
+#: a keyword a schema problem breaks (room.SCHEMA_JA)
+SCHEMA = {
+    "maxLength": "srv.room.schema.maxLength", "minLength": "srv.room.schema.minLength",
+    "pattern": "srv.room.schema.pattern", "enum": "srv.room.schema.enum", "const": "srv.room.schema.const",
+    "type": "srv.room.schema.type", "oneOf": "srv.room.schema.oneOf", "required": "srv.room.schema.required",
+    "additionalProperties": "srv.room.schema.additionalProperties", "minimum": "srv.room.schema.minimum",
+    "maximum": "srv.room.schema.maximum", "exclusiveMinimum": "srv.room.schema.exclusiveMinimum",
+    "finite": "srv.room.schema.finite", "minItems": "srv.room.schema.minItems",
+    "maxItems": "srv.room.schema.maxItems", "uniqueItems": "srv.room.schema.uniqueItems",
+    "propertyNames": "srv.room.schema.propertyNames", "minProperties": "srv.room.schema.minProperties",
+    "maxProperties": "srv.room.schema.maxProperties"
+}
+
+#: a JSON type's name (room.TYPE_JA)
+TYPE = {
+    "object": "srv.room.type.object", "array": "srv.room.type.array", "string": "srv.room.type.string",
+    "integer": "srv.room.type.integer", "number": "srv.room.type.number", "boolean": "srv.room.type.boolean",
+    "null": "srv.room.type.null"
+}
+
 #: a way an infra.exclude entry is wrong (room.EXCLUDE_JA)
 EXCLUDE = {
     "not_a_list": "srv.room.exclude.not_a_list", "not_inside": "srv.room.exclude.not_inside",
@@ -106,8 +126,15 @@ class RoomWords:
     def secret(self, where, path, kind):
         return i18n.tl("srv.room.secret", where=where, path=path, kind=i18n.tl(SECRET[kind]) if kind in SECRET else kind)
 
-    def schema(self, where, path):
-        return i18n.tl("srv.room.schema", where=where, path=path)
+    def schema(self, where, path, detail=None):
+        kw = (detail or {}).get("keyword")
+        if kw not in SCHEMA:
+            return i18n.tl("srv.room.schema", where=where, path=path)
+        v = {k: x for k, x in detail.items() if k != "keyword"}
+        if kw == "type":
+            name = lambda t: i18n.tl(TYPE[t]) if t in TYPE else t  # noqa: E731
+            v.update(want=i18n.tl("srv.room.type.or").join(name(t) for t in v["want"]), found=name(v["found"]))
+        return i18n.tl(SCHEMA[kw], where=where, path=path, **v)
 
     def reference(self, where, path, code):
         return i18n.tl("srv.room.reference", where=where, path=path, code=code)

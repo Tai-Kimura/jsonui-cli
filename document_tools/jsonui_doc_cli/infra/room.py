@@ -48,6 +48,33 @@ FLOW_JA = {"flow.node.missing": "が、この flow と一緒に描かれない n
            "flow.id.duplicate": "の id が、ほかの flow と重なっています",
            "flow.schedule.trigger": "の schedule は、trigger が schedule の時だけ書けます"}
 
+#: one per keyword model.check_schema says (a schema problem's detail; test_infra_room: a keyword with no words is red).
+#: The slots are the detail's: the limit, the length or count found, the type found, what is allowed — never the value
+SCHEMA_JA = {"maxLength": "は {limit} 文字までです（今 {length} 文字）",
+             "minLength": "は {limit} 文字以上です（今 {length} 文字）",
+             "pattern": "の形が違います（書ける形: {pattern}）",
+             "enum": "は {allowed} のどれかです",
+             "const": "は {allowed} です",
+             "type": "は{want}です（今は{found}）",
+             "oneOf": "が {n} 通りの形のうち {fit} 通りに合います（1 つだけに合うこと）",
+             "required": "がありません（書かなければならない欄です）",
+             "additionalProperties": "は書けない欄です（ここに書ける欄: {fields}）",
+             "minimum": "は {limit} 以上です（今の値は {limit} より小さい）",
+             "maximum": "は {limit} 以下です（今の値は {limit} より大きい）",
+             "exclusiveMinimum": "は {limit} より大きい数です（今の値は {limit} 以下）",
+             "finite": "は有限の数です（NaN・Infinity は書けません）",
+             "minItems": "は {limit} 個以上です（今 {count} 個）",
+             "maxItems": "は {limit} 個までです（今 {count} 個）",
+             "uniqueItems": "に同じ物が 2 度あります（{first} 番目と {second} 番目、0 から数えて）",
+             "propertyNames": "の名前の形が違います（書ける形: {pattern}）",
+             "minProperties": "は {limit} 個以上です（今 {count} 個）",
+             "maxProperties": "は {limit} 個までです（今 {count} 個）"}
+
+#: a JSON type's name, in a type line (SCHEMA_JA["type"])
+TYPE_JA = {"object": "オブジェクト", "array": "配列", "string": "文字列", "integer": "整数", "number": "数",
+           "boolean": "真偽値（true・false）", "null": "null"}
+
+
 #: how many folders infra.exclude may name
 EXCLUDE_MAX = 50
 
@@ -75,8 +102,15 @@ class Words:
     def secret(self, where: str, path: str, kind: str) -> str:
         return f"{where}: {path} に秘密の形（{SECRET_JA.get(kind, kind)}）があります。値は書けません"
 
-    def schema(self, where: str, path: str) -> str:
-        return f"{where}: {path} がスキーマに合いません"
+    def schema(self, where: str, path: str, detail: dict | None = None) -> str:
+        """What is wrong, by the keyword (the problem's detail); a detail with no words of its own: the schema alone."""
+        kw = (detail or {}).get("keyword")
+        if kw not in SCHEMA_JA:
+            return f"{where}: {path} がスキーマに合いません"
+        v = dict(detail)
+        if kw == "type":
+            v.update(want="か".join(TYPE_JA.get(t, t) for t in v["want"]), found=TYPE_JA.get(v["found"], v["found"]))
+        return f"{where}: {path} " + SCHEMA_JA[kw].format(**v)
 
     def reference(self, where: str, path: str, code: str) -> str:
         return f"{where}: {path} の参照が合いません（{code}）"
@@ -151,7 +185,7 @@ def short(p: dict, folder: str, words: Words = DEFAULT_WORDS) -> str:
     if code.startswith("secret."):
         return words.secret(where, p["path"], code[7:])
     if code == "schema":
-        return words.schema(where, p["path"])
+        return words.schema(where, p["path"], p.get("detail"))
     if code in ("environment.conflict", "environment.missing", "id.duplicate", "group.missing", "group.cycle", "edge.missing"):
         return words.reference(where, p["path"], code)
     if code == "spec.duplicate":

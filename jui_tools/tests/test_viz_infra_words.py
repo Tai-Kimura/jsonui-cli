@@ -32,6 +32,18 @@ FOLDER = "docs/infra"
 WHERE = "docs/infra/model.json"
 
 
+#: a detail of each keyword a schema problem says (model.check_schema: ticket 2026-10-22-infra-schema-errors-say-only-schema)
+SCHEMA_DETAIL = {
+    "maxLength": {"limit": 200, "length": 236}, "minLength": {"limit": 3, "length": 1}, "pattern": {"pattern": "^[a-z]+$"},
+    "enum": {"allowed": "a, b"}, "const": {"allowed": "0"}, "type": {"want": ["string", "integer"], "found": "array"},
+    "oneOf": {"n": 2, "fit": 2}, "required": {"field": "category"}, "additionalProperties": {"fields": "id, label"},
+    "minimum": {"limit": 1}, "maximum": {"limit": 1000}, "exclusiveMinimum": {"limit": 0}, "finite": {},
+    "minItems": {"limit": 1, "count": 0}, "maxItems": {"limit": 20, "count": 21}, "uniqueItems": {"first": 0, "second": 1},
+    "propertyNames": {"pattern": "^[a-z]+$"}, "minProperties": {"limit": 1, "count": 0}, "maxProperties": {"limit": 50, "count": 51},
+}
+SCHEMA_DETAIL = {kw: {"keyword": kw, **d} for kw, d in SCHEMA_DETAIL.items()}
+
+
 def _table(language: str) -> dict:
     return json.loads(web_text("i18n", f"{language}.json"))
 
@@ -58,6 +70,9 @@ def _room_lines(words) -> dict[str, str]:
         "environment_outside": words.environment_outside(WHERE, "/nodes/0/environments"),
         "environment_none": words.environment_none(WHERE, "/nodes/0"), "spec_ha": words.spec_ha(WHERE, "/nodes/0/spec/0"),
     }
+    lines.update({f"schema.{kw}": words.schema(WHERE, "/nodes/0/x", d) for kw, d in SCHEMA_DETAIL.items()})
+    lines.update({f"schema.type.{t}": words.schema(WHERE, "/nodes/0/x", {"keyword": "type", "want": [t, "null"], "found": t})
+                  for t in room.TYPE_JA})
     lines.update({f"exclude.{w}": words.exclude(room.CONFIG_NAME, "/infra/exclude/0", w) for w in room.EXCLUDE_JA})
     lines.update({f"secret.{k}": words.secret(WHERE, "/nodes/0/x", k) for k in room.SECRET_JA})
     lines.update({f"flow:{c}": words.flow(WHERE, "/flows/0", c) for c in room.FLOW_JA})
@@ -91,14 +106,17 @@ def test_the_keys_are_closed_both_ways():
     have |= {f"srv.room.secret.{k}" for k in room.SECRET_JA} | {f"srv.room.{c}" for c in room.FLOW_JA}
     have |= {f"srv.room.refused.{r}" for r in REFUSED} | {f"srv.room.said.{k}" for k in SAID}
     have |= {f"srv.room.exclude.{w}" for w in room.EXCLUDE_JA}
+    have |= {f"srv.room.schema.{kw}" for kw in room.SCHEMA_JA} | {f"srv.room.type.{t}" for t in room.TYPE_JA} | {"srv.room.type.or"}
     families = ("srv.cost.q.", "srv.cost.meter.", "srv.room.secret.", "srv.room.flow.", "srv.room.refused.", "srv.room.said.",
-                "srv.room.exclude.")
+                "srv.room.exclude.", "srv.room.schema.", "srv.room.type.")
     assert sorted(k for k in ja if k.startswith(families) and k not in have) == []
     assert sorted(k for k in have if k not in ja) == []
     assert (set(infra_words.QUANTITY), set(infra_words.METER), set(infra_words.SECRET), set(infra_words.FLOW),
-            set(infra_words.REFUSED), set(infra_words.SAID), set(infra_words.EXCLUDE)) == (
+            set(infra_words.REFUSED), set(infra_words.SAID), set(infra_words.EXCLUDE), set(infra_words.SCHEMA),
+            set(infra_words.TYPE)) == (
         set(load.quantities()), set(view.METER_LABELS), set(room.SECRET_JA), set(room.FLOW_JA), set(REFUSED), set(SAID),
-        set(room.EXCLUDE_JA))
+        set(room.EXCLUDE_JA), set(room.SCHEMA_JA), set(room.TYPE_JA))
+    assert set(SCHEMA_DETAIL) == set(room.SCHEMA_JA)
 
 
 def test_under_ja_the_lines_are_document_tools_own_letter_for_letter(language):
@@ -189,3 +207,19 @@ def test_the_cost_screens_say_only_the_rooms_own_words_in_japanese(tmp_path, lan
     finally:
         C.forget()
     assert found <= {".scenarios[].label", ".month.scenarios[].label", ".month.keys[].label", ".day.nodes[].label"}, found
+
+
+@pytest.mark.parametrize("lang, want", [
+    ("ja", "docs/infra/main.json: /flows/0/description は 200 文字までです（今 236 文字）"),
+    ("en", "docs/infra/main.json: /flows/0/description is at most 200 characters (it has 236)")])
+def test_a_schema_problem_says_what_is_wrong_on_the_page(tmp_path, language, lang, want):
+    """Through infra_docs (what the page reads): a flow's description of 236 characters names the limit and the length
+    in the page's language, not "does not fit the schema" alone (ticket 2026-10-22-infra-schema-errors-say-only-schema)."""
+    from jui_cli.viz import infra_docs
+    language(lang)
+    model = {"version": 0, "nodes": [{"id": "api", "category": "compute.container"}],
+             "flows": [{"id": "f", "start": "api", "steps": [{"node": "api"}], "description": "x" * 236}]}
+    (tmp_path / "docs" / "infra").mkdir(parents=True)
+    (tmp_path / "docs" / "infra" / "main.json").write_text(json.dumps(model), encoding="utf-8")
+    _status, got = infra_docs.read(tmp_path)
+    assert [p["short"] for p in got["problems"]] == [want], got

@@ -3,8 +3,9 @@
 The contract is infra-model.v0.schema.json next to this file (JSON Schema 2020-12) and the boundary document
 docs/plans/2026-10-20-jui-viz-server-room-boundary.md. Nothing here keeps its own copy of the vocabularies or the
 limits: ``check_schema`` walks the schema file itself (the subset of JSON Schema it uses: type (one, or a list of
-several), const, enum, pattern, maxLength, minimum, maximum, exclusiveMinimum, minItems, maxItems, uniqueItems,
-required, additionalProperties false or a schema, propertyNames, maxProperties, local $ref), so a word added to the
+several), const, enum, oneOf, pattern, minLength, maxLength, minimum, maximum, exclusiveMinimum, minItems, maxItems,
+uniqueItems, required, additionalProperties false or a schema, propertyNames, minProperties, maxProperties, local
+$ref), so a word added to the
 schema is accepted here the moment it is written there. The load definitions and the price files (infra-load.v0, infra-prices.v0, load.py, prices.py) are
 walked by the same function from their own schema files; words beginning with ``x-`` are data for the readers (a
 quantity's unit), never checked.
@@ -226,66 +227,144 @@ def _walk_strings(value, path: str, root: dict | None = None):
 def _type_ok(t: str, v) -> bool:
     return {"object": isinstance(v, dict), "array": isinstance(v, list), "string": isinstance(v, str),
             "integer": isinstance(v, int) and not isinstance(v, bool), "boolean": isinstance(v, bool),
-            "number": isinstance(v, (int, float)) and not isinstance(v, bool)}.get(t, False)
+            "number": isinstance(v, (int, float)) and not isinstance(v, bool), "null": v is None}.get(t, False)
+
+
+def _type_of(v) -> str:
+    """The JSON type of a value read from JSON (a name, never the value)."""
+    for t in ("null", "boolean", "integer", "number", "string", "array", "object"):
+        if _type_ok(t, v):
+            return t
+    return type(v).__name__
+
+
+class Why(str):
+    """A schema problem's message (English), with what a line in another language needs: ``keyword`` (the schema's
+    word it breaks) and ``detail`` (the limit, the length or count found, the type found, what is allowed). Never the
+    value found: a length, a count and a type are not values (ticket 2026-10-22-infra-schema-errors-say-only-schema)."""
+
+    keyword: str
+    detail: dict
+
+    def __new__(cls, text: str, keyword: str, **detail) -> "Why":
+        why = super().__new__(cls, text)
+        why.keyword, why.detail = keyword, detail
+        return why
+
+
+def _an(t: str) -> str:
+    return f"{'an' if t[0] in 'aeiou' else 'a'} {t}"
+
+
+def _types(node: dict, root: dict) -> list[str]:
+    """The types a part of the schema allows ([] when it does not say), its $ref read."""
+    while "$ref" in node:
+        node = root["$defs"][node["$ref"].rsplit("/", 1)[1]]
+    t = node.get("type")
+    return t if isinstance(t, list) else [t] if t else []
 
 
 def check_schema(value, node: dict | None = None, path: str = "", root: dict | None = None) -> list[tuple[str, str]]:
     """(path, why) for each place ``value`` breaks the schema: ``root`` (the infra model's when None) or its part
-    ``node``. A "$ref" is read in root's own $defs."""
+    ``node``. A "$ref" is read in root's own $defs. Each why is a Why: what is wrong, by the keyword."""
     root = schema() if root is None else root
     node = root if node is None else node
     if "$ref" in node:
         name = node["$ref"].rsplit("/", 1)[1]
         return check_schema(value, root["$defs"][name], path, root)
     out: list[tuple[str, str]] = []
+    at = path or "/"
     if "const" in node and not (type(value) is type(node["const"]) and value == node["const"]):   # 0.0 and false are not 0
-        return [(path or "/", f"must be {json.dumps(node['const'])}")]
+        c = json.dumps(node["const"])
+        return [(at, Why(f"must be {c}", "const", allowed=c))]
     if "enum" in node and value not in node["enum"]:
-        return [(path or "/", "must be one of " + ", ".join(map(str, node["enum"])))]
+        allowed = ", ".join(map(str, node["enum"]))
+        return [(at, Why(f"must be one of {allowed}", "enum", allowed=allowed))]
+    if "oneOf" in node:              # exactly one of the forms (a token quantity: a flow, or by_sku)
+        forms = [check_schema(value, f, path, root) for f in node["oneOf"]]
+        fit = sum(1 for f in forms if not f)
+        if fit > 1:
+            return [(at, Why(f"fits {fit} of its {len(forms)} forms (it must fit exactly one)", "oneOf",
+                             n=len(forms), fit=fit))]
+        if not fit:
+            near = [f for form, f in zip(node["oneOf"], forms) if any(_type_ok(t, value) for t in _types(form, root))]
+            if near:                 # the form its type is: what is wrong in it
+                return min(near, key=len)
+            want = [t for form in node["oneOf"] for t in _types(form, root)]
+            want = list(dict.fromkeys(want))
+            found = _type_of(value)
+            return [(at, Why(f"must be {' or '.join(map(_an, want))} (it is {_an(found)})", "type",
+                             want=want, found=found))]
     t = node.get("type")
-    if isinstance(t, list):          # one of several types (a flow quantity: a number, or {amount, per})
-        if not any(_type_ok(x, value) for x in t):
-            return [(path or "/", "must be " + " or ".join(f"{'an' if x[0] in 'aeiou' else 'a'} {x}" for x in t))]
-    elif t and not _type_ok(t, value):
-        return [(path or "/", f"must be {'an' if t[0] in 'aeiou' else 'a'} {t}")]
+    want = t if isinstance(t, list) else [t] if t else []
+    if want and not any(_type_ok(x, value) for x in want):
+        found = _type_of(value)
+        return [(at, Why(f"must be {' or '.join(map(_an, want))} (it is {_an(found)})", "type", want=want, found=found))]
     if isinstance(value, str):
         if "maxLength" in node and len(value) > node["maxLength"]:
-            out.append((path, f"longer than {node['maxLength']} characters"))
+            out.append((path, Why(f"longer than {node['maxLength']} characters (it has {len(value)})", "maxLength",
+                                  limit=node["maxLength"], length=len(value))))
+        if "minLength" in node and len(value) < node["minLength"]:
+            out.append((path, Why(f"shorter than {node['minLength']} characters (it has {len(value)})", "minLength",
+                                  limit=node["minLength"], length=len(value))))
         if "pattern" in node and not re.search(node["pattern"], value):
-            out.append((path, "does not have the allowed form"))
+            out.append((path, Why(f"does not have the allowed form ({node['pattern']})", "pattern",
+                                  pattern=node["pattern"])))
     if isinstance(value, (int, float)) and not isinstance(value, bool):
-        if "minimum" in node and value < node["minimum"]:
-            out.append((path, f"below {node['minimum']}"))
-        if "exclusiveMinimum" in node and value <= node["exclusiveMinimum"]:
-            out.append((path, f"must be above {node['exclusiveMinimum']}"))
-        if "maximum" in node and value > node["maximum"]:
-            out.append((path, f"above {node['maximum']}"))
         if isinstance(value, float) and not math.isfinite(value):     # json reads NaN and Infinity
-            out.append((path, "must be a finite number"))
+            out.append((path, Why("must be a finite number (not NaN or Infinity)", "finite")))
+        else:
+            if "minimum" in node and value < node["minimum"]:
+                out.append((path, Why(f"below {node['minimum']} (it must be {node['minimum']} or more)", "minimum",
+                                      limit=node["minimum"])))
+            if "exclusiveMinimum" in node and value <= node["exclusiveMinimum"]:
+                out.append((path, Why(f"must be above {node['exclusiveMinimum']} (it is {node['exclusiveMinimum']} or less)",
+                                      "exclusiveMinimum", limit=node["exclusiveMinimum"])))
+            if "maximum" in node and value > node["maximum"]:
+                out.append((path, Why(f"above {node['maximum']} (it must be {node['maximum']} or less)", "maximum",
+                                      limit=node["maximum"])))
     if isinstance(value, list):
         if "minItems" in node and len(value) < node["minItems"]:
-            out.append((path, f"needs at least {node['minItems']} item(s)"))
+            out.append((path, Why(f"needs at least {node['minItems']} item(s) (it has {len(value)})", "minItems",
+                                  limit=node["minItems"], count=len(value))))
         if "maxItems" in node and len(value) > node["maxItems"]:
-            out.append((path, f"more than {node['maxItems']} items"))
-        if node.get("uniqueItems") and len({json.dumps(v, sort_keys=True) for v in value}) != len(value):
-            out.append((path, "has the same item twice"))
+            out.append((path, Why(f"more than {node['maxItems']} items (it has {len(value)})", "maxItems",
+                                  limit=node["maxItems"], count=len(value))))
+        if node.get("uniqueItems"):
+            first: dict[str, int] = {}
+            for i, v in enumerate(value):
+                k = json.dumps(v, sort_keys=True)
+                if k in first:
+                    out.append((path, Why(f"has the same item twice (items {first[k]} and {i})", "uniqueItems",
+                                          first=first[k], second=i)))
+                    break
+                first[k] = i
         for i, v in enumerate(value[:10_000]):
             out.extend(check_schema(v, node.get("items", {}), f"{path}/{i}", root))
     if isinstance(value, dict):
         props, extra = node.get("properties", {}), node.get("additionalProperties")
         for k in node.get("required", []):
             if k not in value:
-                out.append((f"{path}/{k}", "is required"))
+                out.append((f"{path}/{k}", Why("is required", "required", field=k)))
         if "maxProperties" in node and len(value) > node["maxProperties"]:
-            out.append((path or "/", f"more than {node['maxProperties']} entries"))
+            out.append((at, Why(f"more than {node['maxProperties']} entries (it has {len(value)})", "maxProperties",
+                                limit=node["maxProperties"], count=len(value))))
+        if "minProperties" in node and len(value) < node["minProperties"]:
+            out.append((at, Why(f"needs at least {node['minProperties']} entr{'y' if node['minProperties'] == 1 else 'ies'} "
+                                f"(it has {len(value)})", "minProperties", limit=node["minProperties"], count=len(value))))
         names = node.get("propertyNames")
         for k, v in value.items():
             if names and check_schema(k, names, "", root):
-                out.append((f"{path}/{_seg(k, root)}", "the name does not have the allowed form"))
+                form = next((w.detail.get("pattern") for _, w in check_schema(k, names, "", root)
+                             if isinstance(w, Why) and w.keyword == "pattern"), None)
+                out.append((f"{path}/{_seg(k, root)}", Why("the name does not have the allowed form"
+                                                            + (f" ({form})" if form else ""), "propertyNames", pattern=form or "")))
             elif k in props:
                 out.extend(check_schema(v, props[k], f"{path}/{k}", root))
             elif extra is False:
-                out.append((f"{path}/{_seg(k, root)}", f"is not a field of {root.get('x-name', 'the infra model v0')}"))
+                fields = ", ".join(props)
+                out.append((f"{path}/{_seg(k, root)}", Why(f"is not a field of {root.get('x-name', 'the infra model v0')} "
+                                                            f"(the fields here: {fields})", "additionalProperties", fields=fields)))
             elif isinstance(extra, dict):           # a table by name (a profile, a schedule): the key is a name, shown masked
                 out.extend(check_schema(v, extra, f"{path}/{_seg(k, root)}", root))
     return out
@@ -294,7 +373,10 @@ def check_schema(value, node: dict | None = None, path: str = "", root: dict | N
 # ---------------------------------------------------------------- the passes
 
 def _problem(file: str, path: str, code: str, message: str, severity: str = "error") -> dict:
-    return {"file": file, "path": path or "/", "code": code, "message": message, "severity": severity}
+    out = {"file": file, "path": path or "/", "code": code, "message": str(message), "severity": severity}
+    if isinstance(message, Why):     # a schema problem: what a line in another language needs (room.Words.schema)
+        out["detail"] = {"keyword": message.keyword, **message.detail}
+    return out
 
 
 def check_file(name: str, raw: bytes) -> tuple[dict | None, list[dict]]:
