@@ -76,8 +76,10 @@ function renderDenialStrip() {
   el.hidden = !shown.length && !elsewhere;
   keyed(el, `${elsewhere}|${denialsSig(shown)}`, () => {
     const otherHTML = elsewhere ? `<p class="ps-rules">${esc(tl('deny.elsewhere', { n: elsewhere }))} <button type="button" class="link-btn" data-set-all data-fk="ds-all">${esc(tl('deny.show.all'))}</button></p>` : '';
-    return `<h3 class="ps-title">${esc(tl('deny.strip.title'))}<b>${shown.filter((d) => d.status === 'pending').length}</b><small>${esc(tl('deny.strip.order'))}</small></h3>${otherHTML}${shown.map((d) => denialHTML(d, 'b')).join('')}`;
+    const foldHTML = shown.map((d) => foldLine(`d:${d.id}`, d, d.tool, d.input || '', d.status === 'pending' ? '' : DEN_DONE[d.status] || d.status)).join('');
+    return `<h3 class="ps-title">${esc(tl('deny.strip.title'))}${countB(shown.filter((d) => d.status === 'pending').length)}<small>${esc(tl('deny.strip.order'))}</small></h3>${foldHTML ? `<ul class="ps-fold">${foldHTML}</ul>` : ''}${otherHTML}${shown.map((d) => denialHTML(d, 'b')).join('')}`;
   });
+  el.classList.toggle('ps-hot', shown.some((d) => d.status === 'pending'));
 }
 function onDenialClick(e) {
   const where = e.currentTarget.dataset.dwhere !== undefined ? e.currentTarget.dataset.dwhere : e.currentTarget.id === 'denied-strip' ? 'b' : '';   // h: the 応答の履歴 tab

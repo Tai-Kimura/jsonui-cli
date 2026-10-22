@@ -74,7 +74,7 @@ async def run_ask_board(pw, out, failures):
         """The permission strip's buttons hit at their centre, with the question strip as shown and absent (ticket
         2026-10-20-jui-viz-board-kanban-header-covers-perm-strip)."""
         for absent in (False, True):
-            got = await page.evaluate("""(absent) => { const q = document.getElementById('q-strip'), was = q.hidden;
+            got = await page.evaluate("""(absent) => { document.getElementById('perm-strip').scrollIntoView({ block: 'nearest' }); const q = document.getElementById('q-strip'), was = q.hidden;
               if (absent) q.hidden = true;
               const out = { q: !q.hidden, hits: (""" + STRIP_HITS + """)() };
               q.hidden = was; return out; }""", absent)
@@ -147,6 +147,13 @@ async def run_ask_board(pw, out, failures):
         check(failures, b["chipAsk"] == f"質問 {len(b['pend'])}" and b["chipPerm"] == f"許可待ち {len(b['perms'])}" and len(b["perms"]) == 1 and len(set(b["perms"])) == 1,
               f"the board's counts are the chips': {b}")
         check(failures, set(b["pend"]) == set(b["panelPend"]), f"the board's questions are the panel's: {b['pend']} vs {b['panelPend']}")
+        # folded on open (ticket 2026-10-22-viz-taskboard-top-strips-hide-the-columns): the focus on the first question's line,
+        # and Enter there opens the strips wide at that card
+        fold = res["openedFold"] = await page.evaluate("() => ({ fold: document.querySelector('#tb .kb-body').classList.contains('tb-fold'), at: (document.activeElement && document.activeElement.dataset.psGo) || null })")
+        check(failures, fold["fold"] and str(fold["at"]).startswith("q:"), f"the board opens folded, the focus on the first question's line: {fold}")
+        await page.keyboard.press("Enter")
+        await wait(page, "() => { const a = document.activeElement; return document.querySelector('#tb .kb-body').classList.contains('tb-wide') && !!a && !!a.closest('#q-strip .qcard'); }",
+                   label="Enter on the line: the strips wide, the focus in that card")
         await page.screenshot(path=str(out / "board-light.png"))
         await strip_hits_here("opened")
         await page.emulate_media(color_scheme="dark")
@@ -204,6 +211,7 @@ async def run_ask_board(pw, out, failures):
         await page.click("#chip-ask")
         await wait(page, "() => { const tb = document.getElementById('tb'); return !tb.hidden && tb.classList.contains('show'); }", label="the board, panel open")
         await page.wait_for_timeout(500)
+        await page.click("#tb-wide[aria-pressed='false']")
         b3 = res["panelOpen"] = await page.evaluate(BOARD)
         check(failures, b3["open"] and not b3["sideClosed"] and len(b3["pend"]) == 1 and set(b3["pend"]) == set(b3["panelPend"]), f"with the panel open, the same board: {b3}")
         last = b3["pend"][0] if b3["pend"] else None
@@ -236,6 +244,7 @@ async def run_ask_board(pw, out, failures):
         await wait(page, "() => { const tb = document.getElementById('tb'); return !tb.hidden && tb.classList.contains('show'); }", label="Space opens the board")
         b5 = res["space"] = await page.evaluate(BOARD)
         check(failures, b5["open"] and len(b5["perms"]) == 1, f"Space on the 許可待ち chip opens the board with the permission: {b5}")
+        await page.click("#tb-wide[aria-pressed='false']")
         await strip_hits_here("space")
         await page.click(f"#perm-strip [data-do='deny'][data-perm='{b5['perms'][0]}']")
         try:

@@ -43,6 +43,14 @@ def words(cmd: str, why: str) -> str:
     the reason, then the two lines that say it was judged fine and how to answer if not."""
     return "\n".join([T("srv.denial.source"), T("srv.denial.what", what=f"Bash: {cmd}"), T("srv.denial.why", why=why),
                       T("srv.denial.judged"), T("srv.denial.again")])
+# The strips on top folded or wide (ticket 2026-10-22-viz-taskboard-top-strips-hide-the-columns): what the board shows of each.
+FOLD = """() => { const kb = document.querySelector('#tb .kb-body'), btn = document.getElementById('tb-wide'), heads = [...document.querySelectorAll('#kanban .kcol .ktab')];
+  return { fold: kb.classList.contains('tb-fold'), wide: kb.classList.contains('tb-wide'), btn: btn.textContent, pressed: btn.getAttribute('aria-pressed'),
+           lines: [...document.querySelectorAll('#denied-strip .ps-line')].map((l) => l.dataset.psGo),
+           cards: [...document.querySelectorAll('#denied-strip [data-dcard]')].filter((c) => c.offsetParent).length, heads: heads.length,
+           headsIn: heads.filter((h) => { const r = h.getBoundingClientRect(); return r.height > 0 && r.top >= 0 && r.bottom <= innerHeight; }).length,
+           headsBottom: Math.round(Math.max(0, ...heads.map((h) => h.getBoundingClientRect().bottom))),
+           kbH: Math.round(document.getElementById('kanban').getBoundingClientRect().height) }; }"""
 REPLY = "チャンネルから来た破壊的な依頼なので、端末で直接確認してください。"
 CARDS = """(where) => [...document.querySelectorAll(`${where} [data-dcard]`)].map((c) => ({ id: c.dataset.dcard, text: c.textContent,
   ask: !!c.querySelector('[data-dask]'), go: !!c.querySelector('[data-dgo]'), dismiss: !!c.querySelector('[data-ddismiss]'),
@@ -197,6 +205,17 @@ async def run_denied(pw, out, failures):
         # the board's strip, from the chip
         await page.click("#chip-denied")
         await wait(page, "() => document.querySelectorAll('#denied-strip [data-dcard]').length === 2", label="the board's strip")
+        # folded on open: each strip its count and one line per card, the four columns' heads in sight; 広げる shows the cards
+        # and hides the columns (ticket 2026-10-22-viz-taskboard-top-strips-hide-the-columns)
+        await wait(page, "() => { const tb = document.getElementById('tb'); return tb.classList.contains('show') && document.querySelectorAll('#denied-strip .ps-line').length === 2; }", label="the folded strip")
+        await page.wait_for_timeout(600)
+        got = res["fold1"] = await page.evaluate(FOLD)
+        check(got["fold"] and not got["wide"] and got["cards"] == 0 and len(got["lines"]) == 2 and got["heads"] == 4 and got["headsIn"] == 4
+              and got["btn"] == T("panel.tb.wide") and got["pressed"] == "false", f"the board opens folded, one line per card, the columns' heads in sight: {got}")
+        await page.click("#tb-wide[aria-pressed='false']")
+        got = res["wide1"] = await page.evaluate(FOLD)
+        check(got["wide"] and not got["fold"] and got["cards"] == 2 and got["headsIn"] == 0 and got["btn"] == T("panel.tb.fold") and got["pressed"] == "true",
+              f"広げる: the cards whole, the columns hidden: {got}")
         # the strip has its own row above the columns, and its buttons are hit at their centre (not under a column's head),
         # once the board has finished opening (its zoom): waited for as a state
         HITS = """() => {
@@ -205,7 +224,7 @@ async def run_denied(pw, out, failures):
             const r = b.getBoundingClientRect(), at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
             return at === b || (!!at && b.contains(at)) ? 'ok' : at ? at.tagName.toLowerCase() + '.' + String(at.className).split(' ')[0] : 'none';
           });
-          return { above: strip.bottom <= kb.top + 1, hits };
+          return { above: kb.height === 0 || strip.bottom <= kb.top + 1, hits };   // wide: no columns at all
         }"""
         try:
             await wait(page, f"() => {{ const l = ({HITS})(); return l.above && l.hits.length === 2 && l.hits.every((h) => h === 'ok'); }}",
@@ -260,6 +279,39 @@ async def run_denied(pw, out, failures):
         until(lambda: next(c for c in snap()["denials"] if c["id"] == n1)["status"] == "dismissed", "そのまま")
         await page.emulate_media(color_scheme="dark")
         await page.screenshot(path=str(out / "board-dark.png"))
+        # the requester's case: the 1080 screen, three strips, a card with its reply. Wide: no columns; たたむ: the heads in sight
+        # again; a card's line opens the strips wide at that card
+        await page.emulate_media(color_scheme="light")
+        await page.set_viewport_size({"width": 1920, "height": 1080})
+        await page.wait_for_timeout(800)
+        got = res["wide2"] = await page.evaluate(FOLD)
+        check(got["wide"] and got["cards"] == 3 and got["headsIn"] == 0, f"1080, wide: three cards, no columns: {got}")
+        await page.screenshot(path=str(out / "strips-wide.png"))
+        await page.click("#tb-wide[aria-pressed='true']")
+        await page.wait_for_timeout(400)
+        got = res["fold2"] = await page.evaluate(FOLD)
+        check(got["fold"] and not got["wide"] and got["cards"] == 0 and len(got["lines"]) == 3 and got["heads"] == 4 and got["headsIn"] == 4 and got["kbH"] >= 400
+              and got["btn"] == T("panel.tb.wide") and got["pressed"] == "false", f"1080, たたむ: one line per card, the four columns' heads in sight and 400 px of them: {got}")
+        await page.screenshot(path=str(out / "strips-fold.png"))
+        await page.click(f"#denied-strip [data-ps-go='d:{d2}']")
+        await wait(page, f"() => {{ const a = document.activeElement; return document.querySelector('#tb .kb-body').classList.contains('tb-wide') && !!a && !!a.closest('#denied-strip [data-dcard=\"{d2}\"]'); }}",
+                   timeout=5000, label="a card's line: wide at that card, the focus in it")
+        await page.click("#tb-wide[aria-pressed='true']")
+        await page.wait_for_timeout(400)
+        got = res["fold3"] = await page.evaluate(FOLD)
+        check(got == res["fold2"], f"たたむ again: as it was: {got} vs {res['fold2']}")
+        # the same board drawn by the rules before the fold (the new rules undone by a style of the run's own), for the requester
+        await page.evaluate("""() => { const s = document.createElement('style'); s.id = 'e2e-before'; s.textContent = `
+          .kb-body.kb-body { overflow-y: visible; } .kb-body.kb-body > .kanban { display: grid; } .ps-fold.ps-fold { display: none; }
+          .kb-body.kb-body > .perm-strip { gap: 8px; max-height: 42vh; padding: 10px 12px; overflow-y: auto; box-shadow: none; }
+          .kb-body.kb-body > .perm-strip > .qcard { display: grid; } .kb-body.kb-body > .perm-strip > .ps-list { display: grid; } .kb-body.kb-body > .perm-strip > .ps-none { display: block; }
+          .kb-body.kb-body .ps-title { flex-wrap: wrap; } .kb-body.kb-body .ps-title small { overflow: visible; white-space: normal; }
+          .kb-body.kb-body.kb-body .perm-strip.perm-strip .ps-title b { padding: 0 8px; background: var(--wb-amber); color: var(--wb-card); font-size: 12.5px; animation: none; }`; document.head.append(s); }""")
+        await page.wait_for_timeout(300)
+        res["before"] = await page.evaluate(FOLD)
+        check(res["before"]["kbH"] < 400, f"the 400 px arm reads the board before the fold as short of it: {res['before']}")
+        await page.screenshot(path=str(out / "strips-before.png"))
+        await page.evaluate("() => document.getElementById('e2e-before').remove()")
         phone = await new_page(browser, watch, "denied-phone", **PHONE)
         await phone.goto(url + "/")
         await ready(phone)
@@ -267,6 +319,14 @@ async def run_denied(pw, out, failures):
         r = res["phone"] = await phone.evaluate("() => ({ hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth })")
         await phone.screenshot(path=str(out / "phone.png"))
         check(r == {"hscroll": False}, f"390 px: no horizontal scroll: {r}")
+        await phone.click("#chip-denied")
+        await wait(phone, "() => { const tb = document.getElementById('tb'); return tb.classList.contains('show') && document.querySelectorAll('#denied-strip .ps-line').length >= 1; }", label="the phone's folded board")
+        await phone.wait_for_timeout(600)
+        r = res["phoneBoard"] = await phone.evaluate("""() => { const st = document.getElementById('denied-strip'), fold = st.querySelector('.ps-fold');
+          return { fold: document.querySelector('#tb .kb-body').classList.contains('tb-fold'), hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+                   strip: st.scrollWidth > st.clientWidth + 1, lines: fold.scrollWidth > fold.clientWidth + 1 }; }""")
+        await phone.screenshot(path=str(out / "phone-board.png"))
+        check(r == {"fold": True, "hscroll": False, "strip": False, "lines": False}, f"390 px, the folded board: no line runs off sideways: {r}")
         await phone.close()
         await page.close()
         await ctx.close()

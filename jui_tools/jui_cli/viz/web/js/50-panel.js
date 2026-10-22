@@ -1224,7 +1224,8 @@ function renderSheet(model, force) {
 
 /* ---------- task board up close: one column per task state, permission prompts on top ---------- */
 const tbEl = $('tb'), kanbanEl = $('kanban'), stripEl = $('perm-strip'), detailEl = $('tb-detail'), qStripEl = $('q-strip');
-const tb = { open: false, detail: null, board: null, waitView: false };   // waitView: opened from a 質問 / 許可待ち chip
+const tb = { open: false, detail: null, board: null, waitView: false, wide: false };   // waitView: opened from a 質問 / 許可待ち chip
+const kbBodyEl = tbEl.querySelector('.kb-body'), wideBtn = $('tb-wide');
 $('tb-lanes').addEventListener('change', (e) => { UI.lanes = e.target.checked; writePref('lanes', UI.lanes ? 'on' : 'off'); renderTaskBoard(latestModel); });
 function openTaskBoard(opener, detail, board) {
   if (detail !== undefined) tb.detail = detail;
@@ -1240,7 +1241,7 @@ function openTaskBoard(opener, detail, board) {
     if (!tb.open) return;
     showOverlay(tbEl);
     renderTaskBoard(latestModel);
-    const firstQ = tb.waitView && !tb.detail ? qStripEl.querySelector('input:not([disabled])') : null;   // from the 質問 chip: the first choice
+    const firstQ = tb.waitView && !tb.detail ? kbBodyEl.querySelector('#q-strip .ps-line, #denied-strip .ps-line, #perm-strip .ps-line') : null;   // from a chip: the first card's line
     (firstQ || $(tb.detail ? 'tbd-close' : 'tb-close')).focus({ preventScroll: true });
   });
 }
@@ -1253,13 +1254,40 @@ function closeTaskDetail() {
 }
 function closeTaskBoard() {
   if (!tb.open) { releaseView('tb'); return; }
-  tb.open = false; tb.detail = null; tb.waitView = false;
+  tb.open = false; tb.detail = null; tb.waitView = false; tb.wide = false;   // the strips are folded again next time
   qStripEl.replaceChildren(); qStripEl._sig = null; qStripEl.hidden = true;   // no second copy of the cards while closed
   const dStrip = $('denied-strip'); dStrip.replaceChildren(); dStrip._sig = null; dStrip.hidden = true;
   hideOverlay(tbEl);
   releaseView('tb');
 }
 $('tb-close').addEventListener('click', closeTaskBoard);
+/* The strips on top, folded or wide (ticket 2026-10-22-viz-taskboard-top-strips-hide-the-columns). Requester: 「上の許可の
+   表示を小さくして、広げるを押すと許可の部分だけ表示で下が消える仕様にして欲しい」. Folded (the default each time the board
+   opens): each strip is its count and one line per card (who, what, how long); the four columns below stay in sight.
+   Wide: the strips' whole cards and no columns. A card's line opens the strips wide at that card. */
+const foldLine = (go, x, tool, text, note = '') => `<li><button type="button" class="ps-line" data-ps-go="${esc(go)}" data-fk="fl-${esc(go)}">${pill(x.who, DEF[x.who].role)}<span class="ps-who">${esc(DEF[x.who].agent)}</span><span class="ps-what">${tool ? `<b>${esc(tool)}</b> <code>${esc(text)}</code>` : esc(text)}</span>${note ? `<span class="ps-note">${esc(note)}</span>` : ''}<span class="pc-wait" data-since="${x.at}"></span></button></li>`;
+const countB = (n) => `<b${n ? '' : ' class="ps-zero"'}>${n}</b>`;
+function paintTbWide() {
+  const any = !qStripEl.hidden || !$('denied-strip').hidden || !stripEl.hidden;
+  if (!any) tb.wide = false;
+  wideBtn.hidden = !any;
+  kbBodyEl.classList.toggle('tb-wide', tb.wide);
+  kbBodyEl.classList.toggle('tb-fold', !tb.wide);
+  wideBtn.setAttribute('aria-pressed', String(tb.wide));
+  setText(wideBtn, tl(tb.wide ? 'panel.tb.fold' : 'panel.tb.wide'));
+}
+const FOLD_CARD = { q: (id) => `#q-strip [data-qcard="${CSS.escape(id)}"]`, d: (id) => `#denied-strip [data-dcard="${CSS.escape(id)}"]`, p: (id) => `#perm-strip [data-fk="pt-${CSS.escape(id)}"]` };
+function setTbWide(on, go) {
+  tb.wide = on;
+  renderTaskBoard(latestModel);
+  const [kind, ...rest] = go ? go.split(':') : [];
+  const at = kind && FOLD_CARD[kind] ? kbBodyEl.querySelector(FOLD_CARD[kind](rest.join(':'))) : null;
+  const card = at && (at.closest('.qcard, .pcard') || at);
+  if (card) { card.scrollIntoView({ block: 'nearest' }); (card.querySelector('input:not([disabled]), button:not([disabled])') || wideBtn).focus({ preventScroll: true }); }
+  else wideBtn.focus({ preventScroll: true });
+}
+wideBtn.addEventListener('click', () => setTbWide(!tb.wide));
+kbBodyEl.addEventListener('click', (e) => { const go = e.target.closest('[data-ps-go]'); if (go) setTbWide(true, go.dataset.psGo); });
 const COL_HINT = { todo: tl('panel.hint.todo'), wait: tl('panel.hint.wait'), doing: tl('panel.hint.doing'), done: '' };
 const mmss = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
 const paintSince = (root, t, word) => root.querySelectorAll('[data-since]').forEach((el) => setText(el, `${word} ${mmss(Math.max(0, t - Number(el.dataset.since)))}`));
@@ -1269,8 +1297,10 @@ function renderQuestionStrip() {
   qStripEl.hidden = !qs.length && !elsewhere && !tb.waitView;
   keyed(qStripEl, `${tb.waitView}|${elsewhere}|${questionsSig(qs)}`, () => {
     const otherHTML = elsewhere ? `<p class="ps-rules" data-q-elsewhere="${elsewhere}">${esc(tl('panel.q.elsewhere', { n: elsewhere }))} <button type="button" class="link-btn" data-set-all data-fk="qs-all">${esc(tl('panel.scope.all.shown'))}</button></p>` : '';
-    return `<h3 class="ps-title">${esc(tl('panel.q.title'))}<b>${qs.filter((q) => q.status === 'pending').length}</b><small>${esc(tl('panel.q.oldest'))}</small></h3>${qs.some((q) => q.status === 'pending') ? '' : `<p class="ps-none">${esc(tl('panel.q.none'))}</p>`}${otherHTML}${qs.map((q) => questionHTML(q, 'b')).join('')}`;
+    const foldHTML = qs.map((q) => foldLine(`q:${q.id}`, q, '', q.questions.map((x) => x.header || x.question).join(' / '), q.status === 'pending' ? '' : qState(q))).join('');
+    return `<h3 class="ps-title">${esc(tl('panel.q.title'))}${countB(qs.filter((q) => q.status === 'pending').length)}<small>${esc(tl('panel.q.oldest'))}</small></h3>${foldHTML ? `<ul class="ps-fold">${foldHTML}</ul>` : ''}${qs.some((q) => q.status === 'pending') ? '' : `<p class="ps-none">${esc(tl('panel.q.none'))}</p>`}${otherHTML}${qs.map((q) => questionHTML(q, 'b')).join('')}`;
   });
+  qStripEl.classList.toggle('ps-hot', qs.some((q) => q.status === 'pending'));
 }
 function renderTaskBoard(model) {
   if (!tb.open) return;
@@ -1295,9 +1325,12 @@ function renderTaskBoard(model) {
     }).join('');
     const rulesHTML = alwaysRules.size ? `<p class="ps-rules">${esc(tl('panel.rules.added'))}${[...alwaysRules.keys()].map((r) => `<code>${esc(r)}</code>`).join(' ')} <button type="button" class="link-btn" data-reset-rules data-fk="rules">${esc(tl('panel.rules.reset'))}</button></p>` : '';
     const otherHTML = elsewhere ? `<p class="ps-rules">${esc(tl('panel.perm.elsewhere', { n: elsewhere }))} <button type="button" class="link-btn" data-set-all data-fk="ps-all">${esc(tl('panel.scope.all.shown'))}</button></p>` : '';
-    return `<h3 class="ps-title">${esc(tl('panel.perm.asking'))}<b>${pend.length}</b><small>${PERM_NOTE}</small></h3>${cardsHTML ? `<ul class="ps-list">${cardsHTML}</ul>` : `<p class="ps-none">${esc(tl('panel.perm.none'))}</p>`}${otherHTML}${rulesHTML}`;
+    const foldHTML = pend.map((p) => foldLine(`p:${p.id}`, p, p.tool, p.input ? permSummary(p) : '')).join('');
+    return `<h3 class="ps-title">${esc(tl('panel.perm.asking'))}${countB(pend.length)}<small>${PERM_NOTE}</small></h3>${foldHTML ? `<ul class="ps-fold">${foldHTML}</ul>` : ''}${cardsHTML ? `<ul class="ps-list">${cardsHTML}</ul>` : `<p class="ps-none">${esc(tl('panel.perm.none'))}</p>`}${otherHTML}${rulesHTML}`;
   });
+  stripEl.classList.toggle('ps-hot', pend.length > 0);
   paintSince(stripEl, model.t, tl('panel.since.wait'));
+  paintTbWide();
   const loopStart = simT - model.t;
   const lists = SESSIONS.filter((x) => visible(x.id)).map((x) => x.id);
   const noteHTML = (x, col) => {

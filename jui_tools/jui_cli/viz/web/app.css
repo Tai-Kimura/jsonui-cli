@@ -806,6 +806,29 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .pc-task:hover { text-decoration: underline; text-underline-offset: 2px; }
 .ps-none, .ps-rules { margin: 0; color: var(--wb-soft); font-size: 12px; }
 .ps-rules code { font: 500 11.5px/1.5 var(--font-mono); }
+/* The strips folded or wide (ticket 2026-10-22-viz-taskboard-top-strips-hide-the-columns): folded, each strip is its count
+   and one line per card, so the four columns stay in sight; wide, the strips' whole cards and no columns. */
+.kb-body.tb-fold > .perm-strip { gap: 4px; padding: 6px 12px; overflow: visible; }
+.kb-body.tb-fold > .perm-strip > :is(.qcard, .ps-list, .ps-none) { display: none; }
+.kb-body.tb-fold .ps-title { flex-wrap: nowrap; }
+.kb-body.tb-fold .ps-title small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-body.tb-wide { overflow-y: auto; }
+.kb-body.tb-wide > .kanban { display: none; }
+.kb-body.tb-wide > .perm-strip { max-height: none; overflow: visible; }
+.kb-body.tb-wide .ps-fold { display: none; }
+.ps-fold { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; max-height: calc(3 * 1.75em); margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.ps-line { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; padding: 1px 6px; border: 0; border-radius: 6px; background: none; color: inherit; font: 500 12.5px/1.6 var(--font-body); text-align: left; cursor: pointer; }
+.ps-line:hover, .ps-line:focus-visible { background: var(--wb-amber-bg); }
+.ps-line .ps-note, .ps-line .pc-wait { flex: none; white-space: nowrap; }
+.ps-line .ps-who { flex: 0 1 auto; min-width: 0; max-width: 16em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ps-line .ps-what { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ps-line code { font: 500 11.5px/1.5 var(--font-mono); }
+.ps-line .ps-note, .ps-line .pc-wait { margin-left: 0; color: var(--wb-soft); }
+.kb-body.tb-fold .ps-title b.ps-zero { background: var(--wb-line); color: var(--wb-soft); }
+.kb-body.tb-fold > .ps-hot { box-shadow: 0 0 0 3px color-mix(in srgb, var(--wb-amber) 40%, transparent); }
+.kb-body.tb-fold > .ps-hot .ps-title b { padding: 0 10px; font-size: 14px; animation: ps-pulse 1.1s ease-in-out 3; }
+@keyframes ps-pulse { 50% { transform: scale(1.3); } }
+@media (prefers-reduced-motion: reduce) { .kb-body.tb-fold > .ps-hot .ps-title b { animation: none; } }
 .link-btn { padding: 0; border: 0; background: none; color: var(--wb-blue); font: 700 12.5px/1.5 var(--font-body); text-align: left; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .rb .link-btn { color: var(--info); }
 .kcol { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; border-radius: 10px; background: var(--kb-col); }

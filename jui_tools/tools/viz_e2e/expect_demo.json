@@ -236,7 +236,7 @@
   "docTasks": {
    "notes": 6,
    "sess": "セッションすべて（2）",
-   "strip": "許可を求めています1ターミナルでも答えられ、先に答えた方が使われるc9セッション c91e…待ち 0:15Bash jsonui-doc generate html --spec docs/screens/json/spec-anatomy.spec.jsonc9 #1 spec の構造ページの HTML を生成 › 詳細許可今後も許可拒否ほかのプロジェクトでも 1 件が許可を待っている すべての",
+   "strip": "許可を求めています1ターミナルでも答えられ、先に答えた方が使われるc9セッション c91e…Bash jsonui-doc generate html --spec docs/screens/json/spec-anatomy.spec.json待ち 0:15c9セッション c91e…待ち 0:15Bash jsonui-doc generate html --spec docs/screens/",
    "title": "タスクボード · JsonUIDocument/"
   },
   "folded": {

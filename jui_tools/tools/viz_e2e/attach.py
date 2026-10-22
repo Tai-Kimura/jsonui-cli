@@ -276,6 +276,7 @@ async def run_attach(pw, out, failures):
         await page.screenshot(path=str(out / "permission.png"))
         await wait(page, "() => !!document.querySelector(\"#perm-strip [data-do='deny']\")", timeout=15000,
                    label="拒否 on the card (the --decide hook waits on it)")
+        await page.click("#tb-wide[aria-pressed='false']")   # the strips wide: folded is the default
         await page.click("#perm-strip [data-do='deny']")
         try:
             decide.wait(timeout=15)
