@@ -103,6 +103,16 @@ def test_the_hook_and_the_transcript_of_one_call_make_one_card():
     assert len(w.denials.items()) == 2
 
 
+def test_two_calls_in_one_second_keep_the_order_they_came_in():
+    """The first from the hook (12.700, to the millisecond), the second from the transcript only (12.000, its record's
+    second): the slice is still first, second (ticket 2026-10-23-viz-denial-cards-order-flips-within-a-second)."""
+    book = DenialBook()
+    book.add(SID, SID, "toolu_A", "Bash", {"command": "first"}, "", 12_700, "hook")
+    book.add(SID, SID, "toolu_B", "Bash", {"command": "second"}, "", 12_000, "transcript")
+    book.add(SID, SID, "toolu_C", "Bash", {"command": "earlier second"}, "", 11_900, "transcript")
+    assert [c["input"] for c in book.items()] == ["earlier second", "first", "second"]
+
+
 @pytest.mark.viz_ja
 def test_the_transcript_alone_makes_the_card():
     w = _world()

@@ -184,7 +184,9 @@ class DenialBook:
     def items(self) -> list[dict]:
         """The slice: each card with the exact words its button would send."""
         out = []
-        for c in sorted(self.cards.values(), key=lambda c: c["at"]):
+        # Oldest first, by the second: the transcript's records are timed to the second and the hook to the millisecond,
+        # so within one second the cards keep the order they were made in (ticket 2026-10-23-viz-denial-cards-order-flips-within-a-second)
+        for c in sorted(self.cards.values(), key=lambda c: (c["at"] // 1000, int(c["id"][1:]))):
             row = {k: v for k, v in c.items() if k != "key"}
             row["via"] = list(c["via"])
             row["prompt"] = prompt_text(c)
