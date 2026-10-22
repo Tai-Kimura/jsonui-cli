@@ -1013,13 +1013,18 @@ def make_app(ctx: ServerContext) -> web.Application:
 
     async def api_infra_cost(request: web.Request) -> web.Response:
         """The cost simulator (infra_cost.read → document_tools' infra.load, infra.cost): {"projectId", "seq",
-        "scenario"?, "date"?, "by"?, "account"?} names a room and a scenario of its load definitions (the first when none); no date:
-        the month and the scenarios, a date: that day. The checks of /api/prompt; never a path from the client; off the
+        "scenario"?, "date"?, "by"?, "account"?, "migration"?} names a room and a scenario of its load definitions (the first when none); no date:
+        the month and the scenarios, a date: that day; a migration plan: its old, steps and new (infra_cost.migration). The checks of /api/prompt; never a path from the client; off the
         event loop; JSON, no-store."""
         body, root = await _infra_room(request, "/api/infra-cost")
         if root is None:
             return body
         seq = body.get("seq") if isinstance(body.get("seq"), int) and not isinstance(body.get("seq"), bool) else None
+        if body.get("migration") is not None:     # a migration plan: the old month, each step's and the new
+            status, got = await asyncio.get_running_loop().run_in_executor(
+                _data_docs_pool(), lambda: infra_cost.migration(root, seq, body.get("migration"), body.get("scenario"),
+                                                                body.get("account") is True))
+            return web.json_response(got, status=status, headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
         status, got = await asyncio.get_running_loop().run_in_executor(
             _data_docs_pool(), lambda: infra_cost.read(root, seq, body.get("scenario"), body.get("date"),
                                                        body.get("by", "provider"), body.get("account")))

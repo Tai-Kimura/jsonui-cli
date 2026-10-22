@@ -109,6 +109,38 @@ window.__dbg = {
     hints: P && P.hints ? P.hints.userData.hints : 0, choices: [...document.querySelectorAll('#sr-choices:not([hidden]) [data-sr-choice]')].map((b) => b.dataset.srChoice),
     toasts: [...document.querySelectorAll('#sr-toasts .sr-toast')].map((t) => t.textContent), history: P ? P.history.length : 0 }; },
   srFlowSpeed: (s) => { SR_FLOW.speed = s; srFlowRenderBar(); return SR_FLOW.speed; },
+  // a migration plan (59-sr-migration.js): what is drawn read from the 3D itself — each changed node's size from its
+  // instance matrix (and its model's), each changed edge's length from the line's positions — and the plan's own lists
+  srMig: () => {
+    const P = SR_MIG.P, V = SR.view;
+    const plans = srMigPlans().map((m) => ({ name: m.name, ok: m.ok, steps: m.steps.length, codes: (m.problems || []).map((p) => p.code), shorts: (m.problems || []).map((p) => p.short) }));
+    if (!P || !V) return { open: false, plans };
+    const m4 = new THREE.Matrix4(), pos = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), sizes = {};
+    for (const [id, list] of V.migNodes || []) { const it = list[0]; it.mesh.getMatrixAt(it.i, m4); m4.decompose(pos, q, sc); sizes[id] = Math.round(sc.x / it.sc.x * 1000) / 1000; }
+    const lengths = {};
+    for (const M of V.migEdges || []) {
+      const a = M.line.geometry.attributes.position.array, o = M.j * 6, full = Math.hypot(M.b[0] - M.a[0], M.b[2] - M.a[2]) || 1;
+      lengths[M.key] = Math.round(Math.hypot(a[o + 3] - a[o], a[o + 5] - a[o + 2]) / full * 1000) / 1000;
+    }
+    const models = {};
+    if (V.models) for (const g of V.models.values()) models[g.userData.node] = { kind: g.userData.kind, visible: g.visible };
+    const drawnNodes = [...V.L.pos.values()].filter((p) => !p.hiddenIn && !srMigHides(p.n.id)).map((p) => p.n.id).sort();
+    const drawnEdges = V.L.edges.filter((e) => !srMigEdgeHidden(e)).map(srMigKey).sort();
+    const shapes = {};
+    for (const set of ['simple', 'detail']) for (const mesh of V.nodeMeshes[set]) mesh.userData.nodes.forEach((id) => { if (srMigAt(P.entry)[id]) (shapes[id] = shapes[id] || {})[set] = mesh.userData.shape; });
+    const specs = {};   // the version of each changed node the room is drawn with now: its spec's values
+    for (const n of SR.model.nodes || []) if (srMigAt(P.entry)[n.id]) specs[n.id] = (n.spec || []).map((x) => x.value).join(',');
+    return { open: true, plans, name: P.entry.name, k: P.k, specs, n: P.entry.steps.length, state: P.state, anim: P.anim ? { i: P.anim.i, t: P.anim.t } : null,
+      log: P.log.slice(), sizes, lengths, models, shapes, lights: P.lights.size, floors: (V.migFloorShown || []).slice().sort(), drawnNodes, drawnEdges,
+      newNodes: P.entry.model.nodes.filter((n) => srVisible(n, V.env) && (V.fold || !n.fold)).map((n) => n.id).sort(),
+      newEdges: P.entry.model.edges.filter((e) => srVisible(e, V.env)).map(srMigKey).sort(),
+      newGroups: P.entry.model.groups.filter((g) => srVisible(g, V.env)).map((g) => g.id).sort(),
+      cost: P.cost ? (P.cost.ok ? { old: P.cost.old.usd, new: P.cost.new.usd, diff: P.cost.diff.usd, steps: P.cost.steps.map((s) => s.usd) } : { ok: false }) : null,
+      bar: ($('sr-mplayer').querySelector('[data-sr-mp-cost]') || {}).textContent || '' };
+  },
+  srMigStart: (name) => srMigStart(name),
+  srcUsd: (v) => srcUsd(v),   // the cost view's own money format (the e2e compares the engine's numbers as shown)
+  srMigSpeed: (s) => { SR_MIG.speed = s; srMigRenderBar(); return SR_MIG.speed; },
   srLabelRects: () => [...document.querySelectorAll('#sr-labels .sr-label:not([hidden])')].map((s) => { const r = s.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom].map(Math.round); }),
   // a robot of the room up close moved onto the line from the camera to the door, at a robot's height: it then stands in
   // front of the door from this view (D2: the door must still take the press, as the bell and the rack do)

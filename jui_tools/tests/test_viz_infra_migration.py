@@ -1,0 +1,87 @@
+"""A migration plan on viz's side (ticket 2026-10-22-viz-infra-migration-plan): the room's read carries its plans
+(infra_docs → document_tools' infra.migration) with their lines in the page's language, and /api/infra-cost with
+"migration" gives document_tools' cost diff — the same numbers `jsonui-doc cost infra --migration` prints — behind the
+route's checks. The room is document_tools' aws-three-tier example with a plan written next to it, under tmp_path."""
+from __future__ import annotations
+
+import json
+
+from jui_cli.core.document_tools_import import load_document_tools_module
+from jui_cli.viz import i18n, infra_cost, infra_docs
+from tests.test_viz_infra_docs import TOKEN, _room, _serve, _world
+
+diff = load_document_tools_module("infra.cost.diff")[0]
+CHANGES = {"version": 0, "nodes": [{"id": "db-prod", "category": "database.relational", "service": "rds.mysql",
+                                    "group": "private-prod", "environments": ["production"],
+                                    "spec": [{"key": "instance_class", "value": "db.r6g.xlarge"}]}]}
+
+
+def _plan(tmp_path, removals=None):
+    root = _room(tmp_path, "aws-three-tier")
+    mig = root / "docs" / "infra" / "migrations" / "move"
+    mig.mkdir(parents=True)
+    (mig / "changes.json").write_text(json.dumps(CHANGES))
+    if removals is not None:
+        (mig / "removals.json").write_text(json.dumps(removals))
+    return root
+
+
+def test_the_rooms_read_carries_its_plans_in_the_pages_language(tmp_path):
+    root = _plan(tmp_path, {"version": 0, "nodes": ["nowhere"]})
+    before = i18n.active()
+    seen = set()
+    try:
+        for lang in ("ja", "en"):
+            i18n.activate(i18n.load(lang, use_env=False))
+            _status, got = infra_docs.read(root, seq=1)
+            m = got["migrations"][0]
+            assert m["name"] == "move" and not m["ok"] and m["problems"][0]["code"] == "migration.remove_missing"
+            assert m["problems"][0]["short"] == i18n.tl("srv.room.migration", where="docs/infra/migrations/move/removals.json",
+                                                         path="/nodes/0", why=i18n.tl("srv.room.migration.remove_missing"),
+                                                         code="migration.remove_missing")
+            seen.add(m["problems"][0]["short"])
+    finally:
+        i18n.activate(before)
+    assert len(seen) == 2          # two languages, two lines
+
+
+def test_a_room_with_no_plan_has_no_migrations_key(tmp_path):
+    _status, got = infra_docs.read(_room(tmp_path, "aws-three-tier"), seq=1)
+    assert got["ok"] and "migrations" not in got
+
+
+def test_the_route_gives_the_engines_difference(tmp_path):
+    root = _plan(tmp_path)
+    world, pid = _world(root)
+
+    def calls(own):
+        ok = {"Host": own, "Origin": f"http://{own}", "X-Jui-Viz-Token": TOKEN, "Content-Type": "application/json"}
+        return [("POST", "/api/infra-cost", ok, json.dumps({"projectId": pid, "seq": 4, "migration": "move"})),
+                ("POST", "/api/infra-cost", {**ok, "X-Jui-Viz-Token": "x" * 43}, json.dumps({"projectId": pid, "migration": "move"})),
+                ("POST", "/api/infra-cost", ok, json.dumps({"projectId": pid, "migration": "../x"})),
+                ("POST", "/api/infra-cost", ok, json.dumps({"projectId": pid, "migration": "nope"}))]
+    got = _serve(world, calls)
+    assert [g[0] for g in got] == [200, 401, 400, 404]
+    page = json.loads(got[0][2])
+    _code, cli = diff.reply(root, "move")
+    assert page["seq"] == 4 and page["ok"] and page["diff"]["usd"] == cli["diff"]["usd"] != 0
+    assert [s["usd"] for s in page["steps"]] == [s["usd"] for s in cli["steps"]]
+    assert json.loads(got[3][2])["reason"] == "no_plan"
+
+
+def test_the_account_is_chosen_as_the_cost_view_chooses_it(tmp_path):
+    """document_tools' diff prices the account with the same scenarios viz's コスト picks."""
+    from jui_cli.viz.infra_cost import account_scenarios as viz_pick
+    load = load_document_tools_module("infra.load")[0]
+    room = load_document_tools_module("infra.room")[0]
+    root = _room(tmp_path, "aws-three-tier")
+    scenarios, model = load.read(root)["scenarios"], room.read(root)
+    for chosen in scenarios:
+        assert viz_pick(scenarios, model, chosen) == diff.account_scenarios(scenarios, model, chosen)
+    fake = [dict(s, environment=e) for s, e in zip(scenarios * 2, ["production", "staging"])]
+    assert viz_pick(fake, model, fake[0]) == diff.account_scenarios(fake, model, fake[0]) and viz_pick(fake, model, fake[0])[0]
+
+
+def test_migration_refuses_what_is_not_a_name(tmp_path):
+    assert infra_cost.migration(tmp_path, 1, "../x")[1]["reason"] == "bad_request"
+    assert infra_cost.migration(tmp_path, 1, "ok", scenario="../x")[1]["reason"] == "bad_request"

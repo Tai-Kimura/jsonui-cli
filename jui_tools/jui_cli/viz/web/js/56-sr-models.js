@@ -122,7 +122,7 @@ function srModelBuild(V, p) {
   }
   const s = p.n.count > 1 ? 1 + Math.min(Math.log2(p.n.count), 4) * 0.12 : 1;
   g.position.set(p.x, p.y + 0.75, p.z); g.scale.setScalar(s);
-  g.userData = { node: p.n.id, kind };
+  g.userData = { node: p.n.id, kind, base: s };   // base: its size, which a migration step scales
   return g;
 }
 

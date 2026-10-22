@@ -147,6 +147,13 @@ TYPE = {
     "null": "srv.room.type.null"
 }
 
+#: a migration plan's problem (room.MIGRATION_JA)
+MIGRATION = {
+    "migration.remove_missing": "srv.room.migration.remove_missing", "migration.duplicate": "srv.room.migration.duplicate",
+    "migration.both": "srv.room.migration.both", "migration.order_unknown": "srv.room.migration.order_unknown",
+    "migration.edge_end": "srv.room.migration.edge_end", "migration.no_plan": "srv.room.migration.no_plan"
+}
+
 #: a way an infra.exclude entry is wrong (room.EXCLUDE_JA)
 EXCLUDE = {
     "not_a_list": "srv.room.exclude.not_a_list", "not_inside": "srv.room.exclude.not_inside",
@@ -213,6 +220,9 @@ class RoomWords:
 
     def exclude(self, where, path, why):
         return i18n.tl(EXCLUDE[why], where=where, path=path, n=self.exclude_max)
+
+    def migration(self, where, path, code):
+        return i18n.tl("srv.room.migration", where=where, path=path, why=i18n.tl(MIGRATION[code]), code=code)
 
     def environment_outside(self, where, path):
         return i18n.tl("srv.room.environment.outside", where=where, path=path)

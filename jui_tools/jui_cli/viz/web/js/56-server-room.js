@@ -33,6 +33,7 @@
      tapered drum, a notification a pyramid...: srDetailShape) and tags of name · service · its main spec; back to
      the simple ones past SR.detail.leave (between the two it stays as it was). There, each node in view stands as a model of what
      it does (56-sr-models.js); the shapes by service under it still take the press.
+   - migration plans (ticket 2026-10-22-viz-infra-migration-plan): the board lists them; 移管 plays one (59-sr-migration.js).
    - a node's spec (§4): the board's 選んだもの lists it, the keys the IaC tables know with a name in words.
    - つながっている物を全部見せる (ticket 2026-10-22-viz-sr-cables-too-thin-and-no-show-neighbours): beside これに寄る; the
      chosen node and every node an edge joins it to (in and out; one step, or every step on) drawn as they are, the rest
@@ -418,7 +419,7 @@ function srLayout(model, env, showFold, closed = new Set(), only = new Set()) {
 
 function srShow(model) {
   SR.phase = 'open';
-  SR.model = model;
+  SR.model = model; SR.migBase = null;
   showOverlay(srEl);
   setText($('sr-room'), (PROJECT[SR.project] && PROJECT[SR.project].name) || '');
   const envs = srEnvs(model);
@@ -434,6 +435,7 @@ function srClose() {
   if (SR.phase !== 'open') return;
   SR.phase = 'idle';
   SR.reach = null;
+  srMigStop(true);   // a plan open: the room's own model again (59-sr-migration.js)
   srBoxEnd();
   srBoxArm(false);
   if (typeof srCostReset === 'function') srCostReset();
@@ -494,7 +496,7 @@ function srBuild() {
   });
   floorMesh.count = L.floors.length;
   floorMesh.userData.groups = L.floors.map((G) => G.g.id);
-  V.near.add(floorMesh); V.pick.push(floorMesh);
+  V.near.add(floorMesh); V.pick.push(floorMesh); V.floorMesh = floorMesh;
   if (L.closed.length) {   // the closed groups: a box each, as tall as what it holds
     const cm = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshLambertMaterial({ color: 0xffffff }), L.closed.length);
     L.closed.forEach((G, i) => {
@@ -603,6 +605,7 @@ function srBuild() {
   cv.onpointerup = (e) => { if (V.downAt && Math.hypot(e.clientX - V.downAt[0], e.clientY - V.downAt[1]) < 5) srPick(e); V.downAt = null; };
   srReachAfterBuild(V);
   srFlowBuild(V);          // 59-sr-flows.js: the cones over the nodes that start a flow
+  srMigAfterBuild(V);      // 59-sr-migration.js: a plan open, its state drawn
   const loop = () => {   // the cost view over the stage pauses it (SR.paused, 56-server-cost.js): no frame drawn meanwhile
     if (SR.paused) { V.raf = 0; return; }
     V.raf = requestAnimationFrame(loop);
@@ -613,6 +616,7 @@ function srBuild() {
     controls.update();
     srLod(V);
     srFlowTick(V, dt);
+    srMigTick(V, dt);
     if (t - V.labelAt > 100) { V.labelAt = t; srPlaceLabels(V); }
     renderer.render(scene, camera);
   };
@@ -660,8 +664,8 @@ function srPlaceLabels(V) {
   if (V.lod === 'far') {
     for (const G of V.L.tops) consider(G.x + G.w / 2, G.boxH + 0.8, G.z + G.d / 2, `${G.g.label || G.g.id} · ${G.nodeCount}`, 'group', 1);
   } else {
-    for (const G of V.L.floors) if (G.g.id) consider(G.x + 0.6, 0.2 + G.level * 0.06, G.z + 0.5, G.g.label || G.g.id, 'group', 0.6);
-    for (const p of V.L.pos.values()) if (!p.hiddenIn && !(SR.reach && !SR.reach.ids.has(p.n.id))) consider(p.x, p.y + 1.9, p.z, `${p.n.label || p.n.id}${p.n.count > 1 ? ` ×${p.n.count}` : ''}`, p.external ? 'external' : 'node', 1, p.n);
+    for (const G of V.L.floors) if (G.g.id && !(V.migFloorShown && !V.migFloorShown.includes(G.g.id))) consider(G.x + 0.6, 0.2 + G.level * 0.06, G.z + 0.5, G.g.label || G.g.id, 'group', 0.6);
+    for (const p of V.L.pos.values()) if (!p.hiddenIn && !srMigHides(p.n.id) && !(SR.reach && !SR.reach.ids.has(p.n.id))) consider(p.x, p.y + 1.9, p.z, `${p.n.label || p.n.id}${p.n.count > 1 ? ` ×${p.n.count}` : ''}`, p.external ? 'external' : 'node', 1, p.n);
   }
   // up close (§5): how many nodes are in view decides the look, with room between going in and coming back
   const inView = out.filter((o) => o.n).length;
@@ -718,7 +722,7 @@ async function srIcons(V) {
     const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.9, 0.9), new THREE.MeshBasicMaterial({ map: tex, transparent: true, toneMapped: false }), list.length);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.5, 0, 0));
     list.forEach((p, i) => { m4.compose(new THREE.Vector3(p.x, p.y + 2.1, p.z), q, new THREE.Vector3(1, 1, 1)); mesh.setMatrixAt(i, m4); });
-    mesh.userData.icon = key;
+    mesh.userData.icon = key; mesh.userData.nodes = list.map((p) => p.n.id);
     V.near.add(mesh);
     V.iconCount = (V.iconCount || 0) + list.length;
   }
@@ -751,7 +755,7 @@ function srFocusLines(V) {
   const ids = new Set([SR.selected, SR.hover].filter(Boolean)), plain = [], cross = [], reach = SR.reach ? SR.reach.edges : null;
   if (ids.size || reach) {
     for (const e of V.L.edges) {
-      if (!ids.has(e.from) && !ids.has(e.to) && !(reach && reach.has(e))) continue;
+      if ((!ids.has(e.from) && !ids.has(e.to) && !(reach && reach.has(e))) || srMigEdgeHidden(e)) continue;
       const a = V.L.pos.get(e.from), b = V.L.pos.get(e.to), y = e.crossProvider ? 2.62 : 1.72;
       (e.crossProvider ? cross : plain).push(a.x, y, a.z, b.x, y, b.z);
     }
@@ -1003,6 +1007,7 @@ ${SR.reach ? `<p class="sr-hint" data-sr-reach-said>${esc(tl('sr.reach.shown', {
     : grp ? `<h3>${esc(tl('sr.grp.title'))}</h3><dl class="sr-sel"><dt>id</dt><dd>${esc(grp.id)}</dd><dt>${esc(tl('sr.sel.name'))}</dt><dd>${esc(grp.label || '')}</dd><dt>${esc(tl('sr.sel.kind'))}</dt><dd>${esc(grp.kind || '')}</dd><dt>provider</dt><dd>${esc(grp.providerResolved || grp.provider || '')}</dd><dt>${esc(tl('sr.grp.nodes'))}</dt><dd>${esc(String(inGroup ? srCountNodes(inGroup) : 0))}</dd></dl>
 <p class="sr-acts"><button type="button" class="wb-btn" data-sr-act="focus">${esc(tl('sr.act.focus'))}</button> <button type="button" class="wb-btn" data-sr-act="toggle" data-sr-group="${esc(grp.id)}">${esc(SR.closed.has(grp.id) ? tl('sr.grp.open') : tl('sr.grp.close'))}</button></p>`
     : `<p class="sr-hint">${esc(tl('sr.board.hint'))}</p>`}
+${srMigBoardHTML()}
 ${probs.length ? `<h3>${esc(tl('sr.board.problems', { n: probs.length }))}</h3><ul class="sr-problems">${probs.map((p) => `<li title="${esc(p.message || '')}">${esc(p.short || p.message || '')}</li>`).join('')}</ul>` : ''}`);
   // a node newly chosen: the board turns to its rows (and the flows it starts, under them), not left where it was scrolled
   const head = $('sr-board').querySelector('[data-sr-sel-head]');
@@ -1074,6 +1079,8 @@ $('sr-board').addEventListener('click', (e) => {
     srBuild();
     return;
   }
+  const mg = e.target.closest('[data-sr-mig]');
+  if (mg) { srMigStart(mg.dataset.srMig); return; }   // 59-sr-migration.js
   const fl = e.target.closest('[data-sr-flow]');
   if (fl) { srFlowPlay(fl.dataset.srFlow); return; }   // 59-sr-flows.js
   const b = e.target.closest('[data-sr-act]');

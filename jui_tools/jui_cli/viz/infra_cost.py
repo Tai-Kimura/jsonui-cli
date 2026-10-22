@@ -174,6 +174,23 @@ def read(root: Path | str, seq=None, scenario: str | None = None, date: str | No
                  "prices": {"warnings": warnings[:20]}}
 
 
+def migration(root: Path | str, seq, plan: str, scenario: str | None = None, account: bool = False) -> tuple[int, dict]:
+    """(HTTP status, the page's reply) for a migration plan (ticket 2026-10-22-viz-infra-migration-plan §6):
+    document_tools' infra.cost.diff — the old month, the month after each step, the new, as cost infra --migration
+    gives them — with the page's seq."""
+    if not (isinstance(plan, str) and ID.match(plan)):
+        return _refuse(400, seq, "bad_request", "migration is a plan's name")
+    if scenario is not None and not (isinstance(scenario, str) and ID.match(scenario)):
+        return _refuse(400, seq, "bad_request", "scenario is an id")
+    from ..core.document_tools_import import load_document_tools_module
+    diff = load_document_tools_module("infra.cost.diff")[0]
+    if diff is None:
+        return _refuse(500, seq, "unreadable", i18n.tl("srv.cost.no_tools"))
+    code, got = diff.reply(Path(root), plan, scenario, bool(account))
+    status = 200 if got.get("ok") else 404 if got.get("reason") in ("no_plan", "no_infra", "not_a_room", "no_load", "no_scenario") else 422
+    return status, dict(got, seq=seq)
+
+
 def forget() -> None:
     """Drop the kept months (tests)."""
     with _LOCK:

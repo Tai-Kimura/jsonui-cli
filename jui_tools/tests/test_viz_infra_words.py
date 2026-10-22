@@ -86,6 +86,7 @@ def _room_lines(words) -> dict[str, str]:
     lines.update({f"exclude.{w}": words.exclude(room.CONFIG_NAME, "/infra/exclude/0", w) for w in room.EXCLUDE_JA})
     lines.update({f"secret.{k}": words.secret(WHERE, "/nodes/0/x", k) for k in room.SECRET_JA})
     lines.update({f"flow:{c}": words.flow(WHERE, "/flows/0", c) for c in room.FLOW_JA})
+    lines.update({f"migration:{c}": words.migration(WHERE, "/nodes/0", c) for c in room.MIGRATION_JA})
     lines.update({f"refused.{r}": words.refused(r, FOLDER) for r in REFUSED})
     values = {"mb": 1, "line": 7, "key": "icons", "folder": FOLDER}
     lines.update({f"said.{k}": words.said(k, **values) for k in SAID})
@@ -105,6 +106,7 @@ def test_every_word_document_tools_says_has_its_key_and_the_japanese_is_its_own(
     want.update({f"srv.cost.meter.{m.replace('-', '_')}": w for m, w in view.METER_LABELS.items()})
     want.update({f"srv.room.secret.{k}": w for k, w in room.SECRET_JA.items()})
     want.update({f"srv.room.{c}": w for c, w in room.FLOW_JA.items()})
+    want.update({f"srv.room.{c}": w for c, w in room.MIGRATION_JA.items()})
     assert {k: ja.get(k) for k in want if ja.get(k) != want[k]} == {}
     assert sorted(k for k in want if k not in en) == []
 
@@ -115,12 +117,12 @@ def test_the_keys_are_closed_both_ways():
     have = {f"srv.cost.q.{q}" for q in load.quantities()} | {f"srv.cost.meter.{m.replace('-', '_')}" for m in view.METER_LABELS}
     have |= {f"srv.room.secret.{k}" for k in room.SECRET_JA} | {f"srv.room.{c}" for c in room.FLOW_JA}
     have |= {f"srv.room.refused.{r}" for r in REFUSED} | {f"srv.room.said.{k}" for k in SAID}
-    have |= {f"srv.room.exclude.{w}" for w in room.EXCLUDE_JA}
+    have |= {f"srv.room.exclude.{w}" for w in room.EXCLUDE_JA} | {f"srv.room.{c}" for c in room.MIGRATION_JA}
     have |= {f"srv.room.schema.{kw}" for kw in room.SCHEMA_JA} | {f"srv.room.type.{t}" for t in room.TYPE_JA} | {"srv.room.type.or"}
     have |= {f"srv.room.side.{k}" for k in room.SIDE_JA}
     have |= {f"srv.room.cost.{k}" for k in room.COST_JA} | {f"srv.room.cost.empty.{k}" for k in room.COST_EMPTY_JA}
     families = ("srv.cost.q.", "srv.cost.meter.", "srv.room.secret.", "srv.room.flow.", "srv.room.refused.", "srv.room.said.",
-                "srv.room.exclude.", "srv.room.schema.", "srv.room.type.", "srv.room.side.", "srv.room.cost.")
+                "srv.room.exclude.", "srv.room.schema.", "srv.room.type.", "srv.room.side.", "srv.room.cost.", "srv.room.migration.")
     assert sorted(k for k in ja if k.startswith(families) and k not in have) == []
     assert sorted(k for k in have if k not in ja) == []
     assert (set(infra_words.QUANTITY), set(infra_words.METER), set(infra_words.SECRET), set(infra_words.FLOW),
@@ -131,6 +133,7 @@ def test_the_keys_are_closed_both_ways():
     assert set(infra_words.SIDE) == set(room.SIDE_JA)
     assert (set(infra_words.COST), set(infra_words.COST_EMPTY)) == (set(room.COST_JA), set(room.COST_EMPTY_JA))
     assert set(SCHEMA_DETAIL) == set(room.SCHEMA_JA)
+    assert set(infra_words.MIGRATION) == set(room.MIGRATION_JA)
 
 
 def test_under_ja_the_lines_are_document_tools_own_letter_for_letter(language):

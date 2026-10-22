@@ -233,7 +233,7 @@ function srcRender(status) {
   if (SRC.error) { setHTML(srcEl, `<p class="src-status src-red">${esc(tl('cost.error', { why: SRC.error }))}</p>`); return; }
   if (!SRC.month) return;
   if (SRC.day) { setHTML(srcEl, srcDayHtml(SRC.day)); srcFillGo(); srcMoreFit(); }
-  else setHTML(srcEl, `${srcSummary(SRC.month)}${srcMonthSvg(SRC.month)}`);
+  else setHTML(srcEl, `${srcSummary(SRC.month)}${srcMonthSvg(SRC.month)}${srMigCostHTML()}`);   // a plan open: 旧 · 新 · 差 (59-sr-migration.js)
 }
 
 /* ---- wiring ---- */

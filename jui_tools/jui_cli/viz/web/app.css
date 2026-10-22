@@ -1586,6 +1586,14 @@ button.talk-peer:focus-visible { outline: 2px solid var(--focus); outline-offset
 .sr-player[hidden] { display: none; }
 .sr-fp-state { color: var(--ink-soft); }
 .sr-fp-chosen { display: grid; gap: 2px; width: 100%; margin: 0; padding-left: 22px; font-size: 12px; }   /* one choice a line, its number before it */
+.sr-mp-cost { font-variant-numeric: tabular-nums; }
+.sr-migs { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.src-mig { margin-top: 14px; }
+.src-mig-t { border-collapse: collapse; margin: 6px 0 10px; font-variant-numeric: tabular-nums; }
+.src-mig-t th, .src-mig-t td { padding: 2px 10px; text-align: right; border-bottom: 1px solid var(--line); }
+.src-mig-t tbody th { text-align: left; font-weight: normal; }
+.src-up { color: var(--bad); }
+.src-down { color: var(--ok); }
 .sr-flows { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 4px; }
 /* the cost simulator over the stage (56-server-cost.js): the month's stacked days, a day's bars */
 .sr-mode { gap: 0; }
