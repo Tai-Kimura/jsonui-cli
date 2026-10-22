@@ -422,9 +422,11 @@ function spiritFlameTex() {
   return spiritFlame;
 }
 const spiritUnitCyl = new THREE.CylinderGeometry(1, 1, 1, 6, 1).translate(0, 0.5, 0).rotateX(Math.PI / 2);   // from 0 to +z, one long
-const spiritBoltA = new THREE.Vector3(), spiritBoltB = new THREE.Vector3();
-function spiritLimb(mesh, a, b, r) {   // a cylinder from a to b, r thick
-  mesh.position.copy(a); mesh.lookAt(b); mesh.scale.set(r, r, Math.max(1e-4, a.distanceTo(b)));
+const spiritBoltA = new THREE.Vector3(), spiritBoltB = new THREE.Vector3(), spiritBoltD = new THREE.Vector3(), spiritZ = new THREE.Vector3(0, 0, 1);
+function spiritLimb(mesh, a, b, r) {   // a cylinder from a to b (its parent's own space, not the world's), r thick
+  const d = spiritBoltD.subVectors(b, a), len = d.length();
+  mesh.position.copy(a); mesh.quaternion.setFromUnitVectors(spiritZ, len > 1e-6 ? d.divideScalar(len) : spiritZ);
+  mesh.scale.set(r, r, Math.max(1e-4, len));
 }
 function spiritShoutTex(text, style = {}) {
   const c = document.createElement('canvas'); c.width = 256; c.height = 96;
@@ -461,9 +463,9 @@ function spiritAura(group, a) {
     const core = i >= SPIRIT_FX.tongues, ang = Math.PI * (0.03 + 0.94 * rnd());
     const sp = sprite(T.tongue, core ? white : color, 0, 0.5, 0.15);
     tongues.push({ sp, core, x: Math.cos(ang) * (core ? 0.35 : 0.66 + 0.2 * rnd()) * size, z: -0.2 - Math.sin(ang) * 0.35,
-      rate: (core ? 2 : [4, 5, 6][i % 3]) / 3, off: rnd(), w: (core ? 0.22 : 0.3 + 0.2 * rnd()) * size, hh: (core ? 0.45 : 0.7 + 0.4 * rnd()) * h / 1.6, k: i });
+      rate: (core ? 2 : [4, 5, 6][i % 3]) / 3, off: rnd(), w: (core ? 0.3 : 0.42 + 0.28 * rnd()) * size, hh: (core ? 0.6 : 0.9 + 0.5 * rnd()) * h / 1.6, k: i });
   }
-  return { style: 'flame', envelope, tongues, base, flicker: a.flicker ?? 1, width: 1.6 * size, size, h };
+  return { style: 'flame', envelope, tongues, base, flicker: a.flicker ?? 1, width: 1.8 * size, size, h };
 }
 function spiritAuraTick(A, t, k) {
   const still = reduceMotion || !A.flicker, s = still ? 0 : t * A.flicker, TAU = Math.PI * 2;
@@ -472,13 +474,13 @@ function spiritAuraTick(A, t, k) {
     if (!still) A.mesh.scale.set(1 + Math.sin(s * 5) * 0.04, 1 + Math.sin(s * 3.3) * 0.06, 1 + Math.sin(s * 4.1) * 0.04);
     return;
   }
-  A.envelope.material.opacity = A.base * k * (still ? 0.9 : 0.85 + 0.1 * Math.sin(TAU * 1.5 * s));
-  A.envelope.scale.set(2.3 * A.size * (1 + (still ? 0 : 0.03 * Math.sin(TAU * s))), A.h * 1.6 * (1 + (still ? 0 : 0.05 * Math.sin(TAU * 1.5 * s))), 1);
+  A.envelope.material.opacity = Math.min(1, A.base * 1.6 * k * (still ? 0.9 : 0.85 + 0.1 * Math.sin(TAU * 1.5 * s)));
+  A.envelope.scale.set(2.6 * A.size * (1 + (still ? 0 : 0.03 * Math.sin(TAU * s))), A.h * 1.6 * (1 + (still ? 0 : 0.05 * Math.sin(TAU * 1.5 * s))), 1);
   for (const F of A.tongues) {
     const p = still ? (F.off * 0.8 + 0.1) : (s * F.rate + F.off) % 1, flick = still ? 1 : 1 + 0.15 * Math.sin(TAU * 2 * s + F.k);
     F.sp.position.set(F.x * (1 - 0.3 * p) + (still ? 0 : 0.05 * Math.sin(TAU * 0.75 * s + F.k)), 0.25 + p * A.h * (F.core ? 0.35 : 0.65), F.z);
     F.sp.scale.set(F.w * (1 - 0.4 * p) * flick, F.hh * (0.7 + 0.5 * Math.sin(Math.PI * p)) * flick, 1);
-    F.sp.material.opacity = A.base * k * Math.sin(Math.PI * Math.min(1, p * 1.2)) * (F.core ? 1.6 : 1.9);
+    F.sp.material.opacity = Math.min(1, A.base * k * Math.sin(Math.PI * Math.min(1, p * 1.2)) * (F.core ? 2.2 : 2.6));
   }
 }
 function spiritFxStart(R, S, gltfs) {

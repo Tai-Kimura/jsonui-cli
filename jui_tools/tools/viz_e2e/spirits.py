@@ -297,6 +297,8 @@ async def run_spirits(pw, out, failures):
         # the lightning: three bolts, ribbons with width, shown in turn
         check(b["fx"]["bolts"] == 3 and b["fx"]["boltWidth"] >= 0.03, f"three bolts, each a ribbon with width: {b['fx']}")
         check(await seen(page, "(l) => window.__dbg.spirit(l).fx.boltShown", who["r2"]), "a bolt shown")
+        bolt = (await page.evaluate(state, who["r2"]))["fx"]
+        check(bolt["boltGap"] is not None and bolt["boltGap"] < 1e-3, f"each bolt is one unbroken zigzag: {bolt}")
         await page.screenshot(path=str(out / "gears-effects.png"))
         hook("r1", hook_event_name="Stop")
         hook("r2", hook_event_name="Stop")

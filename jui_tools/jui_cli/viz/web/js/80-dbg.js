@@ -446,6 +446,9 @@ window.__dbg = {
         // the lightning: its bolts, each a ribbon of meshes (a core in a glow, so it has width), and whether one shows now
         bolts: Array.isArray(S.fx.bolts) ? S.fx.bolts.length : (S.fx.bolt ? 1 : 0),
         boltWidth: Array.isArray(S.fx.bolts) && S.fx.bolts[0] ? +S.fx.bolts[0][0][1].scale.x.toFixed(3) : 0,
+        // how far each bolt's segment ends from where the next begins (0: one unbroken zigzag)
+        boltGap: Array.isArray(S.fx.bolts) ? +Math.max(0, ...S.fx.bolts.flatMap((segs) => segs.slice(1).map(([c], i) => {
+          const p = segs[i][0]; return new THREE.Vector3(0, 0, p.scale.z).applyQuaternion(p.quaternion).add(p.position).distanceTo(c.position); }))).toFixed(4) : null,
         boltShown: !!S.fx.bolt && (S.fx.bolt.glow ? S.fx.bolt.glow.opacity > 0 : S.fx.bolt.material.opacity > 0),
         sparks: S.fx.sparks.filter((x) => x.sp.visible).length, shouts: S.fx.shouts.filter((x) => x.sp.visible).length } : null,
       textures: (() => { let maps = 0, loaded = 0; if (S && S.figure) S.figure.traverse((o) => { if (!o.isMesh) return;
