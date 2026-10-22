@@ -10,6 +10,10 @@ The real `jui viz serve` in a throwaway HOME and the real forward.py; nine sessi
   - a hidden robot that comes to wait on the person (a permission) marks its row, and the list's head says so;
   - なし hides all, 全部 brings all back, 作業中だけ keeps the busy and the waiting only;
   - a session new to the room comes in shown;
+  - a subagent follows its main session's check, and its wait alone marks the main's row;
+  - a robot's spirit's bubble goes with it; a game it plays ends for its partner too;
+  - every board drawn over the 3D (the whiteboard, the task board, the bills, the data server, the server room) hides
+    the list while it is open, the header's waiting chip staying; closed, the list is back;
   - the list keeps off the room's name box, inside the 3D, at 1920, 1440 and 390 px wide; with a robot's card open on a
     wide page it sits left of the card.
 Stills for the requester: all shown and some hidden, at each width.
@@ -25,9 +29,11 @@ import sys
 import time
 
 from common import LAUNCH_ARGS, PHONE, Watch, new_page, ready
+from data_server import _room
+from server_room import _examples, _write
 from waits import until
 
-CWD = "/work/roster-app"
+SUB = "agent-roster-sub-1"
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
 N = 9
 # each its own first letter, so the numbers the page gives them are short ones (the last one comes later)
@@ -60,6 +66,10 @@ async def run_room_roster(pw, out, failures, jt=None):
     (home / ".local" / "state" / "jui-viz").mkdir(parents=True, exist_ok=True)
     jt = pathlib.Path(jt) if jt else pathlib.Path(__file__).resolve().parents[2]
     forward = jt / "jui_cli" / "viz" / "forward.py"
+    # a real folder: an API and a database to read (the data server's rack), a model of servers (the server room's door)
+    CWD = home / "work" / "roster-app"
+    _room(CWD, True)
+    _write(home / "work", _examples(jt), "aws-three-tier", "roster-app")
     port = free_port()
     base_env = {k: v for k, v in os.environ.items() if k not in ISOLATE}
     log = open(out / "serve.log", "w")
@@ -69,7 +79,7 @@ async def run_room_roster(pw, out, failures, jt=None):
     res: dict = {}
 
     def hook(i, **payload):
-        body = {"session_id": SID[i], "cwd": CWD, "transcript_path": f"{home}/t-{i}.jsonl", "permission_mode": "default", **payload}
+        body = {"session_id": SID[i], "cwd": str(CWD), "transcript_path": f"{home}/t-{i}.jsonl", "permission_mode": "default", **payload}
         subprocess.run([sys.executable, "-I", "-S", str(forward)], input=json.dumps(body).encode(), capture_output=True,
                        env=dict(base_env, HOME=str(home)), timeout=10)
 
@@ -86,7 +96,7 @@ async def run_room_roster(pw, out, failures, jt=None):
         context = await browser.new_context(**WIDE)   # one context: the reload keeps this browser's storage
         watch = Watch(origin=url)
         page = await new_page(context, watch, name)
-        await page.emulate_media(color_scheme="light", reduced_motion="reduce")
+        await page.emulate_media(color_scheme="light", reduced_motion="no-preference")   # a game starts only with motion
         await page.goto(url + "/")
         await ready(page)
         await until(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", "connected")
@@ -146,9 +156,17 @@ async def run_room_roster(pw, out, failures, jt=None):
 
         # 2b. a board over the 3D hides the list (requester 10-23: 「ボード出してる時はbotの切り替えの表示も消していいよ」); closed,
         # it is back; the header's chip still says a robot waits
-        for opener, board in (("#btn-specboard", "wb"), ("#chip-perm", "tb")):
-            await page.click(opener)
-            await until(page, f"() => !document.getElementById('{board}').hidden", f"the {board} board open", timeout=8000)
+        # the bills: the settings' 単価 button (the header's chip shows only while a model has no price)
+        OPEN = {"wb": "#btn-specboard", "tb": "#chip-perm", "pr": "() => { const b = document.getElementById('prices-open'); if (!b) return false; b.click(); return true; }",
+                "ds": "() => window.__dbg.pressRack()", "sr": f"() => window.__dbg.srEnter('{room}')"}
+        await until(page, "() => window.__dbg.props && window.__dbg.props().uses.dataServer && window.__dbg.sr().door", "the room's rack and door", timeout=20000,
+                    why="() => ({ props: window.__dbg.props && window.__dbg.props(), sr: window.__dbg.sr() })")
+        for board, opener in OPEN.items():
+            if opener.startswith("#"):
+                await page.click(opener)
+            else:
+                check(failures, await page.evaluate(opener) is not False, f"{board}: opened")
+            await until(page, f"() => !document.getElementById('{board}').hidden", f"the {board} board open", timeout=20000)
             s = res[f"board-{board}"] = await until(page, "() => { const s = window.__dbg.roster(); return s.shown ? null : s; }", f"the list hidden under {board}", timeout=5000, why=RO)
             check(failures, not s["shown"] and s["permChip"], f"{board} open: the list hidden, the header still says a robot waits: {s['shown']} {s['permChip']}")
             if board == "wb":
@@ -191,6 +209,50 @@ async def run_room_roster(pw, out, failures, jt=None):
         s = res["newcomer"] = await until(page, f"() => {{ const s = window.__dbg.roster(); return s.rows.length >= {N + 1} ? s : null; }}", "the newcomer's row", timeout=20000, why=RO)
         new = next(r for r in s["rows"] if r["key"] == SID[N])
         check(failures, new["on"] and next(b for b in s["bots"] if b["sid"] == SID[N])["root"], f"a newcomer is shown: {new}")
+        await page.click("[data-roster-bulk='all']")
+
+        # 6b. a subagent: hidden with its main; its wait alone marks the main's row
+        hook(5, hook_event_name="SubagentStart", agent_id=SUB, agent_type="general-purpose")
+        await until(page, f"() => window.__dbg.roster().bots.some((b) => b.main === '{rid[5]}')", "the subagent in the room", timeout=20000, why=RO)
+        await page.click(f"#roster-list [data-roster-check='{SID[5]}']")
+        s = res["subHidden"] = await until(page, f"() => {{ const s = window.__dbg.roster(); const b = s.bots.filter((x) => x.id === '{rid[5]}' || x.main === '{rid[5]}'); return b.length === 2 && b.every((x) => !x.root) ? s : null; }}",
+                                           "the main and its subagent hidden", timeout=5000, why=RO)
+        check(failures, not next(r for r in s["rows"] if r["id"] == rid[5])["alert"], f"hidden, not waiting: no mark yet: {s['rows']}")
+        sub_in = {"command": "rm -rf build"}
+        hook(5, hook_event_name="PreToolUse", tool_name="Bash", tool_use_id="toolu_sub5", tool_input=sub_in, agent_id=SUB, agent_type="general-purpose")
+        hook(5, hook_event_name="PermissionRequest", tool_name="Bash", tool_input=sub_in, agent_id=SUB, agent_type="general-purpose")
+        s = res["subWaiting"] = await until(page, f"() => {{ const s = window.__dbg.roster(); const r = s.rows.find((x) => x.id === '{rid[5]}'); return r && r.alert ? s : null; }}",
+                                            "the subagent's wait marks its main's row", timeout=15000, why=RO)
+        row = next(r for r in s["rows"] if r["id"] == rid[5])
+        check(failures, row["alert"] and row["wait"] == "perm" and all(not b["root"] for b in s["bots"] if b["id"] == rid[5] or b["main"] == rid[5]),
+              f"a hidden main's subagent waiting: the main's row marked, both still hidden: {row}")
+        idle_lamp = next(r["lamp"] for r in s["rows"] if r["id"] == rid[7])   # an idle main's lamp, as the page draws it
+        check(failures, row["lamp"] == idle_lamp, f"the row is the main's: its own lamp (idle), the subagent's wait marked beside it: {row['lamp']} vs idle {idle_lamp}")
+        await page.click(f"#roster-list [data-roster-check='{SID[5]}']")
+
+        # 6c. a spirit's bubble goes with its robot
+        hook(6, hook_event_name="PreToolUse", tool_name="Skill", tool_input={"skill": "code-review", "args": ""}, tool_use_id="toolu_sk6")
+        await until(page, f"() => {{ const b = window.__dbg.roster().bots.find((x) => x.id === '{rid[6]}'); return b && b.spiritBubble === 'visible'; }}", "the spirit's bubble", timeout=30000, why=RO)
+        await page.click(f"#roster-list [data-roster-check='{SID[6]}']")
+        await page.wait_for_timeout(400)
+        s = res["spirit"] = await page.evaluate(RO)
+        b6 = next(b for b in s["bots"] if b["id"] == rid[6])
+        check(failures, not b6["root"] and b6["spiritBubble"] in (None, "hidden"), f"hidden, its spirit's bubble goes too: {b6}")
+        await page.click(f"#roster-list [data-roster-check='{SID[6]}']")
+
+        # 6d. a game: one player hidden ends it for the other too
+        await page.evaluate("() => window.__dbg.play({ p: 1, idleMs: 0, restMaxSec: 0, solo: { p: 0 } })")
+        s = await until(page, "() => { const s = window.__dbg.roster(); return s.bots.filter((b) => b.play).length >= 2 ? s : null; }", "a game in the room", timeout=60000,
+                        why="() => window.__dbg.play()")
+        players = [b["id"] for b in s["bots"] if b["play"]][:2]
+        await page.evaluate("() => window.__dbg.play({ p: 0 })")   # no new game while this one is watched
+        hide = SID[rid.index(players[0])] if players[0] in rid else next(b["sid"] for b in s["bots"] if b["id"] == players[0])
+        await page.click(f"#roster-list [data-roster-check='{hide}']")
+        s = res["play"] = await until(page, f"() => {{ const s = window.__dbg.roster(); return s.bots.filter((b) => {json.dumps(players)}.includes(b.id) && b.play).length === 0 ? s : null; }}",
+                                      "the game over for both", timeout=8000, why="() => window.__dbg.play()")
+        check(failures, all(next(b for b in s["bots"] if b["id"] == p_)["play"] is None for p_ in players) and next(b for b in s["bots"] if b["id"] == players[1])["root"],
+              f"one player hidden: the game is over for its partner too, who stays shown: {players}")
+        await page.evaluate("() => window.__dbg.play({ p: 0, endAll: true })")
         await page.click("[data-roster-bulk='all']")
 
         # 7. the place on the page: off the name box, inside the 3D; left of a robot's card on a wide page

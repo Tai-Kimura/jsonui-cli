@@ -284,7 +284,8 @@ window.__dbg = {
     const rows = [...document.querySelectorAll('#roster-list .roster-row')].map((li) => ({ key: li.dataset.rosterKey, id: li.dataset.robot, on: li.querySelector('.roster-check').checked,
       wait: li.dataset.wait || null, alert: li.classList.contains('roster-alert'), name: li.querySelector('.roster-nm').textContent, lamp: li.querySelector('.roster-lamp').style.getPropertyValue('--lamp') }));
     const bots = solo ? robots.filter((R) => R.def.room === solo).map((R) => ({ id: R.def.id, sid: R.def.sessionId, kind: R.def.kind, root: R.robot.root.visible,
-      tag: R.tag.style.visibility || '', desk: !!(R.robot.desk && R.robot.desk.visible), busy: !!(R.play || R.solo || R.brk) })) : [];
+      tag: R.tag.style.visibility || '', desk: !!(R.robot.desk && R.robot.desk.visible), busy: !!(R.play || R.solo || R.brk), play: R.play ? R.play.phase : null, main: R.def.kind === 'sub' ? R.def.mainLabel : null,
+      spiritBubble: R.spirit && R.spirit.bubbleEl && !R.spirit.bubbleEl.hidden ? (R.spirit.bubbleEl.style.visibility || 'visible') : null })) : [];
     const alert = document.getElementById('roster-alert');
     return { shown: !!box && !box.hidden, solo, rows, bots, alert: alert && !alert.hidden ? alert.textContent : null, count: (document.getElementById('roster-count') || {}).textContent || '',
       folded: !!box && box.classList.contains('roster-folded'), rect: rect(box), err: rect(document.getElementById('live-error')), soloBox: rect(document.getElementById('room-solo')), card: rect(document.querySelector('#rb.show')),
