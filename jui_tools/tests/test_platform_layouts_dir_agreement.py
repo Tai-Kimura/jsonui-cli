@@ -92,3 +92,13 @@ def test_jui_build_stops_before_distributing_and_says_it(tmp_path):
     assert run.returncode == 1, run.stdout[-2000:] + run.stderr[-2000:]
     assert 'ERROR [platform dirs]:\n  - [ios] jui build writes the layouts to ios/Layouts' in run.stdout
     assert not (root / "ios/Layouts/one.json").exists() and not (root / "ios/ios/Layouts/one.json").exists()
+
+
+def test_a_path_spelled_with_dot_slash_or_a_trailing_slash_is_the_same_folder(tmp_path):
+    """The gate stops the build, so a layoutsDir written by hand as "./ios/Layouts/" — the same folder —
+    must not be told it disagrees (nor a tool config spelled "./ios")."""
+    root = _project(tmp_path, sjui={**SJUI, "source_directory": "./ios/"})
+    for ios in ("./ios/Layouts/", "ios/Layouts/", "./ios/Layouts", "ios//Layouts"):
+        assert disagreements(root, _platforms(ios=ios, android="./app/src/main/assets/Layouts/", web="src/Layouts/")) == [], ios
+    platforms = _platforms(ios="./ios/Layouts/")
+    assert derive_layouts_dirs(root, platforms) is True and platforms["ios"]["layoutsDir"] == "ios/Layouts"
