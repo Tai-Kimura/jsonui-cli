@@ -283,13 +283,15 @@ def build_mock_definition(doc: OpenApiDoc, op: Operation) -> dict:
 
     scenarios: dict = {"default": default_scenario}
 
-    # An empty variant helps test empty-state UI when the body is a collection.
-    body = default_scenario.get("body")
-    if isinstance(body, dict):
-        empty = _empty_variant(body)
-        if empty is not None:
-            scenarios["empty"] = {"status": success_code, "body": empty}
-    elif isinstance(body, list):
+    # An empty variant helps test empty-state UI when the body is a collection: drawn from the schema as an empty
+    # result (OpenApiDoc.empty_for_schema), never from the default's body — that one is the example's since 2.3.20,
+    # and emptying its array alone left its counts and flags as they were. With no schema, only a body that is an
+    # array has an empty form ([]).
+    schema = media.get("schema") if media is not None and content_type == "application/json" else None
+    if schema is not None:
+        if doc.has_top_level_array(schema):
+            scenarios["empty"] = {"status": success_code, "body": doc.empty_for_schema(schema)}
+    elif isinstance(default_scenario.get("body"), list):
         scenarios["empty"] = {"status": success_code, "body": []}
 
     # Synthesize error scenarios from declared 4xx/5xx responses.
@@ -348,16 +350,6 @@ def _response_schema(op: Operation, code):
     """(schema, content_type) for one declared status code, or (None, None)."""
     media, ctype = _response_media(op, code)
     return (media.get("schema") if media is not None else None), ctype
-
-
-def _empty_variant(body: dict):
-    """If the body has a top-level array field, return a copy with it emptied."""
-    for key, value in body.items():
-        if isinstance(value, list):
-            clone = dict(body)
-            clone[key] = []
-            return clone
-    return None
 
 
 @dataclass

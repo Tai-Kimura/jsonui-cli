@@ -199,6 +199,62 @@ class OpenApiDoc:
             return [item] if item is not None else []
         return _primitive_sample(schema, stype)
 
+    def empty_for_schema(self, schema, _depth: int = 0, _seen: tuple = ()):
+        """The body of an empty result for a schema: every array [], every number 0 (its minimum when that is above 0),
+        every boolean false, a nullable field null, an enum its first value, a string its type's sample; objects
+        followed the same way. No example is read: a body built from one keeps its counts, totals and flags beside the
+        array emptied (`results: []` beside `revoked: 1`), and which number goes with which array cannot be told from
+        the example (ticket 2026-10-23-jui-test-mock-empty-scenario-keeps-counts-from-example)."""
+        ref = schema.get("$ref") if isinstance(schema, dict) else None
+        if _depth > _MAX_DEPTH or (ref is not None and ref in _seen):
+            return _stop_value(self.resolve_schema(schema, _depth))
+        if ref is not None:
+            _seen = _seen + (ref,)
+        schema = self.resolve_schema(schema, _depth)
+        if not isinstance(schema, dict):
+            return None
+        stype = schema.get("type")
+        if isinstance(stype, list):   # OpenAPI 3.1: ["integer", "null"]
+            if "null" in stype:
+                return None
+            stype = next((t for t in stype if t != "null"), None)
+        if schema.get("nullable") is True:
+            return None
+        if "enum" in schema and isinstance(schema["enum"], list) and schema["enum"]:
+            return schema["enum"][0]
+        if stype is None and "properties" in schema:
+            stype = "object"
+        if stype == "object" or "properties" in schema:
+            return {name: self.empty_for_schema(prop, _depth + 1, _seen) for name, prop in (schema.get("properties") or {}).items()}
+        if stype == "array":
+            return []
+        if stype in ("integer", "number"):
+            low = schema.get("minimum")
+            if isinstance(schema.get("exclusiveMinimum"), (int, float)) and not isinstance(schema.get("exclusiveMinimum"), bool):
+                low = schema["exclusiveMinimum"] + (1 if stype == "integer" else 0.001)   # 3.1: the bound itself is out
+            elif schema.get("exclusiveMinimum") is True and isinstance(low, (int, float)):
+                low = low + (1 if stype == "integer" else 0.001)                          # 3.0: minimum is out
+            return low if isinstance(low, (int, float)) and low > 0 else 0
+        if stype == "boolean":
+            return False
+        return _primitive_sample(schema, stype)
+
+    def has_top_level_array(self, schema) -> bool:
+        """True when a body of this schema is an array, or an object with an array among its own properties: the
+        responses an empty result is drawn for."""
+        schema = self.resolve_schema(schema)
+        if not isinstance(schema, dict):
+            return False
+        stype = schema.get("type")
+        if stype == "array" or (isinstance(stype, list) and "array" in stype):
+            return True
+        return any(self._is_array(p) for p in (schema.get("properties") or {}).values())
+
+    def _is_array(self, schema) -> bool:
+        s = self.resolve_schema(schema)
+        t = s.get("type") if isinstance(s, dict) else None
+        return t == "array" or (isinstance(t, list) and "array" in t)
+
     def media_example(self, media) -> tuple[bool, object]:
         """`(found, value)` for the example a media type object carries.
 
