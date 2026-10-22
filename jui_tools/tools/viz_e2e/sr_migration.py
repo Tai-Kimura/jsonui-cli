@@ -17,7 +17,8 @@ edge's length from the line's positions), never from the plan's own lists alone.
     frame's colours hold through a replace; played through, the steps come back to back (no frame without one)
   * a step that moves the month: the amount counts to the new one in the step's colour, a tag with its own difference
     floats over each node that moved (fn-a goes and fn-b, Lambda's free requests now its, moves too), the player lists
-    them; the tags always name the step the player shows
+    them; the tags always name the step the player shows; paused, nothing moves (the step, the amount, the tags); a
+    step taken alone keeps its tags until the next
   * the cost: 旧 → 今 → 新 on the player from the engine's months, the step shown with its own difference, the changed
     nodes with no price said; the コスト view's 旧 · 新 · 差 table (rows with no price marked) and its big number said
     to be the old model's, with the month at the step the player is at
@@ -295,6 +296,10 @@ async def run_sr_migration(pw, out, failures):
         for n, d in moved4.items():
             want4.add((n, ("+" if d >= 0 else "−") + await usd(abs(d))))
         check(failures, want4 <= tags4, f"a tag over each node that moved, the neighbour too: {sorted(want4)} vs {sorted(tags4)}")
+        # stepped one at a time, the tags stay to be read until the next step
+        await page.wait_for_timeout(1500)
+        kept = [tg for tg in (await page.evaluate(MIG))["tags"] if tg["step"] == 4]
+        check(failures, len(kept) == len(want4) and all(tg["opacity"] == 1 for tg in kept), f"a stepped step's tags stay, whole: {kept}")
         listed = [x["moved"] for x in sampler.seen if x.get("open") and x["barStep"] == 4 and x["moved"]]
         want_list = T("sr.mig.moved", list=" · ".join([f"{m['node']} {('+' if m['diff'] >= 0 else '−') + await usd(abs(m['diff']))}" for m in step4["moved"][:4]]))
         check(failures, listed and listed[0] == want_list, f"the player lists what moved in the step: {listed[:1]} vs {want_list!r}")
@@ -355,6 +360,17 @@ async def run_sr_migration(pw, out, failures):
         await page.evaluate("() => window.__dbg.srMigSpeed(1)")
         sampler = Sampler(page)
         sampling = asyncio.create_task(sampler.run())
+        await page.click("#sr-mplayer [data-sr-mp='toggle']")
+        # paused in the middle of the step that moves db-prod: the step, the amount and its tags stand still
+        await until(page, "() => { const m = window.__dbg.srMig(); return m.anim && m.anim.i === 2 && m.anim.t > 0.3 && m.tags.length; }", "playing step 2 with its tag", timeout=30000)
+        await page.click("#sr-mplayer [data-sr-mp='toggle']")
+        await page.wait_for_timeout(100)
+        held = await page.evaluate(MIG)
+        await page.wait_for_timeout(900)
+        later = await page.evaluate(MIG)
+        same = held["state"] == "pause" and held["anim"] == later["anim"] and held["now"] == later["now"] and \
+            [(tg["node"], tg["opacity"], tg["transform"]) for tg in held["tags"]] == [(tg["node"], tg["opacity"], tg["transform"]) for tg in later["tags"]]
+        check(failures, same and held["tags"], f"paused, nothing moves: {held['anim']} {held['now']} {held['tags']} → {later['anim']} {later['now']} {later['tags']}")
         await page.click("#sr-mplayer [data-sr-mp='toggle']")
         await until(page, "() => { const m = window.__dbg.srMig(); return m.state === 'done' && !m.anim; }", "played through from the start", timeout=30000)
         sampler.on = False

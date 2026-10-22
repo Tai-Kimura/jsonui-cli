@@ -138,7 +138,7 @@ window.__dbg = {
     const nowEl = $('sr-mplayer').querySelector('[data-sr-mp-now]');
     return { open: true, plans, name: P.entry.name, k: P.k, specs, vers, builds: SR.builds || 0, idle: P.idle || 0, now: nowEl ? nowEl.textContent : null, nowClass: nowEl ? nowEl.className : '',
       fx: P.fx ? { from: P.fx.from, to: P.fx.to, delta: P.fx.delta } : null,
-      tags: [...document.querySelectorAll('#sr-toasts [data-sr-mig-tag]')].map((el) => ({ node: el.dataset.srMigTag, step: Number(el.dataset.srMigStep), text: el.textContent, up: el.classList.contains('sr-up') })),
+      tags: [...document.querySelectorAll('#sr-toasts [data-sr-mig-tag]')].map((el) => ({ node: el.dataset.srMigTag, step: Number(el.dataset.srMigStep), text: el.textContent, up: el.classList.contains('sr-up'), opacity: Number(el.style.opacity || 1), transform: el.style.transform })),
       barStep: P.anim ? P.anim.i : P.k, barDiff: (($('sr-mplayer').querySelector('[data-sr-mp-diff]') || {}).textContent || ''),
       moved: (($('sr-mplayer').querySelector('[data-sr-mp-moved]') || {}).textContent || ''), n: P.entry.steps.length, state: P.state, anim: P.anim ? { i: P.anim.i, t: P.anim.t } : null,
       log: P.log.slice(), sizes, lengths, models, shapes, lights: P.lights.size, floors: (V.migFloorShown || []).slice().sort(), drawnNodes, drawnEdges,

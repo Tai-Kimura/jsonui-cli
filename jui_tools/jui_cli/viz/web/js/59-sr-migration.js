@@ -331,7 +331,7 @@ function srMigTick(V, dt) {
     if (!srMigStepOn()) P.state = 'done';
     srMigRenderBar();
   }
-  if (P.anim) {
+  if (P.anim && (P.state === 'play' || P.state === 'step')) {   // paused: the step, the count and the tags all stand still
     const ms = P.state === 'play' ? SR_MIG.playMs : SR_MIG.stepMs;   // played through: shorter steps, back to back
     P.anim.t = reduceMotion ? 1 : Math.min(1, P.anim.t + dt * SR_MIG.speed / ms);
     if (P.anim.t >= 1) {
@@ -391,20 +391,27 @@ function srMigFxStart(V, P, s) {
     P.tags.push({ el, at: mv.node, left: ms, life: ms });
   }
 }
+/* On the player's clock: nothing moves while it is paused. Played through, a tag fades as its step ends (the next
+   step's tags take its place); stepped one at a time, it stays until the next step starts, to be read. */
 function srMigFxTick(V, P, dt) {
-  const step = dt * SR_MIG.speed;
+  const running = !!P.anim && (P.state === 'play' || P.state === 'step'), step = running ? dt * SR_MIG.speed : 0;
   if (P.fx && P.fx.left > 0) {
     P.fx.left = Math.max(0, P.fx.left - step);
     const k = 1 - P.fx.left / P.fx.life, e = 1 - (1 - k) ** 3, el = $('sr-mplayer').querySelector('[data-sr-mp-now]');
     if (el) el.textContent = srMigUsd(P.fx.from + (P.fx.to - P.fx.from) * e);
   }
   const w = V.renderer.domElement.clientWidth, h = V.renderer.domElement.clientHeight;
-  P.tags = P.tags.filter((x) => { x.left -= step; if (x.left > 0) return true; x.el.remove(); return false; });
+  P.tags = P.tags.filter((x) => {
+    x.age = Math.min(x.life, (x.age || 0) + step);
+    if (P.state === 'play') x.left -= step;
+    if (x.left > 0) return true;
+    x.el.remove(); return false;
+  });
   for (const x of P.tags) {
     const p = srFlowPos(V, x.at);
     if (!p) continue;
     const v = p.clone(); v.y += 1.8; v.project(V.camera);
-    const rise = (1 - x.left / x.life) * 28;
+    const rise = (x.age / x.life) * 28;
     x.el.style.transform = `translate(${Math.round((v.x + 1) / 2 * w)}px, ${Math.round((1 - v.y) / 2 * h - rise)}px) translate(-50%, -100%)`;
     x.el.style.opacity = String(Math.min(1, x.left / 400));
   }
@@ -452,7 +459,7 @@ $('sr-mplayer').addEventListener('click', (e) => {
   if (what === 'toggle') {
     if (P.state === 'play') P.state = 'pause';
     else { if (P.k >= P.entry.steps.length && !P.anim) srMigReset(); SR_MIG.P.state = 'play'; if (!P.anim) srMigStepOn(); }   // at once
-  } else if (what === 'step') { if (!P.anim && srMigStepOn()) P.state = 'step'; }
+  } else if (what === 'step') { if (P.anim || srMigStepOn()) P.state = 'step'; }   // paused mid-step: it goes on to its end
   else if (what === 'reset') srMigReset();
   else if (what === 'stop') { srMigStop(); return; }
   srMigRenderBar();
