@@ -1275,7 +1275,7 @@ function paintTbWide() {
   wideBtn.hidden = !any;
   kbBodyEl.classList.toggle('tb-wide', tb.wide);
   kbBodyEl.classList.toggle('tb-fold', !tb.wide);
-  wideBtn.setAttribute('aria-pressed', String(tb.wide));
+  wideBtn.setAttribute('aria-expanded', String(tb.wide));
   const W = tb.waiting, what = [W.q && tl('panel.tb.wide.q', { n: W.q }), W.d && tl('panel.tb.wide.d', { n: W.d }), W.p && tl('panel.tb.wide.p', { n: W.p })].filter(Boolean).join(tl('panel.tb.wide.sep'));
   setText(wideBtn, tb.wide ? tl('panel.tb.fold') : tl('panel.tb.wide', { what: what || tl('panel.tb.wide.none') }));
 }

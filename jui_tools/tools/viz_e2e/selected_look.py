@@ -60,7 +60,6 @@ MEMBERS = [
     ("rb-tab", "カード: 今・応答の履歴", "#rb .rb-tabs [data-rb-tab]", "aria-selected", None, None),
     ("rb-talk", "カード: トーク", "#rb [data-rb-talk]", "aria-pressed", None, None),
     ("rb-wide", "カード: 広げる", "#rb [data-rb-wide]", "aria-pressed", None, None),
-    ("rb-low", "カード: 下に置く", "#rb [data-rb-low]", "aria-pressed", None, None),
     ("floor", "ビル全体", "#floor-building.fn-btn", "aria-pressed", None, None),
     ("weather", "近所の天気（スイッチ）", "#weather-switch.tw-switch", "aria-checked", None, None),
     ("weather-panel", "近所の天気（パネルのスイッチ）", "#weather-switch-panel", "aria-checked", None, None),
@@ -96,7 +95,6 @@ SOURCES = {
     "rb-tab": ["b.dataset.rbTab === HIST.tab", 'data-rb-tab="now"'],
     "rb-talk": ["data-rb-talk", "String(TALK.on)"],
     "rb-wide": ["data-rb-wide", "String(HIST.wide)"],
-    "rb-low": ["b.setAttribute('aria-pressed', String(on));"],
     "floor": ["floor-building", "TOWER.on"],
     "weather": ['id="weather-switch"', "w.on ? 'true'"],
     "weather-panel": ["weather-switch-panel"],
@@ -240,7 +238,7 @@ async def run_selected_look(pw, out, failures, Server):
     res: dict = {}
     t0 = time.monotonic()
     talk_keys = {"talk-tab"}
-    card_keys = {"rb-tab", "rb-talk", "rb-wide", "rb-low"}
+    card_keys = {"rb-tab", "rb-talk", "rb-wide"}   # 下を広げる left the family in 2.3.20: a disclosure on the cards box's edge (aria-expanded)
     try:
         for scheme in ("light", "dark"):
             page = await new_page(browser, watch, f"selected-look-{scheme}", color_scheme=scheme, **DESKTOP)

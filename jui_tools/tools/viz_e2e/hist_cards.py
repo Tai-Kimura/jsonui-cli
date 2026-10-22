@@ -51,7 +51,7 @@ LOW = """() => { const rb = document.getElementById('rb').getBoundingClientRect(
   const send = document.querySelector('#rb [data-h-send]').getBoundingClientRect(), b = document.querySelector('#rb [data-rb-low]');
   // the handle is on the cards box's top edge (2.3.20, the family of 広げる): right above the box, touching it, in sight
   const edge = b.nextElementSibling === c && Math.abs(b.getBoundingClientRect().bottom - c.getBoundingClientRect().top) < 2 && b.getClientRects().length > 0;
-  return { on: document.getElementById('rb').classList.contains('rb-low'), pressed: b.getAttribute('aria-pressed'), label: b.textContent, edge,
+  return { on: document.getElementById('rb').classList.contains('rb-low'), pressed: b.getAttribute('aria-expanded'), label: b.textContent, edge,
     cardsScroll: c.scrollHeight - c.clientHeight, cardsHeight: c.clientHeight, sendIn: send.height > 0 && send.top >= rb.top && send.bottom <= rb.bottom + 0.5,
     cardsBelowHist: c.getBoundingClientRect().top >= document.querySelector('[data-rb-hist]').getBoundingClientRect().bottom - 0.5,
     histHeight: Math.round(document.querySelector('[data-rb-hist]').getBoundingClientRect().height),

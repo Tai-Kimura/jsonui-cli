@@ -161,9 +161,9 @@ async def perm(browser, url, watch, out):
           strip: [...document.querySelectorAll('#perm-strip .pcard')].map((c) => c.textContent.replace(/\\s+/g, ' ').slice(0, 80)),
           permNotes: [...document.querySelectorAll('#kanban .note.n-perm')].map((n) => n.querySelector('.n-subj').textContent) })""")
         await page.screenshot(path=f"{out}/q-board-{scheme}.png")
-        await page.click("#tb-wide[aria-pressed='false']")   # the strips wide for their buttons, then folded again for the columns
+        await page.click("#tb-wide[aria-expanded='false']")   # the strips wide for their buttons, then folded again for the columns
         await strip_hits(page, f"board-{scheme}")
-        await page.click("#tb-wide[aria-pressed='true']")
+        await page.click("#tb-wide[aria-expanded='true']")
         await page.click("#kanban .note.n-perm .note-open")
         await page.wait_for_timeout(900)
         await page.screenshot(path=f"{out}/q-detail-{scheme}.png")
@@ -182,7 +182,7 @@ async def perm(browser, url, watch, out):
             await page.wait_for_timeout(400)
             R["detailClosed"] = await page.evaluate("""() => ({ hidden: document.getElementById('tb-detail').hidden,
               focus: document.activeElement.className })""")
-            await page.click("#tb-wide[aria-pressed='false']")
+            await page.click("#tb-wide[aria-expanded='false']")
             await page.click('#perm-strip [data-do="deny"]')
             await page.wait_for_timeout(900)
             R["afterDeny"] = await page.evaluate("""() => ({ chipHidden: document.getElementById('chip-perm').hidden,

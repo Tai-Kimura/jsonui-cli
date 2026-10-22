@@ -45,7 +45,7 @@ def words(cmd: str, why: str) -> str:
                       T("srv.denial.judged"), T("srv.denial.again")])
 # The strips on top folded or wide (ticket 2026-10-22-viz-taskboard-top-strips-hide-the-columns): what the board shows of each.
 FOLD = """() => { const kb = document.querySelector('#tb .kb-body'), btn = document.getElementById('tb-wide'), heads = [...document.querySelectorAll('#kanban .kcol .ktab')];
-  return { fold: kb.classList.contains('tb-fold'), wide: kb.classList.contains('tb-wide'), btn: btn.textContent, pressed: btn.getAttribute('aria-pressed'),
+  return { fold: kb.classList.contains('tb-fold'), wide: kb.classList.contains('tb-wide'), btn: btn.textContent, pressed: btn.getAttribute('aria-expanded'),
            lines: [...document.querySelectorAll('#denied-strip .ps-line')].map((l) => l.dataset.psGo),
            cards: [...document.querySelectorAll('#denied-strip [data-dcard]')].filter((c) => c.offsetParent).length, heads: heads.length,
            headsIn: heads.filter((h) => { const r = h.getBoundingClientRect(); return r.height > 0 && r.top >= 0 && r.bottom <= innerHeight; }).length,
@@ -216,7 +216,7 @@ async def run_denied(pw, out, failures):
         check(got["fold"] and not got["wide"] and got["cards"] == 0 and len(got["lines"]) == 2 and got["heads"] == 4 and got["headsIn"] == 4
               and got["btn"] == T("panel.tb.wide", what=T("panel.tb.wide.d", n=2)) and got["pressed"] == "false" and -8 <= got["handleGap"] <= 2,
               f"the board opens folded, one line per card, the columns' heads in sight, the handle on the strips' edge naming what waits: {got}")
-        await page.click("#tb-wide[aria-pressed='false']")
+        await page.click("#tb-wide[aria-expanded='false']")
         got = res["wide1"] = await page.evaluate(FOLD)
         check(got["wide"] and not got["fold"] and got["cards"] == 2 and got["headsIn"] == 0 and got["btn"] == T("panel.tb.fold") and got["pressed"] == "true",
               f"広げる: the cards whole, the columns hidden: {got}")
@@ -291,7 +291,7 @@ async def run_denied(pw, out, failures):
         got = res["wide2"] = await page.evaluate(FOLD)
         check(got["wide"] and got["cards"] == 3 and got["headsIn"] == 0, f"1080, wide: three cards, no columns: {got}")
         await page.screenshot(path=str(out / "strips-wide.png"))
-        await page.click("#tb-wide[aria-pressed='true']")
+        await page.click("#tb-wide[aria-expanded='true']")
         await page.wait_for_timeout(400)
         got = res["fold2"] = await page.evaluate(FOLD)
         check(got["fold"] and not got["wide"] and got["cards"] == 0 and len(got["lines"]) == 3 and got["heads"] == 4 and got["headsIn"] == 4 and got["kbH"] >= 400
@@ -301,7 +301,7 @@ async def run_denied(pw, out, failures):
         await page.click(f"#denied-strip [data-ps-go='d:{d2}']")
         await wait(page, f"() => {{ const a = document.activeElement; return document.querySelector('#tb .kb-body').classList.contains('tb-wide') && !!a && !!a.closest('#denied-strip [data-dcard=\"{d2}\"]'); }}",
                    timeout=5000, label="a card's line: wide at that card, the focus in it")
-        await page.click("#tb-wide[aria-pressed='true']")
+        await page.click("#tb-wide[aria-expanded='true']")
         await page.wait_for_timeout(400)
         got = res["fold3"] = await page.evaluate(FOLD)
         check(got == res["fold2"], f"たたむ again: as it was: {got} vs {res['fold2']}")

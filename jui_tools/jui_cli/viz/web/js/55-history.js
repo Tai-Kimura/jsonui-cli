@@ -1096,7 +1096,7 @@ function histLowBtn() {
     histLowEl = hNode('button', 'h-low');
     histLowEl.type = 'button'; histLowEl.dataset.rbLow = ''; histLowEl.dataset.fk = 'rb-low';
     histLowEl.setAttribute('aria-controls', 'rb');
-    histLowEl.setAttribute('aria-pressed', 'false');
+    histLowEl.setAttribute('aria-expanded', 'false');
     histLowEl.textContent = tl('hist.low.on');
   }
   return histLowEl;
@@ -1105,8 +1105,8 @@ function histLowPaint() {
   const tab = HIST.tab === 'history' && !!rbState.id, on = histLow && tab;
   rbEl.classList.toggle('rb-histtab', tab);   // the tab's rows (app.css)
   rbEl.classList.toggle('rb-low', on);
-  const b = histLowBtn();
-  b.setAttribute('aria-pressed', String(on));
+  const b = histLowBtn();   // it opens a box wider, as a disclosure does: expanded, not one of the selected look's states
+  b.setAttribute('aria-expanded', String(on));
   b.textContent = on ? tl('hist.low.off') : tl('hist.low.on');
   b.title = on ? tl('hist.low.off.title') : tl('hist.low.on.title');
 }

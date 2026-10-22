@@ -265,7 +265,7 @@ async def scenario_work(browser, srv, out, failures, res):
     check(failures, s2 and s2["buttons"] == [] and s2["relay"] and "jui viz relay install" in s2["text"], f"work: no-relay prompt guides instead: {s2}")
     check(failures, s1 and "#2" in s1["text"] and s2 and T_pattern("panel.task.session.none").search(s2["text"]), "work: the prompt is on its owner's task only")
     # allow from the view: perm.decide goes out, the card turns "sent" (the strips open wide first: folded is the default)
-    await page.click("#tb-wide[aria-pressed='false']")
+    await page.click("#tb-wide[aria-expanded='false']")
     await page.click('#perm-strip [data-do="allow"][data-perm="perm-1"]')
     await wait(page, f"() => [...document.querySelectorAll('#perm-strip .pcard')].some((c) => c.textContent.includes({json.dumps(T_head('panel.perm.sent', 'what'))}))", label="perm-1 sent")
     res["decisions"] = fake_state(srv)["decisions"]

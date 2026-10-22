@@ -211,7 +211,7 @@ async def run_ask_board(pw, out, failures):
         await page.click("#chip-ask")
         await wait(page, "() => { const tb = document.getElementById('tb'); return !tb.hidden && tb.classList.contains('show'); }", label="the board, panel open")
         await page.wait_for_timeout(500)
-        await page.click("#tb-wide[aria-pressed='false']")
+        await page.click("#tb-wide[aria-expanded='false']")
         b3 = res["panelOpen"] = await page.evaluate(BOARD)
         check(failures, b3["open"] and not b3["sideClosed"] and len(b3["pend"]) == 1 and set(b3["pend"]) == set(b3["panelPend"]), f"with the panel open, the same board: {b3}")
         last = b3["pend"][0] if b3["pend"] else None
@@ -244,7 +244,7 @@ async def run_ask_board(pw, out, failures):
         await wait(page, "() => { const tb = document.getElementById('tb'); return !tb.hidden && tb.classList.contains('show'); }", label="Space opens the board")
         b5 = res["space"] = await page.evaluate(BOARD)
         check(failures, b5["open"] and len(b5["perms"]) == 1, f"Space on the 許可待ち chip opens the board with the permission: {b5}")
-        await page.click("#tb-wide[aria-pressed='false']")
+        await page.click("#tb-wide[aria-expanded='false']")
         await strip_hits_here("space")
         await page.click(f"#perm-strip [data-do='deny'][data-perm='{b5['perms'][0]}']")
         try:
