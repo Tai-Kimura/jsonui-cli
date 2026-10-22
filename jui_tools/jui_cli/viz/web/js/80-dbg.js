@@ -116,7 +116,12 @@ window.__dbg = {
     const plans = srMigPlans().map((m) => ({ name: m.name, ok: m.ok, steps: m.steps.length, codes: (m.problems || []).map((p) => p.code), shorts: (m.problems || []).map((p) => p.short) }));
     if (!P || !V) return { open: false, plans };
     const m4 = new THREE.Matrix4(), pos = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), sizes = {};
-    for (const [id, list] of V.migNodes || []) { const it = list[0]; it.mesh.getMatrixAt(it.i, m4); m4.decompose(pos, q, sc); sizes[id] = Math.round(sc.x / it.sc.x * 1000) / 1000; }
+    const vers = {};   // a replaced node's two versions: the old one's size and the new one's
+    for (const [id, list] of V.migNodes || []) for (const it of list) {
+      it.mesh.getMatrixAt(it.i, m4); m4.decompose(pos, q, sc);
+      const s = Math.round(sc.x / it.sc.x * 1000) / 1000;
+      sizes[id] = Math.max(sizes[id] || 0, s); (vers[id] = vers[id] || {})[it.ver] = Math.max((vers[id] || {})[it.ver] || 0, s);
+    }
     const lengths = {};
     for (const M of V.migEdges || []) {
       const a = M.line.geometry.attributes.position.array, o = M.j * 6, full = Math.hypot(M.b[0] - M.a[0], M.b[2] - M.a[2]) || 1;
@@ -129,8 +134,11 @@ window.__dbg = {
     const shapes = {};
     for (const set of ['simple', 'detail']) for (const mesh of V.nodeMeshes[set]) mesh.userData.nodes.forEach((id) => { if (srMigAt(P.entry)[id]) (shapes[id] = shapes[id] || {})[set] = mesh.userData.shape; });
     const specs = {};   // the version of each changed node the room is drawn with now: its spec's values
-    for (const n of SR.model.nodes || []) if (srMigAt(P.entry)[n.id]) specs[n.id] = (n.spec || []).map((x) => x.value).join(',');
-    return { open: true, plans, name: P.entry.name, k: P.k, specs, n: P.entry.steps.length, state: P.state, anim: P.anim ? { i: P.anim.i, t: P.anim.t } : null,
+    for (const p of V.L.pos.values()) if (srMigAt(P.entry)[p.n.id]) specs[p.n.id] = (p.n.spec || []).map((x) => x.value).join(',');
+    const nowEl = $('sr-mplayer').querySelector('[data-sr-mp-now]');
+    return { open: true, plans, name: P.entry.name, k: P.k, specs, vers, builds: SR.builds || 0, idle: P.idle || 0, now: nowEl ? nowEl.textContent : null, nowClass: nowEl ? nowEl.className : '',
+      fx: P.fx ? { from: P.fx.from, to: P.fx.to, delta: P.fx.delta } : null,
+      tags: [...document.querySelectorAll('#sr-toasts [data-sr-mig-tag]')].map((el) => ({ node: el.dataset.srMigTag, text: el.textContent, up: el.classList.contains('sr-up') })), n: P.entry.steps.length, state: P.state, anim: P.anim ? { i: P.anim.i, t: P.anim.t } : null,
       log: P.log.slice(), sizes, lengths, models, shapes, lights: P.lights.size, floors: (V.migFloorShown || []).slice().sort(), drawnNodes, drawnEdges,
       newNodes: P.entry.model.nodes.filter((n) => srVisible(n, V.env) && (V.fold || !n.fold)).map((n) => n.id).sort(),
       newEdges: P.entry.model.edges.filter((e) => srVisible(e, V.env)).map(srMigKey).sort(),
@@ -144,6 +152,9 @@ window.__dbg = {
   // where 全体を見る puts the camera (position and target), without moving it
   srFitCamera: () => { const V = SR.view; if (!V) return null; const p = V.camera.position.clone(), q = V.controls.target.clone(); srFit(true);
     const out = V.camera.position.toArray().concat(V.controls.target.toArray()); V.camera.position.copy(p); V.controls.target.copy(q); V.controls.update(); return out; },
+  // the room built again where it stands (what a theme or an environment does, with nothing to look different)
+  srRebuildHere: () => { const V = SR.view; if (!V) return null; srBuild({ pos: V.camera.position.clone(), target: V.controls.target.clone() }); return SR.builds; },
+  srPixTrail: (on) => { const got = SR.pixTrail || []; SR.pixTrail = on ? [] : null; return got; },
   srCamTrail: (on) => { const got = SR.camTrail || []; SR.camTrail = on ? [] : null; return got; },   // the cost view's own money format (the e2e compares the engine's numbers as shown)
   srMigSpeed: (s) => { SR_MIG.speed = s; srMigRenderBar(); return SR_MIG.speed; },
   srLabelRects: () => [...document.querySelectorAll('#sr-labels .sr-label:not([hidden])')].map((s) => { const r = s.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom].map(Math.round); }),

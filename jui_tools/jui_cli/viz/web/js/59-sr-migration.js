@@ -9,17 +9,23 @@
    out the old model and the new together (every node of either has its cell, so nothing moves while it plays), shows
    the old, and the player takes it one step at a time:
    - add: the node grows in its cell; remove: it shrinks away; replace: the old shape shrinks and the new one (its
-     shape, its cloud's colour, up close its model) grows in its place — the room is drawn again at that moment, the
-     camera where it was;
+     shape, its cloud's colour, up close its model) grows in its place — both versions are drawn from the start (the
+     new one at size 0), so a step never builds the room again (a rebuild per replace stalled a long plan and, with a
+     new renderer each time, flashed a washed-out frame: the video, 10-22);
    - an edge that goes shrinks to its middle and is gone; an edge that comes is drawn from its start to its end with
      the flows' light at its head (59-sr-flows.js srFlowLight), after the node it needs is there;
    - a floor of a group the new model has alone comes with its first node; one the new model has not goes at the end.
    play / pause, one step on, back to the start, stop (the old room again), the speed — the flows' player's buttons.
    The month's cost, when the room has load definitions (infra.cost.diff: the engine's months of the old model, of the
    model after each step and of the new, each priced on its own): 旧 → 今の歩 → 新 on the player, with the step's
-   difference; the コスト view lists 旧 · 新 · 差 by node and by cloud.
+   difference; the コスト view lists 旧 · 新 · 差 by node and by cloud. A step that moves the month says so where the eye
+   is (the requester 10-22: 「コストが変わるところが少し変化が薄くてわかりづらい」): the amount on the player counts to the
+   new one, the step's difference pops beside it (warm when it rises, cool when it falls), and a tag with it floats up
+   over the node that changed.
+   Played through (the requester: 「もっとたくさんの移管をスムーズに」), a step is shorter than one stepped alone
+   (SR_MIG.playMs) and the next begins as soon as one ends: nothing is rebuilt between them.
    While a plan is open the room's flows are not offered (they are the old model's). */
-const SR_MIG = { stepMs: 1600, speed: 1.0, P: null };
+const SR_MIG = { stepMs: 1600, playMs: 1050, countMs: 700, tagMs: 1800, speed: 1.0, P: null };
 const SR_MIG_KIND = { add: (node) => tl('sr.mig.kind.add', { node }), remove: (node) => tl('sr.mig.kind.remove', { node }),
   replace: (node) => tl('sr.mig.kind.replace', { node }), edges: () => tl('sr.mig.kind.edges') };
 const SR_MIG_DONE = { add: (s) => tl('sr.mig.log.add', { node: s.node }), remove: (s) => tl('sr.mig.log.remove', { node: s.node }),
@@ -29,13 +35,11 @@ const SR_MIG_CHANGE = { added: tl('sr.mig.change.added'), replaced: tl('sr.mig.c
 function srMigPlans() { return ((SR.migBase || SR.model || {}).migrations) || []; }
 const srMigClamp = (x) => Math.max(0, Math.min(1, x));
 
-/* The old model and the new laid out together: the old version of a node replaced until its step is past (or half
-   done: ``half``), then the new; the new model's own nodes, groups and edges after the old ones. */
-function srMigUnion(base, entry, k, half) {
-  const at = srMigAt(entry), newNodes = new Map(entry.model.nodes.map((n) => [n.id, n]));
+/* The old model and the new laid out together: a replaced node as its old version (srMigVersions puts the new one in
+   the layout as its step passes half way); the new model's own nodes, groups and edges after the old ones. */
+function srMigUnion(base, entry) {
   const oldIds = new Set((base.nodes || []).map((n) => n.id));
-  const isNew = (id) => at[id] && (k >= at[id] || half === at[id]);
-  const nodes = (base.nodes || []).map((n) => (isNew(n.id) && newNodes.has(n.id) ? newNodes.get(n.id) : n));
+  const nodes = (base.nodes || []).slice();
   for (const n of entry.model.nodes) if (!oldIds.has(n.id)) nodes.push(n);
   const oldGroups = new Set((base.groups || []).map((g) => g.id));
   const groups = (base.groups || []).concat(entry.model.groups.filter((g) => !oldGroups.has(g.id)));
@@ -75,6 +79,19 @@ function srMigNodeScale(id) {
   if (kind === 'remove') return P.k >= i ? 0 : 1;
   return 1;
 }
+/* A replaced node is drawn twice (srMigAfterBuild): the old version shrinks over the first half of its step, the new
+   one grows over the second. */
+function srMigVerScale(id, ver) {
+  const P = SR_MIG.P, i = P && srMigAt(P.entry)[id];
+  if (!i || P.entry.steps[i - 1].kind !== 'replace') return srMigNodeScale(id);
+  const A = P.anim && P.anim.i === i ? P.anim : null;
+  if (A) return ver === 'new' ? srMigClamp((A.t - 0.5) / 0.5) : 1 - srMigClamp(A.t / 0.5);
+  return (P.k >= i) === (ver === 'new') ? 1 : 0;
+}
+function srMigVersion(id) {
+  const P = SR_MIG.P, i = srMigAt(P.entry)[id];
+  return P.k >= i || (P.anim && P.anim.i === i && P.anim.t >= 0.5) ? 'new' : 'old';
+}
 function srMigHides(id) { return !!SR_MIG.P && srMigNodeScale(id) <= 0.001; }
 function srMigEdge(e) {
   const P = SR_MIG.P;
@@ -113,7 +130,7 @@ function srMigStart(name) {
   if (SR_MIG.P) srMigStop(true);
   srFlowStop();
   SR.migBase = base;
-  SR_MIG.P = { entry, k: 0, anim: null, state: 'pause', half: null, cost: null, costSeq: 0, lights: new Map(), log: [] };
+  SR_MIG.P = { entry, k: 0, anim: null, state: 'pause', cost: null, costSeq: 0, lights: new Map(), log: [], fx: null, tags: [] };
   srMigRebuild(true);
   srLog(tl('sr.mig.log.start', { name, n: entry.steps.length }));
   srMigCost();
@@ -122,6 +139,7 @@ function srMigStart(name) {
 function srMigStop(quiet) {
   const P = SR_MIG.P;
   if (!P) return false;
+  srMigTagsClear(P);
   SR_MIG.P = null;
   SR.model = SR.migBase; SR.migBase = null;
   if (!quiet) { srMigRebuild(); srLog(tl('sr.mig.log.stop', { name: P.entry.name })); }
@@ -131,16 +149,17 @@ function srMigStop(quiet) {
 /* The room drawn again for the plan's state, the camera kept (srFit only when it opens). */
 function srMigRebuild(first) {
   const V = SR.view, P = SR_MIG.P;
-  if (P) SR.model = srMigUnion(SR.migBase, P.entry, P.k, P.half);
+  if (P) SR.model = srMigUnion(SR.migBase, P.entry);
   if (!V) return;
   srBuild(first ? undefined : { pos: V.camera.position.clone(), target: V.controls.target.clone() });   // no frame from the fit camera
 }
-function srMigReset() {
+function srMigReset() {   // nothing is rebuilt: the sizes, the versions and the lines are put back to the old model's
   const P = SR_MIG.P;
   if (!P) return;
   srMigLightsClear(SR.view);
-  Object.assign(P, { k: 0, anim: null, state: 'pause', half: null });
-  srMigRebuild();
+  srMigTagsClear(P);
+  Object.assign(P, { k: 0, anim: null, state: 'pause', fx: null });
+  if (SR.view) srMigApply(SR.view, true);
 }
 function srMigStepOn() {
   const P = SR_MIG.P;
@@ -171,6 +190,7 @@ function srMigAfterBuild(V) {
   V.near.add(V.migLayer);
   P.lights = new Map();
   const at = srMigAt(P.entry), E = srMigEdgeSteps(P.entry);
+  srMigNewShapes(V, at);
   V.migNodes = new Map();
   srMigIndexNodes(V, at);
   V.migEdges = [];
@@ -186,6 +206,25 @@ function srMigAfterBuild(V) {
   V.migFloors = V.L.floors.map((G, i) => ({ G, i }));
   srMigApply(V, true);
 }
+/* The new version of each replaced node, at its cell, at size 0 until its step: a shape of its own in each set (the simple
+   one and the one by service), in its cloud's colour; they take the press as the others do (srSetDetail). */
+function srMigNewShapes(V, at) {
+  const P = SR_MIG.P, m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), col = new THREE.Color();
+  for (const s of P.entry.steps) {
+    if (s.kind !== 'replace') continue;
+    const n = P.entry.model.nodes.find((x) => x.id === s.node), p = n && V.L.pos.get(s.node);
+    if (!p || p.hiddenIn) continue;
+    for (const set of ['simple', 'detail']) {
+      const shape = srShapeIn(set, n), mesh = new THREE.InstancedMesh(SR_SHAPES[shape](), new THREE.MeshLambertMaterial({ color: 0xffffff }), 1);
+      const sc = n.count > 1 ? 1 + Math.min(Math.log2(n.count), 4) * 0.12 : 1;
+      mesh.setMatrixAt(0, m4.compose(new THREE.Vector3(p.x, p.y + 0.75, p.z), q, new THREE.Vector3(sc, sc, sc)));
+      mesh.setColorAt(0, col.set(srProviderColor(n.providerResolved || n.provider, 'node', 0, V.dark)));
+      Object.assign(mesh.userData, { nodes: [s.node], shape, migNew: true });
+      V.nodeSets[set].add(mesh); V.nodeMeshes[set].push(mesh);
+      if (set === (V.detail ? 'detail' : 'simple')) V.pick.push(mesh);
+    }
+  }
+}
 function srMigIndexNodes(V, at) {
   V.migNodes.clear();
   const meshes = [...V.nodeMeshes.simple, ...V.nodeMeshes.detail];
@@ -196,7 +235,7 @@ function srMigIndexNodes(V, at) {
     mesh.getMatrixAt(i, m4);
     const pos = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
     m4.decompose(pos, q, sc);
-    (V.migNodes.get(id) || V.migNodes.set(id, []).get(id)).push({ mesh, i, pos, q, sc, s: -1 });
+    (V.migNodes.get(id) || V.migNodes.set(id, []).get(id)).push({ mesh, i, pos, q, sc, s: -1, ver: mesh.userData.migNew ? 'new' : 'old' });
   });
   V.migIcons = V.iconCount || 0;
 }
@@ -206,10 +245,11 @@ function srMigApply(V, all) {
   const P = SR_MIG.P;
   if (!P || !V.migNodes) return;
   if ((V.iconCount || 0) !== V.migIcons) srMigIndexNodes(V, srMigAt(P.entry));   // the icons come after the build
+  srMigVersions(V);
   const m4 = new THREE.Matrix4(), sc = new THREE.Vector3(), touched = new Set();
   for (const [id, list] of V.migNodes) {
-    const s = srMigNodeScale(id);
     for (const it of list) {
+      const s = srMigVerScale(id, it.ver);
       if (!all && Math.abs(it.s - s) < 1e-4) continue;
       it.s = s;
       it.mesh.setMatrixAt(it.i, m4.compose(it.pos, it.q, sc.copy(it.sc).multiplyScalar(Math.max(s, 1e-4))));
@@ -283,30 +323,84 @@ function srMigFloors(V) {
 /* ---- each frame: the step playing, the next one when it is done */
 function srMigTick(V, dt) {
   const P = SR_MIG.P;
-  if (!P || !V.migNodes || P.rebuilding) return;
-  if (!P.anim && P.state === 'play') { if (!srMigStepOn()) { P.state = 'done'; srMigRenderBar(); } }
+  if (!P || !V.migNodes) return;
+  srMigFxTick(V, P, dt);
+  if (!P.anim && P.state === 'play') {   // a frame of play with no step on (the e2e counts them: back to back is none)
+    P.idle = (P.idle || 0) + 1;
+    if (!srMigStepOn()) P.state = 'done';
+    srMigRenderBar();
+  }
   if (P.anim) {
-    const kind = P.entry.steps[P.anim.i - 1].kind, before = P.anim.t;
-    P.anim.t = reduceMotion ? 1 : Math.min(1, P.anim.t + dt * SR_MIG.speed / SR_MIG.stepMs);
-    if (kind === 'replace' && before < 0.5 && P.anim.t >= 0.5) {   // the new shape: the room drawn again, then it grows
-      P.half = P.anim.i; P.rebuilding = true;
-      setTimeout(() => { if (SR_MIG.P === P) { P.rebuilding = false; srMigRebuild(); } }, 0);
-      return;
-    }
+    const ms = P.state === 'play' ? SR_MIG.playMs : SR_MIG.stepMs;   // played through: shorter steps, back to back
+    P.anim.t = reduceMotion ? 1 : Math.min(1, P.anim.t + dt * SR_MIG.speed / ms);
     if (P.anim.t >= 1) {
-      P.k = P.anim.i; P.anim = null; P.half = null;
+      P.k = P.anim.i; P.anim = null;
       const s = P.entry.steps[P.k - 1];
       srLog(SR_MIG_DONE[s.kind](s));
       if (P.k >= P.entry.steps.length) P.state = 'done';
       else if (P.state === 'step') P.state = 'pause';
       srMigApply(V, false);
       srMigLightsClear(V);
+      srMigFxStart(V, P, s);
       srMigRenderBar();
+      if (P.state === 'play' && srMigStepOn()) { srMigApply(V, false); srMigRenderBar(); }   // the next step from this same frame: no gap
       return;
     }
   }
   srMigApply(V, false);
 }
+
+/* The new version of each replaced node put in the layout once its step is half way (labels, the board, the models up
+   close read it there), the old one put back before that; a model up close is made again for it. */
+function srMigVersions(V) {
+  const P = SR_MIG.P, newNodes = P.entry._new || (P.entry._new = new Map(P.entry.model.nodes.map((n) => [n.id, n])));
+  const oldNodes = P.entry._old || (P.entry._old = new Map((SR.migBase.nodes || []).map((n) => [n.id, n])));
+  for (const s of P.entry.steps) {
+    if (s.kind !== 'replace') continue;
+    const want = (srMigVersion(s.node) === 'new' ? newNodes : oldNodes).get(s.node), p = V.L.pos.get(s.node);
+    if (!want || !p || p.n === want) continue;
+    p.n = want;   // the layout's only: SR.model keeps the old version, so a build (the theme, an environment) lays out the same
+    if (V.models && V.models.has(s.node)) { V.modelLayer.remove(V.models.get(s.node)); V.models.delete(s.node); V.labelAt = 0; }
+    if (SR.selected === s.node) srRenderBoard();
+  }
+}
+
+/* ---- a step that moves the month: the player's amount counts to the new one, the difference pops beside it, a tag
+   floats up over the node */
+function srMigFxStart(V, P, s) {
+  const C = P.cost;
+  if (!C || !C.ok) return;
+  const to = C.steps[s.index - 1].usd, from = s.index > 1 ? C.steps[s.index - 2].usd : C.old.usd;
+  if (to === null || from === null || Math.abs(to - from) < 0.005) { P.fx = null; return; }
+  P.fx = { from, to, delta: to - from, left: reduceMotion ? 0 : SR_MIG.countMs, node: s.node };
+  if (s.node && !reduceMotion) {
+    const el = document.createElement('div');
+    el.className = `sr-mig-tag ${to > from ? 'sr-up' : 'sr-down'}`;
+    el.dataset.srMigTag = s.node;
+    el.textContent = srMigSigned(to - from);
+    $('sr-toasts').append(el);
+    P.tags.push({ el, at: s.node, left: SR_MIG.tagMs, life: SR_MIG.tagMs });
+  }
+}
+function srMigFxTick(V, P, dt) {
+  const step = dt * SR_MIG.speed;
+  if (P.fx && P.fx.left > 0) {
+    P.fx.left = Math.max(0, P.fx.left - step);
+    const k = 1 - P.fx.left / SR_MIG.countMs, e = 1 - (1 - k) ** 3, el = $('sr-mplayer').querySelector('[data-sr-mp-now]');
+    if (el) el.textContent = srcUsd(P.fx.from + (P.fx.to - P.fx.from) * e);
+  }
+  const w = V.renderer.domElement.clientWidth, h = V.renderer.domElement.clientHeight;
+  P.tags = P.tags.filter((x) => { x.left -= step; if (x.left > 0) return true; x.el.remove(); return false; });
+  for (const x of P.tags) {
+    const p = srFlowPos(V, x.at);
+    if (!p) continue;
+    const v = p.clone(); v.y += 1.8; v.project(V.camera);
+    const rise = (1 - x.left / x.life) * 28;
+    x.el.style.transform = `translate(${Math.round((v.x + 1) / 2 * w)}px, ${Math.round((1 - v.y) / 2 * h - rise)}px) translate(-50%, -100%)`;
+    x.el.style.opacity = String(Math.min(1, x.left / 400));
+  }
+}
+function srMigTagsClear(P) { for (const x of P.tags) x.el.remove(); P.tags = []; }
 /* ---- the player's bar: the plan, play / pause, one step, back to the start, stop, the speed, the cost */
 function srMigRenderBar() {
   const bar = $('sr-mplayer'), P = SR_MIG.P;
@@ -319,7 +413,10 @@ function srMigRenderBar() {
   let costHTML = '';
   if (C && C.ok) {
     const nowUsd = P.k ? C.steps[P.k - 1].usd : C.old.usd, stepDiff = cur ? C.steps[cur.index - 1].diff : null;   // the step shown
-    costHTML = `<span class="sr-mp-cost" data-sr-mp-cost>${esc(tl('sr.mig.cost', { old: srcUsd(C.old.usd), now: srcUsd(nowUsd), new: srcUsd(C.new.usd) }))}${stepDiff !== null ? ` <b data-sr-mp-diff>${esc(tl('sr.mig.cost.step', { diff: srMigSigned(stepDiff) }))}</b>` : ''}</span>`;
+    const fx = P.fx, counting = fx && fx.left > 0, shown = counting ? fx.from : nowUsd;
+    const dir = stepDiff > 0 ? 'sr-up' : stepDiff < 0 ? 'sr-down' : '';
+    const nowCls = fx && P.k && fx.to === nowUsd ? (fx.delta > 0 ? 'sr-up' : 'sr-down') : '';
+    costHTML = `<span class="sr-mp-cost" data-sr-mp-cost>${esc(tl('sr.mig.cost.old', { old: srcUsd(C.old.usd) }))} → <b class="sr-mp-now ${esc(nowCls)}" data-sr-mp-now>${esc(srcUsd(shown))}</b> → ${esc(tl('sr.mig.cost.new', { new: srcUsd(C.new.usd) }))}${stepDiff !== null ? ` <b class="sr-mp-delta ${esc(dir)}" data-sr-mp-diff>${esc(tl('sr.mig.cost.step', { diff: srMigSigned(stepDiff) }))}</b>` : ''}</span>`;
     if (C.unpricedChanged && C.unpricedChanged.length) costHTML += ` <small class="sr-mp-unpriced" data-sr-mp-unpriced title="${esc(C.unpricedChanged.join(', '))}">${esc(tl('sr.mig.unpriced.bar', { n: C.unpricedChanged.length }))}</small>`;
   } else if (C && !C.ok) costHTML = `<span class="sr-fp-state">${esc(tl('sr.mig.cost.none'))}</span>`;
   setHTML(bar, `<b class="sr-fp-title">${esc(tl('sr.mig.title', { name: P.entry.name }))}</b>
@@ -338,7 +435,7 @@ $('sr-mplayer').addEventListener('click', (e) => {
   const what = b.dataset.srMp;
   if (what === 'toggle') {
     if (P.state === 'play') P.state = 'pause';
-    else { if (P.k >= P.entry.steps.length && !P.anim) srMigReset(); SR_MIG.P.state = 'play'; }
+    else { if (P.k >= P.entry.steps.length && !P.anim) srMigReset(); SR_MIG.P.state = 'play'; if (!P.anim) srMigStepOn(); }   // at once
   } else if (what === 'step') { if (!P.anim && srMigStepOn()) P.state = 'step'; }
   else if (what === 'reset') srMigReset();
   else if (what === 'stop') { srMigStop(); return; }

@@ -1911,6 +1911,8 @@
   "sr.mig.stop": "閉じる（今の構成に戻す）",
   "sr.mig.at": "{k} / {n} 歩",
   "sr.mig.cost": "旧 {old} → 今 {now} → 新 {new}",
+  "sr.mig.cost.old": "旧 {old}",
+  "sr.mig.cost.new": "新 {new}",
   "sr.mig.cost.step": "この歩 {diff}",
   "sr.mig.cost.none": "コストは出せません（負荷の定義が要ります）",
   "sr.mig.cost.title": "移管計画 {name} のコスト（月額）",

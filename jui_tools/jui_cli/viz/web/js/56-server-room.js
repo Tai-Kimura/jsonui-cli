@@ -453,7 +453,7 @@ function srDispose() {
   V.ro.disconnect();
   V.controls.dispose();
   V.scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { for (const m of [].concat(o.material)) { if (m.map) m.map.dispose(); m.dispose(); } } });
-  V.renderer.dispose();
+  V.renderer.renderLists.dispose();   // the renderer stays: a new one on the same canvas drew its first frame washed out
   for (const url of V.iconUrls) URL.revokeObjectURL(url);
   if (V.reachMats) for (const m of V.reachMats.values()) m.dispose();   // a faint copy not on a model now is in no scene
   $('sr-labels').innerHTML = '';
@@ -463,13 +463,16 @@ function srDispose() {
    so the fit view is never seen in between. */
 function srBuild(keep) {
   const t0 = srNow();
+  SR.builds = (SR.builds || 0) + 1;   // the e2e: a migration step builds nothing
   srDispose();
   const model = SR.model, env = $('sr-env').value || '', fold = $('sr-fold').checked;
   const L = srLayout(model, env, fold, SR.closed, SR.only);
   // a chosen or pointed node not drawn now (another environment, a cloud not chosen, folded) is let go (the independent verification)
   for (const k of ['selected', 'hover']) if (SR[k] && !(L.pos.has(SR[k]) && !L.pos.get(SR[k]).hiddenIn)) SR[k] = null;
   const cv = $('sr-canvas'), box = cv.parentElement;
-  const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+  // one renderer for the page's server room, kept across builds (the video, 10-22: each build made a new one on the same
+  // canvas, and its first frame showed the floors white and the models pale — once a migration step, once a theme)
+  const renderer = SR.renderer || (SR.renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true }));
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   const scene = new THREE.Scene();
   const dark = isDark(), PAL = dark ? SR_PAL.dark : SR_PAL.light;
@@ -623,12 +626,23 @@ function srBuild(keep) {
     srMigTick(V, dt);
     if (t - V.labelAt > 100) { V.labelAt = t; srPlaceLabels(V); }
     renderer.render(scene, camera);
+    if (SR.pixTrail) SR.pixTrail.push(srPixMean(renderer));   // the e2e: each frame's colour, read as it was drawn
   };
   V.loop = loop;
   loop();
   SR.stats = { firstMs: Math.round(srNow() - t0), nodes: L.nodes.length, edges: L.edges.length, floors: L.floors.length };
   srLog(tl('sr.log.drawn', { nodes: L.nodes.length, edges: L.edges.length, floors: L.floors.length, ms: SR.stats.firstMs })
     + (env ? tl('sr.log.drawn.env', { env }) : ''));
+}
+/* The mean colour of a 12 x 8 grid of the frame just drawn (read before the browser clears it): the e2e holds that a
+   redraw never shows a frame in other colours. */
+function srPixMean(renderer) {
+  const gl = renderer.getContext(), w = gl.drawingBufferWidth, h = gl.drawingBufferHeight, px = new Uint8Array(4), sum = [0, 0, 0];
+  for (let i = 0; i < 12; i++) for (let j = 0; j < 8; j++) {
+    gl.readPixels(Math.floor((i + 0.5) * w / 12), Math.floor((j + 0.5) * h / 8), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    sum[0] += px[0]; sum[1] += px[1]; sum[2] += px[2];
+  }
+  return sum.map((s) => Math.round(s / 96 * 10) / 10);
 }
 function srCountNodes(G) { return G.nodes.length + G.kids.reduce((a, k) => a + srCountNodes(k), 0); }
 function srResize(V) {
@@ -991,7 +1005,8 @@ function srRenderBoard() {
   const M = SR.model, S = SR.shown || {};
   if (!M) return;
   const provs = [...new Set((M.nodes || []).map((n) => n.providerResolved || n.provider).filter(Boolean))];
-  const sel = SR.selected ? (M.nodes || []).find((n) => n.id === SR.selected) : null;
+  const laid = SR.selected && SR.view && SR.view.L.pos.get(SR.selected);   // a migration step may have put a new version there
+  const sel = SR.selected ? (laid && laid.n) || (M.nodes || []).find((n) => n.id === SR.selected) : null;
   const grp = !sel && SR.selectedGroup ? (M.groups || []).find((g) => g.id === SR.selectedGroup) : null;
   const inGroup = grp && SR.view ? SR.view.L.floors.find((F) => F.g.id === grp.id) : null;
   const edgesOf = sel ? (M.edges || []).filter((e) => e.from === sel.id || e.to === sel.id).slice(0, 20) : [];

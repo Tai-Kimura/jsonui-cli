@@ -13,7 +13,10 @@ edge's length from the line's positions), never from the plan's own lists alone.
   * replace: the old version shrinks (its spec still the old one), then the new one (the new spec) grows
   * remove: its edge shrinks to its middle, then the node shrinks away; the edge removed alone goes at the last step
   * the end: what is drawn is the new model, node for node and edge for edge
-  * replace redraws the room with the camera held: no frame from the fit camera between
+  * a step builds nothing (a replaced node's new version is drawn from the start at size 0): the camera and each
+    frame's colours hold through a replace; played through, the steps come back to back (no frame without one)
+  * a step that moves the month: the amount counts to the new one in the step's colour, a tag with the difference
+    floats over the node
   * the cost: 旧 → 今 → 新 on the player from the engine's months, the step shown with its own difference, the changed
     nodes with no price said; the コスト view's 旧 · 新 · 差 table (rows with no price marked) and its big number said
     to be the old model's, with the month at the step the player is at
@@ -114,7 +117,8 @@ async def run_sr_migration(pw, out, failures):
             subprocess.run([sys.executable, "-I", "-S", str(forward)], input=json.dumps(body).encode(), capture_output=True,
                            env=dict(base_env, HOME=str(home)), timeout=10)
         page = await new_page(browser, Watch(origin=url), "sr-migration", **DESKTOP)
-        await page.emulate_media(color_scheme="light", reduced_motion="no-preference")
+        # dark: the washed-out frame showed there (the glow adds to what is behind it), as in the video
+        await page.emulate_media(color_scheme="dark", reduced_motion="no-preference")
         await page.goto(url + "/")
         await ready(page)
         await until(page, f"() => window.__dbg.robots.length >= {len(rooms)}", "the rooms", timeout=60000)
@@ -157,7 +161,9 @@ async def run_sr_migration(pw, out, failures):
         unpriced = T("sr.mig.unpriced.bar", n=len(cli["unpricedChanged"]))
         check(failures, cli["unpricedChanged"] and unpriced in await page.inner_text("#sr-mplayer"),
               f"a changed node with no price is said on the player: {cli['unpricedChanged']} {unpriced!r}")
-        bar_old = T("sr.mig.cost", old=await usd(cli["old"]["usd"]), now=await usd(cli["old"]["usd"]), new=await usd(cli["new"]["usd"]))
+        async def bar_text(now_usd):
+            return f'{T("sr.mig.cost.old", old=await usd(cli["old"]["usd"]))} → {await usd(now_usd)} → {T("sr.mig.cost.new", new=await usd(cli["new"]["usd"]))}'
+        bar_old = await bar_text(cli["old"]["usd"])
         check(failures, m["bar"].startswith(bar_old), f"the player's cost is the engine's old and new: {m['bar']!r} vs {bar_old!r}")
 
         await page.evaluate("() => window.__dbg.srMigSpeed(0.5)")
@@ -166,6 +172,15 @@ async def run_sr_migration(pw, out, failures):
         await until(page, "() => { const m = window.__dbg.srMig(); return m.sizes['cache-prod'] > 0.05 && m.sizes['cache-prod'] < 0.95; }", "the node growing", timeout=20000)
         await until(page, "() => { const m = window.__dbg.srMig(); const l = m.lengths['api-prod->cache-prod']; return l > 0.1 && l < 0.9 && m.lights >= 1; }", "the edge drawn with its light", timeout=20000)
         res["adding"] = await page.evaluate(MIG)
+        # built again while the light draws the edge (a theme or an environment changed then): no frame in other colours
+        # (a new renderer per build drew that first frame washed out — floors white, models pale: the video, 10-22)
+        await page.evaluate("() => window.__dbg.srPixTrail(true)")
+        await page.wait_for_timeout(150)
+        await page.evaluate("() => window.__dbg.srRebuildHere()")
+        await page.wait_for_timeout(300)
+        pix = await page.evaluate("() => window.__dbg.srPixTrail(false)")
+        jumps = [i for i in range(1, len(pix)) if max(abs(a - b) for a, b in zip(pix[i], pix[i - 1])) > 15]
+        check(failures, len(pix) > 10 and not jumps, f"built again mid-step, every frame keeps its colours: {len(pix)} frames, jumps {[(i, pix[i - 1], pix[i]) for i in jumps[:3]]}")
         await until(page, "() => { const m = window.__dbg.srMig(); return m.k === 1 && !m.anim; }", "step 1 done", timeout=20000)
         m = await page.evaluate(MIG)
         check(failures, m["sizes"]["cache-prod"] == 1 and m["lengths"]["api-prod->cache-prod"] == 1 and m["lights"] == 0 and "cache-subnet" in m["floors"],
@@ -177,16 +192,39 @@ async def run_sr_migration(pw, out, failures):
         await page.evaluate("() => window.__dbg.srSelect('db-prod')")
         await page.click("#sr-board [data-sr-act='focus']")
         await page.wait_for_timeout(300)
-        await page.evaluate("() => window.__dbg.srCamTrail(true)")
+        builds = (await page.evaluate(MIG))["builds"]
+        await page.evaluate("() => { window.__dbg.srCamTrail(true); window.__dbg.srPixTrail(true); }")
         await page.click("#sr-mplayer [data-sr-mp='step']")
         await until(page, "() => { const m = window.__dbg.srMig(); return m.anim && m.anim.t > 0.1 && m.anim.t < 0.45 && m.sizes['db-prod'] < 0.9; }", "the old one shrinking", timeout=20000)
         m = await page.evaluate(MIG)
         check(failures, m["specs"]["db-prod"].startswith("db.r6g.large"), f"shrinking, it is the old one: {m['specs']}")
+        check(failures, m["vers"]["db-prod"].get("old", 0) < 1 and m["vers"]["db-prod"].get("new") == 0, f"first half: the old version shrinking, the new not yet: {m['vers']}")
         await until(page, "() => { const m = window.__dbg.srMig(); return m.anim && m.anim.t > 0.55 && m.sizes['db-prod'] < 0.9; }", "the new one growing", timeout=20000)
         m = await page.evaluate(MIG)
         check(failures, m["specs"]["db-prod"].startswith("db.r6g.xlarge"), f"growing, it is the new one: {m['specs']}")
+        check(failures, m["vers"]["db-prod"].get("old") == 0 and 0 < m["vers"]["db-prod"].get("new", 0) < 1, f"second half: the new version growing, the old gone: {m['vers']}")
         await until(page, "() => { const m = window.__dbg.srMig(); return m.k === 2 && !m.anim; }", "step 2 done", timeout=20000)
+        # the month moved: the amount counts to the new one, the difference pops, a tag floats over the node
+        seen = []
+        for _ in range(80):
+            x = await page.evaluate(MIG)
+            seen.append((x["now"], x["nowClass"], x["tags"]))
+            if x["now"] == await usd(cli["steps"][1]["usd"]) and len(seen) > 2:
+                break
+            await page.wait_for_timeout(40)
+        frm, to = cli["steps"][0]["usd"], cli["steps"][1]["usd"]
+        between = [s for s, _c, _t in seen if s and min(frm, to) + 0.01 < float(s.replace("$", "").replace(",", "")) < max(frm, to) - 0.01]
+        check(failures, frm != to and between and seen[-1][0] == await usd(to), f"the amount counts from {frm} to {to}: {[s for s, _c, _t in seen]}")
+        want_cls = "sr-up" if to > frm else "sr-down"
+        check(failures, want_cls in seen[-1][1], f"the amount in the step's colour ({want_cls}): {seen[-1][1]!r}")
+        tags = [tg for _s, _c, ts in seen for tg in ts]
+        signed = ("+" if to >= frm else "−") + await usd(abs(to - frm))
+        check(failures, any(tg["node"] == "db-prod" and tg["text"] == signed and tg["up"] == (to > frm) for tg in tags), f"a tag {signed} over db-prod: {tags[:3]}")
         trail = await page.evaluate("() => window.__dbg.srCamTrail(false)")
+        pix = await page.evaluate("() => window.__dbg.srPixTrail(false)")
+        jumps = [i for i in range(1, len(pix)) if max(abs(a - b) for a, b in zip(pix[i], pix[i - 1])) > 15]
+        check(failures, len(pix) > 10 and not jumps, f"no frame in other colours through the replace: {len(pix)} frames, jumps at {[(i, pix[i - 1], pix[i]) for i in jumps[:3]]}")
+        check(failures, (await page.evaluate(MIG))["builds"] == builds, f"a step builds nothing: {builds} builds before, {(await page.evaluate(MIG))['builds']} after")
         moved = [i for i, c in enumerate(trail) if max(abs(a - b) for a, b in zip(c, trail[0])) > 1e-6]
         fit = await page.evaluate("() => { const t = window.__dbg.srFitCamera(); return t; }")
         check(failures, max(abs(a - b) for a, b in zip(fit, trail[0])) > 1.0, f"the arm stands away from the fit camera: {fit} vs {trail[0]}")
@@ -208,16 +246,27 @@ async def run_sr_migration(pw, out, failures):
 
         # the rest played: the end is the new model
         await page.evaluate("() => window.__dbg.srMigSpeed(3)")
+        builds = (await page.evaluate(MIG))["builds"]
         await page.click("#sr-mplayer [data-sr-mp='toggle']")
         await until(page, "() => { const m = window.__dbg.srMig(); return m.state === 'done' && !m.anim; }", "played to the end", timeout=30000)
         m = await page.evaluate(MIG)
+        check(failures, m["idle"] == 0 and m["builds"] == builds, f"played through: no frame without a step, nothing built: idle {m['idle']}, builds {builds} → {m['builds']}")
         res["end"] = m
         check(failures, m["drawnNodes"] == m["newNodes"] and m["drawnEdges"] == m["newEdges"],
               f"the end is the new model: nodes {sorted(set(m['drawnNodes']) ^ set(m['newNodes']))} edges {sorted(set(m['drawnEdges']) ^ set(m['newEdges']))}")
         check(failures, m["lengths"]["cdn->assets"] == 0 and m["specs"]["db-prod"].startswith("db.r6g.xlarge"), f"the end: {m['lengths']} {m['specs']}")
-        bar_new = T("sr.mig.cost", old=await usd(cli["old"]["usd"]), now=await usd(cli["new"]["usd"]), new=await usd(cli["new"]["usd"]))
+        bar_new = await bar_text(cli["new"]["usd"])
         check(failures, m["bar"].startswith(bar_new), f"at the end now is the new month: {m['bar']!r} vs {bar_new!r}")
         await page.screenshot(path=str(out / "end.png"))
+
+        # built again where it stands: no frame in other colours (a new renderer per build drew its first frame washed out)
+        await page.evaluate("() => window.__dbg.srPixTrail(true)")
+        await page.wait_for_timeout(300)
+        await page.evaluate("() => window.__dbg.srRebuildHere()")
+        await page.wait_for_timeout(500)
+        pix = await page.evaluate("() => window.__dbg.srPixTrail(false)")
+        jumps = [i for i in range(1, len(pix)) if max(abs(a - b) for a, b in zip(pix[i], pix[i - 1])) > 15]
+        check(failures, len(pix) > 10 and not jumps, f"a build where it stands keeps every frame's colours: {len(pix)} frames, jumps {[(i, pix[i - 1], pix[i]) for i in jumps[:3]]}")
 
         # the cost view: 旧 · 新 · 差 by node
         await page.click("#sr-mode-cost")
@@ -240,6 +289,14 @@ async def run_sr_migration(pw, out, failures):
         m = await page.evaluate(MIG)
         check(failures, m["sizes"]["cache-prod"] == 0 and m["sizes"]["mailer"] == 1 and m["lengths"]["cdn->assets"] == 1 and m["specs"]["db-prod"].startswith("db.r6g.large"),
               f"back to the start: the old model again: {m['sizes']} {m['lengths']} {m['specs']}")
+        # played through from the start: the steps back to back (no frame without one), nothing built, the end the new model
+        builds = m["builds"]
+        await page.evaluate("() => window.__dbg.srMigSpeed(5)")
+        await page.click("#sr-mplayer [data-sr-mp='toggle']")
+        await until(page, "() => { const m = window.__dbg.srMig(); return m.state === 'done' && !m.anim; }", "played through from the start", timeout=30000)
+        m = await page.evaluate(MIG)
+        check(failures, m["idle"] == 0 and m["builds"] == builds and m["drawnNodes"] == m["newNodes"] and m["drawnEdges"] == m["newEdges"],
+              f"played through from the start: idle frames {m['idle']}, builds {builds} → {m['builds']}, the end the new model {m['drawnNodes'] == m['newNodes'] and m['drawnEdges'] == m['newEdges']}")
         await page.click("#sr-mplayer [data-sr-mp='stop']")
         await until(page, "() => !window.__dbg.srMig().open", "stopped", timeout=20000)
         after = (await page.evaluate("() => window.__dbg.srFlow()"))["starts"]

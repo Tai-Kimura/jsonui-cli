@@ -1956,6 +1956,8 @@
   "sr.mig.stop": "Close (back to the current model)",
   "sr.mig.at": "step {k} of {n}",
   "sr.mig.cost": "old {old} → now {now} → new {new}",
+  "sr.mig.cost.old": "old {old}",
+  "sr.mig.cost.new": "new {new}",
   "sr.mig.cost.step": "this step {diff}",
   "sr.mig.cost.none": "No cost (needs load definitions)",
   "sr.mig.cost.title": "The migration plan {name}: cost a month",
