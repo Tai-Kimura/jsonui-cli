@@ -71,6 +71,8 @@ BILLS_MAX = 60
 UNPRICED_MAX = 20
 ENDED_LINGER_MS = 60_000
 #: the hooks after which a session no longer waits for input (Notification idle_prompt set it): a prompt, a tool, its end
+#: The events the --stop hook runs on (hooks_installer.STOP_EVENTS, the plugin's hooks.json)
+STOP_EVENTS = frozenset({"PreToolUse", "PostToolUse"})
 INPUT_WAIT_ENDS = frozenset({"UserPromptSubmit", "PreToolUse", "SessionEnd", "SessionStart"})
 # Waiting on background work (requester, 10-18): a session whose Stop listed background_tasks keeps its light on
 # until the work ends — the next Stop without any, SessionEnd, or no background shell left under its process
@@ -406,6 +408,8 @@ class World:
             self._dirty.add("calls")
         if self.denials.session_ended(sid, at):
             self._dirty.add("denials")
+        session.pop("stopAt", None)
+        session.pop("haltOn", None)
         self._status(session, "ended", at)
         self._set(agent, at, "idle", i18n.tl("act.clock_out"), leftAt=at)
 
@@ -662,6 +666,8 @@ class World:
             if agent["kind"] == "main":
                 self.tasks.turn_started(sid, agent["id"], payload.get("prompt"), at)
                 self._dirty.add("tasks")
+                if session.pop("stopAt", None) is not None or session.pop("haltOn", None) is not None:
+                    self._dirty.add("sessions")   # a stop asked for the last turn never stops this one
             self._status(session, "busy", at)
             # A new prompt: whatever the last turn left open was interrupted (Esc).
             self._clear_open(agent["id"])
@@ -788,6 +794,8 @@ class World:
             gone = self._deleting.pop(use_id, None) if use_id else None
             if gone is not None:
                 text = self._shred(agent, gone, failed, payload.get("tool_response"), at)
+            if agent["kind"] == "main" and use_id and session.get("haltOn") == use_id:
+                self._halt(session, agent, at)   # the call the stop was handed out at has run: the turn ended there
         elif kind == "PermissionRequest" and tool == QUESTION_TOOL:
             # A question, not a permission (permissions.NOT_PERMISSIONS): the robot stays "質問に回答待ち" from its
             # PreToolUse, and nothing goes on the permission board.
@@ -860,38 +868,14 @@ class World:
             cat = "task"
             text = f"{i18n.tl('ev.task.created') if kind == 'TaskCreated' else i18n.tl('ev.task.done')} {subject}"
         elif kind in ("Stop", "StopFailure"):
-            if agent["kind"] == "main":
-                self.perms.session_stopped(sid, at)
-                self._dirty.add("perms")
-                if self.questions.session_stopped(sid, at):
-                    self._dirty.add("questions")
             background = payload.get("background_tasks")
             busy = isinstance(background, list) and len(background) > 0
-            if agent["kind"] == "main":
-                self.tasks.turn_ended(sid, at, background=busy, failed=kind == "StopFailure")
-                self._dirty.add("tasks")
-            self._status(session, "busy" if busy else "idle", at)
-            message = _head(payload.get("last_assistant_message"), MESSAGE_MAX)
-            self._clear_open(agent["id"])
-            if not busy and agent["kind"] == "main":
-                # An interrupted subagent sends no SubagentStop; with nothing in
-                # the background, none of this session's subagents is still working.
-                for sub in [a for a in self.agents.values() if a["sessionId"] == sid and a["kind"] == "sub" and "leftAt" not in a]:
-                    self._clear_open(sub["id"])
-                    self._set(sub, at, "done", i18n.tl("status.done"), leftAt=at)
-                    self._until[sub["id"]] = (at + SUBAGENT_LINGER_MS, "gone")
-            if busy and agent["kind"] == "main":
-                # waiting on background work: lit, at its desk watching the screen, until the work ends
-                session["background"] = {"since": at}
+            if agent["kind"] == "main" and session.pop("stopAt", None) is not None:   # the turn ended before any boundary
                 self._dirty.add("sessions")
-                self._set(agent, at, "background", i18n.tl("act.background"), lastMessage=message)
-            else:
-                if agent["kind"] == "main":
-                    self._background_off(session, at, touch_agent=False)
-                self._set(agent, at, "done", i18n.tl("act.background") if busy else i18n.tl("status.done"), lastMessage=message)
-                self._until[agent["id"]] = (at + DONE_TO_IDLE_MS, "idle")
-            if agent["kind"] == "main":
-                self._skill_ended(sid, at)   # the turn is over: an inline skill with it
+                self.state.add_event({"at": at, "sessionId": sid, "agentId": agent["id"], "kind": "StopMissed", "cat": "perm",
+                                      "text": i18n.tl("ev.stop.missed", label=session["label"])})
+            self._turn_over(session, agent, at, busy, _head(payload.get("last_assistant_message"), MESSAGE_MAX),
+                            kind == "StopFailure")
             text = i18n.tl("ev.stop.failed") if kind == "StopFailure" else i18n.tl("ev.stop")
         elif kind == "CwdChanged" and cwd:
             self._move(session, cwd, at)
@@ -913,6 +897,38 @@ class World:
         if tool_input:
             event["detail"] = clip_strings(tool_input, self.tool_input_max)
         return self.state.add_event(event)
+
+    def _turn_over(self, session: dict, agent: dict, at: int, busy: bool, message: str | None, failed: bool) -> None:
+        """The robot's turn has ended: by its Stop / StopFailure hook, or by the page's 停止 (no Stop hook comes then)."""
+        sid = session["id"]
+        if agent["kind"] == "main":
+            self.perms.session_stopped(sid, at)
+            self._dirty.add("perms")
+            if self.questions.session_stopped(sid, at):
+                self._dirty.add("questions")
+            self.tasks.turn_ended(sid, at, background=busy, failed=failed)
+            self._dirty.add("tasks")
+        self._status(session, "busy" if busy else "idle", at)
+        self._clear_open(agent["id"])
+        if not busy and agent["kind"] == "main":
+            # An interrupted subagent sends no SubagentStop; with nothing in
+            # the background, none of this session's subagents is still working.
+            for sub in [a for a in self.agents.values() if a["sessionId"] == sid and a["kind"] == "sub" and "leftAt" not in a]:
+                self._clear_open(sub["id"])
+                self._set(sub, at, "done", i18n.tl("status.done"), leftAt=at)
+                self._until[sub["id"]] = (at + SUBAGENT_LINGER_MS, "gone")
+        if busy and agent["kind"] == "main":
+            # waiting on background work: lit, at its desk watching the screen, until the work ends
+            session["background"] = {"since": at}
+            self._dirty.add("sessions")
+            self._set(agent, at, "background", i18n.tl("act.background"), lastMessage=message)
+        else:
+            if agent["kind"] == "main":
+                self._background_off(session, at, touch_agent=False)
+            self._set(agent, at, "done", i18n.tl("act.background") if busy else i18n.tl("status.done"), lastMessage=message)
+            self._until[agent["id"]] = (at + DONE_TO_IDLE_MS, "idle")
+        if agent["kind"] == "main":
+            self._skill_ended(sid, at)   # the turn is over: an inline skill with it
 
     # ---------------------------------------------------------------- calls (SendMessage, 10-18)
 
@@ -1170,6 +1186,68 @@ class World:
             # page never says "sent" for a prompt that cannot arrive.
             return 409, f"this session was not started with the channel named ({why}): {launch.START_DEV}"
         return None
+
+    # ---------------------------------------------------------------- 停止 (the page's stop button, jui-viz 1.3.0)
+
+    def request_stop(self, sid: str, at: int, cancel: bool = False) -> tuple[int, str] | None:
+        """The page's 停止 for this session (POST /api/stop, after prompt_checks), or its 取り消し (``cancel``). The
+        request waits in session["stopAt"] for the session's next --stop hook (hook_stop). A Stop, a new prompt or the
+        session's end takes it away. Returns None, or (HTTP status, why)."""
+        session = self.sessions.get(sid)
+        if session is None or session["status"] == "ended":
+            return 404, "no such session"
+        if cancel:
+            if session.pop("stopAt", None) is None:
+                return 409, "no stop is waiting for this session"
+            self._dirty.add("sessions")
+            self.state.add_event({"at": at, "sessionId": sid, "agentId": sid, "kind": "StopCancelled", "cat": "perm",
+                                  "text": i18n.tl("ev.stop.cancelled", label=session["label"])})
+            return None
+        if session["status"] not in ("busy", "waiting"):
+            return 409, "this session is not working"
+        if "stopAt" in session:
+            return None   # asked already: the first press stands
+        session["stopAt"] = at
+        self._dirty.add("sessions")
+        self.state.add_event({"at": at, "sessionId": sid, "agentId": sid, "kind": "StopAsked", "cat": "perm",
+                              "text": i18n.tl("ev.stop.asked", label=session["label"])})
+        return None
+
+    def hook_stop(self, payload: dict, at: int) -> dict:
+        """The synchronous --stop hook (PreToolUse / PostToolUse): {"continue": false, ...} when the page asked this
+        session to stop, else {}. The main robot's call takes the request (the stop is handed out once); a subagent's
+        call is answered the same but leaves it, so the main's next boundary still ends the turn (unmeasured: what a
+        subagent does with it). Measured 10-22: from PreToolUse the call still runs, then the turn ends with no Stop
+        hook, so the turn is ended here (PostToolUse) or at that call's PostToolUse (haltOn)."""
+        kind, sid = payload.get("hook_event_name"), _s(payload.get("session_id"))
+        session = self.sessions.get(sid) if sid else None
+        if kind not in STOP_EVENTS or session is None or session["status"] == "ended":
+            return {}
+        if not session.get("stopHook"):
+            session["stopHook"] = True   # this session's plugin has the hook (1.3.0): the page can say it will stop
+            self._dirty.add("sessions")
+        if "stopAt" not in session:
+            return {}
+        answer = {"continue": False, "stopReason": i18n.tl("stop.reason")}
+        if _s(payload.get("agent_id")):
+            return answer
+        del session["stopAt"]
+        session["stoppedAt"] = at
+        self._dirty.add("sessions")
+        agent = self._main(sid, at)
+        self.state.add_event({"at": at, "sessionId": sid, "agentId": agent["id"], "kind": "Stopped", "cat": "perm",
+                              "text": i18n.tl("ev.stop.done", label=session["label"])})
+        use_id = _s(payload.get("tool_use_id"))
+        if use_id and (kind == "PreToolUse" or use_id in self._open_tool):
+            session["haltOn"] = use_id   # the call runs (or its PostToolUse is still on the way): the turn ends after it
+        else:
+            self._halt(session, agent, at)
+        return answer
+
+    def _halt(self, session: dict, agent: dict, at: int) -> None:
+        session.pop("haltOn", None)
+        self._turn_over(session, agent, at, False, None, False)
+        self._set(agent, at, act=i18n.tl("act.stopped"))   # done, back to idle as after a Stop; it says why
 
     def channel_request(self, channel_id: str, request: dict, at: int) -> bool:
         ok = self.perms.channel_request(channel_id, request, at)

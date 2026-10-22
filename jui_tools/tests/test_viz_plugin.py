@@ -41,6 +41,11 @@ def test_the_plugin_hooks_cover_the_same_events_as_the_installer():
     assert ask[0]["timeout"] == hi.ASK_TIMEOUT_SEC
     longest = max(ask_hook_wait_sec(VizConfig(askWaitSec=c)) for c in ASK_WAIT_CHOICES)
     assert ask[0]["timeout"] >= longest + 5 and hi.ASK_TIMEOUT_SEC >= longest + 5
+    # 2.3.20, the page's 停止: one synchronous --stop item on PreToolUse and PostToolUse, the installer's timeout
+    for event in hi.STOP_EVENTS:
+        stop = [h for g in hooks[event] if g.get("matcher") == "*" for h in g["hooks"] if h.get("args", [])[-1:] == ["--stop"]]
+        assert len(stop) == 1 and "async" not in stop[0] and stop[0]["timeout"] == hi.STOP_TIMEOUT_SEC, event
+    assert [e for e in hooks if any(h.get("args", [])[-1:] == ["--stop"] for g in hooks[e] for h in g["hooks"])] == list(hi.STOP_EVENTS)
     env = [h for g in hooks["SessionStart"] for h in g["hooks"] if "session_env.sh" in h.get("command", "")]
     assert len(env) == 1
     script = (PLUGIN / "scripts" / "session_env.sh").read_text()

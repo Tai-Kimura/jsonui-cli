@@ -38,6 +38,7 @@ SPLIT = {
     "操作": "a section (Actions) and a table's column (Action)",
     "リクエスト": "a box of the diagram (Request) and the cost's count of them (Requests)",
     "保存": "the button (Save) and the cost's meter for what is kept (Storage)",
+    "停止": "the log's turn that ended (Stopped) and the history's button that stops one (Stop)",
 }
 
 

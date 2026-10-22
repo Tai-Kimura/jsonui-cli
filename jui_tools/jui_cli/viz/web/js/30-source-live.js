@@ -108,6 +108,20 @@ const SOURCE = {
       body: JSON.stringify({ sessionId: SESSION_UUID[label] || '', id }),
     }).catch(() => {});
   },
+  /* 停止 in the 応答の履歴 tab (55-history.js): POST /api/stop with the checks of /api/prompt; cancel takes the request back
+     while it still waits. Resolves { ok, status, error }. */
+  async stopSession(label, cancel) {
+    try {
+      const body = { sessionId: SESSION_UUID[label] || '' };
+      if (cancel) body.cancel = true;
+      const res = await fetch('/api/stop', {
+        method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token },
+        body: JSON.stringify(body),
+      });
+      return res.ok ? { ok: true, status: res.status } : { ok: false, status: res.status, error: (await res.text()).trim() };
+    } catch (err) { return { ok: false, status: 0, error: tl('live.offline') }; }
+  },
   /* 退勤 (50-panel.js): POST /api/session/end with the same page-only checks as /api/prompt; the server checks the session,
      the robot (a main one) and the process again, sends SIGTERM once and answers when it has gone. Resolves { ok, status, error }. */
   async clockOut(label) {
@@ -991,6 +1005,9 @@ function rebuildSessions() {
     next.push({ id: label, project: s.projectId, robots, room: PROJECT[s.projectId].name, status: s.status, title: s.title || '',
       relay: s.relay === true, prompt: s.prompt === true,   // prompt: its channel takes a prompt from the page (jui-viz 1.2.0+)
       launch: typeof s.launch === 'string' ? s.launch : null,   // whether the CLI hands that text over (sources/launch.py)
+      // 停止 (jui-viz 1.3.0): asked and waiting for its next tool boundary, when it last stopped so, whether its --stop hook was heard
+      stopAt: Number.isFinite(s.stopAt) && s.stopAt > 0 ? s.stopAt : 0, stoppedAt: Number.isFinite(s.stoppedAt) && s.stoppedAt > 0 ? s.stoppedAt : 0,
+      stopHook: s.stopHook === true,
       client: ['terminal', 'vscode', 'desktop', 'other'].includes(s.client) ? s.client : 'unknown',   // 退勤: terminal only
       since: Number.isFinite(s.since) && s.since > 0 ? s.since : null,
       inputWaitAt: Number.isFinite(s.inputWaitAt) && s.inputWaitAt > 0 ? s.inputWaitAt : 0,   // 入力待ち since (53-waits.js)

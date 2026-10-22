@@ -120,6 +120,24 @@ def our_ask_handler(python: str | None = None, forward: Path | None = None) -> d
     }
 
 
+#: The synchronous PreToolUse / PostToolUse hook of the page's 停止 button (jui-viz 1.3.0): forward.py --stop gives up
+#: within about 1 s (STOP_CONNECT_SEC + STOP_READ_SEC), so this is only the last guard. The plugin's hooks.json carries
+#: the same value (test_viz_plugin).
+STOP_TIMEOUT_SEC = 3
+STOP_EVENTS = ("PreToolUse", "PostToolUse")
+
+
+def our_stop_handler(python: str | None = None, forward: Path | None = None) -> dict:
+    """Not async: its output — {"continue": false} when the page asked this session to stop — ends the turn."""
+    python = python or sys.executable
+    forward = forward or forward_path()
+    return {
+        "type": "command",
+        "command": f"{shlex.quote(python)} -I -S {shlex.quote(str(forward))} --stop",
+        "timeout": STOP_TIMEOUT_SEC,
+    }
+
+
 def is_ours(handler) -> bool:
     """A python running forward.py — not merely a command that mentions its path.
 
@@ -179,7 +197,8 @@ def strip_ours(settings: dict) -> tuple[dict, bool]:
     return out, removed_any
 
 
-def add_ours(settings: dict, handler: dict, decide_handler: dict | None = None, ask_handler: dict | None = None) -> dict:
+def add_ours(settings: dict, handler: dict, decide_handler: dict | None = None, ask_handler: dict | None = None,
+             stop_handler: dict | None = None) -> dict:
     out, _ = strip_ours(settings)
     hooks = out.get("hooks")
     if hooks is None:
@@ -198,6 +217,8 @@ def add_ours(settings: dict, handler: dict, decide_handler: dict | None = None, 
             groups.append({"matcher": "*", "hooks": [decide_handler]})
         if event == "PreToolUse" and ask_handler is not None:
             groups.append({"matcher": "AskUserQuestion", "hooks": [ask_handler]})
+        if event in STOP_EVENTS and stop_handler is not None:
+            groups.append({"matcher": "*", "hooks": [stop_handler]})
     return out
 
 
@@ -390,6 +411,7 @@ def install(dry_run: bool = False, python: str | None = None) -> Result:
     handler = our_handler(python)
     decide_handler = our_decide_handler(python)
     ask_handler = our_ask_handler(python)
+    stop_handler = our_stop_handler(python)
     value = str(progress_dir())
 
     def transform(data: dict):
@@ -397,7 +419,7 @@ def install(dry_run: bool = False, python: str | None = None) -> Result:
         if plugin:
             raise SettingsError(f"the plugin {plugin} is enabled, so no hooks are installed (events would be forwarded twice). "
                                 "Not using the plugin? Turn it off with /plugin and run again")
-        new = add_ours(data, handler, decide_handler, ask_handler)
+        new = add_ours(data, handler, decide_handler, ask_handler, stop_handler)
         new, warning = add_env(new, value)
         return new, [w for w in (warning,) if w] + _disabled_warning(new)
 
@@ -457,6 +479,9 @@ def status() -> dict:
     ask = any(is_ours(h) and "--ask" in str(h.get("command", ""))
               for g in (hooks.get("PreToolUse") or []) if isinstance(g, dict) and g.get("matcher") == "AskUserQuestion"
               for h in (g.get("hooks") or []))
+    stop = all(any(is_ours(h) and "--stop" in str(h.get("command", ""))
+                   for g in (hooks.get(event) or []) if isinstance(g, dict) for h in (g.get("hooks") or []))
+               for event in STOP_EVENTS)
     # the --ask hook's timeout as installed: one from before 2.3.7 (600 s) cuts the 30 min and "until answered"
     # windows short (ticket 2026-10-20 question-window-over-5-min) until hooks install is run again
     ask_timeouts = [h.get("timeout") for g in (hooks.get("PreToolUse") or [])
@@ -467,6 +492,7 @@ def status() -> dict:
         "plugin": plugin_enabled(data),
         "decide": decide,
         "ask": ask,
+        "stop": stop,
         "pluginAsk": plugin_ask_status(data),
         "askTimeout": min((t for t in ask_timeouts if isinstance(t, (int, float)) and not isinstance(t, bool)), default=None),
         "readable": True,

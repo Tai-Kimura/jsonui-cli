@@ -929,6 +929,12 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .h-compose .wb-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .h-compose.h-drop { outline: 2px dashed var(--ink-soft); outline-offset: -4px; }
 .h-compose-row .h-attach-pick { margin-left: auto; }
+.h-compose .h-stop { border-color: var(--bad); color: var(--bad); }
+.h-compose .h-stop.h-stop-asked { background: var(--bad-bg); }
+.h-compose .h-stop[hidden], .h-stop-state[hidden] { display: none; }
+.h-stop-state { margin: 0; color: var(--bad); font: 700 12px/1.4 var(--font-body); }
+.h-stop-state[data-h-stop-phase="done"] { color: var(--ink-soft); }
+.h-stop-state.h-compose-err { color: var(--warn); }
 .h-attach { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .h-attach[hidden] { display: none; }
 .h-attach-item { display: flex; align-items: center; gap: 6px; max-width: 100%; padding: 3px 4px 3px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: 500 12px/1.4 var(--font-body); }

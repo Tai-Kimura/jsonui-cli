@@ -53,6 +53,50 @@ def decide(body: bytes, info: dict, path: str = "/hook/decide", wait_key: str = 
         sys.stdout.flush()
 
 
+#: --stop: the whole answer must come within these, or the tool goes on (the hook is on every tool call)
+STOP_CONNECT_SEC = 0.3
+STOP_READ_SEC = 0.7
+
+
+def stop(body: bytes, info: dict) -> None:
+    """--stop: the synchronous PreToolUse / PostToolUse hook (jui-viz 1.3.0, the page's 停止 button).
+
+    Posts the payload to /hook/stop and prints the server's answer only when it is the stop itself —
+    {"continue": false, "stopReason": ...}. Anything else, no server, slow, any error: print nothing, so the
+    tool goes on. Measured 2026-10-22 (Claude Code 2.1.307, isolated): printed from PreToolUse, the call it was
+    for still ran, then the turn ended (terminal_reason hook_stopped, no Stop hook), and the next prompt was
+    taken as usual.
+    """
+    import json
+    import socket
+    import time
+
+    port = int(info["port"])
+    head = (
+        f"POST /hook/stop HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+        f"Content-Type: application/json\r\nContent-Length: {len(body)}\r\n"
+        f"X-Jui-Viz-Token: {info['token']}\r\nConnection: close\r\n\r\n"
+    )
+    with socket.create_connection(("127.0.0.1", port), timeout=STOP_CONNECT_SEC) as s:
+        deadline = time.monotonic() + STOP_READ_SEC   # for the whole answer, not for each read
+        s.settimeout(STOP_READ_SEC)
+        s.sendall(head.encode("ascii") + body)
+        raw = b""
+        while len(raw) < 65536:
+            s.settimeout(max(0.001, deadline - time.monotonic()))
+            chunk = s.recv(65536)
+            if not chunk:
+                break
+            raw += chunk
+    status, _, rest = raw.partition(b"\r\n")
+    if b" 200 " not in status + b" ":
+        return
+    data = json.loads(rest.partition(b"\r\n\r\n")[2].decode("utf-8"))
+    if isinstance(data, dict) and data.get("continue") is False and isinstance(data.get("stopReason"), str):
+        sys.stdout.write(json.dumps({"continue": False, "stopReason": data["stopReason"]}))
+        sys.stdout.flush()
+
+
 def viz_home() -> str:
     """jui viz's runtime folder. ⚠️ The rule of jui_cli/viz/paths.py viz_home(), which this script
     cannot import (it runs as python3 -I -S, and as a copy in the plugin): $JUI_VIZ_HOME, else
@@ -81,6 +125,9 @@ def main() -> int:
             info = json.load(f)
         if "--decide" in sys.argv[1:]:
             decide(body, info)
+            return 0
+        if "--stop" in sys.argv[1:]:
+            stop(body, info)
             return 0
         if "--ask" in sys.argv[1:]:   # PreToolUse of AskUserQuestion: the page's answer, the same way (10-18)
             # how long the server waits for this question — the chosen window (10 min, 30 min, until answered), not

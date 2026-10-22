@@ -9,6 +9,7 @@ Routes (design: dev-guide, 05 §3):
   GET  /<static>    files under web/ (read with importlib.resources)
   GET  /ws          browser WebSocket: hello → auth (within 2 s) → snapshot → pushes
   POST /hook        hook payloads from forward.py (token; no Origin; 2 MB)
+  POST /hook/stop   the synchronous --stop hook: {"continue": false, ...} when the page asked the session to stop (the same checks)
   GET  /api/snapshot  the whole state (token)
   POST /api/prompt    a prompt typed in the page for one session (prompt_checks: the page's own origin only)
   POST /api/attach    one file for a prompt, kept in <viz home>/uploads/<session>/ (the same checks, octet-stream)
@@ -19,6 +20,7 @@ Routes (design: dev-guide, 05 §3):
   POST /api/history-file  one picture a session sent with SendUserFile, named by the robot, the call and the file (the same checks)
   POST /api/reveal-file  show one file of the history in Finder (open -R): a SendUserFile file or an attachment, named as above (the same checks)
   POST /api/data-docs  a JsonUI room's API and DB specifications for its data server, named by the room (the same checks)
+  POST /api/stop    停止: ask one session to stop at its next tool boundary, or take it back (prompt_checks)
   POST /api/session/end  退勤: SIGTERM to one terminal session's claude (prompt_checks, then clockout.py's checks)
 """
 from __future__ import annotations
@@ -47,6 +49,8 @@ USAGE_MAX_BODY = 64_000
 PROMPT_MAX_BODY = 8_192
 #: POST /api/session/end: {"sessionId", "agentId"} and nothing more.
 END_MAX_BODY = 1_024
+#: POST /api/stop: {"sessionId", "cancel"} and nothing more.
+STOP_MAX_BODY = 1_024
 NOTIFY_MAX_BODY = 256     # /api/notify-presence and /api/ask-wait: one small object
 CALL_MAX_BODY = 32_768   # the call button: a role text of callcmd.ROLE_MAX characters, JSON-escaped
 AUTH_TIMEOUT_SEC = 2.0
@@ -467,6 +471,23 @@ def make_app(ctx: ServerContext) -> web.Application:
 
     app.router.add_post("/hook/ask", hook_ask)
 
+    async def hook_stop(request: web.Request) -> web.Response:
+        """The synchronous PreToolUse / PostToolUse hook of the 停止 button (forward.py --stop): answers at once —
+        {"continue": false, "stopReason": ...} when the page asked this session to stop (World.hook_stop), else {}.
+        It never waits: every tool call of every session passes through it."""
+        refused = _check_token(request)
+        if refused is not None:
+            return refused
+        body = await _json_body(request)
+        if body is None or ctx.world is None:
+            return web.Response(status=400, text="bad request\n")
+        answer = ctx.world.hook_stop(body, now_ms())
+        if ctx.publish:
+            ctx.publish()
+        return web.json_response(answer)
+
+    app.router.add_post("/hook/stop", hook_stop)
+
     async def channel_hello(request: web.Request) -> web.Response:
         refused = _check_token(request)
         if refused is not None:
@@ -559,6 +580,29 @@ def make_app(ctx: ServerContext) -> web.Application:
         except OSError:
             return web.Response(status=404, text="no such attachment\n")
         refused_by = ctx.world.send_prompt(sid, text, now_ms(), attached)
+        if refused_by is not None:
+            return web.Response(status=refused_by[0], text=refused_by[1] + "\n")
+        if ctx.publish:
+            ctx.publish()
+        return web.json_response({"ok": True})
+
+    async def api_stop(request: web.Request) -> web.Response:
+        """停止 in the page's 応答の履歴 tab (jui-viz 1.3.0): {"sessionId"} asks that session to stop at its next tool
+        boundary, {"sessionId", "cancel": true} takes the request back. The checks of /api/prompt (prompt_checks)."""
+        refused = prompt_checks(request, ctx)
+        if refused is not None:
+            log(f"refused: /api/stop ({refused.text.strip()})")
+            return refused
+        body = await _capped_json(request, STOP_MAX_BODY)
+        if isinstance(body, web.Response):
+            return body
+        sid = body.get("sessionId") if isinstance(body, dict) else None
+        cancel = body.get("cancel", False) if isinstance(body, dict) else None
+        if not isinstance(sid, str) or not sid or not isinstance(cancel, bool):
+            return web.Response(status=400, text="sessionId is required (and cancel, when given, is true or false)\n")
+        if ctx.world is None:
+            return web.Response(status=503, text="no world\n")
+        refused_by = ctx.world.request_stop(sid, now_ms(), cancel=cancel)
         if refused_by is not None:
             return web.Response(status=refused_by[0], text=refused_by[1] + "\n")
         if ctx.publish:
@@ -1048,6 +1092,7 @@ def make_app(ctx: ServerContext) -> web.Application:
     app.router.add_route("*", "/api/infra-cost", api_infra_cost)
     app.router.add_route("*", "/api/prices", api_prices)
     app.router.add_route("*", "/api/session/end", api_session_end)
+    app.router.add_route("*", "/api/stop", api_stop)
     app.router.add_route("*", "/api/call-command", api_call_command)
     app.router.add_route("*", "/api/notify-presence", api_notify_presence)
     app.router.add_route("*", "/api/ask-wait", api_ask_wait)

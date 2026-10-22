@@ -612,11 +612,14 @@ function composeBuild() {
   const row = hNode('div', 'h-compose-row');
   const state = hNode('span', 'h-compose-state'); state.dataset.hState = ''; state.setAttribute('aria-live', 'polite');
   const send = hNode('button', 'wb-btn h-compose-send', tl('hist.send')); send.type = 'button'; send.dataset.hSend = ''; send.dataset.fk = 'rb-prompt-send';
+  const stop = hNode('button', 'wb-btn h-stop', tl('hist.stop')); stop.type = 'button'; stop.dataset.hStop = ''; stop.dataset.fk = 'rb-stop';
+  stop.title = tl('hist.stop.title');
+  const stopState = hNode('p', 'h-stop-state'); stopState.dataset.hStopState = ''; stopState.setAttribute('aria-live', 'polite'); stopState.hidden = true;
   const pick = hNode('button', 'wb-btn h-attach-pick', tl('hist.attach.pick')); pick.type = 'button'; pick.dataset.hPick = ''; pick.dataset.fk = 'rb-prompt-attach';
   pick.title = tl('hist.attach.pick.title');
   const input = hNode('input', ''); input.type = 'file'; input.multiple = true; input.hidden = true; input.dataset.hFile = '';
   const list = hNode('ul', 'h-attach'); list.dataset.hAttach = ''; list.setAttribute('aria-label', tl('hist.attach.list'));
-  row.append(state, pick, send, input);
+  row.append(state, pick, stop, send, input);
   const confirm = hNode('div', 'h-confirm'); confirm.dataset.hConfirm = ''; confirm.hidden = true;
   confirm.setAttribute('role', 'group'); confirm.setAttribute('aria-label', tl('hist.confirm.aria'));
   const to = hNode('p', 'h-confirm-to'); to.dataset.hTo = '';
@@ -626,7 +629,7 @@ function composeBuild() {
   const back = hNode('button', 'wb-btn', tl('hist.confirm.back')); back.type = 'button'; back.dataset.hBack = '';
   acts.append(go, back);
   confirm.append(to, preview, acts);
-  box.append(head, area, list, row, confirm);
+  box.append(head, area, list, row, stopState, confirm);
   area.addEventListener('input', () => composePaint());
   pick.addEventListener('click', () => input.click());
   input.addEventListener('change', () => { attachAdd([...input.files]); input.value = ''; });
@@ -650,6 +653,7 @@ function composeBuild() {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing) { e.preventDefault(); composeAsk(); }
   });
   send.addEventListener('click', () => composeAsk());
+  stop.addEventListener('click', () => stopPress());
   back.addEventListener('click', () => composeClose(true));
   go.addEventListener('click', () => { if (Date.now() - (box._askedAt || 0) > 350) composeSend(); });   // not the same key press that opened it
   return box;
@@ -658,7 +662,7 @@ function composeEls() {
   const b = HIST.compose;
   const q = (k) => b.querySelector(`[data-${k}]`);
   return { box: b, head: q('h-head'), why: q('h-why'), noteX: q('h-note-x'), area: q('h-text'), state: q('h-state'), send: q('h-send'), confirm: q('h-confirm'), to: q('h-to'), preview: q('h-preview'), go: q('h-go'),
-    pick: q('h-pick'), list: q('h-attach') };
+    pick: q('h-pick'), list: q('h-attach'), stop: q('h-stop'), stopState: q('h-stop-state') };
 }
 function attachAdd(files) {
   const id = HIST.compose && HIST.compose._for;
@@ -804,6 +808,48 @@ function composePaint() {
   E.state.dataset.hPhase = bytes > PROMPT_MAX_BYTES ? 'long' : sent && sent.error ? 'error' : phase;
   E.state.classList.toggle('h-compose-err', bytes > PROMPT_MAX_BYTES || !!(sent && sent.error) || phase === 'missing');
   if (asking && t.why) composeClose(false);   // the session lost its relay while the confirmation was open
+  stopPaint(E, id);
+}
+/* ---------- 停止 (2.3.20, requester 10-22: 「今やってる作業を中断させる停止ボタンがロボットの会話のところにつけたい」) ----------
+   Beside 送信: the server keeps a stop request for the session (POST /api/stop) and the session's synchronous --stop hook
+   (jui-viz 1.3.0, PreToolUse / PostToolUse) takes it at its next tool boundary and ends the turn. It does not need the
+   relay or the channel, only that hook. The limit, in the button's title and the state line: it stops once the tool now
+   running has finished, not in the middle of writing text or of a long Bash. While the request waits the button takes it
+   back. A session whose --stop hook was never heard (a plugin older than 1.3.0, or no tool call since viz started) is
+   asked all the same, and the line says it may not stop. */
+const STOP_DONE_SHOW_MS = 60000;
+function stopTarget(id) {
+  if (!id || !DEF[id] || SOURCE.mode !== 'live' || DEF[id].kind === 'sub' || location.hostname !== '127.0.0.1') return null;
+  const sess = SESSIONS.find((x) => x.id === SESSION_OF[id]);
+  return sess && sess.status !== 'ended' ? sess : null;
+}
+function stopPaint(E, id) {
+  const sess = stopTarget(id), now = Date.now();
+  const working = !!sess && (sess.status === 'busy' || sess.status === 'waiting');
+  const asked = !!sess && sess.stopAt > 0;
+  E.stop.hidden = !(working || asked);
+  E.stop.disabled = !!HIST.stopBusy;
+  setText(E.stop, asked ? tl('hist.stop.cancel') : tl('hist.stop'));
+  E.stop.classList.toggle('h-stop-asked', asked);
+  const failed = HIST.stopError && HIST.stopError.id === id ? HIST.stopError.error : '';
+  const done = !!sess && !asked && sess.stoppedAt > 0 && now - sess.stoppedAt < STOP_DONE_SHOW_MS;
+  const text = failed ? tl('hist.stop.failed', { error: failed })
+    : asked ? (sess.stopHook ? tl('hist.stop.waiting') : tl('hist.stop.old'))
+    : done ? tl('hist.stop.done', { time: HIST_TIME(sess.stoppedAt) }) : '';
+  setText(E.stopState, text);
+  E.stopState.hidden = !text;
+  E.stopState.dataset.hStopPhase = failed ? 'error' : asked ? (sess.stopHook ? 'waiting' : 'old') : done ? 'done' : '';
+  E.stopState.classList.toggle('h-compose-err', !!failed || (asked && !sess.stopHook));
+}
+async function stopPress() {
+  const id = HIST.compose && HIST.compose._for, sess = stopTarget(id);
+  if (!sess || HIST.stopBusy || typeof SOURCE.stopSession !== 'function') return;
+  HIST.stopBusy = true;
+  composePaint();
+  const got = await SOURCE.stopSession(id, sess.stopAt > 0);
+  HIST.stopBusy = false;
+  HIST.stopError = got.ok ? null : { id, error: got.error || `HTTP ${got.status}` };
+  composePaint();
 }
 /* sending / arrived / missing for a prompt sent (and taken by the server). */
 function composePhase(sent) {

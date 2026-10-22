@@ -55,13 +55,19 @@ def test_install_into_no_file_then_uninstall_leaves_an_empty_object(home):
             assert decide["timeout"] == hi.DECIDE_TIMEOUT_SEC > 30
         elif event == "PreToolUse":
             # 10-18: a second, synchronous item for AskUserQuestion only, that waits for the browser's answer.
-            assert len(groups) == 2 and groups[1]["matcher"] == "AskUserQuestion"
+            assert len(groups) == 3 and groups[1]["matcher"] == "AskUserQuestion"
             (ask,) = groups[1]["hooks"]
             assert hi.is_ours(ask) and ask["command"].endswith(" --ask") and "async" not in ask
             assert ask["timeout"] == hi.ASK_TIMEOUT_SEC > 300
-        else:
+        elif event != "PostToolUse":
             assert len(groups) == 1
-    assert hi.status()["decide"] is True and hi.status()["ask"] is True
+        if event in hi.STOP_EVENTS:
+            # 2.3.20: the page's 停止 — a synchronous item on every tool call, cut short (forward.py gives up within 1 s)
+            assert groups[-1]["matcher"] == "*" and len(groups) == (3 if event == "PreToolUse" else 2)
+            (stop,) = groups[-1]["hooks"]
+            assert hi.is_ours(stop) and stop["command"].endswith(" --stop") and "async" not in stop
+            assert stop["timeout"] == hi.STOP_TIMEOUT_SEC <= 3
+    assert hi.status()["decide"] is True and hi.status()["ask"] is True and hi.status()["stop"] is True
     assert data["env"][hi.PROGRESS_ENV] == str(paths.viz_home() / "test-progress")
     hi.uninstall()
     assert _read() == {}
