@@ -1,7 +1,7 @@
 {
   "type": "screen",
   "source": {
-    "layout": "fixtures/__control/CircleView__height-undeclared_width-undeclared.layout.json"
+    "layout": "fixtures/__control/CircleView.layout.json"
   },
   "metadata": {
     "name": "conformance control CircleView",
@@ -15,7 +15,7 @@
   "platform": "all",
   "cases": [
     {
-      "name": "CircleView__height-undeclared_width-undeclared",
+      "name": "CircleView",
       "description": "Control for CircleView: base attributes only, no attribute under test. Every visual fixture on this host must render differently from it — an identical render means the attribute was dropped.",
       "steps": [
         {
@@ -24,7 +24,7 @@
         },
         {
           "action": "screenshot",
-          "name": "control_CircleView__height-undeclared_width-undeclared"
+          "name": "control_CircleView"
         }
       ]
     }

@@ -1,5 +1,26 @@
 {
   "schemaVersion": 1,
   "_comment": "Accepted codegen-differential defects, per (component, attribute, platform, check). An entry means the converter demonstrably fails that judgement and the failure is accepted FOR A STATED REASON — not that it is fine. Unrecorded defects fail `jui conformance gate --codegen-effect`; entries the measurement no longer supports are stale and fail too, so fixing a defect forces its row out (the one-directional version lets a fixed row sit here forever, which is how the previous freeze ledgers rotted). Advisory classes (value-is-default, numeric-string-divergence) are re-derived every run and are deliberately absent. Reason 'unreviewed-initial-measurement' marks the initial-measurement backlog — consume it.",
-  "entries": []
+  "entries": [
+    {
+      "component": "CircleView",
+      "attribute": "size",
+      "platform": "android",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "kjui_tools — the legacy size behind required width / height",
+      "reason": "kjui reads the legacy `size` only when the node declares neither width nor height (image_component.rb / circleview_component.rb), and width / height are REQUIRED on CircleView: the validator warns on a layout without them, and every probe and fixture declares both (a fixture without them fails rjui conformance_fixtures_declare_their_required_attributes_spec). The branch is reachable only from a layout already warned about, so no valid layout can show it; the probe reads it as unread for that reason.",
+      "note": "Retire the spelling (and kjui's branch, with its specs) or drop the width / height requirement; either is a ruling, not a probe fix. Distribution lanes write no `size` on Image or CircleView (counted 2026-10-23)."
+    },
+    {
+      "component": "Image",
+      "attribute": "size",
+      "platform": "android",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "kjui_tools — the legacy size behind required width / height",
+      "reason": "kjui reads the legacy `size` only when the node declares neither width nor height (image_component.rb / circleview_component.rb), and width / height are REQUIRED on Image: the validator warns on a layout without them, and every probe and fixture declares both (a fixture without them fails rjui conformance_fixtures_declare_their_required_attributes_spec). The branch is reachable only from a layout already warned about, so no valid layout can show it; the probe reads it as unread for that reason.",
+      "note": "Retire the spelling (and kjui's branch, with its specs) or drop the width / height requirement; either is a ruling, not a probe fix. Distribution lanes write no `size` on Image or CircleView (counted 2026-10-23)."
+    }
+  ]
 }
