@@ -29,12 +29,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 FPS = 30
-CHAPTER_IDS = ("hook", "2", "3", "4", "5", "6")   # 1a / 1b: term.py
+CHAPTER_IDS = ("hook", "2", "3", "4", "4m", "5", "6")   # 1a / 1b: term.py
 TERM_CHAPTER_IDS = ("1a", "1b")
 ALL = TERM_CHAPTER_IDS + CHAPTER_IDS
 #: window segments inside a viz chapter, captured by term.py into a folder of their own: id -> (chapter, start, end,
 #: the demo-shop file shown). The promo shows the segment over its seconds and the chapter's frames after it.
-SEGMENTS = {"5-json": ("5", 74.0, 77.0, "docs/infra/load/weekend-campaign.json")}
+SEGMENTS = {"5-json": ("5", 110.0, 113.0, "docs/infra/load/weekend-campaign.json")}
 #: a terminal chapter shown split: its terminal on the left half, the viz page beside it on the right half, captured
 #: by capture.py into a folder of its own: id -> the chapter it sits beside. The promo frames both halves at the same
 #: size (its SPLIT layout), so the terminal (term.py) and the board are both taken at SPLIT_VIEWPORT.
@@ -47,7 +47,7 @@ STANDALONE = {"mig": (0.0, 40.0)}
 #: what run.py captures: the promo's chapters and the segments (a chapter brings its segments and board with it)
 CAPTURE_IDS = ALL + tuple(SEGMENTS) + tuple(BOARDS) + tuple(STANDALONE)
 #: the bounds the events below were written for; tests hold them to the promo's timeline.json
-BOUNDS = {"hook": (0, 4), "1a": (4, 16), "1b": (16, 32), "2": (32, 44), "3": (44, 54), "4": (54, 74), "5": (74, 88), "6": (88, 96)}
+BOUNDS = {"hook": (0, 6), "1a": (6, 18), "1b": (18, 34), "2": (34, 46), "3": (46, 56), "4": (56, 76), "4m": (76, 110), "5": (110, 124), "6": (124, 132)}
 
 ROOMS = ("demo-shop", "demo-admin", "demo-docs", "demo-api", "demo-mobile")
 
@@ -266,48 +266,48 @@ def chapters(lang: str) -> dict:
     q = w["question"]
     out = {}
 
-    # hook (0–4): the whole floor, busy; the camera comes in slowly (the wheel, as a person would)
-    out["hook"] = Chapter("hook", 0, 4, floor(w) + waits(w), [
+    # hook (0–6): the whole floor, busy; the camera comes in slowly (the wheel, as a person would)
+    out["hook"] = Chapter("hook", 0, 6, floor(w) + waits(w), [
         E(0.4, "tool_end", key="s09"),
-        E(0.5, "wheel", target={"css": "#scene-canvas"}, dy=-480, dur=3.2),
+        E(0.5, "wheel", target={"css": "#scene-canvas"}, dy=-560, dur=5.0),
         E(1.2, "tool", key="s02", tool="Bash", input={"command": "cd web && npx vitest run tests/unit/generated", "description": "tests"}),
         E(2.0, "sub_start", key="s02"),
         E(2.8, "tool_end", key="s01"),
     ])
 
-    # 2 (32–44): the robots show what each session is doing (requester 10-22: 「ロボットの動きで状況が理解できるのがメイン機能」
+    # 2 (34–46): the robots show what each session is doing (requester 10-22: 「ロボットの動きで状況が理解できるのがメイン機能」
     # 「テスト中かどうかがわかったり」). In on the shop's room: robots typing, reading, thinking (a prompt and no tool yet);
     # one starts its tests, its card shows the run case by case (one fails), then one stops and waits for input.
-    out["2"] = Chapter("2", 32, 44, floor(w), [
-        E(32.8, "click", target={"room_tag": "demo-shop"}, expect="solo:demo-shop"),
-        E(35.2, "tests_start", key="s02", run="r1", command="cd web && npx vitest run tests/unit/generated"),
-        E(35.6, "click", target={"robot": "s02"}, expect="card:s02"),
-        E(36.2, "tests_case", run="r1", case=0, status="passed"),
-        E(36.7, "tests_case", run="r1", case=1, status="passed"),
-        E(37.2, "tests_case", run="r1", case=2, status="passed"),
-        E(37.7, "tests_case", run="r1", case=3, status="failed"),
-        E(38.3, "tests_case", run="r1", case=4, status="passed"),
-        E(38.8, "tests_case", run="r1", case=5, status="passed"),
-        E(39.4, "tests_end", key="s02", run="r1"),
-        E(40.6, "idle", key="s07"),
-        E(41.4, "click", target={"session_row": "s07"}, expect="card:s07"),
+    out["2"] = Chapter("2", 34, 46, floor(w), [
+        E(34.8, "click", target={"room_tag": "demo-shop"}, expect="solo:demo-shop"),
+        E(37.2, "tests_start", key="s02", run="r1", command="cd web && npx vitest run tests/unit/generated"),
+        E(37.6, "click", target={"robot": "s02"}, expect="card:s02"),
+        E(38.2, "tests_case", run="r1", case=0, status="passed"),
+        E(38.7, "tests_case", run="r1", case=1, status="passed"),
+        E(39.2, "tests_case", run="r1", case=2, status="passed"),
+        E(39.7, "tests_case", run="r1", case=3, status="failed"),
+        E(40.3, "tests_case", run="r1", case=4, status="passed"),
+        E(40.8, "tests_case", run="r1", case=5, status="passed"),
+        E(41.4, "tests_end", key="s02", run="r1"),
+        E(42.6, "idle", key="s07"),
+        E(43.4, "click", target={"session_row": "s07"}, expect="card:s07"),
     ], needs=("rooms",))
 
-    # 3 (44–54): a permission answered in the browser, briefly (requester: 「許可の紹介はサラッとでいい」), then the
+    # 3 (46–56): a permission answered in the browser, briefly (requester: 「許可の紹介はサラッとでいい」), then the
     # sessions' talk as a chat (2.3.14): the spec owner's card, its talk with the test runner, two messages arriving.
     talk_prelude = [P("talk", frm="s01", to="s02", text=w["talk"]["t1"], ago=90)]
-    out["3"] = Chapter("3", 44, 54, floor(w) + talk_prelude + up_close("demo-shop"), [
-        E(44.2, "perm", key="s03", command=w["perm_cmd"], description=w["perm_desc"]),
-        E(44.8, "click", target={"bubble": "s03"}, expect="picked:s03"),
-        E(46.0, "click", target={"css": ".pa-allow[data-do='allow']"}),
-        E(47.2, "click", target={"robot": "s01"}, expect="card:s01"),
-        E(47.9, "click", target={"css": "#rb [data-rb-talk]"}, expect="talk"),
-        E(48.6, "click", target={"talk_row": "s02"}),
-        E(49.4, "talk", frm="s02", to="s01", text=w["talk"]["t2"]),
-        E(51.4, "talk", frm="s02", to="s01", text=w["talk"]["t3"]),
+    out["3"] = Chapter("3", 46, 56, floor(w) + talk_prelude + up_close("demo-shop"), [
+        E(46.2, "perm", key="s03", command=w["perm_cmd"], description=w["perm_desc"]),
+        E(46.8, "click", target={"bubble": "s03"}, expect="picked:s03"),
+        E(48.0, "click", target={"css": ".pa-allow[data-do='allow']"}),
+        E(49.2, "click", target={"robot": "s01"}, expect="card:s01"),
+        E(49.9, "click", target={"css": "#rb [data-rb-talk]"}, expect="talk"),
+        E(50.6, "click", target={"talk_row": "s02"}),
+        E(51.4, "talk", frm="s02", to="s01", text=w["talk"]["t2"]),
+        E(53.4, "talk", frm="s02", to="s01", text=w["talk"]["t3"]),
     ], needs=("rooms",))
 
-    # 4 (54–74): the server room as 2.3.19 draws it, small to large (requester 10-22: start close, where the light's
+    # 4 (56–76): the server room as 2.3.19 draws it, small to large (requester 10-22: start close, where the light's
     # way is easy to follow, then pull back to the large system). Close on the shop's group (its focus, then a little
     # nearer: its nodes stand as models), flow "order" at 0.5x among them, its first branch taken; at 1x its second;
     # then the camera pulls back steadily (eased, 6.8 x) until the whole system is in view, and flow "payment" runs
@@ -317,53 +317,56 @@ def chapters(lang: str) -> dict:
                                           P("dbg", call="srZoom", factor=0.82), P("settle")]
     # order: 1.8 s to its first branch, 3.6 s to its second, 5.4 s to its end (at 1x); payment: 4.5 s to its first
     choice = "(c) => !!document.querySelector(`#sr-choices:not([hidden]) [data-sr-choice=\"${c}\"]`)"
-    out["4"] = Chapter("4", 54, 74, floor(w) + sr_prelude + [P("dbg", call="srFlowSpeed", speed=0.5)], [
-        E(54.1, "dbg", call="srSelect", node="browser", expect="flowlist:order"),
-        E(54.4, "click", target={"css": "#sr-board [data-sr-flow='order']"}, expect="flow:order"),
-        E(58.0, "click", target={"css": "#sr-choices [data-sr-choice='hit']"}, ready=choice, arg="hit"),
-        E(58.3, "dbg", call="srFlowSpeed", speed=1),
-        E(61.9, "click", target={"css": "#sr-choices [data-sr-choice='in']"}, ready=choice, arg="in"),
-        E(62.5, "dolly", factor=6.8, dur=7.5),
-        E(70.2, "dbg", call="srSelect", node="api", expect="flowlist:payment"),
-        E(70.4, "dbg", call="srFlowSpeed", speed=2),
-        E(70.7, "click", target={"css": "#sr-board [data-sr-flow='payment']"}, expect="flow:payment"),
+    out["4"] = Chapter("4", 56, 76, floor(w) + sr_prelude + [P("dbg", call="srFlowSpeed", speed=0.5)], [
+        E(56.1, "dbg", call="srSelect", node="browser", expect="flowlist:order"),
+        E(56.4, "click", target={"css": "#sr-board [data-sr-flow='order']"}, expect="flow:order"),
+        E(60.0, "click", target={"css": "#sr-choices [data-sr-choice='hit']"}, ready=choice, arg="hit"),
+        E(60.3, "dbg", call="srFlowSpeed", speed=1),
+        E(63.9, "click", target={"css": "#sr-choices [data-sr-choice='in']"}, ready=choice, arg="in"),
+        E(64.5, "dolly", factor=6.8, dur=7.5),
+        E(72.2, "dbg", call="srSelect", node="api", expect="flowlist:payment"),
+        E(72.4, "dbg", call="srFlowSpeed", speed=2),
+        E(72.7, "click", target={"css": "#sr-board [data-sr-flow='payment']"}, expect="flow:payment"),
     ], needs=("rooms", "server_room", "flows"))
 
-    # mig (standalone, 0–38): the long plan played through (requester 10-22: many migrations, smoothly). Its 12 steps
-    # touch the AWS groups on the left (search, payments, analytics, admin) and the two Azure groups on the right, so
-    # the camera frames the AWS account (its focus: every changed node in view; too many nodes for the models) and
-    # comes in a little while it plays. ▶ once at 0.5x: each step 2.1 s, back to back, the month's cost counting and a
-    # ±$ tag over each changed node; the Azure floors go at the end. Step 3 moves two nodes (two tags, and the bar
-    # names both): the player is paused 1.7 s early in it, while the tags are at full strength (a pause holds the
-    # step, the count and the tags), then played on. Then the cost view
-    # (its total says the old month and the steps taken) and its old / new / difference tables.
-    out["mig"] = Chapter("mig", 0, 40, floor(w) + up_close("demo-shop") + [
-        P("door"),
-        P("click", target={"css": f"#sr-board [data-sr-mig='{MIG_PLAN}']"}, expect="migopen"),
-        P("dbg", call="srSelectGroup", group="aws"),
-        P("click", target={"css": "#sr-board [data-sr-act='focus']"}),
-        P("dbg", call="srSelect", node=None),
-        P("dbg", call="srMigSpeed", speed=0.5), P("settle"),
-        P("dbg", call="noop", expect="migcost"),
-    ], [
-        E(3.0, "click", target={"css": MIG_BTN.format("toggle")}),
-        E(3.2, "dolly", factor=0.85, dur=26.0),
-        E(7.8, "click", target={"css": MIG_BTN.format("toggle")}),
-        E(9.5, "click", target={"css": MIG_BTN.format("toggle")}),
-        E(31.4, "click", target={"css": "#sr-mode-cost"}, expect="migtable"),
-    ], needs=("rooms", "server_room", "migration"))
+    # the migration plan played through (requester 10-22: many migrations, smoothly), as the promo's chapter 4m (76–110)
+    # and as the standalone clip (0–40). Its 12 steps touch the AWS groups on the left (search, payments, analytics,
+    # admin) and the two Azure groups on the right, so the camera frames the AWS account (its focus: every changed node
+    # in view; too many nodes for the models) and comes in a little while it plays. ▶ once at 0.5x: each step 2.1 s,
+    # back to back, the month's cost counting and a ±$ tag over each changed node; the Azure floors go at the end.
+    # Step 3 moves two nodes (two tags, and the bar names both): the player is paused 1.7 s early in it, while the tags
+    # are at full strength (a pause holds the step, the count and the tags), then played on. Then the cost view (its
+    # total says the old month and the steps taken) and its old / new / difference tables.
+    def migration(cid, start, end, play, cost):
+        return Chapter(cid, start, end, floor(w) + up_close("demo-shop") + [
+            P("door"),
+            P("click", target={"css": f"#sr-board [data-sr-mig='{MIG_PLAN}']"}, expect="migopen"),
+            P("dbg", call="srSelectGroup", group="aws"),
+            P("click", target={"css": "#sr-board [data-sr-act='focus']"}),
+            P("dbg", call="srSelect", node=None),
+            P("dbg", call="srMigSpeed", speed=0.5), P("settle"),
+            P("dbg", call="noop", expect="migcost"),
+        ], [
+            E(play, "click", target={"css": MIG_BTN.format("toggle")}),
+            E(play + 0.2, "dolly", factor=0.85, dur=round(cost - play - 2.4, 1)),
+            E(play + 4.8, "click", target={"css": MIG_BTN.format("toggle")}),
+            E(play + 6.5, "click", target={"css": MIG_BTN.format("toggle")}),
+            E(cost, "click", target={"css": "#sr-mode-cost"}, expect="migtable"),
+        ], needs=("rooms", "server_room", "migration"))
+    out["4m"] = migration("4m", 76, 110, 78.0, 105.2)
+    out["mig"] = migration("mig", 0, 40, 3.0, 31.4)
 
-    # 5 (74–88): the cost simulator. 74–77 is the load definition in the editor (term.py, captures/<lang>/5-json:
+    # 5 (110–124): the cost simulator. 110–113 is the load definition in the editor (term.py, captures/<lang>/5-json:
     # SEGMENTS); this capture covers the whole chapter, and its cost page starts after that window: the month, then
     # one day played (24 hours at 200 ms an hour)
-    out["5"] = Chapter("5", 74, 88, floor(w) + up_close("demo-shop") + [P("door"), P("dbg", call="srCostPlayMs", ms=200)], [
-        E(77.3, "click", target={"css": "#sr-mode-cost"}, expect="cost_month"),
-        E(79.4, "select", target={"css": "#sr-scn"}, value="weekend-campaign", expect="cost_month"),
-        E(81.6, "click", target={"cost_day": "busiest"}, expect="cost_day"),
-        E(82.6, "click", target={"css": "#sr-cost [data-src-act='play']"}),
+    out["5"] = Chapter("5", 110, 124, floor(w) + up_close("demo-shop") + [P("door"), P("dbg", call="srCostPlayMs", ms=200)], [
+        E(113.3, "click", target={"css": "#sr-mode-cost"}, expect="cost_month"),
+        E(115.4, "select", target={"css": "#sr-scn"}, value="weekend-campaign", expect="cost_month"),
+        E(117.6, "click", target={"cost_day": "busiest"}, expect="cost_day"),
+        E(118.6, "click", target={"css": "#sr-cost [data-src-act='play']"}),
     ], needs=("rooms", "server_room", "cost"))
 
-    # 1b-board (16–32, beside 1b's terminal): the cart screen's spec on the whiteboard, filling in as the spec owner
+    # 1b-board (18–34, beside 1b's terminal): the cart screen's spec on the whiteboard, filling in as the spec owner
     # writes it. The file starts with its metadata only (spec_reset); each spec_write is a real Write of the real file
     # with one more section of the spec as demo-shop has it, which the server reads (the hook's file, and its watcher)
     # and the open sheet shows. The sections come in the order the sheet shows them while the terminal's gates run.
@@ -372,21 +375,21 @@ def chapters(lang: str) -> dict:
                      P("spec_reset", room="demo-shop", rel=spec, keep=["type", "version", "metadata"]), P("settle"),
                      P("dbg", call="press", css="#btn-side"),   # the side panel closed: the sheet takes the page
                      P("dbg", call="openSpec", room="demo-shop", rel=spec, expect="board"), P("settle")]
-    out["1b-board"] = Chapter("1b-board", 16, 32, board_prelude, [
-        E(16.8, "spec_write", key="s01", room="demo-shop", rel=spec, add="structure"),
-        E(19.0, "spec_write", key="s01", room="demo-shop", rel=spec, add="stateManagement"),
-        E(21.4, "spec_write", key="s01", room="demo-shop", rel=spec, add="dataFlow"),
-        E(23.8, "spec_write", key="s01", room="demo-shop", rel=spec, add="userActions"),
-        E(25.8, "spec_write", key="s01", room="demo-shop", rel=spec, add="transitions"),
-        E(27.8, "spec_write", key="s01", room="demo-shop", rel=spec, add="branchContracts"),
-        E(30.4, "stop", key="s01"),
+    out["1b-board"] = Chapter("1b-board", 18, 34, board_prelude, [
+        E(18.8, "spec_write", key="s01", room="demo-shop", rel=spec, add="structure"),
+        E(21.0, "spec_write", key="s01", room="demo-shop", rel=spec, add="stateManagement"),
+        E(23.4, "spec_write", key="s01", room="demo-shop", rel=spec, add="dataFlow"),
+        E(25.8, "spec_write", key="s01", room="demo-shop", rel=spec, add="userActions"),
+        E(27.8, "spec_write", key="s01", room="demo-shop", rel=spec, add="transitions"),
+        E(29.8, "spec_write", key="s01", room="demo-shop", rel=spec, add="branchContracts"),
+        E(32.4, "stop", key="s01"),
     ], needs=("rooms",), viewport=SPLIT_VIEWPORT)
 
-    # 6 (88–96): back to the whole floor
-    out["6"] = Chapter("6", 88, 96, floor(w) + waits(w) + up_close("demo-shop"), [
-        E(88.6, "click", target={"css": "#room-back"}, expect="floor"),
-        E(90.0, "wheel", target={"css": "#scene-canvas"}, dy=300, dur=4.0),
-        E(91.0, "tool_end", key="s13"),
+    # 6 (124–132): back to the whole floor
+    out["6"] = Chapter("6", 124, 132, floor(w) + waits(w) + up_close("demo-shop"), [
+        E(124.6, "click", target={"css": "#room-back"}, expect="floor"),
+        E(126.0, "wheel", target={"css": "#scene-canvas"}, dy=300, dur=4.0),
+        E(127.0, "tool_end", key="s13"),
     ], needs=("rooms",))
     return out
 

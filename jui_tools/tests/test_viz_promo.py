@@ -220,7 +220,7 @@ def test_1a_ends_on_the_spec_document_held_long_enough_to_read(tmp_path):
     assert files[-1]["html"].startswith("<html>") and not files[-2]["generated"]
     assert files[-1]["sec"] >= 4.0 and files[-1]["stops"]
     start = T.BOUNDS["1a"][1] - files[-1]["sec"]
-    assert start <= 12.0, "the spec document is on screen for the whole of the 12–16 s subtitle"
+    assert start - T.BOUNDS["1a"][0] <= 8.0, "the spec document is on screen for the whole of 1a's last subtitle (its last 4 s)"
     assert "html" not in files[0]
 
 
@@ -280,7 +280,7 @@ def test_chapter_4_starts_close_on_the_order_flow_then_pulls_back_to_the_whole_s
         ch = T.chapters(lang)["4"]
         # the speed changes after the first choice: the second branch is 3.6 s at 1x after it
         first = T.flow_budget(ch, flows["order"])
-        assert [p for p, _ in first["choices"]][:1] == ["hit"] and abs(first["choices"][0][1] - 58.0) <= 0.5, first
+        assert [p for p, _ in first["choices"]][:1] == ["hit"] and abs(first["choices"][0][1] - 60.0) <= 0.5, first
         hit = first["choices"][0][1]
         second = next(ev.at for ev in ch.events if ev.args.get("arg") == "in")
         assert abs(hit + 3.6 - second) <= 0.5, (hit, second)
