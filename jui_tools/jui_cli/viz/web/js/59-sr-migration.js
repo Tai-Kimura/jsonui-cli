@@ -151,7 +151,7 @@ function srMigRebuild(first) {
   const V = SR.view, P = SR_MIG.P;
   if (P) SR.model = srMigUnion(SR.migBase, P.entry);
   if (!V) return;
-  srBuild(first ? undefined : { pos: V.camera.position.clone(), target: V.controls.target.clone() });   // no frame from the fit camera
+  srBuild(first ? undefined : srCamKeep(V));   // no frame from the fit camera
 }
 function srMigReset() {   // nothing is rebuilt: the sizes, the versions and the lines are put back to the old model's
   const P = SR_MIG.P;
@@ -214,8 +214,8 @@ function srMigNewShapes(V, at) {
     if (s.kind !== 'replace') continue;
     const n = P.entry.model.nodes.find((x) => x.id === s.node), p = n && V.L.pos.get(s.node);
     if (!p || p.hiddenIn) continue;
-    for (const set of ['simple', 'detail']) {
-      const shape = srShapeIn(set, n), mesh = new THREE.InstancedMesh(SR_SHAPES[shape](), new THREE.MeshLambertMaterial({ color: 0xffffff }), 1);
+    for (const set of V.flat ? ['simple'] : ['simple', 'detail']) {   // 2D: one set (56-server-room.js srBuild)
+      const shape = srShapeIn(set, n), mesh = srShapeMesh(shape, 1);
       const sc = n.count > 1 ? 1 + Math.min(Math.log2(n.count), 4) * 0.12 : 1;
       mesh.setMatrixAt(0, m4.compose(new THREE.Vector3(p.x, p.y + 0.75, p.z), q, new THREE.Vector3(sc, sc, sc)));
       mesh.setColorAt(0, col.set(srProviderColor(n.providerResolved || n.provider, 'node', 0, V.dark)));

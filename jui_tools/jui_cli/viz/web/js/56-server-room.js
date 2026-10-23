@@ -43,7 +43,10 @@
 const SR = {
   phase: 'idle', project: null, seq: 0, t0: 0, until: 0, why: '', full: '', opener: null, model: null, view: null, log: [],
   fastMs: 300, starMs: 140, okMs: 700, failMs: 9000,
-  lod: { far: 9, near: 13 }, labels: { max: 110, nodes: 80 }, stats: null, detail: { enter: 30, leave: 40 },
+  lod: { far: 9, near: 13 },
+  // 2D pulled back (the requester 10-23, 「引きでは跨ぐ線だけ」): below `hide` px a cell, the cables within one provider are
+  // hidden and only the crossing ones drawn; above `show` all again (a gap between, so it never flickers)
+  flatPlain: { hide: 18, show: 22 }, labels: { max: 110, nodes: 80 }, stats: null, detail: { enter: 30, leave: 40 },
   closed: new Set(), selected: null, selectedGroup: null, boardSel: null, zoomStep: 1.4,
   // fewer lines (2.3.9, requester 10-20: 「線減らす工夫欲しいね」): all cables faint, the pressed and the pointed node's
   // drawn strong on a layer of their own; a switch for all (faint) / crossing ones only / the chosen node's only
@@ -53,7 +56,23 @@ const SR = {
   box: { armed: false, drag: null }, boxFit: 0.92,
   // つながっている物を全部見せる: {id, hops, ids, edges, cam} while shown; how many steps it follows (1, or 'all'); how faint the rest
   reach: null, reachHops: 1, reachFade: 0.82, reachLineOpacity: 0.05, reachFit: 0.7,   // reachFit: what it holds fills this much of the page, its tags inside
+  // 2D (requester 10-23: 「3D見にくいので2Dモードも実装してほしい / 機能は3Dと一緒」): the same room from straight above, an
+  // orthographic camera and flat shapes; flat is the room open now's, remembered per project (srViewPref)
+  flat: false,
 };
+/* The 2D camera's frame: half its height in world units at zoom 1 (srResize gives it the page's aspect), and how high it
+   sits (well above anything drawn, so the cables' near plane never cuts them). */
+const SR_FLAT = { half: 50, height: 400, fov: 45 };
+/* 2D or 3D, per project: {project: '2d' | '3d'} in the page's own storage. */
+function srViewPref(project) {
+  try { const all = JSON.parse(readPref('srView', '{}')) || {}; return (all[project] || all['*']) === '2d'; } catch (err) { return false; }   // '*': every project not chosen yet (the e2e's 2D runs)
+}
+function srViewPrefSet(project, flat) {
+  let all = {};
+  try { all = JSON.parse(readPref('srView', '{}')) || {}; } catch (err) { all = {}; }
+  all[project] = flat ? '2d' : '3d';
+  writePref('srView', JSON.stringify(all));
+}
 const srEl = $('sr'), srBubbleEl = $('sr-bubble');
 function srNow() { return performance.now(); }
 function srCovers() { return SR.phase === 'open'; }   // 40-scene.js: the room's 3D is not drawn under the server room
@@ -182,7 +201,85 @@ function srDetailShape(n) {
   if (c === 'auth' || c === 'secrets') return 'key';
   return srShape(c);
 }
-const srShapeIn = (set, n) => (set === 'detail' ? srDetailShape(n) : srShape(n.category));
+const srShapeIn = (set, n) => (SR.flat ? `flat:${srModelKind(n)}` : set === 'detail' ? srDetailShape(n) : srShape(n.category));
+/* 2D's shapes (the 3D models' kinds, 56-sr-models.js srModelKind; the orchestrator 10-23: each kind told apart, the
+   requester's 「どんな機能のノードかわかりやすいように」): a flat tile each — an outline of its own and its short name on it,
+   drawn once on a canvas, white where the cloud's colour shows and dark for the name. [outline, name, half width, half
+   depth, round]. */
+const SR_FLAT_KIND = {
+  db: ['circle', 'DB', 0.62, 0.62, true], cache: ['circle', 'MEM', 0.55, 0.55, true], bucket: ['bucket', 'OBJ', 0.6, 0.6, false],
+  drive: ['square', 'DISK', 0.6, 0.6, false], broadcast: ['triangle', 'PUB', 0.66, 0.6, false], queue: ['pill', 'QUEUE', 0.8, 0.42, false],
+  stream: ['pill', 'STREAM', 0.8, 0.42, false], splitter: ['diamond', 'LB', 0.66, 0.66, false], globe: ['ring', 'CDN', 0.66, 0.66, true],
+  signpost: ['sign', 'DNS', 0.7, 0.5, false], shield: ['shield', 'WAF', 0.6, 0.66, false], arch: ['arch', 'API', 0.66, 0.6, false],
+  bolt: ['square', 'λ', 0.58, 0.58, false], server: ['square', 'VM', 0.62, 0.62, false], container: ['hex', 'CTR', 0.66, 0.6, false],
+  wheel: ['oct', 'K8s', 0.64, 0.64, true], browser: ['window', 'UI', 0.7, 0.55, false], padlock: ['lock', 'AUTH', 0.58, 0.64, false],
+  key: ['round', 'KEY', 0.58, 0.58, false], clock: ['clock', 'CRON', 0.6, 0.6, true], envelope: ['envelope', 'MAIL', 0.7, 0.5, false],
+  gauge: ['gauge', 'MON', 0.64, 0.56, false], cloud: ['cloud', 'SaaS', 0.74, 0.54, false], plinth: ['round', '', 0.45, 0.45, false],
+};
+const SR_FLAT_TEX = new Map();
+// the tiles drawn this much of their size in SR_FLAT_KIND, so a lane stays clear between two rows or columns of a full
+// room (a cell is SR_CELL; the widest tile then leaves 0.5 between) for the cables to run in (srCablePathFlat)
+const SR_FLAT_TILE = 0.82;
+function srFlatTexture(kind) {
+  if (SR_FLAT_TEX.has(kind)) return SR_FLAT_TEX.get(kind);
+  const [outline, name, hx, hz] = SR_FLAT_KIND[kind] || SR_FLAT_KIND.plinth, S = 128, cv = document.createElement('canvas');
+  cv.width = cv.height = S;
+  const g = cv.getContext('2d'), w = hx / 0.8 * (S / 2 - 4), h = hz / 0.8 * (S / 2 - 4), c = S / 2;
+  g.beginPath();
+  const poly = (pts) => { pts.forEach(([x, y], i) => (i ? g.lineTo(c + x * w, c + y * h) : g.moveTo(c + x * w, c + y * h))); g.closePath(); };
+  const rect = (r) => g.roundRect(c - w, c - h, 2 * w, 2 * h, r);
+  ({ circle: () => g.ellipse(c, c, w, h, 0, 0, Math.PI * 2), ring: () => g.ellipse(c, c, w, h, 0, 0, Math.PI * 2), clock: () => g.ellipse(c, c, w, h, 0, 0, Math.PI * 2),
+    square: () => rect(6), round: () => rect(Math.min(w, h) * 0.45), window: () => rect(5), envelope: () => rect(4), lock: () => rect(10),
+    pill: () => rect(h), hex: () => poly([[-1, 0], [-0.5, -1], [0.5, -1], [1, 0], [0.5, 1], [-0.5, 1]]),
+    oct: () => poly([[-0.42, -1], [0.42, -1], [1, -0.42], [1, 0.42], [0.42, 1], [-0.42, 1], [-1, 0.42], [-1, -0.42]]),
+    diamond: () => poly([[0, -1], [1, 0], [0, 1], [-1, 0]]), triangle: () => poly([[0, -1], [1, 1], [-1, 1]]),
+    bucket: () => poly([[-1, -1], [1, -1], [0.72, 1], [-0.72, 1]]), sign: () => poly([[-1, -1], [0.6, -1], [1, 0], [0.6, 1], [-1, 1]]),
+    shield: () => { g.moveTo(c - w, c - h); g.lineTo(c + w, c - h); g.lineTo(c + w, c); g.quadraticCurveTo(c + w, c + h * 0.7, c, c + h); g.quadraticCurveTo(c - w, c + h * 0.7, c - w, c); g.closePath(); },
+    arch: () => { g.moveTo(c - w, c + h); g.lineTo(c - w, c - h * 0.1); g.arc(c, c - h * 0.1, w, Math.PI, 0); g.lineTo(c + w, c + h); g.closePath(); },
+    gauge: () => { g.moveTo(c - w, c + h * 0.6); g.arc(c, c + h * 0.6, w, Math.PI, 0); g.lineTo(c + w, c + h); g.lineTo(c - w, c + h); g.closePath(); },
+    cloud: () => {} }[outline] || (() => rect(6)))();
+  if (outline === 'cloud') {   // puffs: the edge's grey a little larger under the white
+    const puffs = (k) => { g.beginPath(); for (const [x, y, r] of [[-0.5, 0.25, 0.48], [0.05, -0.2, 0.62], [0.55, 0.2, 0.45]]) { g.moveTo(c + x * w + r * h * k, c + y * h); g.arc(c + x * w, c + y * h, r * h * k, 0, Math.PI * 2); }
+      g.roundRect(c - w * 0.95 * k, c + h * 0.1, w * 1.9 * k, h * 0.75 * k, h * 0.3); };
+    g.fillStyle = '#7a7a7a'; puffs(1.07); g.fill();
+    g.fillStyle = '#ffffff'; puffs(1); g.fill();
+  } else {
+    g.fillStyle = '#ffffff'; g.fill();
+    g.lineWidth = 5; g.strokeStyle = '#7a7a7a'; g.stroke();
+  }
+  g.strokeStyle = '#3a3a3a'; g.lineWidth = 4;   // a mark of the outline's own where it helps tell apart
+  if (outline === 'ring') { g.beginPath(); g.ellipse(c, c, w * 0.78, h * 0.78, 0, 0, Math.PI * 2); g.stroke(); }
+  if (outline === 'window') { g.beginPath(); g.moveTo(c - w, c - h * 0.55); g.lineTo(c + w, c - h * 0.55); g.stroke(); }
+  if (outline === 'envelope') { g.beginPath(); g.moveTo(c - w, c - h); g.lineTo(c, c - h * 0.15); g.lineTo(c + w, c - h); g.stroke(); }
+  if (outline === 'clock') { g.beginPath(); g.moveTo(c, c - h * 0.8); g.lineTo(c, c - h * 0.45); g.stroke(); }
+  if (name) {
+    g.fillStyle = '#2a2a2a';
+    let px = 44;
+    const room = 2 * w * (outline === 'diamond' || outline === 'triangle' ? 0.62 : 0.84);
+    do { g.font = `700 ${px}px system-ui, -apple-system, 'Segoe UI', sans-serif`; px -= 2; } while (g.measureText(name).width > room && px > 14);
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(name, c, c + (outline === 'triangle' ? h * 0.3 : outline === 'window' ? h * 0.2 : outline === 'gauge' ? h * 0.35 : outline === 'envelope' ? h * 0.3 : 0));
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  SR_FLAT_TEX.set(kind, tex);
+  return tex;
+}
+/* A flat tile, lying on the floor's plane (the page's up the layout's -z). */
+let srFlatGeoMade = null;
+function srFlatGeo() {
+  if (!srFlatGeoMade) { srFlatGeoMade = new THREE.PlaneGeometry(1.6 * SR_FLAT_TILE, 1.6 * SR_FLAT_TILE); srFlatGeoMade.rotateX(-Math.PI / 2); }
+  return srFlatGeoMade;
+}
+/* The instanced mesh of a shape: the 3D's lit solids, or 2D's flat tiles (their colour the cloud's, unlit). */
+function srShapeMesh(shape, count) {
+  if (shape.startsWith('flat:')) {
+    const mesh = new THREE.InstancedMesh(srFlatGeo(), new THREE.MeshBasicMaterial({ map: srFlatTexture(shape.slice(5)), alphaTest: 0.5, toneMapped: false }), count);
+    mesh.userData.flatGeo = true;   // shared: never disposed with the mesh
+    return mesh;
+  }
+  return new THREE.InstancedMesh(SR_SHAPES[shape](), new THREE.MeshLambertMaterial({ color: 0xffffff }), count);
+}
 // the services' names as people say them (the tag up close); an unknown one shows as it is written
 const SR_SERVICE_NAME = { ec2: 'EC2', 'ec2.asg': 'EC2 Auto Scaling', ecs: 'ECS', 'ecs.fargate': 'ECS Fargate', eks: 'EKS', lambda: 'Lambda',
   stepfunctions: 'Step Functions', apprunner: 'App Runner', beanstalk: 'Elastic Beanstalk', elb: 'ELB', 'elb.alb': 'ALB', 'elb.nlb': 'NLB',
@@ -299,7 +396,10 @@ function srFootOfObject(key, make) {
   }
   return SR_FOOT.get(key);
 }
-function srShapeFoot(shape) { return srFootOfObject(`shape:${shape}`, () => new THREE.Mesh(SR_SHAPES[shape]())); }
+function srShapeFoot(shape) {
+  if (shape.startsWith('flat:')) { const k = SR_FLAT_KIND[shape.slice(5)] || SR_FLAT_KIND.plinth; return { hx: k[2] * SR_FLAT_TILE, hz: k[3] * SR_FLAT_TILE, y0: -0.01, y1: 0.01, round: k[4] }; }
+  return srFootOfObject(`shape:${shape}`, () => new THREE.Mesh(SR_SHAPES[shape]()));
+}
 function srModelFoot(kind) {
   return srFootOfObject(`model:${kind}`, () => {
     const g = new THREE.Group();
@@ -316,7 +416,8 @@ function srNodeFoot(V, p) {
     return { x: G.x + G.w / 2, z: G.z + SR_HEAD + (G.d - SR_HEAD) / 2, hx: (G.w - SR_PAD) / 2, hz: (G.d - SR_HEAD - SR_PAD * 0.5) / 2, y0: y, y1: y + h, round: false };
   }
   const sc = p.n.count > 1 ? 1 + Math.min(Math.log2(p.n.count), 4) * 0.12 : 1;
-  const f = V.detail && typeof srModelKind === 'function' ? srModelFoot(srModelKind(p.n)) : srShapeFoot(srShape(p.n.category));
+  const f = V.flat ? srShapeFoot(srShapeIn('simple', p.n))
+    : V.detail && typeof srModelKind === 'function' ? srModelFoot(srModelKind(p.n)) : srShapeFoot(srShape(p.n.category));
   const mid = p.y + 0.75;
   return { x: p.x, z: p.z, hx: f.hx * sc, hz: f.hz * sc, y0: mid + f.y0 * sc, y1: mid + f.y1 * sc, round: f.round };
 }
@@ -364,6 +465,7 @@ function srFootGrid(V) {
 }
 /* The path of a cable, from one node's side to the other's (see SR_ROUTE): points [x, y, z], at least two. */
 function srCablePathOf(V, from, to, crossing) {
+  if (V.flat) return srCablePathFlat(V, from, to, crossing);
   const grid = srFootGrid(V), fa = grid.feet.get(from), fb = grid.feet.get(to);
   if (!fa || !fb) return null;
   const lift = crossing ? SR_ROUTE.cross : 0;
@@ -409,9 +511,84 @@ function srCablePathOf(V, from, to, crossing) {
   return pts;
 }
 const srCablePath = (V, e) => srCablePathOf(V, e.from, e.to, !!e.crossProvider);
+/* 2D's cables (the plan's: 「重なる時は角を曲げて避ける」): from one tile's edge to the other's as the 3D's (srNodeFoot,
+   srFootExit), flat under the tiles; straight when nothing is on the way, else around it with square corners: the
+   shortest of an L either way, a run along the lane between two rows or columns next to either end (the cells' edges,
+   SR_CELL / 2 from a node's middle), or a Z, that crosses no other tile. None clear (a full room, far apart): straight,
+   under the tiles — drawn beneath them, never over one. */
+const SR_FLAT_ROUTE = { y: 0.45, cross: 0.03, margin: 0.12, lanes: 6 };
+function srFlatClear(V, grid, P, Q, skip) {
+  const len = Math.hypot(Q[0] - P[0], Q[1] - P[1]);
+  if (len < 1e-6) return true;
+  const seen = new Set(skip);
+  for (let k = 0, n = Math.ceil(len / (SR_CELL / 2)) + 1; k <= n; k++) {
+    const x = P[0] + (Q[0] - P[0]) * k / n, z = P[1] + (Q[1] - P[1]) * k / n;
+    for (let gx = Math.floor(x / SR_CELL) - 1; gx <= Math.floor(x / SR_CELL) + 1; gx++)
+      for (let gz = Math.floor(z / SR_CELL) - 1; gz <= Math.floor(z / SR_CELL) + 1; gz++)
+        for (const f of grid.cells.get(`${gx},${gz}`) || []) {
+          if (seen.has(f)) continue;
+          seen.add(f);
+          if (srFootSpan(f, P, Q, SR_FLAT_ROUTE.margin)) return false;
+        }
+  }
+  return true;
+}
+function srCablePathFlat(V, from, to, crossing) {
+  const grid = srFootGrid(V), fa = grid.feet.get(from), fb = grid.feet.get(to);
+  if (!fa || !fb) return null;
+  const y = SR_FLAT_ROUTE.y + (crossing ? SR_FLAT_ROUTE.cross : 0), skip = [fa, fb];
+  const none = [[fa.x, y, fa.z], [fa.x, y, fa.z]];
+  let dx = fb.x - fa.x, dz = fb.z - fa.z;
+  const d = Math.hypot(dx, dz);
+  if (d < 1e-6 || fa === fb) return none;
+  dx /= d; dz /= d;
+  const ea = srFootExit(fa, dx, dz), eb = srFootExit(fb, -dx, -dz);
+  if (ea + eb >= d) return none;
+  const A = [fa.x + dx * ea, fa.z + dz * ea], B = [fb.x - dx * eb, fb.z - dz * eb];
+  if (srFlatClear(V, grid, A, B, skip)) return [[A[0], y, A[1]], [B[0], y, B[1]]];
+  // the corners' routes: each leg along x or z, leaving and entering the tiles at their edges
+  const out = (f, ux, uz) => { const e = srFootExit(f, ux, uz); return [f.x + ux * e, f.z + uz * e]; };
+  const sx = Math.sign(fb.x - fa.x), sz = Math.sign(fb.z - fa.z), tries = [];
+  if (sx && sz) {
+    tries.push([out(fa, sx, 0), [fb.x, fa.z], out(fb, 0, -sz)]);     // along x, then z
+    tries.push([out(fa, 0, sz), [fa.x, fb.z], out(fb, -sx, 0)]);     // along z, then x
+  }
+  const h = SR_CELL / 2;
+  for (const s1 of [1, -1]) {
+    // along the lane next to one end, then straight into the other (3 legs)
+    tries.push([out(fa, 0, s1), [fa.x, fa.z + s1 * h], [fb.x, fa.z + s1 * h], out(fb, 0, Math.sign(fa.z + s1 * h - fb.z) || -s1)]);
+    tries.push([out(fa, 0, Math.sign(fb.z + s1 * h - fa.z) || s1), [fa.x, fb.z + s1 * h], [fb.x, fb.z + s1 * h], out(fb, 0, s1)]);
+    tries.push([out(fa, s1, 0), [fa.x + s1 * h, fa.z], [fa.x + s1 * h, fb.z], out(fb, Math.sign(fa.x + s1 * h - fb.x) || -s1, 0)]);
+    tries.push([out(fa, Math.sign(fb.x + s1 * h - fa.x) || s1, 0), [fb.x + s1 * h, fa.z], [fb.x + s1 * h, fb.z], out(fb, s1, 0)]);
+    for (const s2 of [1, -1]) {   // the lane by one end, the cross lane by the other (4 legs)
+      tries.push([out(fa, 0, s1), [fa.x, fa.z + s1 * h], [fb.x + s2 * h, fa.z + s1 * h], [fb.x + s2 * h, fb.z], out(fb, s2, 0)]);
+      tries.push([out(fa, s1, 0), [fa.x + s1 * h, fa.z], [fa.x + s1 * h, fb.z + s2 * h], [fb.x, fb.z + s2 * h], out(fb, 0, s2)]);
+    }
+  }
+  for (let k = 0; k <= SR_FLAT_ROUTE.lanes; k++) for (const sgn of k ? [1, -1] : [1]) {
+    const off = sgn * k * SR_CELL / 2;
+    if (sx) { const xm = (fa.x + fb.x) / 2 + off; tries.push([out(fa, Math.sign(xm - fa.x) || sx, 0), [xm, fa.z], [xm, fb.z], out(fb, Math.sign(xm - fb.x) || -sx, 0)]); }
+    if (sz) { const zm = (fa.z + fb.z) / 2 + off; tries.push([out(fa, 0, Math.sign(zm - fa.z) || sz), [fa.x, zm], [fb.x, zm], out(fb, 0, Math.sign(zm - fb.z) || -sz)]); }
+  }
+  const length = (pts) => pts.slice(1).reduce((a, q, i) => a + Math.hypot(q[0] - pts[i][0], q[1] - pts[i][1]), 0);
+  // the shortest first: the first clear one is the one (fewer checks on a full room)
+  const best = tries.map((pts) => [length(pts), pts]).sort((a, b) => a[0] - b[0])
+    .find(([, pts]) => pts.slice(1).every((q, i) => srFlatClear(V, grid, pts[i], q, skip)));
+  return (best ? best[1] : [A, B]).map((q) => [q[0], y, q[1]]);
+}
 /* A bundle between two top groups' boxes, from the side of one to the side of the other, rising over the boxes between. */
 function srBundlePath(V, A, B, crossing) {
   const foot = (G) => ({ x: G.x + G.w / 2, z: G.z + G.d / 2, hx: G.w * 0.46, hz: G.d * 0.46, y0: 0, y1: G.boxH, round: false });
+  if (V.flat) {   // 2D, pulled back: side to side, straight (the boxes are flat, nothing to go round at this size)
+    const fa = foot(A), fb = foot(B), y = SR_FLAT_ROUTE.y + (crossing ? SR_FLAT_ROUTE.cross : 0) + 0.6;
+    let dx = fb.x - fa.x, dz = fb.z - fa.z;
+    const d = Math.hypot(dx, dz);
+    if (d < 1e-6) return [[fa.x, y, fa.z], [fa.x, y, fa.z]];
+    dx /= d; dz /= d;
+    const ea = srFootExit(fa, dx, dz), eb = srFootExit(fb, -dx, -dz);
+    if (ea + eb >= d) return [[fa.x, y, fa.z], [fa.x, y, fa.z]];
+    return [[fa.x + dx * ea, y, fa.z + dz * ea], [fb.x - dx * eb, y, fb.z - dz * eb]];
+  }
   const fa = foot(A), fb = foot(B), lift = crossing ? SR_ROUTE.cross : 0;
   let dx = fb.x - fa.x, dz = fb.z - fa.z;
   const d = Math.hypot(dx, dz);
@@ -614,6 +791,8 @@ function srShow(model) {
   $('sr-fold').checked = false;
   SR.closed = new Set(); SR.selected = null; SR.selectedGroup = null; SR.hover = null; SR.only = new Set();
   $('sr-lines').value = SR.lines;
+  SR.flat = srViewPref(SR.project);   // the look this project was last seen in (56-server-cost.js srSetFlat)
+  srModeButtons();
   srBuild();
   $('sr-back').focus({ preventScroll: true });
 }
@@ -638,7 +817,10 @@ function srDispose() {
   cancelAnimationFrame(V.raf);
   V.ro.disconnect();
   V.controls.dispose();
-  V.scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { for (const m of [].concat(o.material)) { if (m.map) m.map.dispose(); m.dispose(); } } });
+  V.scene.traverse((o) => {
+    if (o.userData.flatGeo) { o.material.dispose(); return; }   // 2D's tile and its canvases are the page's, kept for the next build
+    if (o.geometry) o.geometry.dispose(); if (o.material) { for (const m of [].concat(o.material)) { if (m.map) m.map.dispose(); m.dispose(); } }
+  });
   V.renderer.renderLists.dispose();   // the renderer stays: a new one on the same canvas drew its first frame washed out
   for (const url of V.iconUrls) URL.revokeObjectURL(url);
   if (V.reachMats) for (const m of V.reachMats.values()) m.dispose();   // a faint copy not on a model now is in no scene
@@ -665,10 +847,19 @@ function srBuild(keep) {
   scene.background = new THREE.Color(PAL.bg);
   scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.6));
   const sun = new THREE.DirectionalLight(0xffffff, 1.2); sun.position.set(30, 60, 40); scene.add(sun);
-  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 5000);
+  const flat = SR.flat;
+  // 2D: straight down (OrbitControls' polar angle 0 against the usual up), so the page's top is the layout's -z as the 3D
+  // looks from the south; no turning: a drag moves, the wheel zooms
+  const camera = flat ? new THREE.OrthographicCamera(-SR_FLAT.half, SR_FLAT.half, SR_FLAT.half, -SR_FLAT.half, 1, SR_FLAT.height * 2)
+    : new THREE.PerspectiveCamera(45, 1, 0.1, 5000);
   const controls = new OrbitControls(camera, cv);
   Object.assign(controls, { enableDamping: !reduceMotion, dampingFactor: 0.12, screenSpacePanning: true, minDistance: 3, maxDistance: 4000, maxPolarAngle: Math.PI * 0.48 });
-  const V = { renderer, scene, camera, controls, L, near: new THREE.Group(), far: new THREE.Group(), lod: 'near', pick: [], iconUrls: [], raf: 0,
+  if (flat) {
+    Object.assign(controls, { enableRotate: false, minZoom: SR_FLAT.half * 2 / 4000, maxZoom: SR_FLAT.half * 2 / 3, minPolarAngle: 0, maxPolarAngle: 0 });
+    controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
+  }
+  const V = { flat, renderer, scene, camera, controls, L, near: new THREE.Group(), far: new THREE.Group(), lod: 'near', pick: [], iconUrls: [], raf: 0,
     frames: [], labelAt: 0, labels: [], ro: null, env, fold, dark, floorColors: [] };
   V.far.visible = false;   // srLod only switches on a change: a view that opens near never showed the far boxes' level
   scene.add(V.near, V.far);
@@ -705,11 +896,11 @@ function srBuild(keep) {
   V.nodeMeshes = { simple: [], detail: [] };
   V.nodeSets.detail.visible = false;
   V.detail = false;
-  for (const set of ['simple', 'detail']) {
+  for (const set of flat ? ['simple'] : ['simple', 'detail']) {   // 2D: one set, the flat tiles
     const byShape = {};
     for (const p of L.pos.values()) if (!p.hiddenIn) (byShape[srShapeIn(set, p.n)] = byShape[srShapeIn(set, p.n)] || []).push(p);
     for (const [shape, list] of Object.entries(byShape)) {
-      const mesh = new THREE.InstancedMesh(SR_SHAPES[shape](), new THREE.MeshLambertMaterial({ color: 0xffffff }), list.length);
+      const mesh = srShapeMesh(shape, list.length);
       list.forEach((p, i) => {
         const s = p.n.count > 1 ? 1 + Math.min(Math.log2(p.n.count), 4) * 0.12 : 1;
         m4.compose(at.set(p.x, p.y + 0.75, p.z), q, sc.set(s, s, s));
@@ -782,7 +973,7 @@ function srBuild(keep) {
   srLinesMode(V);
   srFocusLines(V);
   srFit(true);
-  if (keep) { camera.position.copy(keep.pos); controls.target.copy(keep.target); controls.update(); }
+  if (keep && !!keep.flat === flat) { camera.position.copy(keep.pos); controls.target.copy(keep.target); if (flat) { camera.zoom = keep.zoom; camera.updateProjectionMatrix(); } controls.update(); }
   srCounts(L);
   cv.onpointerdown = (e) => { V.downAt = [e.clientX, e.clientY]; };
   cv.onpointermove = (e) => {   // the pointed node's cables, strong (at most every 60 ms)
@@ -831,26 +1022,61 @@ function srPixMean(renderer) {
 function srCountNodes(G) { return G.nodes.length + G.kids.reduce((a, k) => a + srCountNodes(k), 0); }
 function srResize(V) {
   const box = $('sr-canvas').parentElement, w = Math.max(1, box.clientWidth), h = Math.max(1, box.clientHeight);
-  V.renderer.setSize(w, h, false); V.camera.aspect = w / h; V.camera.updateProjectionMatrix();
+  V.renderer.setSize(w, h, false);
+  if (V.flat) { const a = w / h; Object.assign(V.camera, { left: -SR_FLAT.half * a, right: SR_FLAT.half * a, top: SR_FLAT.half, bottom: -SR_FLAT.half }); }
+  else V.camera.aspect = w / h;
+  V.camera.updateProjectionMatrix();
 }
+/* How much of the floor the page's height shows now (world units): the 3D's at its target's distance, the 2D's its frame
+   over its zoom. Both cameras are moved by it (srSetSpan), so fit, zoom, focus, the box and the reach are one code. */
+function srSpan(V) {
+  if (V.flat) return (V.camera.top - V.camera.bottom) / V.camera.zoom;
+  return 2 * V.camera.position.distanceTo(V.controls.target) * Math.tan((V.camera.fov * Math.PI / 180) / 2);
+}
+/* The span as the 3D's distance to its target (the 2D says the distance a 45° camera would need for its span). */
+function srViewDist(V) { return V.flat ? srSpan(V) / (2 * Math.tan(SR_FLAT.fov * Math.PI / 360)) : V.camera.position.distanceTo(V.controls.target); }
+/* Looks at (x, z) with `span` world units in the page's height: the 3D along its direction now, the 2D from straight above. */
+function srSetSpan(V, x, z, span) {
+  V.controls.target.set(x, 0, z);
+  if (V.flat) {
+    V.camera.position.set(x, SR_FLAT.height, z);
+    V.camera.zoom = Math.min(V.controls.maxZoom, Math.max(V.controls.minZoom, (V.camera.top - V.camera.bottom) / span));
+    V.camera.updateProjectionMatrix();
+  } else {
+    const dir = V.camera.position.clone().sub(V.controls.target).normalize();
+    if (!(dir.lengthSq() > 0)) dir.set(0, 0.78, 0.62).normalize();
+    V.camera.position.copy(V.controls.target).addScaledVector(dir, span / (2 * Math.tan((V.camera.fov * Math.PI / 180) / 2)));
+  }
+  V.camera.updateMatrixWorld();
+}
+/* Where the camera is, to put it back after a build (the same view only: a switch between 2D and 3D fits again). */
+function srCamKeep(V) { return { pos: V.camera.position.clone(), target: V.controls.target.clone(), zoom: V.camera.zoom, flat: V.flat }; }
 function srFit(instant) {
   const V = SR.view;
   if (!V) return;
   const L = V.L, cx = L.width / 2, cz = L.depth / 2, r = Math.max(6, Math.hypot(L.width, L.depth) / 2);
-  const dist = r / Math.sin((V.camera.fov * Math.PI / 180) / 2) * 0.95;
-  V.controls.target.set(cx, 0, cz);
-  V.camera.position.set(cx, dist * 0.78, cz + dist * 0.62);
-  V.camera.near = Math.max(0.1, dist / 500); V.camera.far = dist * 6; V.camera.updateProjectionMatrix();
+  if (V.flat) {   // the whole layout in the page, whichever way it is longer
+    const a = (V.camera.right - V.camera.left) / (V.camera.top - V.camera.bottom);
+    srSetSpan(V, cx, cz, Math.max(12, L.depth, L.width / a) * 1.08);
+  } else {
+    const dist = r / Math.sin((V.camera.fov * Math.PI / 180) / 2) * 0.95;
+    V.controls.target.set(cx, 0, cz);
+    V.camera.position.set(cx, dist * 0.78, cz + dist * 0.62);
+    V.camera.near = Math.max(0.1, dist / 500); V.camera.far = dist * 6; V.camera.updateProjectionMatrix();
+  }
   V.controls.update();
   void instant;
 }
 /* How big a node cell is on the page now (px): far below SR.lod.far, near again above SR.lod.near. */
 function srCellPx(V) {
-  const dist = V.camera.position.distanceTo(V.controls.target), h = V.renderer.domElement.clientHeight || 1;
-  return SR_CELL / (2 * dist * Math.tan((V.camera.fov * Math.PI / 180) / 2)) * h;
+  return SR_CELL / srSpan(V) * (V.renderer.domElement.clientHeight || 1);
 }
 function srLod(V) {
   const px = srCellPx(V);
+  if (V.flat) {
+    const sparse = V.sparse ? px < SR.flatPlain.show : px < SR.flatPlain.hide;
+    if (sparse !== !!V.sparse) { V.sparse = sparse; srLinesMode(V); }
+  }
   const want = V.lod === 'near' ? (px < SR.lod.far ? 'far' : 'near') : (px > SR.lod.near ? 'near' : 'far');
   if (want === V.lod) return;
   V.lod = want; V.near.visible = want === 'near'; V.far.visible = want === 'far';
@@ -867,7 +1093,7 @@ function srPlaceLabels(V) {
     for (const G of V.L.tops) consider(G.x + G.w / 2, G.boxH + 0.8, G.z + G.d / 2, `${G.g.label || G.g.id} · ${G.nodeCount}`, 'group', 1);
   } else {
     for (const G of V.L.floors) if (G.g.id && !(V.migFloorShown && !V.migFloorShown.includes(G.g.id))) consider(G.x + 0.6, 0.2 + G.level * 0.06, G.z + 0.5, G.g.label || G.g.id, 'group', 0.6);
-    for (const p of V.L.pos.values()) if (!p.hiddenIn && !srMigHides(p.n.id) && !(SR.reach && !SR.reach.ids.has(p.n.id))) consider(p.x, p.y + 1.9, p.z, `${p.n.label || p.n.id}${p.n.count > 1 ? ` ×${p.n.count}` : ''}`, p.external ? 'external' : 'node', 1, p.n);
+    for (const p of V.L.pos.values()) if (!p.hiddenIn && !srMigHides(p.n.id) && !(SR.reach && !SR.reach.ids.has(p.n.id))) consider(p.x, p.y + 1.9, V.flat ? p.z - 0.85 : p.z, `${p.n.label || p.n.id}${p.n.count > 1 ? ` ×${p.n.count}` : ''}`, p.external ? 'external' : 'node', 1, p.n);
   }
   // up close (§5): how many nodes are in view decides the look, with room between going in and coming back
   const inView = out.filter((o) => o.n).length;
@@ -889,7 +1115,7 @@ function srPlaceLabels(V) {
   V.labels.forEach((s, i) => {
     const o = shown[i];
     if (!o) { s.hidden = true; return; }
-    s.hidden = false; s.dataset.kind = o.kind;
+    s.hidden = false; s.dataset.kind = o.kind; s.dataset.node = o.n ? o.n.id : '';
     if (s.textContent !== o.text) s.textContent = o.text;
     s.style.transform = `translate(${Math.round(o.sx)}px, ${Math.round(o.sy)}px) translate(-50%, -100%)`;
   });
@@ -898,6 +1124,7 @@ function srPlaceLabels(V) {
 /* The simple shapes or the ones by service (§5): shown, and the ones a press picks. */
 function srSetDetail(V, on) {
   V.detail = on;
+  if (V.flat) return;   // 2D: one set of flat tiles, its feet the same up close; only the tags say more (srPlaceLabels)
   V.nodeSets.simple.visible = !on; V.nodeSets.detail.visible = on;
   const drop = new Set(V.nodeMeshes[on ? 'simple' : 'detail']);
   V.pick = V.pick.filter((m) => !drop.has(m)).concat(V.nodeMeshes[on ? 'detail' : 'simple']);
@@ -935,8 +1162,9 @@ async function srIcons(V) {
     const tex = await new THREE.TextureLoader().loadAsync(url).catch(() => null);
     if (!tex || SR.view !== V) continue;
     const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.9, 0.9), new THREE.MeshBasicMaterial({ map: tex, transparent: true, toneMapped: false }), list.length);
-    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.5, 0, 0));
-    list.forEach((p, i) => { m4.compose(new THREE.Vector3(p.x, p.y + 2.1, p.z), q, new THREE.Vector3(1, 1, 1)); mesh.setMatrixAt(i, m4); });
+    // 2D: lying flat on the tile's corner (its name stays readable); 3D: tilted to the usual slant, over the shape
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion().setFromEuler(new THREE.Euler(V.flat ? -Math.PI / 2 : -0.5, 0, 0));
+    list.forEach((p, i) => { m4.compose(V.flat ? new THREE.Vector3(p.x + 0.5, p.y + 0.8, p.z - 0.5) : new THREE.Vector3(p.x, p.y + 2.1, p.z), q, new THREE.Vector3(V.flat ? 0.55 : 1, 1, V.flat ? 0.55 : 1)); mesh.setMatrixAt(i, m4); });
     mesh.userData.icon = key; mesh.userData.nodes = list.map((p) => p.n.id);
     V.near.add(mesh);
     V.iconCount = (V.iconCount || 0) + list.length;
@@ -980,16 +1208,14 @@ function srFocusLines(V) {
 }
 /* The lines switch: all (faint) / crossing ones only / the chosen node's only. */
 function srLinesMode(V) {
-  V.plainLines.visible = V.farPlain.visible = SR.lines === 'all';
+  V.plainLines.visible = V.farPlain.visible = SR.lines === 'all' && !V.sparse;   // 2D pulled back: the crossing ones only (srLod)
   V.crossLines.visible = V.farCross.visible = SR.lines !== 'focus';
 }
 /* Moves in on a node or a group (its floor's middle, near enough to see what it holds). */
 function srFocus(x, z, r) {
   const V = SR.view;
   if (!V) return;
-  const dir = V.camera.position.clone().sub(V.controls.target).normalize(), dist = Math.max(6, r * 2.2);
-  V.controls.target.set(x, 0, z);
-  V.camera.position.copy(V.controls.target).addScaledVector(dir, dist);
+  srSetSpan(V, x, z, 2 * Math.max(6, r * 2.2) * Math.tan(SR_FLAT.fov * Math.PI / 360));
   V.controls.update();
 }
 function srFocusSelected() {
@@ -1010,6 +1236,13 @@ function srToggleGroup(id) {
 function srZoomBy(factor) {
   const V = SR.view;
   if (!V) return;
+  if (V.flat) {
+    const z = V.camera.zoom / factor;
+    if (z < V.controls.minZoom || z > V.controls.maxZoom) return;
+    V.camera.zoom = z; V.camera.updateProjectionMatrix();
+    V.controls.update();
+    return;
+  }
   const d = V.camera.position.clone().sub(V.controls.target).multiplyScalar(factor);
   if (d.length() < V.controls.minDistance || d.length() > V.controls.maxDistance) return;
   V.camera.position.copy(V.controls.target).add(d);
@@ -1037,10 +1270,21 @@ function srBoxDraw() {
 }
 /* The camera, its direction kept, on the middle of these points and as near as lets all of them fill k of the page. */
 function srFrameOn(V, pts, k = SR.boxFit) {
+  const c = pts.reduce((a, v) => a.add(v), new THREE.Vector3()).divideScalar(pts.length);
+  if (V.flat) {   // a distance as the 3D's (srViewDist), the same search
+    const tan = 2 * Math.tan(SR_FLAT.fov * Math.PI / 360), now = srViewDist(V);
+    const place = (d) => srSetSpan(V, c.x, c.z, d * tan);
+    const fits = (d) => { place(d); return pts.every((v) => { const q = v.clone().project(V.camera); return Math.abs(q.x) <= k && Math.abs(q.y) <= k; }); };
+    let lo = V.controls.minDistance, hi = Math.max(now, lo);
+    while (!fits(hi) && hi < V.controls.maxDistance) hi = Math.min(V.controls.maxDistance, hi * 2);
+    if (fits(lo)) hi = lo;
+    else for (let i = 0; i < 32 && hi - lo > 0.01; i++) { const m = (lo + hi) / 2; if (fits(m)) hi = m; else lo = m; }
+    place(hi);
+    return;
+  }
   const dir = V.camera.position.clone().sub(V.controls.target).normalize(), now = V.camera.position.distanceTo(V.controls.target);
   const { minDistance: lo0, maxDistance: hi0 } = V.controls;
   const place = (d) => { V.camera.position.copy(V.controls.target).addScaledVector(dir, d); V.camera.updateMatrixWorld(); };
-  const c = pts.reduce((a, v) => a.add(v), new THREE.Vector3()).divideScalar(pts.length);
   V.controls.target.set(c.x, 0, c.z);
   const fits = (d) => {
     place(d);
@@ -1069,9 +1313,9 @@ function srZoomToBox(x0, y0, x1, y1) {
   const l = Math.min(x0, x1), r = Math.max(x0, x1), t = Math.min(y0, y1), b = Math.max(y0, y1);
   V.camera.updateMatrixWorld();
   const held = srBoxPoints(V).filter(([, v]) => { const s = srScreenAt(V, v, w, h); return s && s[0] >= l && s[0] <= r && s[1] >= t && s[1] <= b; });
-  const dir = V.camera.position.clone().sub(V.controls.target).normalize(), now = V.camera.position.distanceTo(V.controls.target);
+  const dir = V.camera.position.clone().sub(V.controls.target).normalize(), now = srViewDist(V);
   const { minDistance: lo0, maxDistance: hi0 } = V.controls;
-  const place = (d) => { V.camera.position.copy(V.controls.target).addScaledVector(dir, d); V.camera.updateMatrixWorld(); };
+  const place = (d) => { if (V.flat) { srSetSpan(V, V.controls.target.x, V.controls.target.z, d * 2 * Math.tan(SR_FLAT.fov * Math.PI / 360)); return; } V.camera.position.copy(V.controls.target).addScaledVector(dir, d); V.camera.updateMatrixWorld(); };
   if (held.length) srFrameOn(V, held.map(([, v]) => v));
   else {   // nothing in it: its middle on the floor, as much nearer as the box is smaller than the page
     const ray = new THREE.Raycaster(), at = new THREE.Vector3();
@@ -1079,7 +1323,7 @@ function srZoomToBox(x0, y0, x1, y1) {
     if (ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), at)) V.controls.target.copy(at);
     place(Math.min(hi0, Math.max(lo0, now * Math.max((r - l) / w, (b - t) / h))));
   }
-  V.camera.near = Math.max(0.1, Math.min(V.camera.near, V.camera.position.distanceTo(V.controls.target) / 500));
+  if (!V.flat) V.camera.near = Math.max(0.1, Math.min(V.camera.near, V.camera.position.distanceTo(V.controls.target) / 500));
   V.camera.updateProjectionMatrix();
   V.controls.update();
   V.lastBox = { held: held.map(([id]) => id), lod: V.lod };
@@ -1110,7 +1354,7 @@ function srReachToggle() {
   if (SR.reach) { srReachEnd(true); return; }
   if (!V || !SR.selected || !V.L.pos.has(SR.selected)) return;
   SR.reach = { id: SR.selected, hops: SR.reachHops, ...srReachOf(V.L, SR.selected, SR.reachHops),
-    cam: { pos: V.camera.position.clone(), target: V.controls.target.clone() } };
+    cam: { pos: V.camera.position.clone(), target: V.controls.target.clone(), zoom: V.camera.zoom } };
   srReachDraw(V);
   srFrameOn(V, srReachPoints(V), SR.reachFit);
   V.controls.update();
@@ -1123,7 +1367,7 @@ function srReachEnd(back) {
   SR.reach = null;
   if (V) {
     srReachDraw(V);
-    if (back) { V.camera.position.copy(R.cam.pos); V.controls.target.copy(R.cam.target); V.controls.update(); }
+    if (back) { V.camera.position.copy(R.cam.pos); V.controls.target.copy(R.cam.target); if (V.flat) { V.camera.zoom = R.cam.zoom; V.camera.updateProjectionMatrix(); } V.controls.update(); }
   }
   srLog(tl('sr.log.reach.end'));
   srRenderBoard();
@@ -1237,7 +1481,7 @@ function srRenderLog() {
 function srRetheme() {
   const V = SR.view;
   if (SR.phase !== 'open' || !V || V.dark === isDark()) return;
-  srBuild({ pos: V.camera.position.clone(), target: V.controls.target.clone() });
+  srBuild(srCamKeep(V));
   const W = SR.view;
   srLog(tl('sr.log.theme', { theme: W.dark ? tl('sr.theme.dark') : tl('sr.theme.light') }));
 }

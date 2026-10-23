@@ -59,9 +59,12 @@ FUNCTIONS = {"version": 0, "nodes": [
 FUNCTION_LOAD = {"requests": {"amount": 0.6, "per": "second"}, "duration_ms": 200, "memory_mb": 512}
 
 
+FLAT = {"on": False}   # the same arms in 2D (server_room.py FLAT)
+
+
 def check(failures, cond, text):
     if not cond:
-        failures.append(f"sr-migration: {text}")
+        failures.append(f"{'sr-migration-2d' if FLAT['on'] else 'sr-migration'}: {text}")
 
 
 class Sampler:
@@ -97,9 +100,10 @@ def _write(base: pathlib.Path, examples: dict, name: str, dest: str) -> pathlib.
     return base / dest
 
 
-async def run_sr_migration(pw, out, failures):
+async def run_sr_migration(pw, out, failures, flat=False):
     from run import free_port
-    out = pathlib.Path(out) / "sr-migration"
+    FLAT["on"] = flat
+    out = pathlib.Path(out) / ("sr-migration-2d" if flat else "sr-migration")
     out.mkdir(parents=True, exist_ok=True)
     home = out / "home"
     (home / ".local" / "state" / "jui-viz").mkdir(parents=True, exist_ok=True)
@@ -147,7 +151,10 @@ async def run_sr_migration(pw, out, failures):
             body = {"session_id": sids[name], "cwd": str(root), "permission_mode": "default", "hook_event_name": "SessionStart", "source": "startup"}
             subprocess.run([sys.executable, "-I", "-S", str(forward)], input=json.dumps(body).encode(), capture_output=True,
                            env=dict(base_env, HOME=str(home)), timeout=10)
-        page = await new_page(browser, Watch(origin=url), "sr-migration", **DESKTOP)
+        page = await new_page(browser, Watch(origin=url), "sr-migration-2d" if flat else "sr-migration", **DESKTOP)
+        if flat:
+            from server_room import SR_FLAT_INIT
+            await page.add_init_script(SR_FLAT_INIT)
         # dark: the washed-out frame showed there (the glow adds to what is behind it), as in the video
         await page.emulate_media(color_scheme="dark", reduced_motion="no-preference")
         await page.goto(url + "/")

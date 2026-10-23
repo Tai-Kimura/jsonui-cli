@@ -32,10 +32,24 @@ function srcKeyColor(key, i) {
 }
 
 /* ---- switching ---- */
+/* 3D / 2D / コスト: one pressed — the room's look (SR.flat) unless the cost is shown. */
+function srModeButtons() {
+  const cost = SRC.mode === 'cost';
+  $('sr-mode-3d').setAttribute('aria-pressed', String(!cost && !SR.flat));
+  $('sr-mode-2d').setAttribute('aria-pressed', String(!cost && SR.flat));
+  $('sr-mode-cost').setAttribute('aria-pressed', String(cost));
+}
+/* 2D or 3D (remembered for the project): the room built again in that look, fitted; the cost closed. */
+function srSetFlat(flat) {
+  const change = SR.flat !== flat;
+  SR.flat = flat;
+  if (SR.project) srViewPrefSet(SR.project, flat);
+  srcSetMode('3d');
+  if (change && SR.view) srBuild();
+}
 function srcSetMode(mode) {
   SRC.mode = mode;
-  $('sr-mode-3d').setAttribute('aria-pressed', String(mode === '3d'));
-  $('sr-mode-cost').setAttribute('aria-pressed', String(mode === 'cost'));
+  srModeButtons();
   $('sr-scn-ctl').hidden = mode !== 'cost';
   srcEl.hidden = mode !== 'cost';
   SR.paused = mode === 'cost';
@@ -53,8 +67,7 @@ function srCostReset() {   // the server room closed (56-server-room.js srClose)
   Object.assign(SRC, { mode: '3d', scenario: null, account: null, month: null, day: null, date: null, hour: 0, picked: null, error: '', open: new Set(), fill: {} });
   SR.paused = false;
   $('sr-boxzoom').disabled = false;
-  $('sr-mode-3d').setAttribute('aria-pressed', 'true');
-  $('sr-mode-cost').setAttribute('aria-pressed', 'false');
+  srModeButtons();
   $('sr-scn-ctl').hidden = true;
   srcEl.hidden = true;
   setHTML(srcEl, '');
@@ -237,7 +250,8 @@ function srcRender(status) {
 }
 
 /* ---- wiring ---- */
-$('sr-mode-3d').addEventListener('click', () => srcSetMode('3d'));
+$('sr-mode-3d').addEventListener('click', () => srSetFlat(false));
+$('sr-mode-2d').addEventListener('click', () => srSetFlat(true));
 $('sr-mode-cost').addEventListener('click', () => srcSetMode('cost'));
 new ResizeObserver(() => { if (SRC.mode === 'cost' && SRC.day) srcMoreFit(); }).observe(srcEl);   // a narrower page cuts more words
 $('sr-scn').addEventListener('change', () => { SRC.scenario = $('sr-scn').value; Object.assign(SRC, { month: null, day: null }); srcLoad(); });

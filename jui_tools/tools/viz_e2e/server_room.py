@@ -43,6 +43,10 @@ SPEC_SECRET = "postgres://orders@db-prod.internal:5432/orders"
 MARKUP = '<b>x</b><img src=x onerror="window.__srMarkup=1">' 
 #: a frame of the large model must come within this (ms; the slowest tenth of the frames, software GL)
 FRAME_P90_MAX_MS = 250
+#: the same arms in 2D (ticket 2026-10-23-viz-server-room-2d-mode, requester: 「機能は3Dと一緒」): every room opened from straight
+#: above (the page's own choice per project, '*' for all); an arm the 2D cannot share says so where it is skipped
+FLAT = {"on": False}
+SR_FLAT_INIT = "try { localStorage.setItem('agent-view:srView', JSON.stringify({ '*': '2d' })); } catch (e) {}"
 
 
 def _examples(jt: pathlib.Path) -> dict:
@@ -107,7 +111,7 @@ def _contrast(a, b):
 
 def check(failures, cond, text):
     if not cond:
-        failures.append(f"server-room: {text}")
+        failures.append(f"{'server-room-2d' if FLAT['on'] else 'server-room'}: {text}")
 
 
 FLOW = "() => window.__dbg.srFlow()"
@@ -308,6 +312,14 @@ async def run_flows(page, out, failures, res):
 def _routes_ok(failures, where, r):
     """Every cable on its nodes' sides (on the outline as drawn, at a height within the node), flat when nothing stands on
     its straight line, rising over what does (above its top at its middle) — and at least one of the first kind."""
+    if FLAT["on"]:   # 2D (srCableRoutesFlat): one height; around what is on the way with square corners, never through it
+        check(failures, r["cables"] > 0 and r["ends"] == 2 * r["cables"] and r["offOutline"] == 0 and r["offHeight"] == 0,
+              f"{where}: every cable ends on its tiles' outlines, all at one height: {r}")
+        check(failures, r["flat"] > 0 and r["notFlat"] == 0, f"{where}: a cable with nothing on its way is straight: {r}")
+        check(failures, r["crossing"] == 0 and r["notSquare"] == 0, f"{where}: a bent cable turns square corners and runs through no tile: {r}")
+        check(failures, r["blocked"] <= max(1, r["cables"] // 50), f"{where}: a cable left straight across a tile (no clear route) is rare: {r}")
+        check(failures, r["bundlesOff"] == 0, f"{where}: the far view's bundles run from box side to box side: {r['bundles']} bundles, {r['bundlesOff']} ends off")
+        return
     check(failures, r["cables"] > 0 and r["ends"] == 2 * r["cables"] and r["offOutline"] == 0 and r["offHeight"] == 0,
           f"{where}: every cable ends on its nodes' sides, at a height within them: {r}")
     check(failures, r["flat"] > 0 and r["notFlat"] == 0, f"{where}: a cable with nothing on its way is flat: {r}")
@@ -389,11 +401,13 @@ async def run_cables_and_reach(page, out, failures, res):
     # a cable with one end behind the camera (put a third of the way along it, looking at its far end), and one with an end
     # in the camera's own plane (right under it, looking level along the cable: the end's page position divides by 0):
     # cut at the near plane, still drawn, as wide as a cable
-    near_end, far_end = ink_near["ends"]
-    up = lambda v: [v[0], v[1] + 0.5, v[2]]
-    at = [near_end[c] + (far_end[c] - near_end[c]) * 0.35 + (0.5 if c == 1 else 0) for c in range(3)]
-    ink_cut = res["cableInkCut"] = await page.evaluate("([p, t]) => window.__dbg.srCamInk(p, t)", [at, far_end])
-    ink_on = res["cableInkOn"] = await page.evaluate("([p, t]) => window.__dbg.srCamInk(p, t)", [up(near_end), up(far_end)])
+    # (2D has no such camera: it looks straight down from far above everything, so no cable is ever behind it or in its plane)
+    if not FLAT["on"]:
+        near_end, far_end = ink_near["ends"]
+        up = lambda v: [v[0], v[1] + 0.5, v[2]]
+        at = [near_end[c] + (far_end[c] - near_end[c]) * 0.35 + (0.5 if c == 1 else 0) for c in range(3)]
+        ink_cut = res["cableInkCut"] = await page.evaluate("([p, t]) => window.__dbg.srCamInk(p, t)", [at, far_end])
+        ink_on = res["cableInkOn"] = await page.evaluate("([p, t]) => window.__dbg.srCamInk(p, t)", [up(near_end), up(far_end)])
     await page.select_option("#sr-lines", "all")
     await page.click("#sr-fit")
     res["cableWidths"] = widths
@@ -408,8 +422,9 @@ async def run_cables_and_reach(page, out, failures, res):
     check(failures, plain_near["len"] > 50 and plain_near["width"] <= 2.2, f"up close a cable not chosen stays thin (at most 1.8 px): {plain_near}")
     _routes_ok(failures, "the multi-cloud room", routes)
     check(failures, routes["bundles"] > 0, f"the multi-cloud room has far bundles (else that arm proves nothing): {routes['bundles']}")
-    check(failures, 300 < ink_cut["ink"] < ink_cut["page"] * 0.2 and ink_cut["width"] <= 5.5, f"a cable running behind the camera is still drawn, as wide as a cable: {ink_cut}")
-    check(failures, 300 < ink_on["ink"] < ink_on["page"] * 0.2 and (ink_on["width"] or 99) <= 5.5, f"a cable with an end in the camera's plane is still drawn, as wide as a cable: {ink_on}")
+    if not FLAT["on"]:
+        check(failures, 300 < ink_cut["ink"] < ink_cut["page"] * 0.2 and ink_cut["width"] <= 5.5, f"a cable running behind the camera is still drawn, as wide as a cable: {ink_cut}")
+        check(failures, 300 < ink_on["ink"] < ink_on["page"] * 0.2 and (ink_on["width"] or 99) <= 5.5, f"a cable with an end in the camera's plane is still drawn, as wide as a cable: {ink_on}")
     # 2. one step: the node and what an edge joins it to, either way; the rest faint; the camera on all of them
     await page.evaluate("(id) => window.__dbg.srSelect(id)", pick)
     before = (await page.evaluate("() => window.__dbg.srReach()"))["cam"]
@@ -455,9 +470,10 @@ async def run_cables_and_reach(page, out, failures, res):
     await page.click("#sr-fit")
 
 
-async def run_server_room(pw, out, failures):
+async def run_server_room(pw, out, failures, flat=False):
     from run import free_port
-    out = pathlib.Path(out) / "server-room"
+    FLAT["on"] = flat
+    out = pathlib.Path(out) / ("server-room-2d" if flat else "server-room")
     out.mkdir(parents=True, exist_ok=True)
     home = out / "home"
     (home / ".local" / "state" / "jui-viz").mkdir(parents=True, exist_ok=True)
@@ -533,7 +549,9 @@ async def run_server_room(pw, out, failures):
             sids[name] = f"5e000000-0000-4000-8000-{i:012d}"
             hook(sids[name], root, hook_event_name="SessionStart", source="startup")
         watch = Watch(origin=url)
-        page = await new_page(browser, watch, "server-room", **DESKTOP)
+        page = await new_page(browser, watch, "server-room-2d" if flat else "server-room", **DESKTOP)
+        if flat:
+            await page.add_init_script(SR_FLAT_INIT)
         asked: list = []
         page.on("request", lambda r: asked.append(r.url) if "/api/infra-docs" in r.url else None)
         await page.emulate_media(color_scheme="light", reduced_motion="no-preference")
@@ -592,6 +610,8 @@ async def run_server_room(pw, out, failures):
         s = res["opened"] = await page.evaluate(SR)
         check(failures, s["bubble"] is None and (s["shown"] or {}).get("nodes", 0) > 0 and s["stats"]["edges"] > 0, f"open: the model drawn, the bubble gone: {s['shown']}")
         check(failures, s["lod"] == "near" and s["layers"] == {"near": True, "far": False}, f"open up close: the floors and shapes, not the far boxes over them: {s['lod']} {s['layers']}")
+        if FLAT["on"]:   # a small room at fit: its cells large, every cable shown
+            check(failures, s["lines"]["plain"] and not s["lines"]["sparse"], f"2D, a small room opened: every cable: {s['lines']}")
         # one cloud, one colour (ticket 2026-10-22-viz-server-room-palette-and-light-flow §1): the legend's chip of each cloud is
         # the colour its nodes are drawn in (the cost's key is held to the same below)
         colors = res["colors"] = await page.evaluate("() => window.__dbg.srColors()")
@@ -605,16 +625,54 @@ async def run_server_room(pw, out, failures):
         # up close in a small room (ticket 2026-10-22-viz-server-room-palette-and-light-flow §3): every node in view stands as
         # its kind's model, the shapes by service under them still pickable but not drawn
         await page.evaluate("() => window.__dbg.srZoom(0.8)")
-        md = await until(page, "() => { const d = window.__dbg.srDetail(); return d && d.detail && d.inViewIds.length && d.inViewIds.every((i) => d.models[i]) ? d : null; }",
+        if FLAT["on"]:   # 2D: no models — every node in view is its kind's flat tile (the kinds the models have) in its colour
+            md = await until(page, "() => { const d = window.__dbg.srDetail(); return d && d.inViewIds.length >= 5 ? d : null; }", "the small room up close (2D)", timeout=10000)
+            mcol = await page.evaluate("() => window.__dbg.srColors()")
+            res["tiles"] = {"inView": md["inViewIds"], "tiles": {i: md["simple"].get(i) for i in md["inViewIds"]}, "kinds": md["kinds"], "models": md["models"],
+                            "picks": sorted(set(md["picks"]))}
+            check(failures, all(md["simple"].get(i) == f"flat:{k}" for i, k in md["kinds"].items()) and len(set(md["kinds"].values())) >= 5
+                  and md["models"] == {} and all(x.startswith("flat:") for x in res["tiles"]["picks"])
+                  and all(mcol["nodes"][i][1] == colors["nodes"][i][1] for i in md["inViewIds"]),
+                  f"2D up close: every node in view is its kind's flat tile in its cloud's colour, no model: {res['tiles']}")
+            # a node's tag sits above its own tile on the page, never on it: its bottom above the tile's top edge
+            # (the tags are placed each tenth of a second: waited for, up to 5 s, then read as they are)
+            try:
+                tags = await until(page, "() => { const t = window.__dbg.srTagsOnTiles(); return t && t.tags >= 3 && !t.on.length ? t : null; }", "2D: the tags above their tiles", timeout=5000)
+            except Exception:
+                tags = await page.evaluate("() => window.__dbg.srTagsOnTiles()")
+            res["tagsOffTiles"] = tags
+            check(failures, tags and tags["tags"] >= 3 and not tags["on"], f"2D: each node's tag above its tile, not on it: {tags}")
+            md = None
+            # 2D or 3D is remembered per project (the requester's 「2D」 beside 3D and コスト): 3D pressed, the room closed and
+            # opened again opens in 3D, the choice kept under that project; 2D pressed, 2D again
+            proj = await page.evaluate("() => window.__dbg.sr().project")
+            pref = "(p) => { try { return JSON.parse(localStorage.getItem('agent-view:srView') || '{}')[p] || null; } catch (e) { return 'err'; } }"
+            await page.click("#sr-mode-3d")
+            await until(page, "() => window.__dbg.sr().built !== undefined && window.__dbg.srCam() && window.__dbg.srCam().flat === false", "3D pressed")
+            mem = {"after3d": await page.evaluate(pref, proj)}
+            await page.keyboard.press("Escape")
+            await until(page, "() => !window.__dbg.sr().open", "closed")
+            await page.evaluate("(p) => window.__dbg.srEnter(p)", proj)
+            await until(page, "() => window.__dbg.sr().open && window.__dbg.srCam()", "opened again", timeout=15000)
+            mem["reopened"] = (await page.evaluate("() => window.__dbg.srCam()"))["flat"]
+            mem["pressed"] = await page.evaluate("() => ['sr-mode-3d', 'sr-mode-2d', 'sr-mode-cost'].map((id) => document.getElementById(id).getAttribute('aria-pressed'))")
+            await page.click("#sr-mode-2d")
+            await until(page, "() => window.__dbg.srCam() && window.__dbg.srCam().flat === true", "2D pressed again")
+            mem["after2d"] = await page.evaluate(pref, proj)
+            res["viewPref"] = mem
+            check(failures, mem == {"after3d": "3d", "reopened": False, "pressed": ["true", "false", "false"], "after2d": "2d"},
+                  f"2D / 3D is remembered per project: reopened as last chosen, one button pressed: {mem}")
+        else:
+          md = await until(page, "() => { const d = window.__dbg.srDetail(); return d && d.detail && d.inViewIds.length && d.inViewIds.every((i) => d.models[i]) ? d : null; }",
                          "the small room up close: a model per node in view", timeout=10000,
                          why="() => { const d = window.__dbg.srDetail(); return d && [d.detail, d.inViewIds, d.models]; }")
-        mcol = await page.evaluate("() => window.__dbg.srColors()")
-        res["models"] = {"inView": md["inViewIds"], "models": md["models"], "kinds": md["kinds"], "drawn": md["detailDrawn"], "picks": sorted(set(md["picks"])),
-                         "colors": {i: (mcol["models"].get(i), mcol["nodes"][i][1]) for i in md["inViewIds"]}}
-        check(failures, {i: md["models"][i] for i in md["inViewIds"]} == md["kinds"] and len(set(md["kinds"].values())) >= 5
-              and not any(md["detailDrawn"]) and md["picks"] and len(md["models"]) <= md["modelMax"]
-              and all(a_ == b_ for a_, b_ in res["models"]["colors"].values()),
-              f"a small room up close: every node in view is its kind's model in its node's colour, the shapes under them pick but are not drawn: {res['models']}")
+          mcol = await page.evaluate("() => window.__dbg.srColors()")
+          res["models"] = {"inView": md["inViewIds"], "models": md["models"], "kinds": md["kinds"], "drawn": md["detailDrawn"], "picks": sorted(set(md["picks"])),
+                           "colors": {i: (mcol["models"].get(i), mcol["nodes"][i][1]) for i in md["inViewIds"]}}
+          check(failures, {i: md["models"][i] for i in md["inViewIds"]} == md["kinds"] and len(set(md["kinds"].values())) >= 5
+                and not any(md["detailDrawn"]) and md["picks"] and len(md["models"]) <= md["modelMax"]
+                and all(a_ == b_ for a_, b_ in res["models"]["colors"].values()),
+                f"a small room up close: every node in view is its kind's model in its node's colour, the shapes under them pick but are not drawn: {res['models']}")
         await page.click("#sr-fit")
 
         # 2c. the cost simulator (plan L-C): 3D / コスト, the scenarios, the month, a day played, its breakdown and the red
@@ -1058,8 +1116,12 @@ async def run_server_room(pw, out, failures):
         await page.click("#sr-fit")
         lr, lf, la = res["linesRebuilt"], res["linesFar"], res["linesFarAll"]
         check(failures, not lr["plainVisible"] and lr["crossVisible"], f"the lines switch holds through a rebuild: {lr}")
-        check(failures, not lf["plainVisible"] and lf["crossVisible"] and la["plainVisible"] and la["plainOpacity"] <= 0.3 and la["crossOpacity"] <= 0.6,
-              f"far, the bundles are faint and follow the switch: {lf} / {la}")
+        if FLAT["on"]:   # 2D far: pulled back, so only the crossing bundles whatever the switch says (「引きでは跨ぐ線だけ」)
+            check(failures, not lf["plainVisible"] and lf["crossVisible"] and not la["plainVisible"] and la["crossVisible"] and la["crossOpacity"] <= 0.6,
+                  f"2D far: the crossing bundles only, faint, with the switch at all too: {lf} / {la}")
+        else:
+            check(failures, not lf["plainVisible"] and lf["crossVisible"] and la["plainVisible"] and la["plainOpacity"] <= 0.3 and la["crossOpacity"] <= 0.6,
+                  f"far, the bundles are faint and follow the switch: {lf} / {la}")
         lff = res["linesFarFocus"]
         check(failures, la["crossCount"] >= 1 and la["crossVisible"], f"far, at least one crossing bundle drawn and seen with all lines (else the next arm proves nothing): {la}")
         check(failures, not lff["crossVisible"] and not lff["plainVisible"] and lff["crossCount"] == la["crossCount"],
@@ -1110,8 +1172,17 @@ async def run_server_room(pw, out, failures):
         # boxes only — 3 draw calls, 12 triangles, as on 2.3.19 — and no model is made
         fit_models = (await page.evaluate("() => window.__dbg.srDetail()"))["models"]
         res["large"]["fitModels"] = len(fit_models)
-        check(failures, first["gpu"]["calls"] == 3 and first["gpu"]["triangles"] == 12 and fit_models == {},
-              f"the large room at fit-all: the far boxes alone, as before, and no model: {first['gpu']} models {len(fit_models)}")
+        if FLAT["on"]:   # 2D pulled back (the requester 10-23: 「引きでは跨ぐ線だけ」): the cables within a provider hidden, the crossing ones drawn
+            res["large"]["fitLines"] = s["lines"]
+            check(failures, s["lines"] == {"plain": False, "cross": True, "sparse": True} and first["cellPx"] < 18,
+                  f"2D, the large room pulled back: only the cables crossing providers: {s['lines']} at {first['cellPx']} px a cell")
+        if FLAT["on"]:   # 2D frames the room tighter (no slant): at fit a cell is past the far threshold, so the floors, tiles and
+            # routed cables are drawn — no model, and the frame within the same p90 (checked above); the draw is recorded
+            res["large"]["fitFlat"] = {"lod": first["lod"], "cellPx": first["cellPx"], "gpu": first["gpu"]}
+            check(failures, fit_models == {} and first["gpu"]["calls"] <= 40, f"2D, the large room at fit-all: no model, a few dozen draws at most: {res['large']['fitFlat']}")
+        else:
+            check(failures, first["gpu"]["calls"] == 3 and first["gpu"]["triangles"] == 12 and fit_models == {},
+                  f"the large room at fit-all: the far boxes alone, as before, and no model: {first['gpu']} models {len(fit_models)}")
         px_far = await page.evaluate("() => window.__dbg.srZoom(3)")
         await until(page, "() => window.__dbg.sr().lod === 'far'", "far", timeout=5000)
         await until(page, "() => window.__dbg.sr().labels > 0", "far labels", timeout=5000)
@@ -1120,9 +1191,12 @@ async def run_server_room(pw, out, failures):
         px_near = await page.evaluate("() => window.__dbg.srZoom(0.05)")
         await until(page, "() => window.__dbg.sr().lod === 'near'", "near", timeout=5000)
         await until(page, "(n) => window.__dbg.sr().labels > n", "near labels", arg=far["labels"], timeout=5000)
+        if FLAT["on"]:
+            nl = res["large"]["nearLines"] = (await page.evaluate(SR))["lines"]
+            check(failures, nl == {"plain": True, "cross": True, "sparse": False}, f"2D, the large room up close: every cable again: {nl}")
         lr = res["largeRoutes"] = await page.evaluate("() => window.__dbg.srCableRoutes({ side: 0.3, clear: 0.25, cross: 0.06 })")
         _routes_ok(failures, "the large room", lr)
-        check(failures, lr["rising"] > 0, f"the large room: cables rise over what stands on their way (else the arm proves nothing): {lr}")
+        check(failures, lr["bent" if FLAT["on"] else "rising"] > 0, f"the large room: cables go round (2D) / rise over (3D) what stands on their way (else the arm proves nothing): {lr}")
         await page.screenshot(path=str(out / "large-routes.png"))
         near, res["large"]["near"] = await frames("near")
         rects = await page.evaluate("() => window.__dbg.srLabelRects()")
@@ -1136,7 +1210,8 @@ async def run_server_room(pw, out, failures):
         d0 = await page.evaluate("() => window.__dbg.srDetail()")
         res["largeModels"] = {"many": len(d0["models"])}
         check(failures, d0["models"] == {} and all(d0["detailDrawn"]), f"the large room, many in view: no model, the shapes as they were: {res['largeModels']}")
-        fn = next(i for i, sh in d0["byService"].items() if sh == "pillar" and d0["simple"].get(i) == "rack")
+        fn = next(i for i, sh in d0["simple"].items() if sh == "flat:bolt") if FLAT["on"] else \
+            next(i for i, sh in d0["byService"].items() if sh == "pillar" and d0["simple"].get(i) == "rack")
         await page.evaluate("(id) => window.__dbg.srSelect(id)", fn)
         await page.click("#sr-board [data-sr-act='focus']")
         d1 = await until(page, "() => { const d = window.__dbg.srDetail(); return d && d.detail ? d : null; }", "moved in on a Lambda: detail",
@@ -1162,17 +1237,25 @@ async def run_server_room(pw, out, failures):
         await page.click("#sr-fit")
         d2 = await until(page, "() => { const d = window.__dbg.srDetail(); return d.detail ? null : d; }", "the whole view: simple again", timeout=10000)
         res["largeModels"].update(close=[len(d1["models"]), sorted(set(d1["models"].values()))], whole=len(d2["models"]))
-        check(failures, d1["models"].get(fn) == "bolt" and all(d1["models"].get(i) == d1["kinds"][i] for i in d1["inViewIds"]) and d2["models"] == {},
-              f"the large room: moved in, each node in view its model (the Lambda a bolt); the whole view again, none: {res['largeModels']}")
+        if FLAT["on"]:   # 2D: the tiles say the kind at every distance; no model is ever made
+            check(failures, d1["simple"].get(fn) == "flat:bolt" and all(d1["simple"].get(i) == f"flat:{d1['kinds'][i]}" for i in d1["inViewIds"]) and d1["models"] == {} and d2["models"] == {},
+                  f"2D, the large room: moved in, each node in view its kind's tile (the Lambda a bolt), no model at any distance: {res['largeModels']}")
+        else:
+            check(failures, d1["models"].get(fn) == "bolt" and all(d1["models"].get(i) == d1["kinds"][i] for i in d1["inViewIds"]) and d2["models"] == {},
+                  f"the large room: moved in, each node in view its model (the Lambda a bolt); the whole view again, none: {res['largeModels']}")
         await page.evaluate("() => window.__dbg.srSelect(null)")
         def svc_tags(d):
             return [t for t in d["tags"] if " · " in t]
-        res["detail"] = {"many": [d0["detail"], d0["inView"]], "fn": fn, "close": [d1["detail"], d1["inView"], d1["byService"][fn], d1["simple"][fn],
+        res["detail"] = {"many": [d0["detail"], d0["inView"]], "fn": fn, "close": [d1["detail"], d1["inView"], d1["byService"].get(fn), d1["simple"][fn],
                          sorted(set(d1["picks"])), svc_tags(d1)[:6]], "gap": [stay["detail"], off["detail"], still_off["detail"], at_enter["detail"], k],
                          "whole": [d2["detail"], d2["inView"], d2["shown"], sorted(set(d2["picks"])), svc_tags(d2)[:3]]}
         check(failures, not d0["detail"] and d0["inView"] > 40, f"many nodes in view: the simple shapes: {res['detail']['many']}")
-        check(failures, d1["detail"] and k <= 30 and d1["shown"] == {"simple": False, "detail": True} and "pillar" in d1["picks"] and "rack" not in [d1["byService"][fn]]
-              and any(t.startswith(f"{fn} · Lambda") for t in d1["tags"]), f"moved in on a Lambda: its own shape, a tag with the service: {res['detail']['close']}")
+        if FLAT["on"]:   # 2D: one set of tiles at every distance; up close the tags say the service
+            check(failures, d1["detail"] and k <= 30 and d1["shown"]["simple"] and "flat:bolt" in d1["picks"]
+                  and any(t.startswith(f"{fn} · Lambda") for t in d1["tags"]), f"2D, moved in on a Lambda: its tile, a tag with the service: {res['detail']['close']}")
+        else:
+            check(failures, d1["detail"] and k <= 30 and d1["shown"] == {"simple": False, "detail": True} and "pillar" in d1["picks"] and "rack" not in [d1["byService"][fn]]
+                  and any(t.startswith(f"{fn} · Lambda") for t in d1["tags"]), f"moved in on a Lambda: its own shape, a tag with the service: {res['detail']['close']}")
         check(failures, stay["detail"] and not off["detail"] and not still_off["detail"] and at_enter["detail"],
               f"between entering and leaving the look stays as it was: (in at leave, out past leave, stays out, in at enter) {res['detail']['gap']}")
         check(failures, not d2["detail"] and d2["shown"] == {"simple": True, "detail": False} and not svc_tags(d2) and "pillar" not in d2["picks"],
@@ -1228,11 +1311,16 @@ async def run_server_room(pw, out, failures):
         mid = await drag(cx, cy, cx + 120, cy + 10)
         c1 = await page.evaluate("() => window.__dbg.srCam()")
         box_res["turn"] = {"mid": mid, "target": [c0["target"], c1["target"]], "moved": c0["pos"] != c1["pos"]}
-        check(failures, not mid["shown"] and all(abs(x - y) <= 0.05 for x, y in zip(c0["target"], c1["target"])) and not same_cam(c0, c1), f"a plain drag still turns, no box: {box_res['turn']}")
-        mid = await drag(cx, cy, cx + 120, cy + 60, ("Shift",))
-        c2 = await page.evaluate("() => window.__dbg.srCam()")
-        box_res["pan"] = {"mid": mid, "target": [c1["target"], c2["target"]], "last": (await page.evaluate("() => window.__dbg.srBox()"))["last"]}
-        check(failures, not mid["shown"] and c1["target"] != c2["target"] and box_res["pan"]["last"] is None, f"Shift + drag still pans, no box: {box_res['pan']}")
+        if FLAT["on"]:   # 2D turns nothing: a plain drag moves the floor under the camera (its target moves, the zoom stays), no box
+            box_res["turn"]["zoom"] = [c0["zoom"], c1["zoom"]]
+            check(failures, not mid["shown"] and c0["target"] != c1["target"] and abs(c0["zoom"] - c1["zoom"]) < 1e-6 and (await page.evaluate("() => window.__dbg.srBox()"))["last"] is None,
+                  f"2D: a plain drag moves the view, no turn, no box: {box_res['turn']}")
+        else:
+            check(failures, not mid["shown"] and all(abs(x - y) <= 0.05 for x, y in zip(c0["target"], c1["target"])) and not same_cam(c0, c1), f"a plain drag still turns, no box: {box_res['turn']}")
+            mid = await drag(cx, cy, cx + 120, cy + 60, ("Shift",))
+            c2 = await page.evaluate("() => window.__dbg.srCam()")
+            box_res["pan"] = {"mid": mid, "target": [c1["target"], c2["target"]], "last": (await page.evaluate("() => window.__dbg.srBox()"))["last"]}
+            check(failures, not mid["shown"] and c1["target"] != c2["target"] and box_res["pan"]["last"] is None, f"Shift + drag still pans, no box: {box_res['pan']}")
         # the view the box is measured on: back to where the nodes were found
         await page.click("#sr-fit")
         await page.evaluate("() => window.__dbg.srZoom(0.3)")
@@ -1349,6 +1437,8 @@ async def run_server_room(pw, out, failures):
 
         # 7. reduced motion: the * stand still, the bubble shows
         ctx2 = await browser.new_context(**DESKTOP, reduced_motion="reduce")
+        if flat:
+            await ctx2.add_init_script(SR_FLAT_INIT)
         p2 = await ctx2.new_page()
         watch.attach(p2, "server-room-reduced")
         await p2.goto(url + "/")
@@ -1390,6 +1480,8 @@ async def run_server_room(pw, out, failures):
 
         # 8. the demo (and so export-demo): shop-app/'s door opens the made-up layout, the IAM role and the alarm folded
         ctx3 = await browser.new_context(**DESKTOP)
+        if flat:
+            await ctx3.add_init_script(SR_FLAT_INIT)
         p3 = await ctx3.new_page()
         watch.attach(p3, "server-room-demo")
         await p3.goto(url + "/?demo=1")

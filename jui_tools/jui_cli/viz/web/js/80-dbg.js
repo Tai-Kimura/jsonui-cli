@@ -11,7 +11,7 @@ window.__dbg = {
     if (at) { const v = new THREE.Vector3(); at.D.root.getWorldPosition(v); v.y = 1.1; v.project(camera); const r = canvas.getBoundingClientRect(); door = [Math.round(r.left + (v.x + 1) / 2 * r.width), Math.round(r.top + (1 - v.y) / 2 * r.height)]; }
     return { phase: SR.phase, project: SR.project, seq: SR.seq, keypad: k.state, stars: k.stars, built: !!at, door, place: at ? at.place : null,
       bubble: srBubbleEl.hidden ? null : { kind: srBubbleEl.dataset.kind, text: srBubbleEl.querySelector('.sr-short').textContent, full: srBubbleEl.querySelector('.sr-full').textContent },
-      open: !srEl.hidden, lod: V ? V.lod : null, labels: V ? V.shownLabels || 0 : 0, cellPx: V ? +srCellPx(V).toFixed(2) : null, stats: SR.stats, shown: SR.shown || null,
+      open: !srEl.hidden, lod: V ? V.lod : null, lines: V ? { plain: V.plainLines.visible, cross: V.crossLines.visible, sparse: !!V.sparse } : null, labels: V ? V.shownLabels || 0 : 0, cellPx: V ? +srCellPx(V).toFixed(2) : null, stats: SR.stats, shown: SR.shown || null,
       frames: V ? V.frames.slice(-90) : [], icons: V ? V.iconCount || 0 : 0, env: V ? V.env : null, log: SR.log.slice(0, 20).map((l) => l.text),
       board: srEl.hidden ? '' : $('sr-board').textContent, layers: V ? { near: V.near.visible, far: V.far.visible } : null,
       bubbleRect: srBubbleEl.hidden ? null : (({ left, top, right, bottom }) => [left, top, right, bottom].map(Math.round))(srBubbleEl.getBoundingClientRect()),
@@ -41,13 +41,13 @@ window.__dbg = {
   // つながっている物を全部見せる: what it holds, each drawn node's colour now (faint or not), the strong cables, the camera
   srReach: () => { const V = SR.view; if (!V) return null; const c = new THREE.Color(), k = new THREE.Color(), faint = [], full = [];
     // faint: drawn in another colour than the one the shape was kept with (no colour kept: as drawn at the build)
-    for (const mesh of V.nodeSets[V.detail ? 'detail' : 'simple'].children) if (mesh.instanceColor) mesh.userData.nodes.forEach((id, i) => {
+    for (const mesh of V.nodeSets[V.detail && !V.flat ? 'detail' : 'simple'].children) if (mesh.instanceColor) mesh.userData.nodes.forEach((id, i) => {
       mesh.getColorAt(i, c); const base = mesh.userData.baseColors; (base && !k.fromArray(base, i * 3).equals(c) ? faint : full).push(id); });
     const R = SR.reach;
     const v = new THREE.Vector3(), inView = R ? [...R.ids].filter((id) => { const p = V.L.pos.get(id); if (!p) return false; v.set(p.x, p.y + 0.75, p.z).project(V.camera); return Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1 && v.z < 1; }) : [];
     return { on: !!R, id: R ? R.id : null, hops: SR.reachHops, inView, edgesAll: V.L.edges.map((e) => [e.from, e.to]), drawn: V.L.nodes.map((n) => [n.id, n.label || n.id]), ids: R ? [...R.ids] : [], edges: R ? R.edges.size : 0, focus: V.focusCount || 0, faint, full,
       plainOpacity: V.plainLines.material.opacity, pressed: (document.querySelector('#sr-board [data-sr-act="reach"]') || {}).ariaPressed || null,
-      cam: [...V.camera.position.toArray(), ...V.controls.target.toArray()].map((x) => +x.toFixed(3)), labels: [...document.querySelectorAll('#sr-labels .sr-label:not([hidden])')].map((l) => l.textContent) }; },
+      cam: [...V.camera.position.toArray(), ...V.controls.target.toArray(), ...(V.flat ? [V.camera.zoom] : [])].map((x) => +x.toFixed(3)), labels: [...document.querySelectorAll('#sr-labels .sr-label:not([hidden])')].map((l) => l.textContent) }; },
   // how wide the strong cables are drawn, in drawn pixels: a frame drawn now and read back whole, the pixels near the focus
   // colour counted, over the strong cables' length on the page (device px). A 1 px line comes out near 1.
   srCableInk: () => { const V = SR.view; if (!V) return null; V.renderer.render(V.scene, V.camera);
@@ -99,7 +99,7 @@ window.__dbg = {
   // side lies on its picture however well it is grounded
   srCablesOverNodes: (above) => { const V = SR.view; if (!V) return null; const gl = V.renderer.getContext(), w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
     const cam = { p: V.camera.position.clone(), q: V.camera.quaternion.clone() };
-    if (above) { const d = V.camera.position.distanceTo(V.controls.target); V.camera.position.copy(V.controls.target).add(new THREE.Vector3(0, d, 0.0001)); V.camera.lookAt(V.controls.target); V.camera.updateMatrixWorld(); }
+    if (above && !V.flat) { const d = V.camera.position.distanceTo(V.controls.target); V.camera.position.copy(V.controls.target).add(new THREE.Vector3(0, d, 0.0001)); V.camera.lookAt(V.controls.target); V.camera.updateMatrixWorld(); }
     const shot = () => { V.renderer.render(V.scene, V.camera); const px = new Uint8Array(w * h * 4); gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px); return px; };
     const cables = [V.plainLines, V.crossLines, V.focusLines, V.focusCross], was = cables.map((c) => c.visible);
     const withC = shot(); cables.forEach((c) => { c.visible = false; }); const without = shot(); cables.forEach((c, i) => { c.visible = was[i]; });
@@ -119,7 +119,7 @@ window.__dbg = {
   // nothing stands on its straight line; rising when something does, and over that thing's top at its middle
   // want: the heights promised, from the arm (not read from SR_ROUTE, so a changed number is caught): side above a node's
   // foot (half its height at most), clear over the tallest thing crossed, cross the crossing cables' lift
-  srCableRoutes: (want) => { const V = SR.view; if (!V) return null; const grid = srFootGrid(V), feet = [...new Set(grid.feet.values())];
+  srCableRoutes: (want) => { const V = SR.view; if (!V) return null; if (V.flat) return window.__dbg.srCableRoutesFlat(); const grid = srFootGrid(V), feet = [...new Set(grid.feet.values())];
     const W = Object.assign({ side: 0.3, clear: 0.25, cross: 0.06 }, want || {});
     const out = { cables: 0, ends: 0, offOutline: 0, offHeight: 0, offSide: 0, flat: 0, notFlat: 0, rising: 0, notRising: 0, under: 0, lowOver: 0, worst: null, flatNodes: [] };
     const allFlat = new Map();   // a node's cables, all flat?
@@ -159,6 +159,43 @@ window.__dbg = {
       for (const [end, G, other] of [[A, B.a, Z], [Z, B.b, A]]) { const f = box(G), ux = other[0] - f.x, uz = other[2] - f.z, ul = Math.hypot(ux, uz) || 1;
         if (Math.abs(Math.hypot(end[0] - f.x, end[2] - f.z) - srFootExit(f, ux / ul, uz / ul)) > 0.05 || end[1] < 0 || end[1] > G.boxH) out.bundlesOff++; } }
     out.y = [V.plainLines, V.crossLines].map((L) => (srCableCount(L) ? srCablePts(L, 0)[0][1] : null));
+    return out; },
+  // 2D (56-server-room.js srCablePathFlat): every cable at one height, each end on its tile's outline toward the point
+  // next to it; straight when nothing is on its way, else bent with square corners and through no other tile; `blocked`:
+  // a cable left straight across a tile because no route was clear
+  srCableRoutesFlat: () => { const V = SR.view; if (!V || !V.flat) return null; const grid = srFootGrid(V), feet = [...new Set(grid.feet.values())];
+    const out = { flatView: true, cables: 0, ends: 0, offOutline: 0, offHeight: 0, flat: 0, notFlat: 0, bent: 0, notSquare: 0, crossing: 0, blocked: 0, worst: null, flatNodes: [] };
+    // on the way: within the router's clearance (srFlatClear); through: into a tile itself (no clearance)
+    const allFlat = new Map(), segs = { plain: 0, cross: 0 };
+    const onWay = (P, Q, skip) => feet.some((f) => !skip.includes(f) && srFootSpan(f, P, Q, SR_FLAT_ROUTE.margin));
+    const through = (P, Q, skip) => feet.some((f) => !skip.includes(f) && srFootSpan(f, P, Q, 0));
+    for (const e of V.L.edges) { const set = e.crossProvider ? 'cross' : 'plain', L = set === 'cross' ? V.crossLines : V.plainLines, j = segs[set]++;
+      const pts = srCablePts(L, j), A = pts[0], Z = pts[pts.length - 1];
+      if (A[0] === Z[0] && A[2] === Z[2]) continue;
+      out.cables++;
+      if (pts.some((q) => Math.abs(q[1] - A[1]) > 1e-6)) out.offHeight++;
+      for (const [end, id, next] of [[A, e.from, pts[1]], [Z, e.to, pts[pts.length - 2]]]) { const f = grid.feet.get(id); out.ends++;
+        const d = Math.hypot(end[0] - f.x, end[2] - f.z), ux = next[0] - f.x, uz = next[2] - f.z, ul = Math.hypot(ux, uz) || 1, want = srFootExit(f, ux / ul, uz / ul);
+        if (Math.abs(d - want) > 0.05) { out.offOutline++; out.worst = out.worst || { id, d: +d.toFixed(3), want: +want.toFixed(3) }; } }
+      const fa = grid.feet.get(e.from), fb = grid.feet.get(e.to), skip = [fa, fb];
+      // the straight line the router tried first: between the two tiles' edges toward each other's middle
+      const sd = Math.hypot(fb.x - fa.x, fb.z - fa.z) || 1, ux = (fb.x - fa.x) / sd, uz = (fb.z - fa.z) / sd, ea = srFootExit(fa, ux, uz), eb = srFootExit(fb, -ux, -uz);
+      const straightHits = onWay([fa.x + ux * ea, fa.z + uz * ea], [fb.x - ux * eb, fb.z - uz * eb], skip);
+      for (const id of [e.from, e.to]) allFlat.set(id, (allFlat.get(id) ?? true) && !straightHits && pts.length === 2);
+      if (pts.length === 2) { if (straightHits) out.blocked++; else out.flat++; continue; }
+      if (!straightHits) out.notFlat++;
+      out.bent++;
+      for (let k = 0; k + 1 < pts.length; k++) { const a = pts[k], b = pts[k + 1];
+        if (k > 0 && k + 2 < pts.length && Math.abs(a[0] - b[0]) > 1e-6 && Math.abs(a[2] - b[2]) > 1e-6) out.notSquare++;
+        if (through([a[0], a[2]], [b[0], b[2]], skip)) out.crossing++; } }
+    out.flatNodes = [...allFlat].filter(([, v]) => v).map(([id]) => id).sort();
+    out.bundles = 0; out.bundlesOff = 0;
+    const bs = { plain: 0, cross: 0 }, box = (G) => ({ x: G.x + G.w / 2, z: G.z + G.d / 2, hx: G.w * 0.46, hz: G.d * 0.46, round: false });
+    for (const B of V.bundles || []) { const L = B.cross ? V.farCross : V.farPlain, j = bs[B.cross ? 'cross' : 'plain']++, pts = srCablePts(L, j), A = pts[0], Z = pts[pts.length - 1];
+      if (A[0] === Z[0] && A[2] === Z[2]) continue;
+      out.bundles++;
+      for (const [end, G, other] of [[A, B.a, Z], [Z, B.b, A]]) { const f = box(G), ux = other[0] - f.x, uz = other[2] - f.z, ul = Math.hypot(ux, uz) || 1;
+        if (Math.abs(Math.hypot(end[0] - f.x, end[2] - f.z) - srFootExit(f, ux / ul, uz / ul)) > 0.05) out.bundlesOff++; } }
     return out; },
   srReachPress: () => { const b = document.querySelector('#sr-board [data-sr-act="reach"]'); if (b) b.click(); return !!b; },
   srReachHopsSet: (v) => { const sel = document.querySelector('#sr-board [data-sr-reach-hops]'); if (!sel) return false; sel.value = v; sel.dispatchEvent(new Event('change', { bubbles: true })); return true; },
@@ -250,10 +287,20 @@ window.__dbg = {
   srFitCamera: () => { const V = SR.view; if (!V) return null; const p = V.camera.position.clone(), q = V.controls.target.clone(); srFit(true);
     const out = V.camera.position.toArray().concat(V.controls.target.toArray()); V.camera.position.copy(p); V.controls.target.copy(q); V.controls.update(); return out; },
   // the room built again where it stands (what a theme or an environment does, with nothing to look different)
-  srRebuildHere: () => { const V = SR.view; if (!V) return null; srBuild({ pos: V.camera.position.clone(), target: V.controls.target.clone() }); return SR.builds; },
+  srRebuildHere: () => { const V = SR.view; if (!V) return null; srBuild(srCamKeep(V)); return SR.builds; },
   srPixTrail: (on) => { const got = SR.pixTrail || []; SR.pixTrail = on ? [] : null; return got; },
   srCamTrail: (on) => { const got = SR.camTrail || []; SR.camTrail = on ? [] : null; return got; },   // the cost view's own money format (the e2e compares the engine's numbers as shown)
   srMigSpeed: (s) => { SR_MIG.speed = s; srMigRenderBar(); return SR_MIG.speed; },
+  // 2D: each node's tag against its own tile on the page — its bottom (px) above the tile's top edge, else listed
+  srTagsOnTiles: () => { const V = SR.view; if (!V || !V.flat) return null; const cv = V.renderer.domElement.getBoundingClientRect(), on = [];
+    let n = 0, first = null;
+    for (const l of document.querySelectorAll('#sr-labels .sr-label:not([hidden])')) { const id = l.dataset.node; if (!id) continue;
+      const p = V.L.pos.get(id), f = srNodeFoot(V, p), top = new THREE.Vector3(p.x, p.y + 0.75, f.z - f.hz).project(V.camera), r = l.getBoundingClientRect();
+      const topY = cv.top + (1 - top.y) / 2 * cv.height; n++;
+      if (r.bottom > topY + 1) on.push([id, Math.round(r.bottom), Math.round(topY)]);
+      if (n === 1) { const c = new THREE.Vector3(p.x, p.y + 0.75, p.z).project(V.camera);
+        first = { id, text: l.textContent, rect: [r.left, r.top, r.right, r.bottom].map(Math.round), center: Math.round(cv.top + (1 - c.y) / 2 * cv.height), topY: Math.round(topY), hz: f.hz, canvas: [cv.left, cv.top, cv.width, cv.height].map(Math.round), transform: l.style.transform, z: p.z }; } }
+    return { tags: n, on: on.slice(0, 6), first }; },
   srLabelRects: () => [...document.querySelectorAll('#sr-labels .sr-label:not([hidden])')].map((s) => { const r = s.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom].map(Math.round); }),
   // a robot of the room up close moved onto the line from the camera to the door, at a robot's height: it then stands in
   // front of the door from this view (D2: the door must still take the press, as the bell and the rack do)
@@ -292,10 +339,10 @@ window.__dbg = {
   // the box (2.3.11 item 6): the nodes on the page now (client px; null behind the camera), the camera, what the last box held
   srScreen: () => { const V = SR.view; if (!V) return null; V.camera.updateMatrixWorld(); const r = V.renderer.domElement.getBoundingClientRect();
     return { rect: [r.left, r.top, r.right, r.bottom], lod: V.lod, nodes: srBoxPoints(V).map(([id, v]) => { const s = srScreenAt(V, v, r.width, r.height); return [id, s ? [r.left + s[0], r.top + s[1]] : null]; }) }; },
-  srCam: () => { const V = SR.view; return V ? { target: V.controls.target.toArray().map((x) => +x.toFixed(3)), dist: +V.camera.position.distanceTo(V.controls.target).toFixed(3),
-    pos: V.camera.position.toArray().map((x) => +x.toFixed(3)) } : null; },
+  srCam: () => { const V = SR.view; return V ? { target: V.controls.target.toArray().map((x) => +x.toFixed(3)), dist: +srViewDist(V).toFixed(3),
+    pos: V.camera.position.toArray().map((x) => +x.toFixed(3)), flat: V.flat, zoom: +V.camera.zoom.toFixed(4), span: +srSpan(V).toFixed(3) } : null; },
   srBox: () => ({ armed: SR.box.armed, drawing: !!SR.box.drag, shown: !$('sr-box').hidden, last: SR.view ? SR.view.lastBox || null : null }),
-  srZoom: (factor) => { const V = SR.view; if (!V) return null; const d = V.camera.position.clone().sub(V.controls.target).multiplyScalar(factor); V.camera.position.copy(V.controls.target).add(d); V.controls.update(); return +srCellPx(V).toFixed(2); },
+  srZoom: (factor) => { const V = SR.view; if (!V) return null; srSetSpan(V, V.controls.target.x, V.controls.target.z, srSpan(V) * factor); V.controls.update(); return +srCellPx(V).toFixed(2); },
   srEnter: (project) => srEnter(project, null),
   srCross: () => { const V = SR.view; return V ? { drawn: srCableCount(V.crossLines), dashed: V.crossLines.material.uniforms.uDash.value > 0, plain: srCableCount(V.plainLines) } : null; },
   // the browser notifications (2.3.6): what this tab has looked at, its switches, the board and the card open now

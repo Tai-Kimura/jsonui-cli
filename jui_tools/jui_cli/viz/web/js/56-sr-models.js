@@ -130,7 +130,7 @@ function srModelBuild(V, p) {
    for those, built as they come into view; none when the simple shapes are shown. */
 function srModelsSync(V, ids) {
   if (!V.models) { V.models = new Map(); V.modelLayer = new THREE.Group(); V.near.add(V.modelLayer); }
-  const on = V.detail && V.lod === 'near';
+  const on = V.detail && V.lod === 'near' && !V.flat;   // 2D: the flat shapes say the kind, no models
   for (const m of V.nodeMeshes.detail) m.material.visible = !on;    // the shapes by service still take the press
   if (!on) {
     for (const g of V.models.values()) V.modelLayer.remove(g);

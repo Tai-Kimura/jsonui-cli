@@ -299,6 +299,7 @@ function srFlowGlow(P, at) {
    node twice that), and at its own size once the camera is near enough for that. */
 const SR_FLOW_MIN_PX = 7;
 function srFlowPxPerUnit(V, at) {
+  if (V.flat) return V.renderer.domElement.clientHeight / srSpan(V);   // 2D: one scale over the whole page
   const d = V.camera.position.distanceTo(at);
   return V.renderer.domElement.clientHeight / (2 * Math.max(d, 1e-3) * Math.tan(V.camera.fov * Math.PI / 360));
 }

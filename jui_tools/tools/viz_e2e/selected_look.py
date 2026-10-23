@@ -42,7 +42,7 @@ MARK_PX = 2.0
 # key, words, where it is (a selector in the page), its state, the part of the page a made one goes in, the made one
 MEMBERS = [
     ("talk-tab", "トーク: トーク履歴・ロボット一覧", "#rb .talk-tab", "aria-selected", None, None),
-    ("sr-mode", "サーバールーム: 3D・コスト", "#sr-mode-cost", "aria-pressed", None, None),
+    ("sr-mode", "サーバールーム: 3D・2D・コスト", "#sr-mode-cost", "aria-pressed", None, None),
     ("sr-acct", "コスト: アカウント全体・この環境だけ", None, "aria-pressed", "#sr",
      '<span class="sr-ctl sr-mode"><button type="button" class="wb-btn">x</button><button type="button" class="wb-btn">y</button></span>'),
     ("sr-board", "サーバールーム: ボード", "#sr-board-btn", "aria-pressed", None, None),
@@ -84,7 +84,7 @@ MEMBERS = [
 # -checked or -current holds one of these (test_viz_selected_look.py), and each of these is on such a line.
 SOURCES = {
     "talk-tab": ["TALK.tab === k"],
-    "sr-mode": ["sr-mode-3d", "sr-mode-cost"],
+    "sr-mode": ["sr-mode-3d", "sr-mode-2d", "sr-mode-cost"],
     "sr-acct": ['data-src-act="acct-on"'],
     "sr-board": ["sr-board-btn", "$(btn).setAttribute('aria-pressed'"],
     "sr-log": ["sr-log-btn"],
@@ -279,6 +279,13 @@ async def run_selected_look(pw, out, failures, Server):
                 st2 = await page.evaluate("() => ['sr-mode-3d', 'sr-mode-cost'].map((i) => [document.getElementById(i).getAttribute('aria-pressed'), getComputedStyle(document.getElementById(i)).backgroundColor])")
                 check(failures, st2[0][0] == "true" and st2[1][0] == "false" and st2[0][1] == st[1][1] and st2[1][1] == st[0][1],
                       f"{scheme}: 3D pressed takes the on look back ({st2})")
+                # 2D (ticket 2026-10-23-viz-server-room-2d-mode): the third of the group, the on look when pressed, the others off
+                await page.evaluate("() => document.getElementById('sr-mode-2d').click()")
+                st3 = await page.evaluate("() => ['sr-mode-3d', 'sr-mode-2d', 'sr-mode-cost'].map((i) => [document.getElementById(i).getAttribute('aria-pressed'), getComputedStyle(document.getElementById(i)).backgroundColor])")
+                check(failures, [x[0] for x in st3] == ["false", "true", "false"] and st3[1][1] == st[1][1] and st3[0][1] == st3[2][1] == st[0][1],
+                      f"{scheme}: 2D pressed carries the on look, 3D and コスト off ({st3})")
+                await page.locator("#sr .sr-head").screenshot(path=str(out / f"sr-head-2d-{scheme}.png"))
+                await page.evaluate("() => document.getElementById('sr-mode-3d').click()")
                 res[scheme] = got
             except WaitTimeout as e:
                 failures.append(f"selected-look: {scheme}: {e}")
