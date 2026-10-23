@@ -823,7 +823,10 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     if _someone_listens(port):
         _err(in_use)
         return 1
-    runner = web.AppRunner(make_app(ctx), access_log=None, handle_signals=False, shutdown_timeout=REQUEST_GRACE_SEC)
+    # tcp_keepalive off: the server is on 127.0.0.1 only, and aiohttp's keep-alive setsockopt raises EINVAL on macOS for
+    # a connection the client already reset (a page or a curl that gave up), one traceback in serve.log each time.
+    runner = web.AppRunner(make_app(ctx), access_log=None, handle_signals=False, shutdown_timeout=REQUEST_GRACE_SEC,
+                           tcp_keepalive=False)
     await runner.setup()
     site = web.TCPSite(runner, "127.0.0.1", port, reuse_address=True)
     try:
@@ -836,6 +839,18 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
         raise
 
     pid = os.getpid()
+    # what a stuck loop leaves in serve.log: the stacks on USR1 (stop sends it before a KILL) and from the watch
+    from ..viz import loop_watch
+
+    loop_watch.dump_on_usr1()
+
+    def stuck_line(now: float) -> str:
+        server = runner.server
+        open_now = len(server.connections) if server is not None else 0
+        return f"{open_now} connections open; {ctx.requests.describe(now)}"
+
+    watch = loop_watch.LoopWatch(loop, stuck_line)
+    watch.start()
     tasks: list[asyncio.Task] = []
     reader_cleanup: list = []
     observer = None
@@ -1206,6 +1221,7 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
         stop_step[0] = "the files"
         _clear_runtime_files(pid)
         stop_step[0] = "the exit"
+        watch.stop()
     return 0
 
 
@@ -1500,6 +1516,32 @@ def serve_log() -> Path:
     return paths.viz_home() / "serve.log"
 
 
+#: How many earlier serve.logs are kept (serve.log.1 the newest).
+SERVE_LOG_KEEP = 5
+
+
+def _keep_serve_log() -> Path | None:
+    """serve.log moved to serve.log.1 (.1 to .2, …, the oldest past SERVE_LOG_KEEP dropped), so the run it tells of
+    is not written over by the next start (10-24: a stuck server's traceback was lost that way). Nothing is moved when
+    there is no log or it is empty. The kept path, or None."""
+    log = serve_log()
+    try:
+        if log.stat().st_size == 0:
+            return None
+    except OSError:
+        return None
+    try:
+        for n in range(SERVE_LOG_KEEP - 1, 0, -1):
+            older = log.with_name(f"{log.name}.{n}")
+            if older.exists():
+                os.replace(older, log.with_name(f"{log.name}.{n + 1}"))
+        kept = log.with_name(f"{log.name}.1")
+        os.replace(log, kept)
+        return kept
+    except OSError:
+        return None
+
+
 def _serve_child_argv(port: int) -> list[str]:
     """This same jui_cli running `viz serve` — not whatever `jui` is first on PATH."""
     root = str(Path(__file__).resolve().parents[2])
@@ -1567,6 +1609,7 @@ def _cmd_start(args: argparse.Namespace) -> int:
 
     log = serve_log()
     log.parent.mkdir(parents=True, exist_ok=True)
+    _keep_serve_log()
     fd = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
         os.fchmod(fd, 0o600)
@@ -1632,6 +1675,9 @@ def _cmd_stop(args: argparse.Namespace) -> int:
     _clear_runtime_files(pid)
     note = " (not answering /health: confirmed by its pid and command line, then stopped)" if state == "unresponsive" else ""
     note += f" (killed {STOP_TERM_SEC} s after TERM)" if how == "killed" else ""
+    if state == "unresponsive" or how == "killed":
+        kept = _keep_serve_log()
+        note += f" (its log, with the stacks it wrote: {kept})" if kept else ""
     print(f"jui viz: stopped (pid {pid}){note}")
     return 0
 
@@ -1640,6 +1686,8 @@ def _cmd_stop(args: argparse.Namespace) -> int:
 #: three times and was killed by hand; the cause did not reproduce on 2.3.0, so stop no longer depends on it).
 STOP_TERM_SEC = 5
 STOP_KILL_SEC = 3
+#: How long `stop` gives a server that did not end on TERM to write its stacks (USR1) before the KILL.
+STOP_DUMP_SEC = 0.5
 
 
 def _our_viz_serve(pid: int) -> bool:
@@ -1663,6 +1711,19 @@ def _terminate(pid: int):
         time.sleep(0.05)
     if not _pid_alive(pid):
         return "stopped"
+    # still there after TERM: its stacks into serve.log first (a server from before 2.3.22 has no handler for USR1 and
+    # ends on it, which is what the KILL was for)
+    try:
+        os.kill(pid, signal.SIGUSR1)
+    except ProcessLookupError:
+        return "stopped"
+    except PermissionError:
+        return "alive"
+    deadline = time.monotonic() + STOP_DUMP_SEC
+    while time.monotonic() < deadline and _pid_alive(pid):
+        time.sleep(0.05)
+    if not _pid_alive(pid):
+        return "killed"
     try:
         os.kill(pid, signal.SIGKILL)
     except ProcessLookupError:

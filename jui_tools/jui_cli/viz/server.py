@@ -176,6 +176,9 @@ class ServerContext:
     # Each authed socket and the (rev, seq) it has already been sent, so a
     # change made before it connected is not delivered twice.
     sockets: dict = field(default_factory=dict)
+    # The last request taken and the ones being handled (loop_watch.RequestNotes), for the line serve writes when its
+    # loop stops running (ticket 2026-10-24-viz-serve-stops-answering-after-setsockopt-einval).
+    requests: object | None = None
 
 
 def _page_html(ctx: ServerContext) -> str | None:
@@ -237,8 +240,11 @@ async def _send_all(ctx: "ServerContext", message: dict) -> None:
 def make_app(ctx: ServerContext) -> web.Application:
     page = _page_html(ctx) or ""
     hashes = _importmap_hashes(page)
+    from .loop_watch import RequestNotes
+
+    ctx.requests = ctx.requests or RequestNotes()
     app = web.Application(
-        middlewares=[security.make_middleware(ctx.port, hashes, on_refused=lambda request, response: (
+        middlewares=[ctx.requests.middleware(), security.make_middleware(ctx.port, hashes, on_refused=lambda request, response: (
             _clock_log(ctx, {"at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "remote": request.remote}, response)
             if request.path == "/api/session/end" else None))],
         client_max_size=MAX_HOOK_BODY,
