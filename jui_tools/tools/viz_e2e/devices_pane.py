@@ -165,7 +165,38 @@ async def run_devices_pane(pw, out, failures):
             sim: row('UDID'), emu: row('emulator-5554'), phone: row('R58M12345678'), phone2: row('R58N99999999') }; }""".replace("UDID", UDID))
         check(pane["kinds"] == [T("dev.group.title", kind=T("dev.kind.ios"), n=1), T("dev.group.title", kind=T("dev.kind.emulator"), n=1),
                                 T("dev.group.title", kind=T("dev.kind.phone"), n=2)], f"the three kinds and counts: {pane['kinds']}")
-        check(pane["load"] and T_pattern("dev.load.avg").search(pane["loadText"]) and T("dev.mem.free") in pane["loadText"], f"the load: {pane['loadText']}")
+        check(pane["load"] and T_pattern("dev.cpu.head").search(pane["loadText"]) and T_pattern("dev.mem.head").search(pane["loadText"]), f"the load: {pane['loadText']}")
+        # the load box as a person reads it (the requester, 10-23: 「load のところが何を表してるか分かりづらい」): the page's
+        # own machine slice set to two known states and the box read in the same call (the server's next push would
+        # write the real one over it): the CPU's busyness in per cent with what 100 % means, the three averages in a
+        # line with the way they go, the free memory, the colour rule in words. Stills of both, and of a phone's width.
+        LOADS = {"high": {"load": [18.83, 23.39, 29.37], "cpus": 18, "memTotal": 128 * 2 ** 30, "memFreePct": 90, "level": "high"},
+                 "ok": {"load": [4.1, 3.2, 2.0], "cpus": 18, "memTotal": 128 * 2 ** 30, "memFreePct": 62, "level": "ok"}}
+        BOX = """(m) => { window.__dbg.devMachineSet(m);
+          const B = document.querySelector('#dev-pane [data-dev-load]'), t = (q) => (B.querySelector(q) || {}).textContent || null;
+          const bar = (k) => { const e = B.querySelector(`.dev-bar[data-bar="${k}"]`); if (!e) return null; const f = e.querySelector('.dev-bar-fill'), mk = e.querySelector('.dev-bar-mark');
+            return { tone: e.dataset.tone, fill: f.style.width, mark: mk ? mk.style.left : null, colour: getComputedStyle(f).backgroundColor }; };
+          return { cpu: t('[data-dev-cpu] span'), what: t('[data-dev-what]'), recent: t('[data-dev-recent]'), mem: t('[data-dev-mem] span'), rule: t('[data-dev-rule]'),
+            cpuBar: bar('cpu'), memBar: bar('mem'), load: B.dataset.load }; }"""
+        for key, mach in LOADS.items():
+            box = res[f"box-{key}"] = await page.evaluate(BOX, mach)
+            pct = round(mach["load"][0] / mach["cpus"] * 100)
+            trend = T("dev.load.trend.down") if key == "high" else T("dev.load.trend.up")
+            check(box["cpu"] == T("dev.cpu.head", pct=pct) and box["what"] == T("dev.cpu.what", cpus=18)
+                  and box["recent"] == T("dev.load.recent", a=f"{mach['load'][0]:.1f}", b=f"{mach['load'][1]:.1f}", c=f"{mach['load'][2]:.1f}", trend=trend)
+                  and box["mem"] == T("dev.mem.head", pct=mach["memFreePct"]) + T("dev.mem.of", total="128 GiB")
+                  and box["rule"] == T("dev.load.rule", cb=70, ch=100, mb=25, mh=10),
+                  f"{key}: the CPU in per cent and what 100 % means, the three averages and their way, the memory, the rule: {box}")
+            check(box["cpuBar"] and box["cpuBar"]["tone"] == ("high" if pct >= 100 else "busy" if pct >= 70 else "ok") and box["cpuBar"]["mark"] == "50%"
+                  and box["memBar"] and box["memBar"]["tone"] == "ok" and box["memBar"]["fill"] == f"{mach['memFreePct']}%",
+                  f"{key}: the bars, the CPU's marked at 100 %, coloured by the rule: {box['cpuBar']} {box['memBar']}")
+            await page.screenshot(path=str(out / f"load-{key}.png"))
+        check(res["box-high"]["cpuBar"]["colour"] != res["box-ok"]["cpuBar"]["colour"], f"the CPU bar's colour follows its tone: {res['box-high']['cpuBar']} {res['box-ok']['cpuBar']}")
+        await page.set_viewport_size({"width": 390, "height": 844})
+        res["box-390"] = await page.evaluate(BOX, LOADS["high"])
+        check(res["box-390"]["cpu"] == T("dev.cpu.head", pct=105), f"390: the box drawn at a phone's width: {res['box-390']}")
+        await page.screenshot(path=str(out / "load-390.png"))
+        await page.set_viewport_size(DESKTOP["viewport"])
         check(pane["right"] == 0 and pane["overSide"], f"where the side panel is: {pane}")
         check(pane["underHeader"] and pane["buttonSeen"], f"under the header, the デバイス button not covered (it closes the pane): {pane}")
         check(pane["focus"] == "dev-close", f"the focus in the pane: {pane['focus']}")

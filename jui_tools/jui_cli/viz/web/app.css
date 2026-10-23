@@ -1808,6 +1808,15 @@ button.talk-peer:focus-visible { outline: 2px solid var(--focus); outline-offset
 .dev-load[data-load="ok"] { border-color: var(--ok); background: var(--ok-bg); }
 .dev-load[data-load="busy"] { border-color: var(--warn); background: var(--warn-bg); }
 .dev-load[data-load="high"] { border-color: var(--bad); background: var(--bad-bg); }
+.dev-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0; font-weight: 700; }
+.dev-head .dev-level { color: var(--ink-soft); font-size: 12px; font-weight: 600; }
+.dev-what { margin: 0; font-size: 12.5px; }
+.dev-head[data-dev-mem] { margin-top: 6px; }
+.dev-bar { position: relative; display: block; height: 8px; border-radius: 4px; background: var(--chip); overflow: visible; }
+.dev-bar-fill { position: absolute; inset: 0 auto 0 0; border-radius: 4px; background: var(--ok); }
+.dev-bar[data-tone="busy"] .dev-bar-fill { background: var(--warn); }
+.dev-bar[data-tone="high"] .dev-bar-fill { background: var(--bad); }
+.dev-bar-mark { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--ink); }
 .dev-level { font-weight: 700; }
 .dev-group { display: grid; gap: 6px; }
 .dev-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }

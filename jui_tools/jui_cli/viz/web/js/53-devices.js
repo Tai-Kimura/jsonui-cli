@@ -42,14 +42,38 @@ function devRowHTML(d) {
     ? `<li><button type="button" class="dev-row" data-dev-robot="${esc(label)}" data-dev-id="${esc(d.id)}" data-fk="dev-${esc(d.id)}" title="${esc(tl('dev.row.go', { name: label }))}">${innerRowHTML}</button></li>`
     : `<li><div class="dev-row" data-dev-id="${esc(d.id)}">${innerRowHTML}</div></li>`;
 }
+/* The machine's load as a person reads it (the requester, 10-23: what the "load" at the top stood for was hard to
+   tell): the CPU's busyness as a per cent of its cores (the 1-minute load / the cores) with a bar marked at 100 %, what
+   100 % means, the three load averages in small type with the way they go, the free memory the same way, and the
+   colour rule in words. The bars' colours are the box's own thresholds (sources/machine.py: LOAD_BUSY / LOAD_HIGH,
+   MEM_BUSY / MEM_HIGH). */
+const DEV_CPU = { busy: 70, high: 100, max: 200 }, DEV_MEM = { busy: 25, high: 10 };
+const DEV_TREND = { up: tl('dev.load.trend.up'), down: tl('dev.load.trend.down'), flat: tl('dev.load.trend.flat') };
+const devCpuTone = (pct) => (pct >= DEV_CPU.high ? 'high' : pct >= DEV_CPU.busy ? 'busy' : 'ok');
+const devMemTone = (free) => (free < DEV_MEM.high ? 'high' : free < DEV_MEM.busy ? 'busy' : 'ok');
+// the 1-minute load against the 15-minute one: a tenth either way is a change
+const devTrend = (load) => (load[0] > load[2] * 1.1 ? 'up' : load[0] < load[2] * 0.9 ? 'down' : 'flat');
+function devBarHTML(kind, fill, tone, mark) {
+  const width = `${Math.max(0, Math.min(100, fill))}%`;
+  return `<span class="dev-bar" data-bar="${esc(kind)}" data-tone="${esc(tone)}" aria-hidden="true"><span class="dev-bar-fill" style="width:${esc(width)}"></span>`
+    + (mark != null ? `<span class="dev-bar-mark" style="left:${esc(String(mark) + '%')}"></span>` : '') + '</span>';
+}
 function devLoadHTML(m) {
   if (!m) return `<div class="dev-load"><p>${esc(tl('dev.load.none'))}</p></div>`;
-  const load = Array.isArray(m.load) ? m.load : null, ratio = load && m.cpus ? (load[0] / m.cpus).toFixed(2) : null;
+  const load = Array.isArray(m.load) && m.load.length >= 3 ? m.load : null;
+  const pct = load && m.cpus ? Math.round((load[0] / m.cpus) * 100) : null;
   const gib = m.memTotal ? `${Math.round(m.memTotal / 2 ** 30)} GiB` : '';
-  return `<div class="dev-load" data-load="${esc(m.level || '')}" data-dev-load><p class="dev-level">${esc(DEV_LEVEL[m.level] || tl('dev.level.unknown'))}</p>`
-    + `<p>${esc(tl('dev.load.avg', { values: load ? load.map((x) => x.toFixed(2)).join(' / ') : tl('dev.unknown') }))}${m.cpus ? esc(tl('dev.load.cores', { cpus: String(m.cpus), ratio: String(ratio) })) : ''}</p>`
-    + `<p>${esc(tl('dev.mem.free'))} ${m.memFreePct != null ? `${esc(String(m.memFreePct))} %` : esc(tl('dev.unknown'))}${gib ? esc(tl('dev.mem.total', { total: gib })) : ''}</p>`
-    + `<p class="dev-note">${esc(tl('dev.load.note', { at: new Date(m.at || 0).toTimeString().slice(0, 8) }))}</p></div>`;
+  const free = m.memFreePct != null ? Math.round(m.memFreePct) : null;
+  return `<div class="dev-load" data-load="${esc(m.level || '')}" data-dev-load>`
+    + `<p class="dev-head" data-dev-cpu="${esc(pct != null ? String(pct) : '')}"><span>${esc(tl('dev.cpu.head', { pct: pct != null ? String(pct) : tl('dev.unknown') }))}</span>`
+    + `<span class="dev-level">${esc(DEV_LEVEL[m.level] || tl('dev.level.unknown'))}</span></p>`
+    + (pct != null ? devBarHTML('cpu', (pct / DEV_CPU.max) * 100, devCpuTone(pct), (DEV_CPU.high / DEV_CPU.max) * 100) : '')
+    + (m.cpus ? `<p class="dev-what" data-dev-what>${esc(tl('dev.cpu.what', { cpus: String(m.cpus) }))}</p>` : '')
+    + (load ? `<p class="dev-note" data-dev-recent>${esc(tl('dev.load.recent', { a: load[0].toFixed(1), b: load[1].toFixed(1), c: load[2].toFixed(1), trend: DEV_TREND[devTrend(load)] }))}</p>` : '')
+    + `<p class="dev-head" data-dev-mem="${esc(free != null ? String(free) : '')}"><span>${esc(tl('dev.mem.head', { pct: free != null ? String(free) : tl('dev.unknown') }))}${gib ? esc(tl('dev.mem.of', { total: gib })) : ''}</span></p>`
+    + (free != null ? devBarHTML('mem', free, devMemTone(free)) : '')
+    + `<p class="dev-note" data-dev-rule>${esc(tl('dev.load.rule', { cb: String(DEV_CPU.busy), ch: String(DEV_CPU.high), mb: String(DEV_MEM.busy), mh: String(DEV_MEM.high) }))}</p>`
+    + `<p class="dev-note">${esc(tl('dev.load.at', { at: new Date(m.at || 0).toTimeString().slice(0, 8) }))}</p></div>`;
 }
 function renderDevices() {
   const { live, m, devices } = devData();

@@ -654,6 +654,8 @@ window.__dbg = {
   // button's colour per level, a project switch as the picker does it, the robot a project remembers
   devState: () => ({ robot: rbState.id, project: UI.project, card: !document.getElementById('rb').hidden, pane: !document.getElementById('dev-pane').hidden }),
   devMachine: () => (SOURCE.mode === 'live' ? LIVE.slices.machine || null : null),
+  // the load box drawn from a machine slice the suite gives (the server's next push writes the real one over it)
+  devMachineSet: (m) => { if (SOURCE.mode !== 'live') return false; LIVE.slices.machine = Object.assign({ at: Date.now() }, m); renderDevices(); return true; },
   devColours: () => { const b = document.getElementById('btn-devices'), keep = b.dataset.load;
     const out = Object.fromEntries(['ok', 'busy', 'high'].map((l) => { b.dataset.load = l; return [l, getComputedStyle(b).backgroundColor]; }));
     b.dataset.load = keep; return out; },
