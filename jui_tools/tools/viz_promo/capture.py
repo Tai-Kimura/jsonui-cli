@@ -619,6 +619,11 @@ class Driver:
             await self.page.evaluate("() => document.getElementById('btn-specboard').click()")
             await self.until(f"() => !!document.querySelector('.ov-card[data-idx=\"{i}\"]')", what="the spec's card", advance=True)
             await self.page.evaluate(f"() => document.querySelector('.ov-card[data-idx=\"{i}\"]').click()")
+        elif call == "rosterFold":
+            # the room's robot list (2.3.20) folded with its own button, when the room shows it open
+            await self.until("() => { const r = document.getElementById('roster'); return !!r && !r.hidden; }", what="the room's robot list", advance=True)
+            await self.page.evaluate("() => { const b = document.getElementById('roster-fold'); if (b && b.getAttribute('aria-expanded') === 'true') b.click(); }")
+            await self.until("() => document.getElementById('roster').classList.contains('roster-folded')", what="the robot list folded", advance=True)
         elif call == "noop":   # only its expect: a wait before frame 0
             pass
         elif call == "srMigSpeed":

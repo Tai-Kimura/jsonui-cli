@@ -50,6 +50,16 @@ def test_the_chapters_are_the_promos_viz_chapters():
     assert set(T.BOARDS.values()) <= set(T.TERM_CHAPTER_IDS)
 
 
+def test_every_chapter_that_shows_a_room_folds_its_robot_list_first():
+    """2.3.20's この部屋のロボット covered the room and its task board on camera: a chapter that enters a room (before
+    frame 0 or on camera) folds the list with the page's own button before frame 0."""
+    for lang in ("ja", "en"):
+        for cid, c in T.chapters(lang).items():
+            enters = any(ev.kind == "click" and "room_tag" in ev.args.get("target", {}) for ev in c.prelude + c.events)
+            if enters:
+                assert any(ev.kind == "dbg" and ev.args.get("call") == "rosterFold" for ev in c.prelude), (lang, cid)
+
+
 def test_a_board_writes_its_spec_section_by_section_in_the_sheets_order():
     """1b-board: the file starts with its metadata; each write adds one section, each once, in the order the sheet
     shows them (30-source-live.js SPEC_KEYS), and the board is taken at the split's size."""

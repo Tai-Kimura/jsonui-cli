@@ -238,8 +238,9 @@ def floor(w: dict) -> list:
 
 
 def up_close(room: str) -> list:
-    """The camera in on one room (a press on its tag, as a person would)."""
-    return [P("click", target={"room_tag": room}, expect="solo:" + room), P("settle")]
+    """The camera in on one room (a press on its tag, as a person would), its robot list (2.3.20's この部屋のロボット)
+    folded with its own button so it covers neither the room nor the task board (the page keeps the fold)."""
+    return [P("click", target={"room_tag": room}, expect="solo:" + room), P("dbg", call="rosterFold"), P("settle")]
 
 
 def waits(w: dict) -> list:
@@ -278,7 +279,8 @@ def chapters(lang: str) -> dict:
     # 2 (34–46): the robots show what each session is doing (requester 10-22: 「ロボットの動きで状況が理解できるのがメイン機能」
     # 「テスト中かどうかがわかったり」). In on the shop's room: robots typing, reading, thinking (a prompt and no tool yet);
     # one starts its tests, its card shows the run case by case (one fails), then one stops and waits for input.
-    out["2"] = Chapter("2", 34, 46, floor(w), [
+    # the room's robot list folded before frame 0 (in and back out: the room is entered on camera, its list already folded)
+    out["2"] = Chapter("2", 34, 46, floor(w) + up_close("demo-shop") + [P("click", target={"css": "#room-back"}, expect="floor"), P("settle")], [
         E(34.8, "click", target={"room_tag": "demo-shop"}, expect="solo:demo-shop"),
         E(37.2, "tests_start", key="s02", run="r1", command="cd web && npx vitest run tests/unit/generated"),
         E(37.6, "click", target={"robot": "s02"}, expect="card:s02"),
