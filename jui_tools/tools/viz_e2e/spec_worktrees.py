@@ -145,8 +145,9 @@ async def run_spec_worktrees(pw, out, failures, jt=None, shots_only=False):
 
         # the room's 注文 (the worktree's) on the whiteboard
         await page.click("#spec-list .sl-group:has-text('room/') ~ li .spec-row:has-text('注文')")
-        await wait(page, "() => document.getElementById('wb-title').textContent === '注文'", timeout=20000, label="注文's sheet")
-        await page.wait_for_timeout(600)
+        await wait(page, "() => { const c = document.getElementById('wb-close'); return !!(c && c.offsetParent) && document.getElementById('wb-title').textContent === '注文'; }",
+                   timeout=20000, label="注文's sheet shown")
+        await page.wait_for_timeout(900)
         side = res["side"] = await page.evaluate(SIDE_JS)
         check(failures, side["file"] == "⎇ feat/x · docs/screens/json/orders.spec.json",
               f"the open sheet's head says its branch and the file from the worktree's folder: {side['file']!r}")
