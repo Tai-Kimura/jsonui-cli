@@ -204,6 +204,7 @@ async def run_typed_kept(pw, out, failures, Server, jt=None):
             await settled(page, f"folded {scheme}")
             await page.locator("#rb").screenshot(path=str(out / f"card-question-folded-{scheme}.png"))
         await page.emulate_media(color_scheme="light")
+        hook("a", hook_event_name="PreToolUse", tool_name="Bash", tool_use_id="toolu_tk_make", tool_input={"command": "make"})
         hook("a", hook_event_name="PermissionRequest", tool_name="Bash", tool_input={"command": "make"})
         f2 = res["fold2"] = await until(page, "(w) => { const f = window.__dbg.histFold(); return !f.folded || (f.bar && f.bar.includes(w)) ? f : null; }",
                                         "folded, the new wait counted", arg=await page.evaluate("() => window.__dbg.tl('hist.fold.p', { n: 1 })"), timeout=15000, why="() => window.__dbg.histFold()")
@@ -213,6 +214,20 @@ async def run_typed_kept(pw, out, failures, Server, jt=None):
         back = await page.evaluate(FIELD, hist)
         check(failures, abs(f3["histH"] - f0["histH"]) <= 80 and back and back["text"] == TYPED + " more again" and back["other"],
               f"opened: the history as before ({f0['histH']} -> {f3['histH']}), what was typed and picked there: {back}")
+
+        # 4b. nothing waits any more: the fold is forgotten, the next wait comes open
+        await page.click("[data-h-cards] [data-h-fold='close']")
+        await until(page, "() => window.__dbg.histFold().folded", "folded again", timeout=10000)
+        hook("a", hook_event_name="PostToolUse", tool_name="AskUserQuestion", tool_use_id="toolu_tk1", tool_input=QUESTION, tool_response={"answers": {}})
+        hook("a", hook_event_name="PostToolUse", tool_name="Bash", tool_use_id="toolu_tk_make", tool_input={"command": "make"}, tool_response={"stdout": ""})
+        res["cleared"] = await until(page, "() => { const f = window.__dbg.histFold(); return !f.bar ? f : null; }", "nothing waits on a any more", timeout=20000,
+                                     why="() => window.__dbg.histFold()")
+        hook("a", hook_event_name="PreToolUse", tool_name="Bash", tool_use_id="toolu_tk_test", tool_input={"command": "make test"})
+        hook("a", hook_event_name="PermissionRequest", tool_name="Bash", tool_input={"command": "make test"})
+        f5 = res["fold5"] = await until(page, "() => { const f = window.__dbg.histFold(); return f.bar ? f : null; }", "a new wait on a", timeout=20000,
+                                        why="() => window.__dbg.histFold()")
+        check(failures, not f5["folded"] and f5["bar"] == await page.evaluate("() => window.__dbg.tl('hist.fold.close')"),
+              f"folded, then nothing waited, then a new wait: the box comes open (the fold forgotten): {f5}")
 
         # 5. the prompt box: typed for a, another robot, back to a
         area = "#rb [data-h-text]"
