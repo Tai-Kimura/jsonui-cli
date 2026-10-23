@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import faulthandler
 import signal
+import struct
 import sys
 import threading
 import time
@@ -26,10 +27,18 @@ STUCK_SEC = 10.0
 BEAT_SEC = 1.0
 
 
+def thread_names() -> str:
+    """Each thread's id as faulthandler writes it (``Thread 0x…``) and its name: 3.11's faulthandler writes no names."""
+    width = 2 * struct.calcsize("L")
+    return ", ".join(f"0x{t.ident:0{width}x} {t.name}" for t in threading.enumerate() if t.ident is not None)
+
+
 def dump_on_usr1() -> None:
-    """``kill -USR1 <pid>`` writes every thread's stack to stderr, the loop's own included even when it is stuck."""
+    """``kill -USR1 <pid>`` writes every thread's stack to stderr, the loop's own included even when it is stuck, then
+    a line naming the threads (written by the main thread once it runs Python: not at all while it is stuck in C)."""
     if hasattr(signal, "SIGUSR1"):
-        faulthandler.register(signal.SIGUSR1, file=sys.stderr, all_threads=True)
+        signal.signal(signal.SIGUSR1, lambda signum, frame: print(f"jui viz: threads: {thread_names()}", file=sys.stderr, flush=True))
+        faulthandler.register(signal.SIGUSR1, file=sys.stderr, all_threads=True, chain=True)
 
 
 class RequestNotes:
@@ -115,6 +124,7 @@ class LoopWatch:
                     self._write(f"the loop has not run for {idle:.1f} s: {self._describe(now)}; every thread's stack:")
                 except Exception as exc:  # noqa: BLE001 - the stacks matter more than the line
                     self._write(f"the loop has not run for {idle:.1f} s (the line failed: {exc!r}); every thread's stack:")
+                self._write(f"threads: {thread_names()}")
                 out = self._out or sys.stderr
                 faulthandler.dump_traceback(file=out, all_threads=True)
                 out.flush()

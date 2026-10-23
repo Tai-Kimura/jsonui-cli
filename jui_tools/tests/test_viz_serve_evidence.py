@@ -170,12 +170,18 @@ def test_usr1_writes_every_threads_stack_and_the_server_goes_on(home):
     try:
         os.kill(pid, signal.SIGUSR1)
         log = _log_dir(home) / "serve.log"
+        # the loop's own stack and the watch thread's, known by their frames (3.11's faulthandler names no thread),
+        # then the line that names them
+        frames = ("run_forever", 'loop_watch.py", line', "in _watch", "jui viz: threads: ")
         for _ in range(50):
-            if "run_forever" in log.read_text():                   # the loop's own stack is among them
+            if all(f in log.read_text() for f in frames):
                 break
             time.sleep(0.1)
         text = log.read_text()
-        assert "run_forever" in text and "jui-viz-loop-watch" in text, text[-2000:]
+        assert all(f in text for f in frames), text[-2000:]
+        names = text.split("jui viz: threads: ")[-1].splitlines()[0]
+        watch_id = next(part.split()[0] for part in names.split(", ") if part.endswith(" jui-viz-loop-watch"))
+        assert f"Thread {watch_id}" in text, (watch_id, text[-2000:])   # the id is the one in the stack's header
         assert _health(port) == 200 and _alive(pid)
     finally:
         _stop(home, pid)
@@ -199,6 +205,7 @@ def test_the_watch_writes_a_line_and_the_stacks_once_while_the_loop_stands_still
     text = out_path.read_text()
     assert text.count("the loop has not run for") == 1, text
     assert "2 connections open; last request: GET /api/x; every thread's stack:" in text
+    assert "jui viz: threads: " in text and " jui-viz-loop-watch" in text, text
     assert "time.sleep" in text or "in main" in text, text           # the stuck loop's own frame
     assert text.count("the loop runs again, after") == 1, text
 
