@@ -203,3 +203,47 @@ def test_a_failed_case_keeps_a_spec_from_done(tmp_path):
     login = next(s for s in state.slices["specs"] if s["name"] == "Login")
     assert (login["tests"]["needed"], login["tests"]["passed"], login["tests"]["failed"]) == (2, 2, 1), login["tests"]
     assert login["bucket"] != "done"
+
+
+# A lane whose cwd is the parent runs `cd <worktree> && …` (ticket 2026-10-24-jui-viz-worktree-rows-only-from-session-
+# cwd, family 4): the progress records name no folder, so the run is the worktree's when its session's tools named
+# exactly that one linked worktree within WORKTREE_TOUCH_MS; two or more, or none, and it stays the cwd's.
+
+def _parent_runs(tmp_path, touched_at, run_at, worktrees=1):
+    root, wt = _room(tmp_path)
+    folders = [wt]
+    for i in range(1, worktrees):
+        other = tmp_path / "scratch" / f"wt{i}"
+        _git(root, "worktree", "add", "-q", "-b", f"feat/y{i}", str(other))
+        folders.append(other)
+    state = VizState()
+    world = World(state)
+    world.apply_hook({"session_id": "lane", "cwd": str(root), "hook_event_name": "SessionStart"}, 0)
+    for i, folder in enumerate(folders):
+        world.apply_hook({"session_id": "lane", "cwd": str(root), "hook_event_name": "PreToolUse", "tool_name": "Edit",
+                          "tool_use_id": f"e{i}", "tool_input": {"file_path": str(folder / "tests/screens/login.test.json")}},
+                         touched_at)
+    world.tick(touched_at + 10)
+    world.apply_hook({"session_id": "lane", "cwd": str(root), "hook_event_name": "PreToolUse", "tool_name": "Bash",
+                      "tool_use_id": "b", "tool_input": {"command": f"cd {wt} && {CMD}"}}, run_at)
+    world.tests["b"]["progressRun"] = RUN_SEEN
+    world.apply_saved_results(_rows(RUN_SEEN, {"ok": "passed", "ng": "failed"}))
+    world.tick(run_at + 10)
+    world.publish()
+    return {k: (v["passed"], v["failed"]) for k, v in _tests(state).items() if k.startswith("room/:")}
+
+
+def test_a_parent_session_s_run_goes_to_the_one_worktree_its_tools_named(tmp_path):
+    got = _parent_runs(tmp_path, touched_at=100, run_at=200)
+    assert got == {"room/:": (0, 0), "room/:@feat/x": (1, 1)}, got
+
+
+def test_two_worktrees_named_leave_the_run_with_the_cwd(tmp_path):
+    got = _parent_runs(tmp_path, touched_at=100, run_at=200, worktrees=2)
+    assert got["room/:"] == (1, 1) and got["room/:@feat/x"] == (0, 0), got
+
+
+def test_a_worktree_named_longer_ago_than_its_time_leaves_the_run_with_the_cwd(tmp_path):
+    from jui_cli.viz.ingest import WORKTREE_TOUCH_MS
+    got = _parent_runs(tmp_path, touched_at=100, run_at=100 + WORKTREE_TOUCH_MS)
+    assert got == {"room/:": (1, 1)}, got   # its time ran out: no worktree row, the run is the room's

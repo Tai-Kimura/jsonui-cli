@@ -17,7 +17,7 @@ from pathlib import Path
 
 from . import clockout, data_docs, gitbox, i18n, infra_docs, prices, robots
 from .rooms import Rooms, tilde
-from .sources.jsonui_project import TEXTS_SUFFIX, JsonUIProject, test_dirs
+from .sources.jsonui_project import TEXTS_SUFFIX, JsonUIProject, is_linked, test_dirs
 from .attachments import Attachments
 from .calls import CallBook, peer_name
 from .denials import DenialBook
@@ -605,6 +605,18 @@ class World:
             for old in list(touched)[:-TOUCHED_KEPT]:
                 del touched[old]
 
+    def _run_checkout(self, sid: str, session: dict, at: int) -> str:
+        """Where a test command runs, for its rows (_saved_specs): the session's cwd; but when the cwd is in no linked
+        worktree and its tools named exactly one linked worktree within WORKTREE_TOUCH_MS, that worktree (a lane
+        whose cwd is the parent runs `cd <worktree> && …`). Two or more: the cwd, not a guess. The progress records
+        name no folder (progress.schema.json v1), so nothing better is known."""
+        cwd = str(Path(session["cwd"]).expanduser())
+        if not Path(cwd).is_absolute() or is_linked(Path(cwd)):
+            return cwd
+        linked = [top for top, t in self._touched.get(sid, {}).items()
+                  if at - t < WORKTREE_TOUCH_MS and is_linked(Path(top))]
+        return linked[0] if len(linked) == 1 else cwd
+
     def _worktrees_tick(self, at: int) -> None:
         """Each loaded room shows the worktrees of its apps that a session not ended works in (JsonUIProject.
         set_worktrees): its cwd, or a checkout its tools named by path within WORKTREE_TOUCH_MS (a lane whose cwd is
@@ -828,7 +840,7 @@ class World:
             platform = robots.test_platform(str(tool_input.get("command", ""))) if state == "phone" else None
             if platform is not None and use_id:  # a test run only when it runs tests, not when it holds a device
                 command = str(tool_input.get("command", ""))
-                self._test_cwds[use_id] = str(Path(session["cwd"]).expanduser())   # the checkout it runs in (_saved_specs)
+                self._test_cwds[use_id] = self._run_checkout(sid, session, at)   # the checkout it runs in (_saved_specs)
                 self.tests[use_id] = {
                     "id": use_id, "projectId": session["projectId"], "agentId": agent["id"],
                     "platform": platform, "command": robots._clip(command, TEST_COMMAND_MAX),
@@ -1696,10 +1708,14 @@ class World:
             # apps; in a worktree this room shows, that worktree's app@branch only
             seen = run_rooms[row["run"]]
             cwds = [Path(c[4:]) for c in seen if c.startswith("cwd:")]
-            here = [sid for sid in self._specs_of_file(project, file) if project.project_id in seen
-                    and (project.specs[sid].source is None or project.specs[sid].source.base is None)]
             there = [s for s in project.sources if s.base is not None
                      and any(c.is_relative_to(Path(s.checkout["worktree"])) for c in cwds)]
+            # the room's own apps when a command ran in its checkout: not when every one ran in a worktree it shows
+            # (a session of this room whose run is a worktree's, _run_checkout)
+            own = project.project_id in seen and (not cwds or any(
+                not any(c.is_relative_to(Path(s.checkout["worktree"])) for s in there) for c in cwds))
+            here = [sid for sid in self._specs_of_file(project, file) if own
+                    and (project.specs[sid].source is None or project.specs[sid].source.base is None)]
             return here + (project.specs_for_test_file(file, only=there) if there else [])
         key = (project.project_id, file, row["platform"], row.get("app"))
         if key not in self._ties:
