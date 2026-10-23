@@ -28,6 +28,33 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .openapi import OpenApiDoc, Operation, slugify
+
+
+def _write_whole(target: Path, text: str) -> None:
+    """The whole text or nothing: written beside target under a temporary name, then put in its place. A mock
+    written straight into its file was left half written when the writing failed part way (ticket 2026-10-23-jsonui-
+    test-mock-generate-yaml-traceback: an unquoted YAML date stopped json.dump at its key)."""
+    import os
+    import tempfile
+
+    fd, tmp = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp", dir=target.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        try:   # the mode the file had, or the one a plain write gives (mkstemp's is 0600)
+            mode = os.stat(target).st_mode & 0o777
+        except FileNotFoundError:
+            mask = os.umask(0)
+            os.umask(mask)
+            mode = 0o666 & ~mask
+        os.chmod(tmp, mode)
+        os.replace(tmp, target)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 from .scope import PathScope
 
 
@@ -96,7 +123,7 @@ def place_editor_schema(mock_dir: Path) -> list[str]:
                 continue
         except (OSError, UnicodeDecodeError):
             pass
-        target.write_text(text, encoding="utf-8")
+        _write_whole(target, text)
         written.append(str(target.relative_to(mock_dir)))
     return written
 
@@ -468,9 +495,7 @@ def generate(
             target = mock_dir / rel
             definition = build_mock_definition(doc, op)
             target.parent.mkdir(parents=True, exist_ok=True)
-            with open(target, "w", encoding="utf-8") as f:
-                json.dump(definition, f, ensure_ascii=False, indent=2)
-                f.write("\n")
+            _write_whole(target, json.dumps(definition, ensure_ascii=False, indent=2) + "\n")
             created.append(rel)
 
     schemas = _place_editor_schema_quietly(mock_dir, warnings)
@@ -731,9 +756,7 @@ def update_default(
                 unchanged.append(rel)
                 continue
             if not dry_run:
-                with open(target, "w", encoding="utf-8") as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
-                    f.write("\n")
+                _write_whole(target, json.dumps(data, ensure_ascii=False, indent=2) + "\n")
             updated.append(rel)
 
     # `--update-default` is the other half of the same command, and it is the

@@ -2,8 +2,10 @@
 2026-10-23-jsonui-test-mock-generate-yaml-traceback: `jsonui-test mock generate --swagger api.yaml` ended in a
 JSONDecodeError traceback, and five other readers skipped a YAML document without a word).
 
-  * `.json` is read as JSON; `.yaml` / `.yml` as YAML with PyYAML (`yaml.safe_load`); any other name as JSON, then as
-    YAML when that fails and PyYAML is there.
+  * `.json` is read as JSON; `.yaml` / `.yml` as YAML with PyYAML (a safe load); any other name as JSON, then as
+    YAML when that fails and PyYAML is there. A YAML document gives the types a JSON one gives: an unquoted date or
+    time (`2024-01-01`, `2024-01-01T10:00:00Z`) stays a string — YAML 1.1's safe load makes it a date, which no
+    writer of JSON takes (it ended `mock generate` half way through a file).
   * A document that cannot be read raises OpenApiFileError with one line that names the file and why — never a
     traceback. Without PyYAML a YAML document says: `<file>: a YAML OpenAPI document needs PyYAML (pip3 install
     pyyaml), or give its JSON form`.
@@ -43,13 +45,30 @@ def _first_line(exc: Exception) -> str:
     return text[0] if text else type(exc).__name__
 
 
+_LOADER: list = []
+
+
+def _loader(yaml):
+    """yaml.SafeLoader without the timestamp resolver: dates and times stay the strings JSON would hold."""
+    if not _LOADER:
+        class JsonTypesLoader(yaml.SafeLoader):
+            pass
+
+        JsonTypesLoader.yaml_implicit_resolvers = {
+            first: [(tag, rx) for tag, rx in resolvers if tag != "tag:yaml.org,2002:timestamp"]
+            for first, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+        }
+        _LOADER.append(JsonTypesLoader)
+    return _LOADER[0]
+
+
 def _yaml(path: Path, text: str):
     try:
         import yaml
     except ImportError:
         raise OpenApiFileError(NEEDS_PYYAML.format(path=path)) from None
     try:
-        return yaml.safe_load(text)
+        return yaml.load(text, Loader=_loader(yaml))  # noqa: S506 — a SafeLoader with one resolver less
     except yaml.YAMLError as exc:
         raise OpenApiFileError(f"{path}: not readable as YAML: {_first_line(exc)}") from None
 

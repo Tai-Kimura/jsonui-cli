@@ -77,3 +77,23 @@ class YamlDocuments(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GenerateHtmlFindsYaml(unittest.TestCase):
+    """The generator's own walk of docs/api: a YAML document gets its page (before 2.3.21: *.json only)."""
+
+    def test_generate_html_writes_a_page_for_a_yaml_document(self):
+        from jsonui_doc_cli.test_doc.generator import generate_html_directory
+
+        test_doc = {"type": "screen", "source": {"layout": "test.json"}, "metadata": {"name": "F", "description": "d", "screen": "f"},
+                    "platform": "web", "cases": [{"name": "renders", "description": "d", "steps": [{"assert": "visible", "id": "x"}]}]}
+        with TemporaryDirectory() as t:
+            root = Path(t)
+            (root / "tests").mkdir()
+            (root / "tests/a.test.json").write_text(json.dumps(test_doc), encoding="utf-8")
+            (root / "docs/api").mkdir(parents=True)
+            (root / "docs/api/items.yaml").write_text(yaml.safe_dump(API), encoding="utf-8")
+            out = root / "out"
+            generate_html_directory(root / "tests", out, "T", docs_dirs=[root / "docs/api"])
+            self.assertTrue((out / "api/items.html").is_file())
+            self.assertIn("Items", (out / "index.html").read_text(encoding="utf-8"))

@@ -94,3 +94,12 @@ def test_the_viz_rack_counts_and_reads_a_yaml_document(tmp_path):
     assert data_docs.counts(_project(root)) == {"api": 1, "db": 0}
     got = data_docs.read(_project(root))
     assert [d["file"] for d in got["api"]] == ["docs/api/users.yaml"], got
+
+
+def test_an_unquoted_date_or_time_stays_the_string_json_would_hold(tmp_path):
+    """YAML 1.1's safe load makes `2024-01-01` a date: no JSON writer takes it, and it stopped `mock generate` half way
+    through a mock (found by the integration's check of 2.3.21). Read here it is the string a JSON document holds."""
+    (tmp_path / "a.yaml").write_text("example: {created: 2024-01-01, at: 2024-01-01T10:00:00Z, n: 3, ok: true}\n", encoding="utf-8")
+    got = OF.read(tmp_path / "a.yaml")
+    assert got == {"example": {"created": "2024-01-01", "at": "2024-01-01T10:00:00Z", "n": 3, "ok": True}}
+    assert json.dumps(got)   # what a JSON writer does with it
