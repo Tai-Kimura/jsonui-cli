@@ -491,7 +491,7 @@ window.__dbg = {
       spiritBubble: R.spirit && R.spirit.bubbleEl && !R.spirit.bubbleEl.hidden ? (R.spirit.bubbleEl.style.visibility || 'visible') : null })) : [];
     const alert = document.getElementById('roster-alert');
     return { shown: !!box && !box.hidden, solo, rows, bots, alert: alert && !alert.hidden ? alert.textContent : null, count: (document.getElementById('roster-count') || {}).textContent || '',
-      folded: !!box && box.classList.contains('roster-folded'), rect: rect(box), err: rect(document.getElementById('live-error')), soloBox: rect(document.getElementById('room-solo')), card: rect(document.querySelector('#rb.show')),
+      folded: !!box && box.classList.contains('roster-folded'), rect: rect(box), err: rect(document.getElementById('live-error')), soloBox: rect(document.getElementById('room-solo')), card: rect(document.querySelector('#rb.show')), waits: rect(document.getElementById('rb-waits')),
       scene: rect(document.getElementById('scene')), ring: selRing.visible, floorNav: rect(document.getElementById('floor-nav')),
       // every control shown on the page that the list lies on (the live suite's floor check, OVERLAP_JS, asks the same)
       hits: (() => { if (!box || box.hidden) return []; const vis = (el) => { if (!el || el.closest('[hidden]')) return false; const st = getComputedStyle(el);

@@ -22,7 +22,9 @@ The real `jui viz serve` in a throwaway HOME and the real forward.py; nine sessi
   - the list lies on no control of the page (the floor buttons, the name box, a robot's card...) and keeps off the
     source's error line, inside the 3D, at 1920, 1440, 1280, 1024 and 390 px wide: seven sessions in other folders
     make eight rooms, two floors, so the floor buttons are up in the room's view as on a real machine (the gate,
-    10-23: the list's fold button lay on them).
+    10-23: the list's fold button lay on them); with a robot's card open and the other robots' waits beside it
+    (#rb-waits, two robots here wait on a permission) the list keeps off that block too, at 1920, 1440 and 1280 (the
+    gate, 2.3.21: the list beside the card lay on rbw-sum and rbw-robot at 1920).
 Stills for the requester: all shown and some hidden, at each width.
 """
 
@@ -380,8 +382,9 @@ async def run_room_roster(pw, out, failures, jt=None):
             await pg.wait_for_timeout(600)   # rosterPlace runs each quarter second
             s = res[f"place-{label}"] = await pg.evaluate(RO)
             check(failures, s["shown"] and s["hits"] == [] and _apart(s["rect"], s["err"]) and _apart(s["rect"], s["soloBox"]) and _apart(s["rect"], s["floorNav"])
-                  and _inside(s["rect"], s["scene"]) and (not card or s["card"]),
-                  f"{label}: the list on no control, off the error line, inside the 3D: rect {s['rect']} hits {s['hits']} floors {s['floorNav']} name {s['soloBox']} err {s['err']} card {s['card']}")
+                  and _apart(s["rect"], s["waits"]) and _inside(s["rect"], s["scene"]) and (not card or s["card"]),
+                  f"{label}: the list on no control, off the error line and the waits, inside the 3D: rect {s['rect']} hits {s['hits']} floors {s['floorNav']} "
+                  f"name {s['soloBox']} err {s['err']} waits {s['waits']} card {s['card']}")
             return s
         await until(page, "() => !window.__dbg.roster().err", "the sources' error line down", timeout=30000, why=RO)
         s = await placed(page, "1920")
@@ -390,6 +393,8 @@ async def run_room_roster(pw, out, failures, jt=None):
         await page.screenshot(path=str(out / "1920-floors.png"))
         await page.click(f"#roster-list [data-roster-open='{rid[1]}']")
         await until(page, "() => window.__dbg.roster().card", "a robot's card", timeout=8000, why=RO)
+        # the other robots' waits beside the card (robots 3 and 5 wait on a permission): up, so the arm is about them
+        await until(page, "() => window.__dbg.roster().waits", "the waits beside the card", timeout=8000, why=RO)
         await placed(page, "1920-card", card=True)
         # the robot selected now is the list's highlighted row (requester 10-23: 「今選択されてるロボットがチェックの方でも
         # ハイライトされるようにしてほしい」): selected from the list, moved to another, a subagent, none
@@ -417,6 +422,16 @@ async def run_room_roster(pw, out, failures, jt=None):
         await page.keyboard.press("Escape")
         res["currentNone"] = await until(page, "() => { const s = window.__dbg.roster(); return s.shown && !s.card && s.rows.every((r) => !r.current) ? s : null; }",
                                          "no row highlighted once none is selected", timeout=8000, why=RO)
+        # the card open with the waits beside it at 1440 and 1280 as well (1920 above)
+        for w, h in ((1440, 900), (1280, 800)):
+            await page.set_viewport_size({"width": w, "height": h})
+            await page.evaluate("(id) => window.__dbg.openRobot(id)", rid[1])
+            await until(page, "() => { const s = window.__dbg.roster(); return s.card && s.waits; }", f"{w}: a card and the waits beside it",
+                        timeout=8000, why=RO)
+            await placed(page, f"{w}-card", card=True)
+            await page.screenshot(path=str(out / f"{w}-card-waits.png"))
+            await page.keyboard.press("Escape")
+            await until(page, "() => !window.__dbg.roster().card", f"{w}: the card closed", timeout=8000, why=RO)
         for w, h in ((1440, 900), (1280, 800), (1024, 768)):
             await page.set_viewport_size({"width": w, "height": h})
             # the floor buttons come back once the card's camera has returned: measured with them up

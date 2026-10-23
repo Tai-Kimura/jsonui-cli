@@ -1251,9 +1251,9 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 .room-solo[hidden] { display: none; }
 /* the room's robot list (53-roster.js): at the 3D's right; left of the robot card when the page is wide enough for both,
    under it when not (the card is what was asked for last); at the foot of the 3D on a narrow page, folded by a press */
-.roster { position: absolute; top: var(--roster-top, 12px); right: 12px; z-index: 4; display: grid; grid-template-rows: auto auto minmax(0, 1fr); width: 248px; max-height: var(--roster-max, calc(100% - 24px)); overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); box-shadow: 0 4px 16px var(--shadow); font-size: 13px; }
+.roster { position: absolute; top: var(--roster-top, 12px); right: calc(12px + var(--roster-shift, 0px)); z-index: 4; display: grid; grid-template-rows: auto auto minmax(0, 1fr); width: 248px; max-height: var(--roster-max, calc(100% - 24px)); overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); box-shadow: 0 4px 16px var(--shadow); font-size: 13px; }
 .roster[hidden] { display: none; }
-@media (min-width: 1300px) { .scene:has(.rb.show) .roster { right: calc(min(420px, 100% - 28px) + 26px); } }
+@media (min-width: 1300px) { .scene:has(.rb.show) .roster { right: calc(min(420px, 100% - 28px) + 26px + var(--roster-shift, 0px)); } }
 .roster-head { display: flex; align-items: center; gap: 6px; padding: 8px 8px 6px 12px; border-bottom: 1px solid var(--line); }
 .roster-head h2 { margin: 0; font-size: 13px; font-weight: 700; }
 .roster-count { margin-left: auto; color: var(--ink-soft); font-variant-numeric: tabular-nums; }

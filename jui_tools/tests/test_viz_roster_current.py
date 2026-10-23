@@ -83,10 +83,39 @@ def test_the_list_resized_shows_the_selected_row_again():
 let bottom = 1080;
 const props = {};
 const box = { style: { setProperty: (k, v) => { props[k] = v; }, getPropertyValue: (k) => props[k] || '' }, getBoundingClientRect: () => ({ left: 0, right: 248, top: 60, bottom: 600 }) };
-const document = { getElementById: (id) => (id === 'scene' ? { getBoundingClientRect: () => ({ top: 48, bottom, height: bottom - 48 }) } : null) };
+const document = { getElementById: (id) => (id === 'scene' ? { getBoundingClientRect: () => ({ top: 48, bottom, height: bottom - 48 }) } : null), querySelector: () => null };
 const rosterNarrow = () => false;
 const out = [];
 rosterPlace(box); ROSTER.shownFor = 'S-A'; rosterPlace(box); out.push([props['--roster-max'], ROSTER.shownFor]);   // the same: kept
 bottom = 400; rosterPlace(box); out.push([props['--roster-max'], ROSTER.shownFor]);                               // shorter: shown again
 process.stdout.write(JSON.stringify(out));"""
     assert _node(code) == [["1008px", "S-A"], ["328px", None]]
+
+
+def test_the_waits_beside_a_card_move_the_list_left_or_else_below_them():
+    """The other robots' waits beside an open card (#rb-waits) stay at the card's corner; the list moves (the gate,
+    2.3.21: it lay on them at 1920). Room on the left: the list goes left of them (--roster-shift) and keeps its height;
+    no room: below them, as the fixed parts; the waits hidden: no shift. An open card the list lies on (under 1300 px)
+    moves it left of the card, then of the card's waits."""
+    src = web_text("js", "53-roster.js")
+    code = "\n".join(re.search(rf"\nconst {n} = [^\n]*", src).group(0) for n in ("ROSTER", "ROSTER_AROUND", "ROSTER_GAP")) + "\n" + _cut(src, "rosterPlace") + r"""
+const props = {};
+let sceneLeft = 0, hidden = false;
+const box = { style: { setProperty: (k, v) => { props[k] = v; }, getPropertyValue: (k) => props[k] || '' },
+  getBoundingClientRect: () => { const s = parseFloat(props['--roster-shift']) || 0; return { left: 1000 - s, right: 1248 - s, top: 60, bottom: 600 }; } };
+const waits = { get hidden() { return hidden; }, getBoundingClientRect: () => ({ left: 1000, right: 1240, top: 60, bottom: 300, width: 240, height: 240 }) };
+let card = null;
+const document = { getElementById: (id) => (id === 'scene' ? { getBoundingClientRect: () => ({ left: sceneLeft, top: 48, bottom: 1080, height: 1032 }) } : id === 'rb-waits' ? waits : null),
+  querySelector: (q) => (q === '#rb.show' ? card : null) };
+const rosterNarrow = () => false;
+const out = [];
+rosterPlace(box); rosterPlace(box); out.push([props['--roster-shift'], props['--roster-top'], props['--roster-max']]);   // twice: no drift
+sceneLeft = 900; rosterPlace(box); out.push([props['--roster-shift'], props['--roster-top'], props['--roster-max']]);   // no room: below
+sceneLeft = 0; hidden = true; rosterPlace(box); out.push([props['--roster-shift'], props['--roster-top']]);             // hidden: none
+// a card the list lies on (under 1300 px app.css leaves the list at the right): left of the card, then of the waits
+card = { getBoundingClientRect: () => ({ left: 1100, right: 1520, top: 60, bottom: 900, width: 420, height: 840 }) };
+rosterPlace(box); out.push([props['--roster-shift'], props['--roster-top']]);                                           // the card, no waits
+waits.getBoundingClientRect = () => ({ left: 850, right: 1090, top: 60, bottom: 300, width: 240, height: 240 }); hidden = false;
+rosterPlace(box); rosterPlace(box); out.push([props['--roster-shift'], props['--roster-top']]);                        // the card and its waits
+process.stdout.write(JSON.stringify(out));"""
+    assert _node(code) == [["256px", "12px", "1008px"], ["0px", "258px", "762px"], ["0px", "12px"], ["156px", "12px"], ["406px", "12px"]]

@@ -176,14 +176,36 @@ function rosterShowCurrent(current) {
    a room's view on a building of three floors): the room's name box, the floor buttons, the source's error line, the
    building's legend and weather, the empty room's note. Any of them shown in the list's column and in the 3D's upper
    half keeps the list below it; the list is as tall as what is left. On a narrow page the list sits at the foot, so
-   only its height gives way. */
+   only its height gives way.
+   An open card, and the other robots' waits beside it (#rb-waits, 53-waits.js, held at the card's top-left corner),
+   stand where they are, so it is the list that moves (the gate, 2.3.21: the list beside the card lay on their sum and
+   robots at 1920; under 1300 px, where app.css leaves the list at the right, on the card itself): to their left
+   (--roster-shift), the list keeping its height; where the 3D has no room left of the waits, below them as the parts
+   above (under them on a short page the list had no height left: its selected row could not be shown). */
 const ROSTER_AROUND = ['room-solo', 'floor-nav', 'live-error', 'tower-legend', 'tower-weather', 'live-empty'];
+const ROSTER_GAP = 8;
 function rosterPlace(box) {
   const scene = document.getElementById('scene');
   if (!scene) return;
-  const S = scene.getBoundingClientRect(), r = box.getBoundingClientRect();
+  const S = scene.getBoundingClientRect(), now = box.getBoundingClientRect();
+  const had = parseFloat(box.style.getPropertyValue('--roster-shift')) || 0;
+  // the list where it stands with no shift: what is measured against
+  const r = { left: now.left + had, right: now.right + had, top: now.top, bottom: now.bottom };
+  const shown = (el) => { if (!el || el.hidden || rosterNarrow()) return null; const o = el.getBoundingClientRect(); return o.width && o.height ? o : null; };
+  let shift = 0, around = ROSTER_AROUND;
+  const card = shown(document.querySelector('#rb.show'));
+  if (card && card.left < r.right && r.left < card.right) shift = Math.max(0, r.right - (card.left - ROSTER_GAP));
+  const w = shown(document.getElementById('rb-waits'));
+  if (w && w.left < r.right - shift && r.left - shift < w.right) {
+    const want = r.right - (w.left - ROSTER_GAP);   // the list's right edge left of the waits
+    if (r.left - want >= S.left + 12) shift = want;
+    else around = [...ROSTER_AROUND, 'rb-waits'];
+  }
+  shift = Math.round(shift);
+  if (shift !== had) box.style.setProperty('--roster-shift', `${shift}px`);
+  if (shift) { r.left -= shift; r.right -= shift; }
   let clear = S.top + 12;   // the page y the list's top stays under
-  for (const id of ROSTER_AROUND) {
+  for (const id of around) {
     const el = document.getElementById(id);
     if (!el || el.hidden) continue;
     const o = el.getBoundingClientRect();
