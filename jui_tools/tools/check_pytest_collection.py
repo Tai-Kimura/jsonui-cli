@@ -152,6 +152,13 @@ ALLOWED_SKIP_REASONS: tuple[str, ...] = (
     # the release's own full suite runs on that machine, where the arm executes
     # (2.3.4: run there, passed) — the same place the clock-out is measured.
     "session-recovery's common.sh (or jq) is not on this machine",
+    # THE THIRD SHAPE AGAIN, FOR THE PROMO VIDEO'S CAPTURE TOOL (tools/viz_promo). The video's source (jsonui-promo)
+    # and the capture's stage (demo-shop) are local workspaces outside this repository, and the arms that read them
+    # run only on the machine that renders the video: test_viz_promo holds the script to the promo's timeline.json
+    # and to demo-shop's flows there. CI has neither and must not vendor them (the promo is not shipped; demo-shop is
+    # a separate project). The tool's other arms run everywhere.
+    "the jsonui-promo project is not on this machine",
+    "the demo-shop workdir is not on this machine",
 )
 
 
