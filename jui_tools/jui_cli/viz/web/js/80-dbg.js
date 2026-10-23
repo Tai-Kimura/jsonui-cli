@@ -585,6 +585,8 @@ window.__dbg = {
     return { kind: R.robot.waitKind || null, lamp: R.robot.lampKey || null, pose: R.robot.poseName || null,
       bubble: b && !b.hidden ? b.textContent : null, bubbleShown: !!(b && !b.hidden && b.style.visibility === 'visible') }; },
   waitPicked: () => WAIT.picked,
+  tl: (k, a) => tl(k, a),   // the page's words, as the e2e compares them
+  closeTaskBoard: () => closeTaskBoard(),
   towerStateOf: (id) => (SOURCE.mode === 'live' ? towerState(id) : null),
   // a session's main robot and a robot's project, as the page has them (tools/viz_e2e/project_switch.py)
   labelOfSession: (sid) => (typeof SESSION_UUID === 'undefined' ? null : Object.keys(SESSION_UUID).find((l) => SESSION_UUID[l] === sid) || null),

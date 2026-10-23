@@ -892,6 +892,22 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .rb { position: absolute; top: 14px; right: 14px; bottom: 14px; z-index: 5; display: grid; grid-template-rows: auto auto minmax(0, 1fr); width: min(420px, calc(100% - 28px)); overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--ink); box-shadow: 0 10px 30px var(--shadow); opacity: 0; transform: translateX(16px); transition: opacity 0.2s ease, transform 0.25s ease;
   --wb-ink: var(--ink); --wb-soft: var(--ink-soft); --wb-card: var(--bg); --wb-line: var(--line); --wb-blue: var(--info); }
 .rb.show { opacity: 1; transform: none; }
+/* The other sessions' waits beside an open card (53-waits.js cardWaits; requester 10-23): out of the card, at its
+   top-left corner, the waits' amber (the bubbles' "!"); in the head row as a badge where the card has the width. */
+.rb-waits { position: absolute; z-index: 6; display: grid; gap: 6px; width: max-content; max-width: 260px; padding: 8px 10px; border: 1px solid var(--line); border-left: 4px solid #ffb020; border-radius: 10px; background: var(--panel); color: var(--ink); box-shadow: 0 6px 18px var(--shadow); }
+.rb-waits[hidden] { display: none; }
+.rbw-title { margin: 0; color: var(--ink-soft); font: 700 11px/1.4 var(--font-body); }
+.rbw-sum { justify-self: stretch; padding: 4px 10px; border: 1px solid #7a4b00; border-radius: 8px; text-align: left; background: #ffb020; color: #1f1400; font: 800 12px/1.5 var(--font-body); cursor: pointer; }
+.rbw-list { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; }
+.rbw-robot { display: inline-flex; align-items: center; gap: 6px; padding: 2px 6px 2px 2px; border: 0; border-radius: 8px; background: none; color: var(--ink); font: 600 12px/1.5 var(--font-body); text-align: left; cursor: pointer; }
+.rbw-robot:hover { background: var(--chip); }
+.rbw-more { color: var(--ink-soft); font: 500 11.5px/1.5 var(--font-body); }
+.rbw-slot { display: contents; }
+.rbw-badge { padding: 2px 9px; border: 1px solid #7a4b00; border-radius: 999px; background: #ffb020; color: #1f1400; font: 800 12px/1.5 var(--font-body); white-space: nowrap; cursor: pointer; }
+.rbw-sum:focus-visible, .rbw-robot:focus-visible, .rbw-badge:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+@keyframes rbw-arrive { 0% { transform: translateX(-10px) scale(0.96); box-shadow: 0 0 0 0 rgba(255, 176, 32, 0.9); } 60% { transform: none; box-shadow: 0 0 0 8px rgba(255, 176, 32, 0); } 100% { transform: none; } }
+.rb-waits.rbw-arrive, .rbw-badge.rbw-new { animation: rbw-arrive 0.7s ease-out 1; }
+@media (prefers-reduced-motion: reduce) { .rb-waits.rbw-arrive, .rbw-badge.rbw-new { animation: none; } }
 /* The mark and the name on top, the controls on a row of their own below (10-19, requester: a session's name gets the
    card's width instead of sharing it with the buttons): ‹ › at the left, back to 3D at the right. */
 .rb-head { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px 12px; padding: 12px 14px; border-top: 5px solid var(--c); border-bottom: 1px solid var(--line); }

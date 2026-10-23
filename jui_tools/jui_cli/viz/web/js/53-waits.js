@@ -98,3 +98,76 @@ $('chip-input').addEventListener('click', () => {
   const d = ROBOT_DEFS.find((x) => waitKindOf(x.id) === 'input');
   if (d) waitOpen(d.id, 'input');
 });
+
+/* ---------- the waits beside an open card (requester 10-23: 「質問や許可まちがカード開いてると見えないので、開いてるときは
+   カードの左側の上の方に許可が来たのがわかるようにしてほしい」) ----------
+   While a robot's card is open, the header's chips and the other robots' bubbles are behind it. Beside the card, out of
+   it at its top-left corner, a small block says what the other sessions wait on — permissions, questions, stopped calls
+   — how many, and whose (each robot's mark). The open card's own session is left out: its wait is in the card. A
+   robot's button opens its wait's card (waitOpen, as its bubble does); the sum opens the task board's waiting strip (as
+   the chips do). Where the card is the page's width (a phone's sheet, or the card widened to the whole stage) the block
+   has no room beside it: the count goes in the card's head row as a badge that opens the same board. Something new moves
+   once (not under reduced motion). */
+const CARD_WAITS = { seen: new Set(), sig: '' };
+const RBW_SUM = { perm: 'rbw.sum.perm', ask: 'rbw.sum.ask', denied: 'rbw.sum.denied' };
+const RBW_KIND = { perm: 'rbw.kind.perm', ask: 'rbw.kind.ask', denied: 'rbw.kind.denied' };
+const rbwSum = (counts) => ['perm', 'ask', 'denied'].filter((k) => counts[k]).map((k) => tl(RBW_SUM[k], { n: counts[k] })).join(' · ');
+const rbwKinds = (ks) => ks.map((x) => tl(RBW_KIND[x])).join(tl('rbw.sep'));
+const CARD_WAIT_MAX = 6;   // robots listed; the rest said as ほか N
+function cardWaitItems() {
+  const own = rbState.id, out = [];
+  for (const p of (latestModel && latestModel.pending) || []) if (p.who !== own && p.status === 'pending') out.push({ kind: 'perm', who: p.who, key: `p:${p.id}` });
+  for (const d of denialsWaiting()) if (d.who !== own) out.push({ kind: 'denied', who: d.who, key: `d:${d.id}` });
+  for (const q of questionsWaiting()) if (q.who !== own) out.push({ kind: 'ask', who: q.who, key: `q:${q.id}` });
+  return out.filter((x) => DEF[x.who]);
+}
+/* Beside the card (its left edge, its top), or in its head (no room). */
+const cardWaitInHead = () => window.matchMedia('(max-width: 900px)').matches || rbEl.classList.contains('rb-wide-full');
+function cardWaits() {
+  const box = $('rb-waits'), open = !!rbState.id && !rbEl.hidden && rbEl.classList.contains('show');   // the card on screen
+  const items = open ? cardWaitItems() : [];
+  const head = open && cardWaitInHead();
+  const counts = { perm: 0, ask: 0, denied: 0 };
+  for (const x of items) counts[x.kind] += 1;
+  const fresh = items.filter((x) => !CARD_WAITS.seen.has(x.key));
+  for (const x of items) CARD_WAITS.seen.add(x.key);
+  // the block beside the card
+  box.hidden = !items.length || head;
+  if (!box.hidden) {
+    const robots = [...new Set(items.map((x) => x.who))];
+    const kindsOf = (id) => ['perm', 'denied', 'ask'].filter((k) => items.some((x) => x.who === id && x.kind === k));
+    const sig = JSON.stringify([NAMES.rev, items.map((x) => x.key)]);
+    if (sig !== CARD_WAITS.sig) {
+      CARD_WAITS.sig = sig;
+      const sum = rbwSum(counts);
+      const newWho = new Set(fresh.map((x) => x.who));
+      setHTML(box, `<p class="rbw-title">${esc(tl('rbw.title'))}</p><button type="button" class="rbw-sum" data-rbw-board data-fk="rbw-board">${esc(sum)}</button>`
+        + `<ul class="rbw-list">${robots.slice(0, CARD_WAIT_MAX).map((id) => {
+          const ks = kindsOf(id), k = ks[0] === 'ask' ? 'ask' : 'perm';
+          return `<li><button type="button" class="rbw-robot${newWho.has(id) ? ' rbw-new' : ''}" data-rbw-robot="${esc(id)}" data-rbw-kind="${esc(k)}" data-fk="rbw-${esc(id)}" title="${esc(tl('rbw.open', { name: DEF[id].agent || id, what: rbwKinds(ks) }))}">${pill(id, DEF[id].role)}<span>${esc(rbwKinds(ks))}</span></button></li>`;
+        }).join('')}${robots.length > CARD_WAIT_MAX ? `<li class="rbw-more">${esc(tl('rbw.more', { n: robots.length - CARD_WAIT_MAX }))}</li>` : ''}</ul>`);
+      if (fresh.length) { box.classList.remove('rbw-arrive'); void box.offsetWidth; box.classList.add('rbw-arrive'); }
+    }
+    const parent = rbEl.offsetParent || rbEl.parentElement;
+    box.style.top = `${rbEl.offsetTop}px`;
+    box.style.right = `${parent.clientWidth - rbEl.offsetLeft + 10}px`;
+  } else CARD_WAITS.sig = '';
+  // the badge in the card's head row
+  const slot = rbEl.querySelector('[data-rbw-slot]');
+  if (slot) {
+    const n = items.length, want = head && n ? tl('rbw.badge', { n }) : '';
+    if (slot.dataset.n !== String(head ? n : 0)) {
+      slot.dataset.n = String(head ? n : 0);
+      setHTML(slot, want ? `<button type="button" class="rbw-badge${fresh.length ? ' rbw-new' : ''}" data-rbw-board data-fk="rbw-badge" title="${esc(rbwSum(counts))}">${esc(want)}</button>` : '');
+    }
+  }
+}
+function cardWaitClick(e) {
+  const r = e.target.closest('[data-rbw-robot]');
+  if (r) { waitOpen(r.dataset.rbwRobot, r.dataset.rbwKind); return; }
+  const b = e.target.closest('[data-rbw-board]');
+  if (b) { tb.waitView = true; openTaskBoard(b); }
+}
+$('rb-waits').addEventListener('click', cardWaitClick);
+rbEl.addEventListener('click', (e) => { if (e.target.closest('[data-rbw-board]')) cardWaitClick(e); });
+window.addEventListener('resize', () => { if (rbState.id) cardWaits(); });
