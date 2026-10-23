@@ -1044,7 +1044,7 @@ RSpec.describe 'kjui autoFocus (TextField and TextView)' do
 
   it 'asks the id requester of a TextField' do
     code = field('id' => 'email_field', 'autoFocus' => true)
-    expect(code).to include('LaunchedEffect(Unit) { focusRequester_email_field.requestFocus() }')
+    expect(code).to include('LaunchedEffect(Unit) { focusRequester_email_field.requestFocus(); autoFocusKeyboard_email_field?.show() }')
     expect(code).to include('.focusRequester(focusRequester_email_field)')
   end
 
@@ -1052,16 +1052,16 @@ RSpec.describe 'kjui autoFocus (TextField and TextView)' do
     code = field('autoFocus' => true)
     name = code[/val focusRequester_(\w+) = remember \{ FocusRequester\(\) \}/, 1]
     expect(name).not_to be_nil
-    expect(code).to include("LaunchedEffect(Unit) { focusRequester_#{name}.requestFocus() }")
+    expect(code).to include("LaunchedEffect(Unit) { focusRequester_#{name}.requestFocus(); autoFocusKeyboard_#{name}?.show() }")
     expect(code).to include(".focusRequester(focusRequester_#{name})")
   end
 
   it 'asks the id requester of a TextView, and one by position without an id' do
-    expect(text_view('id' => 'note', 'autoFocus' => true)).to include('LaunchedEffect(Unit) { focusRequester_note.requestFocus() }')
+    expect(text_view('id' => 'note', 'autoFocus' => true)).to include('LaunchedEffect(Unit) { focusRequester_note.requestFocus(); autoFocusKeyboard_note?.show() }')
     code = text_view('autoFocus' => true)
     name = code[/val focusRequester_(\w+) = remember \{ FocusRequester\(\) \}/, 1]
     expect(name).not_to be_nil
-    expect(code).to include("LaunchedEffect(Unit) { focusRequester_#{name}.requestFocus() }", ".focusRequester(focusRequester_#{name})")
+    expect(code).to include("LaunchedEffect(Unit) { focusRequester_#{name}.requestFocus(); autoFocusKeyboard_#{name}?.show() }", ".focusRequester(focusRequester_#{name})")
   end
 
   it 'emits nothing for a field without it' do

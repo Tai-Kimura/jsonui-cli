@@ -192,7 +192,7 @@ module KjuiTools
             code += indent("LaunchedEffect(data.#{focus_prop}) { if (data.#{focus_prop}) { focusRequester_#{json_data['id']}.requestFocus(); keyboardController_#{json_data['id']}?.show() } }", depth) + "\n"
           end
           # `autoFocus` (2.3.22, as TextFieldComponent): the field takes the
-          # focus when the screen appears. Its requester is the id's, or one
+          # focus when the screen appears, and the soft keyboard is asked for. Its requester is the id's, or one
           # named by its position (view_id) for a field with no id.
           auto_focus_requester = nil
           if json_data['autoFocus'] == true
@@ -201,7 +201,9 @@ module KjuiTools
             required_imports&.add(:remember)
             required_imports&.add(:launched_effect)
             code += indent("val focusRequester_#{auto_focus_requester} = remember { FocusRequester() }", depth) + "\n" unless focus_prop
-            code += indent("LaunchedEffect(Unit) { focusRequester_#{auto_focus_requester}.requestFocus() }", depth) + "\n"
+            required_imports&.add(:software_keyboard_controller)
+            code += indent("val autoFocusKeyboard_#{auto_focus_requester} = LocalSoftwareKeyboardController.current", depth) + "\n"
+            code += indent("LaunchedEffect(Unit) { focusRequester_#{auto_focus_requester}.requestFocus(); autoFocusKeyboard_#{auto_focus_requester}?.show() }", depth) + "\n"
           end
 
           if has_margins

@@ -305,8 +305,13 @@ module KjuiTools
             code += indent("val focusRequester_#{focus_requester_name} = remember { FocusRequester() }", depth) + "\n"
           end
           if auto_focus
+            # requestFocus alone moves the focus and leaves the soft keyboard
+            # down (measured on an API 35 emulator, 2.3.22); the keyboard is
+            # asked for as the data.<id>IsFocused path does
             required_imports&.add(:launched_effect)
-            code += indent("LaunchedEffect(Unit) { focusRequester_#{focus_requester_name}.requestFocus() }", depth) + "\n"
+            required_imports&.add(:software_keyboard_controller)
+            code += indent("val autoFocusKeyboard_#{focus_requester_name} = LocalSoftwareKeyboardController.current", depth) + "\n"
+            code += indent("LaunchedEffect(Unit) { focusRequester_#{focus_requester_name}.requestFocus(); autoFocusKeyboard_#{focus_requester_name}?.show() }", depth) + "\n"
           end
           if focus_prop
             required_imports&.add(:launched_effect)
