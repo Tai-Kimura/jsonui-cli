@@ -276,6 +276,21 @@ def test_serve_end_to_end(home):
         assert token not in text
 
 
+def _ended(proc: subprocess.Popen, within: float = 10) -> int:
+    """TERM, then its code; one that does not end within `within` s is killed and its own output is the failure's
+    message (the CI flake of 10-23 had only "timed out after 10 seconds"; ticket 2026-10-23-viz-serve-restart-term-not-
+    ending-on-ci)."""
+    proc.terminate()  # our own child
+    try:
+        rc = proc.wait(timeout=within)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        out, err = proc.communicate()
+        raise AssertionError(f"serve did not end within {within} s of TERM\n--- stderr ---\n{err[-3000:]}\n--- stdout ---\n{out[-1500:]}")
+    proc.communicate()
+    return rc
+
+
 def test_serve_restarts_on_the_same_port_right_after_stop(home):
     """The last run's closed connections sit in TIME_WAIT on the server's
     port; a restart must not be refused for them (it was, for about a
@@ -290,16 +305,12 @@ def test_serve_restarts_on_the_same_port_right_after_stop(home):
         )
         with urllib.request.urlopen(req, timeout=5) as res:
             assert res.status == 204
-    proc.terminate()  # our own child
-    assert proc.wait(timeout=10) == 0
-    proc.communicate()
+    assert _ended(proc) == 0
     again = _start_serve(home, port)
     try:
         assert _get(f"http://127.0.0.1:{port}/health") == 200
     finally:
-        again.terminate()
-        again.wait(timeout=10)
-        again.communicate()
+        assert _ended(again) == 0
 
 
 # ---- TERM ends the server within 3 s, with code 0 (ticket 2026-10-21-jui-viz-serve-does-not-exit-on-term) ----------
@@ -406,6 +417,38 @@ def test_term_while_a_pool_job_runs_ends_it(home, where):
     # the thread not waited for is named on stderr (what `jui viz start` keeps in serve.log)
     left = [line for line in err[0].splitlines() if "stopped; not waited for:" in line]
     assert len(left) == 1 and thread in left[0], err[0][-2000:]
+
+
+def test_term_while_it_still_starts_ends_it_with_its_files_cleared(home):
+    """server.json is written before the rest of the start (the readers, the loops): a TERM in between is a stop like any
+    other. Until 2.3.21 the handler came last and such a TERM ended the process outright (-15), its files left."""
+    # the session files' watcher is set up after server.json and before the old place of the handler
+    patch = "import time; from jui_cli.viz.sources import session_files as S; o = S.watch\ndef slow(*a, **k):\n    time.sleep(2); return o(*a, **k)\nS.watch = slow"
+    proc = _serve_as(home, _free_port(), patch=patch)
+    time.sleep(0.3)   # server.json is there; the start is still under way
+    _term_ends_it(proc)
+
+
+def test_a_stop_held_somewhere_ends_within_its_bound_and_names_the_step(home):
+    """Whatever holds the stop (here the pools' close, made to take 30 s), the process ends STOP_MAX_SEC after TERM with
+    code 0, its files cleared, and says where it was held."""
+    from jui_cli.commands.viz_cmd import STOP_MAX_SEC
+
+    patch = "import time; from jui_cli.viz.ingest import World\nWorld.close_pools = lambda self: time.sleep(30)"
+    proc = _serve_as(home, _free_port(), patch=patch)
+    start = time.monotonic()
+    proc.terminate()  # our own child
+    try:
+        rc = proc.wait(timeout=STOP_MAX_SEC + 3)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.communicate()
+        raise AssertionError(f"a held stop did not end within {STOP_MAX_SEC + 3} s")
+    took = time.monotonic() - start
+    _out, err = proc.communicate()
+    assert rc == 0 and STOP_MAX_SEC - 0.5 <= took < STOP_MAX_SEC + 3, (rc, took, err[-1500:])
+    assert not paths.server_json().exists() and not paths.pid_file().exists()
+    assert f"stop held in the pools for {STOP_MAX_SEC:g} s" in err, err[-1500:]
 
 
 def test_serve_refuses_a_port_another_process_listens_on_all_addresses(home):

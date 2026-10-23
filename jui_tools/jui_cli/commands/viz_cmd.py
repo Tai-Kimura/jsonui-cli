@@ -626,6 +626,9 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 HELPERS_GRACE_SEC = 1.0
 #: How long the server's own stop waits for a request still being handled (aiohttp waits 60 s by default).
 REQUEST_GRACE_SEC = 1.0
+#: How long a stop may take in all, whatever holds it: then the process ends, naming the step it was in (ticket
+#: 2026-10-23-viz-serve-restart-term-not-ending-on-ci). Each wait of the stop has its own grace of 1 to 2 s.
+STOP_MAX_SEC = 5.0
 
 
 def _run_serve(main) -> int:
@@ -829,6 +832,31 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     reader_cleanup: list = []
     observer = None
     from ..viz.config import ask_server_info
+
+    # TERM / INT taken from here on, before server.json says the server is there: a TERM while the rest starts up stops
+    # it as any stop does (before 2.3.21 the handler came last, and a TERM in between ended the process outright with
+    # its files left). Once taken, the stop ends within STOP_MAX_SEC whatever holds it, naming the step it was in.
+    stop = asyncio.Event()
+    stop_step = ["starting"]
+
+    def stop_held() -> None:
+        log(f"stop held in {stop_step[0]} for {STOP_MAX_SEC:g} s; ending without it")
+        try:
+            _clear_runtime_files(pid)
+        finally:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os._exit(0)
+
+    def on_stop_signal() -> None:
+        if not stop.is_set():
+            backstop = threading.Timer(STOP_MAX_SEC, stop_held)
+            backstop.daemon = True
+            backstop.start()
+        stop.set()
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, on_stop_signal)
 
     try:
         info = {
@@ -1124,9 +1152,6 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
             tasks.append(asyncio.create_task(cloud_prices_loop()))
             reader_cleanup.append(stop_readers)
 
-        stop = asyncio.Event()
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(sig, stop.set)
         hook_state = hooks_installer.status()
         print(f"jui viz: listening on {_url(port)} (Ctrl+C to quit)", flush=True)
         if replay:
@@ -1147,8 +1172,10 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
         await stop.wait()
         log("stopping")
     finally:
+        stop_step[0] = "the readers"
         for cleanup in reader_cleanup:
             await cleanup()
+        stop_step[0] = "the tasks"
         for task in tasks:
             task.cancel()
         for task in tasks:
@@ -1156,16 +1183,21 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                 await task
             except (asyncio.CancelledError, Exception):  # noqa: BLE001
                 pass
+        stop_step[0] = "the file watchers"
         for watcher in [observer, *observers]:
             if watcher is not None:
                 watcher.stop()
                 watcher.join(timeout=2)
         if rec is not None:
             rec.close()
+        stop_step[0] = "the web server"
         await runner.cleanup()
+        stop_step[0] = "the pools"
         world.close_pools()
         close_pools()
+        stop_step[0] = "the files"
         _clear_runtime_files(pid)
+        stop_step[0] = "the exit"
     return 0
 
 
