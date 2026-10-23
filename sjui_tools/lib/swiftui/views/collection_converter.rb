@@ -1213,6 +1213,19 @@ module SjuiTools
           # the bound currentPage, or a page state of the pager's own when
           # there is none.
           page_state = paging_scroll_selection(current_page_prop, page_changed_handler)
+          # height wrapContent: the pager is as tall as the page it shows
+          # (KotlinJsonUI's HorizontalPager ...wrapContentHeight()). A page-style
+          # TabView has no height of its own: in a vertical ScrollView it took
+          # the height the ScrollView had left (309 of 420 on SwiftJsonUI's
+          # ConformanceHost, the cell floating in its middle; on a consumer's
+          # screen with less left, its cards cut) and asked its ideal size it
+          # is 0 — 378pt of cards measured 40.7pt (ticket
+          # 2026-10-23-sjui-paging-collection-wrapcontent-height-collapses-in-scrollview).
+          # Each page is measured at its own height (paging_fit_heights) and
+          # the TabView is framed at the shown page's; it needs the shown page,
+          # so a pager with no page state gets one of its own.
+          fit_heights = paging_fit_heights
+          page_state ||= paging_scroll_selection(nil, nil, force: true) if fit_heights && !current_page_prop
           if current_page_prop
             add_line "TabView(selection: $data.#{current_page_prop}) {"
           elsif page_state
@@ -1256,7 +1269,7 @@ module SjuiTools
                     vars = open_cell_foreach('cellsData', page_start: drawn.empty? ? nil : 'pageStart', section_index: index,
                                                          pager: true)
                     indent do
-                      add_paging_cell(cell_view_name, vars, spacing)
+                      add_paging_cell(cell_view_name, vars, spacing, fit_heights)
                     end
                     add_line "}"
                   end
@@ -1270,7 +1283,7 @@ module SjuiTools
               indent do
                 vars = open_cell_foreach('cellsData', pager: true)
                 indent do
-                  add_paging_cell(cell_view_name, vars, spacing)
+                  add_paging_cell(cell_view_name, vars, spacing, fit_heights)
                 end
                 add_line "}"
               end
@@ -1280,6 +1293,9 @@ module SjuiTools
           add_line "}"
           add_modifier_line ".tabViewStyle(.page(indexDisplayMode: .never))"
           selection = current_page_prop ? "data.#{current_page_prop}" : page_state
+          # The shown page's height; before it is measured, the tallest measured
+          # (none yet: no frame, as before).
+          add_modifier_line ".frame(height: #{fit_heights}[#{selection}] ?? #{fit_heights}.values.max())" if fit_heights
           generate_paging_scroll_to(selection) if has_scroll_to?
 
           # The page-change callback is called with the page the selection
@@ -1346,8 +1362,8 @@ module SjuiTools
         # jsonui-cli 1.9.6). Until
         # jsonui-cli 1.9.0 the pager drew no scrollTo (and, with no currentPage,
         # no selection at all).
-        def paging_scroll_selection(current_page_prop, page_changed_handler = nil)
-          return nil if current_page_prop || (!has_scroll_to? && !page_changed_handler)
+        def paging_scroll_selection(current_page_prop, page_changed_handler = nil, force: false)
+          return nil if current_page_prop || (!force && !has_scroll_to? && !page_changed_handler)
 
           name = @component['id'] ? to_camel_case(@component['id']) : to_camel_case(position_name('collection'))
           state = "#{name}ScrollPage"
@@ -1405,7 +1421,7 @@ module SjuiTools
         # already is (open_cell_foreach counts a later section's cells from
         # its pageStart). The address counts as the tag does, as kjui's pager
         # test tag and rjui's item id do (round 7).
-        def add_paging_cell(cell_view_name, vars, spacing)
+        def add_paging_cell(cell_view_name, vars, spacing, fit_heights = nil)
           add_line "#{cell_view_name}(data: #{cell_data_arg(vars)}).equatable()"
           generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
           apply_cell_frame
@@ -1424,7 +1440,25 @@ module SjuiTools
           if (page_insets = collection_content_insets_swift_expr)
             add_modifier_line ".padding(#{page_insets})"
           end
+          if fit_heights
+            # Its own height (not the pager's, which comes from it), written
+            # down by page, then laid at the page's top.
+            add_modifier_line ".fixedSize(horizontal: false, vertical: true)"
+            add_modifier_line ".onGeometryChange(for: CGFloat.self) { $0.size.height } action: { #{fit_heights}[#{vars[:index_var]}] = $0 }"
+            add_modifier_line ".frame(maxHeight: .infinity, alignment: .top)"
+          end
           add_modifier_line ".tag(#{vars[:index_var]})"
+        end
+
+        # height wrapContent on a pager: the name of its page heights' state
+        # (page -> measured height), declared here; nil for any other height.
+        def paging_fit_heights
+          return nil unless @component['height'] == 'wrapContent'
+
+          name = @component['id'] ? to_camel_case(@component['id']) : to_camel_case(position_name('collection'))
+          state = "#{name}PageHeights"
+          @state_variables << "@State private var #{state}: [Int: CGFloat] = [:]"
+          state
         end
 
         # The class-list shape's cell view (cellClasses[0], no `sections`),
