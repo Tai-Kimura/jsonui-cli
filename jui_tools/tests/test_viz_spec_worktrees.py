@@ -146,3 +146,28 @@ def test_the_world_shows_it_while_the_session_lives_and_hears_its_robot_write(tm
     world.tick(300)
     world.publish()
     assert sorted(s["id"] for s in state.slices["specs"] if s["projectId"] == room_id) == [f"{room_id}:login.spec.json"]
+
+
+def test_a_detached_worktree_is_named_by_its_commit(tmp_path):
+    """A worktree on no branch (git worktree add --detach: the gates' and the integration's): its commit's 8 characters."""
+    root, _wt = _room(tmp_path)
+    det = tmp_path / "scratch" / "det"
+    _git(root, "worktree", "add", "-q", "--detach", str(det))
+    sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=det, capture_output=True, text=True, check=True).stdout.strip()
+    project = JsonUIProject(root, "p")
+    project.load_all(0)
+    project.set_worktrees([str(det)], 10)
+    rows = _rows(project)
+    assert f"p:@{sha[:8]}/login.spec.json" in rows, sorted(rows)
+    assert rows[f"p:@{sha[:8]}/login.spec.json"]["checkout"]["branch"] == sha[:8]
+
+
+def test_a_cwd_through_a_symlink_finds_its_worktree(tmp_path):
+    """macOS: a session's cwd under /tmp, the worktree's gitdir under /private/tmp (or the other way): compared real."""
+    root, wt = _room(tmp_path)
+    link = tmp_path / "link"
+    link.symlink_to(wt)
+    project = JsonUIProject(root, "p")
+    project.load_all(0)
+    assert project.set_worktrees([str(link / "docs")], 10) is True
+    assert "p:@feat/x/orders.spec.json" in _rows(project)
