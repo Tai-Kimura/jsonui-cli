@@ -34,7 +34,7 @@ TERM_CHAPTER_IDS = ("1a", "1b")
 ALL = TERM_CHAPTER_IDS + CHAPTER_IDS
 #: window segments inside a viz chapter, captured by term.py into a folder of their own: id -> (chapter, start, end,
 #: the demo-shop file shown). The promo shows the segment over its seconds and the chapter's frames after it.
-SEGMENTS = {"5-json": ("5", 110.0, 113.0, "docs/infra/load/weekend-campaign.json")}
+SEGMENTS = {"5-json": ("5", 120.0, 123.0, "docs/infra/load/weekend-campaign.json")}
 #: a terminal chapter shown split: its terminal on the left half, the viz page beside it on the right half, captured
 #: by capture.py into a folder of its own: id -> the chapter it sits beside. The promo frames both halves at the same
 #: size (its SPLIT layout), so the terminal (term.py) and the board are both taken at SPLIT_VIEWPORT.
@@ -47,7 +47,7 @@ STANDALONE = {"mig": (0.0, 40.0)}
 #: what run.py captures: the promo's chapters and the segments (a chapter brings its segments and board with it)
 CAPTURE_IDS = ALL + tuple(SEGMENTS) + tuple(BOARDS) + tuple(STANDALONE)
 #: the bounds the events below were written for; tests hold them to the promo's timeline.json
-BOUNDS = {"hook": (0, 6), "1a": (6, 18), "1b": (18, 34), "2": (34, 46), "3": (46, 56), "4": (56, 76), "4m": (76, 110), "5": (110, 124), "6": (124, 132)}
+BOUNDS = {"hook": (0, 6), "1a": (6, 18), "1b": (18, 40), "2": (40, 52), "3": (52, 62), "4": (62, 86), "4m": (86, 120), "5": (120, 134), "6": (134, 142)}
 
 ROOMS = ("demo-shop", "demo-admin", "demo-docs", "demo-api", "demo-mobile")
 
@@ -69,7 +69,7 @@ SUBAGENT = ("a3f19c2e8b7d4a601", "jsonui-test")
 #: the event kinds the driver knows (capture.Driver.fire)
 KINDS = frozenset({"start", "prompt", "tool", "tool_end", "perm", "ask_pending", "ask", "ask_answered", "denied", "idle", "stop",
                    "sub_start", "sub_stop", "talk", "tests_start", "tests_case", "tests_end", "settle", "door", "dbg", "click",
-                   "hover", "select", "wheel", "spec_reset", "spec_write", "dolly"})
+                   "hover", "select", "wheel", "spec_reset", "spec_write", "dolly", "worktree", "wt_session"})
 #: the migration player's buttons (59-sr-migration.js) and the plan demo-shop carries
 MIG_PLAN = "shop-to-managed"
 MIG_BTN = "#sr-mplayer [data-sr-mp='{}']"
@@ -117,6 +117,8 @@ WORDS = {
         "cases": ["カートが空のとき", "1 個入れたとき", "上限まで入れたとき", "在庫なしのとき", "通信に失敗したとき", "合計の表示"],
         "files": {"spec": "docs/screens/json/cart.spec.json", "readme": "README.md"},
         "board_prompt": "カート画面の spec を書いて",
+        "wt_prompt": "カートにクーポンを足して", "wt_spec": "クーポン", "wt_desc": "カートでクーポンを入れて、割引を受ける（書いている途中）",
+        "wt_cart": "カートの行と合計を見せ、クーポンを入れて注文を確定する。",
         "sub_done": "カートのテストを書き終えた",
         "room_readme": {"demo-admin": "demo-admin — 見本の管理画面（架空）\n", "demo-docs": "demo-docs — 見本のドキュメント（架空）\n",
                         "demo-api": "demo-api — 見本の API（架空）\n", "demo-mobile": "demo-mobile — 見本のスマホアプリ（架空）\n"},
@@ -155,6 +157,8 @@ WORDS = {
         "cases": ["empty cart", "one item", "up to the limit", "out of stock", "network failure", "total shown"],
         "files": {"spec": "docs/screens/json/cart.spec.json", "readme": "README.md"},
         "board_prompt": "Write the cart screen's spec",
+        "wt_prompt": "Add coupons to the cart", "wt_spec": "クーポン", "wt_desc": "カートでクーポンを入れて、割引を受ける（書いている途中）",
+        "wt_cart": "カートの行と合計を見せ、クーポンを入れて注文を確定する。",
         "sub_done": "Finished writing the cart tests",
         "room_readme": {"demo-admin": "demo-admin: a sample admin console (fictional)\n", "demo-docs": "demo-docs: a sample docs site (fictional)\n",
                         "demo-api": "demo-api: a sample API (fictional)\n", "demo-mobile": "demo-mobile: a sample mobile app (fictional)\n"},
@@ -194,6 +198,25 @@ class Chapter:
 
 def E(at, kind, **args) -> Event:
     return Event(at, kind, args)
+
+
+#: the worktree of 1b-board: its branch, its folder's name (scratch/<name> in the stage's HOME), the session working in
+#: it, its new spec and the spec it changes (relative to the room)
+WORKTREE = {"branch": "feat/cart-coupon", "name": "demo-shop-coupon", "sid": "0f0c0000-7d00-4000-8000-00000000c0de",
+            "new": "docs/screens/json/coupon.spec.json", "cart": "docs/screens/json/cart.spec.json"}
+#: the worktree's row on the whiteboard's list (its name and a branch tag)
+WT_ROW = "() => [...document.querySelectorAll('#wb-side-list .ws-item')].some((b) => b.textContent.includes('{}') && b.textContent.includes('⎇'))"
+
+
+def worktree_files(w: dict) -> dict:
+    """The worktree's work in progress: a new spec with its overview and state only, and the cart's spec with a new
+    description (a {dotted key: value} edit of the copy's own file, made by capture.Stage.make_worktree)."""
+    new = {"type": "screen_spec", "version": "1.0",
+           "metadata": {"name": "Coupon", "displayName": w["wt_spec"], "description": w["wt_desc"], "platforms": ["ios", "android", "web"]},
+           "stateManagement": {"uiVariables": [{"name": "couponCode", "type": "String", "initial": "\"\""},
+                                               {"name": "discountText", "type": "String", "initial": "\"\""}]}}
+    return {WORKTREE["new"]: json.dumps(new, ensure_ascii=False, indent=2) + "\n",
+            WORKTREE["cart"]: {"metadata.description": w["wt_cart"]}}
 
 
 def P(kind, **args) -> Event:
@@ -276,62 +299,65 @@ def chapters(lang: str) -> dict:
         E(2.8, "tool_end", key="s01"),
     ])
 
-    # 2 (34–46): the robots show what each session is doing (requester 10-22: 「ロボットの動きで状況が理解できるのがメイン機能」
+    # 2 (40–52): the robots show what each session is doing (requester 10-22: 「ロボットの動きで状況が理解できるのがメイン機能」
     # 「テスト中かどうかがわかったり」). In on the shop's room: robots typing, reading, thinking (a prompt and no tool yet);
     # one starts its tests, its card shows the run case by case (one fails), then one stops and waits for input.
     # the room's robot list folded before frame 0 (in and back out: the room is entered on camera, its list already folded)
-    out["2"] = Chapter("2", 34, 46, floor(w) + up_close("demo-shop") + [P("click", target={"css": "#room-back"}, expect="floor"), P("settle")], [
-        E(34.8, "click", target={"room_tag": "demo-shop"}, expect="solo:demo-shop"),
-        E(37.2, "tests_start", key="s02", run="r1", command="cd web && npx vitest run tests/unit/generated"),
-        E(37.6, "click", target={"robot": "s02"}, expect="card:s02"),
-        E(38.2, "tests_case", run="r1", case=0, status="passed"),
-        E(38.7, "tests_case", run="r1", case=1, status="passed"),
-        E(39.2, "tests_case", run="r1", case=2, status="passed"),
-        E(39.7, "tests_case", run="r1", case=3, status="failed"),
-        E(40.3, "tests_case", run="r1", case=4, status="passed"),
-        E(40.8, "tests_case", run="r1", case=5, status="passed"),
-        E(41.4, "tests_end", key="s02", run="r1"),
-        E(42.6, "idle", key="s07"),
-        E(43.4, "click", target={"session_row": "s07"}, expect="card:s07"),
+    out["2"] = Chapter("2", 40, 52, floor(w) + up_close("demo-shop") + [P("click", target={"css": "#room-back"}, expect="floor"), P("settle")], [
+        E(40.8, "click", target={"room_tag": "demo-shop"}, expect="solo:demo-shop"),
+        E(43.2, "tests_start", key="s02", run="r1", command="cd web && npx vitest run tests/unit/generated"),
+        E(43.6, "click", target={"robot": "s02"}, expect="card:s02"),
+        E(44.2, "tests_case", run="r1", case=0, status="passed"),
+        E(44.7, "tests_case", run="r1", case=1, status="passed"),
+        E(45.2, "tests_case", run="r1", case=2, status="passed"),
+        E(45.7, "tests_case", run="r1", case=3, status="failed"),
+        E(46.3, "tests_case", run="r1", case=4, status="passed"),
+        E(46.8, "tests_case", run="r1", case=5, status="passed"),
+        E(47.4, "tests_end", key="s02", run="r1"),
+        E(48.6, "idle", key="s07"),
+        E(49.4, "click", target={"session_row": "s07"}, expect="card:s07"),
     ], needs=("rooms",))
 
-    # 3 (46–56): a permission answered in the browser, briefly (requester: 「許可の紹介はサラッとでいい」), then the
+    # 3 (52–62): a permission answered in the browser, briefly (requester: 「許可の紹介はサラッとでいい」), then the
     # sessions' talk as a chat (2.3.14): the spec owner's card, its talk with the test runner, two messages arriving.
     talk_prelude = [P("talk", frm="s01", to="s02", text=w["talk"]["t1"], ago=90)]
-    out["3"] = Chapter("3", 46, 56, floor(w) + talk_prelude + up_close("demo-shop"), [
-        E(46.2, "perm", key="s03", command=w["perm_cmd"], description=w["perm_desc"]),
-        E(46.8, "click", target={"bubble": "s03"}, expect="picked:s03"),
-        E(48.0, "click", target={"css": ".pa-allow[data-do='allow']"}),
-        E(49.2, "click", target={"robot": "s01"}, expect="card:s01"),
-        E(49.9, "click", target={"css": "#rb [data-rb-talk]"}, expect="talk"),
-        E(50.6, "click", target={"talk_row": "s02"}),
-        E(51.4, "talk", frm="s02", to="s01", text=w["talk"]["t2"]),
-        E(53.4, "talk", frm="s02", to="s01", text=w["talk"]["t3"]),
+    out["3"] = Chapter("3", 52, 62, floor(w) + talk_prelude + up_close("demo-shop"), [
+        E(52.2, "perm", key="s03", command=w["perm_cmd"], description=w["perm_desc"]),
+        E(52.8, "click", target={"bubble": "s03"}, expect="picked:s03"),
+        E(54.0, "click", target={"css": ".pa-allow[data-do='allow']"}),
+        E(55.2, "click", target={"robot": "s01"}, expect="card:s01"),
+        E(55.9, "click", target={"css": "#rb [data-rb-talk]"}, expect="talk"),
+        E(56.6, "click", target={"talk_row": "s02"}),
+        E(57.4, "talk", frm="s02", to="s01", text=w["talk"]["t2"]),
+        E(59.4, "talk", frm="s02", to="s01", text=w["talk"]["t3"]),
     ], needs=("rooms",))
 
-    # 4 (56–76): the server room as 2.3.19 draws it, small to large (requester 10-22: start close, where the light's
+    # 4 (62–86): the server room as 2.3.19 draws it, small to large (requester 10-22: start close, where the light's
     # way is easy to follow, then pull back to the large system). Close on the shop's group (its focus, then a little
     # nearer: its nodes stand as models), flow "order" at 0.5x among them, its first branch taken; at 1x its second;
     # then the camera pulls back steadily (eased, 6.8 x) until the whole system is in view, and flow "payment" runs
-    # across the regions at 2x to the end.
+    # across the regions at 2x; then 「2D」 in the header and the same room from straight above (2.3.21, requester 10-23:
+    # 「デモのサーバーの章に2dと3d切り替えられるって内容も追加しといて」), held to the chapter's end.
     sr_prelude = up_close("demo-shop") + [P("door"), P("dbg", call="srSelectGroup", group="shop-core"),
                                           P("click", target={"css": "#sr-board [data-sr-act='focus']"}),
                                           P("dbg", call="srZoom", factor=0.82), P("settle")]
     # order: 1.8 s to its first branch, 3.6 s to its second, 5.4 s to its end (at 1x); payment: 4.5 s to its first
     choice = "(c) => !!document.querySelector(`#sr-choices:not([hidden]) [data-sr-choice=\"${c}\"]`)"
-    out["4"] = Chapter("4", 56, 76, floor(w) + sr_prelude + [P("dbg", call="srFlowSpeed", speed=0.5)], [
-        E(56.1, "dbg", call="srSelect", node="browser", expect="flowlist:order"),
-        E(56.4, "click", target={"css": "#sr-board [data-sr-flow='order']"}, expect="flow:order"),
-        E(60.0, "click", target={"css": "#sr-choices [data-sr-choice='hit']"}, ready=choice, arg="hit"),
-        E(60.3, "dbg", call="srFlowSpeed", speed=1),
-        E(63.9, "click", target={"css": "#sr-choices [data-sr-choice='in']"}, ready=choice, arg="in"),
-        E(64.5, "dolly", factor=6.8, dur=7.5),
-        E(72.2, "dbg", call="srSelect", node="api", expect="flowlist:payment"),
-        E(72.4, "dbg", call="srFlowSpeed", speed=2),
-        E(72.7, "click", target={"css": "#sr-board [data-sr-flow='payment']"}, expect="flow:payment"),
-    ], needs=("rooms", "server_room", "flows"))
+    out["4"] = Chapter("4", 62, 86, floor(w) + sr_prelude + [P("dbg", call="srFlowSpeed", speed=0.5)], [
+        E(62.1, "dbg", call="srSelect", node="browser", expect="flowlist:order"),
+        E(62.4, "click", target={"css": "#sr-board [data-sr-flow='order']"}, expect="flow:order"),
+        E(66.0, "click", target={"css": "#sr-choices [data-sr-choice='hit']"}, ready=choice, arg="hit"),
+        E(66.3, "dbg", call="srFlowSpeed", speed=1),
+        E(69.9, "click", target={"css": "#sr-choices [data-sr-choice='in']"}, ready=choice, arg="in"),
+        E(70.5, "dolly", factor=6.8, dur=7.5),
+        E(78.2, "dbg", call="srSelect", node="api", expect="flowlist:payment"),
+        E(78.4, "dbg", call="srFlowSpeed", speed=2),
+        E(78.7, "click", target={"css": "#sr-board [data-sr-flow='payment']"}, expect="flow:payment"),
+        # the same room from straight above (2.3.21): 「2D」 in the header, held to the chapter's end
+        E(81.4, "click", target={"css": "#sr-mode-2d"}, expect="sr2d"),
+    ], needs=("rooms", "server_room", "flows", "sr2d"))
 
-    # the migration plan played through (requester 10-22: many migrations, smoothly), as the promo's chapter 4m (76–110)
+    # the migration plan played through (requester 10-22: many migrations, smoothly), as the promo's chapter 4m (86–120)
     # and as the standalone clip (0–40). Its 12 steps touch the AWS groups on the left (search, payments, analytics,
     # admin) and the two Azure groups on the right, so the camera frames the AWS account (its focus: every changed node
     # in view; too many nodes for the models) and comes in a little while it plays. ▶ once at 0.5x: each step 2.1 s,
@@ -355,17 +381,17 @@ def chapters(lang: str) -> dict:
             E(play + 6.5, "click", target={"css": MIG_BTN.format("toggle")}),
             E(cost, "click", target={"css": "#sr-mode-cost"}, expect="migtable"),
         ], needs=("rooms", "server_room", "migration"))
-    out["4m"] = migration("4m", 76, 110, 78.0, 105.2)
+    out["4m"] = migration("4m", 86, 120, 88.0, 115.2)
     out["mig"] = migration("mig", 0, 40, 3.0, 31.4)
 
-    # 5 (110–124): the cost simulator. 110–113 is the load definition in the editor (term.py, captures/<lang>/5-json:
+    # 5 (120–134): the cost simulator. 120–123 is the load definition in the editor (term.py, captures/<lang>/5-json:
     # SEGMENTS); this capture covers the whole chapter, and its cost page starts after that window: the month, then
     # one day played (24 hours at 200 ms an hour)
-    out["5"] = Chapter("5", 110, 124, floor(w) + up_close("demo-shop") + [P("door"), P("dbg", call="srCostPlayMs", ms=200)], [
-        E(113.3, "click", target={"css": "#sr-mode-cost"}, expect="cost_month"),
-        E(115.4, "select", target={"css": "#sr-scn"}, value="weekend-campaign", expect="cost_month"),
-        E(117.6, "click", target={"cost_day": "busiest"}, expect="cost_day"),
-        E(118.6, "click", target={"css": "#sr-cost [data-src-act='play']"}),
+    out["5"] = Chapter("5", 120, 134, floor(w) + up_close("demo-shop") + [P("door"), P("dbg", call="srCostPlayMs", ms=200)], [
+        E(123.3, "click", target={"css": "#sr-mode-cost"}, expect="cost_month"),
+        E(125.4, "select", target={"css": "#sr-scn"}, value="weekend-campaign", expect="cost_month"),
+        E(127.6, "click", target={"cost_day": "busiest"}, expect="cost_day"),
+        E(128.6, "click", target={"css": "#sr-cost [data-src-act='play']"}),
     ], needs=("rooms", "server_room", "cost"))
 
     # 1b-board (18–34, beside 1b's terminal): the cart screen's spec on the whiteboard, filling in as the spec owner
@@ -375,9 +401,14 @@ def chapters(lang: str) -> dict:
     spec = w["files"]["spec"]
     board_prelude = [P("start", key="s01"), P("prompt", key="s01", text=w["board_prompt"]),
                      P("spec_reset", room="demo-shop", rel=spec, keep=["type", "version", "metadata"]), P("settle"),
+                     P("worktree", room="demo-shop", branch=WORKTREE["branch"], name=WORKTREE["name"], changes=worktree_files(w)),
                      P("dbg", call="press", css="#btn-side"),   # the side panel closed: the sheet takes the page
                      P("dbg", call="openSpec", room="demo-shop", rel=spec, expect="board"), P("settle")]
-    out["1b-board"] = Chapter("1b-board", 18, 34, board_prelude, [
+    # then (2.3.21, requester 10-23: 「specの章には別ワークツリーの作業も進捗見れるって内容追加で」) a session starts in a git
+    # worktree of the room on its own branch (one new spec half written, the cart's spec changed): the board's list
+    # gains the worktree's rows, each tagged ⎇ with its branch beside main's, and the new spec opens from it.
+    wt = WORKTREE
+    out["1b-board"] = Chapter("1b-board", 18, 40, board_prelude, [
         E(18.8, "spec_write", key="s01", room="demo-shop", rel=spec, add="structure"),
         E(21.0, "spec_write", key="s01", room="demo-shop", rel=spec, add="stateManagement"),
         E(23.4, "spec_write", key="s01", room="demo-shop", rel=spec, add="dataFlow"),
@@ -385,13 +416,16 @@ def chapters(lang: str) -> dict:
         E(27.8, "spec_write", key="s01", room="demo-shop", rel=spec, add="transitions"),
         E(29.8, "spec_write", key="s01", room="demo-shop", rel=spec, add="branchContracts"),
         E(32.4, "stop", key="s01"),
-    ], needs=("rooms",), viewport=SPLIT_VIEWPORT)
+        E(33.8, "wt_session", sid=wt["sid"], name=wt["name"], prompt=w["wt_prompt"], edit=wt["new"]),
+        E(36.0, "click", target={"css": "#wb-side-list .ws-item", "text": w["wt_spec"]}, ready=WT_ROW.format(w["wt_spec"]),
+          expect="wbbranch"),
+    ], needs=("rooms", "spec_worktrees"), viewport=SPLIT_VIEWPORT)
 
-    # 6 (124–132): back to the whole floor
-    out["6"] = Chapter("6", 124, 132, floor(w) + waits(w) + up_close("demo-shop"), [
-        E(124.6, "click", target={"css": "#room-back"}, expect="floor"),
-        E(126.0, "wheel", target={"css": "#scene-canvas"}, dy=300, dur=4.0),
-        E(127.0, "tool_end", key="s13"),
+    # 6 (134–142): back to the whole floor
+    out["6"] = Chapter("6", 134, 142, floor(w) + waits(w) + up_close("demo-shop"), [
+        E(134.6, "click", target={"css": "#room-back"}, expect="floor"),
+        E(136.0, "wheel", target={"css": "#scene-canvas"}, dy=300, dur=4.0),
+        E(137.0, "tool_end", key="s13"),
     ], needs=("rooms",))
     return out
 

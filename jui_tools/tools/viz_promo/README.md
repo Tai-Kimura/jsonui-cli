@@ -48,6 +48,14 @@ e2e's machine lock, so it never runs beside a browser-test run.
   server reads the file (the hook's path and its watcher) and the open sheet fills in. Capturing 1b captures
   1b-board too.
 
+- **1b-board ends on a worktree (2.3.21).** Before frame 0 the stage makes a git worktree of the demo-shop copy on
+  `feat/cart-coupon` (in the stage's HOME, scratch/demo-shop-coupon; a new spec half written and the cart's spec
+  changed, uncommitted). After the main spec is written a session starts inside it (`wt_session`), the whiteboard's
+  list gains the worktree's rows tagged ⎇ with their branch, and the new spec is opened from it. The terminal beside it
+  keeps its 16 s of gates (`term.TERM_SPAN`) and holds its last prompt.
+- **Chapter 4 ends in 2D (2.3.21):** 「2D」 in the room's header, the same room from straight above.
+- **Room shots fold the room's robot list** (2.3.20's この部屋のロボット) with its own button before frame 0.
+
 ## Frames and the clock
 
 Frame 0 is the chapter's start; there are (end − start) × 30 frames, the bounds read from `jsonui-promo/src/timeline.json`

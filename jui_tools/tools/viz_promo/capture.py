@@ -66,6 +66,8 @@ FEATURES = {
              "() => !!(window.__dbg && window.__dbg.srCost) && !!document.getElementById('sr-mode-cost')"),
     "i18n": ("jui_cli/viz/i18n.py", None),
     "migration": ("jui_cli/viz/web/js/59-sr-migration.js", "() => !!(window.__dbg && window.__dbg.srMig)"),
+    "sr2d": ("jui_cli/viz/web/js/56-server-room.js", "() => !!document.getElementById('sr-mode-2d')"),
+    "spec_worktrees": ("jui_cli/viz/web/js/30-source-live.js", None),   # no mark of its own: the wait on the sheet's ⎇ head fails without it
 }
 
 # Math.random from a fixed seed (mulberry32): the page's idle choices (a robot's break, a game, a glance) are drawn
@@ -121,6 +123,8 @@ EXPECT = {
     "cost_month": "() => { const c = window.__dbg.srCost(); return !!c.month && !c.error; }",
     "cost_day": "() => !!window.__dbg.srCost().day",
     "migopen": "() => window.__dbg.srMig().open",
+    "wbbranch": "() => { const f = document.getElementById('wb-file'); return !!f && f.textContent.trim().startsWith('⎇'); }",
+    "sr2d": "() => { const b = document.getElementById('sr-mode-2d'); return !!b && b.getAttribute('aria-pressed') === 'true'; }",
     "migcost": "() => { const m = window.__dbg.srMig(); return m.open && !!m.cost; }",
     "migtable": "() => !!document.querySelector('[data-src-mig]')",
     "board": "() => window.__dbg.view().open.wb && !!document.querySelector('#wb-code section.sc')",
@@ -202,6 +206,7 @@ class Stage:
         self.n = 0
         self.runs: dict = {}
         self.specs: dict = {}      # (room, rel) -> (the spec as demo-shop has it, the keys the file has now)
+        self.worktrees: dict = {}  # name -> a worktree's folder (make_worktree)
 
     # ---- the server ----
     def start(self):
@@ -261,6 +266,30 @@ class Stage:
     def use_id(self, key: str) -> str:
         self.n += 1
         return f"toolu_{key}{self.n:06d}"
+
+    # ---- a git worktree of a room (2.3.21: the spec board lists the worktrees sessions work in) ----
+    def make_worktree(self, room: str, branch: str, name: str, changes: dict):
+        """A worktree of the room's copy on a new branch, outside the room (scratch/<name>, as the e2e makes one), with
+        `changes` ({rel: the file's text, or {dotted key: value} edits of its copy there}) written in it and left
+        uncommitted (work in progress)."""
+        wt = self.home / "scratch" / name
+        wt.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "worktree", "add", "-q", "-b", branch, str(wt)], cwd=self.rooms[room], check=True,
+                       capture_output=True, env=self.hook_env)
+        for rel, change in changes.items():
+            path = wt / rel
+            if isinstance(change, dict):   # {dotted key: value} edits of the worktree's own copy of the file
+                data = json.loads(path.read_text(encoding="utf-8"))
+                for key, value in change.items():
+                    *head, last = key.split(".")
+                    at = data
+                    for k in head:
+                        at = at[k]
+                    at[last] = value
+                change = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(change, encoding="utf-8")
+        self.worktrees[name] = wt
 
     # ---- a spec written section by section (a board) ----
     def spec_reset(self, room: str, rel: str, keep: list):
@@ -470,7 +499,7 @@ class Driver:
     async def fire(self, ev, advance: bool):
         a, k, st = ev.args, ev.kind, self.stage
         hook_kinds = {"start", "prompt", "tool", "tool_end", "perm", "ask_pending", "ask", "ask_answered", "denied", "idle",
-                      "stop", "sub_start", "sub_stop", "tests_start", "tests_end", "spec_write"}
+                      "stop", "sub_start", "sub_stop", "tests_start", "tests_end", "spec_write", "wt_session"}
         before = await self.seq() if k in hook_kinds else 0
         now = int(time.time() * 1000)
         if k == "start":
@@ -558,6 +587,17 @@ class Driver:
                             tool_response={"stdout": f" Tests  {res.count('passed')} passed ({len(res)})", "stderr": ""}))
         elif k == "spec_reset":
             st.spec_reset(a["room"], a["rel"], a["keep"])
+        elif k == "worktree":
+            st.make_worktree(a["room"], a["branch"], a["name"], a["changes"])
+        elif k == "wt_session":
+            # a session working in the worktree (its cwd inside it): the board lists the worktree's specs, tagged
+            wt = st.worktrees[a["name"]]
+            body = {"session_id": a["sid"], "cwd": str(wt), "permission_mode": "default"}
+            st.send(dict(body, hook_event_name="SessionStart", source="startup"))
+            st.send(dict(body, hook_event_name="UserPromptSubmit", prompt=a["prompt"]))
+            if a.get("edit"):
+                st.send(dict(body, hook_event_name="PreToolUse", tool_name="Edit", tool_input={"file_path": str(wt / a["edit"])},
+                             tool_use_id=st.use_id("w")))
         elif k == "spec_write":
             # a real Write of the real file: the hook before, the file with one more section, the hook after
             path, text = st.spec_grow(a["room"], a["rel"], a["add"])

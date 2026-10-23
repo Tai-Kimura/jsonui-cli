@@ -60,6 +60,39 @@ def test_every_chapter_that_shows_a_room_folds_its_robot_list_first():
                 assert any(ev.kind == "dbg" and ev.args.get("call") == "rosterFold" for ev in c.prelude), (lang, cid)
 
 
+def test_the_board_ends_on_a_worktrees_spec_tagged_with_its_branch(tmp_path):
+    """1b-board (2.3.21): the worktree is made before frame 0 (a new spec and the cart's spec changed), its session
+    starts after the main spec is written, and the new spec is opened from the list once its row shows its branch.
+    The terminal beside it keeps its 16 s of gates."""
+    import subprocess
+    from types import SimpleNamespace
+    from viz_promo import capture, term
+    for lang in ("ja", "en"):
+        c = T.chapters(lang)["1b-board"]
+        made = [ev for ev in c.prelude if ev.kind == "worktree"]
+        assert len(made) == 1 and set(made[0].args["changes"]) == {T.WORKTREE["new"], T.WORKTREE["cart"]}, lang
+        start = next(ev for ev in c.events if ev.kind == "wt_session")
+        opened = next(ev for ev in c.events if ev.kind == "click" and "#wb-side-list" in ev.args["target"]["css"])
+        last_write = max(ev.at for ev in c.events if ev.kind == "spec_write")
+        assert last_write < start.at < opened.at < c.end and opened.args["expect"] == "wbbranch", lang
+    assert term.TERM_SPAN["1b"] == 16.0 and T.BOUNDS["1b"][1] - T.BOUNDS["1b"][0] > 16.0
+    # the worktree as the stage makes it: on its branch, the new file written, the cart's description edited, nothing committed
+    room = tmp_path / "room"
+    (room / "docs/screens/json").mkdir(parents=True)
+    (room / T.WORKTREE["cart"]).write_text(json.dumps({"metadata": {"name": "Cart", "description": "old"}}))
+    env = {"HOME": str(tmp_path), "PATH": "/usr/bin:/bin", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+    for args in (["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "-m", "init"]):
+        subprocess.run(["git", *args], cwd=room, check=True, capture_output=True, env=env)
+    st = SimpleNamespace(home=tmp_path / "home", rooms={"demo-shop": room}, hook_env=env, worktrees={})
+    capture.Stage.make_worktree(st, "demo-shop", T.WORKTREE["branch"], T.WORKTREE["name"], T.worktree_files(T.WORDS["ja"]))
+    wt = st.worktrees[T.WORKTREE["name"]]
+    branch = subprocess.run(["git", "branch", "--show-current"], cwd=wt, capture_output=True, text=True, env=env).stdout.strip()
+    assert branch == T.WORKTREE["branch"]
+    assert json.loads((wt / T.WORKTREE["new"]).read_text())["metadata"]["displayName"] == T.WORDS["ja"]["wt_spec"]
+    assert json.loads((wt / T.WORKTREE["cart"]).read_text())["metadata"] == {"name": "Cart", "description": T.WORDS["ja"]["wt_cart"]}
+    assert json.loads((room / T.WORKTREE["cart"]).read_text())["metadata"]["description"] == "old", "the room's own copy is untouched"
+
+
 def test_a_board_writes_its_spec_section_by_section_in_the_sheets_order():
     """1b-board: the file starts with its metadata; each write adds one section, each once, in the order the sheet
     shows them (30-source-live.js SPEC_KEYS), and the board is taken at the split's size."""
@@ -290,7 +323,7 @@ def test_chapter_4_starts_close_on_the_order_flow_then_pulls_back_to_the_whole_s
         ch = T.chapters(lang)["4"]
         # the speed changes after the first choice: the second branch is 3.6 s at 1x after it
         first = T.flow_budget(ch, flows["order"])
-        assert [p for p, _ in first["choices"]][:1] == ["hit"] and abs(first["choices"][0][1] - 60.0) <= 0.5, first
+        assert [p for p, _ in first["choices"]][:1] == ["hit"] and abs(first["choices"][0][1] - (ch.start + 4.0)) <= 0.5, first
         hit = first["choices"][0][1]
         second = next(ev.at for ev in ch.events if ev.args.get("arg") == "in")
         assert abs(hit + 3.6 - second) <= 0.5, (hit, second)

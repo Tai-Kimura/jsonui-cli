@@ -32,6 +32,8 @@ from viz_promo.rooms import cleanup, copy_demo_shop
 from viz_promo.timeline import BOARDS, SEGMENTS, SPLIT_VIEWPORT, frame_count, frame_time
 
 PROMPT = "demo-shop $ "
+#: how long a window's own script runs (s); the chapter may be longer and holds its last frame state
+TERM_SPAN = {"1b": 16.0}
 ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 
 # 1b's story (requester 10-22: the message is that the spec and the implementation do not drift apart, and that a
@@ -286,7 +288,8 @@ async def capture_term(pw, chapter_id: str, bounds: tuple, out_root: Path, lang:
             rel = SEGMENTS[chapter_id][3]
             data = [editor_file(shop, rel, end - start)]
             res["files"] = [rel]
-        doc = page_html(chapter_id, data, start, end)
+        # 1b's gates keep the pace of their 16 s; a longer chapter holds the last prompt (the board beside it goes on)
+        doc = page_html(chapter_id, data, start, min(end, start + TERM_SPAN.get(chapter_id, end - start)))
         browser = await pw.chromium.launch()
         try:
             # a chapter shown beside its board takes the board's size (the promo's split frames them alike)
