@@ -263,7 +263,7 @@ function permSubjectLive(p) {
   return `<span class="perm-exact" tabindex="0">${partsHTML.join('')}</span>`;
 }
 const permSubject = (p) => (SOURCE.mode === 'live' ? permSubjectLive(p) : `<code>${esc(permSummary(p))}</code>`);
-const permBox = (p) => `<div class="perm-box" data-perm-box="${esc(p.id)}"><p class="perm-q"><b>${esc(p.tool)}</b> ${permSubject(p)}</p><div class="perm-acts">${permButtons(p, 's')}</div></div>`;
+const permBox = (p, where = 's') => `<div class="perm-box" data-perm-box="${esc(p.id)}"><p class="perm-q"><b>${esc(p.tool)}</b> ${permSubject(p)}</p><div class="perm-acts">${permButtons(p, where)}</div></div>`;
 function recentHTML(id) {
   const items = logItems.filter((e) => e.who === id).slice(0, 6);
   return items.length ? items.map((e) => `<li><time>${fmtClock(BASE_CLOCK + e.abs)}</time><span><b>${esc(e.kind)}</b> ${esc(e.what)}</span></li>`).join('') : `<li><span>${esc(tl('panel.recent.none'))}</span></li>`;
@@ -284,7 +284,7 @@ function refreshNow() {
 function decide(id, behavior, btn) {
   const p = latestModel.pending.find((q) => q.id === id);
   if (!p) return;
-  const where = btn.closest('#tasks, #perm-strip, #kanban, #tb-detail, #rb');
+  const where = btn.closest('#tasks, #perm-strip, #kanban, #tb-detail, #rb, #rb-wait-pane');
   // the reason box of the very card pressed (the card is on the board, the robot's card and its 応答の履歴 tab at once)
   const card = btn.closest('.tbd-perm'), reasonEl = card ? card.querySelector('.tbd-reason input') : null;
   const reason = behavior === 'deny' && reasonEl ? reasonEl.value.trim() : '';
@@ -311,7 +311,7 @@ document.addEventListener('click', (e) => {
   else if (t.hasAttribute('data-rb-close')) closeRobot({ byHand: true });
   else if (t.hasAttribute('data-set-all')) setProject('all');
 });
-$('chip-perm').addEventListener('click', (e) => { tb.waitView = true; openTaskBoard(e.currentTarget); });
+$('chip-perm').addEventListener('click', (e) => openWaitBoard(e.currentTarget, WAITS_OF.perm()));   // 53-waits.js
 
 /* ---------- scope: which project (or all) every panel and board shows, and which sessions ---------- */
 function paintScopeButtons() {
@@ -520,7 +520,7 @@ for (const id of ['questions', 'q-strip']) { $(id).addEventListener('input', onQ
 /* 2.3.5 (requester 10-19: "このヘッダーの許可のチップクリックでボード表示してほしい"): the 質問 chip opens the board that
    already lists what waits for a permission (the task board, its strip on top) with the questions waiting over it,
    panel open or not; the 許可待ち chip opens the same board. The chips are hidden while nothing waits (no no-op chip). */
-$('chip-ask').addEventListener('click', (e) => { tb.waitView = true; openTaskBoard(e.currentTarget); });
+$('chip-ask').addEventListener('click', (e) => openWaitBoard(e.currentTarget, WAITS_OF.ask()));   // 53-waits.js
 
 /* ---------- popovers: project switcher, session picker, robot picker ---------- */
 const popEl = $('pop');
@@ -2259,8 +2259,8 @@ function notifyViewing(kind, ref) {
 function notifyOpen(kind, ref) {
   try { window.focus(); } catch (err) { /* the OS may keep it behind */ }
   if (kind === 'done' || kind === 'idle') { NOTIFY.opened.set(ref.who, Date.now()); if (DEF[ref.who]) selectRobot(ref.who, document.getElementById('scene-canvas')); }
-  else if (kind === 'perm') openTaskBoard(null, ref.task || `perm:${ref.id}`);
-  else { tb.waitView = true; openTaskBoard(null); }
+  else if (kind === 'perm') { scopeToWaits([ref.who]); openTaskBoard(null, ref.task || `perm:${ref.id}`); }
+  else openWaitBoard(null, [ref]);   // 53-waits.js: its project chosen
 }
 /* The one place a notification is made. */
 function notifyOut(key, body, onClick, title = 'jui viz') {

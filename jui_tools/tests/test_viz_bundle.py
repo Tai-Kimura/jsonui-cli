@@ -195,6 +195,8 @@ BUILDERS = {
     },
     "51-denials.js": {"denialHTML"},   # a call stopped by auto mode (ticket 2026-10-20-jui-viz-auto-mode-denial-approve-from-page)
     "53-devices.js": {"devWhoHTML", "devRowHTML", "devLoadHTML", "devBarHTML"},
+    # a robot's waits answered where they are listed: the panel's own cards (questionHTML, permBox, denialHTML) drawn here
+    "53-waits.js": {"paneHTML", "paneRobotsHTML", "paneItemHTML", "questionHTML", "permBox", "denialHTML"},
     "53-roster.js": {"rosterRowHTML"},   # the room's robot list (ticket 2026-10-23-viz-room-robot-list-show-hide)   # the デバイス pane (ticket 2026-10-20-jui-viz-device-panel-machine-load-and-emulators)
     "52-data-docs.js": {"dsContentHTML", "dsEndpointHTML", "dsEpHTML", "dsApiHTML", "dsTableHTML", "dsDbHTML"},
     "59-sr-flows.js": {"srFlowBoardHTML"},   # the flows a chosen node starts, on the server room's board (its item 7)

@@ -85,7 +85,7 @@ function renderDenialStrip() {
 function onDenialClick(e) {
   const where = e.currentTarget.dataset.dwhere !== undefined ? e.currentTarget.dataset.dwhere : e.currentTarget.id === 'denied-strip' ? 'b' : '';   // h: the 応答の履歴 tab
   const ask = e.target.closest('[data-dask]'), go = e.target.closest('[data-dgo]'), back = e.target.closest('[data-dback]'), dismiss = e.target.closest('[data-ddismiss]');
-  const repaint = () => { renderDenials(); if (typeof tb !== 'undefined' && tb.open) renderDenialStrip(); if (typeof histCardsPaint === 'function') histCardsPaint(); };
+  const repaint = () => { renderDenials(); if (typeof tb !== 'undefined' && tb.open) renderDenialStrip(); if (typeof histCardsPaint === 'function') histCardsPaint(); if (typeof cardWaitPanePaint === 'function') cardWaitPanePaint(); };
   if (ask) {
     DEN.asking = `${ask.dataset.dask}|${where}`; DEN.askedAt = Date.now(); repaint();
     const btn = e.currentTarget.querySelector(`[data-dgo="${CSS.escape(ask.dataset.dask)}"]`);
@@ -109,4 +109,4 @@ function onDenialClick(e) {
   }
 }
 for (const id of ['denied', 'denied-strip']) $(id).addEventListener('click', onDenialClick);
-$('chip-denied').addEventListener('click', (e) => { tb.waitView = true; openTaskBoard(e.currentTarget); });
+$('chip-denied').addEventListener('click', (e) => openWaitBoard(e.currentTarget, WAITS_OF.denied()));   // 53-waits.js

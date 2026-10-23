@@ -49,6 +49,30 @@ function waitSync(R) {
   R.waitEl.hidden = false;
 }
 function waitDrop(R) { if (R.waitEl) { R.waitEl.remove(); R.waitEl = null; } }
+/* Before a wait is shown on the board or the panel (requester 10-24: 「質問系でボードに移動する時はその質問をしてる
+   プロジェクト選択状態にして」 and 「複数プロジェクト待ちの時は全てのプロジェクト選択状態にして」, ticket
+   2026-10-24-viz-wait-to-board-keeps-the-wrong-project): the project the waits are in — one project: it; two or more:
+   すべて — so what was pressed for is on screen, not a board of another project saying it is elsewhere. Every way from a
+   wait to the board or the panel goes through here: the header's chips, the block's sum and its pane's ボードで見る,
+   a notification, a robot's bubble. */
+const WAITS_OF = {
+  perm: () => ((latestModel && latestModel.pending) || []).filter((p) => p.status === 'pending'),
+  ask: () => questionsWaiting(),
+  denied: () => denialsWaiting(),
+};
+const waitsAll = () => [...WAITS_OF.perm(), ...WAITS_OF.ask(), ...WAITS_OF.denied()];
+function scopeToWaits(whos) {
+  const ps = [...new Set(whos.map((w) => projectOfRobot(w)).filter(Boolean))];
+  if (!ps.length) return;
+  const want = ps.length === 1 ? ps[0] : 'all';
+  if (UI.project !== want) setProject(want, { camera: false });
+}
+/* The board's waiting strip, for these waits (their project chosen first). */
+function openWaitBoard(opener, waits) {
+  scopeToWaits(waits.map((x) => x.who));
+  tb.waitView = true;
+  openTaskBoard(opener);
+}
 /* A press on a bubble: the panel's card of that wait, scrolled to and focused (the side panel opened first), or the
    session's talk. WAIT.picked says what was picked (the e2e reads it). */
 function waitOpen(id, kind) {
@@ -59,6 +83,7 @@ function waitOpen(id, kind) {
     requestAnimationFrame(talk);
     return;
   }
+  if (kind !== 'input') scopeToWaits([id]);   // its project: the panel shows the project chosen
   if (!sideOpen) { sideOpen = true; applySide(); }
   let el = null, card = null;
   if (kind === 'ask') {
@@ -108,7 +133,7 @@ $('chip-input').addEventListener('click', () => {
    the chips do). Where the card is the page's width (a phone's sheet, or the card widened to the whole stage) the block
    has no room beside it: the count goes in the card's head row as a badge that opens the same board. Something new moves
    once (not under reduced motion). */
-const CARD_WAITS = { seen: new Set(), sig: '' };
+const CARD_WAITS = { seen: new Set(), sig: '', open: null };   // open: the robot whose waits the pane shows
 const RBW_SUM = { perm: 'rbw.sum.perm', ask: 'rbw.sum.ask', denied: 'rbw.sum.denied' };
 const RBW_KIND = { perm: 'rbw.kind.perm', ask: 'rbw.kind.ask', denied: 'rbw.kind.denied' };
 const rbwSum = (counts) => ['perm', 'ask', 'denied'].filter((k) => counts[k]).map((k) => tl(RBW_SUM[k], { n: counts[k] })).join(' · ');
@@ -116,9 +141,9 @@ const rbwKinds = (ks) => ks.map((x) => tl(RBW_KIND[x])).join(tl('rbw.sep'));
 const CARD_WAIT_MAX = 6;   // robots listed; the rest said as ほか N
 function cardWaitItems() {
   const own = rbState.id, out = [];
-  for (const p of (latestModel && latestModel.pending) || []) if (p.who !== own && p.status === 'pending') out.push({ kind: 'perm', who: p.who, key: `p:${p.id}` });
-  for (const d of denialsWaiting()) if (d.who !== own) out.push({ kind: 'denied', who: d.who, key: `d:${d.id}` });
-  for (const q of questionsWaiting()) if (q.who !== own) out.push({ kind: 'ask', who: q.who, key: `q:${q.id}` });
+  for (const p of (latestModel && latestModel.pending) || []) if (p.who !== own && p.status === 'pending') out.push({ kind: 'perm', who: p.who, key: `p:${p.id}`, it: p });
+  for (const d of denialsWaiting()) if (d.who !== own) out.push({ kind: 'denied', who: d.who, key: `d:${d.id}`, it: d });
+  for (const q of questionsWaiting()) if (q.who !== own) out.push({ kind: 'ask', who: q.who, key: `q:${q.id}`, it: q });
   return out.filter((x) => DEF[x.who]);
 }
 /* Beside the card (its left edge, its top), or in its head (no room). */
@@ -144,7 +169,7 @@ function cardWaits() {
       setHTML(box, `<p class="rbw-title">${esc(tl('rbw.title'))}</p><button type="button" class="rbw-sum" data-rbw-board data-fk="rbw-board">${esc(sum)}</button>`
         + `<ul class="rbw-list">${robots.slice(0, CARD_WAIT_MAX).map((id) => {
           const ks = kindsOf(id), k = ks[0] === 'ask' ? 'ask' : 'perm';
-          return `<li><button type="button" class="rbw-robot${newWho.has(id) ? ' rbw-new' : ''}" data-rbw-robot="${esc(id)}" data-rbw-kind="${esc(k)}" data-fk="rbw-${esc(id)}" title="${esc(tl('rbw.open', { name: DEF[id].title || DEF[id].agent || id, what: rbwKinds(ks) }))}">${pill(id, DEF[id].role)}${DEF[id].title ? `<span class="rbw-name">${esc(DEF[id].title)}</span>` : ''}<span>${esc(rbwKinds(ks))}</span></button></li>`;
+          return `<li><button type="button" class="rbw-robot${newWho.has(id) ? ' rbw-new' : ''}" data-rbw-robot="${esc(id)}" data-rbw-kind="${esc(k)}" data-fk="rbw-${esc(id)}" aria-controls="rb-wait-pane" aria-expanded="false" title="${esc(tl('rbw.open', { name: DEF[id].title || DEF[id].agent || id, what: rbwKinds(ks) }))}">${pill(id, DEF[id].role)}${DEF[id].title ? `<span class="rbw-name">${esc(DEF[id].title)}</span>` : ''}<span>${esc(rbwKinds(ks))}</span></button></li>`;
         }).join('')}${robots.length > CARD_WAIT_MAX ? `<li class="rbw-more">${esc(tl('rbw.more', { n: robots.length - CARD_WAIT_MAX }))}</li>` : ''}</ul>`);
       if (fresh.length) { box.classList.remove('rbw-arrive'); void box.offsetWidth; box.classList.add('rbw-arrive'); }
     }
@@ -158,16 +183,122 @@ function cardWaits() {
     const n = items.length, want = head && n ? tl('rbw.badge', { n }) : '';
     if (slot.dataset.n !== String(head ? n : 0)) {
       slot.dataset.n = String(head ? n : 0);
-      setHTML(slot, want ? `<button type="button" class="rbw-badge${fresh.length ? ' rbw-new' : ''}" data-rbw-board data-fk="rbw-badge" title="${esc(rbwSum(counts))}">${esc(want)}</button>` : '');
+      setHTML(slot, want ? `<button type="button" class="rbw-badge${fresh.length ? ' rbw-new' : ''}" data-rbw-pane data-fk="rbw-badge" aria-controls="rb-wait-pane" aria-expanded="false" title="${esc(rbwSum(counts))}">${esc(want)}</button>` : '');
     }
   }
+  cardWaitPanePaint();
+}
+/* ---------- answering a wait where it is listed (requester 10-24: 「ここでも該当の質問クリックで質問が開いてそこで回答
+   できるようにして」, ticket 2026-10-24-viz-card-waits-answer-in-place) ----------
+   A robot's row opens its waits in a pane under the block — the panel's own cards: a question's choices, free answer and
+   send (questionHTML), a permission's tool, what it asks and allow / deny (permBox), a stopped call's (denialHTML) —
+   answered through the same calls (SOURCE.answerQuestion, decide, SOURCE.denial). The open card stays and the camera
+   does not move. Everything is drawn from the one state, so a wait answered anywhere (here, the panel, the board) goes
+   from every place at once; the pane follows, and closes when its robot waits on nothing more. The row again, its ×
+   or Esc closes it. Where the card is the page's width the head's badge opens it, listing the robots first. */
+const paneEl = $('rb-wait-pane');
+const paneItemSig = (x) => (x.kind === 'ask' ? [x.key, x.it.status, x.it.hookWaiting, x.it.tooLongToShow, x.it.released, x.it.waitEnded]
+  : x.kind === 'perm' ? [x.key, x.it.status, x.it.tooLongToShow, x.it.can]
+    : [x.key, x.it.status, x.it.reason, x.it.input, x.it.reply, denialTarget(x.it).why]);
+const paneItemHTML = (x) => (x.kind === 'ask' ? questionHTML(x.it, 'w')
+  : x.kind === 'perm' ? `<article class="qcard pcard rbwp-perm" data-rbwp-perm="${esc(x.it.id)}"><header class="qwho">${pill(x.who, DEF[x.who].role)}<span>${esc(DEF[x.who].agent)}</span><span class="dtag">${esc(tl('rbw.kind.perm'))}</span></header>${permBox(x.it, 'w')}</article>`
+    : denialHTML(x.it, 'w'));
+function paneRobotsHTML(robots, who, items) {
+  return `<ul class="rbw-list rbwp-robots">${robots.map((id) => `<li><button type="button" class="rbw-robot" data-rbwp-robot="${esc(id)}" data-fk="rbwp-${esc(id)}" aria-controls="rb-wait-pane" aria-expanded="${id === who}">${pill(id, DEF[id].role)}${DEF[id].title ? `<span class="rbw-name">${esc(DEF[id].title)}</span>` : ''}<span>${esc(rbwKinds(['perm', 'denied', 'ask'].filter((k) => items.some((x) => x.who === id && x.kind === k))))}</span></button></li>`).join('')}</ul>`;
+}
+function paneHTML(name, head, robots, who, items, mine) {
+  return `<div class="rbwp-head"><p class="rbwp-title">${esc(tl('rbw.pane.title', { name }))}</p>${head ? `<button type="button" class="link-btn" data-rbw-board data-fk="rbwp-board">${esc(tl('rbw.pane.board'))}</button>` : ''}<button type="button" class="rbwp-x" data-rbwp-close data-fk="rbwp-x" aria-label="${esc(tl('rbw.pane.close'))}" title="${esc(tl('rbw.pane.close'))}">×</button></div>`
+    + `${head ? paneRobotsHTML(robots, who, items) : ''}<div class="rbwp-items">${mine.map(paneItemHTML).join('')}</div>`;
+}
+function cardWaitPanePaint() {
+  const head = !!rbState.id && cardWaitInHead();
+  const items = (head || !$('rb-waits').hidden) && rbState.id ? cardWaitItems() : [];
+  const robots = [...new Set(items.map((x) => x.who))];
+  // its robot answered everything: closed (in the head's list, the next robot's waits instead)
+  if (CARD_WAITS.open !== null && !robots.includes(CARD_WAITS.open)) CARD_WAITS.open = head && robots.length ? robots[0] : null;
+  const open = CARD_WAITS.open !== null && items.length > 0;
+  for (const b of document.querySelectorAll('[data-rbw-robot], [data-rbw-pane]')) {
+    const on = open && (b.dataset.rbwPane !== undefined || b.dataset.rbwRobot === CARD_WAITS.open);
+    if (b.getAttribute('aria-expanded') !== String(on)) b.setAttribute('aria-expanded', String(on));
+  }
+  if (!open) { if (!paneEl.hidden) { paneEl.hidden = true; paneEl._sig = null; } CARD_WAITS.open = null; return; }
+  const who = CARD_WAITS.open, mine = items.filter((x) => x.who === who);
+  const name = DEF[who].title || DEF[who].agent || who;
+  paneEl.setAttribute('aria-label', tl('rbw.pane.aria', { name }));
+  // where the block has no room (the card as wide as the page): the robots first, as the block lists them
+  keyed(paneEl, JSON.stringify([NAMES.rev, DEN.asking, head, head ? robots : 0, who, mine.map(paneItemSig)]), () => paneHTML(name, head, head ? robots : [], who, items, mine));
+  for (const card of paneEl.querySelectorAll('[data-qcard]')) questionSendState(card);
+  paneEl.hidden = false;
+  // under the block, its right edge on the block's (left of the card); in the head's case under the card's head row
+  const parent = rbEl.offsetParent || rbEl.parentElement;
+  if (head) {
+    // the card is fixed here (a phone's sheet, or widened over the stage): the pane too, right under the badge, over
+    // the card's body (there is no room beside it), the badge and the head row left in sight
+    const at = (rbEl.querySelector('[data-rbw-pane]') || rbEl.querySelector('.rb-head') || rbEl).getBoundingClientRect(), card = rbEl.getBoundingClientRect();
+    paneEl.classList.add('rbwp-in-head');
+    paneEl.style.top = `${Math.round(at.bottom + 6)}px`;
+    paneEl.style.right = `${Math.round(innerWidth - card.right + 6)}px`;
+    paneEl.style.width = `${Math.max(200, Math.round(card.width - 12))}px`;
+    paneEl.style.maxHeight = `${Math.max(160, Math.round(innerHeight - at.bottom - 18))}px`;
+    return;
+  } else {
+    const box = $('rb-waits');
+    paneEl.classList.remove('rbwp-in-head');
+    const right = parent.clientWidth - rbEl.offsetLeft + 10;
+    paneEl.style.top = `${box.offsetTop + box.offsetHeight + 8}px`;
+    paneEl.style.right = `${right}px`;
+    paneEl.style.width = `${Math.max(220, Math.min(360, parent.clientWidth - right - 12))}px`;
+  }
+  paneEl.style.maxHeight = `${Math.max(160, parent.clientHeight - paneEl.offsetTop - 12)}px`;
+}
+/* Open (or switch to, or close) the pane for a robot; the focus to its first control, or back to what opened it. */
+function cardWaitPaneToggle(who, from) {
+  CARD_WAITS.open = CARD_WAITS.open === who ? null : who;
+  CARD_WAITS.from = from || null;
+  cardWaitPanePaint();
+  if (CARD_WAITS.open) {
+    const first = paneEl.querySelector('.rbwp-items input:not([disabled]), .rbwp-items button:not([disabled])');
+    (first || paneEl.querySelector('[data-rbwp-close]')).focus({ preventScroll: true });
+  } else if (from && from.isConnected) from.focus({ preventScroll: true });
+}
+function cardWaitPaneClose() {
+  if (CARD_WAITS.open === null) return false;
+  const from = CARD_WAITS.from;
+  CARD_WAITS.open = null;
+  cardWaitPanePaint();
+  if (from && from.isConnected) from.focus({ preventScroll: true });
+  return true;
 }
 function cardWaitClick(e) {
   const r = e.target.closest('[data-rbw-robot]');
-  if (r) { waitOpen(r.dataset.rbwRobot, r.dataset.rbwKind); return; }
+  if (r) { cardWaitPaneToggle(r.dataset.rbwRobot, r); return; }
+  const p = e.target.closest('[data-rbw-pane]');
+  if (p) {
+    const first = cardWaitItems()[0];
+    if (CARD_WAITS.open !== null) cardWaitPaneClose(); else if (first) cardWaitPaneToggle(first.who, p);
+    return;
+  }
   const b = e.target.closest('[data-rbw-board]');
-  if (b) { tb.waitView = true; openTaskBoard(b); }
+  if (b) openWaitBoard(b, cardWaitItems());
 }
 $('rb-waits').addEventListener('click', cardWaitClick);
-rbEl.addEventListener('click', (e) => { if (e.target.closest('[data-rbw-board]')) cardWaitClick(e); });
+rbEl.addEventListener('click', (e) => { if (e.target.closest('[data-rbw-board], [data-rbw-pane]')) cardWaitClick(e); });
+paneEl.addEventListener('click', (e) => {
+  if (e.target.closest('[data-rbwp-close]')) { cardWaitPaneClose(); return; }
+  const r = e.target.closest('[data-rbwp-robot]');
+  if (r) { CARD_WAITS.open = r.dataset.rbwpRobot; cardWaitPanePaint(); return; }
+  if (e.target.closest('[data-rbw-board]')) { cardWaitPaneClose(); cardWaitClick(e); }
+});
+// the panel's question and stopped-call handlers, on the pane's cards too (the same state, the same sending)
+paneEl.addEventListener('input', onQuestionInput);
+paneEl.addEventListener('click', onQuestionClick);
+paneEl.addEventListener('click', onDenialClick);
+// Esc closes the pane first (the card stays), from inside it or from the row that opened it
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || paneEl.hidden) return;
+  const a = document.activeElement;
+  if (!(paneEl.contains(a) || $('rb-waits').contains(a) || (a && a.closest && a.closest('[data-rbw-slot]')) || a === document.body)) return;
+  e.preventDefault(); e.stopPropagation();
+  cardWaitPaneClose();
+}, true);
 window.addEventListener('resize', () => { if (rbState.id) cardWaits(); });

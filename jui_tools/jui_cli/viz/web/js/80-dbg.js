@@ -660,6 +660,7 @@ window.__dbg = {
     const out = Object.fromEntries(['ok', 'busy', 'high'].map((l) => { b.dataset.load = l; return [l, getComputedStyle(b).backgroundColor]; }));
     b.dataset.load = keep; return out; },
   setProject: (id) => setProject(id, { camera: false }),
+  notifyOpen: (kind, ref) => notifyOpen(kind, ref),   // a notification clicked (the OS's, which a page cannot press)
   lastRobot: (id) => (LAST_ROBOT.has(id) ? LAST_ROBOT.get(id) : undefined),
   // the box (2.3.4): its desk, what it overlaps, the papers in it, each robot's trip and the trips' ends
   gitBox: () => ({ room: PROPS.room, desk: !!PROPS.gitDesk, fill: PROPS.gitFill, spot: PROPS.place ? PROPS.place.git : null,

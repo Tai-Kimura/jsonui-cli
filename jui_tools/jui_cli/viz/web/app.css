@@ -896,6 +896,16 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
    top-left corner, the waits' amber (the bubbles' "!"); in the head row as a badge where the card has the width. */
 .rb-waits { position: absolute; z-index: 6; display: grid; gap: 6px; width: max-content; max-width: 260px; padding: 8px 10px; border: 1px solid var(--line); border-left: 4px solid #ffb020; border-radius: 10px; background: var(--panel); color: var(--ink); box-shadow: 0 6px 18px var(--shadow); }
 .rb-waits[hidden] { display: none; }
+/* a robot's waits answered where they are listed: under the block, or under the card's head where it has no room */
+.rb-wait-pane { position: absolute; z-index: 7; display: grid; align-content: start; gap: 8px; overflow-y: auto; padding: 8px 10px 10px; border: 1px solid var(--line); border-left: 4px solid #ffb020; border-radius: 10px; background: var(--panel); color: var(--ink); box-shadow: 0 10px 28px var(--shadow); }
+.rb-wait-pane[hidden] { display: none; }
+.rb-wait-pane.rbwp-in-head { position: fixed; z-index: 41; }   /* over the fixed card (a phone's sheet 40, widened 30) */
+.rbwp-head { display: flex; align-items: center; gap: 8px; }
+.rbwp-title { flex: 1; margin: 0; font: 700 12px/1.4 var(--font-body); }
+.rbwp-x { width: 26px; height: 26px; border: 1px solid var(--line); border-radius: 8px; background: none; color: var(--ink); font: 700 15px/1 var(--font-body); cursor: pointer; }
+.rbwp-x:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.rbwp-items { display: grid; gap: 8px; }
+.rbw-robot[aria-expanded="true"] { background: var(--chip); }
 .rbw-title { margin: 0; color: var(--ink-soft); font: 700 11px/1.4 var(--font-body); }
 .rbw-sum { justify-self: stretch; padding: 4px 10px; border: 1px solid #7a4b00; border-radius: 8px; text-align: left; background: #ffb020; color: #1f1400; font: 800 12px/1.5 var(--font-body); cursor: pointer; }
 .rbw-list { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; }

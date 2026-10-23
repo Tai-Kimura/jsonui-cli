@@ -11,9 +11,15 @@ Checked, with host's card open at 1440 px:
     top at the card's top — with 許可 1 and perm's mark, and it moved once (rbw-arrive), not under reduced motion;
   * a question and a stopped call come: 許可 1 · 質問 1 · 止められた操作 1, the robots perm, ask, den; the host's own
     permission is not counted;
-  * a press on perm's mark opens its permission's card (waitPicked, as its bubble does), the robot's card stays;
+  * a press on perm's mark opens its waits in a pane under the block (out of the card), the robot's card stays;
   * a press on the sum opens the task board's waiting strip;
-  * at 390 px (the card a sheet the page's width): no block; the card's head row has 待ち 3, which opens the board;
+  * at 390 px (the card a sheet the page's width): no block; the card's head row has 待ち 3, which opens the pane with
+    the robots listed; its ボードで見る opens the board;
+  * answered where listed (ticket 2026-10-24-viz-card-waits-answer-in-place; qa, qb and pa held by `forward.py --ask` /
+    `--decide`): qa's row opens its question in the pane, beside the card and under the block; Red and 送る reach the
+    waiting hook, and the row and the pane go, the card staying; pa's permission allowed there reaches its hook; qb
+    answered in the panel's card goes from the open pane too; the row again, and Esc, close the pane, the card staying.
+    Stills of the open pane (1440 and 390, light and dark); with `video`, the presses recorded.
   * at 1920 px: the block beside the card again.
 Stills (out/card-waits/*.png) at 1920, 1440 and 390, light and dark.
 """
@@ -32,7 +38,7 @@ from waits import WaitTimeout, settled, until
 
 CWD = "/work/card-waits-app"
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
-SID = {k: f"e2e00000-0000-4000-8000-0000000007{i:02d}" for i, k in enumerate(("host", "perm", "ask", "den", "m1", "m2", "m3", "m4", "m5", "m6"), 1)}
+SID = {k: f"e2e00000-0000-4000-8000-0000000007{i:02d}" for i, k in enumerate(("host", "perm", "ask", "den", "m1", "m2", "m3", "m4", "m5", "m6", "qa", "qb", "pa"), 1)}
 MORE = ("m1", "m2", "m3", "m4", "m5", "m6")   # with perm, ask and den: nine robots waiting, past the six listed
 QUESTION = {"questions": [{"question": "Which colour?", "header": "Colour", "multiSelect": False,
                            "options": [{"label": "Red", "description": "a"}, {"label": "Blue", "description": "b"}]}]}
@@ -43,8 +49,19 @@ BLOCK = """() => { const b = document.getElementById('rb-waits'), rb = document.
     robots: [...b.querySelectorAll('[data-rbw-robot]')].map((x) => x.dataset.rbwRobot).sort(),
     right: r.right, top: r.top, left: r.left, cardLeft: c.left, cardTop: c.top, arrive: b.classList.contains('rbw-arrive'),
     anim: getComputedStyle(b).animationName }; }"""
-BADGE = "() => { const b = document.querySelector('#rb [data-rbw-slot] [data-rbw-board]'); return b ? b.textContent : null; }"
-PICKED = "() => window.__dbg.waitPicked ? window.__dbg.waitPicked() : null"
+BADGE = "() => { const b = document.querySelector('#rb [data-rbw-slot] [data-rbw-pane]'); return b ? b.textContent : null; }"
+QUESTION_B = {"questions": [{"question": "Which size?", "header": "Size", "multiSelect": False,
+                             "options": [{"label": "Small", "description": "s"}, {"label": "Large", "description": "l"}]}]}
+PANE = """() => { const p = document.getElementById('rb-wait-pane');
+  if (!p || p.hidden) return { shown: false };
+  const r = p.getBoundingClientRect(), c = document.getElementById('rb').getBoundingClientRect(), b = document.getElementById('rb-waits').getBoundingClientRect();
+  return { shown: true, q: [...p.querySelectorAll('.rbwp-items [data-qcard]')].map((x) => x.dataset.qcard),
+    perm: [...p.querySelectorAll('.rbwp-items [data-perm-box]')].map((x) => x.dataset.permBox), send: !!p.querySelector('[data-qsend]'),
+    allow: !!p.querySelector('[data-do="allow"]'), robots: [...p.querySelectorAll('[data-rbwp-robot]')].map((x) => x.dataset.rbwpRobot).sort(),
+    left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, cardLeft: c.left, blockBottom: b.bottom, blockShown: !document.getElementById('rb-waits').hidden,
+    focusIn: p.contains(document.activeElement), vw: innerWidth, vh: innerHeight,
+    hit: (() => { const e = document.elementFromPoint(r.left + r.width / 2, r.top + Math.min(r.height / 2, 40)); return !!e && p.contains(e); })() }; }"""
+CARD_ON = "(id) => window.__dbg.board().robot === id && !document.getElementById('rb').hidden && getComputedStyle(document.getElementById('rb')).opacity === '1'"
 
 
 def check(failures, cond, text):
@@ -52,7 +69,7 @@ def check(failures, cond, text):
         failures.append(f"card-waits: {text}")
 
 
-async def run_card_waits(pw, out, failures, jt=None):
+async def run_card_waits(pw, out, failures, jt=None, video: pathlib.Path | None = None):
     from run import free_port
     name = "card-waits"
     out = pathlib.Path(out) / name
@@ -92,7 +109,13 @@ async def run_card_waits(pw, out, failures, jt=None):
                 break
             except OSError:
                 time.sleep(0.1)
-        page = await new_page(browser, watch, name, **DESKTOP)
+        if video:   # the presses recorded, for showing (the arms are the same)
+            ctx = await browser.new_context(**dict(DESKTOP, record_video_dir=str(video), record_video_size=DESKTOP["viewport"]))
+            page = await ctx.new_page()
+            watch.attach(page, name)
+        else:
+            page = await new_page(browser, watch, name, **DESKTOP)
+        pause = (lambda ms: page.wait_for_timeout(ms)) if video else (lambda ms: page.wait_for_timeout(0))
         await page.emulate_media(color_scheme="light", reduced_motion="no-preference")
         await page.goto(url + "/")
         await ready(page)
@@ -100,7 +123,8 @@ async def run_card_waits(pw, out, failures, jt=None):
         for k in SID:
             if k not in MORE:
                 hook(k, hook_event_name="SessionStart", source="startup")
-        await until(page, "() => window.__dbg.robots.length >= 4", "four robots", timeout=40000, why="() => window.__dbg.settleInfo()")
+        await until(page, "(n) => window.__dbg.robots.length >= n", "a robot for each session", arg=len([k for k in SID if k not in MORE]),
+                    timeout=40000, why="() => window.__dbg.settleInfo()")
         ids = await page.evaluate("() => Object.fromEntries(window.__dbg.robots.map((R) => [R.def.sessionId, R.def.id]))")
         rid = {k: ids[SID[k]] for k in SID if k not in MORE}
         res["ids"] = rid
@@ -160,11 +184,16 @@ async def run_card_waits(pw, out, failures, jt=None):
             await settled(page, f"{scheme}: settled")
             await page.screenshot(path=str(out / f"card-waits-1440-{scheme}.png"))
 
-        # a press on perm's mark: its permission's card, the robot's card stays
+        # a press on perm's mark: its waits in the pane, the robot's card stays
         await page.click(f"#rb-waits [data-rbw-robot='{rid['perm']}']")
-        p = res["press"] = await until(page, f"() => {{ const p = ({PICKED})(); return p && p.id === '{rid['perm']}' ? p : null; }}",
-                                       "perm's mark opens its card", timeout=10000, why=PICKED)
-        check(failures, p["kind"] == "perm" and p["found"] and str(p["card"]).startswith("perm:"), f"perm's mark: its permission's card: {p}")
+        p = res["press"] = await until(page, f"() => {{ const p = ({PANE})(); return p.shown && p.perm.length ? p : null; }}",
+                                       "perm's mark opens the pane", timeout=10000, why=PANE)
+        check(failures, p.get("shown") and len(p["perm"]) == 1 and p["right"] <= p["cardLeft"] - 4 and p["top"] >= p["blockBottom"],
+              f"perm's mark: its permission in the pane, out of the card and under the block: {p}")
+        check(failures, await page.evaluate(CARD_ON, rid["host"]), "perm's mark: the host's card stays")
+        await page.click(f"#rb-waits [data-rbw-robot='{rid['perm']}']")   # the row again: closed
+        res["pressAgain"] = again = await until(page, f"() => {{ const p = ({PANE})(); return p.shown ? null : p; }}", "the row again closes the pane", timeout=10000, why=PANE)
+        check(failures, not again.get("shown"), f"the row again: the pane closed: {again}")
         # a press on the sum: the task board's waiting strip
         await page.click("#rb-waits [data-rbw-board]")
         tb = res["board"] = await until(page, "() => { const b = window.__dbg.board(); return b.open ? b : null; }", "the sum opens the board", timeout=10000)
@@ -195,9 +224,19 @@ async def run_card_waits(pw, out, failures, jt=None):
             await page.emulate_media(color_scheme=scheme)
             await settled(page, f"390 {scheme}")
             await page.screenshot(path=str(out / f"card-waits-390-{scheme}.png"))
-        await page.click("#rb [data-rbw-slot] [data-rbw-board]")
-        tb = await until(page, "() => { const b = window.__dbg.board(); return b.open ? b : null; }", "390: the badge opens the board", timeout=10000)
-        check(failures, tb["waitView"], f"390: the badge opens the board's waiting strip: {tb}")
+        await page.click("#rb [data-rbw-slot] [data-rbw-pane]")
+        p = res["390pane"] = await until(page, f"() => {{ const p = ({PANE})(); return p.shown && p.robots.length ? p : null; }}", "390: the badge opens the pane", timeout=10000, why=PANE)
+        check(failures, p.get("shown") and p["robots"] == sorted([rid["perm"], rid["ask"], rid["den"]]) and p["left"] >= 0 and p["right"] <= p["vw"]
+              and p["hit"] and p["bottom"] <= p["vh"],
+              f"390: the badge's pane lists the three robots, on the page and in front (what is at its middle is the pane): {p}")
+        check(failures, await page.evaluate(CARD_ON, rid["host"]), "390: the host's card stays")
+        for scheme in ("light", "dark"):
+            await page.emulate_media(color_scheme=scheme)
+            await settled(page, f"390 pane {scheme}")
+            await page.screenshot(path=str(out / f"card-waits-pane-390-{scheme}.png"))
+        await page.click("#rb-wait-pane [data-rbw-board]")
+        tb = await until(page, "() => { const b = window.__dbg.board(); return b.open ? b : null; }", "390: the pane's ボードで見る opens the board", timeout=10000)
+        check(failures, tb["waitView"], f"390: the pane's ボードで見る opens the board's waiting strip: {tb}")
 
         # reduced motion: a new wait does not move it
         await page.set_viewport_size({"width": 1440, "height": 900})
@@ -215,6 +254,98 @@ async def run_card_waits(pw, out, failures, jt=None):
                                          "the block says perm's new name", arg=rid["perm"], timeout=20000,
                                          why="(id) => { const b = document.querySelector(`#rb-waits [data-rbw-robot=\"${id}\"]`); return b ? [b.title, b.textContent] : null; }")
         check(failures, "Perm lane" not in r[0] and "Perm lane" not in r[1], f"renamed: no old name left in the block: {r}")
+
+        # ---- answered where listed (ticket 2026-10-24-viz-card-waits-answer-in-place)
+        await page.emulate_media(color_scheme="light", reduced_motion="no-preference")
+        held: dict = {}
+
+        def hold(k, flag, **payload):   # a hook that waits for the page's answer
+            body = {"session_id": SID[k], "cwd": CWD, "transcript_path": f"{home}/t-{k}.jsonl", "permission_mode": "default", **payload}
+            p = subprocess.Popen([sys.executable, "-I", "-S", str(forward), flag], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE, env=dict(base_env, HOME=str(home)))
+            p.stdin.write(json.dumps(body).encode())
+            p.stdin.close()
+            p.stdin = None
+            held[k] = p
+
+        def heard(k, timeout=30):
+            o, _ = held[k].communicate(timeout=timeout)
+            return json.loads(o) if o else None
+
+        await page.wait_for_timeout(5500)   # a presence report from the page (the waiting hooks wait only for a visible page)
+        for k, q, use in (("qa", QUESTION, "toolu_qa"), ("qb", QUESTION_B, "toolu_qb")):
+            pre = dict(hook_event_name="PreToolUse", tool_name="AskUserQuestion", tool_use_id=use, tool_input=q)
+            hook(k, hook_event_name="UserPromptSubmit", prompt="ask")
+            hook(k, **pre)
+            hold(k, "--ask", **pre)
+        req = dict(hook_event_name="PermissionRequest", tool_name="Bash", tool_input={"command": "npm test"})
+        hook("pa", hook_event_name="UserPromptSubmit", prompt="test")
+        hook("pa", hook_event_name="PreToolUse", tool_name="Bash", tool_use_id="toolu_pa", tool_input={"command": "npm test"})
+        hook("pa", **req)
+        hold("pa", "--decide", **req)
+        await block("qa, qb and pa in the block", [rid[k] for k in ("perm", "ask", "den", "qa", "qb", "pa")], timeout=30000)
+        await until(page, "() => document.querySelectorAll('#questions .qcard.q-open [data-qsend]').length >= 2", "the two held questions open", timeout=20000)
+        await pause(1200)
+        # qa: its question in the pane; Red, 送る
+        await page.click(f"#rb-waits [data-rbw-robot='{rid['qa']}']")
+        p = res["qaPane"] = await until(page, f"() => {{ const p = ({PANE})(); return p.shown && p.send ? p : null; }}", "qa's question in the pane", timeout=10000, why=PANE)
+        check(failures, p.get("shown") and len(p["q"]) == 1 and p["send"] and p["focusIn"] and p["right"] <= p["cardLeft"] - 4 and p["top"] >= p["blockBottom"] and p["left"] >= 0
+              and p["hit"],
+              f"qa's row: its question (choices, 送る) in the pane, focused, beside the card and under the block: {p}")
+        exp = res["qaExpanded"] = await page.evaluate("(id) => document.querySelector(`#rb-waits [data-rbw-robot=\"${id}\"]`).getAttribute('aria-expanded')", rid["qa"])
+        check(failures, exp == "true", f"qa's row says the pane is open: {exp}")
+        check(failures, await page.evaluate(CARD_ON, rid["host"]), "qa's row: the host's card stays")
+        for scheme in ("light", "dark"):
+            await page.emulate_media(color_scheme=scheme)
+            await settled(page, f"1440 pane {scheme}")
+            await page.screenshot(path=str(out / f"card-waits-pane-1440-{scheme}.png"))
+        await page.emulate_media(color_scheme="light")
+        await pause(1500)
+        await page.click("#rb-wait-pane label:has-text('Red')")
+        await pause(800)
+        await page.click("#rb-wait-pane [data-qsend]")
+        got = res["qaHook"] = heard("qa")
+        ans = (((got or {}).get("hookSpecificOutput") or {}).get("updatedInput") or {}).get("answers")
+        check(failures, ans == {"Which colour?": "Red"}, f"qa: the answer from the pane reaches the waiting hook: {got}")
+        hook("qa", hook_event_name="PostToolUse", tool_name="AskUserQuestion", tool_use_id="toolu_qa",
+             tool_input={**QUESTION, "answers": ans or {}}, tool_response={"answers": ans or {}})
+        await block("qa answered: its row gone", [rid[k] for k in ("perm", "ask", "den", "qb", "pa")], timeout=20000)
+        p = res["qaAfter"] = await until(page, f"() => {{ const p = ({PANE})(); return p.shown ? null : p; }}", "qa answered: the pane closed", timeout=10000, why=PANE)
+        check(failures, not p.get("shown"), f"qa answered: the pane closed: {p}")
+        check(failures, await page.evaluate(CARD_ON, rid["host"]), "qa answered: the host's card stays")
+        await pause(1500)
+        # pa: its permission in the pane, 許可
+        await page.click(f"#rb-waits [data-rbw-robot='{rid['pa']}']")
+        p = res["paPane"] = await until(page, f"() => {{ const p = ({PANE})(); return p.shown && p.allow ? p : null; }}", "pa's permission in the pane", timeout=10000, why=PANE)
+        check(failures, p.get("shown") and len(p["perm"]) == 1 and p["allow"], f"pa's row: its permission (allow / deny) in the pane: {p}")
+        await pause(1500)
+        await page.click("#rb-wait-pane [data-do='allow']")
+        got = res["paHook"] = heard("pa")
+        decision = ((got or {}).get("hookSpecificOutput") or {}).get("decision")
+        check(failures, isinstance(decision, dict) and decision.get("behavior") == "allow", f"pa: allowed in the pane, the hook got allow: {got}")
+        await block("pa allowed: its row gone", [rid[k] for k in ("perm", "ask", "den", "qb")], timeout=20000)
+        p = res["paAfter"] = await until(page, f"() => {{ const p = ({PANE})(); return p.shown ? null : p; }}", "pa allowed: the pane closed", timeout=10000, why=PANE)
+        check(failures, await page.evaluate(CARD_ON, rid["host"]), "pa allowed: the host's card stays")
+        await pause(1500)
+        # qb: open in the pane, answered in the panel's card: gone from the pane too (one state)
+        await page.click(f"#rb-waits [data-rbw-robot='{rid['qb']}']")
+        await until(page, f"() => {{ const p = ({PANE})(); return p.shown && p.send ? p : null; }}", "qb's question in the pane", timeout=10000, why=PANE)
+        res["qbPanel"] = await page.evaluate("""() => { const c = [...document.querySelectorAll('#questions .qcard.q-open')].find((x) => x.textContent.includes('Which size?'));
+          if (!c) return false; const l = [...c.querySelectorAll('label')].find((x) => x.textContent.includes('Large')); l.querySelector('input').click();
+          c.querySelector('input[data-qk]').dispatchEvent(new Event('input', { bubbles: true })); const s = c.querySelector('[data-qsend]'); s.click(); return true; }""")
+        got = res["qbHook"] = heard("qb")
+        ans = (((got or {}).get("hookSpecificOutput") or {}).get("updatedInput") or {}).get("answers")
+        check(failures, res["qbPanel"] and ans == {"Which size?": "Large"}, f"qb answered in the panel's card: {got}")
+        p = res["qbAfter"] = await until(page, f"() => {{ const p = ({PANE})(); return p.shown ? null : p; }}", "qb answered elsewhere: the pane closed", timeout=15000, why=PANE)
+        check(failures, not p.get("shown"), f"qb answered in the panel: gone from the pane too: {p}")
+        # Esc closes the pane, the card stays
+        await page.click(f"#rb-waits [data-rbw-robot='{rid['perm']}']")
+        await until(page, f"() => {{ const p = ({PANE})(); return p.shown ? p : null; }}", "perm's pane again", timeout=10000, why=PANE)
+        await pause(1000)
+        await page.keyboard.press("Escape")
+        p = res["esc"] = await until(page, f"() => {{ const p = ({PANE})(); return p.shown ? null : p; }}", "Esc closes the pane", timeout=10000, why=PANE)
+        check(failures, not p.get("shown") and await page.evaluate(CARD_ON, rid["host"]), f"Esc: the pane closed, the host's card stays: {p}")
+        await pause(1500)
 
         # nine robots waiting: six listed, the rest said as ほか N
         for k in MORE:
