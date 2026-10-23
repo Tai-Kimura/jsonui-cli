@@ -93,6 +93,7 @@ async def run_card_waits(pw, out, failures, jt=None, video: pathlib.Path | None 
     url = f"http://127.0.0.1:{port}"
     res: dict = {}
     browser = None
+    ctx = None
     t0 = time.monotonic()
     try:
         def hook(k, **payload):
@@ -361,6 +362,8 @@ async def run_card_waits(pw, out, failures, jt=None, video: pathlib.Path | None 
         check(failures, more[0] == 6, f"nine waiting: six robots listed and {want_more!r}: {more}")
         (out / "result.json").write_text(json.dumps(res, ensure_ascii=False, indent=1, default=str))
     finally:
+        if video and ctx is not None:
+            await ctx.close()   # the video is written whole only when its context closes
         if browser is not None:
             await browser.close()
         srv.terminate()   # our own child (started above)

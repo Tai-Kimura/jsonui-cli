@@ -70,6 +70,7 @@ async def run_wait_project(pw, out, failures, video: pathlib.Path | None = None)
 
     browser = await pw.chromium.launch(args=LAUNCH_ARGS)
     watch = Watch(origin=url)
+    ctx = None
     t0 = time.monotonic()
     try:
         import urllib.request
@@ -194,6 +195,8 @@ async def run_wait_project(pw, out, failures, video: pathlib.Path | None = None)
         check(failures, got["project"] == B and got["panel"] and (got["picked"] or {}).get("found"), f"b1's bubble from すべて: B chosen, its question card found in the panel: {got}")
         (out / "result.json").write_text(json.dumps(res, ensure_ascii=False, indent=1, default=str))
     finally:
+        if video and ctx is not None:
+            await ctx.close()   # the video is written whole only when its context closes
         await browser.close()
         srv.terminate()
         try:
