@@ -239,14 +239,18 @@ def test_a_key_json_would_not_hold_as_written_halts_every_reader(tmp_path):
             else:
                 assert isinstance(answer, str) and answer.startswith("ERR ") and named in answer, (line, reader, answer)
                 assert "Quote the" in answer, (line, reader, answer)
-    # the control: the same document with the key quoted is read by every reader, as NO
+    # the control: the same document with the key quoted is read by every reader, as NO; and a null enum member (a
+    # nullable enum — JSON holds null in an enum, and jui build's walk always passed it) is read as None, not halted
     folder = tmp_path / "quoted/docs/api"
     folder.mkdir(parents=True)
-    (folder / "api.yaml").write_text(TYPED_HEAD + "        'NO': {type: string}\n", encoding="utf-8")
+    (folder / "api.yaml").write_text(TYPED_HEAD + "        'NO': {type: string}\n"
+                                     "        s: {type: string, nullable: true, enum: [a, null]}\n"
+                                     "        t: {type: string, nullable: true, enum: [a, ~]}\n", encoding="utf-8")
     got = _every_reader(folder)
     assert not [r for r, a in got.items() if isinstance(a, str) and a.startswith("ERR ")], got
-    assert [f.wire_name for f in got["jui build's loader"][0].schemas[0].fields] == ["NO"]
-    assert list(got["the shared rule"]["components"]["schemas"]["M"]["properties"]) == ["NO"]
+    assert [f.wire_name for f in got["jui build's loader"][0].schemas[0].fields] == ["NO", "s", "t"]
+    props = got["the shared rule"]["components"]["schemas"]["M"]["properties"]
+    assert list(props) == ["NO", "s", "t"] and props["s"]["enum"] == props["t"]["enum"] == ["a", None], props
     # a YAML file beside the documents that the prefilter takes for one (`openapi:` at a line's start, inside a quoted
     # string) and is not — a workflow, with its `on:` — is still passed by, not halted on
     from jui_cli.core.openapi_loader import is_swagger_yaml_file, load_swagger
