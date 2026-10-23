@@ -11,7 +11,9 @@
         "jui_tools/jui_cli/viz/sources/transcripts.py",
         "jui_tools/jui_cli/viz/sources/history.py",
         "jui_tools/jui_cli/viz/ingest.py",
-        "jui_tools/jui_cli/viz/__init__.py"
+        "jui_tools/jui_cli/viz/__init__.py",
+        "jui_tools/tools/viz_promo/capture.py",
+        "jui_tools/tools/viz_promo/rooms.py"
       ]
     },
     {
@@ -53,7 +55,8 @@
         "plugins/jui-viz/scripts/forward.py",
         "plugins/jui-viz/scripts/session_env.sh",
         "~/.claude/session-recovery/",
-        "~/.claude/agents/ (the agents' hooks)"
+        "~/.claude/agents/ (the agents' hooks)",
+        "jui_tools/tools/viz_promo/capture.py"
       ]
     },
     {
@@ -90,7 +93,8 @@
         "jui_tools/jui_cli/commands/viz_cmd.py",
         "jui_tools/jui_cli/viz/web/js/50-panel.js",
         "jui_tools/jui_cli/viz/web/js/55-history.js",
-        "jui_tools/jui_cli/viz/callcmd.py"
+        "jui_tools/jui_cli/viz/callcmd.py",
+        "jui_tools/tools/viz_promo/capture.py"
       ]
     },
     {
@@ -110,7 +114,8 @@
         "jui_tools/jui_cli/viz/web/js/55-history.js",
         "plugins/jui-viz/scripts/channel.py",
         "~/.claude/session-recovery/",
-        "jui_tools/jui_cli/viz/callcmd.py"
+        "jui_tools/jui_cli/viz/callcmd.py",
+        "jui_tools/tools/viz_promo/capture.py"
       ]
     },
     {
@@ -182,7 +187,8 @@
         "jui_tools/jui_cli/viz/web/js/20-core.js",
         "jui_tools/jui_cli/viz/web/js/30-source-demo.js",
         "jui_tools/jui_cli/viz/web/js/50-panel.js",
-        "jui_tools/tools/check_pytest_collection.py"
+        "jui_tools/tools/check_pytest_collection.py",
+        "jui_tools/tools/viz_promo/rooms.py"
       ]
     },
     {
@@ -197,7 +203,8 @@
         "plugins/jui-viz/hooks/hooks.json",
         "plugins/jui-viz/scripts/session_env.sh",
         "installer/bootstrap.sh",
-        "test_tools/jsonui_test_cli/branch_tests.py"
+        "test_tools/jsonui_test_cli/branch_tests.py",
+        "jui_tools/tools/viz_promo/capture.py"
       ]
     },
     {
@@ -235,7 +242,8 @@
       "impact": "viz: トークに送った通が出ない・相手が分からない（一覧と詳細が空になる）",
       "files": [
         "jui_tools/jui_cli/viz/talk.py",
-        "jui_tools/jui_cli/viz/sources/talk_records.py"
+        "jui_tools/jui_cli/viz/sources/talk_records.py",
+        "jui_tools/tools/viz_promo/capture.py"
       ]
     },
     {
@@ -247,7 +255,8 @@
       "files": [
         "jui_tools/jui_cli/viz/talk.py",
         "jui_tools/jui_cli/viz/sources/talk_records.py",
-        "jui_tools/jui_cli/viz/sources/history.py"
+        "jui_tools/jui_cli/viz/sources/history.py",
+        "jui_tools/tools/viz_promo/capture.py"
       ]
     },
     {
@@ -259,7 +268,8 @@
       "files": [
         "jui_tools/jui_cli/viz/talk.py",
         "jui_tools/jui_cli/viz/sources/talk_records.py",
-        "jui_tools/jui_cli/viz/sources/history.py"
+        "jui_tools/jui_cli/viz/sources/history.py",
+        "jui_tools/tools/viz_promo/capture.py"
       ]
     },
     {
@@ -270,7 +280,8 @@
       "impact": "viz: 届いた時刻が送りの結果の時刻になる（表示の既読には影響しない）",
       "files": [
         "jui_tools/jui_cli/viz/talk.py",
-        "jui_tools/jui_cli/viz/sources/talk_records.py"
+        "jui_tools/jui_cli/viz/sources/talk_records.py",
+        "jui_tools/tools/viz_promo/capture.py"
       ]
     },
     {
@@ -281,7 +292,8 @@
       "impact": "viz: 自動モードが止めた操作の札が出ない（ボタンから続けさせられない）。ほかは変わらない",
       "files": [
         "jui_tools/jui_cli/viz/denials.py",
-        "jui_tools/jui_cli/viz/web/js/51-denials.js"
+        "jui_tools/jui_cli/viz/web/js/51-denials.js",
+        "jui_tools/tools/viz_promo/capture.py"
       ]
     },
     {
