@@ -27,6 +27,7 @@ import re
 import time
 from pathlib import Path
 from typing import Callable
+from .. import quiet_fs
 
 COMMON = {"v", "t", "platform", "run", "event"}
 KEYS = {
@@ -150,7 +151,7 @@ class FolderTail:
     def prune(self, now: float | None = None) -> int:
         now = now or time.time()
         removed = 0
-        for path in self.folder.glob("*.jsonl") if self.folder.is_dir() else []:
+        for path in self.folder.glob("*.jsonl") if quiet_fs.is_dir(self.folder) else []:
             try:
                 if now - path.stat().st_mtime > KEEP_DAYS * 86400:
                     path.unlink()
@@ -161,7 +162,7 @@ class FolderTail:
 
     def read_new(self) -> list[dict]:
         out: list[dict] = []
-        if not self.folder.is_dir():
+        if not quiet_fs.is_dir(self.folder):
             return out
         for path in sorted(self.folder.glob("*.jsonl")):
             try:

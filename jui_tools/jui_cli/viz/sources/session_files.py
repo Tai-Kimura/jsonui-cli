@@ -13,6 +13,7 @@ import re
 import stat
 from pathlib import Path
 from typing import Callable
+from .. import quiet_fs
 
 SESSION_FILE = re.compile(r"^[0-9]+\.json$")  # ASCII digits only (\d matches other scripts)
 MAX_BYTES = 256_000
@@ -48,7 +49,7 @@ def read_session_file(path: Path) -> dict | None:
 
 
 def scan(folder: Path) -> list[dict]:
-    if not folder.is_dir():
+    if not quiet_fs.is_dir(folder):
         return []
     out = []
     for path in sorted(folder.iterdir()):
@@ -60,7 +61,7 @@ def scan(folder: Path) -> list[dict]:
 
 def watch(folder: Path, on_data: Callable[[dict], None]):
     """Start a watchdog observer; returns it (call .stop() and .join()). None if the folder is missing."""
-    if not folder.is_dir():
+    if not quiet_fs.is_dir(folder):
         return None
     from watchdog.events import FileSystemEventHandler
     from watchdog.observers import Observer

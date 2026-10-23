@@ -31,6 +31,7 @@ import json
 from pathlib import Path
 
 from . import i18n
+from . import quiet_fs
 
 MAX_ITEMS = 300
 MAX_TEXT = 300
@@ -236,5 +237,5 @@ def sheet_for(project, spec_id: str) -> dict | None:
         return None
     data = entry.data
     nodes = project.layout_nodes_cached(project.layout_path(data, entry.source, entry.path))
-    exists = [Path(p).exists() for p in project.related_paths(data, entry.source, entry.path)]
+    exists = [quiet_fs.exists(Path(p)) for p in project.related_paths(data, entry.source, entry.path)]
     return build_doc(data, nodes, exists, project.impl(data, entry.source, entry.path))

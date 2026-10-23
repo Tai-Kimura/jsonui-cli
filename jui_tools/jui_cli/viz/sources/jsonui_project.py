@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ...core.document_tools_import import distribution_root
+from .. import quiet_fs
 
 SECTIONS = ("metadata", "structure", "stateManagement", "dataFlow", "userActions", "transitions", "branchContracts")
 #: a spec's prose in YAML (shared/core/spec_texts.py TEXTS_SUFFIX): watched, so an edit to it reads the spec again
@@ -171,7 +172,7 @@ def _extends_target(config: Path) -> Path | None:
     if not isinstance(extends, str) or not extends.strip():
         return None
     resolved = (config.parent / extends).resolve()
-    if resolved.is_dir():
+    if quiet_fs.is_dir(resolved):
         resolved = resolved / CONFIG_NAME
     return resolved
 
@@ -193,7 +194,7 @@ def follow_extends(config: Path) -> Path | None:
         if _read_config(current).get("spec_directory"):
             return current
         nxt = _extends_target(current)
-        if nxt is None or not nxt.is_file():
+        if nxt is None or not quiet_fs.is_file(nxt):
             return None
         current = nxt
     return None
@@ -201,20 +202,20 @@ def follow_extends(config: Path) -> Path | None:
 
 def find_configs(root: Path, depth: int = SOURCE_DEPTH) -> list[Path]:
     """jui.config.json at the room's root and up to ``depth`` folders below it, root first, then by path."""
-    found = [root / CONFIG_NAME] if (root / CONFIG_NAME).is_file() else []
+    found = [root / CONFIG_NAME] if quiet_fs.is_file(root / CONFIG_NAME) else []
     below: list[Path] = []
 
     def walk(folder: Path, level: int) -> None:
         if level > depth:
             return
         try:
-            children = sorted(p for p in folder.iterdir() if p.is_dir() and not p.is_symlink())
+            children = sorted(p for p in folder.iterdir() if quiet_fs.is_dir(p) and not quiet_fs.is_symlink(p))
         except OSError:
             return
         for child in children:
             if child.name in SKIP_DIRS:
                 continue
-            if (child / CONFIG_NAME).is_file():
+            if quiet_fs.is_file(child / CONFIG_NAME):
                 below.append(child / CONFIG_NAME)
             walk(child, level + 1)
 
@@ -241,10 +242,10 @@ def boundary_roots(spec_path: Path, ceiling: Path | None = None) -> list[Path]:
     within = ceiling is not None and spec_path.is_relative_to(ceiling)
     roots = [spec_path.parent]
     for parent in spec_path.parents:
-        if (parent / "jui.config.json").is_file() or (parent / ".git").exists():
+        if quiet_fs.is_file(parent / "jui.config.json") or quiet_fs.exists(parent / ".git"):
             if parent not in roots:
                 roots.append(parent)
-        if (parent == ceiling) if within else (parent / ".git").exists():
+        if (parent == ceiling) if within else quiet_fs.exists(parent / ".git"):
             break
     return roots
 
@@ -253,9 +254,9 @@ def resolve_declared(value: str, roots: list[Path]) -> tuple[Path, bool]:
     """(where the declared path is, whether it exists): the first root it exists under, else the first root."""
     path = Path(value)
     if path.is_absolute():
-        return path, path.exists()
+        return path, quiet_fs.exists(path)
     for root in roots:
-        if (root / path).exists():
+        if quiet_fs.exists(root / path):
             return root / path, True
     return (roots[0] / path if roots else path), False
 
@@ -278,7 +279,7 @@ def test_dirs():
     if not _TEST_DIRS:
         path = distribution_root() / "test_tools" / "jsonui_test_cli" / "test_dirs.py"
         module = None
-        if path.is_file():
+        if quiet_fs.is_file(path):
             name = "_jui_viz_jsonui_test_dirs"
             spec = importlib.util.spec_from_file_location(name, path)
             if spec is not None and spec.loader is not None:
@@ -374,9 +375,9 @@ def git_dir(folder: Path) -> Path | None:
     """The git directory of a checkout: its .git folder, or the one a .git file points at (a worktree, a submodule)."""
     dot = folder / ".git"
     try:
-        if dot.is_dir():
+        if quiet_fs.is_dir(dot):
             return dot
-        if dot.is_file():
+        if quiet_fs.is_file(dot):
             line = dot.read_text(encoding="utf-8").strip()
             if line.startswith("gitdir:"):
                 target = Path(line[len("gitdir:"):].strip())
@@ -400,7 +401,7 @@ def head_branch(gitdir: Path) -> str:
 def repo_root(folder: Path, ceiling: Path) -> Path | None:
     """The checkout an app's folder is in: the nearest folder from it up to ``ceiling`` holding .git."""
     for candidate in (folder, *folder.parents):
-        if (candidate / ".git").exists():
+        if quiet_fs.exists(candidate / ".git"):
             return candidate
         if candidate == ceiling:
             break
@@ -414,7 +415,7 @@ def worktrees(repo: Path) -> list[tuple[Path, str]]:
         return []
     out = []
     try:
-        admins = sorted(p for p in (gd / "worktrees").iterdir() if p.is_dir())
+        admins = sorted(p for p in (gd / "worktrees").iterdir() if quiet_fs.is_dir(p))
     except OSError:
         return []
     for admin in admins:
@@ -423,7 +424,7 @@ def worktrees(repo: Path) -> list[tuple[Path, str]]:
         except OSError:
             continue
         folder = dot.parent
-        if folder.is_dir():
+        if quiet_fs.is_dir(folder):
             out.append((folder, head_branch(admin)))
     return out
 
@@ -431,7 +432,7 @@ def worktrees(repo: Path) -> list[tuple[Path, str]]:
 def is_linked(folder: Path) -> bool:
     """Whether a folder is in a linked worktree: its checkout's .git file points into <git dir>/worktrees/<name>."""
     for candidate in (folder, *folder.parents):
-        if (candidate / ".git").exists():
+        if quiet_fs.exists(candidate / ".git"):
             gd = git_dir(candidate)
             return gd is not None and gd.parent.name == "worktrees"
     return False
@@ -509,7 +510,7 @@ class JsonUIProject:
                 if real.is_relative_to(room) or not any(c.is_relative_to(real) for c in cwds):
                     continue
                 config = folder / rel / CONFIG_NAME if rel != "." else folder / CONFIG_NAME
-                if not config.is_file():
+                if not quiet_fs.is_file(config):
                     continue
                 declared = follow_extends(config) or config
                 key = f"{base.key}@{branch}"
@@ -544,7 +545,7 @@ class JsonUIProject:
             base.checkout = {"branch": head_branch(gd)} if gd is not None else None
         self.sources = self.base_sources + kept + added
         for source in added:
-            if source.spec_dir.is_dir():
+            if quiet_fs.is_dir(source.spec_dir):
                 for path in sorted(source.spec_dir.rglob("*.spec.json")):
                     if not SKIP_DIRS.intersection(path.relative_to(source.spec_dir).parts):
                         self.reload_spec(path, at, by=None, initial=True, source=source)
@@ -573,7 +574,7 @@ class JsonUIProject:
 
     def load_all(self, at: int) -> None:
         for source in self.sources:
-            if source.spec_dir.is_dir():
+            if quiet_fs.is_dir(source.spec_dir):
                 for path in sorted(source.spec_dir.rglob("*.spec.json")):
                     if not SKIP_DIRS.intersection(path.relative_to(source.spec_dir).parts):
                         self.reload_spec(path, at, by=None, initial=True, source=source)
@@ -586,7 +587,7 @@ class JsonUIProject:
         sid = self.spec_id(path, source)
         entry = self.specs.get(sid) or SpecEntry(path=path, source=source)
         self.specs[sid] = entry
-        if not path.exists():
+        if not quiet_fs.exists(path):
             del self.specs[sid]
             return []
         try:
@@ -779,9 +780,9 @@ class JsonUIProject:
         Nothing here measures a state, a data-flow item, a user action or a transition one by one: the inputs say
         nothing about them, and the board says so instead of guessing.
         """
-        related = [p.exists() for p in self.related_paths(spec, source, spec_path)]
+        related = [quiet_fs.exists(p) for p in self.related_paths(spec, source, spec_path)]
         lp = self.layout_path(spec, source, spec_path)
-        layout = None if lp is None else lp.exists()
+        layout = None if lp is None else quiet_fs.exists(lp)
         ids = component_ids(spec)
         components = None
         if ids:
@@ -919,7 +920,7 @@ def watch(project: JsonUIProject, on_change):
     folders exist. Folders in SKIP_DIRS are ignored.
     """
     from .. import data_docs
-    folders = [f for f in project.artifact_dirs() if f.is_dir()]
+    folders = [f for f in project.artifact_dirs() if quiet_fs.is_dir(f)]
     folders += [d for _k, d, _r in data_docs.doc_dirs(project) if d not in folders]   # the data server's (2.3.5)
     if not folders:
         return None

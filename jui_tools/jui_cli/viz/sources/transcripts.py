@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Callable
 
 from ..calls import record_event
+from .. import quiet_fs
 
 HEAD_BYTES = 65_536
 
@@ -255,7 +256,7 @@ def transcript_path(projects: Path) -> Callable[..., Path | None]:
     """find(session_id, cwd, given, agent_id=None, agent_given=None): the session's transcript, or with agent_id its
     subagent's (the hook's agent_transcript_path, else <session folder>/subagents/agent-<id>.jsonl), a regular .jsonl
     under the projects folder reached through no symlink — or None."""
-    root = projects.resolve() if projects.exists() else projects
+    root = projects.resolve() if quiet_fs.exists(projects) else projects
 
     def agent_paths(session_id, cwd, given, agent_id, agent_given) -> list[Path]:
         out = []
@@ -271,14 +272,14 @@ def transcript_path(projects: Path) -> Callable[..., Path | None]:
         if agent_id:
             for path in agent_paths(session_id, cwd, given, agent_id, agent_given):
                 try:
-                    if path.parent.resolve().is_relative_to(root) and path.is_file() and not path.is_symlink():
+                    if path.parent.resolve().is_relative_to(root) and quiet_fs.is_file(path) and not quiet_fs.is_symlink(path):
                         return path
                 except (OSError, ValueError):
                     continue
             return None
         for path in candidates(projects, session_id, cwd, given):
             try:
-                if path.is_file() and not path.is_symlink():
+                if quiet_fs.is_file(path) and not quiet_fs.is_symlink(path):
                     return path
             except OSError:
                 continue

@@ -25,6 +25,7 @@ from pathlib import Path
 
 from . import i18n
 from . import infra_words
+from . import quiet_fs
 
 ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 DATE = re.compile(r"^20[0-9]{2}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$")
@@ -56,9 +57,9 @@ def _signature(root: Path, room, folders: list[str], cache: Path) -> tuple:
     for folder in folders:
         for name, size in room._list_dir(root, folder) or []:
             out.append((folder, name, size, _stamp(os.path.join(root, folder, name))))
-    if cache.is_dir():
+    if quiet_fs.is_dir(cache):
         for f in sorted(cache.rglob("*.json")):
-            if not f.is_symlink():
+            if not quiet_fs.is_symlink(f):
                 out.append(("cache", str(f.relative_to(cache)), _stamp(str(f))))
     return tuple(out)
 

@@ -25,6 +25,7 @@ import stat
 from pathlib import Path
 
 from . import i18n
+from . import quiet_fs
 
 MAX_FILES = 200            # documents per room
 MAX_FILE_BYTES = 2_000_000
@@ -145,7 +146,7 @@ def doc_dirs(project) -> list[tuple[str, Path, Path]]:
     for r in roots:
         for kind in KINDS:
             d = r / "docs" / kind
-            if not d.is_dir() or not _inside(d, Path(project.root)):
+            if not quiet_fs.is_dir(d) or not _inside(d, Path(project.root)):
                 continue
             real = d.resolve()
             if real in seen:
@@ -168,7 +169,7 @@ def _files(project) -> list[tuple[str, Path, Path, Path]]:
         for f in sorted(p for p in d.rglob("*") if p.suffix.lower() in DOC_EXTENSIONS):   # JSON and YAML (2.3.21)
             if len(out) >= MAX_FILES:
                 return out
-            if not f.is_file() or not _inside(f, d):
+            if not quiet_fs.is_file(f) or not _inside(f, d):
                 continue
             try:
                 if f.stat().st_size > MAX_FILE_BYTES:

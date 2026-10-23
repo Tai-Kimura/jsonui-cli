@@ -51,6 +51,7 @@ from . import i18n, talk_contract
 from .calls import peer_name
 from .sources import session_files
 from .sources.talk_records import observations, wanted
+from . import quiet_fs
 
 SCHEMA = 3
 LIMITS = talk_contract.limits()
@@ -335,7 +336,7 @@ class TalkIndex:
         if path is not None:
             return path
         try:
-            found = [p for p in self.projects.glob(f"*/{sid}.jsonl") if p.is_file() and not p.is_symlink()]
+            found = [p for p in self.projects.glob(f"*/{sid}.jsonl") if quiet_fs.is_file(p) and not quiet_fs.is_symlink(p)]
         except OSError:
             found = []
         if found:
@@ -352,10 +353,10 @@ class TalkIndex:
                 continue
             out.append((main, sid, None))
             subs = main.parent / sid / "subagents"
-            if subs.is_dir() and not subs.is_symlink():
+            if quiet_fs.is_dir(subs) and not quiet_fs.is_symlink(subs):
                 for p in sorted(subs.glob("**/agent-*.jsonl")):
                     aid = p.name[len("agent-"):-len(".jsonl")]
-                    if re.fullmatch(r"[A-Za-z0-9_-]{1,80}", aid) and not p.is_symlink():
+                    if re.fullmatch(r"[A-Za-z0-9_-]{1,80}", aid) and not quiet_fs.is_symlink(p):
                         out.append((p, sid, aid))
         return out
 

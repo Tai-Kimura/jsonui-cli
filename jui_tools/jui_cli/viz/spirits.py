@@ -25,6 +25,7 @@ from importlib import resources
 from pathlib import Path
 
 from . import paths
+from . import quiet_fs
 
 NAME_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
 PART_FILE_RE = re.compile(r"(robot|prop)-[A-Za-z0-9_-]{1,64}\.glb")
@@ -462,11 +463,11 @@ def check_model(folder: Path) -> dict:
     total = 0
     triangles = 0
     spec: dict = {}
-    names = sorted(p.name for p in folder.iterdir()) if folder.is_dir() else []
+    names = sorted(p.name for p in folder.iterdir()) if quiet_fs.is_dir(folder) else []
     glbs = {n for n in names if n == SPIRIT_GLB or PART_FILE_RE.fullmatch(n)}
     for name in names:
         path = folder / name
-        if path.is_symlink() or not path.is_file():
+        if quiet_fs.is_symlink(path) or not quiet_fs.is_file(path):
             notes.append(f"{name}: not read (not a plain file)")
             continue
         size = path.stat().st_size
@@ -487,7 +488,7 @@ def check_model(folder: Path) -> dict:
     if triangles > MAX_TRIANGLES and not any("triangles" in p for p in problems):
         problems.append(f"{triangles:,} triangles in all ({MAX_TRIANGLES:,} at most)")
     json_path = folder / SPIRIT_JSON
-    if SPIRIT_JSON in names and json_path.is_file() and not json_path.is_symlink():
+    if SPIRIT_JSON in names and quiet_fs.is_file(json_path) and not quiet_fs.is_symlink(json_path):
         size = json_path.stat().st_size
         if size > MAX_JSON_BYTES:
             problems.append(f"{SPIRIT_JSON}: {size:,} bytes ({MAX_JSON_BYTES // 1024} KB at most)")
@@ -521,11 +522,11 @@ def check_model(folder: Path) -> dict:
 def scan(base: Path) -> dict:
     """Every model folder under base: {dir, models: [check_model …], skipped: [names], problems: [str]}."""
     out = {"dir": str(base), "models": [], "skipped": [], "problems": []}
-    if not base.is_dir():
+    if not quiet_fs.is_dir(base):
         return out
     folders = []
     for child in sorted(base.iterdir(), key=lambda p: p.name):
-        if not child.is_dir() or child.is_symlink():
+        if not quiet_fs.is_dir(child) or quiet_fs.is_symlink(child):
             continue
         if child.name.startswith("."):
             continue
@@ -578,7 +579,7 @@ def model_file(model_id: str, file: str) -> tuple[int, bytes | str]:
     if file not in model["files"]:
         return 404, "no such file in the model"
     path = Path(model["dir"]) / file
-    if path.is_symlink() or not path.is_file():
+    if quiet_fs.is_symlink(path) or not quiet_fs.is_file(path):
         return 404, "no such file in the model"
     return 200, path.read_bytes()
 
@@ -590,7 +591,7 @@ def doctor_check() -> dict:
     mine = own["models"]
     broken = [m for m in bundled["models"] + mine if not m["ok"]]
     detail = (f"skill spirits: {b_ok} bundled; {sum(1 for m in mine if m['ok'])} of {len(mine)} of yours ok"
-              f" ({own['dir']}{'' if Path(own['dir']).is_dir() else ', no such folder yet'})")
+              f" ({own['dir']}{'' if quiet_fs.is_dir(Path(own['dir'])) else ', no such folder yet'})")
     for m in broken:
         detail += f"; {m['name']} not used: " + "; ".join(m["problems"][:3]) + (
             f" (and {len(m['problems']) - 3} more)" if len(m["problems"]) > 3 else "")
@@ -635,12 +636,12 @@ def main(argv: list[str] | None = None) -> int:
     targets = [Path(a) for a in args] or [bundled_dir(), own_dir()]
     models = []
     for t in targets:
-        if t.is_dir() and any((t / n).is_file() for n in (SPIRIT_JSON, SPIRIT_GLB)) or any(
-                PART_FILE_RE.fullmatch(p.name) for p in (t.iterdir() if t.is_dir() else [])):
+        if quiet_fs.is_dir(t) and any(quiet_fs.is_file(t / n) for n in (SPIRIT_JSON, SPIRIT_GLB)) or any(
+                PART_FILE_RE.fullmatch(p.name) for p in (t.iterdir() if quiet_fs.is_dir(t) else [])):
             models.append(check_model(t))
         else:
             found = scan(t)
-            if not t.is_dir():
+            if not quiet_fs.is_dir(t):
                 print(f"--  {t}: no such folder")
             for s in found["skipped"]:
                 print(f"--  {t / s}: not read (name not A-Z a-z 0-9 _ -)")

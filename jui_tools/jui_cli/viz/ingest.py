@@ -29,6 +29,7 @@ from .sources.history import sent_files as history_sent_files
 from .sources.tasks import TaskBook
 from .sources.test_progress import ProgressBook
 from .state import VizState
+from . import quiet_fs
 
 #: The 18 events the hooks are installed for; anything else is dropped.
 KNOWN_EVENTS = frozenset({
@@ -648,14 +649,14 @@ class World:
             return
         target = Path(path)
         in_artifacts = any(target.is_relative_to(d) for d in project.artifact_dirs())
-        if not after and in_artifacts and use_id and not target.exists():
+        if not after and in_artifacts and use_id and not quiet_fs.exists(target):
             self._new_files.add(use_id)  # a new spec / layout / test is being written
         twins = self._worktree_twins(project, path)   # a room showing this worktree hears the robot write too
         if after:
             self.file_changed(session["projectId"], path, at, by=agent["id"])
             for twin in twins:
                 self.file_changed(twin.project_id, path, at, by=agent["id"])
-            if use_id in self._new_files and target.exists():
+            if use_id in self._new_files and quiet_fs.exists(target):
                 # A new artifact: the robot carries the paper to the shelf (P7 §A4).
                 self._set(agent, at, "carry", robots._clip(i18n.tl("act.carry", path=robots._rel(path, str(project.root)))))
                 self._until[agent["id"]] = (at + CARRY_MS, "idle")

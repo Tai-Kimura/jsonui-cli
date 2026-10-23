@@ -37,6 +37,7 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
+from .. import quiet_fs
 
 BASE_ENV = "JSONUI_TEST_RESULTS_DIR"
 #: A results file's name; group 1 is the run's file key (the drivers since ios 2.1.1 / android 1.19.1 / web 1.17.1),
@@ -79,10 +80,10 @@ def app_folders(base: Path) -> list[Path]:
     out: list[Path] = []
     for platform in ("ios", "web"):
         root = base / platform
-        out += sorted(p for p in root.iterdir() if p.is_dir()) if root.is_dir() else []
+        out += sorted(p for p in root.iterdir() if quiet_fs.is_dir(p)) if quiet_fs.is_dir(root) else []
     android = base / "android"
-    for serial in sorted(p for p in android.iterdir() if p.is_dir()) if android.is_dir() else []:
-        out += sorted(p for p in serial.iterdir() if p.is_dir())
+    for serial in sorted(p for p in android.iterdir() if quiet_fs.is_dir(p)) if quiet_fs.is_dir(android) else []:
+        out += sorted(p for p in serial.iterdir() if quiet_fs.is_dir(p))
     return out
 
 
@@ -225,6 +226,6 @@ async def pull(adb: str, serial: str, base: Path, timeout: float = PULL_TIMEOUT_
             pass
         await proc.wait()
         return False
-    for folder in (p for p in dest.iterdir() if p.is_dir()) if dest.is_dir() else []:
+    for folder in (p for p in dest.iterdir() if quiet_fs.is_dir(p)) if quiet_fs.is_dir(dest) else []:
         prune(folder)
     return rc == 0
