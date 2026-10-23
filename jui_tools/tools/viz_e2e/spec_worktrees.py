@@ -10,9 +10,13 @@ its root, ログイン committed on main) and a worktree of it outside the room 
   worktree spec's head says its branch;
 - a spec added to the room while the worktree's 注文 is open: the rows move, the sheet stays on 注文 (it is kept by
   its id, not its place in the list);
-- the worktree's session ends: its rows leave the room, and the sheet open on one of them goes back to the overview.
+- the worktree's session ends: its rows leave the room, and the sheet open on one of them goes back to the overview;
+- a lane whose cwd is the parent (shop/, orders-web/ a repository inside it, its worktree under a scratchpad)
+  edits a spec in the worktree by an absolute path: the worktree's rows show in shop/ tagged by the branch, no
+  folder on the page; the session ends and they leave.
 
-Pictures: the room's list (both checkouts' ログイン, and 注文 of the worktree only) and the sheet of 注文.
+Pictures: the room's list (both checkouts' ログイン, and 注文 of the worktree only), the sheet of 注文, and shop/'s list
+with the parent lane's worktree (after-parent-lane.png).
 """
 
 from __future__ import annotations
@@ -29,6 +33,7 @@ from common import DESKTOP, LAUNCH_ARGS, Watch, new_page, ready
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
 SID_MAIN = "e2e00000-0000-4000-8000-000000000a01"
 SID_WT = "e2e00000-0000-4000-8000-000000000a02"
+SID_LANE = "e2e00000-0000-4000-8000-000000000a03"
 
 # the room's list, grouped by room: [{room, rows: [{name, tag, wt}]}]
 LIST_JS = """() => { const out = []; let cur = null;
@@ -93,6 +98,26 @@ async def run_spec_worktrees(pw, out, failures, jt=None, shots_only=False):
     wt_specs = wt / "docs" / "screens" / "json"
     (wt_specs / "login.spec.json").write_text(json.dumps(spec("Login", "ログイン", "worktree で直している途中"), ensure_ascii=False))
     (wt_specs / "orders.spec.json").write_text(json.dumps(spec("Orders", "注文"), ensure_ascii=False))
+
+    # a monorepo's shape: the parent room (a repository) with orders-web/ a repository of its own, and a worktree of
+    # orders-web under a session's scratchpad
+    shop = home / "work" / "shop"
+    ow = shop / "orders-web"
+    ow_specs = ow / "docs" / "screens" / "json"
+    ow_specs.mkdir(parents=True, exist_ok=True)
+    (shop / "jui.config.json").write_text("{}")
+    (shop / ".gitignore").write_text("orders-web/\n")
+    git(shop, "init", "-q", "-b", "main", home=home)
+    git(shop, "add", "-A", home=home)
+    git(shop, "commit", "-q", "-m", "init", home=home)
+    (ow / "jui.config.json").write_text(json.dumps({"spec_directory": "docs/screens/json"}))
+    (ow_specs / "orders.spec.json").write_text(json.dumps(spec("Orders", "注文一覧"), ensure_ascii=False))
+    git(ow, "init", "-q", "-b", "main", home=home)
+    git(ow, "add", "-A", home=home)
+    git(ow, "commit", "-q", "-m", "init", home=home)
+    ow_wt = home / "tmp" / "session" / "scratchpad" / "ow-a1"
+    git(ow, "worktree", "add", "-q", "-b", "feat/a1", str(ow_wt), home=home)
+    (ow_wt / "docs" / "screens" / "json" / "audit_logs.spec.json").write_text(json.dumps(spec("AuditLogs", "監査ログ"), ensure_ascii=False))
 
     jt = pathlib.Path(jt) if jt else pathlib.Path(__file__).resolve().parents[2]
     forward = jt / "jui_cli" / "viz" / "forward.py"
@@ -175,6 +200,30 @@ async def run_spec_worktrees(pw, out, failures, jt=None, shots_only=False):
         check(failures, mine == [("あとから足した画面", None), ("ログイン", None)], f"the room's own rows, untagged: {groups}")
         side = await page.evaluate(SIDE_JS)
         check(failures, side["title"] != "注文", f"the sheet of a row gone shows no other spec: {side['title']!r}")
+
+        # a lane whose cwd is the parent (ticket 2026-10-24-jui-viz-worktree-rows-only-from-session-cwd): a room shaped
+        # like a monorepo's (shop/, with orders-web/ a repository of its own inside), the session's cwd the parent, its
+        # worktree of orders-web under a scratchpad; it edits a spec there by an absolute path. The worktree's rows
+        # show, tagged by the branch only (no folder on the page), and leave when the session ends.
+        hook(SID_LANE, shop, hook_event_name="SessionStart", source="startup")
+        await wait(page, "() => [...document.querySelectorAll('#spec-list > li.sl-group')].some((g) => g.textContent.startsWith('shop/'))",
+                   timeout=20000, label="shop's room listed")
+        hook(SID_LANE, shop, hook_event_name="PreToolUse", tool_name="Edit", tool_use_id="lane-edit",
+             tool_input={"file_path": str(ow_wt / "docs" / "screens" / "json" / "audit_logs.spec.json"),
+                         "old_string": "a", "new_string": "b"})
+        await wait(page, "() => [...document.querySelectorAll('#spec-list .spec-row .co-tag')].some((t) => t.textContent.includes('feat/a1'))",
+                   timeout=20000, label="the parent lane's worktree rows")
+        await page.wait_for_timeout(600)
+        groups = res["lane"] = await page.evaluate(LIST_JS)
+        lane = sorted((r["name"], r["tag"]) for r in room_rows(groups, "shop/"))
+        check(failures, lane == [("注文一覧", "⎇ feat/a1"), ("注文一覧", "⎇ main"), ("監査ログ", "⎇ feat/a1")],
+              f"a session whose cwd is the parent shows the worktree it edits in, by its branch: {groups}")
+        text = await page.evaluate("() => document.body.innerText")
+        check(failures, "ow-a1" not in text and "scratchpad" not in text, "the worktree's folder is not on the page")
+        await page.screenshot(path=str(out / "after-parent-lane.png"))
+        hook(SID_LANE, shop, hook_event_name="SessionEnd", reason="other")
+        await wait(page, "() => ![...document.querySelectorAll('#spec-list .spec-row .co-tag')].some((t) => t.textContent.includes('feat/a1'))",
+                   timeout=20000, label="the parent lane's worktree rows gone")
 
         check(failures, not watch.console and not watch.foreign and not watch.csp,
               f"no console error, nothing outside the server: {watch.console[:3]} {watch.foreign[:3]}")
