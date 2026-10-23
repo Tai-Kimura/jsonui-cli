@@ -148,7 +148,7 @@ def test_pruning_keeps_the_newest_500_drops_the_old_and_touches_nothing_else(tmp
 def test_a_saved_result_shows_before_any_progress_and_says_when_it_may_be_stale(tmp_path):
     root = _project(tmp_path / "app")
     world, state = _world(root)
-    assert _login(state) == {"total": 2, "passed": 0, "failed": 0, "running": False}
+    assert _login(state) == {"total": 2, "needed": 2, "passed": 0, "failed": 0, "running": False}
     shelf = tmp_path / "shelf"
     _put(shelf / "web/app", time.time(), _results("web", RUN_A, "app", "screens/login.test.json", {"ok": "passed", "ng": "failed"}))
     world.apply_saved_results(tr.ResultShelf(shelf).scan())

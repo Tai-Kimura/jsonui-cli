@@ -305,6 +305,9 @@ class Source:
     # the room's own app, while one of its worktrees is shown beside it: {"branch"}. None otherwise.
     checkout: dict | None = None
     base: str | None = None   # a worktree's app: the key of the room's app it is a checkout of
+    # In a linked worktree (a room's app@branch, or a room that is itself a worktree): a saved result no command of
+    # this server's ran is never tied to it (it is the main checkout's: ingest._saved_specs)
+    linked: bool = False
 
     @classmethod
     def from_config(cls, key: str, config_path: Path) -> "Source":
@@ -425,6 +428,15 @@ def worktrees(repo: Path) -> list[tuple[Path, str]]:
     return out
 
 
+def is_linked(folder: Path) -> bool:
+    """Whether a folder is in a linked worktree: its checkout's .git file points into <git dir>/worktrees/<name>."""
+    for candidate in (folder, *folder.parents):
+        if (candidate / ".git").exists():
+            gd = git_dir(candidate)
+            return gd is not None and gd.parent.name == "worktrees"
+    return False
+
+
 def _real(path: Path) -> Path:
     try:
         return Path(os.path.realpath(path))
@@ -452,6 +464,8 @@ class JsonUIProject:
         raw = json.loads((self.root / CONFIG_NAME).read_text(encoding="utf-8"))
         self.config = raw if isinstance(raw, dict) else {}
         self.sources = discover_sources(self.root)
+        for source in self.sources:
+            source.linked = is_linked(source.root)
         self.base_sources = list(self.sources)   # the room's own apps; self.sources adds the worktrees shown
         self.specs: dict[str, SpecEntry] = {}
         self._layout_cache: dict[Path, tuple[int, list[dict]]] = {}
@@ -503,7 +517,7 @@ class JsonUIProject:
                     continue
                 seen.add(key)
                 source = Source.from_config(key, declared)
-                source.checkout, source.base = {"branch": branch, "worktree": str(folder)}, base.key
+                source.checkout, source.base, source.linked = {"branch": branch, "worktree": str(folder)}, base.key, True
                 found.append(source)
         return found
 
@@ -825,7 +839,10 @@ class JsonUIProject:
             test_cases = entry.source.test_cases if entry.source else {}
             cases = test_cases.get(stem, 0) + (test_cases.get(layout_name, 0) if layout_name and layout_name != stem else 0)
             result = self.test_results.get(sid, {})
-            tests = {"total": cases, "passed": result.get("passed", 0), "failed": result.get("failed", 0),
+            # what a done spec has passed: its test cases, and as many as its branches (requester 10-23: 「分岐も全部で
+            # 完了」); the bucket, the 分岐 tab and every list say the same count (needed)
+            needed = max(cases, section_items(data, "branchContracts", nodes))
+            tests = {"total": cases, "needed": needed, "passed": result.get("passed", 0), "failed": result.get("failed", 0),
                      "running": bool(result.get("running"))}
             if result.get("latest"):
                 tests["at"] = result["latest"]
@@ -835,7 +852,7 @@ class JsonUIProject:
             by = entry.by if entry.by_until > at else None
             written_any = any(s["items"] for s in sections)
             impl_done = impl["total"] > 0 and impl["done"] == impl["total"]
-            tests_done = cases > 0 and tests["passed"] >= cases and not tests["failed"]
+            tests_done = cases > 0 and tests["passed"] >= needed and not tests["failed"]   # a test file of its own, as before
             bucket = "live" if by else "todo" if not written_any else "done" if impl_done and tests_done else "partial"
             # a worktree's spec is named from the worktree's folder (its rows say the branch; ../../ from the room
             # would only say where the scratchpad is)

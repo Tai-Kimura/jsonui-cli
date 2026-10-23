@@ -187,7 +187,7 @@ def test_progress_records_fill_the_test_run_the_device_and_the_spec(tmp_path):
     run = state.slices["tests"][0]
     assert run["cases"] == [{"name": "ok", "status": "running"}]
     login = state.slices["specs"][0]
-    assert login["tests"] == {"total": 2, "passed": 0, "failed": 0, "running": True}
+    assert login["tests"] == {"total": 2, "needed": 2, "passed": 0, "failed": 0, "running": True}
 
     for rec in (_rec("case_end", t=400, file="screens/login.test.json", test="login", case="ok", attempt=1, status="passed", durationMs=90),
                 _rec("case_start", t=410, file="screens/login.test.json", test="login", case="ng", attempt=1),
@@ -197,7 +197,7 @@ def test_progress_records_fill_the_test_run_the_device_and_the_spec(tmp_path):
     world.tick(500)
     world.publish()
     assert state.slices["tests"][0]["summary"] == "1 passed, 1 failed"
-    assert state.slices["specs"][0]["tests"] == {"total": 2, "passed": 1, "failed": 1, "running": False}
+    assert state.slices["specs"][0]["tests"] == {"total": 2, "needed": 2, "passed": 1, "failed": 1, "running": False}
     assert world.progress.dropped == {"ios": 1}
     world.apply_hook({**base, "hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_use_id": "b", "tool_input": {"command": cmd},
                       "tool_response": {"stdout": "Executed 2 tests, with 1 failure", "stderr": ""}}, 600)

@@ -147,7 +147,7 @@ function secState(s, k) {
   const w = s.written[k], n = s.totals[k];
   if (w <= 0) return { kind: 'empty', f: 0, text: tl('core.sec.empty') };
   if (w < 1) return { kind: 'writing', f: w, text: `${s.by ? tl('core.sec.writing') : tl('core.sec.filling')} ${pct(w)}%` };
-  if (k === 6 && s.implPhase) { const c = s.implN[6]; return { kind: c >= n ? 'tested' : 'test', f: n ? c / n : 1, text: tl('core.sec.tests', { c, n }) }; }
+  if (k === 6 && s.implPhase) { const c = s.implN[6], n = s.testsNeeded || s.totals[6]; return { kind: c >= n ? 'tested' : 'test', f: n ? c / n : 1, text: tl('core.sec.tests', { c, n }) }; }
   if (k === 0 || k === 6 || !s.implPhase || (s.unmeasured && s.unmeasured[k])) return { kind: 'written', f: 1, text: tl('core.sec.written') };
   if (k === 1 && s.measure && !s.measure.components) {
     return s.measure.layout ? { kind: 'done', f: 1, text: tl('core.sec.layout.done') } : { kind: 'impl', f: 0, text: s.measure.layout === false ? tl('core.sec.layout.missing') : tl('core.sec.layout.unnamed') };

@@ -143,8 +143,11 @@ def _runs_of(test: dict) -> list[str]:
 
 def _file_key(project: JsonUIProject, file: str | None) -> str:
     """A driver's `file` as the test file it names in *project* (any platform's spelling), else as written:
-    the case key is (file, test, case), so two test files with the same test / case names stay two."""
-    matched = project.test_file_matches(file) if file else []
+    the case key is (file, test, case), so two test files with the same test / case names stay two. The room's own
+    apps first: a worktree's app@branch holds the same files, and two owners would name none (each spelling its own
+    key, one case counted twice)."""
+    matched = (project.test_file_matches(file, only=[s for s in project.sources if not s.linked])
+               or project.test_file_matches(file)) if file else []
     return matched[0][1] if matched else (file or "")
 
 
@@ -299,6 +302,7 @@ class World:
         # Called with a JsonUIProject whose apps changed (a worktree shown or gone: serve watches its folders again).
         self.on_sources_changed = None
         self._worktree_cwds: frozenset = frozenset()
+        self._test_cwds: dict[str, str] = {}   # test command id -> the cwd of its session (never sent to the page)
         self._worktrees_at = -WORKTREES_EVERY_MS
 
     # ---------------------------------------------------------------- labels
@@ -774,6 +778,7 @@ class World:
             platform = robots.test_platform(str(tool_input.get("command", ""))) if state == "phone" else None
             if platform is not None and use_id:  # a test run only when it runs tests, not when it holds a device
                 command = str(tool_input.get("command", ""))
+                self._test_cwds[use_id] = str(Path(session["cwd"]).expanduser())   # the checkout it runs in (_saved_specs)
                 self.tests[use_id] = {
                     "id": use_id, "projectId": session["projectId"], "agentId": agent["id"],
                     "platform": platform, "command": robots._clip(command, TEST_COMMAND_MAX),
@@ -1601,11 +1606,13 @@ class World:
         return self._ties[key]
 
     def _run_rooms(self) -> dict[str, frozenset[str]]:
-        """Run id -> the rooms of the test commands it is tied to (hand 1 of _saved_specs)."""
+        """Run id -> the rooms of the test commands it is tied to, and the cwds they ran in (hand 1 of _saved_specs)."""
         rooms: dict[str, set[str]] = {}
         for t in self.tests.values():
             for rid in _runs_of(t):
                 rooms.setdefault(rid, set()).add(t["projectId"])
+                if t["id"] in self._test_cwds:
+                    rooms[rid].add("cwd:" + self._test_cwds[t["id"]])
         return {rid: frozenset(r) for rid, r in rooms.items()}
 
     def flush_results(self) -> None:
@@ -1635,7 +1642,15 @@ class World:
             return []
         run_rooms = self._run_rooms() if run_rooms is None else run_rooms
         if row.get("run") and row["run"] in run_rooms:
-            return self._specs_of_file(project, file) if project.project_id in run_rooms[row["run"]] else []
+            # the checkout the command ran in (ticket 2026-10-23-viz-test-tally-and-worktrees): in this room, its own
+            # apps; in a worktree this room shows, that worktree's app@branch only
+            seen = run_rooms[row["run"]]
+            cwds = [Path(c[4:]) for c in seen if c.startswith("cwd:")]
+            here = [sid for sid in self._specs_of_file(project, file) if project.project_id in seen
+                    and (project.specs[sid].source is None or project.specs[sid].source.base is None)]
+            there = [s for s in project.sources if s.base is not None
+                     and any(c.is_relative_to(Path(s.checkout["worktree"])) for c in cwds)]
+            return here + (project.specs_for_test_file(file, only=there) if there else [])
         key = (project.project_id, file, row["platform"], row.get("app"))
         if key not in self._ties:
             self._ties[key] = self._untied_specs(project, row)
@@ -1645,11 +1660,13 @@ class World:
         """Hands 2 and 3 of _saved_specs: they read only the loaded rooms' apps and test files."""
         file = row["file"]
         if row["platform"] == "android" and row.get("app"):
-            by_app = [(p, s) for p in self.jsonui.values() for s in p.sources if s.android_app_id == row["app"]]
+            # a result no command of this server ran is the main checkout's: never a linked worktree's
+            by_app = [(p, s) for p in self.jsonui.values() for s in p.sources if s.android_app_id == row["app"] and not s.linked]
             if by_app:
                 return project.specs_for_test_file(file, only=[s for p, s in by_app if p is project]) \
                     if any(p is project for p, _ in by_app) else []
-        owners = [(p, s) for p in self.jsonui.values() for s, _ in p.test_file_matches(file)]
+        owners = [(p, s) for p in self.jsonui.values()
+                  for s, _ in p.test_file_matches(file, only=[x for x in p.sources if not x.linked])]
         if len(owners) == 1 and owners[0][0] is project and not self._file_elsewhere(project, file):
             return project.specs_for_test_file(file, only=[owners[0][1]])
         return []
@@ -1662,7 +1679,7 @@ class World:
             return True
         if self._all_test_keys is None:
             self._all_test_keys = {}
-            for k in (k for p in self.jsonui.values() for s in p.sources for k in s.test_file_paths.values()):
+            for k in (k for p in self.jsonui.values() for s in p.sources if not s.linked for k in s.test_file_paths.values()):
                 self._all_test_keys.setdefault(rules.segments(k)[-1], []).append(k)
         wanted = rules.segments(file)
         return rules.match_test_file(file, self._all_test_keys.get(wanted[-1] if wanted else "", [])) is None

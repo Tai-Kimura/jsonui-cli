@@ -371,6 +371,9 @@ function liveSpecRow(x) {
   const written = SPEC_KEYS.map((k) => { const q = secs[k]; return !q ? 0 : q.state === 'writing' ? (q.items ? 0.6 : 0.3) : q.state === 'written' ? 1 : 0; });
   const totals = SPEC_KEYS.map((k) => Math.max(0, Number((secs[k] || {}).items) || 0));
   const impl = x.impl || { total: 0, done: 0 }, tests = x.tests || { total: 0, passed: 0, failed: 0, running: false };
+  // what a done spec has passed (the server's tests.needed: its cases, and as many as its branches — requester 10-23
+  // 「分岐も全部で完了」): the 分岐 tab, the panel's and the list's words all count against it, as the bucket does
+  const needed = Number.isFinite(tests.needed) ? tests.needed : tests.total;
   const share = impl.total > 0 ? Math.min(1, impl.done / impl.total) : 0;
   // Only what the server measured (jsonui_project.impl): the structure is the Layout's tree, so it is implemented
   // exactly when the Layout exists (or, when the spec lists components, as many as the Layout has). States, data,
@@ -378,18 +381,18 @@ function liveSpecRow(x) {
   const measure = { related: impl.related || { total: 0, done: 0 }, layout: impl.layout === undefined ? null : impl.layout, components: impl.components || null };
   const implN = totals.map(() => 0);
   implN[1] = measure.components ? Math.min(totals[1], measure.components.done) : measure.layout ? totals[1] : 0;
-  implN[6] = Math.min(totals[6] || tests.total, tests.passed);
+  implN[6] = Math.min(needed, tests.passed);
   const unmeasured = [false, false, true, true, true, true, false];
   if (!totals[6] && tests.total) totals[6] = tests.total;
   const implPhase = impl.done > 0 || tests.total > 0;
   const writingIdx = SPEC_KEYS.findIndex((k) => (secs[k] || {}).state === 'writing');
   const by = labelOf(x.by);
   const pctImpl = impl.total ? pct(share) : 0;
-  const status = tests.running ? { kind: 'test', text: tl('live.spec.testing', { passed: tests.passed, total: tests.total }) }
+  const status = tests.running ? { kind: 'test', text: tl('live.spec.testing', { passed: tests.passed, total: needed }) }
     : writingIdx >= 0 ? { kind: 'write', text: tl('live.spec.writing', { pct: pct(written.reduce((a, b) => a + b, 0) / 7) }) }
       : x.bucket === 'done' ? { kind: 'done', text: tl('live.spec.done') }
         : x.bucket === 'todo' ? { kind: 'idle', text: tl('live.spec.todo') }
-          : impl.total && impl.done >= impl.total ? { kind: 'impl-done', text: tests.total ? tl('live.spec.impl.tests', { passed: tests.passed, total: tests.total }) : tl('live.spec.impl.waiting') }
+          : impl.total && impl.done >= impl.total ? { kind: 'impl-done', text: tests.total ? tl('live.spec.impl.tests', { passed: tests.passed, total: needed }) : tl('live.spec.impl.waiting') }
             : impl.done > 0 ? { kind: by ? 'impl' : 'paused', text: tl('live.spec.impl', { pct: pctImpl }) }
               : written.every((w) => w >= 1) ? { kind: 'written', text: tl('live.spec.written') } : { kind: 'paused', text: tl('live.spec.writing.paused', { pct: pct(written.reduce((a, b) => a + b, 0) / 7) }) };
   // maybeStale: the spec or its layout changed after the newest result (mtime, which a git checkout also moves).
@@ -398,6 +401,7 @@ function liveSpecRow(x) {
       + (tests.maybeStale ? tl('live.note.stale') : '') : tl('live.note.notests'));
   const prev = LIVE.specRows[x.id];
   const row = {
+    testsNeeded: needed,
     id: x.id, screen: String(x.name || ''), name: String(x.name || ''), project: x.projectId, file: String(x.file || ''),
     app: String(x.app || ''), specDir: String(x.specDir || ''),   // the app inside the room that holds the spec
     // the checkout it is read from, when the room shows a worktree of its app: {branch, worktree?} (a worktree's own row has worktree)
