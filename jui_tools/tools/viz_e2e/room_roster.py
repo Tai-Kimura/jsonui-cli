@@ -401,6 +401,10 @@ async def run_room_roster(pw, out, failures, jt=None):
         last = await page.evaluate("() => { const r = window.__dbg.roster().rows.filter((x) => x.on); return r[r.length - 1].id; }")
         await page.evaluate("(id) => window.__dbg.openRobot(id)", last)
         moved = res["currentMoved"] = await until(page, cur, "another robot's row highlighted", arg=last, timeout=8000, why=RO)
+        # in view where the page shows it (not under the log below the 3D): the list is fitted to the shorter page within
+        # its placing beat, and the row selected brought into view again then
+        moved = res["currentInView"] = await until(page, "(id) => { const s = window.__dbg.roster(); const c = s.rows.find((r) => r.current); return c && c.id === id && c.inView ? c : null; }",
+                                                    "the highlighted row seen in the list", arg=last, timeout=3000, why=RO)
         check(failures, moved["inView"], f"the highlighted row is scrolled into the list's view: {moved}")
         await page.screenshot(path=str(out / "520-current-scrolled.png"))
         await page.set_viewport_size({"width": 1920, "height": 1080})

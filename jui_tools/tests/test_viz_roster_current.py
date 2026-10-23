@@ -73,3 +73,20 @@ def test_the_list_is_drawn_again_when_the_selection_changes():
     assert "current = rosterCurrentKey()" in sync and "${solo}|${current}|" in sync
     assert "rows.map((r) => rosterRowHTML(r, current))" in sync
     assert sync.count("rosterShowCurrent(current)") == 2   # drawn again, or the same rows with a selection to show
+
+
+def test_the_list_resized_shows_the_selected_row_again():
+    """The page shorter (or a floor's buttons up): the list is placed shorter, so the selected row is brought into view
+    again; placed the same, the reader's own scroll stays (10-23: at 520 px high the row selected lay under the log)."""
+    src = web_text("js", "53-roster.js")
+    code = "\n".join(re.search(rf"\nconst {n} = [^\n]*", src).group(0) for n in ("ROSTER", "ROSTER_AROUND")) + "\n" + _cut(src, "rosterPlace") + r"""
+let bottom = 1080;
+const props = {};
+const box = { style: { setProperty: (k, v) => { props[k] = v; }, getPropertyValue: (k) => props[k] || '' }, getBoundingClientRect: () => ({ left: 0, right: 248, top: 60, bottom: 600 }) };
+const document = { getElementById: (id) => (id === 'scene' ? { getBoundingClientRect: () => ({ top: 48, bottom, height: bottom - 48 }) } : null) };
+const rosterNarrow = () => false;
+const out = [];
+rosterPlace(box); ROSTER.shownFor = 'S-A'; rosterPlace(box); out.push([props['--roster-max'], ROSTER.shownFor]);   // the same: kept
+bottom = 400; rosterPlace(box); out.push([props['--roster-max'], ROSTER.shownFor]);                               // shorter: shown again
+process.stdout.write(JSON.stringify(out));"""
+    assert _node(code) == [["1008px", "S-A"], ["328px", None]]

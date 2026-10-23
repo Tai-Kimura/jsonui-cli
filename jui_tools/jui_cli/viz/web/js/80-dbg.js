@@ -428,7 +428,8 @@ window.__dbg = {
   roster: () => { const box = document.getElementById('roster'), solo = SOURCE.mode === 'live' ? liveSolo() : null, rect = (el) => { if (!el || el.hidden) return null; const r = el.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom].map(Math.round); };
     const rows = [...document.querySelectorAll('#roster-list .roster-row')].map((li) => ({ key: li.dataset.rosterKey, id: li.dataset.robot, on: li.querySelector('.roster-check').checked,
       wait: li.dataset.wait || null, alert: li.classList.contains('roster-alert'), name: li.querySelector('.roster-nm').textContent, lamp: li.querySelector('.roster-lamp').style.getPropertyValue('--lamp'),
-      current: li.getAttribute('aria-current') === 'true', inView: (() => { const L = li.parentElement.getBoundingClientRect(), r = li.getBoundingClientRect(); return r.top >= L.top - 1 && r.bottom <= L.bottom + 1; })() }));
+      current: li.getAttribute('aria-current') === 'true', inView: (() => { const L = li.parentElement.getBoundingClientRect(), r = li.getBoundingClientRect(), at = document.elementFromPoint(r.left + 12, (r.top + r.bottom) / 2);
+        return r.top >= L.top - 1 && r.bottom <= L.bottom + 1 && !!at && li.contains(at); })() }));
     const bots = solo ? robots.filter((R) => R.def.room === solo).map((R) => ({ id: R.def.id, sid: R.def.sessionId, kind: R.def.kind, root: R.robot.root.visible,
       tag: R.tag.style.visibility || '', desk: !!(R.robot.desk && R.robot.desk.visible), busy: !!(R.play || R.solo || R.brk), play: R.play ? R.play.phase : null, main: R.def.kind === 'sub' ? R.def.mainLabel : null,
       spiritBubble: R.spirit && R.spirit.bubbleEl && !R.spirit.bubbleEl.hidden ? (R.spirit.bubbleEl.style.visibility || 'visible') : null })) : [];

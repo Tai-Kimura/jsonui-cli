@@ -190,7 +190,10 @@ function rosterPlace(box) {
     if (o.width && o.height && o.left < r.right && r.left < o.right && o.top < S.top + S.height / 2) clear = Math.max(clear, o.bottom + 6);
   }
   if (!rosterNarrow()) box.style.setProperty('--roster-top', `${Math.round(clear - S.top)}px`);
-  box.style.setProperty('--roster-max', `${Math.max(48, Math.round(S.bottom - 12 - clear))}px`);
+  const max = `${Math.max(48, Math.round(S.bottom - 12 - clear))}px`;
+  if (box.style.getPropertyValue('--roster-max') === max) return;
+  box.style.setProperty('--roster-max', max);
+  ROSTER.shownFor = null;   // the list taller or shorter (the page resized, a floor's buttons up): the selected row shown again
 }
 const rosterNarrow = () => !!(window.matchMedia && window.matchMedia('(max-width: 900px)').matches);   // app.css: the list at the foot
 function rosterSet(room, key, on) {
