@@ -33,7 +33,7 @@ module RjuiTools
           corner_radius_style = build_corner_radius_style
 
           jsx = <<~JSX.chomp
-            #{indent_str(indent)}<NetworkImage#{id_attr} className="#{class_name}"#{src}#{content_mode}#{placeholder_attr}#{error_image}#{build_alt_attr}#{loading_attr}#{on_load}#{on_error}#{onclick_attr}#{corner_radius_style}#{style_attr}#{testid_attr}#{tag_attr} />
+            #{indent_str(indent)}<NetworkImage#{id_attr}#{class_name_attr(class_name)}#{src}#{content_mode}#{placeholder_attr}#{error_image}#{build_alt_attr}#{loading_attr}#{on_load}#{on_error}#{onclick_attr}#{corner_radius_style}#{style_attr}#{testid_attr}#{tag_attr} />
           JSX
 
           wrap_with_visibility(jsx, indent)

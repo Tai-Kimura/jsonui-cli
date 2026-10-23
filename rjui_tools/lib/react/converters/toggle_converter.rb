@@ -30,7 +30,7 @@ module RjuiTools
           jsx = if text.empty?
             # Checkbox only (no label)
             <<~JSX.chomp
-              #{indent_str(indent)}<input#{id_attr} type="checkbox" className="#{class_name}"#{value_attr}#{checked_attr}#{on_change}#{disabled_attr}#{checkbox_style}#{style_attr}#{testid_attr}#{tag_attr} />
+              #{indent_str(indent)}<input#{id_attr} type="checkbox"#{class_name_attr(class_name)}#{value_attr}#{checked_attr}#{on_change}#{disabled_attr}#{checkbox_style}#{style_attr}#{testid_attr}#{tag_attr} />
             JSX
           else
             # Checkbox with label. The layout `id` lands on the <label>
@@ -46,14 +46,14 @@ module RjuiTools
               control_jsx =
                 "<input type=\"checkbox\"#{value_attr}#{checked_attr}#{on_change}#{disabled_attr} className=\"peer sr-only\" />"                 "<img#{jsx_attr_text('src', off_src)} alt=\"\" className=\"w-6 h-6 peer-checked:hidden\" />"                 "<img#{jsx_attr_text('src', icon_on)} alt=\"\" className=\"w-6 h-6 hidden peer-checked:block\" />"
               <<~JSX.chomp
-                #{indent_str(indent)}<label#{id_attr} className="#{class_name}"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
+                #{indent_str(indent)}<label#{id_attr}#{class_name_attr(class_name)}#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
                 #{indent_str(indent + 2)}#{control_jsx}
                 #{indent_str(indent + 2)}<span>#{convert_text_binding(text)}</span>
                 #{indent_str(indent)}</label>
               JSX
             else
               <<~JSX.chomp
-                #{indent_str(indent)}<label#{id_attr} className="#{class_name}"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
+                #{indent_str(indent)}<label#{id_attr}#{class_name_attr(class_name)}#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
                 #{indent_str(indent + 2)}<input type="checkbox"#{value_attr}#{checked_attr}#{on_change}#{disabled_attr}#{checkbox_style} />
                 #{indent_str(indent + 2)}<span>#{convert_text_binding(text)}</span>
                 #{indent_str(indent)}</label>

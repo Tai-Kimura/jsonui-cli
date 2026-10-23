@@ -14,7 +14,7 @@ module RjuiTools
           tag_attr = build_tag_attr
 
           jsx = <<~JSX.chomp
-            #{indent_str(indent)}<div#{id_attr} className="#{class_name}"#{style_attr}#{testid_attr}#{tag_attr}>
+            #{indent_str(indent)}<div#{id_attr}#{class_name_attr(class_name)}#{style_attr}#{testid_attr}#{tag_attr}>
             #{indent_str(indent + 2)}<div className="#{build_spinner_class}" />
             #{indent_str(indent)}</div>
           JSX

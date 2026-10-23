@@ -109,7 +109,7 @@ module RjuiTools
                       end
 
           <<~JSX.chomp
-            #{indent_str(indent)}<div#{id_attr} className="#{class_name}"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
+            #{indent_str(indent)}<div#{id_attr}#{class_name_attr(class_name)}#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
             #{label_jsx}#{items_jsx}
             #{indent_str(indent)}</div>
           JSX
@@ -148,7 +148,7 @@ module RjuiTools
             control_jsx =
               "<input type=\"radio\" name=\"#{group}\"#{jsx_attr_text('value', radio_value)}#{state_attrs}#{disabled_attr} className=\"peer sr-only\" />"               "<img#{jsx_attr_text('src', off_src)} alt=\"\" className=\"w-6 h-6 peer-checked:hidden\" />"               "<img#{jsx_attr_text('src', on_src)} alt=\"\" className=\"w-6 h-6 hidden peer-checked:block\" />"
             return <<~JSX.chomp
-              #{indent_str(indent)}<label#{id_attr} className="#{class_name} flex items-center #{@root_gap_class}"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
+              #{indent_str(indent)}<label#{id_attr}#{class_name_attr("#{class_name} flex items-center #{@root_gap_class}")}#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
               #{indent_str(indent + 2)}#{control_jsx}
               #{indent_str(indent + 2)}<span>#{convert_text_binding(text)}</span>
               #{indent_str(indent)}</label>
@@ -156,7 +156,7 @@ module RjuiTools
           end
 
           <<~JSX.chomp
-            #{indent_str(indent)}<label#{id_attr} className="#{class_name} flex items-center #{@root_gap_class}"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
+            #{indent_str(indent)}<label#{id_attr}#{class_name_attr("#{class_name} flex items-center #{@root_gap_class}")}#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
             #{indent_str(indent + 2)}<input type="radio" name="#{group}"#{jsx_attr_text('value', radio_value)}#{state_attrs}#{disabled_attr}#{input_style} />
             #{indent_str(indent + 2)}<span>#{convert_text_binding(text)}</span>
             #{indent_str(indent)}</label>

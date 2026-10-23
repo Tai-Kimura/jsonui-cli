@@ -1504,6 +1504,19 @@ module RjuiTools
           " style={{ #{rendered.join(', ')} }#{cast}}"
         end
 
+        # The className attribute for a class string: a template literal when the
+        # string holds a `${...}` expression (a bound `enabled` adds
+        # `${!data.enabled ? 'opacity-50 cursor-not-allowed' : ''}` to it), a
+        # plain string otherwise. Written as "..." the expression reached the
+        # page as its own text and the disabled look never came (ticket
+        # rjui-checkbox-enabled-class-not-template-literal: CheckBox, Switch,
+        # Radio and Slider all wrote their class string that way).
+        def class_name_attr(classes)
+          return " className={`#{classes}`}" if classes.include?('${')
+
+          " className=\"#{classes}\""
+        end
+
         # Build className attribute, handling landscape responsive with template literal.
         # Returns the full className="..." or className={`...`} string.
         def build_responsive_class_attr(static_classes)

@@ -60,7 +60,7 @@ module RjuiTools
           # `disabled` is not a valid attribute on <div>; reflect the state via
           # aria-disabled (each inner <button> carries the real disabled attr).
           jsx = <<~JSX.chomp
-            #{indent_str(indent)}<div#{id_attr} className="#{class_name}"#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
+            #{indent_str(indent)}<div#{id_attr}#{class_name_attr(class_name)}#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
             #{items_jsx}
             #{indent_str(indent)}</div>
           JSX

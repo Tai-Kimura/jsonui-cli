@@ -43,10 +43,10 @@ module RjuiTools
           # wrapping <label> forwards clicks to it — with a bare <div> a
           # text-less Switch renders fine but can never be toggled.
           jsx = if text.empty?
-            "#{indent_str(indent)}<label#{id_attr} className=\"#{class_name} cursor-pointer\"#{style_attr}#{testid_attr}#{tag_attr}#{aria_disabled_attr}>#{switch_html}</label>"
+            "#{indent_str(indent)}<label#{id_attr}#{class_name_attr("#{class_name} cursor-pointer")}#{style_attr}#{testid_attr}#{tag_attr}#{aria_disabled_attr}>#{switch_html}</label>"
           else
             <<~JSX.chomp
-              #{indent_str(indent)}<label#{id_attr} className="#{class_name} flex items-center gap-3 cursor-pointer"#{style_attr}#{testid_attr}#{tag_attr}#{aria_disabled_attr}>
+              #{indent_str(indent)}<label#{id_attr}#{class_name_attr("#{class_name} flex items-center gap-3 cursor-pointer")}#{style_attr}#{testid_attr}#{tag_attr}#{aria_disabled_attr}>
               #{indent_str(indent + 2)}#{switch_html}
               #{indent_str(indent + 2)}<span>#{convert_text_binding(text)}</span>
               #{indent_str(indent)}</label>

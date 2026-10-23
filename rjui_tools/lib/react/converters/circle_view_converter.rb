@@ -19,7 +19,7 @@ module RjuiTools
             "#{indent_str(indent)}<div#{id_attr} className=\"#{class_name}\"#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr} />"
           else
             <<~JSX.chomp
-              #{indent_str(indent)}<div#{id_attr} className="#{class_name}"#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}>
+              #{indent_str(indent)}<div#{id_attr}#{class_name_attr(class_name)}#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}>
               #{children}
               #{indent_str(indent)}</div>
             JSX

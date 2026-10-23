@@ -28,7 +28,7 @@ module RjuiTools
           max_attr = " max={#{attributes['maximumValue'] || default_max}}"
 
           jsx = <<~JSX.chomp
-            #{indent_str(indent)}<progress#{id_attr} className="#{class_name}"#{value_attr}#{max_attr}#{base_style_attr}#{testid_attr}#{tag_attr} />
+            #{indent_str(indent)}<progress#{id_attr}#{class_name_attr(class_name)}#{value_attr}#{max_attr}#{base_style_attr}#{testid_attr}#{tag_attr} />
           JSX
 
           wrap_with_visibility(jsx, indent)

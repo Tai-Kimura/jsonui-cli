@@ -55,7 +55,7 @@ module RjuiTools
           step_attr = step_value ? " step={#{jsx_value_expr(step_value)}}" : ' step="any"'
 
           jsx = <<~JSX.chomp
-            #{indent_str(indent)}<input#{id_attr} type="range" className="#{class_name}" min={#{min_expr}} max={#{max_expr}}#{step_attr}#{value_attr}#{on_change}#{finished}#{disabled_attr}#{base_style_attr}#{testid_attr}#{tag_attr} />
+            #{indent_str(indent)}<input#{id_attr} type="range"#{class_name_attr(class_name)} min={#{min_expr}} max={#{max_expr}}#{step_attr}#{value_attr}#{on_change}#{finished}#{disabled_attr}#{base_style_attr}#{testid_attr}#{tag_attr} />
           JSX
 
           wrap_with_visibility(jsx, indent)

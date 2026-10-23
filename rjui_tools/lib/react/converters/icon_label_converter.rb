@@ -46,7 +46,7 @@ module RjuiTools
           # `<img src="">` drew the browser's empty-image box, 96 high.
           inner = icon_declared? ? [icon_element, text_element] : [text_element]
           jsx = <<~JSX.chomp
-            #{indent_str(indent)}<div#{id_attr} className="#{class_name} flex #{flex_direction} items-center"#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}>
+            #{indent_str(indent)}<div#{id_attr}#{class_name_attr("#{class_name} flex #{flex_direction} items-center")}#{style_attr}#{onclick_attr}#{testid_attr}#{tag_attr}>
             #{inner.map { |el| "#{indent_str(indent + 2)}#{el}" }.join("\n")}
             #{indent_str(indent)}</div>
           JSX

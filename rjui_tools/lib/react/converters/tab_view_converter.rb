@@ -50,7 +50,7 @@ module RjuiTools
                          end
 
           jsx = <<~JSX.chomp
-            #{indent_str(indent)}<div#{id_attr} className="#{class_name}"#{style_attr}#{testid_attr}#{tag_attr}>
+            #{indent_str(indent)}<div#{id_attr}#{class_name_attr(class_name)}#{style_attr}#{testid_attr}#{tag_attr}>
             #{indent_str(indent + 2)}<div className="flex-1 overflow-auto">
             #{tab_panels_jsx}
             #{indent_str(indent + 2)}</div>
