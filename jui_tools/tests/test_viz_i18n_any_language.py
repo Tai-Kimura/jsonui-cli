@@ -254,3 +254,18 @@ def test_each_code_is_the_pages_language_with_its_forms(code, tmp_path):
     assert run.returncode == 0, run.stderr
     got = json.loads(run.stdout)
     assert got == {"locale": code, "million": million, "one": "one" if "one" in forms else "other", "num": num, "day": day}
+
+
+def test_a_numeric_region_is_a_region():
+    """UN M.49 regions are three digits: es-419 (Spanish of Latin America) is a code, with Spanish's plural rule."""
+    words = i18n.load("es-419", use_env=False)
+    assert (words.language, words.locale, words.problems) == ("es-419", "es-419", [])
+    assert i18n.plural_categories("es-419") == ["one", "many", "other"]
+    assert i18n.language_tag("es-41") is None   # two digits: neither a region nor a variant (es-4190 is a variant)
+
+
+@pytest.mark.parametrize("n", [1.5, 0.5, 2.25, "1", None])
+def test_a_count_that_is_not_a_whole_number_is_other(n):
+    """English's 1.5 is "1.5 responses", not "1.5 response" (Intl.PluralRules('en').select(1.5) is "other")."""
+    assert i18n.plural_form(n, "en") == "other"
+    assert i18n.lookup(i18n.load("en", use_env=False), PLURAL_KEY, {"n": n}) == f"{n} responses"
