@@ -15,7 +15,9 @@ module RjuiTools
           id_attr = "#{build_id_attr}#{build_auto_shrink_ref_attr}"
           onclick_attr = build_onclick_attr
           testid_attr = build_testid_attr
-          tag_attr = build_tag_attr
+          # A disabledFontColor shows while `enabled` is false, fixed or bound: the
+          # state rides aria-disabled, read by the `aria-disabled:` class below
+          tag_attr = build_tag_attr + (disabled_font_color? ? build_aria_disabled_attr : '')
 
           # Check if we need partialAttributes rendering
           #
@@ -427,8 +429,22 @@ module RjuiTools
           []
         end
 
+        # disabledFontColor with a declared `enabled` (false, or bound): as iOS and
+        # Android draw it, the disabled colour wins over the base one whenever the
+        # label is disabled (ticket 2026-10-23-bound-enabled-disabled-colors-three-faces;
+        # it used to be an inline colour for a literal false only, so a bound
+        # `enabled` never showed it).
+        def disabled_font_color?
+          !attributes['disabledFontColor'].nil? && !attributes['enabled'].nil? && attributes['enabled'] != true
+        end
+
         def build_class_name
           classes = [super]
+          if disabled_font_color?
+            color = attributes['disabledFontColor']
+            classes << (bound_state_color_class(color, custom_property: '--jui-disabled-color', prefix: 'aria-disabled:text') ||
+                        TailwindMapper.map_color(color, 'aria-disabled:text'))
+          end
 
           if line_clamped?
             # `line-clamp-N` IS a display utility (`display: -webkit-box`), and
@@ -625,11 +641,6 @@ module RjuiTools
             else
               @dynamic_styles['padding'] = "'#{TailwindMapper.rem(edge_inset.to_i)}'"
             end
-          end
-
-          # Disabled font color
-          if attributes['enabled'] == false && attributes['disabledFontColor']
-            @dynamic_styles['color'] = color_style_expr(attributes['disabledFontColor'])
           end
 
           # textShadow — canonical object {color, blur, offset: [x, y]}

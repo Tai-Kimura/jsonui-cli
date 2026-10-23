@@ -215,6 +215,12 @@ module SjuiTools
             # runtime) the hint colour replaces the base one.
             base_color = if @component['enabled'] == false && @component['disabledFontColor']
                            get_font_color_with_binding(@component['disabledFontColor'])
+                         elsif @component['disabledFontColor'] && is_binding?(@component['enabled'])
+                           # a bound `enabled` (ticket 2026-10-23-bound-enabled-disabled-colors-three-faces):
+                           # the disabled colour while it is false, the base while true — only a
+                           # literal false showed it before
+                           "(#{tap_gate_expr(@component['enabled'])} ? #{get_font_color_with_binding(@component['fontColor']) || 'nil'} : " \
+                             "#{get_font_color_with_binding(@component['disabledFontColor'])})"
                          elsif @component['fontColor']
                            get_font_color_with_binding(@component['fontColor'])
                          end

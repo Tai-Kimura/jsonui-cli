@@ -715,6 +715,24 @@ module KjuiTools
             ".background(if (#{held}) #{colour} else #{base}) })"
         end
 
+        # disabledBackground (ticket 2026-10-23-bound-enabled-disabled-colors-three-faces):
+        # the colour while `enabled` is false — a literal false always, a bound one
+        # while it is false — over the base (and the highlight), as iOS and the web
+        # draw it. Compose had no View path for it at all. A lambda taking the base
+        # expression, or nil when there is nothing to swap. Button draws its own
+        # (Material's disabledContainerColor); the text inputs are their own.
+        DISABLED_BACKGROUND_SELF = %w[Button TextField TextView SelectBox].freeze
+        def self.disabled_background(json_data, required_imports)
+          colour = json_data['disabledBackground']
+          return nil if colour.nil? || DISABLED_BACKGROUND_SELF.include?(json_data['type'])
+
+          gate = enabled_expression(json_data)
+          return nil if gate.nil?
+
+          disabled = ResourceResolver.process_color(colour, required_imports)
+          gate == 'false' ? ->(_base) { disabled } : ->(base) { "if (#{gate}) #{base} else #{disabled}" }
+        end
+
         def self.build_background(json_data, required_imports = nil)
           modifiers = []
           
@@ -736,6 +754,7 @@ module KjuiTools
                              end
                            end
 
+          disabled = disabled_background(json_data, required_imports)
           if json_data['background']
             required_imports&.add(:background)
             
@@ -745,6 +764,7 @@ module KjuiTools
               hl = ResourceResolver.process_color(highlight_bg, required_imports)
               background_color = highlight_cond == 'true' ? hl : "if (#{highlight_cond}) #{hl} else #{background_color}"
             end
+            background_color = disabled.call(background_color) if disabled
             
             # border before clip to prevent border being clipped
             modifiers.concat(build_border_and_clip(json_data, required_imports))
@@ -757,6 +777,11 @@ module KjuiTools
             hl = ResourceResolver.process_color(highlight_bg, required_imports)
             expr = highlight_cond == 'true' ? hl : "if (#{highlight_cond}) #{hl} else Color.Transparent"
             modifiers << background_stage(expr, pressed, required_imports)
+          elsif disabled
+            # No base background: the disabled colour while disabled, nothing otherwise
+            required_imports&.add(:background)
+            modifiers.concat(build_border_and_clip(json_data, required_imports))
+            modifiers << background_stage(disabled.call('Color.Transparent'), pressed, required_imports)
           else
             modifiers.concat(build_border_and_clip(json_data, required_imports))
             modifiers << background_stage('Color.Transparent', pressed, required_imports) if pressed

@@ -858,6 +858,14 @@ module SjuiTools
             # 無効状態の背景色
             color = get_swiftui_color(@component['disabledBackground'])
             @modifier_bag.register(:background, ".background(#{color})")
+          elsif @component['disabledBackground'] && is_binding?(@component['enabled']) && !gradient_wins_over_background? && !@modifier_bag.key?(:background)
+            # A bound `enabled` (ticket 2026-10-23-bound-enabled-disabled-colors-three-faces):
+            # the disabled colour while it is false, the base (fixed or bound) while
+            # true — disabled, then pressed, then the base, as Button and the web
+            # draw it. It used to take the base always: only a literal false showed
+            # the disabled colour.
+            disabled = get_swiftui_color(@component['disabledBackground'])
+            @modifier_bag.register(:background, background_line("(#{tap_gate_expr(@component['enabled'])} ? #{background_base_color || 'Color.clear'} : #{disabled})"))
           elsif gradient_wins_over_background?
             # `backgroundFill` ruling (2026-08-07): one fill per surface and
             # the more specific declaration wins, so a declared gradient makes
@@ -1195,6 +1203,30 @@ module SjuiTools
 
         # The background slot for `base` (a Swift Color expression, or nil for
         # none): the pressed colour replaces it while the node is pressed.
+        # A colour expression for the view's own surface with disabledBackground
+        # taken in: the disabled colour for a literal `enabled: false`, a choice by
+        # the binding for a bound one (disabled, then the base), the base alone
+        # otherwise (ticket 2026-10-23-bound-enabled-disabled-colors-three-faces).
+        def disabled_aware_color(base)
+          disabled = @component['disabledBackground']
+          return base unless disabled
+          return get_swiftui_color(disabled) if @component['enabled'] == false
+          return base unless is_binding?(@component['enabled'])
+
+          "(#{tap_gate_expr(@component['enabled'])} ? #{base || 'Color.clear'} : #{get_swiftui_color(disabled)})"
+        end
+
+        # The base background as a colour expression (fixed or bound), nil when none.
+        def background_base_color
+          bg_value = @component['background']
+          return nil unless bg_value
+          if bg_value.is_a?(String) && bg_value.start_with?('@{')
+            bg_expr = SwiftUI::Binding::BindingExpression.swift_value_expr(bg_value[2..-2])
+            return "(SwiftJsonUIConfiguration.shared.getColor(for: #{bg_expr}) ?? Color.clear)"
+          end
+          get_swiftui_color(bg_value)
+        end
+
         def background_line(base)
           pressed = pressed_background_color
           return ".pressedBackground(#{pressed}#{base ? ", base: #{base}" : ''})" if pressed

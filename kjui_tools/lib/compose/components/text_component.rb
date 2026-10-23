@@ -167,12 +167,19 @@ module KjuiTools
           # out, which is what 51-E's declaration made sayable. STATIC only:
           # `enabled` is what selects the set, and a bound one cannot be
           # resolved at emit time — the colour itself may still be bound.
-          disabled_color = if json_data['enabled'] == false && json_data['disabledFontColor']
-                             Helpers::ResourceResolver.process_color(json_data['disabledFontColor'], required_imports)
-                           end
-          base_color = disabled_color || if json_data['fontColor']
-                                           Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
-                                         end
+          # A bound `enabled` chooses at run time (ticket
+          # 2026-10-23-bound-enabled-disabled-colors-three-faces): the disabled
+          # colour while it is false, the base while true — as iOS and the web.
+          plain_color = if json_data['fontColor']
+                          Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
+                        end
+          gate = json_data['disabledFontColor'] ? Helpers::ModifierBuilder.enabled_expression(json_data) : nil
+          base_color = if gate.nil?
+                         plain_color
+                       else
+                         disabled_color = Helpers::ResourceResolver.process_color(json_data['disabledFontColor'], required_imports)
+                         gate == 'false' ? disabled_color : "if (#{gate}) #{plain_color || 'Color.Unspecified'} else #{disabled_color}"
+                       end
           highlight_color = if highlight && highlight_condition && highlight[:font_color]
                               Helpers::ResourceResolver.process_color(highlight[:font_color], required_imports)
                             end

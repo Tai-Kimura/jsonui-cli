@@ -257,6 +257,16 @@ module RjuiTools
           # — on a View that is the colour while `highlighted` holds (below),
           # not while pressed.
 
+          # disabledBackground while `enabled` is false, fixed or bound (ticket
+          # 2026-10-23-bound-enabled-disabled-colors-three-faces): the node carries
+          # aria-disabled (build_aria_disabled_attr), and the `aria-disabled:` class
+          # beats the base background, fixed or bound, as iOS and Android draw it.
+          disabled_bg = attributes['disabledBackground']
+          if disabled_bg && !attributes['enabled'].nil? && attributes['enabled'] != true
+            classes << (bound_state_color_class(disabled_bg, custom_property: '--jui-disabled-bg', prefix: 'aria-disabled:bg') ||
+                        TailwindMapper.map_color(disabled_bg, 'aria-disabled:bg'))
+          end
+
           # Highlighted state (initial highlight).
           #
           # This used to APPEND a second `bg-*` to a class list that already

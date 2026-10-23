@@ -491,16 +491,18 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
     end
 
     context 'with disabled state' do
-      it 'sets color to disabledFontColor when enabled is false' do
+      # an `aria-disabled:` class (the label carries aria-disabled), not an inline
+      # colour: the same for a literal false and a bound `enabled` (ticket
+      # 2026-10-23-bound-enabled-disabled-colors-three-faces)
+      it 'gives disabledFontColor to an aria-disabled: class when enabled is false' do
         converter = create_converter({
           'type' => 'Label',
           'text' => 'Test',
           'enabled' => false,
           'disabledFontColor' => '#999999'
         })
-        converter.send(:build_class_name)
-        result = converter.send(:build_style_attr)
-        expect(result).to include("color: '#999999'")
+        expect(converter.send(:build_class_name)).to include('aria-disabled:text-[#999999]')
+        expect(converter.send(:build_style_attr)).not_to include("color: '#999999'")
       end
     end
 

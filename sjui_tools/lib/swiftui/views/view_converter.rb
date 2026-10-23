@@ -204,7 +204,7 @@ module SjuiTools
             elsif @component['background'] && !gradient_wins_over_background? && pressed_background_color
               # The fill takes the pressed colour while the view is pressed
               # (base_view_converter#pressed_background_color).
-              add_line "PressedFill(pressed: #{pressed_background_color}, base: #{get_swiftui_color(@component['background'])})"
+              add_line "PressedFill(pressed: #{pressed_background_color}, base: #{disabled_aware_color(get_swiftui_color(@component['background']))})"
               @modifier_bag.register(:background, "")
               @fill_is_the_content = true
             elsif @component['background']
@@ -220,7 +220,8 @@ module SjuiTools
                 add_modifier_line ".fill(#{gradient_expression})"
                 @gradient_consumed_as_fill = true
               else
-                add_modifier_line ".fill(#{get_swiftui_color(@component['background'])})"
+                # disabledBackground while disabled, fixed or bound: the fill is this view's surface
+                add_modifier_line ".fill(#{disabled_aware_color(get_swiftui_color(@component['background']))})"
               end
               # Rectangleの場合はbackgroundを適用しない - register background to prevent apply_modifiers from adding it
               @modifier_bag.register(:background, "")
