@@ -110,6 +110,9 @@ RSpec.describe 'rjui bound colours reach a custom property, never a colour name 
       expect(code).not_to match(/(?:borderColor|backgroundColor|border): (?:data\.x|'[^']*@\{|ColorManager\.resolveColor\(data\.x\))/),
                           "#{type}.#{attribute}: #{code}"
     end
+    # a half spinner draws its right edge in the same bound colour
+    code = jsx(BoundColourFamily.node('Indicator', 'color').merge('halfSpinner' => true))
+    expect(code).to include('border-t-[color:var(--jui-indicator-color)]', 'border-r-[color:var(--jui-indicator-color)]')
     # TextView wrote its border inline after the base: a bound width came out as `'@{w}px'`
     code = jsx(BoundColourFamily.node('TextView', 'borderColor').merge('borderWidth' => '@{w}'))
     expect(code).to include('borderWidth: `${data.w}px`')
@@ -195,7 +198,8 @@ RSpec.describe 'rjui bound colours reach a custom property, never a colour name 
     elements = [
       node.('sb', 'SelectBox', 'borderColor'), node.('sbFixed', 'SelectBox', 'borderColor', '#ff0000'),
       node.('tf', 'TextField', 'borderColor'), node.('tv', 'TextView', 'borderColor'),
-      node.('ind', 'Indicator', 'color'), node.('cv', 'CircleView', 'background'),
+      node.('ind', 'Indicator', 'color'), node.('indHalf', 'Indicator', 'color').merge('halfSpinner' => true),
+      node.('cv', 'CircleView', 'background'),
       node.('cvb', 'CircleView', 'borderColor'), node.('blur', 'Blur', 'background')
     ].map { |n| jsx(n) }
     got = draw(elements, {
@@ -204,12 +208,13 @@ RSpec.describe 'rjui bound colours reach a custom property, never a colour name 
                  'tf' => ['tf', nil, nil, 'borderTopColor', false],
                  'tv' => ['tv', nil, nil, 'borderTopColor', false],
                  'ind' => ['ind', 'div', nil, 'borderTopColor', false],
+                 'indHalf' => ['indHalf', 'div', nil, 'borderRightColor', false],
                  'cv' => ['cv', nil, nil, 'backgroundColor', false],
                  'cvb' => ['cvb', nil, '::after', 'borderTopColor', false],
                  'blur' => ['blur', nil, nil, 'backgroundColor', false]
                })
     red = rgb('#ff0000')
-    expect(got.slice('sb', 'tf', 'tv', 'ind', 'cv', 'cvb', 'blur')).to eq(%w[sb tf tv ind cv cvb blur].to_h { |k| [k, red] }), got.inspect
+    expect(got.slice('sb', 'tf', 'tv', 'ind', 'indHalf', 'cv', 'cvb', 'blur')).to eq(%w[sb tf tv ind indHalf cv cvb blur].to_h { |k| [k, red] }), got.inspect
     # focus:border-blue-500 shows over the bound border as over the fixed one
     expect(got['sbFocus']).not_to eq(red), got.inspect
     expect(got['sbFocus']).to eq(got['sbFixedFocus']), got.inspect
