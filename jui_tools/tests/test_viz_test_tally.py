@@ -247,3 +247,44 @@ def test_a_worktree_named_longer_ago_than_its_time_leaves_the_run_with_the_cwd(t
     from jui_cli.viz.ingest import WORKTREE_TOUCH_MS
     got = _parent_runs(tmp_path, touched_at=100, run_at=100 + WORKTREE_TOUCH_MS)
     assert got == {"room/:": (1, 1)}, got   # its time ran out: no worktree row, the run is the room's
+
+
+def test_a_session_in_a_worktree_runs_there_whatever_other_worktree_it_names(tmp_path):
+    root, wt = _room(tmp_path)
+    other = tmp_path / "scratch" / "wt1"
+    _git(root, "worktree", "add", "-q", "-b", "feat/y1", str(other))
+    state = VizState()
+    world = World(state)
+    world.apply_hook({"session_id": "main", "cwd": str(root), "hook_event_name": "SessionStart"}, 0)
+    world.apply_hook({"session_id": "w", "cwd": str(wt), "hook_event_name": "SessionStart"}, 0)
+    world.apply_hook({"session_id": "w", "cwd": str(wt), "hook_event_name": "PreToolUse", "tool_name": "Edit",
+                      "tool_use_id": "e", "tool_input": {"file_path": str(other / "tests/screens/login.test.json")}}, 100)
+    world.tick(110)
+    world.apply_hook({"session_id": "w", "cwd": str(wt), "hook_event_name": "PreToolUse", "tool_name": "Bash",
+                      "tool_use_id": "b", "tool_input": {"command": CMD}}, 200)
+    world.tests["b"]["progressRun"] = RUN_SEEN
+    world.apply_saved_results(_rows(RUN_SEEN, {"ok": "passed", "ng": "failed"}))
+    world.tick(210)
+    world.publish()
+    got = {k: (v["passed"], v["failed"]) for k, v in _tests(state).items() if k.startswith("room/:")}
+    assert got["room/:@feat/x"] == (1, 1) and got["room/:@feat/y1"] == (0, 0), got
+
+
+def test_a_run_of_commands_in_a_worktree_and_in_the_room_goes_to_both(tmp_path):
+    root, wt = _room(tmp_path)
+    state = VizState()
+    world = World(state)
+    world.apply_hook({"session_id": "main", "cwd": str(root), "hook_event_name": "SessionStart"}, 0)
+    world.apply_hook({"session_id": "lane", "cwd": str(root), "hook_event_name": "SessionStart"}, 0)
+    world.apply_hook({"session_id": "lane", "cwd": str(root), "hook_event_name": "PreToolUse", "tool_name": "Edit",
+                      "tool_use_id": "e", "tool_input": {"file_path": str(wt / "tests/screens/login.test.json")}}, 100)
+    world.tick(110)
+    for sid, use in (("lane", "b1"), ("main", "b2")):   # one run id from two commands: the worktree's and the room's
+        world.apply_hook({"session_id": sid, "cwd": str(root), "hook_event_name": "PreToolUse", "tool_name": "Bash",
+                          "tool_use_id": use, "tool_input": {"command": CMD}}, 200)
+        world.tests[use]["progressRun"] = RUN_SEEN
+    world.apply_saved_results(_rows(RUN_SEEN, {"ok": "passed", "ng": "failed"}))
+    world.tick(210)
+    world.publish()
+    got = {k: (v["passed"], v["failed"]) for k, v in _tests(state).items() if k.startswith("room/:")}
+    assert got == {"room/:": (1, 1), "room/:@feat/x": (1, 1)}, got

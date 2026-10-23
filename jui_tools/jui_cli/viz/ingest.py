@@ -579,12 +579,12 @@ class World:
 
     def _checkout_top(self, path: Path) -> str | None:
         """The checkout a path is in: the nearest folder from it up holding .git (a linked worktree's is a file)."""
-        start = path if path.is_dir() else path.parent
+        start = path if quiet_fs.is_dir(path) else path.parent
         key = str(start)
         if key not in self._checkout_tops:
             if len(self._checkout_tops) > 4096:
                 self._checkout_tops.clear()
-            self._checkout_tops[key] = next((str(c) for c in (start, *start.parents) if (c / ".git").exists()), None)
+            self._checkout_tops[key] = next((str(c) for c in (start, *start.parents) if quiet_fs.exists(c / ".git")), None)
         return self._checkout_tops[key]
 
     def _note_paths(self, sid: str, tool_input: dict, at: int) -> None:

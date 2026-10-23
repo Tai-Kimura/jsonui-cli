@@ -253,3 +253,23 @@ def test_a_worktree_gone_prunable_is_not_shown_though_a_path_named_it(tmp_path):
     world.tick(1_010 + WORKTREES_EVERY_MS)
     world.publish()
     assert _ids(state, room_id) == [f"{room_id}:login.spec.json"]
+
+
+def test_a_jui_tools_call_s_project_dir_names_its_worktree(tmp_path):
+    root, wt, state, world, room_id = _world_with_parent_session(tmp_path)
+    _call(world, root, 1_000, "mcp__jui-tools__jui_build", {"project_dir": str(wt)})
+    world.tick(1_010)
+    world.publish()
+    assert f"{room_id}:@feat/x/orders.spec.json" in _ids(state, room_id)
+
+
+def test_a_session_keeps_its_latest_checkouts_and_drops_the_oldest(tmp_path):
+    from jui_cli.viz.ingest import TOUCHED_KEPT
+    root, _wt, _state, world, _room_id = _world_with_parent_session(tmp_path)
+    tops = []
+    for i in range(TOUCHED_KEPT + 1):
+        top = tmp_path / "many" / f"c{i}"
+        (top / ".git").mkdir(parents=True)
+        tops.append(str(top))
+        _call(world, root, 1_000 + i, "Read", {"file_path": str(top / "a.txt")})
+    assert list(world._touched["lane"]) == tops[1:]   # the newest kept, the first dropped
