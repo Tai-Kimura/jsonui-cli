@@ -375,6 +375,30 @@ def test_run_without_the_trees_lock_says_so(tmp_path, monkeypatch, capsys):
     assert "running without the machine's queue" in capsys.readouterr().out
 
 
+def test_run_with_no_lock_takes_no_lock(tmp_path, monkeypatch):
+    """--no-lock: the capture runs beside a running e2e when told to (its own HOME, server and port either way)."""
+    from viz_promo import run
+    log = tmp_path / "log.jsonl"
+    monkeypatch.setenv("PROMO_LOCK_LOG", str(log))
+
+    async def serves(a):
+        with open(log, "a") as f:
+            f.write(json.dumps({"step": "serve"}) + "\n")
+        return 0
+    monkeypatch.setattr(run, "main_async", serves)
+    assert run.main(["--lang", "ja", "--chapters", "2", "--no-lock", "--jui-root", str(_fake_tree(tmp_path))]) == 0
+    assert [json.loads(line)["step"] for line in log.read_text().splitlines()] == ["serve"]
+
+
+def test_chapter_2_opens_sorts_by_state_and_folds_the_robot_list():
+    for lang in ("ja", "en"):
+        ev = [e for e in T.chapters(lang)["2"].events if "roster" in json.dumps(e.args)]
+        assert [(e.kind, e.args.get("value"), e.args.get("expect")) for e in ev] == [
+            ("click", None, "roster_open"), ("select", "state", "roster_state"), ("click", None, "roster_folded")], lang
+        idle = next(e.at for e in T.chapters(lang)["2"].events if e.kind == "idle")
+        assert idle < ev[0].at and ev[-1].at < T.chapters(lang)["2"].end
+
+
 def test_frame_intervals_are_summed_as_percentiles():
     from viz_promo import capture
     got = capture.percentiles([16.0] * 8 + [50.0, 120.0])

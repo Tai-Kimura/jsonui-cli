@@ -302,7 +302,8 @@ def chapters(lang: str) -> dict:
     # 2 (40–52): the robots show what each session is doing (requester 10-22: 「ロボットの動きで状況が理解できるのがメイン機能」
     # 「テスト中かどうかがわかったり」). In on the shop's room: robots typing, reading, thinking (a prompt and no tool yet);
     # one starts its tests, its card shows the run case by case (one fails), then one stops and waits for input.
-    # the room's robot list folded before frame 0 (in and back out: the room is entered on camera, its list already folded)
+    # the room's robot list folded before frame 0 (in and back out: the room is entered on camera, its list already folded);
+    # at the end the list is opened, put in order by state and folded again (2.3.21, requester 10-23)
     out["2"] = Chapter("2", 40, 52, floor(w) + up_close("demo-shop") + [P("click", target={"css": "#room-back"}, expect="floor"), P("settle")], [
         E(40.8, "click", target={"room_tag": "demo-shop"}, expect="solo:demo-shop"),
         E(43.2, "tests_start", key="s02", run="r1", command="cd web && npx vitest run tests/unit/generated"),
@@ -314,9 +315,13 @@ def chapters(lang: str) -> dict:
         E(46.3, "tests_case", run="r1", case=4, status="passed"),
         E(46.8, "tests_case", run="r1", case=5, status="passed"),
         E(47.4, "tests_end", key="s02", run="r1"),
-        E(48.6, "idle", key="s07"),
-        E(49.4, "click", target={"session_row": "s07"}, expect="card:s07"),
-    ], needs=("rooms",))
+        E(48.6, "idle", key="s05"),
+        # the room's robot list (2.3.21): opened with its own button, put in order by state (waiting first: the robot
+        # that just stopped, low in the list's own order, comes to the top), folded again
+        E(49.0, "click", target={"css": "#roster-fold"}, expect="roster_open"),
+        E(49.8, "select", target={"css": "#roster-sort"}, value="state", expect="roster_state"),
+        E(51.3, "click", target={"css": "#roster-fold"}, expect="roster_folded"),
+    ], needs=("rooms", "roster"))
 
     # 3 (52–62): a permission answered in the browser, briefly (requester: 「許可の紹介はサラッとでいい」), then the
     # sessions' talk as a chat (2.3.14): the spec owner's card, its talk with the test runner, two messages arriving.

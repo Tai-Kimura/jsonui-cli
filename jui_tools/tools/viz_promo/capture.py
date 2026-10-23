@@ -67,6 +67,7 @@ FEATURES = {
     "i18n": ("jui_cli/viz/i18n.py", None),
     "migration": ("jui_cli/viz/web/js/59-sr-migration.js", "() => !!(window.__dbg && window.__dbg.srMig)"),
     "sr2d": ("jui_cli/viz/web/js/56-server-room.js", "() => !!document.getElementById('sr-mode-2d')"),
+    "roster": ("jui_cli/viz/web/js/53-roster.js", "() => !!document.getElementById('roster-sort')"),
     "spec_worktrees": ("jui_cli/viz/web/js/30-source-live.js", None),   # no mark of its own: the wait on the sheet's ⎇ head fails without it
 }
 
@@ -123,6 +124,9 @@ EXPECT = {
     "cost_month": "() => { const c = window.__dbg.srCost(); return !!c.month && !c.error; }",
     "cost_day": "() => !!window.__dbg.srCost().day",
     "migopen": "() => window.__dbg.srMig().open",
+    "roster_open": "() => !document.getElementById('roster').classList.contains('roster-folded')",
+    "roster_folded": "() => document.getElementById('roster').classList.contains('roster-folded')",
+    "roster_state": "() => { const r = document.querySelector('#roster-list .roster-row'); return document.getElementById('roster-sort').value === 'state' && !!r; }",
     "wbbranch": "() => { const f = document.getElementById('wb-file'); return !!f && f.textContent.trim().startsWith('⎇'); }",
     "sr2d": "() => { const b = document.getElementById('sr-mode-2d'); return !!b && b.getAttribute('aria-pressed') === 'true'; }",
     "migcost": "() => { const m = window.__dbg.srMig(); return m.open && !!m.cost; }",

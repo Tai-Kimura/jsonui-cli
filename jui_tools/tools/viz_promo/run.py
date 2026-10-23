@@ -50,6 +50,8 @@ def parse(argv=None):
     ap.add_argument("--theme", choices=["dark", "light"], default="dark")
     ap.add_argument("--sky-time", default="14:00", help="the hour the page's sky shows (HH:MM), or 'real'")
     ap.add_argument("--keep", action="store_true", help="keep each chapter's temporary HOME and rooms (for debugging)")
+    ap.add_argument("--no-lock", action="store_true", help="do not wait for the machine's viz e2e queue (when told to capture "
+                    "beside a running e2e: the capture uses its own HOME, server and port either way)")
     a = ap.parse_args(argv)
     a.chapters = [c.strip() for c in a.chapters.split(",") if c.strip()]
     unknown = [c for c in a.chapters if c not in CAPTURE_IDS]
@@ -142,7 +144,7 @@ def main(argv=None) -> int:
     a = parse(argv)
     import os
 
-    fd = take_lock(a.jui_root, f"viz_promo {a.lang} {'fps' if a.measure_fps else ','.join(a.chapters)}")
+    fd = None if a.no_lock else take_lock(a.jui_root, f"viz_promo {a.lang} {'fps' if a.measure_fps else ','.join(a.chapters)}")
     try:
         return asyncio.run(main_async(a))
     finally:
