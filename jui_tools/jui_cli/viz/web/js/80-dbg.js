@@ -252,6 +252,13 @@ window.__dbg = {
       return [`${e.from}>${e.to}`, +pts.slice(1).reduce((a, q, i) => a + Math.hypot(q[0] - pts[i][0], q[1] - pts[i][1], q[2] - pts[i][2]), 0).toFixed(3)]; })) : {} }; },
   srFlowSpeed: (s) => { SR_FLOW.speed = s; srFlowPrefSet('speed', s); srFlowRenderBar(); return SR_FLOW.speed; },
   srFlowShow: (how) => { srFlowShowSet(how); return SR_FLOW.show; },
+  // the camera as it is ([position, target, zoom]), and whether the room would be seen whole from a camera kept so
+  srCamNow: () => { const V = SR.view; return V ? [V.camera.position.toArray(), V.controls.target.toArray(), V.camera.zoom] : null; },
+  srWholeFrom: (cam) => { const V = SR.view; if (!V) return null; const now = [V.camera.position.clone(), V.controls.target.clone(), V.camera.zoom];
+    V.camera.position.fromArray(cam[0]); V.controls.target.fromArray(cam[1]); V.camera.zoom = cam[2]; V.camera.lookAt(V.controls.target); V.camera.updateProjectionMatrix(); V.camera.updateMatrixWorld();
+    const whole = srFlowWhole(V);
+    V.camera.position.copy(now[0]); V.controls.target.copy(now[1]); V.camera.zoom = now[2]; V.camera.lookAt(V.controls.target); V.camera.updateProjectionMatrix(); V.camera.updateMatrixWorld();
+    return whole; },
   // what the 3D draws now, read from it: the nodes at their size (the set that takes the press), their tags, the models
   // shown, the cables drawn (from>to), and each floor's colour against the one it was built with
   srFlowDrawn: () => { const V = SR.view; if (!V) return null; const m4 = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();

@@ -109,11 +109,15 @@ function srFlowPlay(id) {
   const t = SR_TRIGGERS[flow.trigger] || SR_TRIGGERS.user;
   $('sr-route-list').replaceChildren();
   $('sr-route-title').textContent = `${t[0]} ${flow.label || flow.id}`;
-  // the side bar takes its column from the room: a room seen whole stays whole
+  // the side bar takes its column from the room: a room seen whole stays whole (framed on its nodes, as narrow as the
+  // room is now: srFit frames the 3D by its height alone)
   const whole = srFlowWhole(V);
   $('sr-route').hidden = false;
   srResize(V);
-  if (whole && !srFlowWhole(V)) srFit(true);
+  if (whole && !srFlowWhole(V)) {
+    srFrameOn(V, [...V.L.pos.values()].filter((p) => !p.hiddenIn).map((p) => new THREE.Vector3(p.x, p.y, p.z)), 0.95);
+    V.controls.update();
+  }
   srFlowToast(P, flow.start, `${t[0]} ${flow.label || flow.id}`, flow.schedule || t[1]);
   srFlowGlow(P, flow.start);
   srFlowRenderBar();

@@ -347,6 +347,27 @@ async def run_flow_route(page, out, failures, res):
     rt["bar"] = await page.evaluate(BAR_ORDER)
     check(failures, rt["bar"] == {"order": 1, "leftOf": True, "oneLine": True, "beforeGrow": True},
           f"範囲で寄る sits just left of 環境 on the top bar, the rest after it: {rt['bar']}")
+    # the room seen whole when a flow starts, on a page narrow enough that the side bar's column would cut it from the
+    # camera as it was: it is fitted again, and seen whole beside the side bar
+    size = page.viewport_size
+    await page.evaluate("() => { const b = document.querySelector(\"#sr-player [data-sr-fp='stop']\"); if (b) b.click(); }")
+    await page.set_viewport_size({"width": 900, "height": 760})
+    await page.wait_for_timeout(300)
+    await page.click("#sr-fit")
+    await page.wait_for_timeout(300)
+    cam0 = await page.evaluate("() => window.__dbg.srCamNow()")
+    whole0 = (await page.evaluate(DRAWN))["whole"]
+    await page.evaluate("() => window.__dbg.srSelect('browser')")
+    await page.click("#sr-board [data-sr-flow='search']")
+    await page.click("#sr-player [data-sr-fp='toggle']")
+    await page.wait_for_timeout(300)
+    rt["wholeWithBar"] = {"before": whole0, "keptWouldBe": await page.evaluate("(c) => window.__dbg.srWholeFrom(c)", cam0), "now": (await page.evaluate(DRAWN))["whole"]}
+    check(failures, rt["wholeWithBar"]["before"] is True and rt["wholeWithBar"]["keptWouldBe"] is False,
+          f"the room seen whole, and the side bar's column would cut it from the camera as it was (else the next arm proves nothing): {rt['wholeWithBar']}")
+    check(failures, rt["wholeWithBar"]["now"] is True, f"the room seen whole before the side bar opened is still seen whole beside it: {rt['wholeWithBar']}")
+    await page.click("#sr-player [data-sr-fp='stop']")
+    await page.set_viewport_size(size)
+    await page.wait_for_timeout(300)
     await page.evaluate("() => { const b = document.querySelector(\"#sr-player [data-sr-fp='stop']\"); if (b) b.click(); }")
     # a short page, so the side bar runs longer than it shows and must turn to its newest row (and to the branch's ways)
     size = page.viewport_size
@@ -358,6 +379,7 @@ async def run_flow_route(page, out, failures, res):
     over = []      # the words over the room, read on every arrival
     first = await until(page, f"() => {{ const f = ({FLOW})(); return f.arrivals.length >= 1 ? f : null; }}", "route: the first arrival", timeout=30000, why=FLOW)
     over.append(first["toasts"])
+
     at = await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'branch' && f.choices.length ? f : null; }}", "route: its branch", timeout=60000, why=FLOW)
     over.append(at["toasts"])
     rt["atBranch"] = {"rows": at["rows"], "route": at["route"], "geom": await page.evaluate(ROUTE_GEOM), "overlap": await page.evaluate(OVERLAP)}
@@ -366,6 +388,12 @@ async def run_flow_route(page, out, failures, res):
     check(failures, rt["atBranch"]["overlap"] == {"route": True, "board": False, "player": False, "roster": False},
           f"the side bar covers neither the board, the player's bar nor the robot list: {rt['atBranch']['overlap']}")
     await page.screenshot(path=str(out / "flow-route-branch.png"))
+    # 自動 turned on and off while it waits: the default's mark says so at once (read in the same task, before a frame
+    # could take the default)
+    rt["autoMark"] = await page.evaluate("""() => { const cb = document.querySelector("#sr-player [data-sr-fp='auto']"), mark = () => document.querySelector('#sr-choices [data-default] small').textContent;
+      cb.click(); const on = mark(); cb.click(); return [on, mark()]; }""")
+    check(failures, rt["autoMark"] == [T("sr.flow.choice.auto"), T("sr.flow.choice.default")],
+          f"自動 turned on and off at a branch changes its default's mark in the side bar: {rt['autoMark']}")
     await page.click("#sr-route #sr-choices [data-sr-choice='miss']")
     done = await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'done' ? f : null; }}", "route: the end", timeout=90000, why=FLOW)
     over.append(done["toasts"])
@@ -385,6 +413,13 @@ async def run_flow_route(page, out, failures, res):
           f"the newest row is the current one, set apart: {geom}")
     check(failures, geom["overflows"] and geom["curInView"], f"the side bar runs longer than it shows and is turned to its newest row: {geom}")
     await page.set_viewport_size(size)
+    # one step back from the end: the side bar back to the rows it had then, the last of them current
+    before = len(rows)
+    await page.click("#sr-player [data-sr-fp='back']")
+    back = await page.evaluate(FLOW)
+    rt["back"] = {"before": before, "rows": len(back["rows"]), "log": len(back["log"]), "current": [r["current"] for r in back["rows"]]}
+    check(failures, rt["back"]["rows"] < before and rt["back"]["rows"] == rt["back"]["log"] and rt["back"]["current"] == [False] * (rt["back"]["rows"] - 1) + [True],
+          f"a step back takes the side bar back to its rows then, the last current: {rt['back']}")
     # a row pressed: its node chosen on the board
     await page.click("#sr-route-list [data-sr-rt='d1']")
     rt["pressed"] = await page.evaluate("() => { const dt = [...document.querySelectorAll('#sr-board dt')].find((d) => d.textContent === 'id'); return dt ? dt.nextElementSibling.textContent : null; }")
