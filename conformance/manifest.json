@@ -8,15 +8,15 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "0ee6ea3e7c75155028a500e247922fe129648e3ebef653e4919295fc5a3fb587",
+  "generatedFrom": "6b875ed2cfcb662b30461f2a003cc7282f23625831ae3b78bdf2106a9495ccdc",
   "counts": {
-    "fixtures": 1182,
+    "fixtures": 1259,
     "assertable": 51,
-    "visual": 884,
+    "visual": 955,
     "interactive": 41,
-    "control": 128,
+    "control": 134,
     "declarationOnly": 77,
-    "skipped": 157,
+    "skipped": 158,
     "promoted": {
       "callback": 11
     }
@@ -6626,6 +6626,28 @@
       "control": "__control/SelectBox"
     },
     {
+      "id": "common/zIndex__static",
+      "component": "common",
+      "attribute": "zIndex",
+      "case": "static",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "zIndex",
+      "aliasOf": null,
+      "value": 8,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/common/zIndex__static.layout.json",
+      "test": "fixtures/common/zIndex__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/View"
+    },
+    {
       "id": "Label/text__static",
       "component": "Label",
       "attribute": "text",
@@ -11414,6 +11436,164 @@
       "control": "__control/TextField"
     },
     {
+      "id": "TextField/autoFocus__true",
+      "component": "TextField",
+      "attribute": "autoFocus",
+      "case": "true",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "autoFocus",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/autoFocus__true.layout.json",
+      "test": "fixtures/TextField/autoFocus__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "TextField/autoFocus@TextField",
+      "control": "__control/TextField"
+    },
+    {
+      "id": "TextField/autoFocus__false",
+      "component": "TextField",
+      "attribute": "autoFocus",
+      "case": "false",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "autoFocus",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/autoFocus__false.layout.json",
+      "test": "fixtures/TextField/autoFocus__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "TextField/autoFocus@TextField",
+      "control": "__control/TextField"
+    },
+    {
+      "id": "TextField/editable__true",
+      "component": "TextField",
+      "attribute": "editable",
+      "case": "true",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "editable",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/editable__true.layout.json",
+      "test": "fixtures/TextField/editable__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "TextField/editable@TextField",
+      "control": "__control/TextField"
+    },
+    {
+      "id": "TextField/editable__false",
+      "component": "TextField",
+      "attribute": "editable",
+      "case": "false",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "editable",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/editable__false.layout.json",
+      "test": "fixtures/TextField/editable__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "TextField/editable@TextField",
+      "control": "__control/TextField"
+    },
+    {
+      "id": "TextField/name__static",
+      "component": "TextField",
+      "attribute": "name",
+      "case": "static",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "name",
+      "aliasOf": null,
+      "value": "sample",
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/name__static.layout.json",
+      "test": "fixtures/TextField/name__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/TextField"
+    },
+    {
+      "id": "TextField/outlined__true",
+      "component": "TextField",
+      "attribute": "outlined",
+      "case": "true",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "outlined",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/outlined__true.layout.json",
+      "test": "fixtures/TextField/outlined__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "TextField/outlined@TextField",
+      "control": "__control/TextField"
+    },
+    {
+      "id": "TextField/outlined__false",
+      "component": "TextField",
+      "attribute": "outlined",
+      "case": "false",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "outlined",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/outlined__false.layout.json",
+      "test": "fixtures/TextField/outlined__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "TextField/outlined@TextField",
+      "control": "__control/TextField"
+    },
+    {
       "id": "TextView/text__static",
       "component": "TextView",
       "attribute": "text",
@@ -13460,6 +13640,98 @@
       "control": "__control/TextView"
     },
     {
+      "id": "TextView/autoFocus__true",
+      "component": "TextView",
+      "attribute": "autoFocus",
+      "case": "true",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": "autoFocus",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextView/autoFocus__true.layout.json",
+      "test": "fixtures/TextView/autoFocus__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "TextView/autoFocus@TextView",
+      "control": "__control/TextView"
+    },
+    {
+      "id": "TextView/autoFocus__false",
+      "component": "TextView",
+      "attribute": "autoFocus",
+      "case": "false",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": "autoFocus",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextView/autoFocus__false.layout.json",
+      "test": "fixtures/TextView/autoFocus__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "TextView/autoFocus@TextView",
+      "control": "__control/TextView"
+    },
+    {
+      "id": "TextView/maxLines__static",
+      "component": "TextView",
+      "attribute": "maxLines",
+      "case": "static",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": "maxLines",
+      "aliasOf": null,
+      "value": 8,
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextView/maxLines__static.layout.json",
+      "test": "fixtures/TextView/maxLines__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/TextView"
+    },
+    {
+      "id": "TextView/name__static",
+      "component": "TextView",
+      "attribute": "name",
+      "case": "static",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": "name",
+      "aliasOf": null,
+      "value": "sample",
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextView/name__static.layout.json",
+      "test": "fixtures/TextView/name__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/TextView"
+    },
+    {
       "id": "Button/text__static",
       "component": "Button",
       "attribute": "text",
@@ -14106,6 +14378,28 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": "Button/fontFamily@Button",
+      "control": "__control/Button"
+    },
+    {
+      "id": "Button/href__static",
+      "component": "Button",
+      "attribute": "href",
+      "case": "static",
+      "class": "visual",
+      "host": "Button",
+      "writtenKey": "href",
+      "aliasOf": null,
+      "value": "sample",
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Button/href__static.layout.json",
+      "test": "fixtures/Button/href__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/Button"
     },
     {
@@ -14929,6 +15223,28 @@
       "control": "__control/Image__no-src"
     },
     {
+      "id": "Image/size__static",
+      "component": "Image",
+      "attribute": "size",
+      "case": "static",
+      "class": "visual",
+      "host": "Image",
+      "writtenKey": "size",
+      "aliasOf": null,
+      "value": 3,
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Image/size__static.layout.json",
+      "test": "fixtures/Image/size__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Image__height-undeclared_width-undeclared"
+    },
+    {
       "id": "NetworkImage/hint__static",
       "component": "NetworkImage",
       "attribute": "hint",
@@ -15470,6 +15786,72 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": "NetworkImage/renderingMode@NetworkImage",
+      "control": "__control/NetworkImage"
+    },
+    {
+      "id": "NetworkImage/circle__true",
+      "component": "NetworkImage",
+      "attribute": "circle",
+      "case": "true",
+      "class": "visual",
+      "host": "NetworkImage",
+      "writtenKey": "circle",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/NetworkImage/circle__true.layout.json",
+      "test": "fixtures/NetworkImage/circle__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "NetworkImage/circle@NetworkImage",
+      "control": "__control/NetworkImage"
+    },
+    {
+      "id": "NetworkImage/circle__false",
+      "component": "NetworkImage",
+      "attribute": "circle",
+      "case": "false",
+      "class": "visual",
+      "host": "NetworkImage",
+      "writtenKey": "circle",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/NetworkImage/circle__false.layout.json",
+      "test": "fixtures/NetworkImage/circle__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "NetworkImage/circle@NetworkImage",
+      "control": "__control/NetworkImage"
+    },
+    {
+      "id": "NetworkImage/size__static",
+      "component": "NetworkImage",
+      "attribute": "size",
+      "case": "static",
+      "class": "visual",
+      "host": "NetworkImage",
+      "writtenKey": "size",
+      "aliasOf": null,
+      "value": 3,
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/NetworkImage/size__static.layout.json",
+      "test": "fixtures/NetworkImage/size__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
       "control": "__control/NetworkImage"
     },
     {
@@ -16831,6 +17213,50 @@
       "control": "__control/SelectBox"
     },
     {
+      "id": "SelectBox/cancelButtonBackgroundColor__static",
+      "component": "SelectBox",
+      "attribute": "cancelButtonBackgroundColor",
+      "case": "static",
+      "class": "visual",
+      "host": "SelectBox",
+      "writtenKey": "cancelButtonBackgroundColor",
+      "aliasOf": null,
+      "value": "#FF0000",
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SelectBox/cancelButtonBackgroundColor__static.layout.json",
+      "test": "fixtures/SelectBox/cancelButtonBackgroundColor__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/SelectBox"
+    },
+    {
+      "id": "SelectBox/cancelButtonTextColor__static",
+      "component": "SelectBox",
+      "attribute": "cancelButtonTextColor",
+      "case": "static",
+      "class": "visual",
+      "host": "SelectBox",
+      "writtenKey": "cancelButtonTextColor",
+      "aliasOf": null,
+      "value": "#FF0000",
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SelectBox/cancelButtonTextColor__static.layout.json",
+      "test": "fixtures/SelectBox/cancelButtonTextColor__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/SelectBox"
+    },
+    {
       "id": "Switch/isOn__true",
       "component": "Switch",
       "attribute": "isOn",
@@ -17958,6 +18384,28 @@
       "control": null
     },
     {
+      "id": "Segment/fontSize__static",
+      "component": "Segment",
+      "attribute": "fontSize",
+      "case": "static",
+      "class": "visual",
+      "host": "Segment",
+      "writtenKey": "fontSize",
+      "aliasOf": null,
+      "value": 20,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Segment/fontSize__static.layout.json",
+      "test": "fixtures/Segment/fontSize__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Segment"
+    },
+    {
       "id": "Slider/value__static",
       "component": "Slider",
       "attribute": "value",
@@ -18336,6 +18784,28 @@
       "control": "__control/Slider__value-0.5"
     },
     {
+      "id": "Slider/thumbTintColor__static",
+      "component": "Slider",
+      "attribute": "thumbTintColor",
+      "case": "static",
+      "class": "visual",
+      "host": "Slider",
+      "writtenKey": "thumbTintColor",
+      "aliasOf": null,
+      "value": "#FF0000",
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Slider/thumbTintColor__static.layout.json",
+      "test": "fixtures/Slider/thumbTintColor__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Slider"
+    },
+    {
       "id": "Progress/progress__static",
       "component": "Progress",
       "attribute": "progress",
@@ -18678,6 +19148,50 @@
       "promotedFrom": null,
       "peerGroup": null,
       "control": "__control/Progress__progress-0.5"
+    },
+    {
+      "id": "Progress/maximumValue__static",
+      "component": "Progress",
+      "attribute": "maximumValue",
+      "case": "static",
+      "class": "visual",
+      "host": "Progress",
+      "writtenKey": "maximumValue",
+      "aliasOf": null,
+      "value": 8,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Progress/maximumValue__static.layout.json",
+      "test": "fixtures/Progress/maximumValue__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Progress"
+    },
+    {
+      "id": "Progress/progressHeight__static",
+      "component": "Progress",
+      "attribute": "progressHeight",
+      "case": "static",
+      "class": "visual",
+      "host": "Progress",
+      "writtenKey": "progressHeight",
+      "aliasOf": null,
+      "value": 8,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Progress/progressHeight__static.layout.json",
+      "test": "fixtures/Progress/progressHeight__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Progress"
     },
     {
       "id": "View/orientation__horizontal",
@@ -19439,6 +19953,28 @@
       "control": null
     },
     {
+      "id": "CircleView/size__static",
+      "component": "CircleView",
+      "attribute": "size",
+      "case": "static",
+      "class": "visual",
+      "host": "CircleView",
+      "writtenKey": "size",
+      "aliasOf": null,
+      "value": 3,
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/CircleView/size__static.layout.json",
+      "test": "fixtures/CircleView/size__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/CircleView__height-undeclared_width-undeclared"
+    },
+    {
       "id": "ScrollView/orientation__horizontal",
       "component": "ScrollView",
       "attribute": "orientation",
@@ -19857,6 +20393,28 @@
       "promotedFrom": null,
       "peerGroup": "ScrollView/defaultScrollAnchor@ScrollView__child-50058fa9",
       "control": "__control/ScrollView__child-50058fa9"
+    },
+    {
+      "id": "ScrollView/contentInset__static",
+      "component": "ScrollView",
+      "attribute": "contentInset",
+      "case": "static",
+      "class": "visual",
+      "host": "ScrollView",
+      "writtenKey": "contentInset",
+      "aliasOf": null,
+      "value": 8,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/ScrollView/contentInset__static.layout.json",
+      "test": "fixtures/ScrollView/contentInset__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/ScrollView"
     },
     {
       "id": "Collection/lazy__eager",
@@ -21249,6 +21807,114 @@
       "promotedFrom": null,
       "peerGroup": "Collection/listStyle@Collection__no-sections",
       "control": "__control/Collection__no-sections",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/flowAlignment__leading",
+      "component": "Collection",
+      "attribute": "flowAlignment",
+      "case": "leading",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "flowAlignment",
+      "aliasOf": null,
+      "value": "leading",
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/flowAlignment__leading.layout.json",
+      "test": "fixtures/Collection/flowAlignment__leading.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Collection/flowAlignment@Collection__layout-flow_width-150",
+      "control": "__control/Collection__layout-flow_width-150",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/flowAlignment__center",
+      "component": "Collection",
+      "attribute": "flowAlignment",
+      "case": "center",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "flowAlignment",
+      "aliasOf": null,
+      "value": "center",
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/flowAlignment__center.layout.json",
+      "test": "fixtures/Collection/flowAlignment__center.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Collection/flowAlignment@Collection__layout-flow_width-150",
+      "control": "__control/Collection__layout-flow_width-150",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/flowAlignment__trailing",
+      "component": "Collection",
+      "attribute": "flowAlignment",
+      "case": "trailing",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "flowAlignment",
+      "aliasOf": null,
+      "value": "trailing",
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/flowAlignment__trailing.layout.json",
+      "test": "fixtures/Collection/flowAlignment__trailing.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Collection/flowAlignment@Collection__layout-flow_width-150",
+      "control": "__control/Collection__layout-flow_width-150",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/flowAlignment__end",
+      "component": "Collection",
+      "attribute": "flowAlignment",
+      "case": "end",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "flowAlignment",
+      "aliasOf": null,
+      "value": "end",
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/flowAlignment__end.layout.json",
+      "test": "fixtures/Collection/flowAlignment__end.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Collection/flowAlignment@Collection__layout-flow_width-150",
+      "control": "__control/Collection__layout-flow_width-150",
       "companions": [
         "fixtures/Collection/__cells/conformance_cell.layout.json",
         "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
@@ -23120,6 +23786,95 @@
       "control": "__control/Indicator__animating-False"
     },
     {
+      "id": "Indicator/halfSpinner__true",
+      "component": "Indicator",
+      "attribute": "halfSpinner",
+      "case": "true",
+      "class": "visual",
+      "host": "Indicator",
+      "writtenKey": "halfSpinner",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Indicator/halfSpinner__true.layout.json",
+      "test": "fixtures/Indicator/halfSpinner__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Indicator/halfSpinner@Indicator",
+      "control": "__control/Indicator"
+    },
+    {
+      "id": "Indicator/halfSpinner__false",
+      "component": "Indicator",
+      "attribute": "halfSpinner",
+      "case": "false",
+      "class": "visual",
+      "host": "Indicator",
+      "writtenKey": "halfSpinner",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Indicator/halfSpinner__false.layout.json",
+      "test": "fixtures/Indicator/halfSpinner__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Indicator/halfSpinner@Indicator",
+      "control": "__control/Indicator"
+    },
+    {
+      "id": "Indicator/strokeWidth__static",
+      "component": "Indicator",
+      "attribute": "strokeWidth",
+      "case": "static",
+      "class": "visual",
+      "host": "Indicator",
+      "writtenKey": "strokeWidth",
+      "aliasOf": null,
+      "value": 8,
+      "platforms": [
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Indicator/strokeWidth__static.layout.json",
+      "test": "fixtures/Indicator/strokeWidth__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Indicator"
+    },
+    {
+      "id": "Indicator/trackColor__static",
+      "component": "Indicator",
+      "attribute": "trackColor",
+      "case": "static",
+      "class": "visual",
+      "host": "Indicator",
+      "writtenKey": "trackColor",
+      "aliasOf": null,
+      "value": "#FF0000",
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Indicator/trackColor__static.layout.json",
+      "test": "fixtures/Indicator/trackColor__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Indicator__indicatorStyle-linear"
+    },
+    {
       "id": "GradientView/gradient__static",
       "component": "GradientView",
       "attribute": "gradient",
@@ -23273,6 +24028,116 @@
       "control": "__control/GradientView"
     },
     {
+      "id": "GradientView/orientation__vertical",
+      "component": "GradientView",
+      "attribute": "orientation",
+      "case": "vertical",
+      "class": "visual",
+      "host": "GradientView",
+      "writtenKey": "orientation",
+      "aliasOf": null,
+      "value": "vertical",
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/GradientView/orientation__vertical.layout.json",
+      "test": "fixtures/GradientView/orientation__vertical.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "GradientView/orientation@GradientView__child-e837dcb6",
+      "control": "__control/GradientView__child-e837dcb6"
+    },
+    {
+      "id": "GradientView/orientation__horizontal",
+      "component": "GradientView",
+      "attribute": "orientation",
+      "case": "horizontal",
+      "class": "visual",
+      "host": "GradientView",
+      "writtenKey": "orientation",
+      "aliasOf": null,
+      "value": "horizontal",
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/GradientView/orientation__horizontal.layout.json",
+      "test": "fixtures/GradientView/orientation__horizontal.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "GradientView/orientation@GradientView__child-e837dcb6",
+      "control": "__control/GradientView__child-e837dcb6"
+    },
+    {
+      "id": "GradientView/angle__static",
+      "component": "GradientView",
+      "attribute": "angle",
+      "case": "static",
+      "class": "visual",
+      "host": "GradientView",
+      "writtenKey": "angle",
+      "aliasOf": null,
+      "value": 8,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/GradientView/angle__static.layout.json",
+      "test": "fixtures/GradientView/angle__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/GradientView"
+    },
+    {
+      "id": "GradientView/gradientType__linear",
+      "component": "GradientView",
+      "attribute": "gradientType",
+      "case": "linear",
+      "class": "visual",
+      "host": "GradientView",
+      "writtenKey": "gradientType",
+      "aliasOf": null,
+      "value": "linear",
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/GradientView/gradientType__linear.layout.json",
+      "test": "fixtures/GradientView/gradientType__linear.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "GradientView/gradientType@GradientView",
+      "control": "__control/GradientView"
+    },
+    {
+      "id": "GradientView/gradientType__radial",
+      "component": "GradientView",
+      "attribute": "gradientType",
+      "case": "radial",
+      "class": "visual",
+      "host": "GradientView",
+      "writtenKey": "gradientType",
+      "aliasOf": null,
+      "value": "radial",
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/GradientView/gradientType__radial.layout.json",
+      "test": "fixtures/GradientView/gradientType__radial.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "GradientView/gradientType@GradientView",
+      "control": "__control/GradientView"
+    },
+    {
       "id": "Blur/effectStyle__light",
       "component": "Blur",
       "attribute": "effectStyle",
@@ -23366,6 +24231,28 @@
       "promotedFrom": null,
       "peerGroup": null,
       "control": "__control/Blur__root.backdrop-b5f80259"
+    },
+    {
+      "id": "Blur/intensity__static",
+      "component": "Blur",
+      "attribute": "intensity",
+      "case": "static",
+      "class": "visual",
+      "host": "Blur",
+      "writtenKey": "intensity",
+      "aliasOf": null,
+      "value": 8,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Blur/intensity__static.layout.json",
+      "test": "fixtures/Blur/intensity__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Blur"
     },
     {
       "id": "IconLabel/text__static",
@@ -23831,6 +24718,139 @@
       "control": "__control/IconLabel__icon-off-conformance-sample"
     },
     {
+      "id": "IconLabel/contentDescription__static",
+      "component": "IconLabel",
+      "attribute": "contentDescription",
+      "case": "static",
+      "class": "visual",
+      "host": "IconLabel",
+      "writtenKey": "contentDescription",
+      "aliasOf": null,
+      "value": "sample",
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/IconLabel/contentDescription__static.layout.json",
+      "test": "fixtures/IconLabel/contentDescription__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/IconLabel__icon-off-conformance-sample"
+    },
+    {
+      "id": "IconLabel/fontWeight__static",
+      "component": "IconLabel",
+      "attribute": "fontWeight",
+      "case": "static",
+      "class": "visual",
+      "host": "IconLabel",
+      "writtenKey": "fontWeight",
+      "aliasOf": null,
+      "value": "bold",
+      "platforms": [
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/IconLabel/fontWeight__static.layout.json",
+      "test": "fixtures/IconLabel/fontWeight__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/IconLabel"
+    },
+    {
+      "id": "IconLabel/strikethrough__true",
+      "component": "IconLabel",
+      "attribute": "strikethrough",
+      "case": "true",
+      "class": "visual",
+      "host": "IconLabel",
+      "writtenKey": "strikethrough",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/IconLabel/strikethrough__true.layout.json",
+      "test": "fixtures/IconLabel/strikethrough__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "IconLabel/strikethrough@IconLabel",
+      "control": "__control/IconLabel"
+    },
+    {
+      "id": "IconLabel/strikethrough__false",
+      "component": "IconLabel",
+      "attribute": "strikethrough",
+      "case": "false",
+      "class": "visual",
+      "host": "IconLabel",
+      "writtenKey": "strikethrough",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/IconLabel/strikethrough__false.layout.json",
+      "test": "fixtures/IconLabel/strikethrough__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "IconLabel/strikethrough@IconLabel",
+      "control": "__control/IconLabel"
+    },
+    {
+      "id": "IconLabel/underline__true",
+      "component": "IconLabel",
+      "attribute": "underline",
+      "case": "true",
+      "class": "visual",
+      "host": "IconLabel",
+      "writtenKey": "underline",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/IconLabel/underline__true.layout.json",
+      "test": "fixtures/IconLabel/underline__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "IconLabel/underline@IconLabel",
+      "control": "__control/IconLabel"
+    },
+    {
+      "id": "IconLabel/underline__false",
+      "component": "IconLabel",
+      "attribute": "underline",
+      "case": "false",
+      "class": "visual",
+      "host": "IconLabel",
+      "writtenKey": "underline",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/IconLabel/underline__false.layout.json",
+      "test": "fixtures/IconLabel/underline__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "IconLabel/underline@IconLabel",
+      "control": "__control/IconLabel"
+    },
+    {
       "id": "Web/html__static",
       "component": "Web",
       "attribute": "html",
@@ -23957,6 +24977,580 @@
         ]
       },
       "promotedFrom": "callback"
+    },
+    {
+      "id": "Web/allowCamera__true",
+      "component": "Web",
+      "attribute": "allowCamera",
+      "case": "true",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "allowCamera",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/allowCamera__true.layout.json",
+      "test": "fixtures/Web/allowCamera__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/allowCamera@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/allowCamera__false",
+      "component": "Web",
+      "attribute": "allowCamera",
+      "case": "false",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "allowCamera",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/allowCamera__false.layout.json",
+      "test": "fixtures/Web/allowCamera__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/allowCamera@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/allowDownloads__true",
+      "component": "Web",
+      "attribute": "allowDownloads",
+      "case": "true",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "allowDownloads",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/allowDownloads__true.layout.json",
+      "test": "fixtures/Web/allowDownloads__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/allowDownloads@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/allowDownloads__false",
+      "component": "Web",
+      "attribute": "allowDownloads",
+      "case": "false",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "allowDownloads",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/allowDownloads__false.layout.json",
+      "test": "fixtures/Web/allowDownloads__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/allowDownloads@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/allowGeolocation__true",
+      "component": "Web",
+      "attribute": "allowGeolocation",
+      "case": "true",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "allowGeolocation",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/allowGeolocation__true.layout.json",
+      "test": "fixtures/Web/allowGeolocation__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/allowGeolocation@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/allowGeolocation__false",
+      "component": "Web",
+      "attribute": "allowGeolocation",
+      "case": "false",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "allowGeolocation",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/allowGeolocation__false.layout.json",
+      "test": "fixtures/Web/allowGeolocation__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/allowGeolocation@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/allowMicrophone__true",
+      "component": "Web",
+      "attribute": "allowMicrophone",
+      "case": "true",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "allowMicrophone",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/allowMicrophone__true.layout.json",
+      "test": "fixtures/Web/allowMicrophone__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/allowMicrophone@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/allowMicrophone__false",
+      "component": "Web",
+      "attribute": "allowMicrophone",
+      "case": "false",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "allowMicrophone",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/allowMicrophone__false.layout.json",
+      "test": "fixtures/Web/allowMicrophone__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/allowMicrophone@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/allowModals__true",
+      "component": "Web",
+      "attribute": "allowModals",
+      "case": "true",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "allowModals",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/allowModals__true.layout.json",
+      "test": "fixtures/Web/allowModals__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/allowModals@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/allowModals__false",
+      "component": "Web",
+      "attribute": "allowModals",
+      "case": "false",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "allowModals",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/allowModals__false.layout.json",
+      "test": "fixtures/Web/allowModals__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/allowModals@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/allowPopupsToEscapeSandbox__true",
+      "component": "Web",
+      "attribute": "allowPopupsToEscapeSandbox",
+      "case": "true",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "allowPopupsToEscapeSandbox",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/allowPopupsToEscapeSandbox__true.layout.json",
+      "test": "fixtures/Web/allowPopupsToEscapeSandbox__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/allowPopupsToEscapeSandbox@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/allowPopupsToEscapeSandbox__false",
+      "component": "Web",
+      "attribute": "allowPopupsToEscapeSandbox",
+      "case": "false",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "allowPopupsToEscapeSandbox",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/allowPopupsToEscapeSandbox__false.layout.json",
+      "test": "fixtures/Web/allowPopupsToEscapeSandbox__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/allowPopupsToEscapeSandbox@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/allowZoom__true",
+      "component": "Web",
+      "attribute": "allowZoom",
+      "case": "true",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "allowZoom",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/allowZoom__true.layout.json",
+      "test": "fixtures/Web/allowZoom__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/allowZoom@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/allowZoom__false",
+      "component": "Web",
+      "attribute": "allowZoom",
+      "case": "false",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "allowZoom",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/allowZoom__false.layout.json",
+      "test": "fixtures/Web/allowZoom__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/allowZoom@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/allowsFullScreen__true",
+      "component": "Web",
+      "attribute": "allowsFullScreen",
+      "case": "true",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "allowsFullScreen",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/allowsFullScreen__true.layout.json",
+      "test": "fixtures/Web/allowsFullScreen__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/allowsFullScreen@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/allowsFullScreen__false",
+      "component": "Web",
+      "attribute": "allowsFullScreen",
+      "case": "false",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "allowsFullScreen",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/allowsFullScreen__false.layout.json",
+      "test": "fixtures/Web/allowsFullScreen__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/allowsFullScreen@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/allowsInlineMediaPlayback__true",
+      "component": "Web",
+      "attribute": "allowsInlineMediaPlayback",
+      "case": "true",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "allowsInlineMediaPlayback",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/allowsInlineMediaPlayback__true.layout.json",
+      "test": "fixtures/Web/allowsInlineMediaPlayback__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/allowsInlineMediaPlayback@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/allowsInlineMediaPlayback__false",
+      "component": "Web",
+      "attribute": "allowsInlineMediaPlayback",
+      "case": "false",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "allowsInlineMediaPlayback",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/allowsInlineMediaPlayback__false.layout.json",
+      "test": "fixtures/Web/allowsInlineMediaPlayback__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/allowsInlineMediaPlayback@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/javaScriptCanOpenWindowsAutomatically__true",
+      "component": "Web",
+      "attribute": "javaScriptCanOpenWindowsAutomatically",
+      "case": "true",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "javaScriptCanOpenWindowsAutomatically",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/javaScriptCanOpenWindowsAutomatically__true.layout.json",
+      "test": "fixtures/Web/javaScriptCanOpenWindowsAutomatically__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/javaScriptCanOpenWindowsAutomatically@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/javaScriptCanOpenWindowsAutomatically__false",
+      "component": "Web",
+      "attribute": "javaScriptCanOpenWindowsAutomatically",
+      "case": "false",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "javaScriptCanOpenWindowsAutomatically",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/javaScriptCanOpenWindowsAutomatically__false.layout.json",
+      "test": "fixtures/Web/javaScriptCanOpenWindowsAutomatically__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/javaScriptCanOpenWindowsAutomatically@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/javaScriptEnabled__true",
+      "component": "Web",
+      "attribute": "javaScriptEnabled",
+      "case": "true",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "javaScriptEnabled",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/javaScriptEnabled__true.layout.json",
+      "test": "fixtures/Web/javaScriptEnabled__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/javaScriptEnabled@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/javaScriptEnabled__false",
+      "component": "Web",
+      "attribute": "javaScriptEnabled",
+      "case": "false",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "javaScriptEnabled",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/javaScriptEnabled__false.layout.json",
+      "test": "fixtures/Web/javaScriptEnabled__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/javaScriptEnabled@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/lazyLoad__true",
+      "component": "Web",
+      "attribute": "lazyLoad",
+      "case": "true",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "lazyLoad",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/lazyLoad__true.layout.json",
+      "test": "fixtures/Web/lazyLoad__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/lazyLoad@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/lazyLoad__false",
+      "component": "Web",
+      "attribute": "lazyLoad",
+      "case": "false",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "lazyLoad",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/lazyLoad__false.layout.json",
+      "test": "fixtures/Web/lazyLoad__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Web/lazyLoad@Web",
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/title__static",
+      "component": "Web",
+      "attribute": "title",
+      "case": "static",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "title",
+      "aliasOf": null,
+      "value": "sample",
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/title__static.layout.json",
+      "test": "fixtures/Web/title__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Web"
+    },
+    {
+      "id": "Web/userAgent__static",
+      "component": "Web",
+      "attribute": "userAgent",
+      "case": "static",
+      "class": "visual",
+      "host": "Web",
+      "writtenKey": "userAgent",
+      "aliasOf": null,
+      "value": "sample",
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Web/userAgent__static.layout.json",
+      "test": "fixtures/Web/userAgent__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Web"
     },
     {
       "id": "SafeAreaView/orientation__horizontal",
@@ -24638,6 +26232,28 @@
       "control": "__control/TabView"
     },
     {
+      "id": "__control/Blur",
+      "component": "__control",
+      "attribute": null,
+      "case": "Blur",
+      "class": "visual",
+      "host": "Blur",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Blur.layout.json",
+      "test": "fixtures/__control/Blur.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
       "id": "__control/Blur__root.backdrop-b5f80259",
       "component": "__control",
       "attribute": null,
@@ -24804,6 +26420,28 @@
       "isControl": true
     },
     {
+      "id": "__control/CircleView__height-undeclared_width-undeclared",
+      "component": "__control",
+      "attribute": null,
+      "case": "CircleView",
+      "class": "visual",
+      "host": "CircleView",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/CircleView__height-undeclared_width-undeclared.layout.json",
+      "test": "fixtures/__control/CircleView__height-undeclared_width-undeclared.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
       "id": "__control/Collection",
       "component": "__control",
       "attribute": null,
@@ -24925,6 +26563,33 @@
       "deprecated": null,
       "layout": "fixtures/__control/Collection__columns-2.layout.json",
       "test": "fixtures/__control/Collection__columns-2.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
+      "id": "__control/Collection__layout-flow_width-150",
+      "component": "__control",
+      "attribute": null,
+      "case": "Collection",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Collection__layout-flow_width-150.layout.json",
+      "test": "fixtures/__control/Collection__layout-flow_width-150.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
@@ -25076,6 +26741,28 @@
       "isControl": true
     },
     {
+      "id": "__control/GradientView__child-e837dcb6",
+      "component": "__control",
+      "attribute": null,
+      "case": "GradientView",
+      "class": "visual",
+      "host": "GradientView",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/GradientView__child-e837dcb6.layout.json",
+      "test": "fixtures/__control/GradientView__child-e837dcb6.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
       "id": "__control/IconLabel",
       "component": "__control",
       "attribute": null,
@@ -25196,6 +26883,28 @@
       "isControl": true
     },
     {
+      "id": "__control/Image__height-undeclared_width-undeclared",
+      "component": "__control",
+      "attribute": null,
+      "case": "Image",
+      "class": "visual",
+      "host": "Image",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Image__height-undeclared_width-undeclared.layout.json",
+      "test": "fixtures/__control/Image__height-undeclared_width-undeclared.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
       "id": "__control/Image__no-src",
       "component": "__control",
       "attribute": null,
@@ -25253,7 +26962,8 @@
       "value": null,
       "platforms": [
         "ios",
-        "android"
+        "android",
+        "web"
       ],
       "mode": null,
       "deprecated": null,
@@ -25281,6 +26991,28 @@
       "deprecated": null,
       "layout": "fixtures/__control/Indicator__animating-False.layout.json",
       "test": "fixtures/__control/Indicator__animating-False.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/Indicator__indicatorStyle-linear",
+      "component": "__control",
+      "attribute": null,
+      "case": "Indicator",
+      "class": "visual",
+      "host": "Indicator",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Indicator__indicatorStyle-linear.layout.json",
+      "test": "fixtures/__control/Indicator__indicatorStyle-linear.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
@@ -29892,6 +31624,11 @@
       "component": "Web",
       "attribute": "reloadToken",
       "reason": "binding-only"
+    },
+    {
+      "component": "Web",
+      "attribute": "scrollEnabled",
+      "reason": "behavioral (no visual or assertable effect in v1)"
     },
     {
       "component": "SafeAreaView",

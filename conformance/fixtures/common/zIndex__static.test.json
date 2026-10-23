@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/common/zIndex__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance common.zIndex (static)",
+    "description": "Conformance fixture for 'zIndex' on View (section: common, class: visual). Value under test: 8.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "common"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "zIndex__static",
+      "description": "Conformance fixture for 'zIndex' on View (section: common, class: visual). Value under test: 8.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "common_zIndex__static"
+        }
+      ]
+    }
+  ]
+}

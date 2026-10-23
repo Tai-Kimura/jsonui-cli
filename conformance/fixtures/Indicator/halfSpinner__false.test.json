@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Indicator/halfSpinner__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Indicator.halfSpinner (false)",
+    "description": "Conformance fixture for 'halfSpinner' on Indicator (section: Indicator, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Indicator"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "halfSpinner__false",
+      "description": "Conformance fixture for 'halfSpinner' on Indicator (section: Indicator, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Indicator_halfSpinner__false"
+        }
+      ]
+    }
+  ]
+}

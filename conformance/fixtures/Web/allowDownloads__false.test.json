@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Web/allowDownloads__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Web.allowDownloads (false)",
+    "description": "Conformance fixture for 'allowDownloads' on Web (section: Web, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Web"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "allowDownloads__false",
+      "description": "Conformance fixture for 'allowDownloads' on Web (section: Web, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Web_allowDownloads__false"
+        }
+      ]
+    }
+  ]
+}

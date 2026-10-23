@@ -35,23 +35,19 @@ module RjuiTools
         def build_spinner_class
           classes = []
 
-          # Size from width/height or size string
+          # The spinner's size: a declared length on both axes, else the
+          # medium spinner. wrapContent / matchParent are not lengths (they
+          # were written as `w-[wrapContentpx]`, a class Tailwind does not
+          # have). A legacy `size` never arrives here: the layout normalizer
+          # folds it into width / height on every platform.
           width = attributes['width']
           height = attributes['height']
-          size = attributes['size'] || 'medium'
 
-          if width && height
+          if length?(width) && length?(height)
             classes << "w-[#{width}px]"
             classes << "h-[#{height}px]"
           else
-            case size.to_s.downcase
-            when 'small'
-              classes << 'w-4 h-4'
-            when 'large'
-              classes << 'w-8 h-8'
-            else # medium
-              classes << 'w-6 h-6'
-            end
+            classes << 'w-6 h-6'
           end
 
           # Spinner animation
@@ -75,6 +71,10 @@ module RjuiTools
           end
 
           classes.join(' ')
+        end
+
+        def length?(value)
+          value.is_a?(Numeric) || value.to_s.match?(/\A\d+(\.\d+)?\z/)
         end
       end
     end

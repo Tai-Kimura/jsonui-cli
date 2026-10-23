@@ -160,6 +160,15 @@ def plan_definitions(
 # --------------------------------------------------------------------------- #
 
 
+def _write_size(target: dict[str, Any], base: dict[str, Any]) -> None:
+    """The target's width / height: the base's, wrapContent when it has none,
+    and no key at all for rules.UNDECLARED."""
+    for axis in ("width", "height"):
+        value = base.get(axis, "wrapContent")
+        if value != rules.UNDECLARED:
+            target[axis] = value
+
+
 def build_layout(plan: AttributePlan, case: CasePlan, *, source_label: str) -> dict:
     """One minimal layout: root View + (anchor?) + target component."""
     extra = rules.base_attrs_for(plan.host, plan.attribute, case.name)
@@ -172,8 +181,7 @@ def build_layout(plan: AttributePlan, case: CasePlan, *, source_label: str) -> d
     children = base.pop("child", None) or rules.BASE_CHILDREN.get(plan.host)
 
     target: dict[str, Any] = {"type": plan.host, "id": rules.TARGET_ID}
-    target["width"] = base.get("width", "wrapContent")
-    target["height"] = base.get("height", "wrapContent")
+    _write_size(target, base)
     for key, value in base.items():
         if key in ("width", "height"):
             continue
@@ -583,8 +591,7 @@ def build_control_layout(
     children = base.pop("child", None) or rules.BASE_CHILDREN.get(host)
 
     target: dict[str, Any] = {"type": host, "id": rules.TARGET_ID}
-    target["width"] = base.get("width", "wrapContent")
-    target["height"] = base.get("height", "wrapContent")
+    _write_size(target, base)
     for key, value in base.items():
         if key not in ("width", "height"):
             target[key] = value

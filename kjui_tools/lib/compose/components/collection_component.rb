@@ -2319,16 +2319,14 @@ module KjuiTools
           h_spacing = json_data['columnSpacing'] || json_data['itemSpacing'] || 0
           v_spacing = json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['itemSpacing'] || 0
 
-          # Flow alignment
-          flow_alignment = json_data['flowAlignment'] || 'leading'
-          arrangement = case flow_alignment
-          when 'center'
-            'Arrangement.Center'
-          when 'trailing', 'end'
-            'Arrangement.End'
-          else
-            'Arrangement.Start'
-          end
+          # Flow alignment: where each row's cells sit, as the alignment of the
+          # rows' spacedBy (Start, the default, needs none). It was computed
+          # into an `arrangement` nothing read, so every value drew leading.
+          align_arg = case json_data['flowAlignment']
+                      when 'center' then ', Alignment.CenterHorizontally'
+                      when 'trailing', 'end' then ', Alignment.End'
+                      else ''
+                      end
 
           # Build modifiers
           modifiers = []
@@ -2402,7 +2400,7 @@ module KjuiTools
           per_section = items_bound && (sections.count { |section| section['cell'] } > 1 ||
                                         sections.any? { |section| section['header'] || section['footer'] })
           container = per_section ? 'Column' : 'FlowRow'
-          flow_arrangements = "horizontalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(h_spacing)}), " \
+          flow_arrangements = "horizontalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(h_spacing)}#{align_arg}), " \
                               "verticalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(v_spacing)})"
 
           outer_depth = depth
@@ -2447,7 +2445,7 @@ module KjuiTools
             code += Helpers::ModifierBuilder.format(modifiers, depth)
           end
           unless per_section
-            code += ",\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(h_spacing)}),", depth + 1)
+            code += ",\n" + indent("horizontalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(h_spacing)}#{align_arg}),", depth + 1)
           end
           code += (per_section ? ",\n" : "\n") + indent("verticalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(v_spacing)})", depth + 1)
           code += "\n" + indent(") {", depth)

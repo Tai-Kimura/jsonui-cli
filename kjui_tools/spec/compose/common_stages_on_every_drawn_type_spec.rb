@@ -448,6 +448,24 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
     end
   end
 
+  # flowAlignment places each flow row's cells: the alignment of the rows'
+  # spacedBy, none for leading (the default). It was read into a variable
+  # nothing used, so every value drew leading. (Compiled with the flow routes
+  # of collection_cell_first_frame_spec.rb.)
+  it 'draws a flow row at the declared alignment' do
+    { 'leading' => nil, 'center' => 'Alignment.CenterHorizontally', 'trailing' => 'Alignment.End', 'end' => 'Alignment.End' }
+      .each do |value, alignment|
+        code = emit.call({ 'type' => 'Collection', 'items' => [], 'layout' => 'flow', 'flowAlignment' => value })
+        arrangement = code[/horizontalArrangement = Arrangement\.spacedBy\([^\n]*\)/]
+        expect(arrangement).not_to be_nil, code
+        if alignment
+          expect(arrangement).to include(", #{alignment})"), "#{value}: #{arrangement}"
+        else
+          expect(arrangement).not_to include('Alignment.'), "#{value}: #{arrangement}"
+        end
+      end
+  end
+
   # The emits, whole, with every stage declared at once, type-check against
   # Compose's names and types (spec/support/compose_stub_universe.rb
   # `common_stages`). ⚠️ Against stubs: this says "well-typed Kotlin", not

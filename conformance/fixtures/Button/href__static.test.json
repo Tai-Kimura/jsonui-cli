@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Button/href__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Button.href (static)",
+    "description": "Conformance fixture for 'href' on Button (section: Button, class: visual). Value under test: \"sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Button"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "href__static",
+      "description": "Conformance fixture for 'href' on Button (section: Button, class: visual). Value under test: \"sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Button_href__static"
+        }
+      ]
+    }
+  ]
+}

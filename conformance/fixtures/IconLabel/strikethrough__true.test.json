@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/IconLabel/strikethrough__true.layout.json"
+  },
+  "metadata": {
+    "name": "conformance IconLabel.strikethrough (true)",
+    "description": "Conformance fixture for 'strikethrough' on IconLabel (section: IconLabel, class: visual). Value under test: true.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "IconLabel"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "strikethrough__true",
+      "description": "Conformance fixture for 'strikethrough' on IconLabel (section: IconLabel, class: visual). Value under test: true.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "IconLabel_strikethrough__true"
+        }
+      ]
+    }
+  ]
+}

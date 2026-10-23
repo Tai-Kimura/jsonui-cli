@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/TextView/autoFocus__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance TextView.autoFocus (false)",
+    "description": "Conformance fixture for 'autoFocus' on TextView (section: TextView, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "TextView"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "autoFocus__false",
+      "description": "Conformance fixture for 'autoFocus' on TextView (section: TextView, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "TextView_autoFocus__false"
+        }
+      ]
+    }
+  ]
+}

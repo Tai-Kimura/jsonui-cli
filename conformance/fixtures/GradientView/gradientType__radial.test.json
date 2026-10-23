@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/GradientView/gradientType__radial.layout.json"
+  },
+  "metadata": {
+    "name": "conformance GradientView.gradientType (radial)",
+    "description": "Conformance fixture for 'gradientType' on GradientView (section: GradientView, class: visual). Value under test: \"radial\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "GradientView"
+    ]
+  },
+  "platform": [
+    "web"
+  ],
+  "cases": [
+    {
+      "name": "gradientType__radial",
+      "description": "Conformance fixture for 'gradientType' on GradientView (section: GradientView, class: visual). Value under test: \"radial\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "GradientView_gradientType__radial"
+        }
+      ]
+    }
+  ]
+}

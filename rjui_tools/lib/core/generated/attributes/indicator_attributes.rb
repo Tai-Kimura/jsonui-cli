@@ -24,8 +24,6 @@ module JsonUI
         { name: 'hidesWhenStopped', kind: :boolean }.freeze,
         # Indicator style: `small` / `medium` / `large` are the spinner's size and `linear` a bar instead of a spinner. Each size is the platform's own value, `small` and `large` as well as `medium` (2026-10-05 user ruling): the faces need not draw the same small or large spinner. A declared width / height wins over the style's size. The legacy spellings `style` (naming one of these values) and `size` (a length) are folded by the layout normalizer, with a warning: `style` into this attribute, `size` into width and height.
         { name: 'indicatorStyle', kind: :enum, values: ['small', 'medium', 'large', 'linear'].freeze }.freeze,
-        # small, medium (default) or large when width/height are not given (rjui indicator_converter).
-        { name: 'size', kind: :string }.freeze,
         # Width of the spinner's stroke (kjui indicator_component: circular only; rjui indicator_converter: border width, 2 by default).
         { name: 'strokeWidth', kind: :number }.freeze,
         # Track colour of a linear indicator (kjui indicator_component).

@@ -127,7 +127,7 @@ NARROWED_IN_2_3_22 = {
     ("Blur", "intensity"), ("Button", "href"), ("CircleView", "size"), ("Collection", "flowAlignment"),
     ("GradientView", "angle"), ("GradientView", "gradientType"), ("GradientView", "orientation"),
     ("IconLabel", "contentDescription"), ("IconLabel", "fontWeight"), ("IconLabel", "strikethrough"),
-    ("IconLabel", "underline"), ("Image", "size"), ("Indicator", "halfSpinner"), ("Indicator", "size"),
+    ("IconLabel", "underline"), ("Image", "size"), ("Indicator", "halfSpinner"),
     ("Indicator", "strokeWidth"), ("Indicator", "trackColor"), ("NetworkImage", "circle"), ("NetworkImage", "size"),
     ("Progress", "maximumValue"), ("Progress", "progressHeight"), ("ScrollView", "contentInset"), ("Segment", "fontSize"),
     ("SelectBox", "cancelButtonBackgroundColor"), ("SelectBox", "cancelButtonTextColor"), ("Slider", "thumbTintColor"),

@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/CircleView/size__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance CircleView.size (static)",
+    "description": "Conformance fixture for 'size' on CircleView (section: CircleView, class: visual). Value under test: 3.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "CircleView"
+    ]
+  },
+  "platform": [
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "size__static",
+      "description": "Conformance fixture for 'size' on CircleView (section: CircleView, class: visual). Value under test: 3.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "CircleView_size__static"
+        }
+      ]
+    }
+  ]
+}

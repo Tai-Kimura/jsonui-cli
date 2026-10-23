@@ -27,11 +27,11 @@ module JsonUI
         # Gradient direction
         { name: 'gradientDirection', kind: :enum, values: ['Vertical', 'Horizontal', 'Oblique'].freeze }.freeze,
         # linear (default) or radial (rjui gradient_view_converter).
-        { name: 'gradientType', kind: :string }.freeze,
+        { name: 'gradientType', kind: :enum, values: ['linear', 'radial'].freeze }.freeze,
         # Color stop locations (0.0-1.0)
         { name: 'locations', kind: :array }.freeze,
         # How the children stack inside the gradient: vertical (default, a flex column) or horizontal (rjui gradient_view_converter). Not the gradient's direction — that is gradientDirection.
-        { name: 'orientation', kind: :string }.freeze,
+        { name: 'orientation', kind: :enum, values: ['vertical', 'horizontal'].freeze }.freeze,
         # Unit coordinates in the view's own box for where the gradient starts: [x, y] or {"x": x, "y": y}, with 0 = leading/top, 0.5 = centre/middle, 1 = trailing/bottom. THREE faces read this key three incompatible ways today: sjui gradient_view_converter.rb:107-109 wants an OBJECT ({x, y}), rjui gradient_view_converter.rb:72-73 destructures an ARRAY ([x, y]), and kjui gradientview_component.rb:58-59 expects a STRING edge name ('top'). The two coordinate forms are declared because both are real coordinate spellings of the same thing; the android string form is NOT declared - it is `gradientDirection` semantics written under the wrong key, and is filed as a defect rather than blessed here. Declaring BOTH startPoint and endPoint replaces gradientDirection entirely; declaring only one is ignored and gradientDirection still decides (plan 51-E). [accepts: array | object]
         { name: 'startPoint', kind: :raw }.freeze,
       ].freeze

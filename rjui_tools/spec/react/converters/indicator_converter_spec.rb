@@ -22,27 +22,25 @@ RSpec.describe RjuiTools::React::Converters::IndicatorConverter do
       end
     end
 
-    context 'with size small' do
-      it 'applies small size' do
-        converter = create_converter({ 'class' => 'Indicator', 'size' => 'small' })
-        result = converter.convert
-        expect(result).to include('w-4 h-4')
+    # `size` is not an Indicator attribute: the layout normalizer folds it into
+    # width / height before any converter runs, so the converter draws the
+    # medium spinner for it rather than reading a second spelling.
+    context 'with a legacy size' do
+      it 'draws the medium spinner and reads no size' do
+        %w[small large].each do |size|
+          result = create_converter({ 'class' => 'Indicator', 'size' => size }).convert
+          expect(result).to include('w-6 h-6')
+          expect(result).not_to include('w-4 h-4')
+          expect(result).not_to include('w-8 h-8')
+        end
       end
     end
 
-    context 'with size medium' do
-      it 'applies medium size' do
-        converter = create_converter({ 'class' => 'Indicator', 'size' => 'medium' })
-        result = converter.convert
+    context 'with wrapContent width/height' do
+      it 'draws the medium spinner, not a px class of the keyword' do
+        result = create_converter({ 'class' => 'Indicator', 'width' => 'wrapContent', 'height' => 'wrapContent' }).convert
         expect(result).to include('w-6 h-6')
-      end
-    end
-
-    context 'with size large' do
-      it 'applies large size' do
-        converter = create_converter({ 'class' => 'Indicator', 'size' => 'large' })
-        result = converter.convert
-        expect(result).to include('w-8 h-8')
+        expect(result).not_to include('wrapContentpx')
       end
     end
 

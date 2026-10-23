@@ -42,6 +42,8 @@ RSpec.describe 'kjui codegen: a Collection cell composes with its own data from 
     'trackedGrid' => { 'columns' => 2, 'cellIdProperty' => 'id', 'autoChangeTrackingId' => true },
     'keyed' => { 'cellIdProperty' => 'id' },
     'flow' => { 'layout' => 'flow' },
+    'flowCentred' => { 'layout' => 'flow', 'flowAlignment' => 'center' },
+    'flowAtTheEnd' => { 'layout' => 'flow', 'flowAlignment' => 'trailing' },
     'row' => { 'layout' => 'horizontal', 'lazy' => 'none' },
     'paging' => { 'layout' => 'horizontal', 'paging' => true },
     'classList' => { 'sections' => nil, 'cellClasses' => ['ACell'], 'headerClasses' => ['HCell'], 'footerClasses' => ['FCell'] }
@@ -83,8 +85,14 @@ RSpec.describe 'kjui codegen: a Collection cell composes with its own data from 
     fun Modifier.semantics(properties: SemanticsPropertyReceiver.() -> Unit): Modifier = this
     class Dp
     val Int.dp: Dp get() = Dp()
-    interface Alignment { interface Vertical; companion object { val TopStart = object : Alignment {}; val Top = object : Vertical {} } }
-    class Arrangement { companion object { fun spacedBy(space: Dp): Arrangement = Arrangement() } }
+    interface Alignment {
+        interface Vertical; interface Horizontal
+        companion object {
+            val TopStart = object : Alignment {}; val Top = object : Vertical {}
+            val CenterHorizontally = object : Horizontal {}; val End = object : Horizontal {}
+        }
+    }
+    class Arrangement { companion object { fun spacedBy(space: Dp): Arrangement = Arrangement(); fun spacedBy(space: Dp, alignment: Alignment.Horizontal): Arrangement = Arrangement() } }
     class BoxWithConstraintsScope { val constraints = Constraints() }
     fun BoxWithConstraints(modifier: Modifier = Modifier, content: BoxWithConstraintsScope.() -> Unit) { BoxWithConstraintsScope().content() }
     fun Box(modifier: Modifier = Modifier, contentAlignment: Alignment = Alignment.TopStart, content: () -> Unit) { content() }

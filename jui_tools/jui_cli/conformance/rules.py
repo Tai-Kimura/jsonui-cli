@@ -450,6 +450,12 @@ CONFORMANCE_ASSET_PIXELS = 96
 #: :data:`CONFORMANCE_ASSET_PIXELS` square.
 IMAGE_ASSET_NAME = "conformance_sample"
 
+#: A base width / height of UNDECLARED writes no such key on the target: the
+#: fixture builders otherwise default an absent axis to wrapContent, and an
+#: attribute read only when the node declares no size at all (kjui's legacy
+#: `size` on Image and CircleView) could never be reached.
+UNDECLARED = "undeclared"
+
 #: Distinct second asset for STATE images (NetworkImage placeholder/hint/
 #: loadingImage/errorImage). The control's base carries defaultImage with
 #: the primary asset; giving state images the same asset made every state
@@ -2250,6 +2256,28 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # and the branch was unreachable. Unblocked by E declaring `animating`
     # (the attribute existed in three converters and in no schema).
     "Indicator.hidesWhenStopped": {"animating": False},
+    # A linear indicator's track: kjui reads `trackColor` on the linear bar
+    # only (indicator_component.rb), and the base indicator is a spinner.
+    "Indicator.trackColor": {"indicatorStyle": "linear"},
+    # The legacy diameter / edge length: kjui reads `size` only when the node
+    # declares neither width nor height (image_component.rb,
+    # circleview_component.rb), and every base here declares both — so the
+    # fixture writes none (UNDECLARED), not wrapContent.
+    "Image.size": {"width": UNDECLARED, "height": UNDECLARED},
+    "CircleView.size": {"width": UNDECLARED, "height": UNDECLARED},
+    # The icon's accessibility text: kjui writes it on the icon's Image, and
+    # the base IconLabel is text-only (same family as iconSize above).
+    "IconLabel.contentDescription": {"icon_off": IMAGE_ASSET_NAME},
+    # A flow row's alignment needs a flow layout whose rows leave room — the
+    # `Collection.layout` width that makes flow wrap.
+    "Collection.flowAlignment": {"layout": "flow", "width": 150},
+    # How rjui stacks a GradientView's children: a gradient with none has
+    # nothing to stack (three, as SafeAreaView's orientation needs).
+    "GradientView.orientation": {"child": [
+        {"type": "View", "id": "box_a", "width": 20, "height": 20, "background": "#FFFFFF"},
+        {"type": "View", "id": "box_b", "width": 20, "height": 20, "background": "#000000"},
+        {"type": "View", "id": "box_c", "width": 20, "height": 20, "background": "#00AA00"},
+    ]},
     # kjui puts the label on whichever side `labelPosition` names, but only on
     # the labelled path (switch_component.rb:144/170) — and a Switch's label is
     # `labelAttributes.text`. Switch has no BASE_ATTRS entry at all, so there
