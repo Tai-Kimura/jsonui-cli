@@ -18,8 +18,8 @@ require 'react/tailwind_mapper'
 # the `@{…}` text into an inline style (CircleView's border, Blur's
 # background) or wrote the binding inline over the base's custom property
 # (CircleView's background). A text input's bound border went inline as
-# borderColor, which beat the control's own state border (SelectBox's
-# focus:border-*), the shape bound_colors_keep_state_colors_spec fixed for
+# borderColor, which beat the control's own state classes (SelectBox's
+# focus:border-* until 2.3.22), the shape bound_colors_keep_state_colors_spec fixed for
 # background and fontColor; TextView then wrote it inline once more.
 #
 # The family, measured: every converter, every colour attribute its
@@ -215,8 +215,9 @@ RSpec.describe 'rjui bound colours reach a custom property, never a colour name 
                })
     red = rgb('#ff0000')
     expect(got.slice('sb', 'tf', 'tv', 'ind', 'indHalf', 'cv', 'cvb', 'blur')).to eq(%w[sb tf tv ind indHalf cv cvb blur].to_h { |k| [k, red] }), got.inspect
-    # focus:border-blue-500 shows over the bound border as over the fixed one
-    expect(got['sbFocus']).not_to eq(red), got.inspect
+    # focused, the bound border is the fixed one's: its colour, under a ring (a SelectBox's focus is the ring since
+    # 2.3.22, ticket 2026-10-24-rjui-selectbox-focus-border-hides-bound-border-color; it was a blue border over both)
+    expect(got['sbFocus']).to eq(red), got.inspect
     expect(got['sbFocus']).to eq(got['sbFixedFocus']), got.inspect
   end
 

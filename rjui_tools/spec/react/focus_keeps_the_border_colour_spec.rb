@@ -5,6 +5,7 @@ require 'json'
 require 'open3'
 require 'tmpdir'
 require_relative '../support/headless_chromium'
+require_relative '../support/typescript_compiler'
 require 'react/converters/select_box_converter'
 require 'react/converters/text_field_converter'
 
@@ -40,8 +41,8 @@ RSpec.describe 'rjui: a focused input keeps its border colour (in a browser)' do
     %w[.bin/esbuild .bin/tailwindcss playwright].all? { |p| File.exist?(File.join(node_modules, p)) }
   end
 
-  def jsx(id, converter, json)
-    converter.new({ 'id' => id }.merge(json), { 'use_tailwind' => true }).convert.strip
+  def jsx(id, converter, json, typescript: false)
+    converter.new({ 'id' => id }.merge(json), { 'use_tailwind' => true, 'typescript' => typescript }).convert.strip
   end
 
   def rgb(hex) = "rgb(#{hex.delete('#').scan(/../).map { |h| h.to_i(16) }.join(', ')})"
@@ -133,5 +134,28 @@ RSpec.describe 'rjui: a focused input keeps its border colour (in a browser)' do
       expect(out).to include('focus:ring-2 focus:ring-blue-500')
       expect(out.include?('focus:border-blue-500')).to eq(want == :blue), "#{id}: #{out[/className=[^>]*/]}"
     end
+  end
+
+  it 'the SelectBoxes compile as TypeScript', :typescript_compile do
+    elements = FocusKeepsTheBorder::CASES.select { |_, (conv, _, _)| conv == FocusKeepsTheBorder::CONV::SelectBoxConverter }
+                                         .map { |id, (conv, json, _)| jsx(id, conv, json, typescript: true) }
+    # the elements typed as far as their handlers need (control_onclick_spec.rb's shape), so the arrows' events
+    # are typed by lib.dom
+    ambient = <<~TS
+      declare namespace JSX {
+        interface Element {}
+        interface ElementChildrenAttribute { children: {} }
+        interface IntrinsicElements {
+          input: { [attr: string]: unknown; onClick?: (e: { currentTarget: HTMLInputElement }) => void;
+                   onChange?: (e: { target: HTMLInputElement }) => void };
+          select: { [attr: string]: unknown; onChange?: (e: { target: HTMLSelectElement }) => void };
+          option: { [attr: string]: unknown };
+        }
+      }
+      declare namespace React { type CSSProperties = { [property: string]: string | number | undefined } }
+      declare const data: { c: string; v: string; onVChange?: (value: string) => void };
+      declare const ColorManager: { resolveColor(c: unknown): string };
+    TS
+    expect(TypeScriptCompiler.component(*elements)).to compile_as_typescript.with_ambient(ambient)
   end
 end
