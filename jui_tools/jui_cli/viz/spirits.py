@@ -72,9 +72,12 @@ READ_EXTENSIONS = (
     "KHR_materials_emissive_strength", "EXT_materials_bump", "EXT_mesh_gpu_instancing",
 )
 
-# A field's kind: ("num", lo, hi), ("int", lo, hi), "color", "bool", ("enum", choices), "vec3"
+# A field's kind: ("num", lo, hi), ("int", lo, hi), "color", "bool", ("enum", choices), ("vec3", lo, hi)
 _NUM = lambda lo, hi: ("num", lo, hi)  # noqa: E731
 _INT = lambda lo, hi: ("int", lo, hi)  # noqa: E731
+#: an offset (the robot's units) and a rotation (degrees, as spiritPut turns it: a quarter turn is 90)
+_OFFSET = ("vec3", -10, 10)
+_DEGREES = ("vec3", -360, 360)
 
 #: the effects the page draws (spirit.json effects.<name>), with the fields each takes
 EFFECTS = {
@@ -96,10 +99,10 @@ MATERIAL_FIELDS = {
 }
 OUTLINE_FIELDS = {"color": "color", "width": _NUM(0, 0.2)}
 SPIRIT_FIELDS = {
-    "file": "file", "at": ("enum", ANCHORS), "offset": "vec3", "rotate": "vec3", "scale": _NUM(0.1, 5),
+    "file": "file", "at": ("enum", ANCHORS), "offset": _OFFSET, "rotate": _DEGREES, "scale": _NUM(0.1, 5),
     "opacity": _NUM(0, 1), "tint": "color", "clips": "clips", "material": "material", "outline": "outline",
 }
-PART_FIELDS = {"file": "file", "at": ("enum", ANCHORS), "offset": "vec3", "rotate": "vec3", "scale": _NUM(0.1, 5)}
+PART_FIELDS = {"file": "file", "at": ("enum", ANCHORS), "offset": _OFFSET, "rotate": _DEGREES, "scale": _NUM(0.1, 5)}
 ROBOT_FIELDS = {"hide": "hide", "eyes": "eyes", "pose": ("enum", POSES), "tag": ("enum", TAG_PLACES)}
 EYES_FIELDS = {"shape": ("enum", EYE_SHAPES), "color": "color"}
 BUBBLE_FIELDS = {
@@ -340,10 +343,10 @@ class _Check:
         elif kind == "color":
             if not isinstance(value, str) or not COLOR_RE.fullmatch(value):
                 self.bad(where, f"{value!r} is not a colour (#rrggbb)")
-        elif kind == "vec3":
+        elif isinstance(kind, tuple) and kind[0] == "vec3":
             if (not isinstance(value, list) or len(value) != 3
-                    or not all(isinstance(v, (int, float)) and not isinstance(v, bool) and -10 <= v <= 10 for v in value)):
-                self.bad(where, "is not three numbers from -10 to 10")
+                    or not all(isinstance(v, (int, float)) and not isinstance(v, bool) and kind[1] <= v <= kind[2] for v in value)):
+                self.bad(where, f"is not three numbers from {kind[1]} to {kind[2]}")
         elif kind == "version":
             if value != 1:
                 self.bad(where, f"{value!r} (1 is read)")
