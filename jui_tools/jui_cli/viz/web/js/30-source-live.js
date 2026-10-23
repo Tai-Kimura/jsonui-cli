@@ -400,6 +400,9 @@ function liveSpecRow(x) {
   const row = {
     id: x.id, screen: String(x.name || ''), name: String(x.name || ''), project: x.projectId, file: String(x.file || ''),
     app: String(x.app || ''), specDir: String(x.specDir || ''),   // the app inside the room that holds the spec
+    // the checkout it is read from, when the room shows a worktree of its app: {branch, worktree?} (a worktree's own row has worktree)
+    checkout: x.checkout && typeof x.checkout.branch === 'string'
+      ? { branch: x.checkout.branch, worktree: typeof x.checkout.worktree === 'string' ? x.checkout.worktree : '' } : null,
     advancedAt: Number.isFinite(x.advancedAt) ? x.advancedAt : 0,   // when it last moved on: the lists' order (specNewer)
     advancedBy: typeof x.advancedBy === 'string' ? x.advancedBy : '',   // what moved it: spec / layout / test (specWhen)
     doc: prev && prev.docAt === x.updatedAt ? prev.doc : (prev ? prev.doc : null), docAt: prev ? prev.docAt : null, updatedAt: x.updatedAt,
@@ -414,10 +417,14 @@ function liveSpecRow(x) {
 function rebuildSpecs() {
   const list = Array.isArray(LIVE.slices.specs) ? LIVE.slices.specs : [];
   const rows = list.filter((x) => x && x.id && PROJECT[x.projectId]).map(liveSpecRow);
-  rows.sort((a, b) => (PROJECT[a.project].order - PROJECT[b.project].order) || a.file.localeCompare(b.file));
+  rows.sort((a, b) => (PROJECT[a.project].order - PROJECT[b.project].order) || a.file.localeCompare(b.file) || a.id.localeCompare(b.id));
+  // the spec open on the whiteboard is kept by its id: a row that comes or goes (a worktree shown or gone) moves the
+  // others' places, and a gone spec leaves the overview (ticket 2026-10-23-jui-viz-spec-board-shows-worktree-in-progress)
+  const openId = typeof wb !== 'undefined' && wb.idx >= 0 && SPECS[wb.idx] ? SPECS[wb.idx].id : null;
   SPECS.splice(0, SPECS.length, ...rows);
   for (const k of Object.keys(SPEC_INDEX)) delete SPEC_INDEX[k];
   SPECS.forEach((x, i) => { SPEC_INDEX[x.id] = i; });
+  if (openId !== null) wb.idx = openId in SPEC_INDEX ? SPEC_INDEX[openId] : -1;
   for (const k of Object.keys(SCREEN_JA)) delete SCREEN_JA[k];
   for (const x of SPECS) if (x.doc && x.doc.metadata) SCREEN_JA[x.doc.metadata.name] = x.doc.metadata.displayName || x.name;
 }

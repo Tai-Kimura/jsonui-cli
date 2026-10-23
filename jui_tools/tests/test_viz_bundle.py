@@ -191,6 +191,7 @@ BUILDERS = {
         "prose",   # 2.3.20: a prose field, esc()'d or a Markdown placeholder (ticket 2026-10-23-viz-spec-sheet-shows-md-reference-raw)
         "foldLine", "countB",   # the board's strips folded: a card's line and a strip's count (ticket 2026-10-22-viz-taskboard-top-strips-hide-the-columns)
         "rbMovedHTML",   # the card's mark when its robot moved and the view did not follow (ticket 2026-10-21-jui-viz-camera-does-not-follow-robot-walking-rooms)
+        "coTag",   # a spec's checkout, its branch (ticket 2026-10-23-jui-viz-spec-board-shows-worktree-in-progress)
     },
     "51-denials.js": {"denialHTML"},   # a call stopped by auto mode (ticket 2026-10-20-jui-viz-auto-mode-denial-approve-from-page)
     "53-devices.js": {"devWhoHTML", "devRowHTML", "devLoadHTML"},

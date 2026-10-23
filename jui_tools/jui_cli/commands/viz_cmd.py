@@ -743,18 +743,26 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     ctx.world = world
     ctx.publish = world.publish
 
+    watched: dict[str, object] = {}   # project id -> its observer (a worktree shown or gone: watched again)
+
     def watch_project(project) -> None:
         from ..viz.sources import jsonui_project
 
         def on_change(path: str) -> None:
             loop.call_soon_threadsafe(lambda: (world.file_changed(project.project_id, path, now_ms()), world.publish()))
 
+        old = watched.pop(project.project_id, None)
+        if old is not None:
+            old.stop()
+            observers.remove(old)
         observer = jsonui_project.watch(project, on_change)
         if observer is not None:
             observers.append(observer)
+            watched[project.project_id] = observer
 
     if not replay:
         world.on_project_loaded = watch_project
+        world.on_sources_changed = watch_project
 
     def on_hook(payload: dict) -> None:
         at = now_ms()

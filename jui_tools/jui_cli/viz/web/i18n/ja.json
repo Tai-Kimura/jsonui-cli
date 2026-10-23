@@ -1472,6 +1472,8 @@
   "panel.flow.actual": "実際の大きさ",
   "panel.flow.fit": "幅に合わせる",
   "panel.app.root": "直下",
+  "panel.co.worktree": "worktree で作っている途中の spec（{path}）",
+  "panel.co.room": "部屋のチェックアウトの spec",
   "panel.ws.close": "一覧を閉じる",
   "panel.ws.open": "spec 一覧",
   "panel.app.filter": "アプリで絞り込む",

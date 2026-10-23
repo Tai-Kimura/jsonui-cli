@@ -1502,6 +1502,8 @@
   "panel.flow.actual": "Actual size",
   "panel.flow.fit": "Fit to width",
   "panel.app.root": "Top level",
+  "panel.co.worktree": "A spec in progress in a worktree ({path})",
+  "panel.co.room": "A spec in the room's checkout",
   "panel.ws.close": "Close the list",
   "panel.ws.open": "Spec list",
   "panel.app.filter": "Filter by app",

@@ -301,6 +301,10 @@ class Source:
     test_file_keys: dict = field(default_factory=dict)   # "screens/login.test.json" -> spec keys
     test_file_paths: dict = field(default_factory=dict)  # the same key -> the file under the room ("tests/user/screens/login.test.json")
     android_app_id: str | None = None                    # test.artifacts.android.appId: ties a saved Android result
+    # A checkout other than the room's (a git worktree a session works in, outside the room): {"branch", "worktree"};
+    # the room's own app, while one of its worktrees is shown beside it: {"branch"}. None otherwise.
+    checkout: dict | None = None
+    base: str | None = None   # a worktree's app: the key of the room's app it is a checkout of
 
     @classmethod
     def from_config(cls, key: str, config_path: Path) -> "Source":
@@ -353,6 +357,81 @@ def discover_sources(root: Path) -> list[Source]:
     return sources
 
 
+# ---------------------------------------------------------------- the checkouts sessions work in (git worktrees)
+#
+# A session often works in a git worktree of a room's repository outside the room (a scratchpad, ~/…/wt/x): its
+# specs reach the room's board only after a merge and a pull (ticket 2026-10-23-jui-viz-spec-board-shows-worktree-in-
+# progress). The room shows them beside its own, each worktree an app of its own ("<app>@<branch>"), but only a
+# worktree a session that has not ended is working in: a machine keeps many worktrees no one works in (gates, the
+# integration's, a recording's). git is read, never written, and never run: the worktree list is the repository's
+# own files (<git dir>/worktrees/<name>/gitdir names each worktree's .git, its HEAD its branch), as `git worktree
+# list` reads them.
+
+def git_dir(folder: Path) -> Path | None:
+    """The git directory of a checkout: its .git folder, or the one a .git file points at (a worktree, a submodule)."""
+    dot = folder / ".git"
+    try:
+        if dot.is_dir():
+            return dot
+        if dot.is_file():
+            line = dot.read_text(encoding="utf-8").strip()
+            if line.startswith("gitdir:"):
+                target = Path(line[len("gitdir:"):].strip())
+                return target if target.is_absolute() else (folder / target).resolve()
+    except OSError:
+        pass
+    return None
+
+
+def head_branch(gitdir: Path) -> str:
+    """The branch a git directory's HEAD names, else its commit (8 characters); "?" when it cannot be read."""
+    try:
+        head = (gitdir / "HEAD").read_text(encoding="utf-8").strip()
+    except OSError:
+        return "?"
+    if head.startswith("ref: refs/heads/"):
+        return head[len("ref: refs/heads/"):]
+    return head[:8] if head else "?"
+
+
+def repo_root(folder: Path, ceiling: Path) -> Path | None:
+    """The checkout an app's folder is in: the nearest folder from it up to ``ceiling`` holding .git."""
+    for candidate in (folder, *folder.parents):
+        if (candidate / ".git").exists():
+            return candidate
+        if candidate == ceiling:
+            break
+    return None
+
+
+def worktrees(repo: Path) -> list[tuple[Path, str]]:
+    """(folder, branch) of each linked worktree of a checkout's repository whose folder is still there."""
+    gd = git_dir(repo)
+    if gd is None:
+        return []
+    out = []
+    try:
+        admins = sorted(p for p in (gd / "worktrees").iterdir() if p.is_dir())
+    except OSError:
+        return []
+    for admin in admins:
+        try:
+            dot = Path((admin / "gitdir").read_text(encoding="utf-8").strip())
+        except OSError:
+            continue
+        folder = dot.parent
+        if folder.is_dir():
+            out.append((folder, head_branch(admin)))
+    return out
+
+
+def _real(path: Path) -> Path:
+    try:
+        return Path(os.path.realpath(path))
+    except OSError:
+        return path
+
+
 @dataclass
 class SpecEntry:
     path: Path
@@ -373,6 +452,7 @@ class JsonUIProject:
         raw = json.loads((self.root / CONFIG_NAME).read_text(encoding="utf-8"))
         self.config = raw if isinstance(raw, dict) else {}
         self.sources = discover_sources(self.root)
+        self.base_sources = list(self.sources)   # the room's own apps; self.sources adds the worktrees shown
         self.specs: dict[str, SpecEntry] = {}
         self._layout_cache: dict[Path, tuple[int, list[dict]]] = {}
         self.test_results: dict[str, dict] = {}  # spec id -> {passed, failed, running}
@@ -394,6 +474,69 @@ class JsonUIProject:
                 if d is not None and d not in out:
                     out.append(d)
         return out
+
+    # ---------------------------------------------------------------- the worktrees sessions work in
+
+    def worktree_sources(self, cwds) -> list[Source]:
+        """The apps of the worktrees a cwd in ``cwds`` is inside: each of the room's apps whose checkout has a linked
+        worktree outside the room holding one of them, as that worktree's own app (its config at the same place in
+        the worktree as the app's in the room's checkout)."""
+        room = _real(self.root)
+        cwds = [_real(Path(c)) for c in cwds]
+        found: list[Source] = []
+        seen: set[str] = set()
+        for base in self.base_sources:
+            repo = repo_root(base.root, self.root)
+            if repo is None:
+                continue
+            rel = os.path.relpath(base.root, repo)
+            for folder, branch in worktrees(repo):
+                real = _real(folder)
+                if real.is_relative_to(room) or not any(c.is_relative_to(real) for c in cwds):
+                    continue
+                config = folder / rel / CONFIG_NAME if rel != "." else folder / CONFIG_NAME
+                if not config.is_file():
+                    continue
+                declared = follow_extends(config) or config
+                key = f"{base.key}@{branch}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                source = Source.from_config(key, declared)
+                source.checkout, source.base = {"branch": branch, "worktree": str(folder)}, base.key
+                found.append(source)
+        return found
+
+    def set_worktrees(self, cwds, at: int) -> bool:
+        """Show the worktrees sessions work in (worktree_sources): a new one's specs read, a gone one's dropped, and
+        each of the room's apps marked with its own branch while one of its worktrees is shown. True when the apps
+        changed (the caller watches the new folders)."""
+        wanted = {s.key: s for s in self.worktree_sources(cwds)}
+        shown = {s.key: s for s in self.sources if s.base is not None}
+        same = {k for k in wanted if k in shown and shown[k].root == wanted[k].root}
+        if same == set(wanted) == set(shown):
+            return False
+        for key, source in shown.items():
+            if key in same:
+                continue
+            for sid in [sid for sid, e in self.specs.items() if e.source is source]:
+                del self.specs[sid]
+        kept = [shown[k] for k in sorted(same)]
+        added = [wanted[k] for k in sorted(wanted) if k not in same]
+        with_twins = {s.base for s in kept + added}
+        for base in self.base_sources:
+            repo = repo_root(base.root, self.root) if base.key in with_twins else None
+            gd = git_dir(repo) if repo is not None else None
+            base.checkout = {"branch": head_branch(gd)} if gd is not None else None
+        self.sources = self.base_sources + kept + added
+        for source in added:
+            if source.spec_dir.is_dir():
+                for path in sorted(source.spec_dir.rglob("*.spec.json")):
+                    if not SKIP_DIRS.intersection(path.relative_to(source.spec_dir).parts):
+                        self.reload_spec(path, at, by=None, initial=True, source=source)
+        self._tests_by_name = None
+        self.load_tests()
+        return True
 
     # ---------------------------------------------------------------- loading
 
@@ -694,13 +837,18 @@ class JsonUIProject:
             impl_done = impl["total"] > 0 and impl["done"] == impl["total"]
             tests_done = cases > 0 and tests["passed"] >= cases and not tests["failed"]
             bucket = "live" if by else "todo" if not written_any else "done" if impl_done and tests_done else "partial"
+            # a worktree's spec is named from the worktree's folder (its rows say the branch; ../../ from the room
+            # would only say where the scratchpad is)
+            base_dir = Path(entry.source.checkout["worktree"]) if entry.source and entry.source.checkout and entry.source.checkout.get("worktree") else self.root
             item = {
                 "id": sid, "projectId": self.project_id,
                 # The app inside the room ("" = the room's own config) and its spec folder.
                 "app": entry.source.key if entry.source else "",
-                "specDir": os.path.relpath(entry.source.spec_dir, self.root) if entry.source else "",
+                # the checkout it is read from, when the room shows a worktree of its app (Source.checkout)
+                **({"checkout": _checkout_view(entry.source.checkout)} if entry.source and entry.source.checkout else {}),
+                "specDir": os.path.relpath(entry.source.spec_dir, base_dir) if entry.source else "",
                 "name": meta.get("displayName") or meta.get("name") or stem,
-                "file": os.path.relpath(entry.path, self.root),
+                "file": os.path.relpath(entry.path, base_dir),
                 "sections": sections, "impl": impl, "tests": tests, "bucket": bucket,
                 "updatedAt": at,
                 # when it last moved on (ticket 2026-10-23-viz-spec-list-not-recent-first): the newest of the spec's
@@ -711,6 +859,12 @@ class JsonUIProject:
                 item["by"] = by
             out.append(item)
         return out
+
+
+def _checkout_view(checkout: dict) -> dict:
+    """A checkout for the page: its branch, and a worktree's folder with the home folder as ~."""
+    from ..rooms import tilde
+    return {"branch": checkout["branch"], **({"worktree": tilde(checkout["worktree"])} if checkout.get("worktree") else {})}
 
 
 def _mtime_ms(path: Path | None) -> int:

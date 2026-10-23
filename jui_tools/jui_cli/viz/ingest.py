@@ -166,6 +166,9 @@ DATA_DOCS_QUIET_MS = 500
 #: The server room's door (2.3.9+, infra_docs.py): every room's model files are counted (a listing, nothing opened)
 #: this often, in a worker thread of their own; the model itself is read only when the door is pressed.
 INFRA_EVERY_MS = 5_000
+#: how often each room looks again at the worktrees its sessions work in (and at once when their cwds change):
+#: a worktree made, removed or switched to another branch while a session works in it
+WORKTREES_EVERY_MS = 5_000
 
 
 def attachment_line(record: dict) -> str:
@@ -293,6 +296,10 @@ class World:
         self._now = 0
         # Called with each JsonUIProject once it is loaded (serve starts its file watcher).
         self.on_project_loaded = None
+        # Called with a JsonUIProject whose apps changed (a worktree shown or gone: serve watches its folders again).
+        self.on_sources_changed = None
+        self._worktree_cwds: frozenset = frozenset()
+        self._worktrees_at = -WORKTREES_EVERY_MS
 
     # ---------------------------------------------------------------- labels
 
@@ -554,6 +561,30 @@ class World:
             return {pid: infra_docs.counts(root, caches[pid]) for pid, root in roots.items()}
         self._infra_job = self._infra_pool.submit(count)
 
+    def _worktrees_tick(self, at: int) -> None:
+        """Each loaded room shows the worktrees of its apps that a session not ended works in (JsonUIProject.
+        set_worktrees): when the sessions' cwds change, and every WORKTREES_EVERY_MS (a worktree made, removed or on
+        another branch)."""
+        cwds = frozenset(str(Path(s["cwd"]).expanduser()) for s in self.sessions.values()
+                         if s.get("status") != "ended" and s.get("cwd") not in (None, "?"))
+        if cwds == self._worktree_cwds and at - self._worktrees_at < WORKTREES_EVERY_MS:
+            return
+        self._worktree_cwds, self._worktrees_at = cwds, at
+        for project in self.jsonui.values():
+            if project.set_worktrees(cwds, at):
+                self._forget_ties()
+                self._merge_due.add(project.project_id)
+                self._dirty.add("specs")
+                if self.on_sources_changed is not None:
+                    self.on_sources_changed(project)
+
+    def _worktree_twins(self, project, path: str) -> list:
+        """The other loaded rooms that show the file through a worktree of theirs (the session's room is its own)."""
+        target = Path(path)
+        return [p for p in self.jsonui.values() if p is not project
+                and any(s.base is not None and target.is_relative_to(d) for s in p.sources
+                        for d in (s.spec_dir, s.layouts_dir, s.tests_dir) if d is not None)]
+
     def infra_root(self, project_id) -> str | None:
         """The room's root the server room reads (POST /api/infra-docs, /api/infra-icon): a room this server knows, by
         its id only; None otherwise."""
@@ -615,20 +646,24 @@ class World:
         in_artifacts = any(target.is_relative_to(d) for d in project.artifact_dirs())
         if not after and in_artifacts and use_id and not target.exists():
             self._new_files.add(use_id)  # a new spec / layout / test is being written
+        twins = self._worktree_twins(project, path)   # a room showing this worktree hears the robot write too
         if after:
             self.file_changed(session["projectId"], path, at, by=agent["id"])
+            for twin in twins:
+                self.file_changed(twin.project_id, path, at, by=agent["id"])
             if use_id in self._new_files and target.exists():
                 # A new artifact: the robot carries the paper to the shelf (P7 §A4).
                 self._set(agent, at, "carry", robots._clip(i18n.tl("act.carry", path=robots._rel(path, str(project.root)))))
                 self._until[agent["id"]] = (at + CARRY_MS, "idle")
             self._new_files.discard(use_id or "")
         else:
-            hits = project.specs_touching(path)
-            for sid in hits:
-                entry = project.specs[sid]
-                entry.by, entry.by_until = agent["id"], at + 10_000
-            if hits:
-                self._dirty.add("specs")
+            for room in (project, *twins):
+                hits = room.specs_touching(path)
+                for sid in hits:
+                    entry = room.specs[sid]
+                    entry.by, entry.by_until = agent["id"], at + 10_000
+                if hits:
+                    self._dirty.add("specs")
 
     # ---------------------------------------------------------------- hooks
 
@@ -1680,6 +1715,7 @@ class World:
             except OSError:
                 pass
         self._infra_tick(at)
+        self._worktrees_tick(at)
         for project in self.jsonui.values():
             for entry in project.specs.values():
                 due = [t for t in (entry.by_until, *entry.writing_until.values()) if t and t <= at]

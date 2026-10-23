@@ -149,7 +149,7 @@ function renderPanel(model) {
   const shown = model.specs.map((s, i) => [s, i]).filter(([s]) => inScope(s.project) && (specFilter === 'all' || s.bucket === specFilter)).sort((a, b) => roomOrder[a[0].project] - roomOrder[b[0].project] || specNewer(a, b));
   const multi = new Set(shown.map(([x]) => x.project)).size > 1;
   keyed(specListEl, JSON.stringify([UI.project, specFilter, scopedSpecs.length, shown.map(([x, i]) => `${i}:${x.bucket}:${x.by || ''}:${x.name}`)]), () => (shown.length
-    ? shown.map(([x, i], k) => `${multi && (k === 0 || shown[k - 1][0].project !== x.project) ? `<li class="sl-group">${esc(PROJECT[x.project].name)}<b>${shown.filter(([y]) => y.project === x.project).length}</b></li>` : ''}<li><button type="button" class="spec-row b-${esc(x.bucket)}" data-idx="${i}" data-fk="sp-${i}"${roleVar(x)}><span class="nm">${esc(x.name)}</span><span class="stx"></span>${x.by ? pill(x.by, DEF[x.by].role) : ''}${SEGS}</button></li>`).join('')
+    ? shown.map(([x, i], k) => `${multi && (k === 0 || shown[k - 1][0].project !== x.project) ? `<li class="sl-group">${esc(PROJECT[x.project].name)}<b>${shown.filter(([y]) => y.project === x.project).length}</b></li>` : ''}<li><button type="button" class="spec-row b-${esc(x.bucket)}" data-idx="${i}" data-fk="sp-${i}"${roleVar(x)}><span class="nm">${coTag(x)}${esc(x.name)}</span><span class="stx"></span>${x.by ? pill(x.by, DEF[x.by].role) : ''}${SEGS}</button></li>`).join('')
     : `<li class="empty-note">${!scopedSpecs.length ? esc(tl('panel.spec.none.scope', { scope: scopeLabel() })) : specFilter === 'live' ? esc(tl('panel.spec.none.live')) : esc(tl('panel.spec.none.state'))}</li>`));
   specListEl.querySelectorAll('.spec-row').forEach((b) => { const s = model.specs[+b.dataset.idx]; paintStatus(b.querySelector('.stx'), specStatus(s)); paintSegs(b.querySelector('.segs'), s); });
 
@@ -707,7 +707,14 @@ function wbApps(model) {
   return list;
 }
 const inApp = (s) => wb.app === 'all' || (s.app || '') === wb.app;
-const appLabel = (app) => app || tl('panel.app.root');
+// a worktree's app is "<app>@<branch>" (the server's key): its app's name and its branch
+const appLabel = (app) => {
+  const at = app.indexOf('@');
+  return at < 0 ? (app || tl('panel.app.root')) : `${app.slice(0, at) || tl('panel.app.root')} ⎇ ${app.slice(at + 1)}`;
+};
+/* The checkout a spec is read from, when the room shows a worktree of its app beside it: the branch, and on a
+   worktree's row its folder in the title. Both rows of a spec in the two checkouts are shown, each with its own tag. */
+const coTag = (s) => (s.checkout ? `<span class="co-tag${s.checkout.worktree ? ' co-wt' : ''}" title="${esc(s.checkout.worktree ? tl('panel.co.worktree', { path: s.checkout.worktree }) : tl('panel.co.room'))}">⎇ ${esc(s.checkout.branch)}</span>` : '');
 let wbSideOpen = readPref('wbSide', 'open') === 'open';
 const narrowWb = () => sceneEl.clientWidth < 800;
 function applyWbSide() {
@@ -791,7 +798,7 @@ function renderWbSide(model) {
     const total = apps.reduce((k, [, c]) => k + c, 0);
     const appsHTML = apps.length > 1 ? `<div class="seg-filter ws-apps" role="group" aria-label="${esc(tl('panel.app.filter'))}">${[['all', total], ...apps].map(([a, c]) => `<button type="button" data-app="${esc(a)}" aria-pressed="${wb.app === a}">${esc(a === 'all' ? tl('panel.app.all') : appLabel(a))}<b>${esc(String(c))}</b></button>`).join('')}</div>` : '';
     const allHTML = appsHTML + `<button type="button" class="ws-item ws-all" data-idx="-1" data-fk="ws--1" aria-current="${wb.idx === -1}"><span class="dot" aria-hidden="true"></span><span class="nm">${esc(tl('panel.ws.all'))}</span><span></span><small>${esc(scopeLabel())} · ${esc(tl('panel.ws.progress', { n }))}</small></button>`;
-    const bodyHTML = groups.map(([label, items]) => `<p class="ws-group"><span>${esc(label)}</span><b>${items.length}</b></p>${items.map(([s, i]) => `<button type="button" class="ws-item b-${esc(s.bucket)}" data-idx="${i}" data-fk="ws-${i}" aria-current="${wb.idx === i}"${roleVar(s)}><span class="dot" aria-hidden="true"></span><span class="nm">${esc(s.name)}</span>${s.by ? pill(s.by, DEF[s.by].role) : '<span></span>'}<small></small></button>`).join('')}`).join('');
+    const bodyHTML = groups.map(([label, items]) => `<p class="ws-group"><span>${esc(label)}</span><b>${items.length}</b></p>${items.map(([s, i]) => `<button type="button" class="ws-item b-${esc(s.bucket)}" data-idx="${i}" data-fk="ws-${i}" aria-current="${wb.idx === i}"${roleVar(s)}><span class="dot" aria-hidden="true"></span><span class="nm">${coTag(s)}${esc(s.name)}</span>${s.by ? pill(s.by, DEF[s.by].role) : '<span></span>'}<small></small></button>`).join('')}`).join('');
     return allHTML + (bodyHTML || `<p class="ws-none">${esc(tl('panel.ws.none'))}</p>`);
   });
   wbSideList.querySelectorAll('.ws-item:not(.ws-all)').forEach((b) => { const x = model.specs[+b.dataset.idx]; paintStatus(b.lastElementChild, specStatus(x, UI.project === 'all' ? `${PROJECT[x.project].name} · ` : '')); });
@@ -929,7 +936,7 @@ function renderOverview(model) {
     wbCode.innerHTML = !inS.length ? `<p class="sc-ph ov-none">${esc(tl('panel.ov.none', { scope: scopeLabel() }))}</p>` : BUCKETS.map(([b, label]) => {
       const items = model.specs.map((s, i) => [s, i]).filter(([s]) => s.bucket === b && inScope(s.project) && inApp(s)).sort(specNewer);
       if (!items.length) return '';
-      return `<section class="ov-group" aria-label="${esc(label)}"><h3>${esc(label)}<small>${items.length}</small></h3><div class="ov-grid">${items.map(([s, i]) => `<button type="button" class="ov-card b-${esc(s.bucket)}" data-idx="${i}"${roleVar(s)}><span class="ov-top"><strong>${esc(s.name)}</strong><span class="state"></span></span><code class="ov-file">${UI.project === 'all' ? `${esc(PROJECT[s.project].name)} · ` : ''}${esc(s.file)}</code><span class="ov-who"></span><span class="ov-secs">${SEGS}<span class="ov-labels" aria-hidden="true">${SECTIONS.map((x) => `<span>${esc(x)}</span>`).join('')}</span></span><span class="ov-sum"></span></button>`).join('')}</div></section>`;
+      return `<section class="ov-group" aria-label="${esc(label)}"><h3>${esc(label)}<small>${items.length}</small></h3><div class="ov-grid">${items.map(([s, i]) => `<button type="button" class="ov-card b-${esc(s.bucket)}" data-idx="${i}"${roleVar(s)}><span class="ov-top"><strong>${coTag(s)}${esc(s.name)}</strong><span class="state"></span></span><code class="ov-file">${UI.project === 'all' ? `${esc(PROJECT[s.project].name)} · ` : ''}${esc(s.file)}</code><span class="ov-who"></span><span class="ov-secs">${SEGS}<span class="ov-labels" aria-hidden="true">${SECTIONS.map((x) => `<span>${esc(x)}</span>`).join('')}</span></span><span class="ov-sum"></span></button>`).join('')}</div></section>`;
     }).join('');
     wbCode._sig = sig; wbCode._html = null;
   }
@@ -1100,7 +1107,7 @@ function renderSheet(model, force) {
       return;
     }
   }
-  if (SOURCE.mode === 'live') setHead(s.name, s.file, STATUS_CLASS[s.status.kind], specStatus(s), s.by ? robotWho(s.by) : '');
+  if (SOURCE.mode === 'live') setHead(s.name, s.checkout ? `⎇ ${s.checkout.branch} · ${s.file}` : s.file, STATUS_CLASS[s.status.kind], specStatus(s), s.by ? robotWho(s.by) : '');
   else setHead(tl('panel.sheet.head', { name: s.name, screen: s.screen }), `docs/screens/json/${s.file}`, STATUS_CLASS[s.status.kind], specStatus(s), s.by ? pill(s.by, DEF[s.by].role) : '');
   wbNav.hidden = false; $('wb-follow-label').hidden = false;
   setHTML($('wb-legend'), SOURCE.mode === 'live' ? SHEET_LEGEND_LIVE : SHEET_LEGEND); wbHelpMode(false);
