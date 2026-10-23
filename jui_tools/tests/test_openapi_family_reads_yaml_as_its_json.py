@@ -152,3 +152,21 @@ def test_jsonui_doc_validate_resolves_a_mark_from_yaml_as_from_json(tmp_path):
         return [e.message for e in result.errors], m["returnType"]
     got = [resolved(_canon_project(tmp_path / k, k == "yaml")) for k in ("json", "yaml")]
     assert got[0] == got[1] == ([], "ItemListResponse"), got
+
+
+def test_a_key_yaml_makes_a_bool_or_null_is_the_string_json_writes(tmp_path):
+    """`true:` and `null:` / `~:` are YAML 1.1's bool and null; JSON writes such keys as "true" and "null"."""
+    of = shared_core.load("openapi_file")
+    (tmp_path / "a.yaml").write_text("x-flags:\n  true: on-value\n  false: off-value\n  null: none\n  ~: tilde\n  1.5: half\n", encoding="utf-8")
+    assert of.read(tmp_path / "a.yaml") == {"x-flags": {"true": "on-value", "false": "off-value", "null": "tilde", "1.5": "half"}}
+
+
+def test_a_mapping_inside_a_list_has_its_keys_as_json_writes_them(tmp_path):
+    """Every mapping key, at any depth: one inside a list (a parameter's examples, an extension's samples) too."""
+    of = shared_core.load("openapi_file")
+    (tmp_path / "a.yaml").write_text(
+        "x-samples:\n  - 200: {since: 2024-01-01}\n  - [{404: none}]\n"
+        "parameters:\n  - name: day\n    in: query\n    examples:\n      2024: {value: 2024-01-01}\n", encoding="utf-8")
+    assert of.read(tmp_path / "a.yaml") == {
+        "x-samples": [{"200": {"since": "2024-01-01"}}, [{"404": "none"}]],
+        "parameters": [{"name": "day", "in": "query", "examples": {"2024": {"value": "2024-01-01"}}}]}
