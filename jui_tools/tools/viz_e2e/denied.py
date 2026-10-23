@@ -205,9 +205,12 @@ async def run_denied(pw, out, failures):
         check(res["chimes"] == 2, f"one chime per card: {res['chimes']}")
         await page.screenshot(path=str(out / "cards.png"))
 
-        # the board's strip, from the chip
+        # the board's strip, from the chip: the waits' project chosen, both S_OK's (ticket
+        # 2026-10-24-viz-wait-to-board-keeps-the-wrong-project)
         await page.click("#chip-denied")
         await wait(page, "() => document.querySelectorAll('#denied-strip [data-dcard]').length === 2", label="the board's strip")
+        res["chipProject"] = got = await page.evaluate("() => ({ project: window.__dbg.project(), ok: window.__dbg.robotProject(window.__dbg.labelOfSession(%s)) })" % json.dumps(S_OK))
+        check(got["project"] and got["project"] == got["ok"], f"the 止められた操作 chip, both calls S_OK's: its project chosen: {got}")
         # folded on open: each strip its count and one line per card, the four columns' heads in sight; 広げる shows the cards
         # and hides the columns (ticket 2026-10-22-viz-taskboard-top-strips-hide-the-columns)
         await wait(page, "() => { const tb = document.getElementById('tb'); return tb.classList.contains('show') && document.querySelectorAll('#denied-strip .ps-line').length === 2; }", label="the folded strip")
@@ -274,6 +277,9 @@ async def run_denied(pw, out, failures):
         # a session whose channel cannot take a prompt: the reason, no button; そのまま closes it
         hook(S_NO, hook_event_name="PermissionDenied", tool_name="Bash", tool_input={"command": "rm -rf build"}, tool_use_id="toolu_n1",
              reason="[Irreversible Local Destruction]")
+        # S_NO is another project's: the board (S_OK's project, chosen by the chip) says it waits elsewhere; すべて shows it
+        await wait(page, "() => !!document.querySelector('#denied-strip [data-set-all]')", label="the third card, elsewhere")
+        await page.click("#denied-strip [data-set-all]")
         await wait(page, "() => document.querySelectorAll('#denied-strip [data-dcard]').length === 3", label="the third card")
         n1 = next(c["id"] for c in snap()["denials"] if c["toolUseId"] == "toolu_n1")
         got = res["noChannel"] = next(c for c in await page.evaluate(CARDS, "#denied-strip") if c["id"] == n1)
