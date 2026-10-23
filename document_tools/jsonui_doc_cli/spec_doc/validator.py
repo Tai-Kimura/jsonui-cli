@@ -245,6 +245,8 @@ class SpecValidator:
         # spec under it: `validate all` put the same line under every spec
         # with a declared endpoint, so one key read as N warnings.
         self._config_keys_reported: set[str] = set()
+        # A YAML document the family's load halted on, said once per run.
+        self._unread_yaml_reported: set[str] = set()
         self._custom_rules: CustomRules = custom_rules or CustomRules()
         self._build_effective_rules()
 
@@ -3555,6 +3557,7 @@ class SpecValidator:
         if context is None:
             return
         self._report_yaml_shortfall(context, result)
+        self._report_unread_yaml(context, result)
         for message in getattr(context, "unknown_config_keys", ()):
             if message in self._config_keys_reported:
                 continue
@@ -3730,6 +3733,7 @@ class SpecValidator:
                 or list(canon.iter_divergence_declarations(data))):
             return
         context = self._canon_context()
+        self._report_unread_yaml(context, result)
         index, convention = context.index, context.convention
         # Before resolution, not after: `resolve_spec_marks` rewrites `params`
         # in place, so a method that carried a mark stops looking like one and
@@ -3743,6 +3747,18 @@ class SpecValidator:
         for path, message in warnings:
             result.warnings.append(SpecValidationMessage(
                 path=path, message=message, level="warning"))
+
+    def _report_unread_yaml(self, context, result):
+        """An error per YAML document the family's load halted on (`NO:` as a
+        key), once per run. Its routes are not in the index, and without this
+        a mark or endpoint into it read "not declared in any OpenAPI document"
+        — the wrong reason (2.3.21)."""
+        for message in getattr(context, "unread_yaml", ()):
+            if message in self._unread_yaml_reported:
+                continue
+            self._unread_yaml_reported.add(message)
+            result.errors.append(SpecValidationMessage(
+                path="api_directory", message=message))
 
     def _report_yaml_shortfall(self, context, result):
         """Say once that the check was skipped, rather than degrade quietly.

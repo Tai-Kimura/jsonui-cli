@@ -379,12 +379,15 @@ def index_documents(documents) -> dict:
     return index
 
 
-def load_documents(api_dir, *, want_yaml=True):
+def load_documents(api_dir, *, want_yaml=True, unread=None):
     """`(source, document)` pairs for every OpenAPI file under a directory.
 
     YAML needs PyYAML. Returning half an index would report every route that
     lives in a YAML document as missing, so the shortfall is reported to the
-    caller instead of absorbed: `(pairs, missing_yaml_count)`.
+    caller instead of absorbed: `(pairs, missing_yaml_count)`. A YAML document
+    the family's load halts on (a key JSON would not hold as written, `NO:`;
+    openapi_file.YamlTypedKey) is left out too, its one line appended to
+    `unread` — said with its reason, not as its routes missing.
     """
     api_dir = Path(api_dir)
     if not api_dir.is_dir():
@@ -410,7 +413,9 @@ def load_documents(api_dir, *, want_yaml=True):
             # the family's one YAML load (openapi_file.load_yaml): a date stays a string and a key is a string, as in
             # the same document's JSON — the mock and this index read one document one way (2.3.21)
             pairs.append((str(p), of.load_yaml(text, yaml) if of is not None else yaml.safe_load(text)))
-        except (OSError, Exception):  # noqa: B014 - yaml raises its own tree
+        except (OSError, Exception) as exc:  # noqa: B014 - yaml raises its own tree
+            if of is not None and isinstance(exc, of.YamlTypedKey) and unread is not None:
+                unread.append(f"{p}: {exc}")
             continue
     return pairs, 0
 
@@ -479,6 +484,11 @@ class SpecCanonContext:
     #: reported as missing — so the shortfall is carried to the caller rather
     #: than absorbed into a smaller index.
     missing_yaml: int = 0
+    #: YAML documents the family's load halted on (`NO:` read as a bool key,
+    #: openapi_file.YamlTypedKey), one line each. Their routes are not in the
+    #: index; without this line a mark into one read "not declared in any
+    #: OpenAPI document" — the wrong reason (2.3.21).
+    unread_yaml: tuple = ()
     #: The directory the answering config's `api_directory` resolved to, so an
     #: empty index can be reported with the place that was actually searched.
     #: "No OpenAPI document was found" without the where sent a consumer lane
@@ -648,6 +658,7 @@ def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
     problems: list = []
     unknown: list = []
     invalid_values: list = []
+    unread: list = []
     answer = None
     for root in candidates:
         cfg = root / "jui.config.json"
@@ -681,7 +692,7 @@ def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
 
         declares_api = "api_directory" in config
         api_dir = (root / config.get("api_directory", "docs/api")).resolve()
-        documents, missing = load_documents(api_dir)
+        documents, missing = load_documents(api_dir, unread=unread)
         if missing:
             # Half an index is worse than none, so this config cannot answer —
             # but the walk continues, because the configs after it still have
@@ -728,12 +739,14 @@ def build_spec_canon_context(spec_path, *, config_path=None, extra_roots=()):
                                 convention=answer.convention,
                                 config_path=answer.config_path,
                                 missing_yaml=answer.missing_yaml,
+                                unread_yaml=tuple(dict.fromkeys(unread)),
                                 api_dir=answer.api_dir,
                                 unresolved_extends=tuple(problems),
                                 unknown_config_keys=tuple(unknown),
                                 invalid_config_values=tuple(invalid_values))
     return SpecCanonContext(index={}, convention=fallback_convention,
                             config_path=None,
+                            unread_yaml=tuple(dict.fromkeys(unread)),
                             unresolved_extends=tuple(problems),
                             unknown_config_keys=tuple(unknown),
                             invalid_config_values=tuple(invalid_values))

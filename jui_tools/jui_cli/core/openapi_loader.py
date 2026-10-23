@@ -164,14 +164,18 @@ def _import_yaml():
     return yaml
 
 
-def _safe_load_yaml(path: Path) -> Any:
+def _safe_load_yaml(path: Path, *, skip_if_not_swagger: bool = False) -> Any:
     """``yaml.safe_load`` with the loader's halt semantics.
 
     Raises ``pyyaml-missing`` when the dependency is absent and
     ``yaml-parse-error`` (with line/column when available) on malformed
     input. Type-coercion guards are the caller's job — a regex-prefiltered
     file that turns out not to be a swagger doc must be skipped without
-    them (see :func:`load_swagger`).
+    them (see :func:`load_swagger`). The family's load halts itself on a
+    key JSON would not hold as written (``NO:`` → bool, ``~:`` → null,
+    ``010:`` → 8) and on a bool enum member: that is ``yaml-type-coercion``,
+    except with ``skip_if_not_swagger`` for a file whose top level is not a
+    swagger document (its data is returned for the caller to skip).
     """
     yaml_mod = _import_yaml()
     if yaml_mod is None:
@@ -183,18 +187,26 @@ def _safe_load_yaml(path: Path) -> Any:
         with open(path, "r", encoding="utf-8") as f:
             text = f.read()
         return family.load_yaml(text, yaml_mod) if family is not None else yaml_mod.safe_load(text)
-    except yaml_mod.YAMLError as e:
-        mark = getattr(e, "problem_mark", None)
-        loc = (
-            f" at line {mark.line + 1}, column {mark.column + 1}"
-            if mark is not None
-            else ""
-        )
-        raise OpenAPILoadError(
-            "yaml-parse-error",
-            f"YAML parse failed{loc}: {e}",
-            source=str(path),
-        ) from e
+    except Exception as e:  # noqa: BLE001 — family.YamlTypedKey only; anything else is re-raised below
+        if family is None or not isinstance(e, family.YamlTypedKey):
+            if isinstance(e, yaml_mod.YAMLError):
+                mark = getattr(e, "problem_mark", None)
+                loc = (
+                    f" at line {mark.line + 1}, column {mark.column + 1}"
+                    if mark is not None
+                    else ""
+                )
+                raise OpenAPILoadError(
+                    "yaml-parse-error",
+                    f"YAML parse failed{loc}: {e}",
+                    source=str(path),
+                ) from e
+            raise
+        if skip_if_not_swagger:
+            data = yaml_mod.safe_load(text)
+            if not isinstance(data, dict) or not ("openapi" in data or "swagger" in data):
+                return data
+        raise OpenAPILoadError("yaml-type-coercion", str(e), source=str(path)) from None
 
 
 def _check_yaml_type_coercion(node: Any, *, source: str, pointer: str = "#") -> None:
@@ -203,7 +215,9 @@ def _check_yaml_type_coercion(node: Any, *, source: str, pointer: str = "#") -> 
     YAML 1.1 type-coerces unquoted scalars: ``NO`` → bool (the Norway
     problem). (Dates and non-string mapping keys no longer reach here: the
     family's one YAML load, shared/core/openapi_file.load_yaml, keeps a date
-    the string JSON holds and writes keys as JSON does, 2.3.21.) A bool where
+    the string JSON holds, writes ``200:`` as "200", and halts itself on a
+    bool, null or renamed number key and a bool enum member, 2.3.21; this
+    walk still stands for a tree without shared/core.) A bool where
     a string was meant would make "YAML input yields the same IR as JSON"
     silently false. Enum members and mapping keys are
     where coercion corrupts codegen, so those halt with quote-the-value
@@ -602,7 +616,7 @@ def load_swagger(
         # subproject that doesn't even consume it.
         if not is_swagger_yaml_file(yml):
             continue
-        data = _safe_load_yaml(yml)
+        data = _safe_load_yaml(yml, skip_if_not_swagger=True)
         if not isinstance(data, dict) or not ("openapi" in data or "swagger" in data):
             # The cheap regex prefilter can false-match `openapi:` inside
             # a comment or block scalar. After a real parse, a document

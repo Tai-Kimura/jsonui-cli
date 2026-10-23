@@ -154,11 +154,124 @@ def test_jsonui_doc_validate_resolves_a_mark_from_yaml_as_from_json(tmp_path):
     assert got[0] == got[1] == ([], "ItemListResponse"), got
 
 
-def test_a_key_yaml_makes_a_bool_or_null_is_the_string_json_writes(tmp_path):
-    """`true:` and `null:` / `~:` are YAML 1.1's bool and null; JSON writes such keys as "true" and "null"."""
+def test_a_number_key_written_as_json_writes_it_is_that_string(tmp_path):
+    """`200:` and `1.5:` are the strings JSON holds; `"NO":` quoted is NO."""
     of = shared_core.load("openapi_file")
-    (tmp_path / "a.yaml").write_text("x-flags:\n  true: on-value\n  false: off-value\n  null: none\n  ~: tilde\n  1.5: half\n", encoding="utf-8")
-    assert of.read(tmp_path / "a.yaml") == {"x-flags": {"true": "on-value", "false": "off-value", "null": "tilde", "1.5": "half"}}
+    (tmp_path / "a.yaml").write_text("x-flags:\n  200: ok\n  1.5: half\n  -1: minus\n  'NO': quoted\n", encoding="utf-8")
+    assert of.read(tmp_path / "a.yaml") == {"x-flags": {"200": "ok", "1.5": "half", "-1": "minus", "NO": "quoted"}}
+
+
+# ---- a key JSON would not hold as written halts every reader (ticket 2026-10-24-yaml-bool-mapping-key-silently-
+# becomes-false). Up to 2.3.20 jui build's loader halted on every non-string key and the other readers did not read YAML;
+# the pre-tag 2.3.21 load wrote each key as JSON would, so the property `NO` was generated as `false`, `~` as `null`,
+# `010` as `8` — with nothing said, by all nine readers. The halt is in the one load (openapi_file.load_yaml), so each
+# reader says it: the readers that raise name the text and its line; the canonical index leaves the document out and
+# carries the line (jui build's marks and jsonui-doc validate say it); the viz rack, jsonui-doc's html and db-schema pass
+# it by, as they pass any document they cannot read (and as they passed every YAML document up to 2.3.20).
+TYPED = {   # the key as written -> what the halt names
+    "        NO: {type: string}\n": "Mapping key NO (line 9) was implicitly typed as bool",
+    "        yes: {type: string}\n": "Mapping key yes (line 9) was implicitly typed as bool",
+    "        ~: {type: string}\n": "Mapping key ~ (line 9) was implicitly typed as NoneType",
+    "        010: {type: string}\n": "Mapping key 010 (line 9) was implicitly typed as int",
+    "        1.50: {type: string}\n": "Mapping key 1.50 (line 9) was implicitly typed as float",
+    "        s: {type: string, enum: [NO, x]}\n": "Enum member NO (line 9) was implicitly typed as bool",
+}
+TYPED_HEAD = ("openapi: 3.0.3\ninfo: {title: T, version: '1'}\npaths: {}\ncomponents:\n  schemas:\n    M:\n      type: object\n"
+              "      properties:\n")
+
+
+def _every_reader(folder: Path) -> dict:
+    """What each reader of the family made of the one document in folder: its error's line, or what it read."""
+    from jui_cli.commands.ls_cmd import cmd_ls
+    from jui_cli.core.openapi_loader import load_swagger
+    from jui_cli.viz import data_docs
+    from jsonui_doc_cli.check.db_schema.doc_parser import parse_db_docs
+    from jsonui_doc_cli.check.openapi_diff import load_doc_side
+    from jsonui_doc_cli.test_doc.html.swagger import parse_swagger_file
+    from jsonui_test_cli.mock.openapi import OpenApiDoc, api_documents, read_document
+
+    doc = folder / "api.yaml"
+
+    def said(fn):
+        try:
+            return fn()
+        except Exception as exc:  # noqa: BLE001 — the line each reader gives
+            return f"ERR {exc}"
+
+    def listed():
+        _write_config(folder.parents[1])
+        with _in_project(folder.parents[1]), _capture_stdout() as buf:
+            cmd_ls(argparse.Namespace(ls_target="api-specs", as_json=True))
+        (entry,) = json.loads(buf.getvalue())["files"]
+        return f"ERR {entry['error']}" if "error" in entry else entry["schema_count"]
+
+    def indexed():
+        unread: list = []
+        pairs, _ = shared_core.load("openapi_canonical").load_documents(folder, unread=unread)
+        return f"ERR {unread[0]}" if unread else pairs[0][1]
+
+    return {
+        "the shared rule": said(lambda: shared_core.load("openapi_file").read(doc)),
+        "jui build's loader": said(lambda: load_swagger(folder)),
+        "jui ls api-specs": said(listed),
+        "the canonical index": said(indexed),
+        "jsonui-test mock": said(lambda: OpenApiDoc.load(doc).spec),
+        "contracts coverage": said(lambda: read_document(api_documents(folder)[0])),
+        "openapi-diff": said(lambda: load_doc_side(folder)),
+        "the viz rack": said(lambda: data_docs._swagger(doc.read_bytes(), doc.name)),
+        "jsonui-doc html": said(lambda: parse_swagger_file(doc)),
+        "db-schema": said(lambda: parse_db_docs(folder)),
+    }
+
+
+def test_a_key_json_would_not_hold_as_written_halts_every_reader(tmp_path):
+    pytest.importorskip("jsonui_test_cli")
+    pytest.importorskip("jsonui_doc_cli")
+    quiet = {"the viz rack": None, "jsonui-doc html": None, "db-schema": {}}   # as for any document they cannot read
+    for n, (line, named) in enumerate(TYPED.items()):
+        folder = tmp_path / f"p{n}/docs/api"
+        folder.mkdir(parents=True)
+        (folder / "api.yaml").write_text(TYPED_HEAD + line, encoding="utf-8")
+        got = _every_reader(folder)
+        for reader, answer in got.items():
+            if reader in quiet:
+                assert answer == quiet[reader], (line, reader, answer)
+            else:
+                assert isinstance(answer, str) and answer.startswith("ERR ") and named in answer, (line, reader, answer)
+                assert "Quote the" in answer, (line, reader, answer)
+    # the control: the same document with the key quoted is read by every reader, as NO
+    folder = tmp_path / "quoted/docs/api"
+    folder.mkdir(parents=True)
+    (folder / "api.yaml").write_text(TYPED_HEAD + "        'NO': {type: string}\n", encoding="utf-8")
+    got = _every_reader(folder)
+    assert not [r for r, a in got.items() if isinstance(a, str) and a.startswith("ERR ")], got
+    assert [f.wire_name for f in got["jui build's loader"][0].schemas[0].fields] == ["NO"]
+    assert list(got["the shared rule"]["components"]["schemas"]["M"]["properties"]) == ["NO"]
+    # a YAML file beside the documents that the prefilter takes for one (`openapi:` at a line's start, inside a quoted
+    # string) and is not — a workflow, with its `on:` — is still passed by, not halted on
+    from jui_cli.core.openapi_loader import is_swagger_yaml_file, load_swagger
+
+    (folder / "ci.yaml").write_text('on: push\nnote: "see the\nopenapi: 3 job"\n', encoding="utf-8")
+    assert is_swagger_yaml_file(folder / "ci.yaml")
+    assert [Path(d.source_path).name for d in load_swagger(folder)] == ["api.yaml"]
+
+
+def test_a_mark_into_a_document_with_a_typed_key_names_the_key(tmp_path):
+    """The canonical index leaves the document out; jui build and jsonui-doc validate say why, not "not declared"."""
+    pytest.importorskip("jsonui_doc_cli")
+    from jui_cli.core.spec_extractor import CanonicalMarkError, extract_screen_spec
+    from jsonui_doc_cli.spec_doc.validator import SpecValidationResult, SpecValidator
+
+    spec = _canon_project(tmp_path, True)
+    doc = spec.parents[2] / "docs/api/swagger.yaml"
+    doc.write_text(doc.read_text(encoding="utf-8").replace("components:\n", "x-flags:\n  NO: 1\ncomponents:\n", 1), encoding="utf-8")
+    with pytest.raises(CanonicalMarkError, match=r"Mapping key NO \(line \d+\) was implicitly typed as bool"):
+        extract_screen_spec(json.loads(spec.read_text()), spec)
+    v = SpecValidator()
+    v._spec_file_path = spec
+    result = SpecValidationResult()
+    v._resolve_canonical_marks(json.loads(spec.read_text()), result)
+    assert any("Mapping key NO (line" in e.message and str(doc) in e.message for e in result.errors), [e.message for e in result.errors]
 
 
 def test_a_mapping_inside_a_list_has_its_keys_as_json_writes_them(tmp_path):

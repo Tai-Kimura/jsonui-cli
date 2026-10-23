@@ -688,6 +688,10 @@ def resolve_canonical_marks(spec_data: dict, spec_path) -> None:
         print(f"WARNING: {message}")
     if context.unresolved_extends:
         raise CanonicalMarkError("; ".join(context.unresolved_extends))
+    # A document the family's YAML load halted on (`NO:` as a key): its routes are not in the index, and a mark into
+    # one would otherwise read "not declared in any OpenAPI document" (2.3.21)
+    if getattr(context, "unread_yaml", ()):
+        raise CanonicalMarkError("; ".join(context.unread_yaml))
     index, convention = context.index, context.convention
 
     # Before resolution — see the note in jsonui-doc's validator.
