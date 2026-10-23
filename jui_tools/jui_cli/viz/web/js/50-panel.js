@@ -89,9 +89,12 @@ const roleVar = (s) => (s.by ? ` style="--c:${ROLES[DEF[s.by].role].color}"` : '
 const permSig = (p) => (p ? JSON.stringify([p.id, p.status, p.can, p.tooLongToShow, p.sentBy, p.sentRules, p.sentReason, p.input && p.input.command, p.task]) : '');
 function keyed(el, sig, build) {
   if (el._sig === sig) return;
-  const a = document.activeElement, fk = el.contains(a) && !keepOf(a) ? a.dataset.fk : undefined;
+  const a = document.activeElement, fk = el.contains(a) ? a.dataset.fk : undefined;
   keepFields(el, () => { el.innerHTML = build(); el._sig = sig; el._html = null; });   // a typed field: its text, focus, cursor
-  if (fk !== undefined) { const again = el.querySelector(`[data-fk="${CSS.escape(fk)}"]`); if (again) again.focus({ preventScroll: true }); else el._lostFk = fk; }
+  // The focus by its data-fk, a typed field's too: one drawn again here has it already (keepFields, with its
+  // cursor; focus() on it again moves nothing), and one that is not here any more — the prompt box, which the
+  // history puts back after the card is drawn (55-history.js) — is remembered for whoever puts it back.
+  if (fk !== undefined) { const again = el.querySelector(`[data-fk="${CSS.escape(fk)}"]`); if (again) { if (document.activeElement !== again) again.focus({ preventScroll: true }); } else el._lostFk = fk; }
 }
 const SEGS = `<span class="segs" aria-hidden="true">${'<i></i>'.repeat(7)}</span>`;
 const SG_CLASS = { empty: 'sg-empty', writing: 'sg-writing', written: 'sg-written', impl: 'sg-impl', done: 'sg-done', test: 'sg-test', tested: 'sg-tested' };
