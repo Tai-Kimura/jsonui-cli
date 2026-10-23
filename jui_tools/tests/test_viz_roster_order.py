@@ -1,6 +1,7 @@
 """The room's robot list put in order (requester 10-23: 「ロボットの一覧に並べ替え機能追加できる？左右キーで移動するのもその
 順番に」): the person's own order (a drop or Alt+↑↓; remembered per room, a new session at the end), by name, by state
-(waiting first), most recently active; the card's ‹ › and ← → go in the list's order and skip the robots it hides.
+(waiting first), most recently active; the card's ‹ › and ← → go in the list's order and skip the robots it hides, in a
+room's view and in the building's (room by room).
 53-roster.js's functions and 50-panel.js's robotCycle / stepRobot are cut out and run in node with the page's state
 stood in; dragging and the keys on the page itself are tools/viz_e2e/room_roster.py's."""
 from __future__ import annotations
@@ -100,6 +101,7 @@ def test_the_cards_steps_go_in_the_lists_order_and_skip_the_hidden():
     panel = web_text("js", "50-panel.js")
     got = _node(STAND_IN + _roster() + r"""
 const SOURCE = { mode: 'live' }, LIVE = { leaving: {} };
+let has3D = true;
 let SOLO = 'r';
 const liveSolo = () => SOLO;
 const ROBOT_DEFS = robots.map((R) => R.def), roomsInView = () => ['r', 'other'], projectOfRobot = (id) => DEF[id].room;
@@ -116,7 +118,10 @@ rbState.id = '10'; stepRobot(1); const fromHidden = rbState.id;
 rbState.id = '10'; stepRobot(-1); const fromHiddenBack = rbState.id;
 LIVE.leaving.ab = true; const leaving = robotCycle();
 SOLO = null; const building = robotCycle();
-process.stdout.write(JSON.stringify({ cycle, walk, back, hidden, fromHidden, fromHiddenBack, leaving, building }));""")
+PREF['roster-order:r'] = JSON.stringify(['S-20', 'S-30']); ROSTER.order.clear(); const buildingOwn = robotCycle();
+has3D = false; const no3D = robotCycle();
+has3D = true; SOURCE.mode = 'demo'; const demo = robotCycle();
+process.stdout.write(JSON.stringify({ cycle, walk, back, hidden, fromHidden, fromHiddenBack, leaving, building, buildingOwn, no3D, demo }));""")
     assert got == {
         "cycle": ["30", "10", "20", "ab", "ag"],
         "walk": ["20", "ab", "ag", "30", "10"],
@@ -125,5 +130,8 @@ process.stdout.write(JSON.stringify({ cycle, walk, back, hidden, fromHidden, fro
         "fromHidden": "30",
         "fromHiddenBack": "ag",
         "leaving": ["30", "20", "ag"],
-        "building": ["10", "20", "30", "ag", "40"],   # not in a room's view: rooms, then numbers, as before (ab leaving)
+        "building": ["30", "20", "ag", "40"],          # the building: room by room, each in its list's order, 10 hidden, ab leaving
+        "buildingOwn": ["20", "ag", "30", "40"],
+        "no3D": ["10", "20", "30", "ag", "40"],        # no 3D, no list: rooms, then numbers
+        "demo": ["10", "20", "30", "ab", "ag", "40"],  # the demo: as before (no leaving there)
     }

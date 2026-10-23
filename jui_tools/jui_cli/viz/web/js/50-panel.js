@@ -1751,10 +1751,11 @@ function closeRobot({ byHand = false } = {}) {
    flies with the existing zoomTo (the camera itself is 40-scene.js's). */
 function robotCycle() {
   const live = SOURCE.mode === 'live';
-  // a room's own view: its robot list's order, the robots it hides skipped (53-roster.js)
-  const solo = liveSolo();
-  if (solo) return rosterCycle(solo).filter((id) => !LIVE.leaving[id]);
-  const rooms = roomsInView();
+  // live with the 3D, a room's own view or the building's: room by room, each in its robot list's order, the robots it
+  // hides skipped (53-roster.js; requester 10-23: the building's too, the rooms in their order). The demo and a page
+  // with no 3D have no list: rooms, then numbers.
+  const solo = liveSolo(), rooms = solo ? [solo] : roomsInView();
+  if (live && has3D) return rooms.flatMap((room) => rosterCycle(room)).filter((id) => !LIVE.leaving[id]);
   return ROBOT_DEFS.filter((d) => rooms.includes(projectOfRobot(d.id)) && !(live && LIVE.leaving[d.id]))
     .sort((a, b) => rooms.indexOf(projectOfRobot(a.id)) - rooms.indexOf(projectOfRobot(b.id)) || a.id.localeCompare(b.id, 'ja', { numeric: true }))
     .map((d) => d.id);
