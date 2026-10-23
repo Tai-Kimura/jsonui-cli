@@ -169,6 +169,8 @@ if __name__ == "__main__":
     ap.add_argument("--jt", required=True, help="that checkout's jui_tools")
     ap.add_argument("--shots-only", action="store_true")
     a = ap.parse_args()
+    # the page's words in Japanese, as run.py pins them (a picture beside run.py's is in one language)
+    os.environ.setdefault("JUI_VIZ_LANGUAGE", "ja")
     e2e_lock.hold(only=["test-tally"])
     fails: list = []
 

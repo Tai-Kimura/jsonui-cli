@@ -483,7 +483,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 #ticker { display: grid; gap: 1px; font: 500 12px/1.55 var(--font-mono); }
 #ticker li { display: grid; grid-template-columns: auto auto 9.5em minmax(0, 1fr); align-items: center; gap: 8px; white-space: nowrap; }
 #ticker time { color: var(--ink-soft); font-variant-numeric: tabular-nums; }
-#ticker .kind { overflow: hidden; font-weight: 700; text-overflow: ellipsis; }
+#ticker .kind { overflow: hidden; font: 600 12px/1.4 var(--font-mono); text-overflow: ellipsis; }   /* a hook's name (SessionStart): an identifier */
 #ticker .what { overflow: hidden; text-overflow: ellipsis; }
 .ticker-btns { display: flex; gap: 6px; align-items: start; }
 /* The log strip closed (requester, 10-19): its row goes (the scene and the panel take the height) and only 「ログを開く」
@@ -1780,3 +1780,6 @@ button.dev-row:hover { border-color: var(--info); }
 .dev-row .dev-name { font-weight: 700; }
 .dev-who, .dev-note { color: var(--ink-soft); font-size: 12px; }
 .dev-who .dev-guess { margin-left: 4px; }
+
+/* a Layout row's component type beside its Japanese name (View beside コンテナ): an identifier */
+.ty-raw { color: var(--wb-soft); font: 500 11px/1.4 var(--font-mono); }

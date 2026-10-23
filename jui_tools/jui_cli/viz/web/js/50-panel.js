@@ -1141,7 +1141,9 @@ function renderSheet(model, force) {
       const items = pick(1, d.components, Math.min(COMP_MAX, compAll), writing);
       const moreHTML = compAll > COMP_MAX ? `<p class="sc-note">${esc(tl('panel.comp.more', { n: compAll - COMP_MAX, max: COMP_MAX }))}</p>` : '';
       const wfState = (m) => (writing ? (m[2] === 'is-new' ? 'writing' : 'defined') : !s.implPhase ? 'defined' : m[1] === 'm-done' ? 'done' : m[1] === 'm-doing' ? 'doing' : 'todo');
-      const rowText = (type, id, desc) => `<span class="tp">${esc(TYPE_JA[type] || type)}</span> <span class="id">${esc(id)}</span> <span class="desc">${prose(desc)}</span>`;
+      // a Layout's row: its description is the component's own type name (Image and NetworkImage are both 画像), an
+      // identifier, drawn as code beside the Japanese name
+      const rowText = (type, id, desc) => `<span class="tp">${esc(TYPE_JA[type] || type)}</span> <span class="id">${esc(id)}</span> ${desc === type && TYPE_JA[type] ? `<code class="desc ty-raw">${esc(desc)}</code>` : `<span class="desc">${prose(desc)}</span>`}`;
       let rowsHTML, wfHTML;
       if (hasDepths(d.components)) {
         // a tree: the list indented by depth with its lines, the phone frame's boxes nested
