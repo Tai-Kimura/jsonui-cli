@@ -1805,9 +1805,8 @@ def _check_object_typed(body: dict[str, Any], *, source_path: str, pointer: str)
     if has_strict_or_open and not has_props:
         raise OpenAPILoadError(
             "object-without-type",
-            "Schema declares 'type: object' but has no $ref / properties / "
-            "typed additionalProperties. Add explicit field declarations or "
-            "wait for v2 (which may treat this as `Map<String, Any>`).",
+            shapeless_message("Schema declares 'type: object' with no $ref, properties or typed additionalProperties",
+                              "'type: object' なのに $ref・properties・型を決めた additionalProperties が無い"),
             source=source_path,
             pointer=pointer,
         )
@@ -2064,9 +2063,8 @@ def _field_type(
         if not body.get("properties"):
             raise OpenAPILoadError(
                 "object-without-type",
-                f"Inline object at {pointer} has no 'properties' and no "
-                f"typed 'additionalProperties'. Add field declarations or "
-                f"use $ref.",
+                shapeless_message(f"Inline object at {pointer} has no 'properties' and no typed 'additionalProperties'",
+                                  f"{pointer} のその場の object に properties も、型を決めた additionalProperties も無い"),
                 source=source_path,
                 pointer=pointer,
             )
@@ -2130,12 +2128,32 @@ def _field_type(
             return FieldType(is_primitive=True, primitive=PrimitiveKind.FLOAT), [], []
         return FieldType(is_primitive=True, primitive=PrimitiveKind.DOUBLE), [], []
 
+    if type_str is None:   # `{}` or a schema with only nullable / description: a field whose shape is not declared
+        raise OpenAPILoadError("unknown-type", shapeless_message(f"Field at {pointer} has no type", f"{pointer} の欄に型が無い"),
+                               source=source_path, pointer=pointer)
     raise OpenAPILoadError(
         "unknown-type",
-        f"Field at {pointer} has unrecognized type {type_str!r}",
+        f"Field at {pointer} has unrecognized type {type_str!r} / {pointer} の型 {type_str!r} は読めない",
         source=source_path,
         pointer=pointer,
     )
+
+
+# Why a field whose shape is not declared is refused, and how to write it instead — one line, English then Japanese,
+# said by unknown-type (no type) and object-without-type alike. Refused by design (2.3.22): a value whose type is not
+# known cannot be read and written safely on every platform's DTO, so the API declares the shape (until 2.3.21 these
+# messages promised a v2 that would read it as `Map<String, Any>`; that is withdrawn — ticket 2026-10-23-jui-openapi-
+# free-form-json-field).
+SHAPELESS_WHY_EN = "a field whose shape is not declared cannot be read and written safely on every platform"
+SHAPELESS_HOW_EN = ("declare its shape: a list of {key, value} objects, an object with its fields, "
+                    "a typed additionalProperties (a map of one type), or oneOf the types it can be")
+SHAPELESS_WHY_JA = "形の決まらない欄は、どの面でも安全に読み書きできない"
+SHAPELESS_HOW_JA = "key・value の配列、欄を決めた object、型を決めた additionalProperties（1 つの型の map）、取り得る型を並べた oneOf のどれかで形を書く"
+
+
+def shapeless_message(what_en: str, what_ja: str) -> str:
+    """One line: what, why, how — in English, then in Japanese."""
+    return f"{what_en}: {SHAPELESS_WHY_EN}; {SHAPELESS_HOW_EN}. / {what_ja}。{SHAPELESS_WHY_JA}。{SHAPELESS_HOW_JA}。"
 
 
 # String formats retained on FieldType.format (plan 03 — format-aware
