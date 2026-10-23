@@ -17,6 +17,7 @@
       "id": "target",
       "width": 200,
       "height": "wrapContent",
+      "progress": 4,
       "maximumValue": 8
     }
   ]

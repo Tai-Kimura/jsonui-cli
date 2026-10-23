@@ -596,6 +596,8 @@ VALUE_OVERRIDES_BY_SECTION: dict[tuple[str, str], Any] = {
     # actually lifts. The generic 50 would have worked too; 150 matches the
     # ceiling fixtures' scale and leaves no doubt which side of the content it
     # is on.
+    # rjui's default bar is h-2 (8px), so the generic 8 drew the control's bar.
+    ("Progress", "progressHeight"): 20,
     ("common", "minWidth"): 150,
     ("common", "minHeight"): 150,
     ("Image", "src"): IMAGE_ALT_ASSET_NAME,
@@ -1760,6 +1762,9 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # blurs to the same flat colour, which is why every radius rendered its
     # control; stripes give the blur something to smear.
     "Blur.blurRadius": {"root.backdrop": _striped_backdrop()},
+    # `intensity` is a blur radius as well (rjui: intensity × 20 px), so it needs
+    # the same stripes underneath; 2.3.21's fixture blurred a white page.
+    "Blur.intensity": {"root.backdrop": _striped_backdrop()},
     # The same missing backdrop, one attribute along, and the arithmetic is
     # exact rather than approximate. A material is a scrim PLUS a blur, and
     # the two values the ledger records as collapsed differ in both:
@@ -1871,6 +1876,9 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # default order already puts the target on top, which is exactly why only
     # one of the pair was ever inert.
     "indexAbove": {"root.anchorLast": True},
+    # A sibling drawn after the target, over all of it: the control shows the
+    # cover, and a z-index lifts the target above it (root_cover).
+    "zIndex": {"root.cover": [{"type": "View", "id": "cover", "width": 200, "height": 200, "background": "#0000FF"}]},
     "alignTopOfView": {"width": 50, "height": 50},
     "alignBottomOfView": {"width": 50, "height": 50},
     "alignLeftOfView": {"width": 50, "height": 50},
@@ -2044,6 +2052,10 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # (`value` is the undeclared legacy spelling there — see
     # shared/core/attribute_semantics.json → progressValue).
     "Slider.tintColor": {"value": 0.5},
+    # The scale needs a value to scale: with no progress the bar is empty at 0/8
+    # as at 0/100 (2.3.21's fixture). 4 of the representative 8 is half a bar,
+    # of the default 100 a sliver.
+    "Progress.maximumValue": {"progress": 4},
     "Progress.color": {"progress": 0.5},
     "Progress.tintColor": {"progress": 0.5},
     "Progress.progressTintColor": {"progress": 0.5},
@@ -2684,7 +2696,7 @@ def apply_base_overrides(base: dict[str, Any], extra: dict[str, Any] | None) -> 
 
 #: `root.` keys that describe the root's CHILDREN rather than its attributes.
 #: Handled structurally by the layout builders; never written as JSON keys.
-ROOT_STRUCTURE_KEYS = ("backdrop", "anchorLast")
+ROOT_STRUCTURE_KEYS = ("backdrop", "anchorLast", "cover")
 
 
 def root_backdrop(extra: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -2696,6 +2708,17 @@ def root_backdrop(extra: dict[str, Any] | None) -> list[dict[str, Any]]:
     its control came out identical no matter what radius was asked for.
     """
     return [dict(n) for n in (split_root_attrs(extra).get("backdrop") or [])]
+
+
+def root_cover(extra: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Nodes to place OVER the target, after it in the root's own child list.
+
+    `zIndex` decides which of two overlapping siblings is drawn on top, and the
+    target overlapped nothing, so every value drew its control (2.3.21, ticket
+    2026-10-23-four-new-fixtures-cannot-show-their-attribute). A later sibling
+    covers the target in the control; the fixture's z-index lifts it back over.
+    """
+    return [dict(n) for n in (split_root_attrs(extra).get("cover") or [])]
 
 
 def root_anchor_last(extra: dict[str, Any] | None) -> bool:

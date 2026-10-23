@@ -10,11 +10,11 @@
   "schemaVersion": 2,
   "generatedFrom": "914c7f17da54d1685e208afd4921866d353a0378929e12f5b2b047846b29a338",
   "counts": {
-    "fixtures": 1257,
+    "fixtures": 1258,
     "assertable": 51,
     "visual": 954,
     "interactive": 41,
-    "control": 133,
+    "control": 134,
     "declarationOnly": 77,
     "skipped": 158,
     "promoted": {
@@ -6645,7 +6645,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
-      "control": "__control/View"
+      "control": "__control/View__root.cover-2f7ab4a5"
     },
     {
       "id": "Label/text__static",
@@ -19169,7 +19169,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
-      "control": "__control/Progress"
+      "control": "__control/Progress__progress-4"
     },
     {
       "id": "Progress/progressHeight__static",
@@ -19180,7 +19180,7 @@
       "host": "Progress",
       "writtenKey": "progressHeight",
       "aliasOf": null,
-      "value": 8,
+      "value": 20,
       "platforms": [
         "web"
       ],
@@ -24225,7 +24225,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
-      "control": "__control/Blur"
+      "control": "__control/Blur__root.backdrop-b5f80259"
     },
     {
       "id": "IconLabel/text__static",
@@ -26205,28 +26205,6 @@
       "control": "__control/TabView"
     },
     {
-      "id": "__control/Blur",
-      "component": "__control",
-      "attribute": null,
-      "case": "Blur",
-      "class": "visual",
-      "host": "Blur",
-      "writtenKey": null,
-      "aliasOf": null,
-      "value": null,
-      "platforms": [
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/__control/Blur.layout.json",
-      "test": "fixtures/__control/Blur.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "control": null,
-      "isControl": true
-    },
-    {
       "id": "__control/Blur__root.backdrop-b5f80259",
       "component": "__control",
       "attribute": null,
@@ -27464,6 +27442,28 @@
       "deprecated": null,
       "layout": "fixtures/__control/Progress__progress-0.5.layout.json",
       "test": "fixtures/__control/Progress__progress-0.5.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/Progress__progress-4",
+      "component": "__control",
+      "attribute": null,
+      "case": "Progress",
+      "class": "visual",
+      "host": "Progress",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Progress__progress-4.layout.json",
+      "test": "fixtures/__control/Progress__progress-4.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
@@ -28888,6 +28888,28 @@
       "deprecated": null,
       "layout": "fixtures/__control/View__root.backdrop-309d3595_root.orientation-horizontal.layout.json",
       "test": "fixtures/__control/View__root.backdrop-309d3595_root.orientation-horizontal.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/View__root.cover-2f7ab4a5",
+      "component": "__control",
+      "attribute": null,
+      "case": "View",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/View__root.cover-2f7ab4a5.layout.json",
+      "test": "fixtures/__control/View__root.cover-2f7ab4a5.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,

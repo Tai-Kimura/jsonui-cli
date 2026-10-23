@@ -216,7 +216,7 @@ def build_layout(plan: AttributePlan, case: CasePlan, *, source_label: str) -> d
 def _root_children(
     target: dict, needs_anchor: bool, extra: dict | None
 ) -> list[dict]:
-    """The root's child list: backdrop, anchor and target in drawing order.
+    """The root's child list: backdrop, anchor, target and cover in drawing order.
 
     A root with no orientation overlays its children, so position in this list
     IS depth — which is what both structural companions trade on. The backdrop
@@ -234,6 +234,7 @@ def _root_children(
     children.append(target)
     if needs_anchor and anchor_last:
         children.append(dict(ANCHOR_NODE))
+    children.extend(rules.root_cover(extra))
     return children
 
 

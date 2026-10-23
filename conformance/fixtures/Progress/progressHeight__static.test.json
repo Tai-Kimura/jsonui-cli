@@ -5,7 +5,7 @@
   },
   "metadata": {
     "name": "conformance Progress.progressHeight (static)",
-    "description": "Conformance fixture for 'progressHeight' on Progress (section: Progress, class: visual). Value under test: 8.",
+    "description": "Conformance fixture for 'progressHeight' on Progress (section: Progress, class: visual). Value under test: 20.",
     "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
     "tags": [
       "conformance",
@@ -18,7 +18,7 @@
   "cases": [
     {
       "name": "progressHeight__static",
-      "description": "Conformance fixture for 'progressHeight' on Progress (section: Progress, class: visual). Value under test: 8.",
+      "description": "Conformance fixture for 'progressHeight' on Progress (section: Progress, class: visual). Value under test: 20.",
       "steps": [
         {
           "action": "waitFor",

@@ -63,6 +63,13 @@
         }
       ],
       "zIndex": 8
+    },
+    {
+      "type": "View",
+      "id": "cover",
+      "width": 200,
+      "height": 200,
+      "background": "#0000FF"
     }
   ]
 }
