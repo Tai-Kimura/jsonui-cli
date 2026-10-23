@@ -22,14 +22,18 @@ RSpec.describe 'inline color attributes resolve colors.json keys' do
   end
 
   describe 'dynamically bound colors' do
+    # a custom property read by a class, so a state colour's class still wins
+    # (ticket rjui-bound-background-overrides-tap-background)
     it 'resolves a bound background' do
-      expect(label('background' => '@{bgColor}'))
-        .to include('backgroundColor: ColorManager.resolveColor(data.bgColor)')
+      out = label('background' => '@{bgColor}')
+      expect(out).to include("'--jui-bg': ColorManager.resolveColor(data.bgColor)")
+      expect(out).to include('bg-[var(--jui-bg)]')
     end
 
     it 'resolves a bound fontColor' do
-      expect(label('fontColor' => '@{fgColor}'))
-        .to include('color: ColorManager.resolveColor(data.fgColor)')
+      out = label('fontColor' => '@{fgColor}')
+      expect(out).to include("'--jui-color': ColorManager.resolveColor(data.fgColor)")
+      expect(out).to include('text-[var(--jui-color)]')
     end
 
     it 'resolves a bound borderColor' do

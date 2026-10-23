@@ -252,10 +252,19 @@ module RjuiTools
             static_spacing('marginInlineEnd', attributes['endMargin'])
           )
 
-          # Background - check for dynamic binding or gradient
+          # Background - check for dynamic binding or gradient.
+          #
+          # A bound colour rides a custom property and a class, never an inline
+          # `backgroundColor` (ticket rjui-bound-background-overrides-tap-background):
+          # an inline style beats every class, so the state colours — tapBackground's
+          # `hover:` / `active:`, disabledBackground's `disabled:` — never showed on a
+          # bound background, while iOS and Android draw the state colour over a bound
+          # base exactly as over a fixed one. A class with a state variant beats this
+          # one (a pseudo-class is more specific), as it beats a fixed `bg-*`.
           if attributes['background']
             if has_binding?(attributes['background'])
-              @dynamic_styles['backgroundColor'] = color_style_expr(attributes['background'])
+              @dynamic_styles['--jui-bg'] = color_style_expr(attributes['background'])
+              classes << 'bg-[var(--jui-bg)]'
             elsif attributes['background'].to_s.include?('gradient')
               # CSS gradients must be inline styles
               @dynamic_styles['background'] = "'#{attributes['background']}'"
@@ -268,10 +277,13 @@ module RjuiTools
           corner_radius = bound_length_style('borderRadius', attributes['cornerRadius'])
           classes << TailwindMapper.map_corner_radius(corner_radius) if corner_radius
 
-          # Text color - check for dynamic binding
+          # Text color - check for dynamic binding. Bound: a custom property and a
+          # class, as the background above, so highlightColor's `hover:text-*` and
+          # disabledFontColor's `disabled:text-*` still win over it.
           if attributes['fontColor']
             if has_binding?(attributes['fontColor'])
-              @dynamic_styles['color'] = color_style_expr(attributes['fontColor'])
+              @dynamic_styles['--jui-color'] = color_style_expr(attributes['fontColor'])
+              classes << 'text-[var(--jui-color)]'
             else
               classes << TailwindMapper.map_color(attributes['fontColor'], 'text')
             end
