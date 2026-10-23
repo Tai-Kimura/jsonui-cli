@@ -218,8 +218,11 @@ async def run_spec_worktrees(pw, out, failures, jt=None, shots_only=False):
         lane = sorted((r["name"], r["tag"]) for r in room_rows(groups, "shop/"))
         check(failures, lane == [("注文一覧", "⎇ feat/a1"), ("注文一覧", "⎇ main"), ("監査ログ", "⎇ feat/a1")],
               f"a session whose cwd is the parent shows the worktree it edits in, by its branch: {groups}")
-        text = await page.evaluate("() => document.body.innerText")
-        check(failures, "ow-a1" not in text and "scratchpad" not in text, "the worktree's folder is not on the page")
+        # the rows (the panel's list and the spec board) name the branch, never the worktree's folder; the session's own
+        # line and the log say the path its tool was given, as for any edit
+        text = await page.evaluate("() => ['#spec-list', '#wb'].map((q) => document.querySelector(q).innerText).join('\\n')")
+        check(failures, "feat/a1" in text and "ow-a1" not in text and "scratchpad" not in text,
+              f"the rows name the branch, not the worktree's folder: {[l for l in text.splitlines() if 'ow-a1' in l][:3]}")
         await page.screenshot(path=str(out / "after-parent-lane.png"))
         hook(SID_LANE, shop, hook_event_name="SessionEnd", reason="other")
         await wait(page, "() => ![...document.querySelectorAll('#spec-list .spec-row .co-tag')].some((t) => t.textContent.includes('feat/a1'))",
