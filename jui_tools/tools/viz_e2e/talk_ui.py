@@ -53,7 +53,7 @@ from workwear import contrast, de2000
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 from jui_cli.viz import talk_contract  # noqa: E402
 
-LONG_NAME = 'jsonui-agents-for-claude-4f-library-orchestrator-for-the-2.3.7-train'
+LONG_NAME = 'shop-app-release-coordinator-for-the-spring-catalog-and-checkout-update'
 def sub_name() -> str:
     """The subagent's name in the talk list: the demo's words in the run's language."""
     return demo_talk("a3")

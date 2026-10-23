@@ -36,7 +36,7 @@ WORDS = {
   5: ("signup.spec.json の項目を 3 つ足して、検証を通してください。", None),
   6: ("足しました。doc_validate_spec は緑です。", None),
   7: ("レビューをお願いします（クラウドの相手へ）", None),
-  8: ("2.3.7 の列車の範囲を決めました。トークの画面が入ります。", "2.3.7 の範囲"),
+  8: ("春のセールの範囲を決めました。注文履歴の画面が入ります。", "春のセールの範囲"),
   9: ("決済の画面のテスト、止まっていますか？", None),
   10: ("シミュレーターを待っています。空いたら流します。", None),
   11: ("スクリーンショットを差し替えました。もう一度見てください。", "差し替え"),
@@ -58,7 +58,7 @@ WORDS = {
   5: ("Add three fields to signup.spec.json and get it through validation, please.", None),
   6: ("Added. doc_validate_spec is green.", None),
   7: ("Please review this (to the cloud peer)", None),
-  8: ("The 2.3.7 train's scope is set. The talk view is in.", "2.3.7 scope"),
+  8: ("The spring sale's scope is set. The order history screen is in.", "Spring sale scope"),
   9: ("Is the payment screen's test stuck?", None),
   10: ("Waiting for the simulator. It runs as soon as one is free.", None),
   11: ("The screenshots are replaced. Please take another look.", "Replaced"),
@@ -69,7 +69,7 @@ WORDS = {
 def build(lang: str) -> dict:
     W = WORDS[lang]
     NAMES = {"a0": "shop-app-main", "b4": "shop-app-signup",
-             "4f": "jsonui-agents-for-claude-4f-library-orchestrator-for-the-2.3.7-train",
+             "4f": "shop-app-release-coordinator-for-the-spring-catalog-and-checkout-update",
              "d8": "shop-app-payment", "a3": W["a3"]}
     EXT = external_key("cloud-reviewer")
     NAMES[EXT] = "cloud-reviewer"

@@ -112,6 +112,43 @@ def test_the_robots_are_the_demos_own(lang):
     assert {k for k in keys if not k.startswith("x:")} <= DEMO_ROBOTS
 
 
+
+#: What a peer's name or a message may not hold: the demo is public sample data (the docsite's screenshots, every
+#: `jui viz export-demo` page), and until 2.3.22 a peer carried a working session's name — its local folder, its role
+#: and its train (ticket 2026-10-24-viz-demo-talk-data-carries-a-real-session-name).
+#: The product's own names (jsonui-define, jsonui-test) are the demo's words; a checkout folder of the agents repo, a
+#: role, a home path or a version (a train) are not.
+NOT_IN_THE_DEMO = re.compile(r"jsonui-agents|orchestrator|/Users/|~/|\b\d+\.\d+\.\d+\b", re.I)
+#: The demo's peers: the shop app's sessions, the cloud reviewer, and the subagent (named in the run's language).
+DEMO_PEER = re.compile(r"shop-app-[a-z-]+|cloud-reviewer")
+
+
+def names_and_texts(d):
+    def walk(v):
+        if isinstance(v, dict):
+            for k, x in v.items():
+                if k in ("name", "fromName", "toName", "text", "preview", "summary") and isinstance(x, str):
+                    yield k, x
+                else:
+                    yield from walk(x)
+        elif isinstance(v, list):
+            for x in v:
+                yield from walk(x)
+    yield from walk(d)
+
+
+@pytest.mark.parametrize("lang", LANGUAGES)
+def test_no_name_or_message_is_a_real_folder_session_or_train(lang):
+    d = data(lang)
+    found = list(names_and_texts(d))
+    assert any(k == "name" for k, _ in found) and any(k == "text" for k, _ in found), "the walk saw no names or texts"
+    leaked = sorted({(k, v) for k, v in found if NOT_IN_THE_DEMO.search(v)})
+    assert not leaked, f"a real folder, session or train in the demo: {leaked}"
+    subagents = {c["peer"]["name"] for l in d["lists"].values() for c in l["items"] if c["peer"]["kind"] == "subagent"}
+    foreign = sorted({v for k, v in found if k in ("name", "fromName", "toName")
+                      and not DEMO_PEER.fullmatch(v) and v not in subagents})
+    assert not foreign, f"a peer that is not the demo's own: {foreign}"
+
 def test_in_the_demo_bundle_only_and_data_only():
     assert "31-talk-demo-data.js" in bundle.parts("demo", e2e=False)
     assert "31-talk-demo-data.js" not in bundle.parts("live", e2e=False)
