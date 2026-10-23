@@ -321,6 +321,7 @@
     "jui_tools/jui_cli/viz/web/js/58-talk.js": "トークの画面（一覧と詳細）。サーバーの talk.* の frame（talk_contract.json）だけを読み、transcript や CLI の形は読まない。msg_id などの CLI の形はサーバー（データの層）の側の項目",
     "jui_tools/jui_cli/viz/export_demo.py": "デモのページを静的に書き出すだけ（サーバーも CLI も無し）",
     "jui_tools/jui_cli/viz/rooms.py": "cwd から JsonUI プロジェクトの根を探すだけ（jui.config.json / .git）",
+    "jui_tools/jui_cli/viz/loop_watch.py": "viz サーバー自身の loop が止まった時に、スタックと要求の道（method と path だけ）を serve.log に書くだけ。CLI・フック・transcript の形は読まない",
     "jui_tools/jui_cli/viz/security.py": "viz サーバー自身の Host・Origin・トークンの守り。CLI 側の形は読まない",
     "jui_tools/jui_cli/viz/sheet.py": "JsonUI の spec からホワイトボードを作るだけ",
     "jui_tools/jui_cli/viz/sources/__init__.py": "パッケージの印だけ",
