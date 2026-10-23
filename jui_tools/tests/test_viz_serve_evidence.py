@@ -22,6 +22,8 @@ import os
 import signal
 import socket
 import struct
+import subprocess
+import sys
 import time
 import urllib.request
 from pathlib import Path
@@ -96,6 +98,35 @@ def test_stop_keeps_the_log_of_a_server_it_had_to_force(home):
         assert str(kept) in r.stdout, r.stdout
         assert f"started (pid {pid})" in kept.read_text()
         assert not (_log_dir(home) / "serve.log").exists()
+    finally:
+        if _alive(pid):
+            os.kill(pid, signal.SIGKILL)
+
+
+def test_stop_keeps_the_log_of_a_server_that_ignored_term_and_ended_on_usr1(home, monkeypatch, capsys):
+    """A server from before 2.3.22 has no USR1 handler: one that held on past TERM ends on the USR1 stop sends before
+    the KILL. That is a forced stop too: "killed", and its log kept."""
+    folder = _log_dir(home)
+    folder.mkdir(parents=True)
+    (folder / "serve.log").write_text("jui viz: started (pid 1)\n")
+    # a grandchild, so the system reaps it when it ends (a child of this test would stay a zombie and look alive)
+    launcher = subprocess.Popen([sys.executable, "-c", "import os, signal, sys, time\n"
+                                 "if os.fork():\n    os._exit(0)\nos.setsid()\n"
+                                 "signal.signal(signal.SIGTERM, signal.SIG_IGN)\nprint(os.getpid(), flush=True)\n"
+                                 "sys.stdout.close()\ntime.sleep(60)\n"],
+                                stdout=subprocess.PIPE, text=True)
+    pid = int(launcher.stdout.readline())                     # TERM is ignored from here on
+    launcher.stdout.close()
+    launcher.wait(10)
+    try:
+        monkeypatch.setattr(viz_cmd, "STOP_TERM_SEC", 0.5)
+        monkeypatch.setattr(viz_cmd, "_identify", lambda: ("running", pid, {}))
+        monkeypatch.setattr(viz_cmd, "_clear_runtime_files", lambda pid=None: None)
+        assert viz_cmd._cmd_stop(SimpleNamespace()) == 0
+        out = capsys.readouterr().out
+        assert not _alive(pid)
+        assert "killed" in out and str(folder / "serve.log.1") in out, out
+        assert (folder / "serve.log.1").read_text() == "jui viz: started (pid 1)\n"
     finally:
         if _alive(pid):
             os.kill(pid, signal.SIGKILL)
