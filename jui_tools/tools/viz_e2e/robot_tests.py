@@ -19,9 +19,8 @@ import subprocess
 import sys
 import time
 import urllib.request
-import uuid
 
-from common import ISOLATE, DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, ready, stamp
+from common import ISOLATE, DESKTOP, e2e_run_id, LAUNCH_ARGS, Watch, dump, new_page, ready, stamp
 
 SID_A = "aaaa0000-0000-4000-8000-0000000000c1"
 SID_B = "bbbb0000-0000-4000-8000-0000000000c2"
@@ -126,7 +125,7 @@ async def run_robot_tests(pw, out, failures):
         await wait(page, "() => document.querySelectorAll('#sessions [data-robot-open]').length >= 2", label="two robots")
 
         # A: a run that ends, eight of ten cases failed
-        run_a = str(uuid.uuid4())
+        run_a = e2e_run_id()
         hook(dict(base(SID_A), hook_event_name="PreToolUse", tool_name="Bash", tool_use_id="run-a",
                   tool_input={"command": "npx playwright test tests/a.test.json"}))
         await page.wait_for_timeout(600)
@@ -139,7 +138,7 @@ async def run_robot_tests(pw, out, failures):
         hook(dict(base(SID_A), hook_event_name="PostToolUse", tool_name="Bash", tool_use_id="run-a",
                   tool_input={"command": "npx playwright test tests/a.test.json"}, tool_response={"stdout": "2 passed, 8 failed", "stderr": ""}))
         # B: a run still going
-        run_b = str(uuid.uuid4())
+        run_b = e2e_run_id()
         hook(dict(base(SID_B), hook_event_name="PreToolUse", tool_name="Bash", tool_use_id="run-b",
                   tool_input={"command": "npx playwright test tests/b.test.json"}))
         await page.wait_for_timeout(600)
@@ -182,7 +181,7 @@ async def run_robot_tests(pw, out, failures):
         await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected again")
         hook(dict(base(SID_A), hook_event_name="SessionStart", source="resume"))
         await wait(page, "() => !!document.querySelector('#sessions [data-robot-open]')", label="robot A again")
-        run_c = str(uuid.uuid4())
+        run_c = e2e_run_id()
         hook(dict(base(SID_A), hook_event_name="PreToolUse", tool_name="Bash", tool_use_id="run-c",
                   tool_input={"command": "npx playwright test tests/a.test.json"}))
         await page.wait_for_timeout(600)

@@ -35,7 +35,7 @@ sys.path.insert(0, str(HERE))
 from playwright.async_api import async_playwright  # noqa: E402
 
 import demo  # noqa: E402
-from common import ISOLATE, LAUNCH_ARGS, Watch, dump, progress_count, progress_grew, suite_guard  # noqa: E402
+from common import E2E_MARKS, ISOLATE, LAUNCH_ARGS, Watch, dump, progress_count, progress_grew, suite_guard  # noqa: E402
 
 EXPECT_DEMO = HERE / "expect_demo.json"
 
@@ -224,6 +224,7 @@ def main(argv=None) -> int:
     os.environ.setdefault("JUI_VIZ_LANGUAGE", "ja")
     out = pathlib.Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
+    E2E_MARKS.update({str(out), str(out.resolve())})   # every throwaway HOME is under it: a path of one in a record is this run's
     failures: list[str] = []
     suites = a.suite or list(demo.SUITES)
 

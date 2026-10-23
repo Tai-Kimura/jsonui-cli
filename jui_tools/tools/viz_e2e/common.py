@@ -11,6 +11,7 @@ import datetime
 import json
 import re
 import traceback
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -67,18 +68,41 @@ def project_id(cwd) -> str:
 # real one's state (its folder, the progress a runner writes, the saved results) — 10-18.
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
 # The real server's progress folder (the orchestrator's gate, 10-18: driver web's jest once wrote 480 files there from a test).
-# Every suite runs in a throwaway HOME; after each, this folder must not have grown. The folder is a parameter so a
-# pytest arm can show the gate turns red on a temporary one (tests/test_viz_e2e_gate.py) without writing to the real.
+# Every suite runs in a throwaway HOME; after each, no file of this run may have appeared there. The folder is a
+# parameter so a pytest arm can show the gate turns red on a temporary one (tests/test_viz_e2e_gate.py) without
+# writing to the real.
 REAL_PROGRESS = Path.home() / ".local" / "state" / "jui-viz" / "test-progress"
+# What marks a file as this run's: the run ids its suites write records under (e2e_run_id) and its output folder,
+# which holds every throwaway HOME. A file without one is another lane's test run on the real HOME, which the
+# folder's count alone took for a leak (2.3.21: 405 -> 412 from a web run of another lane at the same time).
+E2E_MARKS: set[str] = set()
 
 
-def progress_count(folder: Path = REAL_PROGRESS) -> int:
-    return len(list(folder.glob("*.jsonl"))) if folder.is_dir() else 0
+def e2e_run_id() -> str:
+    """A progress run id for a suite's records, kept as one of this run's marks."""
+    run = str(uuid.uuid4())
+    E2E_MARKS.add(run)
+    return run
 
 
-def progress_grew(suite: str, before: int, folder: Path = REAL_PROGRESS) -> str | None:
-    now = progress_count(folder)
-    return f"{suite}: the real test-progress folder grew ({before} -> {now})" if now > before else None
+def progress_count(folder: Path = REAL_PROGRESS) -> dict[str, int]:
+    """The folder's progress files and their sizes (what progress_grew compares against)."""
+    return {f.name: f.stat().st_size for f in folder.glob("*.jsonl")} if folder.is_dir() else {}
+
+
+def progress_grew(suite: str, before: dict[str, int], folder: Path = REAL_PROGRESS) -> str | None:
+    """The files new or grown since before that carry one of this run's marks, in their name or their text."""
+    ours = []
+    for name, size in sorted(progress_count(folder).items()):
+        if before.get(name) == size:
+            continue
+        try:
+            text = name + "\n" + (folder / name).read_text(errors="replace")
+        except OSError:
+            continue
+        if any(m in text for m in E2E_MARKS):
+            ours.append(name)
+    return f"{suite}: this run wrote to the real test-progress folder ({len(ours)}: {', '.join(ours[:3])})" if ours else None
 
 
 #: how long a suite's leftover process has after INT before KILL (the arms make it short)
