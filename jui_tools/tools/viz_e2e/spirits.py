@@ -1,10 +1,11 @@
 """The skill spirit in the page (ticket 2026-10-21-jui-viz-skill-spirit). Runs with `--only spirits`.
 
-The real `jui viz serve` in a throwaway HOME on a free port and the real forward.py. The HOME holds four models of the
+The real `jui viz serve` in a throwaway HOME on a free port and the real forward.py. The HOME holds five models of the
 person's own (copies of the bundled originals, each naming one skill, so the choice is known): "scholar" for
 code-review (a bubble with ruby, glasses on the head), "gears" for band-test (it hides the band; a glow, a flame aura,
-sparks at rate 40 and three bolts added), "textured" for tex-test (a quad with an embedded PNG) and "skinned" for
-glow-test (a skinned strip, a turning square and an fx_ card, with an outline and a glow). Checked:
+sparks at rate 40 and three bolts added), "textured" for tex-test (a quad with an embedded PNG), "turned" for
+turn-test (the scholar's figure, raised by spirit.offset and turned by spirit.rotate) and "skinned" for glow-test (a
+skinned strip, a turning square and an fx_ card, with an outline and a glow). Checked:
   * a Skill call: the robot's spirit loads, appears and stands (the figure and its parts on the robot), the badge says
     the skill, the bubble shows the model's words and ruby aimed at the spirit, the tag moves to the cheek
   * the scholar's ghost look, narrow eyes and the book's pose, its sparks; the gears' three afterimages, shouts and
@@ -12,6 +13,7 @@ glow-test (a skinned strip, a turning square and an fx_ card, with an outline an
   * another session's skill hides its robot's band; the turn's Stop takes the spirit, the parts, the effects and the
     badge off and gives the band, the eyes and the pose back
   * an embedded texture is read (GLTFLoader's blob: URL under the page's CSP) and its picture loaded
+  * spirit.offset and spirit.rotate place the figure on its anchor (offset [0, 1, 0], rotate [0, 90, 0])
   * the outline and effects.glow are posed as the figure, frame by frame: on the gears' turning gears and on "skinned"
     (glow-test: a strip whose bones its loop clip swings, a square whose own node turns), and never on an fx_ node;
     the glow's rim the same on a mesh scaled 2; none in the afterimages; hidden on a third spirit (past fullFx)
@@ -156,7 +158,8 @@ def _skinned_glb() -> bytes:
 
 
 def _own_models(home: pathlib.Path, jt: pathlib.Path):
-    """Three models of the person's own: the bundled originals, copied, each naming one skill, and a textured quad."""
+    """The five models of the person's own: two bundled originals copied, each naming one skill; a textured quad; the scholar
+    turned; a skinned strip."""
     bundled = jt / "jui_cli" / "viz" / "web" / "spirits"
     own = home / ".local" / "state" / "jui-viz" / "spirits"
     for name, src, skill in (("scholar", "ink-scholar", "code-review"), ("gears", "gear-giant", "band-test")):
@@ -169,6 +172,13 @@ def _own_models(home: pathlib.Path, jt: pathlib.Path):
             spec["effects"]["sparks"] = {**spec["effects"]["sparks"], "rate": 40, "size": 0.18}
             spec["effects"]["lightning"] = {"count": 3, "everySec": 0.3}
         (own / name / "spirit.json").write_text(json.dumps(spec, ensure_ascii=False), encoding="utf-8")
+    # "turned": the scholar's figure alone, raised by offset and turned by rotate (ticket
+    # 2026-10-24-jui-viz-spirit-figure-ignores-offset-rotate)
+    shutil.copytree(bundled / "ink-scholar", own / "turned")
+    spec = json.loads((own / "turned" / "spirit.json").read_text(encoding="utf-8"))
+    spec = {"version": spec["version"], "skills": ["turn-test"],
+            "spirit": {**spec["spirit"], "offset": [0, 1, 0], "rotate": [0, 90, 0]}}
+    (own / "turned" / "spirit.json").write_text(json.dumps(spec, ensure_ascii=False), encoding="utf-8")
     (own / "textured").mkdir()
     (own / "textured" / "spirit.glb").write_bytes(_textured_glb())
     (own / "textured" / "spirit.json").write_text(json.dumps({"version": 1, "skills": ["tex-test"],
@@ -321,6 +331,18 @@ async def run_spirits(pw, out, failures):
         res["steps"].append({"step": "r3 tex-test", **s3})
         check(s3["model"] == "own/textured" and s3["textures"] == {"maps": 1, "loaded": 1} and not s3["error"],
               f"the embedded texture is read and drawn: {s3}")
+        hook("r3", hook_event_name="Stop")
+        await wait(page, "(l) => !window.__dbg.spirit(l).phase", arg=who["r3"], label="r3 back to itself")
+
+        # spirit.offset and spirit.rotate place the figure: raised 1 and turned 90 degrees on its anchor
+        skill("r3", "turn-test", "u5")
+        await wait(page, "(l) => { const s = window.__dbg.spirit(l); return s && s.phase === 'shown'; }", arg=who["r3"],
+                   timeout=30000, label="r3's turned spirit standing")
+        s3 = await page.evaluate(state, who["r3"])
+        res["steps"].append({"step": "r3 turn-test", **s3})
+        check(s3["model"] == "own/turned" and s3["place"] == {"offset": [0, 1, 0], "rotate": [0, 90, 0]},
+              f"the figure takes spirit.json's offset and rotate: {s3['place']}")
+        await page.screenshot(path=str(out / "turned.png"))
         hook("r3", hook_event_name="Stop")
         await wait(page, "(l) => !window.__dbg.spirit(l).phase", arg=who["r3"], label="r3 back to itself")
 

@@ -698,6 +698,9 @@ window.__dbg = {
       pose: R.robot.spiritPose || null,
       near: S ? S.near !== false : null, figureShown: !!(S && S.figure && S.figure.visible),
       mixerTime: S && S.mixer ? +S.mixer.time.toFixed(3) : null,
+      // where the figure sits on its anchor: spirit.json's offset and rotate (degrees)
+      place: S && S.figure ? { offset: S.figure.position.toArray().map((v) => +v.toFixed(3)),
+        rotate: S.figure.rotation.toArray().slice(0, 3).map((v) => +THREE.MathUtils.radToDeg(v).toFixed(1)) } : null,
       bubbleBox: S && shown(S.bubbleEl) ? (({ left, top, right, bottom }) => ({ left, top, right, bottom }))(S.bubbleEl.getBoundingClientRect()) : null,
       fx: S && S.fx ? { aura: !!S.fx.aura, glow: !!S.fx.glow, bolt: !!S.fx.bolt, clones: S.fx.clones.length,
         // the aura's look: its style, its flame tongues and their heights summed (they rise: it changes), its brightest
