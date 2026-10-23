@@ -171,25 +171,25 @@ function renderPrices(force) {
   }).join('');
   const e = pr.edit;
   const formHTML = e ? `<form class="pr-form" id="pr-form"><h3>${esc(e.isNew ? tl('pr.add') : tl('pr.change'))}</h3>
-      <label class="pr-model">${esc(tl('pr.model.label'))}<input data-pr-in="model" value="${esc(e.model || '')}" ${e.isNew ? '' : 'readonly'} required maxlength="100" autocomplete="off" spellcheck="false"></label>
-      <div class="pr-nums">${PR_KINDS.map(([k, ja]) => `<label>${esc(ja)}<input data-pr-in="${esc(k)}" type="number" min="0" max="100000" step="any" required value="${esc(e.values[k] === undefined ? '' : String(e.values[k]))}"></label>`).join('')}</div>
+      <label class="pr-model">${esc(tl('pr.model.label'))}<input data-pr-in="model" data-keep="pr:new:model" value="${esc(e.model || '')}" ${e.isNew ? '' : 'readonly'} required maxlength="100" autocomplete="off" spellcheck="false"></label>
+      <div class="pr-nums">${PR_KINDS.map(([k, ja]) => `<label>${esc(ja)}<input data-pr-in="${esc(k)}" data-keep="${esc(`pr:${e.isNew ? 'new' : e.model}:${k}`)}" type="number" min="0" max="100000" step="any" required value="${esc(e.values[k] === undefined ? '' : String(e.values[k]))}"></label>`).join('')}</div>
       <p class="set-hint">${esc(tl('pr.hint'))}</p>
       <div class="pr-btns"><button type="submit" class="mini-btn pr-save"${pr.busy ? ' disabled' : ''}>${esc(tl('pr.save'))}</button><button type="button" class="mini-btn" data-pr-cancel>${esc(tl('pr.cancel'))}</button></div></form>`
     : `<p><button type="button" class="mini-btn" data-pr-add="">${esc(tl('pr.add'))}</button></p>`;
   const aboutHTML = `<p class="pr-about">${esc(BILL.notice)} ${tlHTML('pr.about', { source: p.source || '', checked: p.checked || '', path: p.userPath || '' })}</p>`;
   const msgHTML = pr.msg ? `<p class="pr-msg" role="status">${esc(pr.msg)}</p>` : '';
   const headHTML = PR_KINDS.map(([, ja]) => `<th>${esc(ja)}</th>`).join('');
-  prBody.innerHTML = `${aboutHTML}${msgHTML}`
+  keepFields(prBody, () => { prBody.innerHTML = `${aboutHTML}${msgHTML}`
     + (unpricedHTML ? `<section class="pr-unpriced"><h3>${esc(tl('pr.unpriced'))}</h3><ul>${unpricedHTML}</ul></section>` : '')
     + (errorsHTML ? `<section class="pr-errors"><h3>${esc(tl('pr.errors'))}</h3><ul>${errorsHTML}</ul></section>` : '')
-    + `${formHTML}<table class="ds-table pr-table"><thead><tr><th>${esc(tl('pr.col.model'))}</th>${headHTML}<th>${esc(tl('pr.col.origin'))}</th><th></th></tr></thead><tbody>${rowsHTML}</tbody></table>`;
+    + `${formHTML}<table class="ds-table pr-table"><thead><tr><th>${esc(tl('pr.col.model'))}</th>${headHTML}<th>${esc(tl('pr.col.origin'))}</th><th></th></tr></thead><tbody>${rowsHTML}</tbody></table>`; });   // a number typed and not saved yet: kept (DRAFTS, 50-panel.js)
 }
 async function pricesSend(op, model, row) {
   pr.busy = true; renderPrices(true);
   const got = typeof SOURCE.pricesOp === 'function' ? await SOURCE.pricesOp(op, model, row) : { ok: false, error: tl('pr.live.only') };
   pr.busy = false;
   pr.msg = got.ok ? tl({ set: 'pr.done.set', remove: 'pr.done.remove', reset: 'pr.done.reset' }[op], { model }) : tl('pr.failed', { error: got.error || tl('pr.unknown') });
-  if (got.ok && op === 'set') pr.edit = null;
+  if (got.ok && op === 'set') { pr.edit = null; dropDrafts('pr:'); }   // saved: no draft left
   renderPrices(true);
 }
 $('pr-close').addEventListener('click', closePrices);
@@ -205,7 +205,7 @@ prBody.addEventListener('click', (ev) => {
     return;
   }
   if (op) { pricesSend(op.dataset.prOp, op.dataset.prModel, null); return; }
-  if (t.closest('[data-pr-cancel]')) { pr.edit = null; renderPrices(true); }
+  if (t.closest('[data-pr-cancel]')) { pr.edit = null; dropDrafts('pr:'); renderPrices(true); }
 });
 prBody.addEventListener('submit', (ev) => {
   ev.preventDefault();

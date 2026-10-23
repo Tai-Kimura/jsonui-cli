@@ -81,19 +81,20 @@ const QUESTIONS = [{ id: 'qa', who: 's1', status: 'answered', doneAt: NOW }, { i
                    { id: 'qs', who: 's1', status: 'sent' }];
 const DENIALS = [{ id: 'da', who: 'm1', status: 'dismissed', doneAt: NOW }, { id: 'dp', who: 'm1', status: 'pending' }];
 let shown = null;
-const box = { hidden: false };
+const box = { hidden: false, classList: { toggle() {} } };
 function histCardsBox() { return box; }
 const permSig = () => '', questionsSig = (x) => x.map((q) => q.id), denialsSig = (x) => x.map((d) => d.id);
 function keyed(el, sig, build) { shown = JSON.parse(sig); }
 function histLowBtn() { return {}; }   // the box's handle (its own row on the box's top edge): not what these arms look at
 """
     parts = _pref_parts() + [stubs, _cut("55-history.js", "HIST_OFF_PREF"), _cut("55-history.js", "HIST_OFF"),
+                             _cut("55-history.js", "HIST_FOLD"), _cut("55-history.js", "histFoldKeys"), _cut("55-history.js", "histFoldState"),
                              _cut("55-history.js", "histCardsPaint")]
     got = _node(parts, "(() => { histCardsPaint(); const before = shown;"
                        " HIST_OFF.push('q:qa', 'q:qs', 'q:qp', 'd:da', 'd:dp'); histCardsPaint(); return [before, shown]; })()")
     before, after = got
-    assert before[4:] == [["qa", "qp", "qs"], ["da", "dp"]], "the control: all of them before"
-    assert after[4:] == [["qp"], ["dp"]], "off: the answered ones; a waiting card is never left out"
+    assert before[4:6] == [["qa", "qp", "qs"], ["da", "dp"]], "the control: all of them before"
+    assert after[4:6] == [["qp"], ["dp"]], "off: the answered ones; a waiting card is never left out"
 
 
 def test_a_cross_takes_off_its_own_card_only_not_the_others_of_its_kind():
@@ -106,13 +107,14 @@ const latestModel = { pending: [] };
 const QUESTIONS = [{ id: 'q1', who: 'm1', status: 'answered', doneAt: NOW }, { id: 'q2', who: 'm1', status: 'answered', doneAt: NOW }];
 const DENIALS = [{ id: 'd1', who: 'm1', status: 'dismissed', doneAt: NOW }, { id: 'd2', who: 'm1', status: 'sent', doneAt: NOW }];
 let shown = null;
-function histCardsBox() { return { hidden: false }; }
+function histCardsBox() { return { hidden: false, classList: { toggle() {} } }; }
 const permSig = () => '', questionsSig = (x) => x.map((q) => q.id), denialsSig = (x) => x.map((d) => d.id);
 function keyed(el, sig, build) { shown = JSON.parse(sig); }
 function histLowBtn() { return {}; }   // the box's handle (its own row on the box's top edge): not what these arms look at
 """
     parts = _pref_parts() + [stubs, _cut("55-history.js", "HIST_OFF_PREF"), _cut("55-history.js", "HIST_OFF"),
-                             _cut("55-history.js", "histOff"), _cut("55-history.js", "histCardsPaint")]
+                             _cut("55-history.js", "histOff"), _cut("55-history.js", "HIST_FOLD"), _cut("55-history.js", "histFoldKeys"), _cut("55-history.js", "histFoldState"),
+                             _cut("55-history.js", "histCardsPaint")]
     got = _node(parts, "(() => { histCardsPaint(); const before = shown; histOff('q:q1'); histOff('d:d2'); return [before, shown]; })()")
-    assert got[0][4:] == [["q1", "q2"], ["d1", "d2"]], "the control: both of each kind before"
-    assert got[1][4:] == [["q2"], ["d1"]], "one × takes off that card only; the other answered card of its kind stays"
+    assert got[0][4:6] == [["q1", "q2"], ["d1", "d2"]], "the control: both of each kind before"
+    assert got[1][4:6] == [["q2"], ["d1"]], "one × takes off that card only; the other answered card of its kind stays"

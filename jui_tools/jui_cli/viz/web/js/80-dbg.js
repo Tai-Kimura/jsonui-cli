@@ -360,6 +360,15 @@ window.__dbg = {
       htmlLabels: window.mermaid ? window.mermaid.mermaidAPI.getConfig().htmlLabels : null };
   },
   robotState: () => robotState,   // the model behind the robots (live: what the last slice said)
+  // typed text through a redraw (50-panel.js keepFields): every keyed box of the panel, the board and the card's history drawn
+  // again now, as a new record, a new question or a new order would draw them
+  redrawTyped: () => { for (const el of [$('questions'), $('q-strip'), $('tasks'), $('tb-detail'), HIST.cards].filter(Boolean)) { el._sig = null; el._html = null; } refreshNow(); histCardsPaint(); },
+  pricesRedraw: () => renderPrices(true),
+  openPrices: () => openPrices(document.body),
+  openTaskBoard: (detail) => openTaskBoard(document.body, detail),
+  pendingPerms: () => latestModel.pending.filter((p) => p.status === 'pending').map((p) => p.id),
+  drafts: () => Object.fromEntries(DRAFTS),
+  histFold: () => { const el = HIST.cards, pane = typeof histPane === 'function' ? histPane() : null; return { folded: !!el && el.classList.contains('h-folded'), bar: el && el.querySelector('[data-h-fold]') ? el.querySelector('[data-h-fold]').textContent : null, fresh: !!(el && el.querySelector('.h-fold-new')), histH: pane ? pane.clientHeight : 0, cardsH: el ? el.clientHeight : 0 }; },
   // the outside (10-18): the arms force a season ('spring' …) or a weather ({ kind, isDay }); null gives it back
   outside: (opts) => {
     if (opts && 'season' in opts) OUTSIDE.force = opts.season;

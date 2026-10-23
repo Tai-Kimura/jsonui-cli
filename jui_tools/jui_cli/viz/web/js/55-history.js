@@ -723,7 +723,9 @@ function composePlace(pane, id) {
   if (HIST.compose._for !== id) {   // another robot: nothing typed for the last one goes to this one
     attachDropAll(HIST.compose._for);
     HIST.compose._for = id;
-    composeEls().area.value = '';
+    const area = composeEls().area;   // what was typed for this robot before (DRAFTS, 50-panel.js) comes back
+    area.dataset.keep = `prompt:${id}`;
+    area.value = (DRAFTS.get(area.dataset.keep) || {}).v || '';
     composeClose(false);
   }
   const cards = histCardsBox(), low = histLowBtn();   // the box's handle on its top edge, a row of its own (not in the box's scroll)
@@ -768,9 +770,47 @@ function histCardsBox() {
     el.addEventListener('click', onQuestionClick);
     el.addEventListener('click', onDenialClick);
     el.addEventListener('click', (e) => { const b = e.target.closest('[data-h-off]'); if (b) histOff(b.dataset.hOff); });
+    el.addEventListener('click', (e) => { const b = e.target.closest('[data-h-fold]'); if (b) histFoldToggle(b.dataset.hFold); });
     HIST.cards = el;
   }
   return HIST.cards;
+}
+/* The box of cards folded to one line (requester 10-23: a question on the card hides the conversation above it, and
+   they want to read it before answering): a card that waits takes the box's height from the history above.
+   ▼ folds it to its bar — what waits and how many, the first question's words — and the history gets the height; ▲
+   opens it again. Folded, nothing is taken away: the cards stay (hidden), with what was typed and picked in them.
+   Remembered per robot (HIST_FOLD: its id -> the waits it had when folded). A new wait while folded: the box stays
+   folded (the person is reading), the bar says the new count, moves once and stays marked until opened (h-fold-new). When nothing waits any more
+   the robot's fold is forgotten: the next question comes open. */
+const HIST_FOLD = new Map();
+const histFoldKeys = (perms, qs, ds) => [...perms.filter((p) => p.status === 'pending').map((p) => `p:${p.id}`),
+  ...qs.filter((q) => q.status === 'pending').map((q) => `q:${q.id}`), ...ds.filter((d) => d.status === 'pending').map((d) => `d:${d.id}`)];
+function histFoldState(id, perms, qs, ds) {
+  const keys = histFoldKeys(perms, qs, ds), fold = HIST_FOLD.get(id);
+  if (!keys.length) { HIST_FOLD.delete(id); return { folded: false, n: 0, fresh: false }; }
+  if (!fold) return { folded: false, n: keys.length, fresh: false };
+  if (fold.init) fold.init = false;   // folded now: what waits now is what was seen
+  else if (keys.some((k) => !fold.seen.has(k))) fold.fresh = true;   // a new wait: marked until the box is opened
+  for (const k of keys) fold.seen.add(k);
+  return { folded: true, n: keys.length, fresh: fold.fresh };
+}
+function histFoldBar(fold, perms, qs, ds) {
+  const pend = (xs) => xs.filter((x) => x.status === 'pending').length;
+  const n = { q: pend(qs), p: pend(perms), d: pend(ds) };
+  if (!n.q && !n.p && !n.d) return '';
+  if (!fold.folded) return `<button type="button" class="h-fold" data-h-fold="close" data-fk="h-fold" aria-expanded="true">${esc(tl('hist.fold.close'))}</button>`;
+  const what = [['q', 'hist.fold.q'], ['p', 'hist.fold.p'], ['d', 'hist.fold.d']].filter(([k]) => n[k]).map(([k, key]) => tl(key, { n: n[k] })).join(tl('hist.fold.sep'));
+  const first = qs.find((q) => q.status === 'pending'), text = first && first.questions[0] ? first.questions[0].question : '';
+  const textHTML = text ? `<span class="h-fold-text">${esc(text)}</span>` : '';
+  return `<button type="button" class="h-fold${fold.fresh ? ' h-fold-new' : ''}" data-h-fold="open" data-fk="h-fold" aria-expanded="false">${esc(tl('hist.fold.open', { what }))}${textHTML}</button>`;
+}
+function histFoldToggle(how) {
+  const id = HIST.compose && HIST.compose._for;
+  if (!id) return;
+  if (how === 'close') HIST_FOLD.set(id, { seen: new Set(), fresh: false, init: true });
+  else HIST_FOLD.delete(id);
+  histCardsPaint();
+  if (how === 'close') { const pane = histPane(); if (pane && HIST.atEnd) histToEnd(pane); }   // the newest stays in view as the history grows
 }
 function histCardsPaint(id = HIST.compose && HIST.compose._for, off = HIST.tab !== 'history') {
   const el = histCardsBox(), sess = id ? SESSION_OF[id] : null, now = Date.now();
@@ -780,9 +820,11 @@ function histCardsPaint(id = HIST.compose && HIST.compose._for, off = HIST.tab !
   const qs = !off ? QUESTIONS.filter((q) => mine(q.who) && kept('q', q) && (q.status === 'pending' || q.status === 'sent' || now - (q.doneAt || 0) < Q_SHOW_MS)) : [];
   const ds = !off && typeof DENIALS !== 'undefined' ? DENIALS.filter((d) => mine(d.who) && kept('d', d) && (d.status === 'pending' || now - (d.doneAt || 0) < DEN_SHOW_MS)) : [];
   el.hidden = !(perms.length || qs.length || ds.length);
-  keyed(el, JSON.stringify([id, NAMES.rev, DEN.asking, perms.map(permSig), questionsSig(qs), denialsSig(ds)]),
-    () => `${perms.map((p) => permDetail(p, `hb-${p.id}`)).join('')}${qs.map((q) => questionHTML(q, 'h')).join('')}${ds.map((d) => denialHTML(d, 'h')).join('')}`);
-  histLowBtn().hidden = el.hidden;   // the handle that grows this box (下を広げる until 2.3.20) is shown with it, on its top edge
+  const fold = histFoldState(id, perms, qs, ds);
+  el.classList.toggle('h-folded', fold.folded);
+  keyed(el, JSON.stringify([id, NAMES.rev, DEN.asking, perms.map(permSig), questionsSig(qs), denialsSig(ds), fold.folded, fold.n, fold.fresh]),
+    () => `${histFoldBar(fold, perms, qs, ds)}${perms.map((p) => permDetail(p, `hb-${p.id}`)).join('')}${qs.map((q) => questionHTML(q, 'h')).join('')}${ds.map((d) => denialHTML(d, 'h')).join('')}`);
+  histLowBtn().hidden = el.hidden || fold.folded;   // the handle that grows this box: shown with it, on its top edge (not while folded)
 }
 function composePaint() {
   if (!HIST.compose) return;
@@ -887,7 +929,7 @@ async function composeSend() {
   E.go.disabled = false;
   composeClose(!got.ok);
   if (got.ok) {
-    HIST.sent = { id, text, at: Date.now() }; E.area.value = '';
+    HIST.sent = { id, text, at: Date.now() }; E.area.value = ''; dropDrafts(`prompt:${id}`);
     for (const a of HIST.attach) attachKeepThumb(a);
     HIST.attach = [];
   } else HIST.sent = { id, text, at: Date.now(), error: got.error || `HTTP ${got.status}` };

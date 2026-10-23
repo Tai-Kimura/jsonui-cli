@@ -1,7 +1,45 @@
 
 /* ---------- side panel ---------- */
 const $ = (id) => document.getElementById(id);
-const setHTML = (el, html) => { if (el._html !== html) { el.innerHTML = html; el._html = html; } };
+/* What the person types is kept through a redraw (requester 10-23: 「質問の回答書いてる途中でこの履歴が更新されると書いてる内容が
+   消える気がする」). A field that can be drawn again under the cursor carries data-keep, a key of its own (the card's id
+   and the field: the same question in the panel, on the board and in the history shares it). Each input or change is
+   remembered by that key (DRAFTS), until it is sent or cancelled (dropDrafts); after a redraw (keepFields: setHTML,
+   keyed, and the price editor's) every field with a draft gets it back — its text, what was checked — and the one
+   that had the focus gets the focus and the cursor back. A card that goes and comes back has its draft too. */
+const DRAFTS = new Map();
+const keepOf = (el) => (el && el.dataset ? el.dataset.keep : undefined);
+function rememberDraft(e) {
+  const el = e.target, k = keepOf(el);
+  if (!k) return;
+  if (el.type === 'radio') {   // the group's other radios unchecked with it: each one's state
+    const scope = el.form || el.closest('[data-qcard]') || document;
+    for (const r of scope.querySelectorAll(`input[type="radio"][name="${CSS.escape(el.name)}"][data-keep]`)) DRAFTS.set(r.dataset.keep, { c: r.checked });
+  } else DRAFTS.set(k, el.type === 'checkbox' ? { c: el.checked } : { v: el.value });
+}
+document.addEventListener('input', rememberDraft, true);
+document.addEventListener('change', rememberDraft, true);
+const dropDrafts = (prefix) => { for (const k of [...DRAFTS.keys()]) if (k.startsWith(prefix)) DRAFTS.delete(k); };
+function restoreDrafts(root) {
+  for (const el of root.querySelectorAll('[data-keep]')) {
+    const d = DRAFTS.get(el.dataset.keep);
+    if (!d) continue;
+    if ('c' in d) { if (el.checked !== d.c) el.checked = d.c; } else if (el.value !== d.v) el.value = d.v;
+  }
+  if (typeof questionSendState === 'function') for (const card of root.querySelectorAll('[data-qcard]')) questionSendState(card);
+}
+function keepFields(root, replace) {
+  const a = document.activeElement, k = root.contains(a) ? keepOf(a) : undefined;
+  const sel = k !== undefined && typeof a.selectionStart === 'number' ? [a.selectionStart, a.selectionEnd, a.selectionDirection] : null;
+  replace();
+  restoreDrafts(root);
+  if (k === undefined) return;
+  const again = root.querySelector(`[data-keep="${CSS.escape(k)}"]`);
+  if (!again) return;
+  if (document.activeElement !== again) again.focus({ preventScroll: true });
+  if (sel) { try { again.setSelectionRange(sel[0], sel[1], sel[2]); } catch (err) { /* a field with no text cursor */ } }
+}
+const setHTML = (el, html) => { if (el._html !== html) keepFields(el, () => { el.innerHTML = html; el._html = html; }); };
 const setText = (el, text) => { if (el && el.textContent !== text) el.textContent = text; };
 /* The legend of heavy work's three looks (2.3.6), under the card's 重い作業 line. */
 const HEAVY_LEGEND = tl('panel.heavy.legend');
@@ -51,8 +89,8 @@ const roleVar = (s) => (s.by ? ` style="--c:${ROLES[DEF[s.by].role].color}"` : '
 const permSig = (p) => (p ? JSON.stringify([p.id, p.status, p.can, p.tooLongToShow, p.sentBy, p.sentRules, p.sentReason, p.input && p.input.command, p.task]) : '');
 function keyed(el, sig, build) {
   if (el._sig === sig) return;
-  const a = document.activeElement, fk = el.contains(a) ? a.dataset.fk : undefined;
-  el.innerHTML = build(); el._sig = sig; el._html = null;
+  const a = document.activeElement, fk = el.contains(a) && !keepOf(a) ? a.dataset.fk : undefined;
+  keepFields(el, () => { el.innerHTML = build(); el._sig = sig; el._html = null; });   // a typed field: its text, focus, cursor
   if (fk !== undefined) { const again = el.querySelector(`[data-fk="${CSS.escape(fk)}"]`); if (again) again.focus({ preventScroll: true }); else el._lostFk = fk; }
 }
 const SEGS = `<span class="segs" aria-hidden="true">${'<i></i>'.repeat(7)}</span>`;
@@ -249,6 +287,7 @@ function decide(id, behavior, btn) {
   const reason = behavior === 'deny' && reasonEl ? reasonEl.value.trim() : '';
   if (SOURCE.mode === 'live' && behavior === 'always') { openAlwaysConfirm(p, btn); return; }   // confirm the rules first (plan 08 §5)
   SOURCE.decide(id, behavior, { perm: p, reason });
+  dropDrafts(`perm:${id}:`);   // sent: its reason is no draft any more
   refreshNow();
   // The answered buttons are gone; keep the keyboard where the person was.
   if (!document.activeElement || document.activeElement === document.body) {
@@ -386,8 +425,8 @@ function questionHTML(q, where = '') {   // where: '' in the panel, 'b' on the b
   const got = q.sentAnswers || q.gotAnswers || null;
   const itemsHTML = q.questions.map((x, i) => {
     const type = x.multiSelect ? 'checkbox' : 'radio', name = `qa-${where}${q.id}-${i}`;   // radios: one group per card
-    const optsHTML = x.options.map((o, k) => `<label class="qopt"><input type="${esc(type)}" name="${esc(name)}" data-qi="${i}" data-qk="${k}"${open ? '' : ' disabled'}><span class="qlabel">${esc(o.label)}</span>${o.description ? `<span class="qdesc">${esc(o.description)}</span>` : ''}${o.preview ? `<pre class="qprev">${esc(o.preview)}</pre>` : ''}</label>`).join('');
-    const otherHTML = `<label class="qopt qother"><input type="${esc(type)}" name="${esc(name)}" data-qi="${i}" data-qk="other"${open ? '' : ' disabled'}><span class="qlabel">${esc(tl('panel.q.other'))}</span><input type="text" class="qother-text" data-qi="${i}" aria-label="${esc(tl('panel.q.other.aria', { question: x.question }))}" maxlength="2000"${open ? '' : ' disabled'}></label>`;
+    const optsHTML = x.options.map((o, k) => `<label class="qopt"><input type="${esc(type)}" name="${esc(name)}" data-qi="${i}" data-qk="${k}" data-keep="${esc(`q:${q.id}:${i}:${k}`)}"${open ? '' : ' disabled'}><span class="qlabel">${esc(o.label)}</span>${o.description ? `<span class="qdesc">${esc(o.description)}</span>` : ''}${o.preview ? `<pre class="qprev">${esc(o.preview)}</pre>` : ''}</label>`).join('');
+    const otherHTML = `<label class="qopt qother"><input type="${esc(type)}" name="${esc(name)}" data-qi="${i}" data-qk="other" data-keep="${esc(`q:${q.id}:${i}:other`)}"${open ? '' : ' disabled'}><span class="qlabel">${esc(tl('panel.q.other'))}</span><input type="text" class="qother-text" data-qi="${i}" data-keep="${esc(`q:${q.id}:${i}:text`)}" aria-label="${esc(tl('panel.q.other.aria', { question: x.question }))}" maxlength="2000"${open ? '' : ' disabled'}></label>`;
     const answeredHTML = got && got[x.question] !== undefined ? `<p class="qgot">${esc(tl('panel.q.got'))}<b>${esc(got[x.question])}</b></p>` : '';
     // answered or over: the question and its answer only
     const choicesHTML = q.status === 'pending' ? `${optsHTML}${otherHTML}` : '';
@@ -450,14 +489,19 @@ function onQuestionInput(e) {
   const q = card && QUESTIONS.find((x) => x.id === card.dataset.qcard);
   if (!q) return;
   // typing a free answer picks その他
-  if (e.target.classList.contains('qother-text') && e.target.value) { const box = e.target.parentElement.querySelector('input[data-qk="other"]'); if (box) box.checked = true; }
-  const send = card.querySelector('[data-qsend]');
-  if (send) send.disabled = !questionPicks(card, q).complete;
-  if (send) holdQuestion(q.id);   // someone is answering: the hook waits a little longer
+  if (e.target.classList.contains('qother-text') && e.target.value) { const box = e.target.parentElement.querySelector('input[data-qk="other"]'); if (box && !box.checked) { box.checked = true; rememberDraft({ target: box }); } }   // checked by the page: no change event, the draft noted here
+  if (questionSendState(card)) holdQuestion(q.id);   // someone is answering: the hook waits a little longer
+}
+/* Its send button pressable when every question has an answer (as typed, or as kept through a redraw); whether it has one. */
+function questionSendState(card) {
+  const q = QUESTIONS.find((x) => x.id === card.dataset.qcard), send = card.querySelector('[data-qsend]');
+  if (!q || !send) return false;
+  send.disabled = !questionPicks(card, q).complete;
+  return true;
 }
 function onQuestionClick(e) {
   const r = e.target.closest('[data-qrelease]');
-  if (r) { r.disabled = true; SOURCE.releaseQuestion(r.dataset.qrelease); return; }
+  if (r) { r.disabled = true; dropDrafts(`q:${r.dataset.qrelease}:`); SOURCE.releaseQuestion(r.dataset.qrelease); return; }
   const b = e.target.closest('[data-qsend]');
   if (!b) return;
   const card = b.closest('[data-qcard]'), q = QUESTIONS.find((x) => x.id === b.dataset.qsend);
@@ -465,6 +509,7 @@ function onQuestionClick(e) {
   const { picks, complete } = questionPicks(card, q);
   if (!complete) return;
   b.disabled = true;
+  dropDrafts(`q:${q.id}:`);   // sent
   SOURCE.answerQuestion(q.id, picks);
 }
 // The same handlers for the panel's cards and the board's: the same state (QUESTIONS), the same sending (SOURCE).
@@ -1432,8 +1477,8 @@ ${sample ? rawDetails(sample) : ''}`;
   detailEl.querySelectorAll('[data-recent]').forEach((el) => setHTML(el, recentHTML(el.dataset.recent)));
 }
 const permDetail = (p, where) => (SOURCE.mode === 'live' ? permDetailLive(p, where) : permDetailDemo(p, where));
-const permDetailLive = (p, where) => `<div class="tbd-perm"><h4>${esc(tl('panel.perm.asking'))}</h4><p>${pill(p.who, DEF[p.who].role)} ${esc(DEF[p.who].agent)} ${esc(tl('panel.perm.wants.pre'))}<b>${esc(p.tool)}</b>${esc(tl('panel.perm.wants.post'))}<span class="tbd-wait" data-since="${p.at}"></span></p><div class="tbd-cmd">${permSubjectLive(p)}</div>${p.can.reason ? `<label class="tbd-reason">${esc(tl('panel.perm.reason'))}<input type="text" id="${esc(where)}-reason" autocomplete="off"></label>` : ''}<div class="perm-acts">${permButtons(p, where)}</div><p class="tbd-note">${PERM_NOTE}${p.relayOnly ? esc(tl('panel.perm.relayonly')) : ''}</p></div>`;
-const permDetailDemo = (p, where) => `<div class="tbd-perm"><h4>${esc(tl('panel.perm.asking'))}</h4><p>${pill(p.who, DEF[p.who].role)} ${esc(DEF[p.who].agent)} ${esc(tl('panel.perm.wants.pre'))}<b>${esc(p.tool)}</b>${esc(tl('panel.perm.wants.post'))}<span class="tbd-wait" data-since="${p.at}"></span></p><pre class="tbd-cmd">${esc(permSummary(p))}</pre><label class="tbd-reason">${esc(tl('panel.perm.reason'))}<input type="text" id="${esc(where)}-reason" placeholder="${esc(tl('panel.perm.reason.example'))}" autocomplete="off"></label><div class="perm-acts">${permButtons(p, where)}</div><p class="tbd-note">${PERM_NOTE}${tlHTML('panel.perm.demo.note', { rule: p.rule })}</p></div>`;
+const permDetailLive = (p, where) => `<div class="tbd-perm"><h4>${esc(tl('panel.perm.asking'))}</h4><p>${pill(p.who, DEF[p.who].role)} ${esc(DEF[p.who].agent)} ${esc(tl('panel.perm.wants.pre'))}<b>${esc(p.tool)}</b>${esc(tl('panel.perm.wants.post'))}<span class="tbd-wait" data-since="${p.at}"></span></p><div class="tbd-cmd">${permSubjectLive(p)}</div>${p.can.reason ? `<label class="tbd-reason">${esc(tl('panel.perm.reason'))}<input type="text" id="${esc(where)}-reason" autocomplete="off" data-keep="${esc(`perm:${p.id}:reason`)}"></label>` : ''}<div class="perm-acts">${permButtons(p, where)}</div><p class="tbd-note">${PERM_NOTE}${p.relayOnly ? esc(tl('panel.perm.relayonly')) : ''}</p></div>`;
+const permDetailDemo = (p, where) => `<div class="tbd-perm"><h4>${esc(tl('panel.perm.asking'))}</h4><p>${pill(p.who, DEF[p.who].role)} ${esc(DEF[p.who].agent)} ${esc(tl('panel.perm.wants.pre'))}<b>${esc(p.tool)}</b>${esc(tl('panel.perm.wants.post'))}<span class="tbd-wait" data-since="${p.at}"></span></p><pre class="tbd-cmd">${esc(permSummary(p))}</pre><label class="tbd-reason">${esc(tl('panel.perm.reason'))}<input type="text" id="${esc(where)}-reason" placeholder="${esc(tl('panel.perm.reason.example'))}" autocomplete="off" data-keep="${esc(`perm:${p.id}:reason`)}"></label><div class="perm-acts">${permButtons(p, where)}</div><p class="tbd-note">${PERM_NOTE}${tlHTML('panel.perm.demo.note', { rule: p.rule })}</p></div>`;
 /* The relay's request id: five lowercase letters without "l". */
 const relayId = (p) => [...`${p.id}${p.who}xyz`].slice(0, 5).map((ch, k) => 'abcdefghijkmnopqrstuvwxyz'[(ch.charCodeAt(0) * 7 + k * 11) % 25]).join('');
 const livePermHow = (q) => (q.status === 'terminal' ? (q.terminalBehavior === 'deny' ? esc(tl('panel.how.term.deny')) : esc(tl('panel.how.term.allow')))
