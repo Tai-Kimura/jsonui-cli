@@ -7,10 +7,36 @@
     "web"
   ],
   "counts": {
-    "entries": 80,
+    "entries": 120,
     "unreviewed": 0
   },
   "entries": [
+    {
+      "fixture": "Blur/intensity__static",
+      "component": "Blur",
+      "attribute": "intensity",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "type-fallback-value",
+      "reason": "adjudicated fixture-sample-cannot-discriminate: the fixture has no backdrop, so a stronger blur of a white page is the same white; the Blur attributes that are measured stand on a root.backdrop companion, and this one needs it too (codegen-effect C2 sees blur(160px) vs blur(340px)). The converter reads the attribute; the fixture cannot show it. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: fixture-sample-cannot-discriminate.",
+      "note": "Fixture shape to fix in rules.py (a representative value or companion), then re-bake from a CI run.",
+      "adjudicatedFamily": "fixture-sample-cannot-discriminate"
+    },
+    {
+      "fixture": "Button/href__static",
+      "component": "Button",
+      "attribute": "href",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "type-fallback-value",
+      "reason": "adjudicated interaction-only: rjui wraps the button in the host's <Link href> (an anchor with no style of its own), which changes where a tap goes, not one pixel of the still. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
     {
       "fixture": "CheckBox/checked__false",
       "component": "CheckBox",
@@ -116,6 +142,19 @@
       "adjudicatedFamily": "value-is-default"
     },
     {
+      "fixture": "GradientView/gradientType__linear",
+      "component": "GradientView",
+      "attribute": "gradientType",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated sibling-value-active: linear is rjui's default gradient (gradient_view_converter: radial-gradient only for 'radial'), so the fixture writes what the control already draws and the pair cannot differ. The sibling value (radial) is active on web in the same run. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223), 2.3.21's new declarations. Family: sibling-value-active.",
+      "note": "",
+      "adjudicatedFamily": "sibling-value-active"
+    },
+    {
       "fixture": "GradientView/gradient__alias_colors",
       "component": "GradientView",
       "attribute": "gradient",
@@ -128,6 +167,19 @@
       "family": "sibling-value-active",
       "reason": "Fixture shape: the alias probe's colour list equals the control's companion gradient, so the two renders are identical by construction (verified: alias and control both draw the red→purple ramp; the static sibling's green ramp discriminates). The alias IS read — a probe-value collision, not an alias gap.",
       "note": ""
+    },
+    {
+      "fixture": "GradientView/orientation__vertical",
+      "component": "GradientView",
+      "attribute": "orientation",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated sibling-value-active: vertical is the default stacking (a flex column, the same class the control's children get), so the fixture writes what the control already draws and the pair cannot differ. The sibling value (horizontal) is active on web in the same run. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223), 2.3.21's new declarations. Family: sibling-value-active.",
+      "note": "",
+      "adjudicatedFamily": "sibling-value-active"
     },
     {
       "fixture": "IconLabel/selected__false",
@@ -144,6 +196,32 @@
       "note": "",
       "adjudicatedFamily": "off-face-equals-control",
       "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "IconLabel/strikethrough__false",
+      "component": "IconLabel",
+      "attribute": "strikethrough",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated sibling-value-active: false is the absent state, so the fixture writes what the control already draws and the pair cannot differ. The sibling value (true) is active on web in the same run. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223), 2.3.21's new declarations. Family: sibling-value-active.",
+      "note": "",
+      "adjudicatedFamily": "sibling-value-active"
+    },
+    {
+      "fixture": "IconLabel/underline__false",
+      "component": "IconLabel",
+      "attribute": "underline",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated sibling-value-active: false is the absent state, so the fixture writes what the control already draws and the pair cannot differ. The sibling value (true) is active on web in the same run. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223), 2.3.21's new declarations. Family: sibling-value-active.",
+      "note": "",
+      "adjudicatedFamily": "sibling-value-active"
     },
     {
       "fixture": "Image/highlightSrc__binding",
@@ -183,6 +261,19 @@
       "note": "",
       "adjudicatedFamily": "off-face-equals-control",
       "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "Indicator/halfSpinner__false",
+      "component": "Indicator",
+      "attribute": "halfSpinner",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated sibling-value-active: false is the absent state (no border-r colour), so the fixture writes what the control already draws and the pair cannot differ. The sibling value (true) is active on web in the same run. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223), 2.3.21's new declarations. Family: sibling-value-active.",
+      "note": "",
+      "adjudicatedFamily": "sibling-value-active"
     },
     {
       "fixture": "Indicator/hidesWhenStopped__false",
@@ -317,6 +408,19 @@
       "controlDiffExclusion": "off-face-equals-control"
     },
     {
+      "fixture": "NetworkImage/circle__false",
+      "component": "NetworkImage",
+      "attribute": "circle",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated sibling-value-active: false is the absent state (no rounded-full), so the fixture writes what the control already draws and the pair cannot differ. The sibling value (true) is active on web in the same run. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223), 2.3.21's new declarations. Family: sibling-value-active.",
+      "note": "",
+      "adjudicatedFamily": "sibling-value-active"
+    },
+    {
       "fixture": "NetworkImage/contentMode__binding",
       "component": "NetworkImage",
       "attribute": "contentMode",
@@ -368,6 +472,32 @@
       "family": "untriaged",
       "reason": "adjudicated implemented-but-unobservable-in-a-still: the attribute IS read and applied on this face — measured by counting application sites OUTSIDE the decode slot in DynamicComponent.swift, so 'decoded' was not mistaken for 'applied'. What the fixture cannot do is put the effect into a STILL screenshot. This is a different family from an unimplemented face (cf. common/glass, where the Dynamic side had no implementation at all and the two faces agreed because BOTH drew nothing): here one face draws the effect and the camera cannot see it. Applied at ProgressConverter.swift:48 as `.controlSize(.regular)`. Same reason as the __large sibling.",
       "note": ""
+    },
+    {
+      "fixture": "Progress/maximumValue__static",
+      "component": "Progress",
+      "attribute": "maximumValue",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "type-fallback-value",
+      "reason": "adjudicated fixture-sample-cannot-discriminate: the fixture writes no progress, so the bar is empty at 0/8 as at 0/100; it needs a progress companion (as Progress.color has) to show the scale. The converter reads the attribute; the fixture cannot show it. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: fixture-sample-cannot-discriminate.",
+      "note": "Fixture shape to fix in rules.py (a representative value or companion), then re-bake from a CI run.",
+      "adjudicatedFamily": "fixture-sample-cannot-discriminate"
+    },
+    {
+      "fixture": "Progress/progressHeight__static",
+      "component": "Progress",
+      "attribute": "progressHeight",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "type-fallback-value",
+      "reason": "adjudicated fixture-sample-cannot-discriminate: the representative value 8 is 8px, the height of rjui's default bar (h-2), so h-[8px] draws the control's bar; a value other than 8 discriminates (codegen-effect C2 sees h-[8px] vs h-[17px]). The converter reads the attribute; the fixture cannot show it. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: fixture-sample-cannot-discriminate.",
+      "note": "Fixture shape to fix in rules.py (a representative value or companion), then re-bake from a CI run.",
+      "adjudicatedFamily": "fixture-sample-cannot-discriminate"
     },
     {
       "fixture": "Radio/checked__false",
@@ -742,6 +872,58 @@
       "adjudicatedFamily": "value-is-default"
     },
     {
+      "fixture": "TextField/autoFocus__false",
+      "component": "TextField",
+      "attribute": "autoFocus",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated sibling-value-active: false is the absent state (no autoFocus prop), so the fixture writes what the control already draws and the pair cannot differ. The sibling value (true) is active on web in the same run. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223), 2.3.21's new declarations. Family: sibling-value-active.",
+      "note": "Measured on web only; the mobile faces this fixture also runs on are measured by the next conformance-mobile run, and a changed platform set returns the row to the backlog.",
+      "adjudicatedFamily": "sibling-value-active"
+    },
+    {
+      "fixture": "TextField/editable__false",
+      "component": "TextField",
+      "attribute": "editable",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes readOnly, which stops typing and leaves the input's look unchanged in Chromium (no :read-only style in the host). The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "TextField/editable__true",
+      "component": "TextField",
+      "attribute": "editable",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated value-is-default: true is the default (an editable input), so the fixture writes what the control already draws and the pair cannot differ. The sibling value (false) renders no differently either; see its row. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223), 2.3.21's new declarations. Family: value-is-default.",
+      "note": "",
+      "adjudicatedFamily": "value-is-default"
+    },
+    {
+      "fixture": "TextField/name__static",
+      "component": "TextField",
+      "attribute": "name",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "type-fallback-value",
+      "reason": "adjudicated interaction-only: rjui writes the input's form `name`, a submission key with no rendering. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
       "fixture": "TextField/secure__false",
       "component": "TextField",
       "attribute": "secure",
@@ -754,6 +936,19 @@
       "note": "",
       "adjudicatedFamily": "off-face-equals-control",
       "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "TextView/autoFocus__false",
+      "component": "TextView",
+      "attribute": "autoFocus",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "sibling-value-active",
+      "reason": "adjudicated sibling-value-active: false is the absent state (no autoFocus prop), so the fixture writes what the control already draws and the pair cannot differ. The sibling value (true) is active on web in the same run. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223), 2.3.21's new declarations. Family: sibling-value-active.",
+      "note": "Measured on web only; the mobile faces this fixture also runs on are measured by the next conformance-mobile run, and a changed platform set returns the row to the backlog.",
+      "adjudicatedFamily": "sibling-value-active"
     },
     {
       "fixture": "TextView/editable__true",
@@ -786,6 +981,19 @@
       "note": "",
       "adjudicatedFamily": "off-face-equals-control",
       "controlDiffExclusion": "off-face-equals-control"
+    },
+    {
+      "fixture": "TextView/name__static",
+      "component": "TextView",
+      "attribute": "name",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "type-fallback-value",
+      "reason": "adjudicated interaction-only: rjui writes the textarea's form `name`, a submission key with no rendering. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
     },
     {
       "fixture": "TextView/resize__none",
@@ -928,6 +1136,305 @@
       "reason": "adjudicated no-slack-at-this-shape: safeAreaInsetPositions reserves the safe area (the SSoT's own words; rjui pads by env(safe-area-inset-*)), and these fixtures put a 200x200 box in the page, away from every screen edge, so there is no inset to reserve on any host: android and web measured 0 px, and ios measured 0 px against its control (Dynamic and codegen, iOS 26.5, 2026-10-05) once SwiftJsonUI and sjui codegen stopped adding SwiftUI's default 16 pt (`.safeAreaPadding(edges)` with no length) on top of it. That 16 was the only reason ios read active here. The converters emit the attribute (`.safeAreaPadding(edges, 0)`), so the inert verdict is the fixture's shape, not a dropped spelling. Family: no-slack-at-this-shape.",
       "note": "",
       "adjudicatedFamily": "no-slack-at-this-shape"
+    },
+    {
+      "fixture": "Web/allowCamera__false",
+      "component": "Web",
+      "attribute": "allowCamera",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowCamera__true",
+      "component": "Web",
+      "attribute": "allowCamera",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowDownloads__false",
+      "component": "Web",
+      "attribute": "allowDownloads",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowDownloads__true",
+      "component": "Web",
+      "attribute": "allowDownloads",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowGeolocation__false",
+      "component": "Web",
+      "attribute": "allowGeolocation",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowGeolocation__true",
+      "component": "Web",
+      "attribute": "allowGeolocation",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowMicrophone__false",
+      "component": "Web",
+      "attribute": "allowMicrophone",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowMicrophone__true",
+      "component": "Web",
+      "attribute": "allowMicrophone",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowModals__false",
+      "component": "Web",
+      "attribute": "allowModals",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowModals__true",
+      "component": "Web",
+      "attribute": "allowModals",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowPopupsToEscapeSandbox__false",
+      "component": "Web",
+      "attribute": "allowPopupsToEscapeSandbox",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowPopupsToEscapeSandbox__true",
+      "component": "Web",
+      "attribute": "allowPopupsToEscapeSandbox",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowsFullScreen__false",
+      "component": "Web",
+      "attribute": "allowsFullScreen",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowsFullScreen__true",
+      "component": "Web",
+      "attribute": "allowsFullScreen",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowsInlineMediaPlayback__false",
+      "component": "Web",
+      "attribute": "allowsInlineMediaPlayback",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/allowsInlineMediaPlayback__true",
+      "component": "Web",
+      "attribute": "allowsInlineMediaPlayback",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/javaScriptCanOpenWindowsAutomatically__false",
+      "component": "Web",
+      "attribute": "javaScriptCanOpenWindowsAutomatically",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/javaScriptCanOpenWindowsAutomatically__true",
+      "component": "Web",
+      "attribute": "javaScriptCanOpenWindowsAutomatically",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/javaScriptEnabled__false",
+      "component": "Web",
+      "attribute": "javaScriptEnabled",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "Measured on web only; the mobile faces this fixture also runs on are measured by the next conformance-mobile run, and a changed platform set returns the row to the backlog.",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/javaScriptEnabled__true",
+      "component": "Web",
+      "attribute": "javaScriptEnabled",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes it into the iframe's allow / sandbox / script permissions, which decide what the embedded page may do; the fixture's frame shows no page that asks for it, so nothing in the still can change. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "Measured on web only; the mobile faces this fixture also runs on are measured by the next conformance-mobile run, and a changed platform set returns the row to the backlog.",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/lazyLoad__false",
+      "component": "Web",
+      "attribute": "lazyLoad",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes the iframe's loading attribute; an iframe already in the viewport loads the same either way. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/lazyLoad__true",
+      "component": "Web",
+      "attribute": "lazyLoad",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "untriaged",
+      "reason": "adjudicated interaction-only: rjui writes the iframe's loading attribute; an iframe already in the viewport loads the same either way. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
+    },
+    {
+      "fixture": "Web/title__static",
+      "component": "Web",
+      "attribute": "title",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "type-fallback-value",
+      "reason": "adjudicated interaction-only: rjui writes the iframe's `title`, an accessible name with no rendering. The attribute is read (codegen-effect --paired passes on web for it), so the inert verdict is the still's limit, not a dropped spelling. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: interaction-only.",
+      "note": "",
+      "adjudicatedFamily": "interaction-only"
     },
     {
       "fixture": "common/alignBottom__false",
@@ -1164,6 +1671,19 @@
       "reason": "adjudicated no-tintable-content-at-this-host: common.tintColor tints TEMPLATE content — a symbol, a control's accent, a template image — and the fixture's host is a plain View whose children are opaque colour boxes, so there is nothing on screen for a tint to reach. Measured on the web artifacts at HEAD: 0 px for both the static and the bound face, and the bound face's data section supplies a real colour (#FF0000), so this is not a binding hole. codegen-effect --paired at HEAD 2026-08-07 (CI's own arguments, 863 probes) reports no defect for this attribute, so the converter emits the spelling — the inert verdict is a render-stage or fixture-shape fact, not a dropped spelling. Closure: host the fixture on a component that actually has template content (owner D). Family: no-tintable-content.",
       "note": "",
       "adjudicatedFamily": "no-tintable-content"
+    },
+    {
+      "fixture": "common/zIndex__static",
+      "component": "common",
+      "attribute": "zIndex",
+      "inertOn": [
+        "web"
+      ],
+      "kind": "single-platform-scope",
+      "family": "type-fallback-value",
+      "reason": "adjudicated fixture-sample-cannot-discriminate: z-index decides which of two overlapping boxes is drawn on top, and the fixture's target overlaps nothing; it needs a sibling it covers. The converter reads the attribute; the fixture cannot show it. Measured: web-conformance run 39938123554 (release/2.3.21 @ ea30b223). Family: fixture-sample-cannot-discriminate.",
+      "note": "Fixture shape to fix in rules.py (a representative value or companion), then re-bake from a CI run.",
+      "adjudicatedFamily": "fixture-sample-cannot-discriminate"
     }
   ]
 }
