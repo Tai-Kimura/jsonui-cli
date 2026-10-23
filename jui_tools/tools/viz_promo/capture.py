@@ -99,6 +99,10 @@ POINT_JS = """(t) => {
   return centre(el);
 }"""
 
+# the target element pressed (its click()), found as POINT_JS finds it
+CLICK_JS = """(t) => { const all = [...document.querySelectorAll(t.css)]; const el = t.text ? all.find((e) => e.textContent.includes(t.text)) : all[0];
+  if (el) el.click(); return !!el; }"""
+
 # the target is where a press there lands on it: on the screen and not under something else (choices drawn over a
 # node off the screen took no press, 10-21)
 HIT_JS = """(t) => { if (t.door) return !!window.__dbg.sr().door;
@@ -127,7 +131,8 @@ EXPECT = {
     "roster_open": "() => !document.getElementById('roster').classList.contains('roster-folded')",
     "roster_folded": "() => document.getElementById('roster').classList.contains('roster-folded')",
     "roster_state": "() => { const r = document.querySelector('#roster-list .roster-row'); return document.getElementById('roster-sort').value === 'state' && !!r; }",
-    "wbbranch": "() => { const f = document.getElementById('wb-file'); return !!f && f.textContent.trim().startsWith('⎇'); }",
+    # the sheet opened on a spec (its title is set at the press; the head's ⎇ branch comes with the page's next frame)
+    "wbtitle": "(t) => document.getElementById('wb-title').textContent === t",
     "sr2d": "() => { const b = document.getElementById('sr-mode-2d'); return !!b && b.getAttribute('aria-pressed') === 'true'; }",
     "migcost": "() => { const m = window.__dbg.srMig(); return m.open && !!m.cost; }",
     "migtable": "() => !!document.querySelector('[data-src-mig]')",
@@ -625,7 +630,11 @@ class Driver:
         elif k in ("click", "hover", "select"):
             at = await self.point(a["target"], advance)
             await self.move(at)
-            if k == "click":
+            if k == "click" and a.get("js"):
+                # the element itself pressed where the cursor is (a list drawn again while a session writes can swap
+                # the row between the mouse's down and up, and the press then lands on the list, not the row)
+                await self.page.evaluate(CLICK_JS, await self.resolved(a["target"]))
+            elif k == "click":
                 await self.page.mouse.click(at[0], at[1])
             elif k == "select":
                 await self.page.select_option(a["target"]["css"], a["value"])

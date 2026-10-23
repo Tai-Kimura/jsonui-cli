@@ -422,8 +422,9 @@ def chapters(lang: str) -> dict:
         E(29.8, "spec_write", key="s01", room="demo-shop", rel=spec, add="branchContracts"),
         E(32.4, "stop", key="s01"),
         E(33.8, "wt_session", sid=wt["sid"], name=wt["name"], prompt=w["wt_prompt"], edit=wt["new"]),
-        E(36.0, "click", target={"css": "#wb-side-list .ws-item", "text": w["wt_spec"]}, ready=WT_ROW.format(w["wt_spec"]),
-          expect="wbbranch"),
+        # the row tagged with the branch (its tag, then its name): the worktree's own room lists the same spec untagged
+        E(36.0, "click", target={"css": "#wb-side-list .ws-item", "text": f"⎇ {wt['branch']}{w['wt_spec']}"},
+          ready=WT_ROW.format(w["wt_spec"]), expect="wbtitle:" + w["wt_spec"], js=True),
     ], needs=("rooms", "spec_worktrees"), viewport=SPLIT_VIEWPORT)
 
     # 6 (134–142): back to the whole floor

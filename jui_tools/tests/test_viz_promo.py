@@ -74,7 +74,8 @@ def test_the_board_ends_on_a_worktrees_spec_tagged_with_its_branch(tmp_path):
         start = next(ev for ev in c.events if ev.kind == "wt_session")
         opened = next(ev for ev in c.events if ev.kind == "click" and "#wb-side-list" in ev.args["target"]["css"])
         last_write = max(ev.at for ev in c.events if ev.kind == "spec_write")
-        assert last_write < start.at < opened.at < c.end and opened.args["expect"] == "wbbranch", lang
+        assert last_write < start.at < opened.at < c.end and opened.args["expect"] == "wbtitle:" + T.WORDS[lang]["wt_spec"], lang
+        assert opened.args["target"]["text"].startswith("⎇ " + T.WORKTREE["branch"]), "the tagged row, not the worktree room's own"
     assert term.TERM_SPAN["1b"] == 16.0 and T.BOUNDS["1b"][1] - T.BOUNDS["1b"][0] > 16.0
     # the worktree as the stage makes it: on its branch, the new file written, the cart's description edited, nothing committed
     room = tmp_path / "room"
