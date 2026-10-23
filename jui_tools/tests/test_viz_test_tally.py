@@ -96,8 +96,10 @@ def test_a_run_seen_in_the_worktree_goes_to_its_app_at_branch_only(tmp_path):
     """The command's cwd a folder below the worktree's root (a robot runs tests in its app's folder): still the worktree's."""
     root, wt = _room(tmp_path)
     world, state = _world(root, wt)
-    below = wt / "docs" / "screens"
-    world.apply_hook({"session_id": "wt", "cwd": str(below), "hook_event_name": "PreToolUse", "tool_name": "Bash",
+    below = wt / "docs" / "screens"   # a session started there (claude started in the app's folder): its cwd is below
+    world.apply_hook({"session_id": "below", "cwd": str(below), "hook_event_name": "SessionStart"}, 25)
+    assert world.sessions["below"]["cwd"].endswith("scratch/wt/docs/screens")
+    world.apply_hook({"session_id": "below", "cwd": str(below), "hook_event_name": "PreToolUse", "tool_name": "Bash",
                       "tool_use_id": "b", "tool_input": {"command": CMD}}, 30)
     world.tests["b"]["progressRun"] = RUN_SEEN   # its progress record named the run (test_viz_test_progress)
     world.apply_saved_results(_rows(RUN_SEEN, {"ok": "passed", "ng": "failed"}))
