@@ -73,6 +73,18 @@ module SjuiTools
           # 2026-09-22: a focused field flush against the fixed footer).
           padding_arg = keyboard_padding_arg
 
+          # A horizontal ScrollView of height wrapContent is as tall as its
+          # content (KotlinJsonUI's horizontalScroll row). Its view,
+          # AdvancedKeyboardAvoidingScrollView, is a GeometryReader framing the
+          # scroll at the reader's height, and in a vertical ScrollView the
+          # reader is offered none: it took the height the outer ScrollView had
+          # left — a 28pt row drew 386pt tall in a 420pt ScrollView on
+          # SwiftJsonUI's ConformanceHost (ticket
+          # 2026-10-23-sjui-geometryreader-in-vertical-scroll-collapses). The
+          # content is measured at its own height (content_fit_height) and the
+          # ScrollView framed at it.
+          fit_height = content_fit_height(axes)
+
           # AdvancedKeyboardAvoidingScrollViewを使用
           # keyboardAvoidance: falseの場合はconfigurationでisEnabled: falseを指定
           if keyboard_avoidance
@@ -112,6 +124,11 @@ module SjuiTools
               add_line "Spacer(minLength: 0)"
             end
             add_line "}"
+            if fit_height
+              # its own height, before the frame stretches it to the viewport
+              add_modifier_line ".fixedSize(horizontal: false, vertical: true)"
+              add_modifier_line ".onGeometryChange(for: CGFloat.self) { $0.size.height } action: { #{fit_height} = $0 }"
+            end
             # Stretched to the ScrollView's size and placed where the stack is
             # aligned: without an alignment the frame centred the stack, so a
             # leading child of a wider ScrollView drew in its middle (x 25 for
@@ -120,6 +137,8 @@ module SjuiTools
           end
           add_line "}"
           
+          add_modifier_line ".frame(height: #{fit_height})" if fit_height
+
           # scrollEnabled — emit .scrollDisabled(_:) (not .disabled(_:)) so a
           # dynamic toggle does not interrupt an in-flight pan / deceleration.
           scroll_enabled = @component['scrollEnabled']
@@ -197,6 +216,18 @@ module SjuiTools
           apply_modifiers
           
           generated_code
+        end
+
+        # A horizontal-only ScrollView of height wrapContent: the name of its
+        # content height's state, declared here (nil until measured: no frame,
+        # as before); nil for any other ScrollView.
+        def content_fit_height(axes)
+          return nil unless axes == '.horizontal' && @component['height'] == 'wrapContent'
+
+          name = @component['id'] ? to_camel_case(@component['id']) : to_camel_case(position_name('scrollView'))
+          state = "#{name}ContentHeight"
+          @state_variables << "@State private var #{state}: CGFloat? = nil"
+          state
         end
       end
     end
