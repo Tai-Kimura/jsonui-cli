@@ -15,7 +15,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from jui_cli.viz.ingest import World
+from jui_cli.viz.ingest import WORKTREE_TOUCH_MS, WORKTREES_EVERY_MS, World
 from jui_cli.viz.sources.jsonui_project import JsonUIProject, git_dir, head_branch, worktrees
 from jui_cli.viz.state import VizState
 
@@ -171,3 +171,85 @@ def test_a_cwd_through_a_symlink_finds_its_worktree(tmp_path):
     project.load_all(0)
     assert project.set_worktrees([str(link / "docs")], 10) is True
     assert "p:@feat/x/orders.spec.json" in _rows(project)
+
+
+# A lane whose cwd is the parent and works in a worktree by absolute paths (ticket
+# 2026-10-24-jui-viz-worktree-rows-only-from-session-cwd): the worktree a tool's path names counts for
+# WORKTREE_TOUCH_MS after the last call that named it, while the session lives; a prunable one never.
+
+def _world_with_parent_session(tmp_path):
+    root, wt = _room(tmp_path)
+    state = VizState()
+    world = World(state)
+    world.apply_hook({"session_id": "lane", "cwd": str(root), "hook_event_name": "SessionStart"}, 0)
+    world.tick(10)
+    world.publish()
+    room_id = next(p["id"] for p in state.slices["projects"] if p["name"] == "room/")
+    return root, wt, state, world, room_id
+
+
+def _ids(state, room_id):
+    return sorted(s["id"] for s in state.slices["specs"] if s["projectId"] == room_id)
+
+
+def _call(world, root, at, tool, tool_input, agent=None):
+    """A tool call of the session whose cwd is the room (the parent), or of its subagent."""
+    payload = {"session_id": "lane", "cwd": str(root), "hook_event_name": "PreToolUse", "tool_name": tool,
+               "tool_use_id": f"u{at}", "tool_input": tool_input}
+    if agent:
+        payload |= {"agent_id": agent, "agent_type": "general-purpose"}
+    world.apply_hook(payload, at)
+
+
+def test_a_worktree_a_parent_session_edits_by_path_is_shown_until_its_time_runs_out(tmp_path):
+    root, wt, state, world, room_id = _world_with_parent_session(tmp_path)
+    assert _ids(state, room_id) == [f"{room_id}:login.spec.json"]   # the cwd alone: no worktree
+    _call(world, root, 1_000, "Edit", {"file_path": str(wt / "docs" / "screens" / "json" / "login.spec.json")})
+    world.tick(1_010)
+    world.publish()
+    assert _ids(state, room_id) == [f"{room_id}:@feat/x/login.spec.json", f"{room_id}:@feat/x/orders.spec.json",
+                                    f"{room_id}:login.spec.json"]
+    row = next(s for s in state.slices["specs"] if s["id"] == f"{room_id}:@feat/x/login.spec.json")
+    assert str(wt) not in json.dumps(row.get("checkout", {}).get("branch")) and row["checkout"]["branch"] == "feat/x"
+    world.tick(1_000 + WORKTREE_TOUCH_MS - 1)
+    world.publish()
+    assert f"{room_id}:@feat/x/orders.spec.json" in _ids(state, room_id)   # still within its time
+    world.tick(1_000 + WORKTREE_TOUCH_MS)
+    world.publish()
+    assert _ids(state, room_id) == [f"{room_id}:login.spec.json"]
+
+
+def test_a_subagent_s_read_counts_and_the_session_s_end_takes_it(tmp_path):
+    root, wt, state, world, room_id = _world_with_parent_session(tmp_path)
+    _call(world, root, 1_000, "Grep", {"pattern": "x", "path": str(wt / "docs")}, agent="sub1")
+    world.tick(1_010)
+    world.publish()
+    assert f"{room_id}:@feat/x/orders.spec.json" in _ids(state, room_id)
+    world.apply_hook({"session_id": "lane", "cwd": str(root), "hook_event_name": "SessionEnd"}, 2_000)
+    world.tick(2_010)
+    world.publish()
+    assert _ids(state, room_id) == [f"{room_id}:login.spec.json"]
+
+
+def test_a_relative_path_or_a_bash_command_names_no_worktree(tmp_path, monkeypatch):
+    root, wt, state, world, room_id = _world_with_parent_session(tmp_path)
+    monkeypatch.chdir(wt.parent)   # read from the server's own folder, the path would be inside the worktree
+    _call(world, root, 1_000, "Read", {"file_path": "wt/docs/screens/json/login.spec.json"})
+    _call(world, root, 1_001, "Bash", {"command": f"cd {wt} && ls"})
+    world.tick(1_010)
+    world.publish()
+    assert _ids(state, room_id) == [f"{room_id}:login.spec.json"]
+
+
+def test_a_worktree_gone_prunable_is_not_shown_though_a_path_named_it(tmp_path):
+    import shutil
+    root, wt, state, world, room_id = _world_with_parent_session(tmp_path)
+    _call(world, root, 1_000, "Write", {"file_path": str(wt / "docs" / "screens" / "json" / "login.spec.json")})
+    world.tick(1_010)
+    world.publish()
+    assert f"{room_id}:@feat/x/orders.spec.json" in _ids(state, room_id)
+    shutil.rmtree(wt)   # git worktree list now says prunable: its folder is gone, its admin entry stays
+    assert (root / ".git" / "worktrees" / "wt").is_dir()
+    world.tick(1_010 + WORKTREES_EVERY_MS)
+    world.publish()
+    assert _ids(state, room_id) == [f"{room_id}:login.spec.json"]

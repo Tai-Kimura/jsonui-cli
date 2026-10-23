@@ -173,6 +173,15 @@ INFRA_EVERY_MS = 5_000
 #: how often each room looks again at the worktrees its sessions work in (and at once when their cwds change):
 #: a worktree made, removed or switched to another branch while a session works in it
 WORKTREES_EVERY_MS = 5_000
+#: a worktree a session names in a tool's path (not its cwd) counts this long after the last call that named it: a
+#: lane whose cwd is the parent and works in a worktree by absolute paths (ticket
+#: 2026-10-24-jui-viz-worktree-rows-only-from-session-cwd)
+WORKTREE_TOUCH_MS = 30 * 60_000
+#: the tool input fields that name a file or a folder (Read/Edit/Write/NotebookEdit, Grep/Glob, a jui-tools call's
+#: project_dir); a Bash command is free text and is not read for paths
+PATH_FIELDS = ("file_path", "notebook_path", "path", "project_dir")
+#: the checkouts kept per session (the latest)
+TOUCHED_KEPT = 32
 
 
 def attachment_line(record: dict) -> str:
@@ -303,6 +312,8 @@ class World:
         # Called with a JsonUIProject whose apps changed (a worktree shown or gone: serve watches its folders again).
         self.on_sources_changed = None
         self._worktree_cwds: frozenset = frozenset()
+        self._touched: dict[str, dict[str, int]] = {}   # session -> the checkout tops its tools named -> when, last
+        self._checkout_tops: dict[str, str | None] = {}   # a folder -> the checkout it is in (None: none)
         self._test_cwds: dict[str, str] = {}   # test command id -> the cwd of its session (never sent to the page)
         self._worktrees_at = -WORKTREES_EVERY_MS
 
@@ -566,12 +577,48 @@ class World:
             return {pid: infra_docs.counts(root, caches[pid]) for pid, root in roots.items()}
         self._infra_job = self._infra_pool.submit(count)
 
+    def _checkout_top(self, path: Path) -> str | None:
+        """The checkout a path is in: the nearest folder from it up holding .git (a linked worktree's is a file)."""
+        start = path if path.is_dir() else path.parent
+        key = str(start)
+        if key not in self._checkout_tops:
+            if len(self._checkout_tops) > 4096:
+                self._checkout_tops.clear()
+            self._checkout_tops[key] = next((str(c) for c in (start, *start.parents) if (c / ".git").exists()), None)
+        return self._checkout_tops[key]
+
+    def _note_paths(self, sid: str, tool_input: dict, at: int) -> None:
+        """The checkouts a tool call names by an absolute path (PATH_FIELDS), as the session's, now."""
+        for field in PATH_FIELDS:
+            value = tool_input.get(field)
+            if not isinstance(value, str) or not value.strip():
+                continue
+            path = Path(value.strip()).expanduser()
+            if not path.is_absolute():
+                continue
+            top = self._checkout_top(path)
+            if top is None:
+                continue
+            touched = self._touched.setdefault(sid, {})
+            touched.pop(top, None)
+            touched[top] = at
+            for old in list(touched)[:-TOUCHED_KEPT]:
+                del touched[old]
+
     def _worktrees_tick(self, at: int) -> None:
         """Each loaded room shows the worktrees of its apps that a session not ended works in (JsonUIProject.
-        set_worktrees): when the sessions' cwds change, and every WORKTREES_EVERY_MS (a worktree made, removed or on
-        another branch)."""
-        cwds = frozenset(str(Path(s["cwd"]).expanduser()) for s in self.sessions.values()
-                         if s.get("status") != "ended" and s.get("cwd") not in (None, "?"))
+        set_worktrees): its cwd, or a checkout its tools named by path within WORKTREE_TOUCH_MS (a lane whose cwd is
+        the parent). When those change, and every WORKTREES_EVERY_MS (a worktree made, removed or on another branch;
+        a path's time run out)."""
+        live = {sid for sid, s in self.sessions.items() if s.get("status") != "ended"}
+        for sid in [sid for sid in self._touched if sid not in live]:
+            del self._touched[sid]
+        for touched in self._touched.values():
+            for top in [top for top, t in touched.items() if at - t >= WORKTREE_TOUCH_MS]:
+                del touched[top]
+        cwds = frozenset(str(Path(s["cwd"]).expanduser()) for sid, s in self.sessions.items()
+                         if sid in live and s.get("cwd") not in (None, "?"))
+        cwds |= {top for touched in self._touched.values() for top in touched}
         if cwds == self._worktree_cwds and at - self._worktrees_at < WORKTREES_EVERY_MS:
             return
         self._worktree_cwds, self._worktrees_at = cwds, at
@@ -695,6 +742,8 @@ class World:
         tool = _s(payload.get("tool_name"))
         tool_input = payload.get("tool_input") if isinstance(payload.get("tool_input"), dict) else {}
         use_id = _s(payload.get("tool_use_id"))
+        if kind in ("PreToolUse", "PostToolUse") and tool_input:
+            self._note_paths(sid, tool_input, at)
         cat = "tool" if kind in TOOL_EVENTS else "session"
         text = kind
         if tool == SENT_TOOL and use_id and kind in ("PreToolUse", "PostToolUse") and self.sent_copies is not None:
