@@ -93,9 +93,11 @@ def test_a_result_no_command_here_ran_is_the_main_checkouts(tmp_path):
 
 
 def test_a_run_seen_in_the_worktree_goes_to_its_app_at_branch_only(tmp_path):
+    """The command's cwd a folder below the worktree's root (a robot runs tests in its app's folder): still the worktree's."""
     root, wt = _room(tmp_path)
     world, state = _world(root, wt)
-    world.apply_hook({"session_id": "wt", "cwd": str(wt), "hook_event_name": "PreToolUse", "tool_name": "Bash",
+    below = wt / "docs" / "screens"
+    world.apply_hook({"session_id": "wt", "cwd": str(below), "hook_event_name": "PreToolUse", "tool_name": "Bash",
                       "tool_use_id": "b", "tool_input": {"command": CMD}}, 30)
     world.tests["b"]["progressRun"] = RUN_SEEN   # its progress record named the run (test_viz_test_progress)
     world.apply_saved_results(_rows(RUN_SEEN, {"ok": "passed", "ng": "failed"}))
@@ -183,3 +185,19 @@ def test_an_android_result_by_its_package_is_the_main_checkouts(tmp_path):
     world.publish()
     got = {k: v["passed"] for k, v in _tests(state).items()}
     assert got == {"room/:": 2, "room/:@feat/x": 0, "wt/:": 0}, got
+
+
+def test_a_failed_case_keeps_a_spec_from_done(tmp_path):
+    """Every case and every branch passed, and one failed too (two runs): not done."""
+    root, _wt = _room(tmp_path, branches=2)
+    state = VizState()
+    world = World(state)
+    world.apply_hook({"session_id": "main", "cwd": str(root), "hook_event_name": "SessionStart"}, 0)
+    rows = _rows(RUN_UNSEEN, {"ok": "passed", "ng": "passed"})
+    failed = [dict(r, case="extra", status="failed", path=r["path"].replace(RUN_UNSEEN, RUN_SEEN)) for r in rows[:1]]
+    world.apply_saved_results(rows + failed)
+    world.tick(10)
+    world.publish()
+    login = next(s for s in state.slices["specs"] if s["name"] == "Login")
+    assert (login["tests"]["needed"], login["tests"]["passed"], login["tests"]["failed"]) == (2, 2, 1), login["tests"]
+    assert login["bucket"] != "done"
