@@ -65,12 +65,12 @@ function devLoadHTML(m) {
   const gib = m.memTotal ? `${Math.round(m.memTotal / 2 ** 30)} GiB` : '';
   const free = m.memFreePct != null ? Math.round(m.memFreePct) : null;
   return `<div class="dev-load" data-load="${esc(m.level || '')}" data-dev-load>`
-    + `<p class="dev-head" data-dev-cpu="${esc(pct != null ? String(pct) : '')}"><span>${esc(tl('dev.cpu.head', { pct: pct != null ? String(pct) : tl('dev.unknown') }))}</span>`
+    + `<p class="dev-stat" data-dev-cpu="${esc(pct != null ? String(pct) : '')}"><span>${esc(tl('dev.cpu.head', { pct: pct != null ? String(pct) : tl('dev.unknown') }))}</span>`
     + `<span class="dev-level">${esc(DEV_LEVEL[m.level] || tl('dev.level.unknown'))}</span></p>`
     + (pct != null ? devBarHTML('cpu', (pct / DEV_CPU.max) * 100, devCpuTone(pct), (DEV_CPU.high / DEV_CPU.max) * 100) : '')
     + (m.cpus ? `<p class="dev-what" data-dev-what>${esc(tl('dev.cpu.what', { cpus: String(m.cpus) }))}</p>` : '')
     + (load ? `<p class="dev-note" data-dev-recent>${esc(tl('dev.load.recent', { a: load[0].toFixed(1), b: load[1].toFixed(1), c: load[2].toFixed(1), trend: DEV_TREND[devTrend(load)] }))}</p>` : '')
-    + `<p class="dev-head" data-dev-mem="${esc(free != null ? String(free) : '')}"><span>${esc(tl('dev.mem.head', { pct: free != null ? String(free) : tl('dev.unknown') }))}${gib ? esc(tl('dev.mem.of', { total: gib })) : ''}</span></p>`
+    + `<p class="dev-stat" data-dev-mem="${esc(free != null ? String(free) : '')}"><span>${esc(tl('dev.mem.head', { pct: free != null ? String(free) : tl('dev.unknown') }))}${gib ? esc(tl('dev.mem.of', { total: gib })) : ''}</span></p>`
     + (free != null ? devBarHTML('mem', free, devMemTone(free)) : '')
     + `<p class="dev-note" data-dev-rule>${esc(tl('dev.load.rule', { cb: String(DEV_CPU.busy), ch: String(DEV_CPU.high), mb: String(DEV_MEM.busy), mh: String(DEV_MEM.high) }))}</p>`
     + `<p class="dev-note">${esc(tl('dev.load.at', { at: new Date(m.at || 0).toTimeString().slice(0, 8) }))}</p></div>`;

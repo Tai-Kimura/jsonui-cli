@@ -178,6 +178,10 @@ async def run_devices_pane(pw, out, failures):
             return { tone: e.dataset.tone, fill: f.style.width, mark: mk ? mk.style.left : null, colour: getComputedStyle(f).backgroundColor }; };
           return { cpu: t('[data-dev-cpu] span'), what: t('[data-dev-what]'), recent: t('[data-dev-recent]'), mem: t('[data-dev-mem] span'), rule: t('[data-dev-rule]'),
             cpuBar: bar('cpu'), memBar: bar('mem'), load: B.dataset.load }; }"""
+        # each kind's heading apart from what is above it, the load box or the kind before (the requester, 10-23: the
+        # iOS simulators' heading sat on the load box's lower edge)
+        GAPS = """() => [...document.querySelectorAll('#dev-body > .dev-group')].map((g) => { const h = g.querySelector('h3').getBoundingClientRect(),
+          prev = g.previousElementSibling.getBoundingClientRect(); return { kind: g.dataset.devKind, gap: Math.round(h.top - prev.bottom) }; })"""
         for key, mach in LOADS.items():
             box = res[f"box-{key}"] = await page.evaluate(BOX, mach)
             pct = round(mach["load"][0] / mach["cpus"] * 100)
@@ -190,11 +194,15 @@ async def run_devices_pane(pw, out, failures):
             check(box["cpuBar"] and box["cpuBar"]["tone"] == ("high" if pct >= 100 else "busy" if pct >= 70 else "ok") and box["cpuBar"]["mark"] == "50%"
                   and box["memBar"] and box["memBar"]["tone"] == "ok" and box["memBar"]["fill"] == f"{mach['memFreePct']}%",
                   f"{key}: the bars, the CPU's marked at 100 %, coloured by the rule: {box['cpuBar']} {box['memBar']}")
+            gaps = res[f"gaps-{key}"] = await page.evaluate(GAPS)
+            check(len(gaps) == 3 and all(g["gap"] >= 8 for g in gaps), f"{key}: each kind's heading 8 px or more under the box before it: {gaps}")
             await page.screenshot(path=str(out / f"load-{key}.png"))
         check(res["box-high"]["cpuBar"]["colour"] != res["box-ok"]["cpuBar"]["colour"], f"the CPU bar's colour follows its tone: {res['box-high']['cpuBar']} {res['box-ok']['cpuBar']}")
         await page.set_viewport_size({"width": 390, "height": 844})
         res["box-390"] = await page.evaluate(BOX, LOADS["high"])
         check(res["box-390"]["cpu"] == T("dev.cpu.head", pct=105), f"390: the box drawn at a phone's width: {res['box-390']}")
+        gaps = res["gaps-390"] = await page.evaluate(GAPS)
+        check(len(gaps) == 3 and all(g["gap"] >= 8 for g in gaps), f"390: each kind's heading 8 px or more under the box before it: {gaps}")
         await page.screenshot(path=str(out / "load-390.png"))
         await page.set_viewport_size(DESKTOP["viewport"])
         check(pane["right"] == 0 and pane["overSide"], f"where the side panel is: {pane}")
