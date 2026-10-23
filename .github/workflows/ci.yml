@@ -110,7 +110,9 @@ jobs:
     # took 7m13s on 2026-10-22 — Playwright's --with-deps pulled 25.9 MB of apt packages at 79.9 kB/s
     # (5m25s; 17s the run before), and the SVG converters' apt-get was slow the same way — so the job was
     # cancelled inside its unit tests. A slow mirror is not a failing suite.
-    timeout-minutes: 25
+    # 35, not 25: on 2026-10-23 the same mirror (48.5 kB/s) held the two apt steps for about 11 minutes and
+    # the suites took 13m13s under load, so the job finished every step and was cancelled 12s later, at 25.
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       # 🔻 THE FOUR CROSS-REPO ARMS RAN NOWHERE BUT ONE DEVELOPER TREE.
