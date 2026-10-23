@@ -216,11 +216,21 @@ def test_the_environment_comes_before_config(home, monkeypatch):
     assert i18n.load("en", use_env=False).language == "en"
 
 
-def test_an_unknown_language_is_the_default_with_a_problem(home):
+def test_a_language_without_bundled_words_is_used_over_english(home):
+    """Until 2.3.22 "fr" was a problem and the view was English-shaped (ticket 2026-10-24-viz-language-only-en-ja):
+    now it is the page's language and locale, its words English's until the person's file gives them."""
     write_config({"language": "fr"})
     words = i18n.from_config(load_config())
+    assert (words.language, words.words, words.locale, words.problems) == ("fr", "en", "fr", [])
+    assert words.table == i18n.bundled("en")
+
+
+def test_a_string_that_is_not_a_language_code_is_the_default_with_a_problem(home):
+    write_config({"language": "french!"})
+    words = i18n.from_config(load_config())
     assert words.language == i18n.DEFAULT_LANGUAGE
-    assert words.problems == [f'language "fr" is not one of en, ja; using {i18n.DEFAULT_LANGUAGE}']
+    assert words.problems == [f'language "french!" is not a language code (BCP 47: fr, de, zh-TW, pt-BR …); '
+                              f'using {i18n.DEFAULT_LANGUAGE}']
 
 
 def test_a_language_of_the_wrong_type_is_the_default(home, capsys):
@@ -371,16 +381,20 @@ def doctor_language(capsys) -> str:
 
 def test_doctor_names_the_language(home, capsys, monkeypatch):
     monkeypatch.setenv("PATH", "")
-    assert doctor_language(capsys).startswith(f"{i18n.DEFAULT_LANGUAGE}. Read when the server starts")
+    assert doctor_language(capsys).startswith("en (words: en; dates and counts: en-US). Read when the server starts")
     write_config({"language": "ja", "strings": own_words({"status.idle": "ひま"})})
-    assert doctor_language(capsys).startswith(f"ja, own words: {paths.viz_home() / 'mine.json'} (1 keys used). ")
+    assert doctor_language(capsys).startswith(
+        f"ja (words: ja and your own; dates and counts: ja-JP), own words: {paths.viz_home() / 'mine.json'} "
+        f"(1 of its 1 keys used). ")
 
 
 def test_doctor_warns_of_each_problem(home, capsys, monkeypatch):
     monkeypatch.setenv("PATH", "")
-    write_config({"language": "fr", "strings": own_words({"nope": "x"})})
+    write_config({"language": "fr!", "strings": own_words({"nope": "x", "status.idle": "libre"})})
     detail = doctor_language(capsys)
-    assert f'2 warning(s): language "fr" is not one of en, ja; using {i18n.DEFAULT_LANGUAGE}; strings file: unknown key "nope" left out' in detail
+    assert "(1 of its 2 keys used)" in detail, detail
+    assert (f'2 warning(s): language "fr!" is not a language code (BCP 47: fr, de, zh-TW, pt-BR …); using '
+            f'{i18n.DEFAULT_LANGUAGE}; strings file: unknown key "nope" left out') in detail
     monkeypatch.setenv(i18n.LANGUAGE_ENV, "ja")
     assert "(from JUI_VIZ_LANGUAGE)" in doctor_language(capsys)
 

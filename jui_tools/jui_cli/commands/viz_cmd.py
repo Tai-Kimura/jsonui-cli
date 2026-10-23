@@ -81,6 +81,10 @@ def register_viz_command(subparsers: argparse._SubParsersAction) -> None:
     export.add_argument("--out", required=True, help="An empty or new folder")
     export.add_argument("--lang", choices=["en", "ja"], help="The words of the page (default: the view's default language)")
 
+    strings = sub.add_parser("strings", help="Write a template of the view's words, to translate into config.json's \"strings\" file")
+    strings.add_argument("strings_action", nargs="?", choices=["template"], default="template")
+    strings.add_argument("--lang", help="A language code (fr, de, zh-TW …): its plural forms (default: config.json's language)")
+
     pr = sub.add_parser("prices", help="Show or change the prices behind the estimated cost over each robot")
     pr.add_argument("prices_action", nargs="?", choices=["list", "set", "remove", "reset"], default="list")
     pr.add_argument("model", nargs="?", help="The model ID as the transcript writes it (message.model)")
@@ -114,16 +118,17 @@ def cmd_viz(args: argparse.Namespace) -> int:
         "statusline": _cmd_statusline,
         "relay": _cmd_relay,
         "export-demo": _cmd_export_demo,
+        "strings": _cmd_strings,
         "prices": _cmd_prices,
         "cloud-prices": _cmd_cloud_prices,
     }
     handler = handlers.get(getattr(args, "viz_cmd", None))
     if handler is None:
-        _err("usage: jui viz {serve,start,status,stop,open,doctor,hooks,statusline,relay,export-demo,prices,cloud-prices}")
+        _err("usage: jui viz {serve,start,status,stop,open,doctor,hooks,statusline,relay,export-demo,strings,prices,cloud-prices}")
         return 1
     try:
         # Every command that reads or writes the runtime folder moves the old one first; export-demo uses none.
-        moved = paths.migrate_legacy() if args.viz_cmd != "export-demo" else []
+        moved = paths.migrate_legacy() if args.viz_cmd not in ("export-demo", "strings") else []
         if moved:
             _err(f"moved the state from {paths.legacy_viz_home()} to {paths.viz_home()} ({', '.join(moved)})")
         return handler(args)
@@ -1250,6 +1255,26 @@ def _cmd_export_demo(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_strings(args: argparse.Namespace) -> int:
+    """`jui viz strings template --lang fr > fr.json`: every key of the view's words with its English words, a plural key
+    with the language's plural forms — the file config.json's "strings" names, to translate (ticket 2026-10-24-viz-
+    language-only-en-ja)."""
+    from ..viz import i18n
+    from ..viz.config import load_config
+
+    given = getattr(args, "lang", None) or getattr(load_config(), "language", "") or i18n.DEFAULT_LANGUAGE
+    tag = i18n.language_tag(given)
+    if tag is None:
+        _err(f'"{given}" is not a language code (BCP 47: fr, de, zh-TW, pt-BR …)')
+        return 1
+    print(json.dumps(i18n.template(tag), ensure_ascii=False, indent=1))
+    forms = ", ".join(i18n.plural_categories(tag))
+    _err(f"{len(i18n.bundled(i18n.FALLBACK_LANGUAGE))} keys, in English; plural forms for {tag}: {forms}. "
+         f'Translate the words, keep the {{name}} slots, and name the file in config.json: "language": "{tag}", '
+         f'"strings": "<the file>"')
+    return 0
+
+
 # ---------------------------------------------------------------- relay (08 §2)
 
 RELAY_NAME = "jui-viz"
@@ -1913,8 +1938,9 @@ def _language_detail() -> str:
     text = f"{words.language}"
     if os.environ.get(i18n.LANGUAGE_ENV):
         text += f" (from {i18n.LANGUAGE_ENV})"
+    text += f" (words: {words.words}" + (" and your own" if words.own_path else "") + f"; dates and counts: {words.locale})"
     if words.own_path:
-        text += f", own words: {words.own_path} ({words.own_used} keys used)"
+        text += f", own words: {words.own_path} ({words.own_used} of its {words.own_keys} keys used)"
     if words.problems:
         text += f". {len(words.problems)} warning(s): " + "; ".join(words.problems)
     return text + ". Read when the server starts (jui viz stop, then start, after a change)"

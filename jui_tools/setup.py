@@ -28,6 +28,7 @@ setup(
             "web/spirits/*/*",
             "web/vendor/mermaid-11.17.2/*",
             "prices.json",
+            "plural_rules.json",
             "talk_contract.json",
         ],
     },

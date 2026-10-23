@@ -17,7 +17,7 @@ from jui_cli.viz import talk_contract as C
 BASE = 1_792_300_000_000           # the demo's "now" at t=0 (ms); the page shifts every time by (its clock - base)
 M = 60_000
 # The words of the demo's talks, by language (ticket 2026-10-21-jui-viz-language-switch-ja-en): the page shows the
-# set of its language (I18N.language, web/js/05-i18n.js), English when it has none.
+# set of its bundled words' language (I18N.words, web/js/05-i18n.js: ja-JP's is ja), English when it has none.
 WORDS = {
  "ja": {
   "a3": "サブエージェント a3（jsonui-define）",
@@ -157,5 +157,5 @@ out = ("// The talk view's demo data: frames as jui_cli/viz/talk_contract.json s
        "// eslint-disable-next-line no-unused-vars\n"
        f"const TALK_DEMO_BY_LANGUAGE = {body};\n"
        "// eslint-disable-next-line no-unused-vars\n"
-       "const TALK_DEMO = TALK_DEMO_BY_LANGUAGE[typeof I18N === 'object' ? I18N.language : 'en'] || TALK_DEMO_BY_LANGUAGE.en;\n")
+       "const TALK_DEMO = TALK_DEMO_BY_LANGUAGE[typeof I18N === 'object' ? (I18N.words || I18N.language) : 'en'] || TALK_DEMO_BY_LANGUAGE.en;\n")
 pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else DEFAULT_OUT).write_text(out, encoding="utf-8")

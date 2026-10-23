@@ -7,7 +7,7 @@ const I18N = (() => {
     const data = JSON.parse(document.getElementById('jui-viz-strings').textContent);
     if (data && typeof data.strings === 'object') return { ...data, served: true };
   } catch (err) { /* a page without the server's words (debug.html): English keys as they are */ }
-  return { language: 'en', locale: 'en-US', strings: {} };
+  return { language: 'en', words: 'en', locale: 'en-US', strings: {} };
 })();
 const LOCALE = I18N.locale || 'en-US';
 const PLURAL = new Intl.PluralRules(LOCALE);

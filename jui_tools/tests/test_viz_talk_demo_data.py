@@ -24,8 +24,9 @@ DEMO_ROBOTS = {"a0", "a3", "a5", "a2", "a7", "b4", "e6", "f2", "d8", "4f", "7c",
 
 
 LANGUAGES = ("en", "ja")
-#: the one line of code: the set of the page's language (I18N, web/js/05-i18n.js), English when it has none
-PICK = "const TALK_DEMO = TALK_DEMO_BY_LANGUAGE[typeof I18N === 'object' ? I18N.language : 'en'] || TALK_DEMO_BY_LANGUAGE.en;"
+#: the one line of code: the set of the page's bundled words' language (I18N.words, web/js/05-i18n.js: ja-JP's is ja;
+#: I18N.language for a page from before 2.3.22), English when it has none
+PICK = "const TALK_DEMO = TALK_DEMO_BY_LANGUAGE[typeof I18N === 'object' ? (I18N.words || I18N.language) : 'en'] || TALK_DEMO_BY_LANGUAGE.en;"
 
 
 def by_language() -> dict:

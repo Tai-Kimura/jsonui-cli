@@ -36,8 +36,10 @@ class VizConfig:
     # The talk view (talk.py): how long a conversation is kept after one of its two sessions ended (the requester's
     # ruling 10-20: one hour), so a session resumed within it keeps its talks.
     talkGraceSec: float = 3600
-    # The view's words (i18n.py; the requester's ruling 10-21): "en" or "ja" (none: i18n.DEFAULT_LANGUAGE), and a file of
-    # the person's own words over them (absolute, or from the viz folder). Read when the server starts.
+    # The view's words (i18n.py; the requester's rulings 10-21, 10-24): any language code — fr, de, zh-TW … (none:
+    # i18n.DEFAULT_LANGUAGE; the words of en and ja are bundled, the others start from English) — and a file of the
+    # person's own words over them (absolute, or from the viz folder; `jui viz strings template` writes one to start
+    # from). Read when the server starts.
     language: str = ""
     strings: str = ""
 

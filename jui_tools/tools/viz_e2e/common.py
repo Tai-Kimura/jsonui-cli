@@ -415,5 +415,5 @@ def demo_talk(key):
         node = next(n for n in tree.body if isinstance(n, ast.Assign) and any(getattr(t, "id", None) == "WORDS" for t in n.targets))
         _DEMO_TALK = ast.literal_eval(node.value)
     lang = os.environ.get("JUI_VIZ_LANGUAGE", "") or "en"
-    words = _DEMO_TALK.get(lang) or _DEMO_TALK["en"]
+    words = _DEMO_TALK.get(lang) or _DEMO_TALK.get(lang.split("-")[0]) or _DEMO_TALK["en"]   # ja-JP: ja, as the page
     return words[key]

@@ -28,12 +28,14 @@ const SPIRIT_ANCHORS = {
 };
 /* Where a part goes when spirit.json does not say: robot-*.glb on the head, prop-*.glb in the right hand. */
 const spiritDefaultAt = (file) => (file.startsWith('prop-') ? 'handR' : 'head');
-/* A model's words in the page's language (05-i18n.js), else ja, else the first written; a string is itself. */
+/* A model's words in the page's language (05-i18n.js; a code: pt-BR, then pt), else ja, else the first written; a
+   string is itself. */
 function spiritWords(v) {
   if (typeof v === 'string' || Array.isArray(v)) return v;
   if (!v || typeof v !== 'object') return '';
   const lang = (typeof I18N !== 'undefined' && I18N.language) || 'en';
-  return v[lang] !== undefined ? v[lang] : v.ja !== undefined ? v.ja : Object.values(v)[0] || '';
+  const base = lang.split('-')[0];
+  return v[lang] !== undefined ? v[lang] : v[base] !== undefined ? v[base] : v.ja !== undefined ? v.ja : Object.values(v)[0] || '';
 }
 /* The list, asked at most every SPIRIT.listMs (a model put in the folder shows from the next skill after). */
 function spiritList() {

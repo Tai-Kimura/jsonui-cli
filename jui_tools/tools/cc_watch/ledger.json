@@ -299,7 +299,8 @@
   "not_relying": {
     "jui_tools/jui_cli/viz/attachments.py": "プロンプトの添付を viz の私用の場所に保存し、消すだけ。CLI の形は読まず、受け手の設定も許可の規則も書かない。受け手の Read が許可を求めること（10-20 の測り 1）は、許可の板にそのまま出るだけで、この file の動作はそれに依らない",
     "jui_tools/jui_cli/viz/bundle.py": "web/js を順に連結するだけ。CLI の形を読まない",
-    "jui_tools/jui_cli/viz/i18n.py": "ページの文言の表（同梱の en・ja と利用者のファイル）を config.json の language・strings で選んで重ねるだけ。CLI・フックの形は読まない",
+    "jui_tools/jui_cli/viz/i18n.py": "ページの文言の表（同梱の en・ja と利用者のファイル）を config.json の language（任意の言語コード）・strings で選んで重ねるだけ。CLI・フックの形は読まない",
+    "jui_tools/jui_cli/viz/plural_rules.json": "CLDR の複数形の規則（言語コードごとの one・few・many などの分類）だけ。CLI の形は読まない",
     "jui_tools/jui_cli/viz/spirits.py": "スキルの守護霊のモデルのフォルダ（.glb の頭と JSON の塊、spirit.json）と viz の config.json の spiritsDir を読んで検査するだけ。CLI・フック・transcript の形は読まない（スキルの始まりの見分けは、作る時に ingest.py の側で台帳に載せる）",
     "jui_tools/jui_cli/viz/web/spirits/": "同梱のオリジナルの守護霊のモデル（.glb と spirit.json、tools/spirits で書き出した物）。データだけで、CLI の形は読まない",
     "jui_tools/jui_cli/viz/web/i18n/en.json": "ページの英語の文言（キーと文）だけ。CLI の形は読まない",

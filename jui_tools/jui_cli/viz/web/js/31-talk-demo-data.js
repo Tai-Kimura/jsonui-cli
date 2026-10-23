@@ -1511,4 +1511,4 @@ const TALK_DEMO_BY_LANGUAGE = {
  }
 };
 // eslint-disable-next-line no-unused-vars
-const TALK_DEMO = TALK_DEMO_BY_LANGUAGE[typeof I18N === 'object' ? I18N.language : 'en'] || TALK_DEMO_BY_LANGUAGE.en;
+const TALK_DEMO = TALK_DEMO_BY_LANGUAGE[typeof I18N === 'object' ? (I18N.words || I18N.language) : 'en'] || TALK_DEMO_BY_LANGUAGE.en;

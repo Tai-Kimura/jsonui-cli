@@ -1,0 +1,536 @@
+{
+ "_comment": "CLDR's cardinal plural rules for whole counts, one row per distinct rule (i18n.plural_form). Made from Intl.PluralRules of node's ICU (scratch script: every two- and three-letter tag ICU supports, and pt-PT); `counts` holds the category of 0..199 as one letter each (z zero, o one, t two, f few, m many, x other), a count of 200 or more is the one of 100 + count % 100, except a whole million (`million`). tests/test_viz_i18n_any_language.py checks it against node's Intl when node is there. Cornish (kw) is left out: its rule reads count % 1000 and % 100000, which this shape cannot hold, so it reads as English with a problem said (the page's Intl has it right).",
+ "icu": "78.3",
+ "cldr": "48.0",
+ "rows": [
+  {
+   "languages": [
+    "af",
+    "an",
+    "az",
+    "bg",
+    "ce",
+    "da",
+    "de",
+    "dv",
+    "ee",
+    "el",
+    "en",
+    "eo",
+    "et",
+    "eu",
+    "fi",
+    "fo",
+    "fy",
+    "gl",
+    "ha",
+    "hu",
+    "ia",
+    "ie",
+    "io",
+    "ka",
+    "kk",
+    "kl",
+    "ks",
+    "ku",
+    "ky",
+    "lb",
+    "lg",
+    "ml",
+    "mn",
+    "mr",
+    "nb",
+    "nd",
+    "ne",
+    "nl",
+    "nn",
+    "no",
+    "nr",
+    "ny",
+    "om",
+    "or",
+    "os",
+    "ps",
+    "rm",
+    "sc",
+    "sd",
+    "sn",
+    "so",
+    "sq",
+    "ss",
+    "st",
+    "sv",
+    "sw",
+    "ta",
+    "te",
+    "tk",
+    "tn",
+    "tr",
+    "ts",
+    "ug",
+    "ur",
+    "uz",
+    "ve",
+    "vo",
+    "xh",
+    "yi",
+    "asa",
+    "ast",
+    "bal",
+    "bem",
+    "bez",
+    "brx",
+    "cgg",
+    "chr",
+    "ckb",
+    "fur",
+    "gsw",
+    "haw",
+    "jgo",
+    "jmc",
+    "kaj",
+    "kcg",
+    "kkj",
+    "ksb",
+    "lij",
+    "mas",
+    "mgo",
+    "nah",
+    "nnh",
+    "nyn",
+    "pap",
+    "rof",
+    "rwk",
+    "saq",
+    "sdh",
+    "seh",
+    "ssy",
+    "syr",
+    "teo",
+    "tig",
+    "vun",
+    "wae",
+    "xog"
+   ],
+   "categories": [
+    "one",
+    "other"
+   ],
+   "counts": "xoxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "million": "x"
+  },
+  {
+   "languages": [
+    "bm",
+    "bo",
+    "dz",
+    "id",
+    "ig",
+    "ii",
+    "ja",
+    "jv",
+    "km",
+    "ko",
+    "lo",
+    "ms",
+    "my",
+    "sg",
+    "su",
+    "th",
+    "to",
+    "vi",
+    "wo",
+    "yo",
+    "zh",
+    "hnj",
+    "jbo",
+    "kde",
+    "kea",
+    "lkt",
+    "nqo",
+    "osa",
+    "sah",
+    "ses",
+    "tpi",
+    "yue"
+   ],
+   "categories": [
+    "other"
+   ],
+   "counts": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "million": "x"
+  },
+  {
+   "languages": [
+    "ak",
+    "am",
+    "as",
+    "bn",
+    "fa",
+    "ff",
+    "gu",
+    "hi",
+    "hy",
+    "kn",
+    "ln",
+    "mg",
+    "pa",
+    "si",
+    "ti",
+    "wa",
+    "zu",
+    "bho",
+    "csw",
+    "doi",
+    "guw",
+    "kab",
+    "kok",
+    "nso",
+    "pcm"
+   ],
+   "categories": [
+    "one",
+    "other"
+   ],
+   "counts": "ooxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "million": "x"
+  },
+  {
+   "languages": [
+    "he",
+    "iu",
+    "se",
+    "naq",
+    "sat",
+    "sma",
+    "smi",
+    "smj",
+    "smn",
+    "sms"
+   ],
+   "categories": [
+    "one",
+    "two",
+    "other"
+   ],
+   "counts": "xotxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "million": "x"
+  },
+  {
+   "languages": [
+    "ca",
+    "es",
+    "it",
+    "lld",
+    "scn",
+    "vec",
+    "pt-PT"
+   ],
+   "categories": [
+    "one",
+    "many",
+    "other"
+   ],
+   "counts": "xoxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "million": "m"
+  },
+  {
+   "languages": [
+    "cv",
+    "blo",
+    "ksh",
+    "lag"
+   ],
+   "categories": [
+    "zero",
+    "one",
+    "other"
+   ],
+   "counts": "zoxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "million": "x"
+  },
+  {
+   "languages": [
+    "be",
+    "ru",
+    "uk"
+   ],
+   "categories": [
+    "one",
+    "few",
+    "many",
+    "other"
+   ],
+   "counts": "mofffmmmmmmmmmmmmmmmmofffmmmmmmofffmmmmmmofffmmmmmmofffmmmmmmofffmmmmmmofffmmmmmmofffmmmmmmofffmmmmmmofffmmmmmmmmmmmmmmmmofffmmmmmmofffmmmmmmofffmmmmmmofffmmmmmmofffmmmmmmofffmmmmmmofffmmmmmmofffmmmmm",
+   "million": "m"
+  },
+  {
+   "languages": [
+    "bs",
+    "hr",
+    "sr"
+   ],
+   "categories": [
+    "one",
+    "few",
+    "other"
+   ],
+   "counts": "xofffxxxxxxxxxxxxxxxxofffxxxxxxofffxxxxxxofffxxxxxxofffxxxxxxofffxxxxxxofffxxxxxxofffxxxxxxofffxxxxxxofffxxxxxxxxxxxxxxxxofffxxxxxxofffxxxxxxofffxxxxxxofffxxxxxxofffxxxxxxofffxxxxxxofffxxxxxxofffxxxxx",
+   "million": "x"
+  },
+  {
+   "languages": [
+    "sl",
+    "dsb",
+    "hsb"
+   ],
+   "categories": [
+    "one",
+    "two",
+    "few",
+    "other"
+   ],
+   "counts": "xotffxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxotffxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "million": "x"
+  },
+  {
+   "languages": [
+    "ar",
+    "ars"
+   ],
+   "categories": [
+    "zero",
+    "one",
+    "two",
+    "few",
+    "many",
+    "other"
+   ],
+   "counts": "zotffffffffmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmxxxffffffffmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+   "million": "x"
+  },
+  {
+   "languages": [
+    "ceb",
+    "fil"
+   ],
+   "categories": [
+    "one",
+    "other"
+   ],
+   "counts": "ooooxoxooxooooxoxooxooooxoxooxooooxoxooxooooxoxooxooooxoxooxooooxoxooxooooxoxooxooooxoxooxooooxoxooxooooxoxooxooooxoxooxooooxoxooxooooxoxooxooooxoxooxooooxoxooxooooxoxooxooooxoxooxooooxoxooxooooxoxoox",
+   "million": "o"
+  },
+  {
+   "languages": [
+    "cs",
+    "sk"
+   ],
+   "categories": [
+    "one",
+    "few",
+    "many",
+    "other"
+   ],
+   "counts": "xofffxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "million": "x"
+  },
+  {
+   "languages": [
+    "fr",
+    "pt"
+   ],
+   "categories": [
+    "one",
+    "many",
+    "other"
+   ],
+   "counts": "ooxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "million": "m"
+  },
+  {
+   "languages": [
+    "is",
+    "mk"
+   ],
+   "categories": [
+    "one",
+    "other"
+   ],
+   "counts": "xoxxxxxxxxxxxxxxxxxxxoxxxxxxxxxoxxxxxxxxxoxxxxxxxxxoxxxxxxxxxoxxxxxxxxxoxxxxxxxxxoxxxxxxxxxoxxxxxxxxxoxxxxxxxxxxxxxxxxxxxoxxxxxxxxxoxxxxxxxxxoxxxxxxxxxoxxxxxxxxxoxxxxxxxxxoxxxxxxxxxoxxxxxxxxxoxxxxxxxx",
+   "million": "x"
+  },
+  {
+   "languages": [
+    "lv",
+    "prg"
+   ],
+   "categories": [
+    "zero",
+    "one",
+    "other"
+   ],
+   "counts": "zoxxxxxxxxzzzzzzzzzzzoxxxxxxxxzoxxxxxxxxzoxxxxxxxxzoxxxxxxxxzoxxxxxxxxzoxxxxxxxxzoxxxxxxxxzoxxxxxxxxzoxxxxxxxxzzzzzzzzzzzoxxxxxxxxzoxxxxxxxxzoxxxxxxxxzoxxxxxxxxzoxxxxxxxxzoxxxxxxxxzoxxxxxxxxzoxxxxxxxx",
+   "million": "z"
+  },
+  {
+   "languages": [
+    "br"
+   ],
+   "categories": [
+    "one",
+    "two",
+    "few",
+    "many",
+    "other"
+   ],
+   "counts": "xotffxxxxfxxxxxxxxxxxotffxxxxfxotffxxxxfxotffxxxxfxotffxxxxfxotffxxxxfxxxxxxxxxxxotffxxxxfxxxxxxxxxxxotffxxxxfxxxxxxxxxxxotffxxxxfxotffxxxxfxotffxxxxfxotffxxxxfxotffxxxxfxxxxxxxxxxxotffxxxxfxxxxxxxxxx",
+   "million": "m"
+  },
+  {
+   "languages": [
+    "cy"
+   ],
+   "categories": [
+    "zero",
+    "one",
+    "two",
+    "few",
+    "many",
+    "other"
+   ],
+   "counts": "zotfxxmxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "million": "x"
+  },
+  {
+   "languages": [
+    "ga"
+   ],
+   "categories": [
+    "one",
+    "two",
+    "few",
+    "many",
+    "other"
+   ],
+   "counts": "xotffffmmmmxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "million": "x"
+  },
+  {
+   "languages": [
+    "gd"
+   ],
+   "categories": [
+    "one",
+    "two",
+    "few",
+    "other"
+   ],
+   "counts": "xotffffffffotfffffffxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "million": "x"
+  },
+  {
+   "languages": [
+    "gv"
+   ],
+   "categories": [
+    "one",
+    "two",
+    "few",
+    "many",
+    "other"
+   ],
+   "counts": "fotxxxxxxxxotxxxxxxxfotxxxxxxxxotxxxxxxxfotxxxxxxxxotxxxxxxxfotxxxxxxxxotxxxxxxxfotxxxxxxxxotxxxxxxxfotxxxxxxxxotxxxxxxxfotxxxxxxxxotxxxxxxxfotxxxxxxxxotxxxxxxxfotxxxxxxxxotxxxxxxxfotxxxxxxxxotxxxxxxx",
+   "million": "f"
+  },
+  {
+   "languages": [
+    "lt"
+   ],
+   "categories": [
+    "one",
+    "few",
+    "many",
+    "other"
+   ],
+   "counts": "xoffffffffxxxxxxxxxxxoffffffffxoffffffffxoffffffffxoffffffffxoffffffffxoffffffffxoffffffffxoffffffffxoffffffffxxxxxxxxxxxoffffffffxoffffffffxoffffffffxoffffffffxoffffffffxoffffffffxoffffffffxoffffffff",
+   "million": "x"
+  },
+  {
+   "languages": [
+    "mt"
+   ],
+   "categories": [
+    "one",
+    "two",
+    "few",
+    "many",
+    "other"
+   ],
+   "counts": "fotffffffffmmmmmmmmmxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxffffffffmmmmmmmmmxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "million": "x"
+  },
+  {
+   "languages": [
+    "pl"
+   ],
+   "categories": [
+    "one",
+    "few",
+    "many",
+    "other"
+   ],
+   "counts": "mofffmmmmmmmmmmmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmmmmmmmmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmmmmfffmmmmm",
+   "million": "m"
+  },
+  {
+   "languages": [
+    "ro"
+   ],
+   "categories": [
+    "one",
+    "few",
+    "other"
+   ],
+   "counts": "foffffffffffffffffffxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxfffffffffffffffffffxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "million": "x"
+  },
+  {
+   "languages": [
+    "sgs"
+   ],
+   "categories": [
+    "one",
+    "two",
+    "few",
+    "many",
+    "other"
+   ],
+   "counts": "xotfffffffxxxxxxxxxxxoffffffffxoffffffffxoffffffffxoffffffffxoffffffffxoffffffffxoffffffffxoffffffffxoffffffffxxxxxxxxxxxoffffffffxoffffffffxoffffffffxoffffffffxoffffffffxoffffffffxoffffffffxoffffffff",
+   "million": "x"
+  },
+  {
+   "languages": [
+    "shi"
+   ],
+   "categories": [
+    "one",
+    "few",
+    "other"
+   ],
+   "counts": "oofffffffffxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "million": "x"
+  },
+  {
+   "languages": [
+    "tzm"
+   ],
+   "categories": [
+    "one",
+    "other"
+   ],
+   "counts": "ooxxxxxxxxxoooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "million": "x"
+  }
+ ]
+}

@@ -603,12 +603,13 @@ def doctor_check() -> dict:
 
 
 def words(value, language: str) -> str:
-    """A model's words in ``language``, else ja, else the first written; a string is itself (the page's spiritWords)."""
+    """A model's words in ``language`` (a code: pt-BR, then pt), else ja, else the first written; a string is itself
+    (the page's spiritWords)."""
     if isinstance(value, str):
         return value
     if not isinstance(value, dict) or not value:
         return ""
-    got = value.get(language, value.get("ja", next(iter(value.values()))))
+    got = value.get(language, value.get(language.split("-")[0], value.get("ja", next(iter(value.values())))))
     return got if isinstance(got, str) else ""
 
 
