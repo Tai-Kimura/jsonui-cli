@@ -78,6 +78,7 @@ def test_a_small_model_with_every_section_is_ok(tmp_path):
     ({"version": 1, "spirit": {"file": "spirit.glb", "rotate": [0, 361, 0]}}, "spirit.rotate: is not three numbers from -360 to 360"),
     ({"version": 1, "parts": [{"file": "robot-a.glb", "rotate": [0, 0, -400]}]}, "parts[0].rotate: is not three numbers from -360 to 360"),
     ({"version": 1, "spirit": {"file": "spirit.glb", "offset": [0, 11, 0]}}, "spirit.offset: is not three numbers from -10 to 10"),
+    ({"version": 1, "parts": [{"file": "robot-a.glb", "offset": [11, 0, 0]}]}, "parts[0].offset: is not three numbers from -10 to 10"),
     ({"version": 1, "robot": {"hide": ["legs"]}}, "robot.hide[0]: 'legs' is not one of band, antenna, headset"),
     ({"version": 1, "bubble": {"text": "x", "target": "desk"}}, "bubble.target: 'desk' is not one of spirit, robot"),
     ({"version": 1, "bubble": {"text": ["1", "2", "3", "4", "5", "6", "7"]}}, "bubble.text: has 7 lines"),
@@ -197,6 +198,27 @@ def test_the_report_names_the_model_by_its_name_in_the_language(tmp_path, monkey
     out = capsys.readouterr().out
     assert line in out
     assert f"OK  plain ({plain})" in out
+
+
+@pytest.mark.parametrize("language,line", [("ja", "OK  one（歯車の巨人） ("), ("en", "OK  one: 歯車の巨人 (")])
+def test_a_name_written_as_one_string_is_named_as_it_is(tmp_path, monkeypatch, capsys, language, line):
+    monkeypatch.setenv("JUI_VIZ_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("JUI_VIZ_LANGUAGE", language)
+    assert spirits.main([str(model(tmp_path, {"version": 1, "name": "歯車の巨人"}, name="one"))]) == 0
+    assert line in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("language,line", [("ja", "OK  named（墨の書生） ("), ("en", "OK  named: Ink Scholar (")])
+def test_the_command_reports_in_config_json_s_language(tmp_path, monkeypatch, capsys, language, line):
+    # the language is config.json's when the environment names none: main() reads it, as the view's words do
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "config.json").write_text(json.dumps({"language": language}), encoding="utf-8")
+    monkeypatch.setenv("JUI_VIZ_HOME", str(home))
+    monkeypatch.delenv("JUI_VIZ_LANGUAGE", raising=False)
+    named = model(tmp_path, {"version": 1, "name": {"ja": "墨の書生", "en": "Ink Scholar"}}, name="named")
+    assert spirits.main([str(named)]) == 0
+    assert line in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("name", ["robot-a.glb/../x", "robot-a.glb\\x", "robot-a.glb.txt", "robot-a.glbx", "../robot-a.glb",
