@@ -20,8 +20,9 @@
    - layout: every group a floor holding its child groups and its nodes, packed in rows (sizes bottom-up, places top-
      down), so 2,000 nodes still fit one view; a node is a cell.
    - shapes: one InstancedMesh per shape (category → shape, srShape), the colour the provider's; one InstancedMesh for
-     all the floors; the cables two sets of strips (within a provider: solid; across providers: dashed magenta, higher),
-     each at least SR_CABLE px wide on the page however far the camera is (srCables).
+     all the floors; the cables two sets of strips (within a provider: solid; across providers: dashed magenta, a little
+     higher), from one node's side to the other's, low, rising only over what stands between (srCablePathOf), each at least SR_CABLE px
+     wide on the page however far the camera is (srCables).
    - far (a node smaller than SR.lod.far px on the page): the top groups are boxes, the cables bundled between them
      (one line per pair, its count in the board), the labels the boxes' only; near again past SR.lod.near px.
    - labels: a pool of SR.labels.max on the page, given each tenth of a second to the nearest things in view.
@@ -266,11 +267,171 @@ function srEnvs(model) { return (model.environments || []).map((e) => (typeof e 
    pushed apart on the page by SR_CABLE_SHADER — at least `px` wide (pulled back) and, up close, as wide as
    `world` units up to `max` px, like the flows' light (59-sr-flows.js srFlowLightKeepSize) whose core is a little wider, so a light
    still reads as running inside its cable. A segment with an end behind the camera is cut at the near plane; one of
-   length 0 (a migration step's edge before it grows) draws nothing. srCableSet / srCableGet / srCableDone move one
-   segment's ends (59-sr-migration.js): the order is the one srBuild laid them in. */
-// px: the least width on the page by layer; world: the width up close (units); max: the most on the page — a cable running
-// past the camera would otherwise fill the page, and draw every pixel of it
-const SR_CABLE = { plain: 2.2, cross: 2.8, focus: 4, bundle: 2.6, world: 0.08, max: 7 };
+   length 0 (a migration step's edge before it grows) draws nothing. A cable is a path of segments (srCablePathOf);
+   srCableShow / srCableShown / srCableGet / srCableDone draw part of one and read it (59-sr-migration.js): the order is
+   the one srBuild laid them in. A cable running past the camera is held to `max` px, else it would fill the page. */
+// The widths (requester 10-23, 2.3.20 in use: 「未選択の時の線はもっと全然細くていい」「選択時も少しだけ細くして」): the
+// cables not chosen thin — px on the page at least, `faintWorld` units up close up to `faintMax` px; the strong layer (the
+// chosen, the pointed, the reach) `focus` px, `world` units up close up to `max` px, inside the flows' light (its core
+// at least 7/3 px in radius: 59-sr-flows.js).
+const SR_CABLE = { plain: 0.9, cross: 1.1, bundle: 1, faintWorld: 0.025, faintMax: 1.8, focus: 3, world: 0.06, max: 5 };
+/* Where a cable runs (requester 10-23: 「線がノードのオブジェクトの上にあるからわかりづらい、ちゃんとノード同士を繋ぐように
+   してほしい」; then 「ノードの外にあることというよりノードの際外側と接地してることだね、今上に浮いてるから高さが合ってない
+   他のオブジェクト避ける時だけ上に角度変えて」): from the side of one node to the side of the other, low — each end on the
+   outer edge of the node as it is drawn now (its simple shape, or up close its model: srNodeFoot), at a height within the
+   node, SR_ROUTE.side above its foot. Straight and flat between the two, unless something stands on the way (another node,
+   a closed group's box): then the cable rises just before it (SR_ROUTE.ramp), passes SR_ROUTE.clear over its top, and
+   comes down after it; obstacles near each other share one rise. A cable is a polyline: every set of cables, the strong
+   layer, the flows' light and their branch hints, the migration's edges read the same path (srCablePathOf). The far
+   view's bundles run the same way between the top groups' boxes (srBundlePath). */
+// join: two rises nearer than this (units, ramp to ramp) are one — a cable through a crowded room rises once at the
+// height of the tallest thing under it, rather than up and down over each (and a segment for each: 133,000 segments
+// in the 2,000-node room, a frame up close 87 ms, against 5,000 and 18 before the paths)
+const SR_ROUTE = { side: 0.3, ramp: 0.55, clear: 0.25, margin: 0.06, cross: 0.06, join: Infinity };
+// a shape's or a model's extent around its middle (x, z half widths; y from its middle) and whether it is round
+const SR_FOOT = new Map();
+function srFootOfObject(key, make) {
+  if (!SR_FOOT.has(key)) {
+    const o = make(), box = new THREE.Box3().setFromObject(o);
+    const round = o.isMesh && !(o.geometry && o.geometry.type === 'BoxGeometry');
+    SR_FOOT.set(key, { hx: Math.max(Math.abs(box.min.x), box.max.x), hz: Math.max(Math.abs(box.min.z), box.max.z), y0: box.min.y, y1: box.max.y, round });
+    o.traverse((x) => { if (x.geometry) x.geometry.dispose(); });
+  }
+  return SR_FOOT.get(key);
+}
+function srShapeFoot(shape) { return srFootOfObject(`shape:${shape}`, () => new THREE.Mesh(SR_SHAPES[shape]())); }
+function srModelFoot(kind) {
+  return srFootOfObject(`model:${kind}`, () => {
+    const g = new THREE.Group();
+    for (const [geo, x, y, z, , rot] of srModelParts()[kind]) { const m = new THREE.Mesh(geo.clone()); m.position.set(x, y, z); if (rot) m.rotation.set(rot[0], rot[1], rot[2]); g.add(m); }
+    g.updateMatrixWorld(true);
+    return g;
+  });
+}
+/* A node as drawn now, on the floor's plane: its middle, its half widths, its foot and top (world y), whether round. A node
+   in a closed group is that group's box. */
+function srNodeFoot(V, p) {
+  if (p.hiddenIn) {
+    const G = p.hiddenIn, h = 0.6 + Math.log2(1 + srCountNodes(G)) * 0.35, y = 0.06 * G.level;
+    return { x: G.x + G.w / 2, z: G.z + SR_HEAD + (G.d - SR_HEAD) / 2, hx: (G.w - SR_PAD) / 2, hz: (G.d - SR_HEAD - SR_PAD * 0.5) / 2, y0: y, y1: y + h, round: false };
+  }
+  const sc = p.n.count > 1 ? 1 + Math.min(Math.log2(p.n.count), 4) * 0.12 : 1;
+  const f = V.detail && typeof srModelKind === 'function' ? srModelFoot(srModelKind(p.n)) : srShapeFoot(srShape(p.n.category));
+  const mid = p.y + 0.75;
+  return { x: p.x, z: p.z, hx: f.hx * sc, hz: f.hz * sc, y0: mid + f.y0 * sc, y1: mid + f.y1 * sc, round: f.round };
+}
+/* Where a ray from a foot's middle, along the unit (dx, dz), leaves its outline. */
+function srFootExit(f, dx, dz) {
+  if (f.round) return 1 / Math.hypot(dx / Math.max(f.hx, 1e-6), dz / Math.max(f.hz, 1e-6));
+  return Math.min(Math.abs(dx) > 1e-9 ? f.hx / Math.abs(dx) : Infinity, Math.abs(dz) > 1e-9 ? f.hz / Math.abs(dz) : Infinity);
+}
+/* Where the segment s(t) = A + t (B - A), t in 0..1, crosses a foot grown by m (null: it does not), as [t in, t out]. */
+function srFootSpan(f, A, B, m) {
+  const dx = B[0] - A[0], dz = B[1] - A[1];
+  if (f.round) {   // an ellipse: scaled to the unit circle
+    const ax = (A[0] - f.x) / (f.hx + m), az = (A[1] - f.z) / (f.hz + m), bx = dx / (f.hx + m), bz = dz / (f.hz + m);
+    const qa = bx * bx + bz * bz, qb = 2 * (ax * bx + az * bz), qc = ax * ax + az * az - 1, disc = qb * qb - 4 * qa * qc;
+    if (qa < 1e-12 || disc <= 0) return null;
+    const r = Math.sqrt(disc), t0 = (-qb - r) / (2 * qa), t1 = (-qb + r) / (2 * qa);
+    return t1 < 0 || t0 > 1 ? null : [Math.max(0, t0), Math.min(1, t1)];
+  }
+  let t0 = 0, t1 = 1;   // a box: the slabs
+  for (const [o, d, c, h] of [[A[0], dx, f.x, f.hx + m], [A[1], dz, f.z, f.hz + m]]) {
+    if (Math.abs(d) < 1e-12) { if (Math.abs(o - c) > h) return null; continue; }
+    let u0 = (c - h - o) / d, u1 = (c + h - o) / d;
+    if (u0 > u1) [u0, u1] = [u1, u0];
+    t0 = Math.max(t0, u0); t1 = Math.min(t1, u1);
+    if (t0 > t1) return null;
+  }
+  return [t0, t1];
+}
+/* The feet of the nodes drawn, on a grid of SR_CELL, for the spans a cable may cross. */
+function srFootGrid(V) {
+  if (V.footGrid && V.footGrid.detail === V.detail) return V.footGrid;
+  const cells = new Map(), feet = new Map(), boxes = new Set();
+  for (const [id, p] of V.L.pos) {
+    const f = srNodeFoot(V, p);
+    feet.set(id, f);
+    if (p.hiddenIn) { if (boxes.has(p.hiddenIn)) continue; boxes.add(p.hiddenIn); }
+    f.id = id;
+    for (let gx = Math.floor((f.x - f.hx) / SR_CELL); gx <= Math.floor((f.x + f.hx) / SR_CELL); gx++)
+      for (let gz = Math.floor((f.z - f.hz) / SR_CELL); gz <= Math.floor((f.z + f.hz) / SR_CELL); gz++) {
+        const k = `${gx},${gz}`; (cells.get(k) || cells.set(k, []).get(k)).push(f);
+      }
+  }
+  V.footGrid = { cells, feet, detail: V.detail };
+  return V.footGrid;
+}
+/* The path of a cable, from one node's side to the other's (see SR_ROUTE): points [x, y, z], at least two. */
+function srCablePathOf(V, from, to, crossing) {
+  const grid = srFootGrid(V), fa = grid.feet.get(from), fb = grid.feet.get(to);
+  if (!fa || !fb) return null;
+  const lift = crossing ? SR_ROUTE.cross : 0;
+  let dx = fb.x - fa.x, dz = fb.z - fa.z;
+  const d = Math.hypot(dx, dz);
+  const ya = Math.min(fa.y0 + SR_ROUTE.side, (fa.y0 + fa.y1) / 2) + lift, yb = Math.min(fb.y0 + SR_ROUTE.side, (fb.y0 + fb.y1) / 2) + lift;
+  if (d < 1e-6 || (fa === fb)) return [[fa.x, ya, fa.z], [fa.x, ya, fa.z]];   // one place (a closed group to itself): nothing drawn
+  dx /= d; dz /= d;
+  const ea = srFootExit(fa, dx, dz), eb = srFootExit(fb, -dx, -dz);
+  if (ea + eb >= d) return [[fa.x, ya, fa.z], [fa.x, ya, fa.z]];   // touching: no cable between them
+  const A = [fa.x + dx * ea, fa.z + dz * ea], B = [fb.x - dx * eb, fb.z - dz * eb], len = d - ea - eb;
+  // what stands on the way: the feet in the grid cells along it (its own two out)
+  const seen = new Set([fa, fb]), spans = [];
+  for (let k = 0, n = Math.ceil(len / (SR_CELL / 2)) + 1; k <= n; k++) {
+    const x = A[0] + (B[0] - A[0]) * k / n, z = A[1] + (B[1] - A[1]) * k / n;
+    for (let gx = Math.floor(x / SR_CELL) - 1; gx <= Math.floor(x / SR_CELL) + 1; gx++)
+      for (let gz = Math.floor(z / SR_CELL) - 1; gz <= Math.floor(z / SR_CELL) + 1; gz++)
+        for (const f of grid.cells.get(`${gx},${gz}`) || []) {
+          if (seen.has(f)) continue;
+          seen.add(f);
+          const sp = srFootSpan(f, A, B, SR_ROUTE.margin);
+          if (sp) spans.push([sp[0], sp[1], f.y1 + SR_ROUTE.clear]);
+        }
+  }
+  const base = (t) => ya + (yb - ya) * t, at = (t, y) => [A[0] + (B[0] - A[0]) * t, y, A[1] + (B[1] - A[1]) * t];
+  const pts = [at(0, ya)];
+  if (spans.length) {   // rises, each over the obstacles it covers; two whose ramps would meet are one
+    const r = SR_ROUTE.ramp / len, join = SR_ROUTE.join / len;
+    spans.sort((p, q) => p[0] - q[0]);
+    const humps = [];
+    for (const sp of spans) {
+      const h = humps[humps.length - 1];
+      if (h && sp[0] - r <= h[1] + r + join) { h[1] = Math.max(h[1], sp[1]); h[2] = Math.max(h[2], sp[2]); } else humps.push([...sp]);
+    }
+    for (const [t0, t1, top] of humps) {
+      const up = Math.max(0, t0 - r), down = Math.min(1, t1 + r), y = Math.max(top, base(t0), base(t1));
+      if (up > 0) pts.push(at(up, base(up)));
+      pts.push(at(t0, y), at(t1, y));
+      if (down < 1) pts.push(at(down, base(down)));
+    }
+  }
+  pts.push(at(1, yb));
+  return pts;
+}
+const srCablePath = (V, e) => srCablePathOf(V, e.from, e.to, !!e.crossProvider);
+/* A bundle between two top groups' boxes, from the side of one to the side of the other, rising over the boxes between. */
+function srBundlePath(V, A, B, crossing) {
+  const foot = (G) => ({ x: G.x + G.w / 2, z: G.z + G.d / 2, hx: G.w * 0.46, hz: G.d * 0.46, y0: 0, y1: G.boxH, round: false });
+  const fa = foot(A), fb = foot(B), lift = crossing ? SR_ROUTE.cross : 0;
+  let dx = fb.x - fa.x, dz = fb.z - fa.z;
+  const d = Math.hypot(dx, dz);
+  const ya = Math.min(SR_ROUTE.side * 2, A.boxH / 2) + lift, yb = Math.min(SR_ROUTE.side * 2, B.boxH / 2) + lift;
+  if (d < 1e-6) return [[fa.x, ya, fa.z], [fa.x, ya, fa.z]];
+  dx /= d; dz /= d;
+  const ea = srFootExit(fa, dx, dz), eb = srFootExit(fb, -dx, -dz);
+  if (ea + eb >= d) return [[fa.x, ya, fa.z], [fa.x, ya, fa.z]];
+  const P = [fa.x + dx * ea, fa.z + dz * ea], Q = [fb.x - dx * eb, fb.z - dz * eb], len = d - ea - eb, r = SR_ROUTE.ramp * 2 / len;
+  const spans = V.L.tops.filter((G) => G !== A && G !== B).map((G) => { const sp = srFootSpan(foot(G), P, Q, SR_ROUTE.margin); return sp ? [sp[0], sp[1], G.boxH + SR_ROUTE.clear] : null; }).filter(Boolean).sort((p, q) => p[0] - q[0]);
+  const base = (t) => ya + (yb - ya) * t, at = (t, y) => [P[0] + (Q[0] - P[0]) * t, y, P[1] + (Q[1] - P[1]) * t], pts = [at(0, ya)];
+  for (const [t0, t1, top] of spans) {
+    const up = Math.max(0, t0 - r), down = Math.min(1, t1 + r), y = Math.max(top, base(t0), base(t1));
+    if (up > 0) pts.push(at(up, base(up)));
+    pts.push(at(t0, y), at(t1, y));
+    if (down < 1) pts.push(at(down, base(down)));
+  }
+  pts.push(at(1, yb));
+  return pts;
+}
 const SR_CABLE_SHADER = {
   vertex: `attribute vec3 cableStart; attribute vec3 cableEnd; uniform vec2 uRes; uniform float uPx, uWorld, uMax; varying float vDist;
     void main() {
@@ -298,12 +459,12 @@ const SR_CABLE_SHADER = {
     }`,   // the colour as the old lines drew it: uColor is linear (THREE.Color), the page sRGB
 };
 /* A set of cables from [ax, ay, az, bx, by, bz, ...]: `px` the least width on the page, `dash`/`gap` world units (0: solid). */
-function srCables(arr, { color, opacity = 1, px = SR_CABLE.plain, dash = 0, gap = 0 }) {
+function srCables(paths, { color, opacity = 1, px = SR_CABLE.plain, dash = 0, gap = 0, world = SR_CABLE.faintWorld, max = SR_CABLE.faintMax }) {
   const g = new THREE.BufferGeometry();
-  srCableFill(g, arr);
+  srCableFill(g, paths);
   const m = new THREE.ShaderMaterial({ vertexShader: SR_CABLE_SHADER.vertex, fragmentShader: SR_CABLE_SHADER.fragment, transparent: opacity < 1, depthWrite: opacity >= 1, side: THREE.DoubleSide,   // the corners' winding is the page's, whichever way the cable runs
     uniforms: { uColor: { value: new THREE.Color(color) }, uOpacity: { value: opacity }, uRes: { value: new THREE.Vector2(1, 1) }, uPx: { value: px },
-      uWorld: { value: SR_CABLE.world }, uMax: { value: SR_CABLE.max }, uDash: { value: dash }, uGap: { value: gap } } });
+      uWorld: { value: world }, uMax: { value: max }, uDash: { value: dash }, uGap: { value: gap } } });
   m.opacity = opacity;   // read as a LineBasicMaterial's was (the board, the e2e); the shader reads uOpacity
   const mesh = new THREE.Mesh(g, m);
   mesh.frustumCulled = false;   // the strips are placed by the shader: the box three would cull by is the corners'
@@ -311,36 +472,61 @@ function srCables(arr, { color, opacity = 1, px = SR_CABLE.plain, dash = 0, gap 
   mesh.onBeforeRender = (renderer) => renderer.getSize(m.uniforms.uRes.value).multiplyScalar(0.5);   // half the page: NDC 1 is this many px
   return mesh;
 }
-/* Four corners a cable, each carrying both its ends. Not instanced: measured in the e2e's software GL, up close in the
-   2,000-node room, 5,000 instanced strips made a frame's p90 56 ms (17 with the old lines); written out, 20. */
-function srCableFill(g, arr) {
-  const n = arr.length / 6, corner = new Float32Array(n * 12), st = new Float32Array(n * 12), en = new Float32Array(n * 12), idx = new Uint32Array(n * 6);
+/* Four corners a segment, each carrying both its ends; a cable (one path, srCablePathOf) is its segments one after
+   the other, kept as geometry.userData.paths[j] = {i0, pts, lens, len}. Not instanced: measured in the e2e's software GL,
+   up close in the 2,000-node room, 5,000 instanced strips made a frame's p90 56 ms (17 with the old lines); written
+   out, 20. */
+function srCableFill(g, paths) {
+  const list = [], segs = [];
+  for (const pts of paths) {
+    const i0 = segs.length, lens = [];
+    for (let k = 0; k + 1 < pts.length; k++) { segs.push([pts[k], pts[k + 1]]); lens.push(Math.hypot(pts[k + 1][0] - pts[k][0], pts[k + 1][1] - pts[k][1], pts[k + 1][2] - pts[k][2])); }
+    list.push({ i0, pts, lens, len: lens.reduce((x, y) => x + y, 0) });
+  }
+  const n = segs.length, corner = new Float32Array(n * 12), st = new Float32Array(n * 12), en = new Float32Array(n * 12), idx = new Uint32Array(n * 6);
   for (let i = 0; i < n; i++) {
     corner.set([-0.5, 0, 0, 0.5, 0, 0, -0.5, 1, 0, 0.5, 1, 0], i * 12);
-    for (let k = 0; k < 4; k++) for (let c = 0; c < 3; c++) { st[i * 12 + k * 3 + c] = arr[i * 6 + c]; en[i * 12 + k * 3 + c] = arr[i * 6 + 3 + c]; }
+    for (let k = 0; k < 4; k++) for (let c = 0; c < 3; c++) { st[i * 12 + k * 3 + c] = segs[i][0][c]; en[i * 12 + k * 3 + c] = segs[i][1][c]; }
     idx.set([0, 1, 2, 2, 1, 3].map((x) => i * 4 + x), i * 6);
   }
   g.setAttribute('position', new THREE.BufferAttribute(corner, 3));
   g.setAttribute('cableStart', new THREE.BufferAttribute(st, 3));
   g.setAttribute('cableEnd', new THREE.BufferAttribute(en, 3));
   g.setIndex(new THREE.BufferAttribute(idx, 1));
-  g.userData.cables = n;
+  g.userData.paths = list;
+  g.userData.cables = paths.length;
 }
-/* A set's cables all made again (the strong layer: the pressed, the pointed, the reach). */
-function srCablesRefill(mesh, arr) {
+/* A set's cables all made again (the strong layer: the pressed, the pointed, the reach; every set when the look changes). */
+function srCablesRefill(mesh, paths) {
   mesh.geometry.dispose();
   mesh.geometry = new THREE.BufferGeometry();
-  srCableFill(mesh.geometry, arr);
+  srCableFill(mesh.geometry, paths);
 }
 const srCableCount = (mesh) => mesh.geometry.userData.cables;
-function srCableSet(mesh, j, a, b) {
-  const st = mesh.geometry.getAttribute('cableStart').array, en = mesh.geometry.getAttribute('cableEnd').array;
-  for (let k = 0; k < 4; k++) for (let c = 0; c < 3; c++) { st[j * 12 + k * 3 + c] = a[c]; en[j * 12 + k * 3 + c] = b[c]; }
+const srCablePts = (mesh, j) => mesh.geometry.userData.paths[j].pts;
+/* Cable j drawn from f0 to f1 of its length (0..1), the rest of it not (a migration's edge going to its middle, or
+   coming out of its start); its segments written, srCableDone hands them over. */
+function srCableShow(mesh, j, f0, f1) {
+  const P = mesh.geometry.userData.paths[j], st = mesh.geometry.getAttribute('cableStart').array, en = mesh.geometry.getAttribute('cableEnd').array;
+  const lo = f0 * P.len, hi = f1 * P.len;
+  let at = 0;
+  for (let k = 0; k < P.lens.length; k++) {
+    const a = P.pts[k], b = P.pts[k + 1], l = P.lens[k], u0 = Math.min(1, Math.max(0, (lo - at) / (l || 1))), u1 = Math.min(1, Math.max(0, (hi - at) / (l || 1)));
+    const s0 = a.map((x, c) => x + (b[c] - x) * u0), s1 = u1 > u0 ? a.map((x, c) => x + (b[c] - x) * u1) : s0;
+    const i = P.i0 + k;
+    for (let q = 0; q < 4; q++) for (let c = 0; c < 3; c++) { st[i * 12 + q * 3 + c] = s0[c]; en[i * 12 + q * 3 + c] = s1[c]; }
+    at += l;
+  }
 }
-function srCableGet(mesh, j) {
-  const st = mesh.geometry.getAttribute('cableStart').array, en = mesh.geometry.getAttribute('cableEnd').array;
-  return [[st[j * 12], st[j * 12 + 1], st[j * 12 + 2]], [en[j * 12], en[j * 12 + 1], en[j * 12 + 2]]];
+/* How much of cable j is drawn now (0..1), and its two ends as drawn. */
+function srCableShown(mesh, j) {
+  const P = mesh.geometry.userData.paths[j], st = mesh.geometry.getAttribute('cableStart').array, en = mesh.geometry.getAttribute('cableEnd').array;
+  let drawn = 0;
+  for (let k = 0; k < P.lens.length; k++) { const i = P.i0 + k; drawn += Math.hypot(en[i * 12] - st[i * 12], en[i * 12 + 1] - st[i * 12 + 1], en[i * 12 + 2] - st[i * 12 + 2]); }
+  return P.len ? drawn / P.len : 0;
 }
+/* Cable j's two ends (its path's first and last points). */
+function srCableGet(mesh, j) { const pts = srCablePts(mesh, j); return [pts[0], pts[pts.length - 1]]; }
 function srCableDone(mesh) { for (const k of ['cableStart', 'cableEnd']) mesh.geometry.getAttribute(k).needsUpdate = true; }
 
 /* Places every group and node (sizes bottom-up, places top-down); the external nodes on a strip in front. */
@@ -540,14 +726,13 @@ function srBuild(keep) {
   // cables: within a provider solid, across providers dashed magenta and higher (requester: 跨いでいることが見て分かる)
   const plain = [], cross = [];
   for (const e of L.edges) {
-    const a = L.pos.get(e.from), b = L.pos.get(e.to), crossing = !!e.crossProvider, y = crossing ? 2.6 : 1.7;
-    (crossing ? cross : plain).push(a.x, y, a.z, b.x, y, b.z);
+    (e.crossProvider ? cross : plain).push(srCablePath(V, e));
   }
   V.plainLines = srCables(plain, { color: PAL.plain, opacity: SR.plainOpacity, px: SR_CABLE.plain });
   V.crossLines = srCables(cross, { color: PAL.cross, opacity: SR.crossOpacity, px: SR_CABLE.cross, dash: 0.5, gap: 0.3 });
   // the strong layer: the pressed, the pointed node's and the reach's cables (srFocusLines fills it)
-  V.focusLines = srCables([], { color: PAL.focus, px: SR_CABLE.focus });
-  V.focusCross = srCables([], { color: PAL.cross, px: SR_CABLE.focus });
+  V.focusLines = srCables([], { color: PAL.focus, px: SR_CABLE.focus, world: SR_CABLE.world, max: SR_CABLE.max });
+  V.focusCross = srCables([], { color: PAL.cross, px: SR_CABLE.focus, world: SR_CABLE.world, max: SR_CABLE.max });
   V.focusLines.renderOrder = V.focusCross.renderOrder = 2;
   V.near.add(V.plainLines, V.crossLines, V.focusLines, V.focusCross);
   // far: the top groups as boxes, the cables bundled between them
@@ -573,8 +758,7 @@ function srBuild(keep) {
   }
   const bp = [], bc = [];
   for (const B of bundles.values()) {
-    const ya = B.a.boxH + 0.3, yb = B.b.boxH + 0.3;
-    (B.cross ? bc : bp).push(B.a.x + B.a.w / 2, ya, B.a.z + B.a.d / 2, B.b.x + B.b.w / 2, yb, B.b.z + B.b.d / 2);
+    (B.cross ? bc : bp).push(srBundlePath(V, B.a, B.b, !!B.cross));
   }
   V.bundles = [...bundles.values()];
   // the far view's bundles: as faint as the near cables, and the lines switch holds there too (the independent verification of item 1)
@@ -717,6 +901,19 @@ function srSetDetail(V, on) {
   V.nodeSets.simple.visible = !on; V.nodeSets.detail.visible = on;
   const drop = new Set(V.nodeMeshes[on ? 'simple' : 'detail']);
   V.pick = V.pick.filter((m) => !drop.has(m)).concat(V.nodeMeshes[on ? 'detail' : 'simple']);
+  srCablesReroute(V);   // the cables end on the nodes as drawn now: the models' sides up close, the shapes' otherwise
+}
+/* Every cable laid again on the nodes as drawn now (srNodeFoot), the same edges in the same order: a migration's state
+   is written on them again (59-sr-migration.js). */
+function srCablesReroute(V) {
+  const t0 = srNow();
+  const plain = [], cross = [];
+  for (const e of V.L.edges) (e.crossProvider ? cross : plain).push(srCablePath(V, e));
+  srCablesRefill(V.plainLines, plain);
+  srCablesRefill(V.crossLines, cross);
+  srFocusLines(V);
+  if (V.migEdges && typeof srMigApply === 'function') srMigApply(V, true);
+  V.reroutes = (V.reroutes || 0) + 1; V.rerouteMs = Math.round(srNow() - t0);   // how often and how long (the e2e reads it)
 }
 /* The room's icons: per node the strongest key the settings give (service → provider → category), an image plane above it. */
 async function srIcons(V) {
@@ -774,13 +971,12 @@ function srFocusLines(V) {
   if (ids.size || reach) {
     for (const e of V.L.edges) {
       if ((!ids.has(e.from) && !ids.has(e.to) && !(reach && reach.has(e))) || srMigEdgeHidden(e)) continue;
-      const a = V.L.pos.get(e.from), b = V.L.pos.get(e.to), y = e.crossProvider ? 2.62 : 1.72;
-      (e.crossProvider ? cross : plain).push(a.x, y, a.z, b.x, y, b.z);
+      (e.crossProvider ? cross : plain).push(srCablePath(V, e).map((q) => [q[0], q[1] + 0.02, q[2]]));   // a hair over its faint twin
     }
   }
   srCablesRefill(V.focusLines, plain);
   srCablesRefill(V.focusCross, cross);
-  V.focusCount = (plain.length + cross.length) / 6;
+  V.focusCount = plain.length + cross.length;   // a path a cable
 }
 /* The lines switch: all (faint) / crossing ones only / the chosen node's only. */
 function srLinesMode(V) {

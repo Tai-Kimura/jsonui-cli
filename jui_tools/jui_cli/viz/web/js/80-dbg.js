@@ -57,19 +57,103 @@ window.__dbg = {
     let ink = 0; for (let i = 0; i < px.length; i += 4) if (Math.abs(px[i] - want[0]) + Math.abs(px[i + 1] - want[1]) + Math.abs(px[i + 2] - want[2]) < 60) ink++;
     // the length on the page of what is in view only (64 steps a cable, a step counted when both its ends are on the page)
     const a = new THREE.Vector3(), b = new THREE.Vector3(), on = (v) => v.z > -1 && v.z < 1 && Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1;
-    let len = 0; for (let i = 0; i < srCableCount(V.focusLines); i++) {
-      const [p, q] = srCableGet(V.focusLines, i), P = new THREE.Vector3().fromArray(p), Q = new THREE.Vector3().fromArray(q);
-      for (let k = 0; k < 64; k++) {
-        a.lerpVectors(P, Q, k / 64).project(V.camera); b.lerpVectors(P, Q, (k + 1) / 64).project(V.camera);
-        if (on(a) && on(b)) len += Math.hypot((a.x - b.x) * w / 2, (a.y - b.y) * h / 2);
-      } }
+    let len = 0; for (let i = 0; i < srCableCount(V.focusLines); i++) { const pts = srCablePts(V.focusLines, i);   // along its path
+      for (let s = 0; s + 1 < pts.length; s++) { const P = new THREE.Vector3().fromArray(pts[s]), Q = new THREE.Vector3().fromArray(pts[s + 1]);
+        for (let k = 0; k < 64; k++) {
+          a.lerpVectors(P, Q, k / 64).project(V.camera); b.lerpVectors(P, Q, (k + 1) / 64).project(V.camera);
+          if (on(a) && on(b)) len += Math.hypot((a.x - b.x) * w / 2, (a.y - b.y) * h / 2);
+        } } }
     return { ink, len: Math.round(len), width: len ? +(ink / len).toFixed(2) : null, cables: srCableCount(V.focusLines), page: w * h,
       ends: srCableCount(V.focusLines) ? srCableGet(V.focusLines, 0) : null }; },
   // the camera put at a point looking at another (the arms: a cable with one end behind it)
   // the camera put at a point looking at another, as it is (no controls' limits), and the strong cables measured at once,
   // before the next frame's controls move it (the arms: a cable with an end behind the camera, or on it)
+  // the camera put at a point looking at another, through the controls (as a person turning the view would)
+  srRoutePerf: () => { const V = SR.view; return V ? { reroutes: V.reroutes || 0, ms: V.rerouteMs || 0, detail: V.detail, inView: V.inView, segs: [V.plainLines, V.crossLines].map((L) => L.geometry.getAttribute('cableStart').count / 4) } : null; },
+  srCamSet: (pos, target) => { const V = SR.view; if (!V) return false; V.camera.position.fromArray(pos); V.controls.target.fromArray(target); V.controls.update(); return true; },
   srCamInk: (pos, target) => { const V = SR.view; if (!V) return null; V.camera.position.fromArray(pos); V.camera.lookAt(new THREE.Vector3().fromArray(target));
     V.camera.updateMatrixWorld(); return window.__dbg.srCableInk(); },
+  // one cable layer's width as drawn: the layer alone over black, in white at full strength, its pixels over its length on
+  // the page (as srCableInk), then the frame as it was
+  srLayerWidth: (name) => { const V = SR.view, L = V && V[name]; if (!L) return null;
+    const keep = { bg: V.scene.background, vis: new Map(), color: L.material.uniforms.uColor.value.clone(), op: L.material.uniforms.uOpacity.value };
+    V.scene.traverse((o) => { if (o !== V.scene) keep.vis.set(o, o.visible); });
+    V.scene.traverse((o) => { if (o.isMesh || o.isInstancedMesh || o.isSprite || o.isLine || o.isPoints) o.visible = false; });
+    for (let o = L; o; o = o.parent) o.visible = true;
+    V.scene.background = new THREE.Color(0, 0, 0); L.material.uniforms.uColor.value.setRGB(1, 1, 1); L.material.uniforms.uOpacity.value = 1;
+    V.renderer.render(V.scene, V.camera);
+    const gl = V.renderer.getContext(), w = gl.drawingBufferWidth, h = gl.drawingBufferHeight, px = new Uint8Array(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    let ink = 0; for (let i = 0; i < px.length; i += 4) ink += (px[i] + px[i + 1] + px[i + 2]) / 765;   // partial coverage counts as part
+    for (const [o, v] of keep.vis) o.visible = v;
+    V.scene.background = keep.bg; L.material.uniforms.uColor.value.copy(keep.color); L.material.uniforms.uOpacity.value = keep.op;
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), on = (v) => v.z > -1 && v.z < 1 && Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1;
+    let len = 0; for (let i = 0; i < srCableCount(L); i++) { const pts = srCablePts(L, i);   // along its path
+      for (let s = 0; s + 1 < pts.length; s++) { const P = new THREE.Vector3().fromArray(pts[s]), Q = new THREE.Vector3().fromArray(pts[s + 1]);
+        for (let k = 0; k < 32; k++) { a.lerpVectors(P, Q, k / 32).project(V.camera); b.lerpVectors(P, Q, (k + 1) / 32).project(V.camera); if (on(a) && on(b)) len += Math.hypot((a.x - b.x) * w / 2, (a.y - b.y) * h / 2); } } }
+    return { ink: Math.round(ink), len: Math.round(len), width: len ? +(ink / len).toFixed(2) : null, cables: srCableCount(L), ratio: V.renderer.getPixelRatio() }; },
+  // the cables over the nodes: the frame drawn with the cables and without, the pixels that differ are the cables seen;
+  // the nodes (shapes, models, icons) drawn alone give where the nodes are; the count of cable pixels over a node
+  // above: looked at from straight over the target (the camera put back after): a cable on a node's side then stops at
+  // the node's outline, one over it or into its middle lies on it — from the usual slant a cable in front of a node's
+  // side lies on its picture however well it is grounded
+  srCablesOverNodes: (above) => { const V = SR.view; if (!V) return null; const gl = V.renderer.getContext(), w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
+    const cam = { p: V.camera.position.clone(), q: V.camera.quaternion.clone() };
+    if (above) { const d = V.camera.position.distanceTo(V.controls.target); V.camera.position.copy(V.controls.target).add(new THREE.Vector3(0, d, 0.0001)); V.camera.lookAt(V.controls.target); V.camera.updateMatrixWorld(); }
+    const shot = () => { V.renderer.render(V.scene, V.camera); const px = new Uint8Array(w * h * 4); gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px); return px; };
+    const cables = [V.plainLines, V.crossLines, V.focusLines, V.focusCross], was = cables.map((c) => c.visible);
+    const withC = shot(); cables.forEach((c) => { c.visible = false; }); const without = shot(); cables.forEach((c, i) => { c.visible = was[i]; });
+    const isNode = (o) => (o.isInstancedMesh && (o.userData.nodes || o.userData.shape)) || (V.modelLayer && (o === V.modelLayer || V.modelLayer.children.includes(o)));
+    const keep = new Map(); V.scene.traverse((o) => { if (o !== V.scene) keep.set(o, o.visible); });
+    const bg = V.scene.background; V.scene.background = new THREE.Color(0, 0, 0);
+    V.scene.traverse((o) => { if ((o.isMesh || o.isInstancedMesh || o.isSprite || o.isLine) && !isNode(o) && !(V.modelLayer && o.parent && V.modelLayer.children.includes(o.parent))) o.visible = false; });
+    const nodes = shot();
+    for (const [o, v] of keep) o.visible = v; V.scene.background = bg;
+    V.camera.position.copy(cam.p); V.camera.quaternion.copy(cam.q); V.camera.updateMatrixWorld();
+    let cable = 0, over = 0;
+    for (let i = 0; i < withC.length; i += 4) {
+      if (Math.abs(withC[i] - without[i]) + Math.abs(withC[i + 1] - without[i + 1]) + Math.abs(withC[i + 2] - without[i + 2]) < 24) continue;
+      cable++; if (nodes[i] + nodes[i + 1] + nodes[i + 2] > 12) over++; }
+    return { cable, over, share: cable ? +(over / cable).toFixed(3) : null, detail: V.detail, lod: V.lod }; },
+  // every cable laid: its ends on its nodes' outlines (as drawn) at a height within each node; flat (two points) when
+  // nothing stands on its straight line; rising when something does, and over that thing's top at its middle
+  srCableRoutes: () => { const V = SR.view; if (!V) return null; const grid = srFootGrid(V), feet = [...new Set(grid.feet.values())];
+    const out = { cables: 0, ends: 0, offOutline: 0, offHeight: 0, flat: 0, notFlat: 0, rising: 0, notRising: 0, under: 0, worst: null, flatNodes: [] };
+    const allFlat = new Map();   // a node's cables, all flat?
+    const yAt = (pts, x, z) => { let best = null, bd = Infinity;   // the path's height at the point of it nearest (x, z)
+      for (let k = 0; k + 1 < pts.length; k++) { const a = pts[k], b = pts[k + 1], dx = b[0] - a[0], dz = b[2] - a[2], l2 = dx * dx + dz * dz;
+        const u = l2 ? Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[2]) * dz) / l2)) : 0, px = a[0] + dx * u, pz = a[2] + dz * u, d = Math.hypot(px - x, pz - z);
+        if (d < bd) { bd = d; best = a[1] + (b[1] - a[1]) * u; } } return best; };
+    const segs = { plain: 0, cross: 0 };
+    for (const e of V.L.edges) { const set = e.crossProvider ? 'cross' : 'plain', L = set === 'cross' ? V.crossLines : V.plainLines, j = segs[set]++;
+      const pts = srCablePts(L, j), A = pts[0], Z = pts[pts.length - 1];
+      if (A[0] === Z[0] && A[2] === Z[2]) continue;
+      out.cables++;
+      for (const [end, id, other] of [[A, e.from, Z], [Z, e.to, A]]) { const f = grid.feet.get(id); out.ends++;
+        const d = Math.hypot(end[0] - f.x, end[2] - f.z), ux = (other[0] - f.x), uz = (other[2] - f.z), ul = Math.hypot(ux, uz) || 1;
+        const want = srFootExit(f, ux / ul, uz / ul);
+        if (Math.abs(d - want) > 0.05) { out.offOutline++; out.worst = out.worst || { id, d: +d.toFixed(3), want: +want.toFixed(3) }; }
+        if (end[1] < f.y0 - 1e-3 || end[1] > f.y1 + 1e-3) out.offHeight++; }
+      const fa = grid.feet.get(e.from), fb = grid.feet.get(e.to), P = [A[0], A[2]], Q = [Z[0], Z[2]];
+      // what stands on its way: a node's or a box's foot, with the clearance a cable keeps (SR_ROUTE.margin)
+      const hits = feet.map((f) => (f !== fa && f !== fb ? [f, srFootSpan(f, P, Q, SR_ROUTE.margin)] : null)).filter((h) => h && h[1]);
+      for (const id of [e.from, e.to]) allFlat.set(id, (allFlat.get(id) ?? true) && !hits.length);
+      if (!hits.length) { if (pts.length === 2) out.flat++; else out.notFlat++; continue; }
+      if (pts.length > 2) { out.rising++; if (!out.risingSample) out.risingSample = { from: e.from, to: e.to, pts }; } else out.notRising++;
+      for (const [f, sp] of hits) {   // over it: the path's height where the straight line is inside the foot, at that stretch's middle
+        const t = (sp[0] + sp[1]) / 2, y = yAt(pts, P[0] + (Q[0] - P[0]) * t, P[1] + (Q[1] - P[1]) * t);
+        if (y === null || y < f.y1) out.under++; } }
+    out.flatNodes = [...allFlat].filter(([, v]) => v).map(([id]) => id).sort();
+    // the far view's bundles: each from the side of one top group's box to the other's, at a height within the boxes
+    out.bundles = 0; out.bundlesOff = 0;
+    const bs = { plain: 0, cross: 0 }, box = (G) => ({ x: G.x + G.w / 2, z: G.z + G.d / 2, hx: G.w * 0.46, hz: G.d * 0.46, round: false });
+    for (const B of V.bundles || []) { const L = B.cross ? V.farCross : V.farPlain, j = bs[B.cross ? 'cross' : 'plain']++, pts = srCablePts(L, j), A = pts[0], Z = pts[pts.length - 1];
+      if (A[0] === Z[0] && A[2] === Z[2]) continue;
+      out.bundles++;
+      for (const [end, G, other] of [[A, B.a, Z], [Z, B.b, A]]) { const f = box(G), ux = other[0] - f.x, uz = other[2] - f.z, ul = Math.hypot(ux, uz) || 1;
+        if (Math.abs(Math.hypot(end[0] - f.x, end[2] - f.z) - srFootExit(f, ux / ul, uz / ul)) > 0.05 || end[1] < 0 || end[1] > G.boxH) out.bundlesOff++; } }
+    out.y = [V.plainLines, V.crossLines].map((L) => (srCableCount(L) ? srCablePts(L, 0)[0][1] : null));
+    return out; },
   srReachPress: () => { const b = document.querySelector('#sr-board [data-sr-act="reach"]'); if (b) b.click(); return !!b; },
   srReachHopsSet: (v) => { const sel = document.querySelector('#sr-board [data-sr-reach-hops]'); if (!sel) return false; sel.value = v; sel.dispatchEvent(new Event('change', { bubbles: true })); return true; },
   srEdgesOf: (id) => (SR.view ? SR.view.L.edges.filter((e) => e.from === id || e.to === id).length : null),
@@ -101,12 +185,15 @@ window.__dbg = {
     // ball travels (no sphere in the flow's layer) and that the light is the cable's own shader
     lights: P ? P.lights.filter((o) => o.userData.flowLight && o.userData.moving).length : 0, chosen: P ? P.chosen.slice() : [],
     spheres: V && V.flowLayer ? V.flowLayer.children.filter((o) => o.geometry && o.geometry.type === 'SphereGeometry').length : 0,
+    // every light on its cable's path: the same points, a tube a segment
+    lightOnPath: P && V ? P.lights.filter((o) => o.userData.flowLight).every((o) => { const want = srCablePathOf(V, o.userData.from, o.userData.to, srFlowCrossing(V, o.userData.from, o.userData.to));
+      return o.userData.parts.length === want.length - 1 && o.userData.pts.length === want.length && o.userData.pts.every((q, i) => q.distanceTo(new THREE.Vector3(...want[i])) < 1e-4); }) : null,
     lightMaterials: P ? P.lights.filter((o) => o.userData.flowLight).map((o) => [o.userData.glow, o.userData.core].map((m) => m.material.type + (m.material.uniforms && m.material.uniforms.uHead ? ':uHead' : '')).join('+')) : [],
     // the smallest moving light's glow radius on the screen at its head, in pixels (null: none moving)
     lightPx: (() => { const d = P && V ? P.lights.filter((o) => o.userData.flowLight && o.userData.moving) : [];
       return d.length ? Math.min(...d.map((o) => +(o.userData.glow.scale.x * srFlowPxPerUnit(V, o.userData.head)).toFixed(2))) : null; })(),
     lightHead: (() => { const d = P ? P.lights.filter((o) => o.userData.flowLight && o.userData.moving) : [];
-      return d.length ? +d[0].userData.glow.material.uniforms.uHead.value.toFixed(3) : null; })(),
+      return d.length ? +(d[0].userData.k || 0).toFixed(3) : null; })(),   // on its whole path (srFlowLightAt)
     hints: P && P.hints ? P.hints.userData.hints : 0, choices: [...document.querySelectorAll('#sr-choices:not([hidden]) [data-sr-choice]')].map((b) => b.dataset.srChoice),
     toasts: [...document.querySelectorAll('#sr-toasts .sr-toast')].map((t) => t.textContent), history: P ? P.history.length : 0 }; },
   srFlowSpeed: (s) => { SR_FLOW.speed = s; srFlowRenderBar(); return SR_FLOW.speed; },
@@ -126,8 +213,7 @@ window.__dbg = {
     const lengths = {}, sent = {};   // sent: how many times each edge's cables were handed to the GPU (needsUpdate: version)
     for (const M of V.migEdges || []) {
       sent[M.key] = M.line.geometry.getAttribute('cableStart').version;
-      const [a, b] = srCableGet(M.line, M.j), full = Math.hypot(M.b[0] - M.a[0], M.b[2] - M.a[2]) || 1;
-      lengths[M.key] = Math.round(Math.hypot(b[0] - a[0], b[2] - a[2]) / full * 1000) / 1000;
+      lengths[M.key] = Math.round(srCableShown(M.line, M.j) * 1000) / 1000;   // how much of its path is drawn
     }
     const models = {};
     if (V.models) for (const g of V.models.values()) models[g.userData.node] = { kind: g.userData.kind, visible: g.visible };

@@ -150,43 +150,63 @@ const SR_FLOW_LIGHT_SHADER = {
       if (a <= 0.004) discard;
       gl_FragColor = vec4(mix(uColor, vec3(1.0), uWhite * pow(a, 3.0)), a * uOpacity); }`,
 };
-function srFlowCableY(V, from, to) {
+function srFlowCrossing(V, from, to) {
   const e = V.L.edges.find((x) => (x.from === from && x.to === to) || (x.from === to && x.to === from));
-  return e && e.crossProvider ? 2.6 : 1.7;
+  return !!(e && e.crossProvider);
 }
+/* The light runs in its cable, along the same path (56-server-room.js srCablePathOf), in the move's direction: a tube a
+   segment, each lit for the part of the head and tail that falls on it. */
 function srFlowLight(V, from, to) {
-  const pa = V.L.pos.get(from), pb = V.L.pos.get(to), y = srFlowCableY(V, from, to);
-  const a = new THREE.Vector3(pa.x, y, pa.z), b = new THREE.Vector3(pb.x, y, pb.z), len = Math.max(a.distanceTo(b), 1e-3);
-  const PAL = SR_PAL[V.dark ? 'dark' : 'light'], tail = Math.min(0.85, SR_FLOW_LIGHT.tail / len);
+  const pts = srCablePathOf(V, from, to, srFlowCrossing(V, from, to)).map((q) => new THREE.Vector3(...q));
+  const lens = pts.slice(1).map((q, i) => q.distanceTo(pts[i])), total = Math.max(lens.reduce((x, y) => x + y, 0), 1e-3);
+  const PAL = SR_PAL[V.dark ? 'dark' : 'light'], tail = Math.min(0.85, SR_FLOW_LIGHT.tail / total);
   const layer = (color, opacity, soft, white) => new THREE.ShaderMaterial({ vertexShader: SR_FLOW_LIGHT_SHADER.vertex, fragmentShader: SR_FLOW_LIGHT_SHADER.fragment,
     uniforms: { uColor: { value: new THREE.Color(color) }, uHead: { value: 0 }, uTail: { value: tail }, uOpacity: { value: opacity }, uSoft: { value: soft }, uWhite: { value: white } },
     transparent: true, depthWrite: false, blending: V.dark ? THREE.AdditiveBlending : THREE.NormalBlending });
-  const tube = new THREE.CylinderGeometry(1, 1, 1, 12, 1, true);
-  const glow = new THREE.Mesh(tube, layer(PAL.light, V.dark ? 0.75 : 0.85, 1, 0));
-  const core = new THREE.Mesh(tube, layer(PAL.lightCore, 1, 0, V.dark ? 0.85 : 0.35));
-  const light = new THREE.Group();
-  light.add(glow, core);
-  light.position.copy(a).add(b).multiplyScalar(0.5);
-  light.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
-  glow.scale.set(SR_FLOW_LIGHT.glow, len, SR_FLOW_LIGHT.glow); core.scale.set(SR_FLOW_LIGHT.core, len, SR_FLOW_LIGHT.core);
-  light.renderOrder = glow.renderOrder = core.renderOrder = 3;
-  light.userData = { flowLight: true, moving: true, a, b, head: a.clone(), glow, core, tail };
+  const tube = new THREE.CylinderGeometry(1, 1, 1, 12, 1, true), light = new THREE.Group(), parts = [];
+  let at = 0;
+  for (let i = 0; i < lens.length; i++) {
+    const a = pts[i], b = pts[i + 1], len = Math.max(lens[i], 1e-4);
+    const glow = new THREE.Mesh(tube, layer(PAL.light, V.dark ? 0.75 : 0.85, 1, 0)), core = new THREE.Mesh(tube, layer(PAL.lightCore, 1, 0, V.dark ? 0.85 : 0.35));
+    const seg = new THREE.Group();
+    seg.add(glow, core);
+    seg.position.copy(a).add(b).multiplyScalar(0.5);
+    seg.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+    glow.scale.set(SR_FLOW_LIGHT.glow, len, SR_FLOW_LIGHT.glow); core.scale.set(SR_FLOW_LIGHT.core, len, SR_FLOW_LIGHT.core);
+    seg.renderOrder = glow.renderOrder = core.renderOrder = 3;
+    light.add(seg);
+    parts.push({ glow, core, from: at / total, span: len / total });
+    at += len;
+  }
+  light.renderOrder = 3;
+  // glow / core: the first part's (read by the e2e hooks as before); parts: every part, its place on the path
+  light.userData = { flowLight: true, moving: true, from, to, a: pts[0], b: pts[pts.length - 1], pts, total, head: pts[0].clone(), glow: parts[0].glow, core: parts[0].core, parts, tail };
   return light;
 }
-/* The head at k (0: the cable's start, 1: its end, past 1: the tail draining). */
+/* The head at k (0: the cable's start, 1: its end, past 1: the tail draining): each part sees it in its own length. */
 function srFlowLightAt(o, k) {
-  for (const m of [o.userData.glow, o.userData.core]) m.material.uniforms.uHead.value = k;
-  o.userData.head.lerpVectors(o.userData.a, o.userData.b, Math.min(k, 1));
+  const U = o.userData;
+  U.k = k;   // where the head is on the whole path (the e2e reads it)
+  for (const P of U.parts) for (const m of [P.glow, P.core]) {
+    m.material.uniforms.uHead.value = (k - P.from) / P.span;
+    m.material.uniforms.uTail.value = U.tail / P.span;
+  }
+  const want = Math.min(k, 1) * U.total;
+  let at = 0;
+  for (let i = 0; i + 1 < U.pts.length; i++) {
+    const l = U.pts[i + 1].distanceTo(U.pts[i]);
+    if (at + l >= want || i + 2 === U.pts.length) { U.head.lerpVectors(U.pts[i], U.pts[i + 1], l ? Math.min(1, (want - at) / l) : 1); break; }
+    at += l;
+  }
 }
 /* Pulled back, the glow is drawn at least SR_FLOW_MIN_PX in radius at its head (the core a third of that). */
 function srFlowLightKeepSize(V, o) {
   const px = srFlowPxPerUnit(V, o.userData.head), g = Math.max(SR_FLOW_LIGHT.glow, SR_FLOW_MIN_PX / px), c = Math.max(SR_FLOW_LIGHT.core, SR_FLOW_MIN_PX / 3 / px);
-  o.userData.glow.scale.x = o.userData.glow.scale.z = g;
-  o.userData.core.scale.x = o.userData.core.scale.z = c;
+  for (const P of o.userData.parts) { P.glow.scale.x = P.glow.scale.z = g; P.core.scale.x = P.core.scale.z = c; }
 }
 function srFlowLightDispose(o) {
   o.userData.glow.geometry.dispose();
-  for (const m of [o.userData.glow, o.userData.core]) m.material.dispose();
+  for (const P of o.userData.parts) for (const m of [P.glow, P.core]) m.material.dispose();
 }
 function srFlowSay(P, step, at) {
   const act = SR_ACTIONS[step.action];
@@ -210,12 +230,12 @@ function srFlowHints(P, b) {
   for (const c of b.choices) {
     const first = (c.steps || []).find((s) => s.from && s.to);
     if (!first) continue;
-    const a = srFlowPos(V, first.from), z = srFlowPos(V, first.to);
-    if (a && z) arr.push(a.x, a.y, a.z, z.x, z.y, z.z);
+    const path = srCablePathOf(V, first.from, first.to, srFlowCrossing(V, first.from, first.to));   // as its cable runs
+    if (path) arr.push(path);
   }
   // a strip as wide as the cables (56-server-room.js srCables), in the light's colour: a 1 px line was lost beside them
-  const lines = srCables(arr, { color: SR_PAL[V.dark ? 'dark' : 'light'].light, opacity: 0.45, px: SR_CABLE.focus });
-  lines.userData.hints = arr.length / 6;
+  const lines = srCables(arr, { color: SR_PAL[V.dark ? 'dark' : 'light'].light, opacity: 0.45, px: SR_CABLE.focus, world: SR_CABLE.world, max: SR_CABLE.max });
+  lines.userData.hints = arr.length;
   V.flowLayer.add(lines);
   P.hints = lines;
 }

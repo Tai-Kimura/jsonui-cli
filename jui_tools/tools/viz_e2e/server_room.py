@@ -244,6 +244,7 @@ async def run_flows(page, out, failures, res):
     check(failures, fl["cableLight"]["spheres"] == (0, 0) and fl["cableLight"]["materials"] == ["ShaderMaterial:uHead+ShaderMaterial:uHead"]
           and 0.1 < mid["lightHead"] < 0.6 <= later["lightHead"] <= 1,
           f"the flow's light runs through its cable (a head in the cable's shader), no ball travels: {fl['cableLight']}")
+    check(failures, mid["lightOnPath"] is True and later["lightOnPath"] is True, f"the flow's light runs along its cable's path, over what it rises over: {mid['lightOnPath']} {later['lightOnPath']}")
     await page.evaluate("() => window.__dbg.srZoom(1 / 8)")
     # a schedule's flow: its mark and its schedule as written
     await page.click("#sr-player [data-sr-fp='stop']")
@@ -304,6 +305,16 @@ async def run_flows(page, out, failures, res):
     await until(page, "() => { const c = window.__dbg.srCost(); return c.mode === '3d' && !c.paused; }", "the 3D after コスト")
 
 
+def _routes_ok(failures, where, r):
+    """Every cable on its nodes' sides (on the outline as drawn, at a height within the node), flat when nothing stands on
+    its straight line, rising over what does (above its top at its middle) — and at least one of the first kind."""
+    check(failures, r["cables"] > 0 and r["ends"] == 2 * r["cables"] and r["offOutline"] == 0 and r["offHeight"] == 0,
+          f"{where}: every cable ends on its nodes' sides, at a height within them: {r}")
+    check(failures, r["flat"] > 0 and r["notFlat"] == 0, f"{where}: a cable with nothing on its way is flat: {r}")
+    check(failures, r["notRising"] == 0 and r["under"] == 0, f"{where}: a cable with something on its way rises over it: {r}")
+    check(failures, r["bundlesOff"] == 0, f"{where}: the far view's bundles run from box side to box side: {r['bundles']} bundles, {r['bundlesOff']} ends off")
+
+
 def _reach_walk(edges, start, hops):
     """The nodes joined to start by an edge either way, hops steps on (None: until nothing new) — the arms' own walk."""
     seen, front, d = {start}, [start], 0
@@ -330,20 +341,49 @@ async def run_cables_and_reach(page, out, failures, res):
     one, every = _reach_walk(edges, pick, 1), _reach_walk(edges, pick, None)
     res["reachPick"] = {"node": pick, "one": sorted(one), "all": sorted(every)}
     check(failures, len(every) > len(one) > 1, f"the room has a node with neighbours and neighbours' neighbours: {res['reachPick']}")
-    # 1. the cables: wide on the page, measured in drawn pixels (the strong layer alone shown)
+    # 1. the cables (ticket 2026-10-23-viz-sr-cables-thinner-and-end-at-node-edges): thin when not chosen, the strong layer a
+    # little thinner than 2.3.20's, each layer measured in drawn pixels alone (srLayerWidth); low over the floors, from
+    # one node's footprint edge to the other's, and not drawn over a node (its shapes, its model up close)
     widths = await page.evaluate("() => window.__dbg.srLines().px")
+    routes = res["cableRoutes"] = await page.evaluate("() => window.__dbg.srCableRoutes()")
+    plain_fit = res["plainFit"] = await page.evaluate("() => window.__dbg.srLayerWidth('plainLines')")
+    # the cables of a node all of whose cables are flat (one rising over a node is drawn over it, as asked), alone, seen
+    # from straight above: their pixels stop at the nodes' outlines — pulled back, with the simple shapes, up close with
+    # the models (a strip's rounded end against an outline, and the nodes' tops leaning out in perspective, share a few pixels:
+    # 7-10% measured; a cable into a node's middle lies on it for the node's radius)
+    flat_nodes = routes["flatNodes"]
+    check(failures, len(flat_nodes) > 0, f"a node whose cables are all flat (else the next arms prove nothing): {routes}")
+    if flat_nodes:
+        await page.evaluate("(id) => window.__dbg.srSelect(id)", flat_nodes[0])
+        await page.select_option("#sr-lines", "focus")
+        over_fit = res["overFit"] = await page.evaluate("() => window.__dbg.srCablesOverNodes(true)")
+        await page.evaluate("() => window.__dbg.srDetail({ enter: 0, leave: 0 })")   # the simple shapes, however few are in view
+        await page.wait_for_timeout(300)
+        over_simple = res["overSimple"] = await page.evaluate("() => window.__dbg.srCablesOverNodes(true)")
+        await page.evaluate("() => window.__dbg.srDetail({ enter: 30, leave: 40 })")
+        await page.click("#sr-board [data-sr-act='focus']")
+        over_models = res["overModels"] = await until(page, "() => { const o = window.__dbg.srCablesOverNodes(true); return o && o.detail ? o : null; }", "up close, the models", timeout=5000)
+        await page.screenshot(path=str(out / "cables-models.png"))
+        for name, o in (("pulled back", over_fit), ("the simple shapes", over_simple), ("up close, the models", over_models)):
+            check(failures, o["cable"] > 30 and o["share"] <= 0.15, f"{name}: a node's flat cables are not drawn over the nodes, seen from above: {o}")
+        await page.click("#sr-fit")
     await page.evaluate("(id) => window.__dbg.srSelect(id)", pick)
     await page.select_option("#sr-lines", "focus")
+    focus_fit = res["focusFit"] = await page.evaluate("() => window.__dbg.srLayerWidth('focusLines')")
     ink = res["cableInk"] = await page.evaluate("() => window.__dbg.srCableInk()")
     await page.evaluate("() => window.__dbg.srZoom(1.5)")
-    ink_back = res["cableInkBack"] = await page.evaluate("() => ({ ...window.__dbg.srCableInk(), lod: window.__dbg.sr().lod })")
+    focus_back = res["focusBack"] = await page.evaluate("() => ({ ...window.__dbg.srLayerWidth('focusLines'), lod: window.__dbg.sr().lod })")
     await page.screenshot(path=str(out / "cables-focus.png"))
-    # up close (これに寄る on the node): wider than pulled back, as wide as 0.08 units up to 7 px; closer still, never past 7
+    # up close (これに寄る on the node): the models stand; wider than pulled back, 0.06 units up to 5 px; closer, never past 5
     await page.click("#sr-board [data-sr-act='focus']")
+    await page.wait_for_timeout(400)
     ink_near = res["cableInkNear"] = await page.evaluate("() => ({ ...window.__dbg.srCableInk(), lod: window.__dbg.sr().lod, cellPx: window.__dbg.sr().cellPx })")
-    await page.screenshot(path=str(out / "cables-near.png"))
+    focus_near = res["focusNear"] = await page.evaluate("() => window.__dbg.srLayerWidth('focusLines')")
+    await page.select_option("#sr-lines", "all")
+    plain_near = res["plainNear"] = await page.evaluate("() => window.__dbg.srLayerWidth('plainLines')")
+    await page.select_option("#sr-lines", "focus")
     await page.evaluate("() => window.__dbg.srZoom(0.4)")
-    ink_closer = res["cableInkCloser"] = await page.evaluate("() => ({ ...window.__dbg.srCableInk(), cellPx: window.__dbg.sr().cellPx })")
+    focus_closer = res["focusCloser"] = await page.evaluate("() => ({ ...window.__dbg.srLayerWidth('focusLines'), cellPx: window.__dbg.sr().cellPx })")
     # a cable with one end behind the camera (put a third of the way along it, looking at its far end), and one with an end
     # in the camera's own plane (right under it, looking level along the cable: the end's page position divides by 0):
     # cut at the near plane, still drawn, as wide as a cable
@@ -355,15 +395,19 @@ async def run_cables_and_reach(page, out, failures, res):
     await page.select_option("#sr-lines", "all")
     await page.click("#sr-fit")
     res["cableWidths"] = widths
-    check(failures, widths["plain"] >= 2 and widths["cross"] >= 2 and widths["focus"] >= 3 and widths["bundle"] >= 2, f"every cable layer is at least 2 px wide on the page: {widths}")
-    check(failures, ink["cables"] >= 1 and ink["len"] > 50 and ink["width"] >= 2.5, f"the strong cables are drawn wide, in pixels: {ink}")
-    check(failures, ink_back["lod"] == "near" and ink_back["width"] >= 2.5, f"pulled back, still as wide on the page: {ink_back}")
-    check(failures, widths["cross"] > widths["plain"], f"a cable across clouds is wider than one within a cloud: {widths}")
-    check(failures, ink_near["lod"] == "near" and ink_near["len"] > 50 and ink_near["width"] >= ink["width"] * 1.4 and ink_near["width"] <= 7.5,
-          f"up close the strong cables are wider than pulled back, up to 7 px: {ink_near} vs {ink}")
-    check(failures, ink_closer["len"] > 50 and ink_closer["width"] <= 7.5, f"closer still, no wider than 7 px: {ink_closer}")
-    check(failures, 300 < ink_cut["ink"] < ink_cut["page"] * 0.2 and ink_cut["width"] <= 7.5, f"a cable running behind the camera is still drawn, as wide as a cable: {ink_cut}")
-    check(failures, 300 < ink_on["ink"] < ink_on["page"] * 0.2 and (ink_on["width"] or 99) <= 7.5, f"a cable with an end in the camera's plane is still drawn, as wide as a cable: {ink_on}")
+    check(failures, widths["plain"] <= 1.2 and widths["bundle"] <= 1.2 and widths["plain"] < widths["cross"] <= 1.5 and 2.5 <= widths["focus"] <= 3.5,
+          f"not chosen, a cable is about 1 px (across clouds a little wider); chosen, 3: {widths}")
+    check(failures, plain_fit["cables"] >= 1 and plain_fit["len"] > 50 and 0.2 < plain_fit["width"] <= 1.5, f"a cable not chosen is drawn thin: {plain_fit}")
+    check(failures, focus_fit["len"] > 50 and 2.2 <= focus_fit["width"] <= 3.8, f"the strong cables are drawn about 3 px: {focus_fit}")
+    check(failures, focus_back["lod"] == "near" and 2.2 <= focus_back["width"] <= 3.8, f"pulled back, still about 3 px: {focus_back}")
+    check(failures, focus_near["len"] > 50 and focus_near["width"] >= focus_fit["width"] * 1.25 and focus_near["width"] <= 5.5,
+          f"up close the strong cables are wider than pulled back, up to 5 px: {focus_near} vs {focus_fit}")
+    check(failures, focus_closer["len"] > 50 and focus_closer["width"] <= 5.5, f"closer still, no wider than 5 px: {focus_closer}")
+    check(failures, plain_near["len"] > 50 and plain_near["width"] <= 2.2, f"up close a cable not chosen stays thin (at most 1.8 px): {plain_near}")
+    _routes_ok(failures, "the multi-cloud room", routes)
+    check(failures, routes["bundles"] > 0, f"the multi-cloud room has far bundles (else that arm proves nothing): {routes['bundles']}")
+    check(failures, 300 < ink_cut["ink"] < ink_cut["page"] * 0.2 and ink_cut["width"] <= 5.5, f"a cable running behind the camera is still drawn, as wide as a cable: {ink_cut}")
+    check(failures, 300 < ink_on["ink"] < ink_on["page"] * 0.2 and (ink_on["width"] or 99) <= 5.5, f"a cable with an end in the camera's plane is still drawn, as wide as a cable: {ink_on}")
     # 2. one step: the node and what an edge joins it to, either way; the rest faint; the camera on all of them
     await page.evaluate("(id) => window.__dbg.srSelect(id)", pick)
     before = (await page.evaluate("() => window.__dbg.srReach()"))["cam"]
@@ -1074,6 +1118,10 @@ async def run_server_room(pw, out, failures):
         px_near = await page.evaluate("() => window.__dbg.srZoom(0.05)")
         await until(page, "() => window.__dbg.sr().lod === 'near'", "near", timeout=5000)
         await until(page, "(n) => window.__dbg.sr().labels > n", "near labels", arg=far["labels"], timeout=5000)
+        lr = res["largeRoutes"] = await page.evaluate("() => window.__dbg.srCableRoutes()")
+        _routes_ok(failures, "the large room", lr)
+        check(failures, lr["rising"] > 0, f"the large room: cables rise over what stands on their way (else the arm proves nothing): {lr}")
+        await page.screenshot(path=str(out / "large-routes.png"))
         near, res["large"]["near"] = await frames("near")
         rects = await page.evaluate("() => window.__dbg.srLabelRects()")
         overlaps = sum(1 for i, a_ in enumerate(rects) for b_ in rects[i + 1:] if a_[0] < b_[2] - 1 and b_[0] < a_[2] - 1 and a_[1] < b_[3] - 1 and b_[1] < a_[3] - 1)

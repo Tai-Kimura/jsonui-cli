@@ -200,8 +200,7 @@ function srMigAfterBuild(V) {
     const set = e.crossProvider ? 'cross' : 'plain', j = segs[set]++;
     const key = srMigKey(e);
     if (E.out[key] || E.in[key]) {
-      const a = V.L.pos.get(e.from), b = V.L.pos.get(e.to), y = e.crossProvider ? 2.6 : 1.7;
-      V.migEdges.push({ e, key, line: set === 'cross' ? V.crossLines : V.plainLines, j, a: [a.x, y, a.z], b: [b.x, y, b.z], v: -1 });
+      V.migEdges.push({ e, key, line: set === 'cross' ? V.crossLines : V.plainLines, j, v: -1 });   // its path: srCablePathOf (56-server-room.js)
     }
   }
   V.migFloors = V.L.floors.map((G, i) => ({ G, i }));
@@ -268,9 +267,9 @@ function srMigApply(V, all) {
     const st = srMigEdge(M.e);
     if (!all && Math.abs(M.v - st.v) < 1e-4 && M.mode === st.mode) { srMigLight(V, M, st); continue; }
     M.v = st.v; M.mode = st.mode;
-    const a = M.a, b = M.b, mid = a.map((x, c) => (x + b[c]) / 2);   // going: to its middle; coming: out of its start
-    if (st.mode === 'shrink') srCableSet(M.line, M.j, a.map((x, c) => mid[c] + (x - mid[c]) * st.v), b.map((x, c) => mid[c] + (x - mid[c]) * st.v));
-    else srCableSet(M.line, M.j, a, a.map((x, c) => x + (b[c] - x) * st.v));
+    // going: to its middle; coming: out of its start — along its path, over what it rises over
+    if (st.mode === 'shrink') srCableShow(M.line, M.j, 0.5 - st.v / 2, 0.5 + st.v / 2);
+    else srCableShow(M.line, M.j, 0, st.v);
     lines.add(M.line);
     srMigLight(V, M, st);
   }
