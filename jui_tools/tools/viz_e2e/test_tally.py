@@ -116,7 +116,7 @@ async def run_test_tally(pw, out, failures, jt=None, shots_only=False):
         await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         hook(hook_event_name="SessionStart", source="startup")
         await page.click("#spec-filter [data-f='all']")
-        await wait(page, "() => [...document.querySelectorAll('#spec-list .spec-row .stx')].filter((x) => /\\d+\\/\\d+/.test(x.textContent)).length >= 2",
+        await wait(page, "() => [...document.querySelectorAll('#spec-list .spec-row')].filter((b) => b.classList.contains('b-done') || /\\d+\\/\\d+/.test(b.querySelector('.stx').textContent)).length >= 2",
                    timeout=30000, label="both specs with their results")
         await page.wait_for_timeout(500)
         rows = res["rows"] = await page.evaluate(ROWS_JS)
