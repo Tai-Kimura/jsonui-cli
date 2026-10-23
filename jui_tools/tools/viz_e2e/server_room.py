@@ -361,10 +361,36 @@ async def run_flow_route(page, out, failures, res):
     await page.click("#sr-board [data-sr-flow='search']")
     await page.click("#sr-player [data-sr-fp='toggle']")
     await page.wait_for_timeout(300)
-    rt["wholeWithBar"] = {"before": whole0, "keptWouldBe": await page.evaluate("(c) => window.__dbg.srWholeFrom(c)", cam0), "now": (await page.evaluate(DRAWN))["whole"]}
+    fit = await page.evaluate("() => window.__dbg.srFlowRoomFit()")
+    cv, bar = fit["canvas"], fit["bar"]
+    seen_h = (min(cv[3], bar[1]) if bar and bar[1] > cv[1] else cv[3]) - cv[1]    # the canvas above the player's bar
+    out_of_view = [[r["id"], r["kind"]] for r in fit["rects"] if r["behind"] or r["box"][0] < 0 or r["box"][1] < 0 or r["box"][2] > cv[2] - cv[0] or r["box"][3] > seen_h]
+    fit = {"n": len(fit["rects"]), "out": out_of_view, "seen": [cv[2] - cv[0], seen_h]}
+    rt["wholeWithBar"] = {"before": whole0, "keptWouldBe": await page.evaluate("(c) => window.__dbg.srWholeFrom(c)", cam0), "now": (await page.evaluate(DRAWN))["whole"],
+                          "out": fit["out"], "rects": fit["n"], "seen": fit["seen"]}
     check(failures, rt["wholeWithBar"]["before"] is True and rt["wholeWithBar"]["keptWouldBe"] is False,
           f"the room seen whole, and the side bar's column would cut it from the camera as it was (else the next arm proves nothing): {rt['wholeWithBar']}")
-    check(failures, rt["wholeWithBar"]["now"] is True, f"the room seen whole before the side bar opened is still seen whole beside it: {rt['wholeWithBar']}")
+    # every node's shape and tag inside the room's part of the page (not under the board, the side bar or the player's bar)
+    check(failures, rt["wholeWithBar"]["now"] is True and fit["n"] > 0 and fit["out"] == [],
+          f"the room seen whole before the side bar opened has every shape and tag in view beside it, above the player's bar: {rt['wholeWithBar']}")
+    await page.screenshot(path=str(out / "flow-route-narrow.png"))
+    await page.click("#sr-player [data-sr-fp='stop']")
+    # and on a wide, low page, where the room's height decides its frame: nothing under the player's bar
+    await page.set_viewport_size({"width": 1280, "height": 520})
+    await page.wait_for_timeout(300)
+    await page.click("#sr-fit")
+    await page.wait_for_timeout(300)
+    await page.evaluate("() => window.__dbg.srSelect('browser')")
+    await page.click("#sr-board [data-sr-flow='search']")
+    await page.click("#sr-player [data-sr-fp='toggle']")
+    await page.wait_for_timeout(300)
+    low = await page.evaluate("() => window.__dbg.srFlowRoomFit()")
+    cv, bar = low["canvas"], low["bar"]
+    seen_h = (min(cv[3], bar[1]) if bar and bar[1] > cv[1] else cv[3]) - cv[1]
+    rt["lowPage"] = {"barCovers": bool(bar and cv[1] < bar[1] < cv[3]), "seen": [cv[2] - cv[0], seen_h], "rects": len(low["rects"]),
+                     "out": [[r["id"], r["kind"]] for r in low["rects"] if r["behind"] or r["box"][0] < 0 or r["box"][1] < 0 or r["box"][2] > cv[2] - cv[0] or r["box"][3] > seen_h]}
+    check(failures, rt["lowPage"]["barCovers"], f"on a low page the player's bar covers part of the room (else the next arm proves nothing): {rt['lowPage']}")
+    check(failures, rt["lowPage"]["rects"] > 0 and rt["lowPage"]["out"] == [], f"on a low page every shape and tag is in view above the player's bar: {rt['lowPage']}")
     await page.click("#sr-player [data-sr-fp='stop']")
     await page.set_viewport_size(size)
     await page.wait_for_timeout(300)

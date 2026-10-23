@@ -42,9 +42,10 @@ const SR_ACTIONS = { request: ['→', tl('sr.flow.action.request')], response: [
 const SR_TRIGGERS = { user: ['👤', tl('sr.flow.trigger.user')], device: ['📡', tl('sr.flow.trigger.device')], schedule: ['⏰', tl('sr.flow.trigger.schedule')], event: ['⚡', tl('sr.flow.trigger.event')] };
 const SR_FLOW_STATE = { play: tl('sr.flow.state.play'), pause: tl('sr.flow.state.pause'), branch: tl('sr.flow.state.branch'), done: tl('sr.flow.state.done') };
 // follow: the light past `out` of the page's half (NDC) starts the camera after it, back inside `in` it stops; `ms` how
-// quickly it catches up
+// quickly it catches up. frame: how much of the seen part of the room its shapes and tags fill when it is framed again
+// beside the side bar (srFlowFrameRoom)
 const SR_FLOW = { speed: 1.0, auto: false, unitsPerSec: 10, restMs: 400, branchRest: 2, nodeMs: 450, show: 'flow', floorFade: 0.6,
-  follow: { out: 0.8, in: 0.45, ms: 280 }, player: null };
+  follow: { out: 0.8, in: 0.45, ms: 280 }, frame: 0.8, player: null };
 
 /* Speed and the nodes shown, per room: {project: {speed, show}} in the page's own storage. */
 function srFlowPref() {
@@ -109,15 +110,14 @@ function srFlowPlay(id) {
   const t = SR_TRIGGERS[flow.trigger] || SR_TRIGGERS.user;
   $('sr-route-list').replaceChildren();
   $('sr-route-title').textContent = `${t[0]} ${flow.label || flow.id}`;
-  // the side bar takes its column from the room: a room seen whole stays whole (framed on its nodes, as narrow as the
-  // room is now: srFit frames the 3D by its height alone)
+  // the side bar takes its column from the room: a room seen whole stays whole, its shapes and tags in what is left of
+  // the room above the player's bar (srFit frames the 3D by its height alone, and a node's middle in view can be a tag
+  // cut by the page's edge: the requester's stills at 900 wide)
   const whole = srFlowWhole(V);
   $('sr-route').hidden = false;
   srResize(V);
-  if (whole && !srFlowWhole(V)) {
-    srFrameOn(V, [...V.L.pos.values()].filter((p) => !p.hiddenIn).map((p) => new THREE.Vector3(p.x, p.y, p.z)), 0.95);
-    V.controls.update();
-  }
+  srFlowRenderBar();
+  if (whole && srFlowRoomOut(V).length) srFlowFrameRoom(V);
   srFlowToast(P, flow.start, `${t[0]} ${flow.label || flow.id}`, flow.schedule || t[1]);
   srFlowGlow(P, flow.start);
   srFlowRenderBar();
@@ -479,6 +479,52 @@ function srFlowShowApply(V, force = false) {
   V.labelAt = 0;   // the tags placed again on the next frame
 }
 
+/* What the room draws on the page (px, in the canvas): each node's shape (a box round its cell, as tall as a model) and
+   its tag (srTagOf, srTagWidth: 20 px over its point). */
+function srFlowRoomRects(V) {
+  const w = V.renderer.domElement.clientWidth, h = V.renderer.domElement.clientHeight, v = new THREE.Vector3(), out = [];
+  const px = (x, y, z) => { v.set(x, y, z).project(V.camera); return [(v.x + 1) / 2 * w, (1 - v.y) / 2 * h, v.z]; };
+  for (const p of V.L.pos.values()) {
+    if (p.hiddenIn) continue;
+    const pts = [];
+    for (const dx of [-0.9, 0.9]) for (const dz of [-0.9, 0.9]) for (const dy of [0, 1.6]) pts.push(px(p.x + dx, p.y + dy, p.z + dz));
+    out.push({ id: p.n.id, kind: 'shape', box: [Math.min(...pts.map((q) => q[0])), Math.min(...pts.map((q) => q[1])), Math.max(...pts.map((q) => q[0])), Math.max(...pts.map((q) => q[1]))],
+      behind: pts.some((q) => q[2] > 1) });
+    const t = srTagOf(V, p), a = px(...t.at), wd = srTagWidth(t.text);
+    out.push({ id: p.n.id, kind: 'tag', box: [a[0] - wd / 2, a[1] - 20, a[0] + wd / 2, a[1]], behind: a[2] > 1 });
+  }
+  return out;
+}
+/* The shapes and tags not inside the seen part of the canvas ([id, kind]). */
+function srFlowRoomOut(V) {
+  const S = srFlowSeen(V);
+  return srFlowRoomRects(V).filter((r) => r.behind || r.box[0] < S[0] || r.box[1] < S[1] || r.box[2] > S[2] || r.box[3] > S[3]).map((r) => [r.id, r.kind]);
+}
+/* The part of the canvas the room can be seen in (px): all of it but what the player's bar covers. */
+function srFlowSeen(V) {
+  const c = V.renderer.domElement.getBoundingClientRect(), bar = $('sr-player'), b = !bar.hidden && bar.getBoundingClientRect();
+  return [0, 0, c.width, b && b.top > c.top ? Math.min(c.height, b.top - c.top) : c.height];
+}
+/* The camera moved (its distance in 3D, its span in 2D, the same way it looks) until every shape and tag is inside the
+   seen part of the canvas with SR_FLOW.frame of it to spare round the edges; at the room's middle. */
+function srFlowFrameRoom(V) {
+  const L = V.L, cx = L.width / 2, cz = L.depth / 2, S = srFlowSeen(V), m = (1 - SR_FLOW.frame) / 2;
+  const inner = [S[0] + (S[2] - S[0]) * m, S[1] + (S[3] - S[1]) * m, S[2] - (S[2] - S[0]) * m, S[3] - (S[3] - S[1]) * m];
+  const dir = V.camera.position.clone().sub(V.controls.target).normalize();
+  if (!(dir.lengthSq() > 0)) dir.set(0, 0.78, 0.62).normalize();
+  const tan = 2 * Math.tan(SR_FLAT.fov * Math.PI / 360);
+  const place = (d) => {
+    if (V.flat) { srSetSpan(V, cx, cz, d * tan); return; }
+    V.controls.target.set(cx, 0, cz); V.camera.position.copy(V.controls.target).addScaledVector(dir, d); V.camera.updateMatrixWorld();
+  };
+  const fits = (d) => { place(d); return srFlowRoomRects(V).every((r) => !r.behind && r.box[0] >= inner[0] && r.box[1] >= inner[1] && r.box[2] <= inner[2] && r.box[3] <= inner[3]); };
+  let lo = V.controls.minDistance, hi = Math.max(srViewDist(V), lo);
+  while (!fits(hi) && hi < V.controls.maxDistance) hi = Math.min(V.controls.maxDistance, hi * 2);
+  for (let i = 0; i < 32 && hi - lo > 0.01; i++) { const mid = (lo + hi) / 2; if (fits(mid)) hi = mid; else lo = mid; }
+  place(hi);
+  if (!V.flat) { V.camera.far = Math.max(V.camera.far, hi * 6); V.camera.updateProjectionMatrix(); }
+  V.controls.update();
+}
 /* The camera after a light about to leave the page: moved over the floor (the same distance, the same angle) until the
    light is well inside again. Not while the whole room is in view: there the light never leaves it. */
 function srFlowWhole(V) {

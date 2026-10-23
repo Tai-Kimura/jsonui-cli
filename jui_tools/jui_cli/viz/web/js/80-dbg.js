@@ -253,6 +253,11 @@ window.__dbg = {
   srFlowSpeed: (s) => { SR_FLOW.speed = s; srFlowPrefSet('speed', s); srFlowRenderBar(); return SR_FLOW.speed; },
   srFlowShow: (how) => { srFlowShowSet(how); return SR_FLOW.show; },
   // the camera as it is ([position, target, zoom]), and whether the room would be seen whole from a camera kept so
+  // the room's shapes and tags as drawn (px in the canvas), and where the canvas and the player's bar are on the page: the
+  // e2e works out what is in view itself
+  srFlowRoomFit: () => { const V = SR.view; if (!V) return null; const c = V.renderer.domElement.getBoundingClientRect(), bar = $('sr-player');
+    return { rects: srFlowRoomRects(V).map((r) => ({ id: r.id, kind: r.kind, behind: r.behind, box: r.box.map((x) => Math.round(x)) })), canvas: [c.left, c.top, c.right, c.bottom].map(Math.round),
+      bar: bar.hidden ? null : (() => { const b = bar.getBoundingClientRect(); return [b.left, b.top, b.right, b.bottom].map(Math.round); })() }; },
   srCamNow: () => { const V = SR.view; return V ? [V.camera.position.toArray(), V.controls.target.toArray(), V.camera.zoom] : null; },
   srWholeFrom: (cam) => { const V = SR.view; if (!V) return null; const now = [V.camera.position.clone(), V.controls.target.clone(), V.camera.zoom];
     V.camera.position.fromArray(cam[0]); V.controls.target.fromArray(cam[1]); V.camera.zoom = cam[2]; V.camera.lookAt(V.controls.target); V.camera.updateProjectionMatrix(); V.camera.updateMatrixWorld();

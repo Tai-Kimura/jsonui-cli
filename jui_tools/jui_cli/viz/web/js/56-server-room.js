@@ -1082,6 +1082,10 @@ function srLod(V) {
   V.lod = want; V.near.visible = want === 'near'; V.far.visible = want === 'far';
   V.labelAt = 0;
 }
+/* A tag's width on the page (px) from its text, as the tags are given out (and as 59-sr-flows.js frames the room). */
+function srTagWidth(text) { return 12 + [...text].reduce((a, ch) => a + (ch.charCodeAt(0) > 0x2e7f ? 12 : 7), 0); }
+/* A node's tag as srPlaceLabels writes it, and the point it stands on. */
+function srTagOf(V, p) { return { text: `${p.n.label || p.n.id}${p.n.count > 1 ? ` ×${p.n.count}` : ''}`, at: [p.x, p.y + 1.9, V.flat ? p.z - 0.85 : p.z] }; }
 function srPlaceLabels(V) {
   const cam = V.camera, w = V.renderer.domElement.clientWidth, h = V.renderer.domElement.clientHeight, v = new THREE.Vector3(), out = [];
   const consider = (x, y, z, text, kind, weight, n = null) => {
@@ -1093,7 +1097,7 @@ function srPlaceLabels(V) {
     for (const G of V.L.tops) consider(G.x + G.w / 2, G.boxH + 0.8, G.z + G.d / 2, `${G.g.label || G.g.id} · ${G.nodeCount}`, 'group', 1);
   } else {
     for (const G of V.L.floors) if (G.g.id && !(V.migFloorShown && !V.migFloorShown.includes(G.g.id))) consider(G.x + 0.6, 0.2 + G.level * 0.06, G.z + 0.5, G.g.label || G.g.id, 'group', 0.6);
-    for (const p of V.L.pos.values()) if (!p.hiddenIn && !srMigHides(p.n.id) && !srFlowHides(p.n.id) && !(SR.reach && !SR.reach.ids.has(p.n.id))) consider(p.x, p.y + 1.9, V.flat ? p.z - 0.85 : p.z, `${p.n.label || p.n.id}${p.n.count > 1 ? ` ×${p.n.count}` : ''}`, p.external ? 'external' : 'node', 1, p.n);
+    for (const p of V.L.pos.values()) if (!p.hiddenIn && !srMigHides(p.n.id) && !srFlowHides(p.n.id) && !(SR.reach && !SR.reach.ids.has(p.n.id))) { const t = srTagOf(V, p); consider(...t.at, t.text, p.external ? 'external' : 'node', 1, p.n); }
   }
   // up close (§5): how many nodes are in view decides the look, with room between going in and coming back
   const inView = out.filter((o) => o.n).length;
@@ -1107,7 +1111,7 @@ function srPlaceLabels(V) {
   const groups = out.filter((o) => o.kind === 'group').slice(0, SR.labels.max - SR.labels.nodes);
   const rest = out.filter((o) => o.kind !== 'group').slice(0, SR.labels.nodes);
   const placed = [], clear = (o) => {   // a label that would cover one already given out is left out (its width from its text)
-    const wd = 12 + [...o.text].reduce((a, ch) => a + (ch.charCodeAt(0) > 0x2e7f ? 12 : 7), 0), b = [o.sx - wd / 2, o.sy - 20, o.sx + wd / 2, o.sy];
+    const wd = srTagWidth(o.text), b = [o.sx - wd / 2, o.sy - 20, o.sx + wd / 2, o.sy];
     if (placed.some((q) => b[0] < q[2] && b[2] > q[0] && b[1] < q[3] && b[3] > q[1])) return false;
     placed.push(b); return true;
   };
