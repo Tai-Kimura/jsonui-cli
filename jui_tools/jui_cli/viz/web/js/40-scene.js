@@ -1221,6 +1221,18 @@ function liveSoloSync() {
   if (solo) setText(document.getElementById('room-solo-name'), PROJECT[solo].name);
   const call = document.getElementById('room-call');
   if (call) call.hidden = SOURCE.mode !== 'live';   // the call bell's keyboard way in (2.3.5); the demo has no folder
+  // the server room's way in beside it (2.3.21, requester: 「サーバールームに入るのボタンを呼び出しのメニューの横につけて欲しい
+  // / 今3Dクリックでしか入れないよね？」): the door's own srEnter. Shown in every room, as 呼び出し is; a room with no
+  // docs/infra (no door) has it not pressable, saying why — a button that is gone tells nobody where the room went.
+  const sr = document.getElementById('room-sr'), why = document.getElementById('room-sr-why');
+  if (sr) {
+    const has = !!solo && serverDoorWanted(solo);
+    sr.hidden = SOURCE.mode !== 'live';
+    if (sr.getAttribute('aria-disabled') !== String(!has)) sr.setAttribute('aria-disabled', String(!has));
+    const note = has ? tl('page.room.sr.title') : tl('page.room.sr.none');
+    if (sr.title !== note) sr.title = note;
+    if (why) setText(why, has ? '' : note);
+  }
 }
 /* ---------- the room up close: a water server, a robot vacuum and a wooden floor (requester, 10-18) ----------
    Only in the one-room view (room-solo) and only while that room has 10 robots or fewer; built when it is wanted and

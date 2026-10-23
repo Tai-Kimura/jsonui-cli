@@ -2134,6 +2134,10 @@ $('call-role').addEventListener('input', callAsk);
 $('call-copy').addEventListener('click', callCopy);
 $('call-close').addEventListener('click', closeCall);
 $('room-call').addEventListener('click', (e) => openCall(liveSolo(), e.currentTarget));
+$('room-sr').addEventListener('click', (e) => {   // as a press on the room's server room door (40-scene.js); not with no docs/infra
+  if (e.currentTarget.getAttribute('aria-disabled') === 'true') return;
+  srEnter(liveSolo(), e.currentTarget);
+});
 callEl.addEventListener('click', (e) => { if (e.target === callEl) closeCall(); });
 callEl.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeCall(); return; }

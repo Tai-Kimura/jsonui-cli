@@ -1265,6 +1265,38 @@ async def run_server_room(pw, out, failures):
         res["noDoor"] = (await page.evaluate(SR))["built"]
         check(failures, res["noDoor"] is False, f"a room without an infra folder has no door: built {res['noDoor']}")
 
+        # 6c. the server room's button beside 呼び出し (2.3.21, requester: 「サーバールームに入るのボタンを呼び出しのメニューの横につけて
+        # 欲しい / 今3Dクリックでしか入れないよね？」). In a room with no docs/infra it is there, not pressable, and says why; a press
+        # reads nothing. In a room with one, Enter on it opens the server room as the door does (the door's own press: step 2).
+        BTN = """() => { const b = document.getElementById('room-sr'), w = document.getElementById('room-sr-why'), c = document.getElementById('room-call');
+          return b ? { shown: !b.hidden && b.getClientRects().length > 0, off: b.getAttribute('aria-disabled'), title: b.title, why: w ? w.textContent : null,
+                       text: b.textContent, afterCall: !!c && c.nextElementSibling === b } : null; }"""
+        await page.locator("#room-solo").screenshot(path=str(out / "room-bar-no-infra.png"))
+        nb = res["srButtonNoInfra"] = await page.evaluate(BTN)
+        before = len(asked)
+        await page.focus("#room-sr")
+        await page.keyboard.press("Enter")
+        await page.click("#room-sr", force=True)   # a pointer's press on it (Playwright waits for aria-disabled to clear otherwise)
+        t = await page.evaluate("() => performance.now()")
+        await until(page, "(t) => performance.now() > t + 800", "a moment after the press", arg=t)
+        nb["phase"] = (await page.evaluate(SR))["phase"]
+        nb["reads"] = len(asked) - before
+        check(failures, nb and nb["shown"] and nb["afterCall"] and nb["off"] == "true" and nb["title"] == T("page.room.sr.none")
+              and nb["why"] == T("page.room.sr.none") and nb["phase"] == "idle" and nb["reads"] == 0,
+              f"no docs/infra: the server room's button is beside 呼び出し, not pressable, says why, and a press reads nothing: {nb}")
+        await up_close("three")
+        await page.locator("#room-solo").screenshot(path=str(out / "room-bar.png"))
+        yb = res["srButton"] = await page.evaluate(BTN)
+        check(failures, yb and yb["shown"] and yb["afterCall"] and yb["off"] == "false" and yb["title"] == T("page.room.sr.title")
+              and yb["text"] == T("page.room.sr"), f"a room with docs/infra: the button is pressable and names what it opens: {yb}")
+        await page.focus("#room-sr")
+        await page.keyboard.press("Enter")
+        await until(page, "() => window.__dbg.sr().open", "the server room from its button", timeout=15000)
+        res["srFromButton"] = (await page.evaluate(SR))["phase"]
+        await page.screenshot(path=str(out / "sr-from-button.png"))
+        await page.keyboard.press("Escape")
+        await until(page, "() => !window.__dbg.sr().open && window.__dbg.sr().phase === 'idle'", "back to the room from the button's server room")
+
         # 7. reduced motion: the * stand still, the bubble shows
         ctx2 = await browser.new_context(**DESKTOP, reduced_motion="reduce")
         p2 = await ctx2.new_page()

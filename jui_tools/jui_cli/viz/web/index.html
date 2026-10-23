@@ -57,6 +57,8 @@
         <button type="button" class="fn-btn" id="room-back">{{tl:page.room.back}}← フロア全体に戻る{{/tl}}</button>
         <span class="rs-name" id="room-solo-name" aria-live="polite"></span>
         <button type="button" class="fn-btn" id="room-call" hidden aria-haspopup="dialog">{{tl:page.room.call}}呼び出し{{/tl}}</button>
+        <button type="button" class="fn-btn" id="room-sr" hidden aria-disabled="true" aria-describedby="room-sr-why">{{tl:page.room.sr}}サーバールームに入る{{/tl}}</button>
+        <span id="room-sr-why" hidden></span>
       </div>
       <section class="roster" id="roster" aria-labelledby="roster-h" hidden>
         <div class="roster-head">
