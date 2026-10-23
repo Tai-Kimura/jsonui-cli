@@ -74,7 +74,7 @@ KINDS = frozenset({"start", "prompt", "tool", "tool_end", "perm", "ask_pending",
 MIG_PLAN = "shop-to-managed"
 MIG_BTN = "#sr-mplayer [data-sr-mp='{}']"
 #: what a page event's target may name (capture.Driver.point)
-TARGETS = frozenset({"css", "text", "room_tag", "bubble", "session_row", "talk_row", "robot", "cost_day", "door"})
+TARGETS = frozenset({"css", "text", "room_tag", "bubble", "session_row", "talk_row", "robot", "robot_tag", "cost_day", "door"})
 
 
 def session_id(key: str) -> str:
@@ -330,7 +330,8 @@ def chapters(lang: str) -> dict:
         E(52.2, "perm", key="s03", command=w["perm_cmd"], description=w["perm_desc"]),
         E(52.8, "click", target={"bubble": "s03"}, expect="picked:s03"),
         E(54.0, "click", target={"css": ".pa-allow[data-do='allow']"}),
-        E(55.2, "click", target={"robot": "s01"}, expect="card:s01"),
+        # its own name tag: the English tags are long, and another robot's lay over its body
+        E(55.2, "click", target={"robot_tag": "s01"}, expect="card:s01"),
         E(55.9, "click", target={"css": "#rb [data-rb-talk]"}, expect="talk"),
         E(56.6, "click", target={"talk_row": "s02"}),
         E(57.4, "talk", frm="s02", to="s01", text=w["talk"]["t2"]),
@@ -450,9 +451,10 @@ def chapters(lang: str) -> dict:
 # ---- the promo's timeline ----
 
 def promo_timeline(promo: Path) -> dict:
-    """{id: (start, end)} of jsonui-promo/src/timeline.json."""
+    """{id: (start, end)} of jsonui-promo/src/timeline.json's captured chapters (a "card" chapter is drawn by the promo
+    itself, with nothing to capture: the feature list)."""
     data = json.loads((Path(promo) / "src" / "timeline.json").read_text(encoding="utf-8"))
-    return {c["id"]: (float(c["start"]), float(c["end"])) for c in data["chapters"]}
+    return {c["id"]: (float(c["start"]), float(c["end"])) for c in data["chapters"] if c.get("frame") != "card"}
 
 
 def check_bounds(promo: dict) -> list:

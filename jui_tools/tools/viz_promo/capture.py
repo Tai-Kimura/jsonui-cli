@@ -716,6 +716,8 @@ class Driver:
             t = {"css": f"#sessions [data-robot-open='{await self.label(t['session_row'])}']"}
         elif "talk_row" in t:
             t = {"css": "#rb .talk-row", "text": self.w["names"][t["talk_row"]]}
+        elif "robot_tag" in t:   # the robot's own name tag (a press on it selects the robot, as on its body)
+            t = {"css": f"#tags .tag[data-robot='{await self.label(t['robot_tag'])}']"}
         return t
 
     async def hittable(self, target: dict) -> bool:
