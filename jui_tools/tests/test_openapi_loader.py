@@ -1614,7 +1614,9 @@ class YamlInputTests(unittest.TestCase):
             docs = load_swagger(tmp)
             self.assertEqual(docs[0].enums[0].string_values, ["NO", "SE"])
 
-    def test_date_literal_halts(self):
+    def test_date_literal_reads_as_the_string_json_holds(self):
+        """Halted until 2.3.21 (YAML made it a date, unlike JSON). The family's one YAML load keeps it the string the
+        same document's JSON holds, so it is read, as jsonui-test and jsonui-doc read it."""
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             (tmp / "api.yaml").write_text(
@@ -1627,12 +1629,14 @@ class YamlInputTests(unittest.TestCase):
                 "      properties:\n"
                 "        since:\n"
                 "          type: string\n"
-                "          default: 2026-07-24\n",
+                "          default: 2026-07-24\n"
+                "paths:\n  /x:\n    get:\n      responses:\n        200:\n          description: ok\n",
                 encoding="utf-8",
             )
-            with self.assertRaises(OpenAPILoadError) as ctx:
-                load_swagger(tmp)
-            self.assertEqual(ctx.exception.code, "yaml-type-coercion")
+            docs = load_swagger(tmp)   # the unquoted `200:` key reads as "200", as in JSON
+            self.assertEqual(len(docs), 1)
+            since = [f for s in docs[0].schemas if s.name == "M" for f in s.fields if f.wire_name == "since"][0]
+            self.assertEqual(since.default, "2026-07-24")
 
     def test_duplicate_basename_yaml_and_json_halts(self):
         with tempfile.TemporaryDirectory() as tmpdir:

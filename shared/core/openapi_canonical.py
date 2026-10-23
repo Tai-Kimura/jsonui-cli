@@ -403,13 +403,31 @@ def load_documents(api_dir, *, want_yaml=True):
         import yaml
     except ImportError:
         return pairs, len(yaml_docs)
+    of = _openapi_file_module()
     for p in yaml_docs:
         try:
-            with open(p, "r", encoding="utf-8") as f:
-                pairs.append((str(p), yaml.safe_load(f)))
+            text = p.read_text(encoding="utf-8")
+            # the family's one YAML load (openapi_file.load_yaml): a date stays a string and a key is a string, as in
+            # the same document's JSON — the mock and this index read one document one way (2.3.21)
+            pairs.append((str(p), of.load_yaml(text, yaml) if of is not None else yaml.safe_load(text)))
         except (OSError, Exception):  # noqa: B014 - yaml raises its own tree
             continue
     return pairs, 0
+
+
+def _openapi_file_module():
+    """Sibling module openapi_file.py, loaded the way the tools load this one (None when it is not there)."""
+    name = "_jsonui_shared_core_openapi_file"
+    if name in sys.modules:
+        return sys.modules[name]
+    path = Path(__file__).resolve().parent / "openapi_file.py"
+    if not path.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 #: `find_api_directories` and `param_case_for` lived here until v1.7.8. They

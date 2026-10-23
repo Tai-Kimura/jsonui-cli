@@ -176,9 +176,13 @@ def _safe_load_yaml(path: Path) -> Any:
     yaml_mod = _import_yaml()
     if yaml_mod is None:
         raise OpenAPILoadError("pyyaml-missing", _PYYAML_HINT, source=str(path))
+    from . import shared_core
+
+    family = shared_core.load("openapi_file")   # the family's one YAML load: dates and keys as JSON has them (2.3.21)
     try:
         with open(path, "r", encoding="utf-8") as f:
-            return yaml_mod.safe_load(f)
+            text = f.read()
+        return family.load_yaml(text, yaml_mod) if family is not None else yaml_mod.safe_load(text)
     except yaml_mod.YAMLError as e:
         mark = getattr(e, "problem_mark", None)
         loc = (
@@ -196,10 +200,12 @@ def _safe_load_yaml(path: Path) -> Any:
 def _check_yaml_type_coercion(node: Any, *, source: str, pointer: str = "#") -> None:
     """Halt where YAML 1.1 implicit typing silently diverged from JSON.
 
-    ``yaml.safe_load`` type-coerces unquoted scalars: ``NO`` → bool (the
-    Norway problem), ``2026-07-24`` → ``datetime.date``, and allows
-    non-string mapping keys — all of which would make "YAML input yields
-    the same IR as JSON" silently false. Enum members and mapping keys are
+    YAML 1.1 type-coerces unquoted scalars: ``NO`` → bool (the Norway
+    problem). (Dates and non-string mapping keys no longer reach here: the
+    family's one YAML load, shared/core/openapi_file.load_yaml, keeps a date
+    the string JSON holds and writes keys as JSON does, 2.3.21.) A bool where
+    a string was meant would make "YAML input yields the same IR as JSON"
+    silently false. Enum members and mapping keys are
     where coercion corrupts codegen, so those halt with quote-the-value
     guidance. Plain bools elsewhere (``nullable: true`` …) are legitimate
     JSON and pass through.

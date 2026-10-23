@@ -123,13 +123,14 @@ DATED = {"openapi": "3.0.3", "info": {"title": "Dated", "version": "1"},
                                                                              "at": {"type": "string", "format": "date-time"}}},
                                   "example": {"created": "2024-01-01", "at": "2024-01-01T10:00:00Z"}}}}}}}}}
 # the same document as YAML writes it by hand: the example's date and time unquoted
-DATED_YAML = yaml.safe_dump(DATED, sort_keys=False).replace("'2024-01-01'", "2024-01-01").replace("'2024-01-01T10:00:00Z'", "2024-01-01T10:00:00Z")
+DATED_YAML = (yaml.safe_dump(DATED, sort_keys=False).replace("'2024-01-01'", "2024-01-01")
+              .replace("'2024-01-01T10:00:00Z'", "2024-01-01T10:00:00Z").replace("'200':", "200:"))   # status codes unquoted too
 
 
 def test_an_unquoted_date_in_a_yaml_example_is_the_string_json_holds(tmp_path):
     """Found by the integration's check of 2.3.21: the date became a Python date, json.dump stopped at its key, a half
     written mock was left and the run said 0."""
-    assert "created: 2024-01-01\n" in DATED_YAML   # the fixture is what it says
+    assert "created: 2024-01-01\n" in DATED_YAML and " 200:\n" in DATED_YAML   # the fixture is what it says
     (tmp_path / "api.yaml").write_text(DATED_YAML, encoding="utf-8")
     (tmp_path / "api.json").write_text(json.dumps(DATED), encoding="utf-8")
     trees = {}
@@ -174,3 +175,45 @@ def test_the_validate_gate_says_a_document_it_cannot_read_in_one_line(tmp_path, 
     got = _check_mocks_against_swagger(str(tmp_path / "jui.config.json"))
     out = capsys.readouterr().out
     assert got == (1, None, 1, {}) and "Error: " in out and "not readable as YAML" in out and "Traceback" not in out, (got, out)
+
+
+# ---- branch-tests read the canon from the same document (shared/core/openapi_canonical, 2.3.21): YAML with an unquoted
+# date and status code generates what its JSON generates, and refuses what its JSON refuses
+ORDERS = {"openapi": "3.0.0", "paths": {
+    "/api/user/orders": {"post": {"operationId": "createOrder",
+                                  "requestBody": {"content": {"application/json": {"schema": {"type": "object"},
+                                                                                   "example": {"since": "2024-01-01"}}}},
+                                  "responses": {"200": {"description": "ok"}}}},
+    "/api/user/orders/{id}": {"get": {"responses": {"200": {"description": "ok"}}}}}}
+
+
+def _orders_yaml(doc) -> str:
+    return yaml.safe_dump(doc, sort_keys=False).replace("'2024-01-01'", "2024-01-01").replace("'200':", "200:")
+
+
+@pytest.mark.parametrize("declares_body", [True, False])
+def test_branch_tests_answer_from_yaml_as_from_json(tmp_path, declares_body):
+    from jsonui_test_cli.branch_tests import BranchTestGenerationError, generate_branch_tests
+    from tests.test_branch_tests_generator import _project
+    from tests.test_branch_request_on_a_bodyless_operation import _request_row
+
+    doc = json.loads(json.dumps(ORDERS))
+    if not declares_body:
+        del doc["paths"]["/api/user/orders"]["post"]["requestBody"]
+    answers = {}
+    for kind in ("json", "yaml"):
+        root = _project(tmp_path / kind, _request_row("createOrder", {"id": 1}))
+        api = root / "docs/api"
+        api.mkdir(parents=True, exist_ok=True)
+        if kind == "json":
+            (api / "api.json").write_text(json.dumps(doc), encoding="utf-8")
+        else:
+            text = _orders_yaml(doc)
+            assert " 200:\n" in text and (not declares_body or "since: 2024-01-01" in text)
+            (api / "api.yaml").write_text(text, encoding="utf-8")
+        try:
+            answers[kind] = generate_branch_tests("checkout", root).test_file.read_text(encoding="utf-8").replace(str(root), "<root>")
+        except BranchTestGenerationError as e:
+            answers[kind] = "refused: " + str(e).replace(str(root), "<root>").replace("api.yaml", "api.<ext>").replace("api.json", "api.<ext>")
+    assert answers["yaml"] == answers["json"]
+    assert answers["json"].startswith("refused: ") != declares_body, answers["json"][:200]
