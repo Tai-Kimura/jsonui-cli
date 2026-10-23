@@ -238,8 +238,31 @@ window.__dbg = {
     lightHead: (() => { const d = P ? P.lights.filter((o) => o.userData.flowLight && o.userData.moving) : [];
       return d.length ? +(d[0].userData.k || 0).toFixed(3) : null; })(),   // on its whole path (srFlowLightAt)
     hints: P && P.hints ? P.hints.userData.hints : 0, choices: [...document.querySelectorAll('#sr-choices:not([hidden]) [data-sr-choice]')].map((b) => b.dataset.srChoice),
-    toasts: [...document.querySelectorAll('#sr-toasts .sr-toast')].map((t) => t.textContent), history: P ? P.history.length : 0 }; },
-  srFlowSpeed: (s) => { SR_FLOW.speed = s; srFlowRenderBar(); return SR_FLOW.speed; },
+    toasts: [...document.querySelectorAll('#sr-toasts .sr-toast')].map((t) => t.textContent), history: P ? P.history.length : 0,
+    // the pace (ticket 2026-10-23-viz-sr-flow-replay-pace-and-focus): each move's start [from, to, t], each choice [at, id, t],
+    // each move's cable length, the frames the camera followed
+    show: SR_FLOW.show, departs: P ? P.departs.slice() : [], chose: P ? P.chose.slice() : [], follows: P ? P.follows || 0 : 0,
+    lengths: V && V.flowLayer ? Object.fromEntries(V.L.edges.map((e) => { const pts = srCablePathOf(V, e.from, e.to, srFlowCrossing(V, e.from, e.to));
+      return [`${e.from}>${e.to}`, +pts.slice(1).reduce((a, q, i) => a + Math.hypot(q[0] - pts[i][0], q[1] - pts[i][1], q[2] - pts[i][2]), 0).toFixed(3)]; })) : {} }; },
+  srFlowSpeed: (s) => { SR_FLOW.speed = s; srFlowPrefSet('speed', s); srFlowRenderBar(); return SR_FLOW.speed; },
+  srFlowShow: (how) => { srFlowShowSet(how); return SR_FLOW.show; },
+  // what the 3D draws now, read from it: the nodes at their size (the set that takes the press), their tags, the models
+  // shown, the cables drawn (from>to), and each floor's colour against the one it was built with
+  srFlowDrawn: () => { const V = SR.view; if (!V) return null; const m4 = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+    const nodes = new Set();
+    for (const mesh of V.nodeMeshes[V.detail && !V.flat ? 'detail' : 'simple']) mesh.userData.nodes.forEach((id, i) => { mesh.getMatrixAt(i, m4); m4.decompose(p, q, s); if (s.x > 0.01) nodes.add(id); });
+    const segs = { plain: 0, cross: 0 }, cables = [];
+    for (const e of V.L.edges) { const set = e.crossProvider ? 'cross' : 'plain', j = segs[set]++; if (srCableShown(set === 'cross' ? V.crossLines : V.plainLines, j) > 0.5) cables.push(`${e.from}>${e.to}`); }
+    const fm = V.floorMesh, c = new THREE.Color(), bg = new THREE.Color(V.scene.background);
+    const floors = V.floorColors.map((hex, i) => { fm.getColorAt(i, c); const b = new THREE.Color(hex); return { built: hex, now: `#${c.getHexString()}`, toGround: +(1 - Math.hypot(c.r - bg.r, c.g - bg.g, c.b - bg.b) / Math.max(1e-6, Math.hypot(b.r - bg.r, b.g - bg.g, b.b - bg.b))).toFixed(3), scale: (() => { fm.getMatrixAt(i, m4); m4.decompose(p, q, s); return +s.x.toFixed(3); })() }; });
+    return { nodes: [...nodes].sort(), all: [...V.L.pos.values()].filter((x) => !x.hiddenIn).map((x) => x.n.id).sort(), cables: cables.sort(),
+      tags: [...document.querySelectorAll('#sr-labels .sr-label:not([hidden])')].filter((t) => t.dataset.node).map((t) => t.dataset.node).sort(),
+      models: V.models ? [...V.models].filter(([, g]) => g.visible).map(([id]) => id).sort() : [], floors,
+      cam: V.controls.target.toArray().map((x) => +x.toFixed(3)), whole: srFlowWhole(V),
+      ndc: Object.fromEntries([...V.L.pos.values()].filter((x) => !x.hiddenIn).map((x) => { const v = new THREE.Vector3(x.x, x.y, x.z).project(V.camera); return [x.n.id, +Math.max(Math.abs(v.x), Math.abs(v.y)).toFixed(3)]; })) }; },   // how near each node is to the page's edge (NDC)
+  // the camera moved over the floor, away from a node (`units` world units): the e2e puts that node near the page's edge
+  srPanFrom: (id, units) => { const V = SR.view, p = V && V.L.pos.get(id); if (!p) return null; const d = new THREE.Vector3(V.controls.target.x - p.x, 0, V.controls.target.z - p.z).normalize().multiplyScalar(units);
+    V.controls.target.add(d); V.camera.position.add(d); V.camera.updateMatrixWorld(); V.controls.update(); return V.controls.target.toArray(); },
   // a migration plan (59-sr-migration.js): what is drawn read from the 3D itself — each changed node's size from its
   // instance matrix (and its model's), each changed edge's length from the line's positions — and the plan's own lists
   srMig: () => {

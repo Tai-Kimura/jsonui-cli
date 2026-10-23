@@ -125,6 +125,175 @@ TOAST_LIFE = """() => { const box = document.getElementById('sr-toasts'), L = wi
   mo.observe(box, { childList: true }); }"""
 
 
+DRAWN = "() => window.__dbg.srFlowDrawn()"
+# the nodes 検索する names (its branch's two ways and its two lanes)
+SEARCH_NODES = {"browser", "web", "api", "kv", "d1", "queue", "r2"}
+
+
+def _moves(f, lengths):
+    """Each move of a flow played to its end: [from, to, length, ms], a depart paired with the first arrival at its end after it."""
+    out, used = [], set()
+    for frm, to, t0 in f["departs"]:
+        k = next((i for i, (at, t1) in enumerate(f["reached"]) if i not in used and at == to and t1 >= t0), None)
+        if k is None:
+            continue
+        used.add(k)
+        out.append([frm, to, lengths.get(f"{frm}>{to}", lengths.get(f"{to}>{frm}")), f["reached"][k][1] - t0])
+    return out
+
+
+def _rests(f):
+    """How long the light stayed before each move: at a node (from the last arrival before it) or at a branch (from the
+    choice, when one came between)."""
+    node, branch = [], []
+    for frm, to, t0 in f["departs"][1:]:
+        last = max((t for _, t in f["reached"] if t <= t0), default=None)
+        chose = [t for _, _, t in f["chose"] if (last is None or t >= last) and t <= t0]
+        if chose:
+            branch.append(t0 - chose[-1])
+        elif last is not None:
+            node.append(t0 - last)
+    return node, branch
+
+
+def _median(xs):
+    xs = sorted(xs)
+    return xs[len(xs) // 2] if xs else 0
+
+
+async def _play_search(page, speed, way="miss"):
+    """検索する played to its end at `speed`, `way` chosen at its branch by a press."""
+    await page.evaluate("() => { const b = document.querySelector(\"#sr-player [data-sr-fp='stop']\"); if (b) b.click(); }")
+    await page.evaluate("(s) => window.__dbg.srFlowSpeed(s)", speed)
+    await page.evaluate("() => window.__dbg.srSelect('browser')")
+    await page.click("#sr-board [data-sr-flow='search']")
+    await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'branch' && f.choices.length ? f : null; }}", f"search at {speed}: its branch",
+                timeout=60000, why=FLOW)
+    await page.click(f"#sr-choices [data-sr-choice='{way}']")
+    return await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'done' ? f : null; }}", f"search at {speed}: the end", timeout=90000, why=FLOW)
+
+
+async def run_flow_pace(page, out, failures, res):
+    """The flows' pace and what is shown while one plays (ticket 2026-10-23-viz-sr-flow-replay-pace-and-focus; requester
+    10-23: 「距離/sで設定して / スピード調整が欲しい。0.5-3.0くらいで / 各喉についた時にそれぞれ少し留まって欲しい。 / 再生中は
+    関係ないノードは消して欲しい」), on the multi-provider room's 検索する: its moves go from a cable inside one cloud to one
+    across to GCP, so their lengths differ."""
+    fp = res["flowPace"] = {}
+    await page.click("#sr-fit")
+    fp["default"] = (await page.evaluate(FLOW))["show"]
+    await page.evaluate("() => window.__dbg.srSelect('browser')")
+    await page.click("#sr-board [data-sr-flow='search']")
+    fp["speeds"] = await page.evaluate("() => [...document.querySelectorAll(\"#sr-player [data-sr-fp='speed'] option\")].map((o) => [Number(o.value), o.textContent, o.selected])")
+    check(failures, fp["default"] == "flow", f"a room not chosen for yet shows the nodes the flow names: {fp['default']}")
+    check(failures, [v for v, _, _ in fp["speeds"]] == [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0]
+          and [t for _, t, _ in fp["speeds"]][:3] == ["0.5×", "0.75×", "1.0×"],
+          f"the speed is 0.5 to 3.0 by 0.25: {fp['speeds']}")
+    # the pace: each move's time is its cable's length at one speed (world units a second), at 1.0 and at 3.0
+    lengths = (await page.evaluate(FLOW))["lengths"]
+    pace, rests = {}, {}
+    for speed in (1.0, 3.0):
+        f = await _play_search(page, speed)
+        mv = _moves(f, lengths)
+        pace[speed] = [[a, b, ln, round(ms), round(ln / ms * 1000, 2) if ln and ms > 0 else None] for a, b, ln, ms in mv]
+        rests[speed] = _rests(f)
+    fp["pace"] = pace
+    fp["rests"] = {k: [[round(x) for x in v] for v in r] for k, r in rests.items()}
+    u1 = [m[4] for m in pace[1.0] if m[4]]
+    lens = [m[2] for m in pace[1.0] if m[2]]
+    med1, med3 = _median(u1), _median([m[4] for m in pace[3.0] if m[4]])
+    fp["perSec"] = {"1.0": med1, "3.0": med3, "lengthSpread": round(max(lens) / min(lens), 2) if lens else 0}
+    check(failures, len(u1) >= 7 and fp["perSec"]["lengthSpread"] >= 1.5,
+          f"検索する's moves are timed, and their cables differ in length (else the next arm proves nothing): {fp['perSec']} {pace[1.0]}")
+    check(failures, u1 and all(0.75 * med1 <= u <= 1.3 * med1 for u in u1) and 7 <= med1 <= 13,
+          f"at 1.0 every move goes the same distance a second (~10 units), a long cable taking longer: {pace[1.0]}")
+    check(failures, med1 and 2.4 <= med3 / med1 <= 3.6, f"at 3.0 the light goes three times as far a second: {fp['perSec']}")
+    node1, branch1 = rests[1.0]
+    node3, _ = rests[3.0]
+    fp["restMed"] = {"node1": round(_median(node1)), "branch1": [round(x) for x in branch1], "node3": round(_median(node3))}
+    check(failures, len(node1) >= 5 and all(300 <= x <= 700 for x in node1),
+          f"at 1.0 the light rests at each node it reaches (~400 ms) before it goes on: {fp['rests'][1.0]}")
+    check(failures, len(branch1) == 1 and 650 <= branch1[0] <= 1300 and branch1[0] >= 1.6 * _median(node1),
+          f"at a branch, once chosen, it rests twice as long as at a node: {fp['restMed']}")
+    check(failures, _median(node3) and 2.2 <= _median(node1) / _median(node3) <= 3.8, f"the rests go by the speed too: {fp['restMed']}")
+
+    # what is shown: at the branch, each of the four, read from the 3D (the nodes at their size, their tags, models and
+    # cables); the floors faint while any node is hidden
+    await page.evaluate("() => { const b = document.querySelector(\"#sr-player [data-sr-fp='stop']\"); if (b) b.click(); }")
+    await page.evaluate("() => window.__dbg.srFlowSpeed(1)")
+    every = await page.evaluate(DRAWN)
+    fp["stopped"] = {"nodes": every["nodes"] == every["all"], "floors": [x["toGround"] for x in every["floors"]]}
+    await page.evaluate("() => window.__dbg.srSelect('browser')")
+    await page.click("#sr-board [data-sr-flow='search']")
+    await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'branch' && f.choices.length ? f : null; }}", "search: its branch for the four",
+                timeout=60000, why=FLOW)
+    want = {"flow": SEARCH_NODES, "now": {"api", "kv", "d1"}, "seen": {"browser", "web", "api", "kv", "d1"}, "all": set(every["all"])}
+    shown = fp["shown"] = {}
+    for how in ("now", "seen", "all", "flow"):
+        await page.click(f"#sr-player [data-sr-fp-show='{how}']")
+        d = await until(page, f"(w) => {{ const d = ({DRAWN})(); return d.tags.every((t) => w.includes(t)) ? d : null; }}", f"shown: {how}",
+                        arg=sorted(want[how]), timeout=5000, why=DRAWN)
+        pressed = await page.evaluate("() => [...document.querySelectorAll('#sr-player [data-sr-fp-show]')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.dataset.srFpShow)")
+        cables_want = sorted(c for c in every["cables"] if set(c.split(">")) <= want[how])
+        shown[how] = {"nodes": d["nodes"], "cables": d["cables"], "cablesWant": cables_want, "tags": d["tags"], "models": d["models"], "pressed": pressed,
+                      "floors": sorted({x["toGround"] for x in d["floors"]}),
+                      "floorsSized": [x["scale"] for x in d["floors"]] == [x["scale"] for x in every["floors"]]}
+        check(failures, d["nodes"] == sorted(want[how]) and d["cables"] == cables_want and set(d["tags"]) <= want[how] and set(d["models"]) <= want[how]
+              and pressed == [how],
+              f"{how}: the nodes drawn are {sorted(want[how])}, their cables only, no other tag or model: {shown[how]}")
+        faint = shown[how]["floors"]
+        if how == "all":
+            check(failures, all(abs(g) < 0.02 for g in faint), f"all: the floors as built: {shown[how]['floors']}")
+        else:
+            check(failures, faint and all(0.5 <= g <= 0.7 for g in faint) and shown[how]["floorsSized"],
+                  f"{how}: every floor still drawn, faint, as a map: {shown[how]['floors']}")
+    await page.screenshot(path=str(out / "flow-show-flow.png"))
+    fp["kept"] = await page.evaluate("() => { try { return Object.values(JSON.parse(localStorage.getItem('agent-view:srFlow')) || {}); } catch (e) { return null; } }")
+    check(failures, fp["kept"] and fp["kept"][0].get("show") == "flow" and fp["kept"][0].get("speed") == 1,
+          f"the nodes shown and the speed are kept for the room: {fp['kept']}")
+    await page.click("#sr-player [data-sr-fp='stop']")
+    back = await until(page, f"() => {{ const d = ({DRAWN})(); return d.nodes.length === d.all.length ? d : null; }}", "stopped: every node again", timeout=5000, why=DRAWN)
+    fp["back"] = {"nodes": back["nodes"] == back["all"], "cables": back["cables"] == every["cables"], "floors": sorted({x["toGround"] for x in back["floors"]})}
+    check(failures, fp["back"]["nodes"] and fp["back"]["cables"] and all(abs(g) < 0.02 for g in fp["back"]["floors"]),
+          f"stopped: every node, cable and floor as before: {fp['back']}")
+
+    # the camera: the whole room in view, it never moves — pulled back from fit and moved over until the flow's start is
+    # near the page's edge, past where a light would be followed, the whole room still in view (at fit the flow's nodes
+    # sit well inside: nothing would be followed anyway); up close on api, it goes after the light as it leaves the page
+    await page.click("#sr-fit")
+    await page.wait_for_timeout(400)
+    await page.evaluate("() => window.__dbg.srZoom(1.6)")
+    for _ in range(200):
+        await page.evaluate("() => window.__dbg.srPanFrom('browser', 0.4)")
+        d = await page.evaluate(DRAWN)
+        if not d["whole"]:
+            await page.evaluate("() => window.__dbg.srPanFrom('browser', -0.4)")
+            break
+        if d["ndc"]["browser"] > 0.9:
+            break
+    snug = await page.evaluate(DRAWN)
+    cam0 = snug["cam"]
+    whole = await _play_search(page, 3.0, "hit")
+    cam1 = (await page.evaluate(DRAWN))["cam"]
+    fp["whole"] = {"follows": whole["follows"], "moved": round(sum((a - b) ** 2 for a, b in zip(cam0, cam1)) ** 0.5, 3), "whole": snug["whole"],
+                   "browserNdc": snug["ndc"]["browser"]}
+    check(failures, fp["whole"]["whole"] and fp["whole"]["browserNdc"] > 0.85,
+          f"the whole room in view, the flow's start near the page's edge (else the next arm proves nothing): {fp['whole']}")
+    check(failures, fp["whole"]["follows"] == 0 and fp["whole"]["moved"] < 0.05,
+          f"the whole room in view: the camera stays where it is while it plays: {fp['whole']}")
+    await page.evaluate("() => { const b = document.querySelector(\"#sr-player [data-sr-fp='stop']\"); if (b) b.click(); }")
+    await page.evaluate("() => window.__dbg.srSelect('api')")
+    await page.click("#sr-board [data-sr-act='focus']")
+    await page.wait_for_timeout(600)
+    cam0 = (await page.evaluate(DRAWN))["cam"]
+    near = await _play_search(page, 1.0, "hit")
+    cam1 = (await page.evaluate(DRAWN))["cam"]
+    fp["near"] = {"follows": near["follows"], "moved": round(sum((a - b) ** 2 for a, b in zip(cam0, cam1)) ** 0.5, 3)}
+    check(failures, fp["near"]["follows"] > 0 and fp["near"]["moved"] > 1,
+          f"up close, a light leaving the page is followed: {fp['near']}")
+    await page.evaluate("() => { const b = document.querySelector(\"#sr-player [data-sr-fp='stop']\"); if (b) b.click(); }")
+    await page.click("#sr-fit")
+
+
 async def run_flows(page, out, failures, res):
     """Flows played (the server room ticket's item 7) on the multi-provider room's two: 検索する (browser, a branch with a
     default, lanes side by side) and 毎晩の写し (r2, a schedule)."""
@@ -174,12 +343,13 @@ async def run_flows(page, out, failures, res):
                         timeout=30000, why=FLOW)
     done = await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'done' ? f : null; }}", "search: the end", timeout=40000, why=FLOW)
     when = {}
-    for to, t in done["reached"]:
-        when.setdefault(to, t)
-    lane_gap = abs(when.get("queue", 0) - when.get("r2", 1e9))
-    fl["miss"] = {"chosen": done["chosen"], "log": done["log"], "lanes": lanes["lights"], "laneGapMs": round(lane_gap)}
-    # the lanes run at once: at 1.0 a move takes 900 ms, so one after the other they would arrive ~900 ms apart
-    check(failures, lane_gap < 300, f"lanes side by side arrive together, not one after the other: {fl['miss']['laneGapMs']} ms")
+    for frm, to, t in done["departs"]:
+        when.setdefault(f"{frm}>{to}", t)
+    lane_gap = abs(when.get("api>queue", 0) - when.get("api>r2", 1e9))
+    fl["miss"] = {"chosen": done["chosen"], "log": done["log"], "lanes": lanes["lights"], "laneStartGapMs": round(lane_gap)}
+    # the lanes start at once (each then takes its own cable's length: run_flow_pace); one after the other, the second
+    # would start after the first one's move and rest
+    check(failures, lane_gap < 100, f"lanes side by side start together, not one after the other: {fl['miss']['laneStartGapMs']} ms")
     check(failures, done["chosen"] == ["KV に結果が有る？ → 無い"] and say("📖", "d1", "read") in done["log"] and say("📖", "kv", "read") not in done["log"]
           and {say("📥", "queue", "enqueue"), say("💾", "r2", "write")} <= set(done["log"]) and done["log"][-2:] == [say("←", "ブラウザ", "response"), T("sr.flow.end")],
           f"the choice taken is the way played, the other not; the lanes and the way back: {fl['miss']}")
@@ -220,7 +390,7 @@ async def run_flows(page, out, failures, res):
     check(failures, 1.5 <= toast_ratio <= 2.6 and abs(toast_ratio - ratio) <= 0.5,
           f"twice the speed, a toast up half as long, as the light's step: {lives} (ratio {toast_ratio:.2f}, the light's {ratio:.2f})")
     await page.click("#sr-player [data-sr-fp='stop']")
-    await page.evaluate("() => window.__dbg.srFlowSpeed(5)")
+    await page.evaluate("() => window.__dbg.srFlowSpeed(3)")
     await page.click("#sr-board [data-sr-flow='search']")
     await page.check("#sr-player [data-sr-fp='auto']")
     auto = await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'done' ? f : null; }}", "自動: the end", timeout=40000, why=FLOW)
@@ -1134,6 +1304,7 @@ async def run_server_room(pw, out, failures, flat=False):
         await page.screenshot(path=str(out / "multi-light.png"))
         await run_cables_and_reach(page, out, failures, res)
         await run_flows(page, out, failures, res)
+        await run_flow_pace(page, out, failures, res)
         await page.keyboard.press("Escape")
         await up_close("icons")
         await press_door()

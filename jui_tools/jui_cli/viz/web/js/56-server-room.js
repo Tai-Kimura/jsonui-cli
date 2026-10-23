@@ -1093,7 +1093,7 @@ function srPlaceLabels(V) {
     for (const G of V.L.tops) consider(G.x + G.w / 2, G.boxH + 0.8, G.z + G.d / 2, `${G.g.label || G.g.id} · ${G.nodeCount}`, 'group', 1);
   } else {
     for (const G of V.L.floors) if (G.g.id && !(V.migFloorShown && !V.migFloorShown.includes(G.g.id))) consider(G.x + 0.6, 0.2 + G.level * 0.06, G.z + 0.5, G.g.label || G.g.id, 'group', 0.6);
-    for (const p of V.L.pos.values()) if (!p.hiddenIn && !srMigHides(p.n.id) && !(SR.reach && !SR.reach.ids.has(p.n.id))) consider(p.x, p.y + 1.9, V.flat ? p.z - 0.85 : p.z, `${p.n.label || p.n.id}${p.n.count > 1 ? ` ×${p.n.count}` : ''}`, p.external ? 'external' : 'node', 1, p.n);
+    for (const p of V.L.pos.values()) if (!p.hiddenIn && !srMigHides(p.n.id) && !srFlowHides(p.n.id) && !(SR.reach && !SR.reach.ids.has(p.n.id))) consider(p.x, p.y + 1.9, V.flat ? p.z - 0.85 : p.z, `${p.n.label || p.n.id}${p.n.count > 1 ? ` ×${p.n.count}` : ''}`, p.external ? 'external' : 'node', 1, p.n);
   }
   // up close (§5): how many nodes are in view decides the look, with room between going in and coming back
   const inView = out.filter((o) => o.n).length;
@@ -1140,6 +1140,7 @@ function srCablesReroute(V) {
   srCablesRefill(V.crossLines, cross);
   srFocusLines(V);
   if (V.migEdges && typeof srMigApply === 'function') srMigApply(V, true);
+  if (V.flowHidden && V.flowHidden.size) srFlowShowApply(V, true);   // a flow playing: its hidden nodes' cables again (59-sr-flows.js)
   V.reroutes = (V.reroutes || 0) + 1; V.rerouteMs = Math.round(srNow() - t0);   // how often and how long (the e2e reads it)
 }
 /* The room's icons: per node the strongest key the settings give (service → provider → category), an image plane above it. */
@@ -1198,7 +1199,7 @@ function srFocusLines(V) {
   const ids = new Set([SR.selected, SR.hover].filter(Boolean)), plain = [], cross = [], reach = SR.reach ? SR.reach.edges : null;
   if (ids.size || reach) {
     for (const e of V.L.edges) {
-      if ((!ids.has(e.from) && !ids.has(e.to) && !(reach && reach.has(e))) || srMigEdgeHidden(e)) continue;
+      if ((!ids.has(e.from) && !ids.has(e.to) && !(reach && reach.has(e))) || srMigEdgeHidden(e) || srFlowEdgeHidden(e)) continue;
       (e.crossProvider ? cross : plain).push(srCablePath(V, e).map((q) => [q[0], q[1] + 0.02, q[2]]));   // a hair over its faint twin
     }
   }
