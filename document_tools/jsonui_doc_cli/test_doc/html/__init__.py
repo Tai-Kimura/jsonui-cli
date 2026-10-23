@@ -17,6 +17,7 @@ from .index import generate_index_html
 from .document import generate_document_html
 from .swagger import (
     is_swagger_file,
+    openapi_files,
     parse_swagger_file,
     generate_swagger_html,
 )
@@ -40,6 +41,7 @@ __all__ = [
     "generate_index_html",
     "generate_document_html",
     "is_swagger_file",
+    "openapi_files",
     "parse_swagger_file",
     "generate_swagger_html",
     "has_api_paths",

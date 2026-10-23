@@ -128,12 +128,12 @@ _YAML_SWAGGER_KEY_RE = re.compile(r"^(?:openapi|swagger)\s*:", re.MULTILINE)
 def is_swagger_yaml_file(path: Path) -> bool:
     """Return True if a YAML *path* looks like an OpenAPI / Swagger doc.
 
-    v1 cannot parse YAML (Q8), but we still need to tell apart a YAML swagger
-    the user *intended* as a codegen input (→ the helpful "convert to JSON"
-    halt) from an unrelated YAML artifact that merely shares the api
-    directory (→ skip it, like a non-swagger ``*.json``). Decided by a cheap
-    text scan for a top-level ``openapi:`` / ``swagger:`` key — no YAML parser
-    dependency, mirroring :func:`is_swagger_file`'s top-level-key check.
+    Tells a YAML swagger meant as an input (read with PyYAML by
+    :func:`load_swagger`) from an unrelated YAML artifact that merely shares
+    the api directory (→ skip it, like a non-swagger ``*.json``). Decided by a
+    cheap text scan for a top-level ``openapi:`` / ``swagger:`` key — no YAML
+    parser needed for the check, mirroring :func:`is_swagger_file`'s
+    top-level-key check. `jui ls api-specs` lists by the same rule.
     """
     try:
         with open(path, "r", encoding="utf-8") as f:

@@ -25,6 +25,9 @@ authors = [
     {name = "Tai Kimura"}
 ]
 keywords = ["jsonui", "testing", "ui-testing", "validation"]
+# PyYAML: an OpenAPI document written in YAML (mock generate / serve, validate's mock gate, contracts), read by
+# shared/core/openapi_file.py. Imported only when such a document is read; without it the reader says so in one line.
+dependencies = ["PyYAML>=6.0"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",

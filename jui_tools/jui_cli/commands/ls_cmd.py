@@ -74,7 +74,7 @@ def cmd_ls(args: argparse.Namespace) -> int:
 def _cmd_ls_api_specs(args: argparse.Namespace) -> int:
     """Enumerate swagger files + metadata."""
     from ..core.config_manager import ConfigManager
-    from ..core.openapi_loader import is_swagger_file
+    from ..core.openapi_loader import is_swagger_file, is_swagger_yaml_file
 
     config_mgr = ConfigManager()
     if not config_mgr.exists():
@@ -90,10 +90,12 @@ def _cmd_ls_api_specs(args: argparse.Namespace) -> int:
     if not api_dir.exists():
         return _emit(args, payload)
 
-    for json_path in sorted(api_dir.rglob("*.json")):
-        if not is_swagger_file(json_path):
-            continue
-        entry = _swagger_metadata(json_path, config_mgr.project_root)
+    # JSON and YAML, found as `jui build` finds them (openapi_loader.load_swagger): before 2.3.21 a YAML document that
+    # `jui build` read was missing from this list (ticket 2026-10-23-jsonui-test-mock-generate-yaml-traceback)
+    found = [p for p in api_dir.rglob("*.json") if is_swagger_file(p)]
+    found += [p for p in (*api_dir.rglob("*.yaml"), *api_dir.rglob("*.yml")) if is_swagger_yaml_file(p)]
+    for doc_path in sorted(found):
+        entry = _swagger_metadata(doc_path, config_mgr.project_root)
         payload["files"].append(entry)
 
     return _emit(args, payload, _format_api_specs)
@@ -107,15 +109,22 @@ def _swagger_metadata(path: Path, project_root: Path) -> dict[str, Any]:
     flags the v1-halt patterns so consumers see *which* files would halt
     before running ``jui build``.
     """
+    from ..core.openapi_loader import OpenAPILoadError, _safe_load_yaml
+
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            raw = json.load(f)
-    except (OSError, json.JSONDecodeError) as e:
+        if path.suffix.lower() in (".yaml", ".yml"):
+            raw = _safe_load_yaml(path)   # its errors say pyyaml-missing / yaml-parse-error, as `jui build` does
+        else:
+            with open(path, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+    except (OSError, json.JSONDecodeError, OpenAPILoadError) as e:
         return {
             "path": _rel(path, project_root),
             "absolute_path": str(path),
             "error": f"{type(e).__name__}: {e}",
         }
+    if not isinstance(raw, dict):
+        return {"path": _rel(path, project_root), "absolute_path": str(path), "error": "not an OpenAPI document (its top level is not a mapping)"}
 
     info = raw.get("info") or {}
     title = info.get("title", "") if isinstance(info, dict) else ""

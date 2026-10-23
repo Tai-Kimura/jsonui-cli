@@ -53,6 +53,36 @@ class Operation:
     request_body: dict = field(default_factory=dict)
 
 
+class OpenApiLoadError(ValueError):
+    """An OpenAPI document that could not be read: str() is one line naming the file and why."""
+
+
+def read_document(path: Path) -> object:
+    """One document's data, JSON or YAML, by the rule every tool shares (shared/core/openapi_file.py; ticket
+    2026-10-23-jsonui-test-mock-generate-yaml-traceback: a YAML document ended `mock generate` in a JSONDecodeError
+    traceback). A tree synced without shared/ reads JSON only and says so for anything else."""
+    from .. import shared_core
+
+    of = shared_core.load("openapi_file")
+    if of is None:
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise OpenApiLoadError(f"{path}: not readable as JSON (this install has no shared/core to read YAML): {exc}") from None
+    try:
+        return of.read(path)
+    except of.OpenApiFileError as exc:
+        raise OpenApiLoadError(str(exc)) from None
+
+
+def api_documents(folder: Path) -> list[Path]:
+    """The documents a folder holds: .json, .yaml and .yml (shared/core/openapi_file.py), .json only without it."""
+    from .. import shared_core
+
+    of = shared_core.load("openapi_file")
+    return of.documents(folder) if of is not None else sorted(Path(folder).rglob("*.json"))
+
+
 class OpenApiDoc:
     """Loaded OpenAPI document with $ref resolution and sample synthesis."""
 
@@ -65,9 +95,11 @@ class OpenApiDoc:
 
     @classmethod
     def load(cls, path: str | Path) -> "OpenApiDoc":
+        """JSON or YAML (read_document); OpenApiLoadError with one line when it cannot be read."""
         p = Path(path)
-        with open(p, "r", encoding="utf-8") as f:
-            spec = json.load(f)
+        spec = read_document(p)
+        if not isinstance(spec, dict):
+            raise OpenApiLoadError(f"{p}: not an OpenAPI document (its top level is not a mapping)")
         return cls(spec, source_path=str(p))
 
     def is_api_spec(self) -> bool:

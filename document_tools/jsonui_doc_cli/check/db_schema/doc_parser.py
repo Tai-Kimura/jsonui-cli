@@ -9,7 +9,6 @@ which existing DB docs do not maintain consistently).
 
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -88,10 +87,12 @@ def _first_object_schema(schemas: dict) -> tuple[str, dict] | None:
 
 
 def parse_table_file(path: Path) -> DocTable | None:
-    """Parse one docs/db table JSON. Returns None for non-swagger files."""
+    """Parse one docs/db table document, JSON or YAML. Returns None for non-swagger files."""
+    from ...test_doc.html.swagger import OpenApiReadError, read_openapi
+
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        data = read_openapi(path)
+    except OpenApiReadError:
         return None
     if not isinstance(data, dict):
         return None
@@ -166,9 +167,9 @@ def parse_db_docs(db_dir: Path) -> dict[str, DocTable]:
     """Parse every table JSON directly inside db_dir (non-recursive:
     in the multi-DB layout each database directory is parsed separately)."""
     tables: dict[str, DocTable] = {}
-    for f in sorted(db_dir.glob("*.json")):
-        if f.name.startswith("."):
-            continue
+    from ...test_doc.html.swagger import openapi_files
+
+    for f in openapi_files(db_dir, recursive=False):   # JSON and YAML alike (2.3.21)
         table = parse_table_file(f)
         if table is not None:
             tables[table.name] = table

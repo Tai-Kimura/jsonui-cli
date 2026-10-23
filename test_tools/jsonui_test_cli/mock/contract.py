@@ -44,6 +44,8 @@ class ContractIndex:
 
     #: route_key -> (doc, operation)
     operations: dict = field(default_factory=dict)
+    #: one line per document that could not be read (serve says them instead of "no swagger configured")
+    unread: list = field(default_factory=list)
 
     @classmethod
     def load(cls, swagger_paths) -> "ContractIndex":
@@ -51,7 +53,8 @@ class ContractIndex:
         for swagger in swagger_paths or []:
             try:
                 doc = OpenApiDoc.load(swagger)
-            except (OSError, ValueError):
+            except (OSError, ValueError) as exc:
+                index.unread.append(str(exc))
                 continue
             if not doc.is_api_spec():
                 continue

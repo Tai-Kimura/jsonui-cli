@@ -176,7 +176,9 @@ def load_api_index(swaggers: list[Path], api_directory: Path | None) -> ApiIndex
             index.by_id[op.operation_id] = (path, op)
     if api_directory is not None and api_directory.is_dir():
         listed = {p.resolve() for p in swaggers}
-        for path in sorted(api_directory.rglob("*.json")):
+        from .mock.openapi import api_documents
+
+        for path in api_documents(api_directory):   # JSON and YAML alike (shared/core/openapi_file.py)
             if path.resolve() in listed:
                 continue
             try:

@@ -21,6 +21,7 @@ from .html import (
     generate_index_html,
     generate_document_html,
     is_swagger_file,
+    openapi_files,
     parse_swagger_file,
     generate_swagger_html,
     has_api_paths,
@@ -1510,7 +1511,7 @@ def generate_html_directory(
             category_name = docs_path.name
 
             used_html_paths: set[str] = set()
-            for json_file in sorted(docs_path.rglob("*.json")):
+            for json_file in openapi_files(docs_path):   # JSON and YAML alike (2.3.21)
                 if is_swagger_file(json_file):
                     swagger_data = parse_swagger_file(json_file)
                     if swagger_data:

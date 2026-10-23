@@ -102,14 +102,26 @@ def _read_capped(root: Path, rel: Path, cap: int):
         os.close(fd)
 
 
-def _swagger(raw: bytes | None) -> dict | None:
+#: the names a document can have (shared/core/openapi_file.py)
+DOC_EXTENSIONS = (".json", ".yaml", ".yml")
+
+
+def _swagger(raw: bytes | None, name: str = ".json") -> dict | None:
     """document_tools' is_swagger_file + parse_swagger_file over bytes already read (they open the path again): a
-    JSON object with "openapi" or "swagger". test_viz_data_docs keeps the two answers the same."""
+    JSON or YAML object (by the file's name, shared/core/openapi_file.py; 2.3.21) with "openapi" or "swagger".
+    test_viz_data_docs keeps the two answers the same."""
     if raw is None:
         return None
     try:
-        data = json.loads(raw.decode("utf-8"))
-    except (ValueError, UnicodeDecodeError):
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    from ..core import shared_core
+
+    of = shared_core.load("openapi_file")
+    try:
+        data = of.parse(text, name) if of is not None else json.loads(text)
+    except Exception:  # noqa: BLE001 — of.OpenApiFileError or a JSON error: not a document to show
         return None
     return data if isinstance(data, dict) and ("openapi" in data or "swagger" in data) else None
 
@@ -153,7 +165,7 @@ def _files(project) -> list[tuple[str, Path, Path, Path]]:
             d_rel = d.resolve().relative_to(real_root)
         except (OSError, ValueError):
             continue
-        for f in sorted(d.rglob("*.json")):
+        for f in sorted(p for p in d.rglob("*") if p.suffix.lower() in DOC_EXTENSIONS):   # JSON and YAML (2.3.21)
             if len(out) >= MAX_FILES:
                 return out
             if not f.is_file() or not _inside(f, d):
@@ -195,7 +207,7 @@ def counts(project, cache: dict | None = None) -> dict:
         raw = _read_capped(root, rel, min(MAX_FILE_BYTES, MAX_TOTAL_BYTES - total)) if total < MAX_TOTAL_BYTES else None
         raw = None if raw is TOO_BIG else raw
         total += len(raw) if raw else 0
-        data = _swagger(raw)
+        data = _swagger(raw, _f.name)
         if data is not None:
             n["api" if mods["schema"].has_api_paths(data) else "db"] += 1
     if cache is not None:
@@ -307,7 +319,7 @@ def read(project) -> dict:
         if raw is TOO_BIG:
             out["skipped"] += 1
             continue
-        data = _swagger(raw)
+        data = _swagger(raw, f.name)
         if data is None:
             continue
         total += len(raw)

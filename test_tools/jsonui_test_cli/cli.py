@@ -1143,8 +1143,14 @@ def _check_mocks_against_swagger(config_path):
     resolved, mock_path, config = inputs
     scope = _load_path_scope(config_path)
 
-    report = generate(resolved, mock_path, check=True, scope=scope,
-                      strict=bool(config.get("checkOptionalFields", False)))
+    from .mock.openapi import OpenApiLoadError
+
+    try:
+        report = generate(resolved, mock_path, check=True, scope=scope,
+                          strict=bool(config.get("checkOptionalFields", False)))
+    except OpenApiLoadError as exc:   # a document the gate cannot read is one error line, not a traceback
+        print(f"\nError: {exc}")
+        return 1, None, 1, {}
     if not isinstance(report, CheckReport):
         return 0, None, 0, {}
     orphans = len(report.orphaned)
@@ -2445,7 +2451,16 @@ def _resolve_swaggers(swaggers, root, config_path):
 def cmd_mock_generate(args):
     """Scaffold or diff mock definition files from OpenAPI specs."""
     from .mock.generate import generate, update_default, GenerateReport, CheckReport
+    from .mock.openapi import OpenApiLoadError
 
+    try:
+        return _mock_generate(args, generate, update_default, GenerateReport, CheckReport)
+    except OpenApiLoadError as exc:   # one line naming the document, not a traceback
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+
+def _mock_generate(args, generate, update_default, GenerateReport, CheckReport):
     config, _ = _load_mock_config(getattr(args, "config", None))
     swaggers = list(args.swagger) if args.swagger else list(config.get("swagger") or [])
     mock_dir = args.out or config.get("mockDir", "tests/mocks")
@@ -2721,8 +2736,10 @@ def cmd_mock_serve(args):
     contract_log = ContractLog()
     if config.get("validateRequests", True) and not getattr(args, "no_validate_requests", False):
         contract = ContractIndex.load(list(config.get("swagger") or []))
+        for line in contract.unread:
+            print(f"  request validation: {line}")
         if not contract:
-            print("  request validation: off (no swagger configured)")
+            print("  request validation: off (" + ("no swagger could be read" if contract.unread else "no swagger configured") + ")")
 
     store = MockStore.load(mock_dir)
     server = MockServer(store, RunManager(run_targets, project_root,
@@ -3481,7 +3498,7 @@ def main():
     mock_subparsers = mock_parser.add_subparsers(dest="mock_action", help="Mock action")
 
     mock_gen_parser = mock_subparsers.add_parser("generate", help="Scaffold mock files from swagger")
-    mock_gen_parser.add_argument("--swagger", action="append", help="Path to an OpenAPI file (repeatable)")
+    mock_gen_parser.add_argument("--swagger", action="append", help="Path to an OpenAPI file, JSON or YAML (repeatable)")
     mock_gen_parser.add_argument("--out", help="Output mock dir (default: mock.mockDir or tests/mocks)")
     mock_gen_parser.add_argument("--config", help="Config file (default: jui.config.json)")
     mock_gen_parser.add_argument("--check", action="store_true", help="Report drift vs swagger, do not write")

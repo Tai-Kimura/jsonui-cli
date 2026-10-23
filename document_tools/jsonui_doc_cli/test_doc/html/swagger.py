@@ -7,28 +7,68 @@ from pathlib import Path
 
 from .sidebar import escape_html
 
+#: the names a document can have (shared/core/openapi_file.py; ticket 2026-10-23-jsonui-test-mock-generate-yaml-traceback:
+#: before 2.3.21 every reader here took *.json only and passed a YAML document by without a word)
+DOC_EXTENSIONS = (".json", ".yaml", ".yml")
+
+
+class OpenApiReadError(ValueError):
+    """A document that could not be read: str() is one line naming the file and why."""
+
+
+def read_openapi(file_path: Path) -> object:
+    """One document's data, JSON or YAML (shared/core/openapi_file.py); OpenApiReadError with one line otherwise. A
+    tool tree without shared/ reads JSON only."""
+    from ... import shared_core
+
+    of = shared_core.load("openapi_file")
+    if of is None:
+        try:
+            return json.loads(Path(file_path).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise OpenApiReadError(f"{file_path}: not readable as JSON (this install has no shared/core to read YAML): {exc}") from None
+    try:
+        return of.read(file_path)
+    except of.OpenApiFileError as exc:
+        raise OpenApiReadError(str(exc)) from None
+
+
+def openapi_files(folder: Path, recursive: bool = True) -> list[Path]:
+    """The .json / .yaml / .yml files in folder (and below it when recursive), sorted, dot-files left out."""
+    d = Path(folder)
+    if not d.is_dir():
+        return []
+    found = d.rglob("*") if recursive else d.iterdir()
+    return sorted(p for p in found if p.is_file() and p.suffix.lower() in DOC_EXTENSIONS and not p.name.startswith("."))
+
+
+def _said(file_path: Path, exc: Exception) -> None:
+    """A YAML document that cannot be read for want of PyYAML is said once on stderr (it is not just skipped)."""
+    if "needs PyYAML" in str(exc):
+        from ... import run_log
+
+        run_log.warn(f"warning: {exc}")
+
 
 def is_swagger_file(file_path: Path) -> bool:
     """
-    Check if a file is a Swagger/OpenAPI document.
+    Check if a file is a Swagger/OpenAPI document (JSON or YAML).
 
     Args:
-        file_path: Path to the JSON file
+        file_path: Path to the .json / .yaml / .yml file
 
     Returns:
         True if the file is a Swagger/OpenAPI document
     """
-    if not file_path.exists() or file_path.suffix.lower() != '.json':
+    if not file_path.exists() or file_path.suffix.lower() not in DOC_EXTENSIONS:
         return False
-
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-
-        # Check for OpenAPI 3.x or Swagger 2.0
-        return 'openapi' in data or 'swagger' in data
-    except Exception:
+        data = read_openapi(file_path)
+    except OpenApiReadError as exc:
+        _said(file_path, exc)
         return False
+    # Check for OpenAPI 3.x or Swagger 2.0
+    return isinstance(data, dict) and ('openapi' in data or 'swagger' in data)
 
 
 def parse_swagger_file(file_path: Path) -> dict | None:
@@ -36,16 +76,16 @@ def parse_swagger_file(file_path: Path) -> dict | None:
     Parse a Swagger/OpenAPI file and extract relevant information.
 
     Args:
-        file_path: Path to the Swagger/OpenAPI JSON file
+        file_path: Path to the Swagger/OpenAPI file (JSON or YAML)
 
     Returns:
         Parsed swagger data dict or None if parsing fails
     """
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception:
+        data = read_openapi(file_path)
+    except OpenApiReadError:
         return None
+    return data if isinstance(data, dict) else None
 
 
 def _get_relative_root(doc_path: str) -> str:

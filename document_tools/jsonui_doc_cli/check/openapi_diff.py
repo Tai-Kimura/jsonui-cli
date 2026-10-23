@@ -53,13 +53,13 @@ def load_doc_side(api_dir: Path) -> tuple[NormSpec, list[Path]]:
     """Load and merge every swagger file under docs/api (recursive)."""
     merged = NormSpec()
     files: list[Path] = []
-    for f in sorted(api_dir.rglob("*.json")):
-        if f.name.startswith("."):
-            continue
+    from ..test_doc.html.swagger import OpenApiReadError, openapi_files, read_openapi
+
+    for f in openapi_files(api_dir):   # JSON and YAML alike (2.3.21)
         try:
-            data = json.loads(f.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise OpenApiDiffError(f"failed to read {f}: {exc}")
+            data = read_openapi(f)
+        except OpenApiReadError as exc:
+            raise OpenApiDiffError(f"failed to read {exc}")
         if not _is_swagger(data):
             continue
         files.append(f)
