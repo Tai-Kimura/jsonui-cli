@@ -14,6 +14,11 @@ The real `jui viz serve` in a throwaway HOME and the real forward.py; nine sessi
   - a robot's spirit's bubble goes with it; a game it plays ends for its partner too;
   - every board drawn over the 3D (the whiteboard, the task board, the bills, the data server, the server room) hides
     the list while it is open, the header's waiting chip staying; closed, the list is back;
+  - put in order (requester 10-23: 「ロボットの一覧に並べ替え機能追加できる？左右キーで移動するのもその順番に」): by state the
+    waiting first; Alt+↓ / Alt+↑ on a row and a drag move it, the order shown becoming the person's own; kept over a
+    reload; the card's → and › go in the list's order, the hidden robots skipped;
+  - the robot selected now (its card open) is the list's one highlighted row (aria-current), a subagent its main's row,
+    scrolled into the list's view when it was not; none selected, none highlighted;
   - the list lies on no control of the page (the floor buttons, the name box, a robot's card...) and keeps off the
     source's error line, inside the 3D, at 1920, 1440, 1280, 1024 and 390 px wide: seven sessions in other folders
     make eight rooms, two floors, so the floor buttons are up in the room's view as on a real machine (the gate,
@@ -204,6 +209,45 @@ async def run_room_roster(pw, out, failures, jt=None):
             s = res[f"board-{board}-closed"] = await until(page, "() => { const s = window.__dbg.roster(); return s.shown ? s : null; }", f"the list back after {board}", timeout=8000, why=RO)
             check(failures, s["shown"] and len(s["rows"]) == N, f"{board} closed: the list back: {s['shown']}")
 
+        # 2c. put in order (requester 10-23: 「ロボットの一覧に並べ替え機能追加できる？左右キーで移動するのもその順番に」)
+        ids = "(w) => { const s = window.__dbg.roster(); return JSON.stringify(s.rows.map((r) => r.id)) === JSON.stringify(w) ? s : null; }"
+        await page.select_option("#roster-sort", "state")
+        s = res["sortState"] = await until(page, f"() => {{ const s = window.__dbg.roster(); return s.rows.length === {N} && s.rows[0].id === '{rid[3]}' ? s : null; }}",
+                                           "by state: the waiting first", timeout=5000, why=RO)
+        shown = [r["id"] for r in s["rows"]]
+        check(failures, s["sort"] == "state" and shown[1:3] == [rid[1], rid[2]], f"by state: the waiting, then the busy: {shown}")
+        await page.wait_for_timeout(300)
+        await page.screenshot(path=str(out / "1920-sort-state.png"))
+        key_of = {r["id"]: r["key"] for r in s["rows"]}
+        await page.focus(f"#roster-list [data-roster-check='{key_of[shown[0]]}']")
+        await page.keyboard.press("Alt+ArrowDown")
+        want = [shown[1], shown[0]] + shown[2:]
+        s = res["altDown"] = await until(page, ids, "Alt+↓: one down", arg=want, timeout=5000, why=RO)
+        check(failures, s["sort"] == "own" and json.loads(s["order"] or "[]")[:N] == [key_of[i] for i in want] and s["focusKey"] == key_of[shown[0]],
+              f"Alt+↓ makes the order shown the person's own, the focus kept on the row: {s['sort']} {s['order']} {s['focusKey']}")
+        await page.keyboard.press("Alt+ArrowUp")
+        res["altUp"] = await until(page, ids, "Alt+↑: back up", arg=shown, timeout=5000, why=RO)
+        src, dst = f"#roster-list .roster-row[data-roster-key='{key_of[shown[-1]]}']", f"#roster-list .roster-row[data-roster-key='{key_of[shown[0]]}']"
+        a, b = await page.locator(src).bounding_box(), await page.locator(dst).bounding_box()
+        await page.mouse.move(a["x"] + 40, a["y"] + a["height"] / 2)
+        await page.mouse.down()
+        await page.mouse.move(b["x"] + 40, b["y"] + 4, steps=8)
+        # headless Chromium sends this page no dragover until the button is let go (a bare page gets them): the line is
+        # drawn from one dispatched where the pointer is, the drop below being the real one
+        mark = await page.evaluate("""([sel, x, y]) => { const row = document.querySelector(sel);
+            row.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, clientX: x, clientY: y, dataTransfer: new DataTransfer() }));
+            return document.querySelectorAll('#roster-list .roster-drop-before').length === 1 && row.classList.contains('roster-drop-before')
+                && getComputedStyle(row, '::after').content !== 'none' && getComputedStyle(row, '::after').height === '3px' ? 1 : 0; }""",
+            [dst, b["x"] + 40, b["y"] + 4])
+        await page.wait_for_timeout(200)
+        await page.screenshot(path=str(out / "1920-dragging.png"))
+        await page.mouse.up()
+        dragged = [shown[-1]] + shown[:-1]
+        s = res["dragged"] = await until(page, ids, "dragged to the top", arg=dragged, timeout=5000, why=RO)
+        check(failures, mark == 1 and s["sort"] == "own", f"while dragged a line where it goes, dropped the order the person's own: {mark} {s['sort']}")
+        await page.wait_for_timeout(300)
+        await page.screenshot(path=str(out / "1920-sort-own-dragged.png"))
+
         # 3. kept: a reload, the room again, the same three hidden
         await page.reload()
         await ready(page)
@@ -213,6 +257,25 @@ async def run_room_roster(pw, out, failures, jt=None):
         s = res["reload"] = await until(page, "() => { const s = window.__dbg.roster(); return s.rows.length && s.bots.filter((b) => !b.root).length === 3 ? s : null; }",
                                         "the same three hidden after a reload", timeout=15000, why=RO)
         check(failures, {b["id"] for b in s["bots"] if not b["root"]} == hidden and {r["id"] for r in s["rows"] if not r["on"]} == hidden, f"a reload keeps them hidden: {s['rows']}")
+        check(failures, [r["id"] for r in s["rows"]] == dragged and s["sort"] == "own", f"a reload keeps the order: {[r['id'] for r in s['rows']]} {s['sort']}")
+        # the card's → and › go in the list's order, the hidden skipped
+        cycle = [r["id"] for r in s["rows"] if r["on"]]
+        await page.click(f"#roster-list [data-roster-open='{cycle[0]}']")
+        cur = "(id) => { const s = window.__dbg.roster(); const c = s.rows.filter((r) => r.current); return s.card && c.length === 1 && c[0].id === id ? c[0] : null; }"
+        await until(page, cur, "the first row's card", arg=cycle[0], timeout=8000, why=RO)
+        walked = []
+        for i, nxt in enumerate(cycle[1:] + cycle[:1]):
+            if i == 1:
+                await page.click("#rb [data-rb-step='1']")
+            else:
+                await page.keyboard.press("ArrowRight")
+            walked.append((await until(page, cur, f"→ to {nxt}", arg=nxt, timeout=8000, why=RO))["id"])
+        await page.keyboard.press("ArrowLeft")
+        walked.append((await until(page, cur, "← back", arg=cycle[-1], timeout=8000, why=RO))["id"])
+        res["walked"] = walked
+        check(failures, not hidden & set(walked), f"→ and › skip the hidden: {walked} {sorted(hidden)}")
+        await page.keyboard.press("Escape")
+        await until(page, "() => !window.__dbg.roster().card", "the card closed", timeout=8000, why=RO)
 
         # 4. checked again: back
         await page.click(f"#roster-list [data-roster-check='{SID[0]}']")
@@ -328,8 +391,28 @@ async def run_room_roster(pw, out, failures, jt=None):
         await page.click(f"#roster-list [data-roster-open='{rid[1]}']")
         await until(page, "() => window.__dbg.roster().card", "a robot's card", timeout=8000, why=RO)
         await placed(page, "1920-card", card=True)
+        # the robot selected now is the list's highlighted row (requester 10-23: 「今選択されてるロボットがチェックの方でも
+        # ハイライトされるようにしてほしい」): selected from the list, moved to another, a subagent, none
+        cur = "(id) => { const s = window.__dbg.roster(); const c = s.rows.filter((r) => r.current); return c.length === 1 && c[0].id === id ? c[0] : null; }"
+        res["currentPicked"] = await until(page, cur, "the picked robot's row highlighted", arg=rid[1], timeout=5000, why=RO)
         await page.screenshot(path=str(out / "1920-card.png"))
+        await page.set_viewport_size({"width": 1920, "height": 520})        # a short list: the last row is scrolled away
+        await page.evaluate("() => { document.getElementById('roster-list').scrollTop = 0; }")
+        last = await page.evaluate("() => { const r = window.__dbg.roster().rows.filter((x) => x.on); return r[r.length - 1].id; }")
+        await page.evaluate("(id) => window.__dbg.openRobot(id)", last)
+        moved = res["currentMoved"] = await until(page, cur, "another robot's row highlighted", arg=last, timeout=8000, why=RO)
+        check(failures, moved["inView"], f"the highlighted row is scrolled into the list's view: {moved}")
+        await page.screenshot(path=str(out / "520-current-scrolled.png"))
+        await page.set_viewport_size({"width": 1920, "height": 1080})
+        sub = await page.evaluate("() => (window.__dbg.robots.find((R) => R.def.kind === 'sub' && R.def.room === window.__dbg.roster().solo) || {def: {}}).def")
+        if sub.get("id"):
+            await page.evaluate("(id) => window.__dbg.openRobot(id)", sub["id"])
+            res["currentSub"] = await until(page, cur, "a subagent: its main's row highlighted", arg=sub["mainLabel"], timeout=8000, why=RO)
+        else:
+            check(failures, False, "a subagent in the room to select (the arm above would prove nothing without one)")
         await page.keyboard.press("Escape")
+        res["currentNone"] = await until(page, "() => { const s = window.__dbg.roster(); return s.shown && !s.card && s.rows.every((r) => !r.current) ? s : null; }",
+                                         "no row highlighted once none is selected", timeout=8000, why=RO)
         for w, h in ((1440, 900), (1280, 800), (1024, 768)):
             await page.set_viewport_size({"width": w, "height": h})
             # the floor buttons come back once the card's camera has returned: measured with them up

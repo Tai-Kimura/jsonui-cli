@@ -1253,7 +1253,16 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 .roster-folded .roster-fold::before { content: "▸"; }
 .roster-folded .roster-body { display: none; }
 .roster-alert-line { margin: 0; padding: 6px 12px; background: var(--warn-bg); color: var(--ink); font-weight: 700; }
-.roster-body { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
+.roster-body { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-height: 0; }
+.roster-sort { display: flex; align-items: center; gap: 6px; padding: 0 8px 6px; color: var(--ink-soft); font-size: 12px; }
+.roster-sort select { min-width: 0; flex: 1; font: inherit; color: var(--ink); }
+/* a row dragged (53-roster.js): faded, and a line where it would go — its own element, so a waiting or selected row's
+   inset mark does not hide it */
+.roster-dragging { opacity: 0.45; }
+.roster-drop-before, .roster-drop-after { position: relative; }
+.roster-drop-before::after, .roster-drop-after::after { content: ""; position: absolute; left: 4px; right: 4px; height: 3px; border-radius: 2px; background: var(--info); pointer-events: none; }
+.roster-drop-before::after { top: -1px; }
+.roster-drop-after::after { bottom: -1px; }
 .roster-bulk { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 8px; }
 .roster-bulk .fn-btn { padding: 2px 8px; font-size: 12px; }
 .roster-list { margin: 0; padding: 0 0 6px; overflow-y: auto; list-style: none; }
@@ -1261,6 +1270,8 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 .roster-row .roster-wait { grid-column: 2 / 4; justify-self: start; padding: 0 6px; border-radius: 6px; background: var(--warn-bg); color: var(--warn); font-size: 11px; font-weight: 700; }
 .roster-off .roster-name { opacity: 0.55; }
 .roster-alert { background: var(--warn-bg); box-shadow: inset 3px 0 0 var(--warn); }
+/* the robot selected now (its card, its ring): the project list's selected look, over a waiting row's too */
+.roster-row[aria-current="true"] { background: var(--info-bg); box-shadow: inset 3px 0 0 var(--info); }
 .roster-alert .roster-name { opacity: 1; }
 .roster-check { width: 16px; height: 16px; margin: 0; }
 .roster-name { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 2px 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }

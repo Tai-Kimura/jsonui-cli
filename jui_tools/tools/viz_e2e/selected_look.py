@@ -67,6 +67,9 @@ MEMBERS = [
     ("play", "デモ: 一時停止", ".controls #btn-play", "aria-pressed", None, None),
     ("pop-option", "プロジェクトの一覧", None, "aria-selected", "body",
      '<div class="pop" style="visibility:hidden"><ul class="pop-list"><li role="option">x</li></ul></div>'),
+    ("roster-row", "この部屋のロボット: 今選んでいるロボット", None, "aria-current", "#roster",
+     '<ul class="roster-list"><li class="roster-row"><input type="checkbox" class="roster-check" checked>'
+     '<button type="button" class="roster-name"><span class="roster-nm">x</span></button><span class="roster-lamp"></span></li></ul>'),
     ("ws-item", "spec ボード: 一覧の今の spec", None, "aria-current", "#wb-side",
      '<button type="button" class="ws-item"><span class="dot"></span><span class="nm">x</span><span></span></button>'),
     ("ws-apps", "spec ボード: アプリの絞り込み", None, "aria-pressed", "#wb-side",
@@ -102,6 +105,7 @@ SOURCES = {
     "play": ["btn-play"],
     "pop-option": ['<li role="option"'],
     "ws-item": ['class="ws-item'],
+    "roster-row": ["r.key === current"],
     "ws-apps": ["seg-filter ws-apps"],
     "ds-tab": ['class="ds-tab"'],
     "flow-zoom": ["data-flow-zoom", "String(wb.flowFit)"],
@@ -109,14 +113,16 @@ SOURCES = {
 # lines that read a state and set none
 READS = ["popEl.querySelector('[role=\"option\"][aria-selected=\"true\"]')",
          # the side list finds the open spec's row to bring it into view (wbSideShowOpen): its look is .ws-item's
-         "wbSideList.querySelector('.ws-item[aria-current=\"true\"]')"]
+         "wbSideList.querySelector('.ws-item[aria-current=\"true\"]')",
+         # the room's list finds the selected robot's row to bring it into view (rosterShowCurrent): its look is the row's
+         "list.querySelector('.roster-row[aria-current=\"true\"]')"]
 
 READ = """([sel, attr, home, made]) => {
   let el = sel ? document.querySelector(sel) : null, wrap = null;
   if (!el && made) {
     wrap = document.createElement('div'); wrap.dataset.e2eMade = ''; wrap.innerHTML = made;
     (document.querySelector(home) || document.body).appendChild(wrap);
-    el = wrap.querySelector('[data-flow-zoom], .sr-prov, [role=option], .ws-item, .ds-tab, button');
+    el = wrap.querySelector('[data-flow-zoom], .sr-prov, [role=option], .ws-item, .ds-tab, .roster-row, button');
   }
   if (!el) return null;
   const parse = (s) => { const m = s.match(/rgba?\\(([^)]+)\\)/); if (!m) return [0, 0, 0, 0]; const v = m[1].split(/[ ,\\/]+/).filter(Boolean).map(Number); return [v[0], v[1], v[2], v.length > 3 ? v[3] : 1]; };

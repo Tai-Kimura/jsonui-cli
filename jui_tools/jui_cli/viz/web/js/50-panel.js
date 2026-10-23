@@ -302,6 +302,14 @@ function focusProject(id, instant) {
    覚えといて、それがいたらそれを選択、いなかったら未選択で部屋表示」): project id -> robot, or null when its card was closed
    by hand. Kept in the page only (a label may name another robot after the server restarts). */
 const LAST_ROBOT = new Map();
+/* The robot now on the card, its project's last picked: every way the card goes to a robot (openRobot: a press, the
+   lists, a notification, a talk, a switch back; goRobot: ← →, ‹ ›, a name in the history). Requester 10-23: 「クリックで
+   3D開く左右キーで移動、別プロジェクト行って帰ってくるの時に最後に選択してたやつを表示して欲しい」 (ticket
+   2026-10-23-viz-last-robot-per-project-only-on-click: ← → had kept the one clicked). */
+function rbRemember(id) {
+  const p = projectOfRobot(id);
+  if (p) LAST_ROBOT.set(p, id);
+}
 /* The robot to pick on switching to a project with a robot picked: the one last picked there if it is still in the
    room (not gone, not walking out), else none. すべて: none. */
 function robotToPick(id) {
@@ -1612,7 +1620,7 @@ const focusing = () => has3D && !!rbState.id && zoom.zoomed && !camTween;
   }, { passive: false });
 }
 function openRobot(id, opener) {
-  if (projectOfRobot(id)) LAST_ROBOT.set(projectOfRobot(id), id);   // whichever way it was opened (list, tag, card, notification)
+  rbRemember(id);
   rbState.seen = { id, room: projectOfRobot(id) || null, name: (PROJECT[projectOfRobot(id)] || {}).name || '' }; rbState.moved = null;
   NOTIFY.opened.set(id, Date.now());   // the session looked at since its turn's end: no 入力待ち reminder (notifyIdle)
   holdView('rb');
@@ -1743,6 +1751,9 @@ function closeRobot({ byHand = false } = {}) {
    flies with the existing zoomTo (the camera itself is 40-scene.js's). */
 function robotCycle() {
   const live = SOURCE.mode === 'live';
+  // a room's own view: its robot list's order, the robots it hides skipped (53-roster.js)
+  const solo = liveSolo();
+  if (solo) return rosterCycle(solo).filter((id) => !LIVE.leaving[id]);
   const rooms = roomsInView();
   return ROBOT_DEFS.filter((d) => rooms.includes(projectOfRobot(d.id)) && !(live && LIVE.leaving[d.id]))
     .sort((a, b) => rooms.indexOf(projectOfRobot(a.id)) - rooms.indexOf(projectOfRobot(b.id)) || a.id.localeCompare(b.id, 'ja', { numeric: true }))
@@ -1750,14 +1761,15 @@ function robotCycle() {
 }
 function stepRobot(dir) {
   const list = robotCycle();
-  if (!rbState.id || list.length < 2) return;
-  const i = list.indexOf(rbState.id);
-  goRobot(list[i < 0 ? 0 : (i + dir + list.length) % list.length]);
+  if (!rbState.id || !list.length) return;
+  const i = list.indexOf(rbState.id);   // -1: its card open on a robot the list hides now, ‹ › go to the last or first
+  goRobot(list[i < 0 ? (dir > 0 ? 0 : list.length - 1) : (i + dir + list.length) % list.length]);
 }
 /* The card on another robot, as ← → do it (the camera flies, the tab stays): also a linked name in the history. */
 function goRobot(next) {
   if (!rbState.id || !next || next === rbState.id) return;
   rbState.id = next;
+  rbRemember(next);
   renderRobot(latestModel);
   zoomToRobot(next);
 }

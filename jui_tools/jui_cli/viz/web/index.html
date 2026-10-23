@@ -73,6 +73,14 @@
             <button type="button" class="fn-btn" data-roster-bulk="busy" title="{{tl:page.roster.busy.title}}待っているものも含めて、手が空いていないロボットだけ{{/tl}}">{{tl:page.roster.busy}}作業中だけ{{/tl}}</button>
             <button type="button" class="fn-btn" data-roster-bulk="none">{{tl:page.roster.none}}なし{{/tl}}</button>
           </div>
+          <label class="roster-sort" title="{{tl:page.roster.sort.title}}行をドラッグするか、行で Alt+↑↓ を押すと、自分で並べた順になります{{/tl}}">{{tl:page.roster.sort}}並べ方{{/tl}}
+            <select id="roster-sort">
+              <option value="own">{{tl:page.roster.sort.own}}自分で並べた順{{/tl}}</option>
+              <option value="name">{{tl:page.roster.sort.name}}名前順{{/tl}}</option>
+              <option value="state">{{tl:page.roster.sort.state}}状態順（待っているものが上）{{/tl}}</option>
+              <option value="recent">{{tl:page.roster.sort.recent}}最近動いた順{{/tl}}</option>
+            </select>
+          </label>
           <ul class="roster-list" id="roster-list"></ul>
         </div>
       </section>

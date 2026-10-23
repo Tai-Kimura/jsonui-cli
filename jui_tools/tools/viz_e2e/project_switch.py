@@ -5,7 +5,7 @@ The requester: 「ロボット選択状態でプロジェクト切り替えた�
 ロボット覚えといて、それがいたらそれを選択、いなかったら未選択で部屋表示」.
 
 The real `jui viz serve` in a throwaway HOME on a free port and the real forward.py: three sessions in two projects
-(A: a1; B: b1, b2). Robots are opened from the panel's session list and projects switched from the header's
+(A: a1; B: b1, b2, b3). Robots are opened from the panel's session list and projects switched from the header's
 project picker, as a person does. Checked, in order:
   * A with a1 picked → B (nothing picked there before): nothing picked, B shown
   * b2 picked → A: a1 → B: b2
@@ -13,6 +13,8 @@ project picker, as a person does. Checked, in order:
   * a1 closed by hand (← 3D に戻る) → B with nothing picked: nothing opens (only a picked robot carries over)
   * b2 picked → A: nothing picked (closed by hand is remembered)
   * a1 picked again → B (b2) → a1's session ends and its robot walks out → A: nothing picked
+  * b1 clicked, → twice → A (a1) → B: the robot → went to last, not b1; ‹ once → A → B: that one (requester 10-23:
+    「クリックで3D開く左右キーで移動、別プロジェクト行って帰ってくるの時に最後に選択してたやつを表示して欲しい」)
   * with a robot picked, another opened from the list → すべて: nothing picked
   * a robot of another project picked from outside the view (selectRobot: a talk's ロボットへ移る, a notification), with a
     card open and with none (the camera turned by hand first): its project shown, its card open, the camera on it, and
@@ -34,8 +36,8 @@ import time
 from common import DESKTOP, ISOLATE, LAUNCH_ARGS, Watch, dump, new_page, ready
 
 SIDS = {"a1": "e2e00000-0000-4000-8000-0000000000a1", "b1": "e2e00000-0000-4000-8000-0000000000b1",
-        "b2": "e2e00000-0000-4000-8000-0000000000b2"}
-CWDS = {"a1": "/work/switch-a", "b1": "/work/switch-b", "b2": "/work/switch-b"}
+        "b2": "e2e00000-0000-4000-8000-0000000000b2", "b3": "e2e00000-0000-4000-8000-0000000000b3"}
+CWDS = {"a1": "/work/switch-a", "b1": "/work/switch-b", "b2": "/work/switch-b", "b3": "/work/switch-b"}
 CARD_ON = "(l) => window.__dbg.board().robot === l && !document.getElementById('rb').hidden"
 CARD_OFF = "() => !window.__dbg.board().robot && document.getElementById('rb').hidden"
 STATE = "() => ({ robot: window.__dbg.board().robot, project: window.__dbg.project(), card: !document.getElementById('rb').hidden })"
@@ -89,13 +91,13 @@ async def run_project_switch(pw, out, failures):
         page = await new_page(browser, watch, "project-switch", **DESKTOP)
         await page.goto(url + "/")
         await ready(page)
-        await wait(page, "() => document.querySelectorAll('#sessions [data-robot-open]').length >= 3", label="three sessions")
+        await wait(page, "() => document.querySelectorAll('#sessions [data-robot-open]').length >= 4", label="four sessions")
         # the labels and the projects, as the page has them
         who = await page.evaluate("(sids) => Object.fromEntries(Object.entries(sids).map(([k, sid]) => [k, window.__dbg.labelOfSession(sid)]))", SIDS)
         proj = await page.evaluate("(ls) => Object.fromEntries(Object.entries(ls).map(([k, l]) => [k, window.__dbg.robotProject(l)]))", who)
         res["who"], res["proj"] = who, proj
         A, B = proj["a1"], proj["b1"]
-        check(A and B and A != B and proj["b2"] == B, f"two projects: a1 in one, b1 and b2 in the other: {proj}")
+        check(A and B and A != B and proj["b2"] == B and proj["b3"] == B, f"two projects: a1 in one, b1, b2 and b3 in the other: {proj}")
 
         async def pick_project(pid):
             await page.click("[data-scope-btn]")
@@ -151,6 +153,32 @@ async def run_project_switch(pw, out, failures):
         await open_robot("a1")
         await pick_project(B)
         await state("a1 picked → B: b2", "b2", B)
+        # the card moved with → and ‹: the robot remembered is the last one on it, not the one clicked
+        ON = "() => window.__dbg.board().robot"
+        async def moved(how, frm):
+            if how == "‹":
+                await page.click("#rb [data-rb-step='-1']")
+            else:
+                await page.keyboard.press("ArrowRight")
+            await wait(page, "(l) => { const r = window.__dbg.board().robot; return !!r && r !== l; }", arg=frm, label=f"{how} from {frm}")
+            await page.wait_for_timeout(300)
+            return await page.evaluate(ON)
+        async def back_again(step, label):
+            await pick_project(A)
+            await wait(page, CARD_ON, arg=who["a1"], label=f"{step}: a1 on A")
+            await pick_project(B)
+            got = await page.evaluate(STATE)
+            res["steps"].append({"step": step, **got})
+            check(got == {"robot": label, "project": B, "card": True}, f"{step}: {label} expected, got {got}")
+        await open_robot("b1")
+        last = await moved("→", who["b1"])
+        last = await moved("→", last)
+        check(last != who["b1"], f"→ twice from b1 ends on another robot: {last}")
+        await back_again("b1 clicked, → twice → A → B: the last one", last)
+        await page.screenshot(path=str(out / "back-to-last-moved.png"))
+        prev = await moved("‹", last)
+        await back_again("‹ once → A → B: that one", prev)
+        await open_robot("b2")
         # a robot of another project picked from outside the view (a talk's ロボットへ移る, a notification): selectRobot
         await page.evaluate("(l) => window.__dbg.selectRobot(l)", who["a1"])
         await wait(page, CARD_ON, arg=who["a1"], label="a1's card (selectRobot, a card open)")
