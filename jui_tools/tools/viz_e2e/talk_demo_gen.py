@@ -28,11 +28,11 @@ WORDS = {
            "テスト: `jsonui-test run tests/screens/signup` で 14 件すべて通りました。\n"
            "iOS と Android のスクリーンショットは docs/screens/signup/ に置いてあります。\n"
            "<script>alert(1)</script> のような文字列も、そのまま文字として出ること（escape の見本）。\n"
-           "残り: 住所の自動入力は次の列車で。"),
+           "残り: 住所の自動入力は次のリリースで。"),
   1: ("会員登録の画面、進み具合はどう？", "会員登録の進み具合"),
   2: ("いま入力の検証を書いています。30 分ほどで出せます。", None),
   3: (None, "会員登録の画面を仕上げた"),
-  4: ("ありがとう。住所の自動入力は次の列車で大丈夫です。", None),
+  4: ("ありがとう。住所の自動入力は次のリリースで大丈夫です。", None),
   5: ("signup.spec.json の項目を 3 つ足して、検証を通してください。", None),
   6: ("足しました。doc_validate_spec は緑です。", None),
   7: ("レビューをお願いします（クラウドの相手へ）", None),
@@ -50,11 +50,11 @@ WORDS = {
            "Tests: all 14 pass with `jsonui-test run tests/screens/signup`.\n"
            "The iOS and Android screenshots are in docs/screens/signup/.\n"
            "A string like <script>alert(1)</script> shows as plain text (the escaping example).\n"
-           "Left: address autofill goes on the next train."),
+           "Left: address autofill goes in the next release."),
   1: ("How is the sign-up screen going?", "Sign-up progress"),
   2: ("Writing the input checks now. About 30 minutes to go.", None),
   3: (None, "The sign-up screen is done"),
-  4: ("Thanks. Address autofill on the next train is fine.", None),
+  4: ("Thanks. Address autofill in the next release is fine.", None),
   5: ("Add three fields to signup.spec.json and get it through validation, please.", None),
   6: ("Added. doc_validate_spec is green.", None),
   7: ("Please review this (to the cloud peer)", None),

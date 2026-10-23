@@ -115,12 +115,36 @@ def test_the_robots_are_the_demos_own(lang):
 
 #: What a peer's name or a message may not hold: the demo is public sample data (the docsite's screenshots, every
 #: `jui viz export-demo` page), and until 2.3.22 a peer carried a working session's name — its local folder, its role
-#: and its train (ticket 2026-10-24-viz-demo-talk-data-carries-a-real-session-name).
-#: The product's own names (jsonui-define, jsonui-test) are the demo's words; a checkout folder of the agents repo, a
-#: role, a home path or a version (a train) are not.
-NOT_IN_THE_DEMO = re.compile(r"jsonui-agents|orchestrator|/Users/|~/|\b\d+\.\d+\.\d+\b", re.I)
+#: and its train — and a message a real train (ticket 2026-10-24-viz-demo-talk-data-carries-a-real-session-name).
+#: A role or a lane in either language, a train, a version (2.3.7, v2.3, 2.3), a home path. The product's own names
+#: (jsonui-define, jsonui-test) are the demo's words; the agents repo's folder is not.
+NOT_IN_THE_DEMO = re.compile(
+    r"jsonui-agents|orchestrator|オーケストレーター|サポート|triage|トリアージ|担当|\btrains?\b|列車"
+    r"|/Users/|~/|\bv?\d+\.\d+(?:\.\d+)?\b", re.I)
+#: Every folder-like word (two or more parts joined by - or _) a name or a message holds: a closed list, so a project
+#: folder written into the demo is red whatever it is called.
+FOLDER_LIKE = re.compile(r"[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)+")
+DEMO_WORDS = {"sign-up", "Sign-up", "cloud-reviewer", "doc_validate_spec", "jsonui-define", "jsonui-test"}
 #: The demo's peers: the shop app's sessions, the cloud reviewer, and the subagent (named in the run's language).
 DEMO_PEER = re.compile(r"shop-app-[a-z-]+|cloud-reviewer")
+
+
+def leaks(text: str) -> list:
+    """What in one name or message is not the demo's own: a stopped word, or a folder-like word off the list."""
+    return [m.group(0) for m in NOT_IN_THE_DEMO.finditer(text)] + [
+        w for w in FOLDER_LIKE.findall(text) if w not in DEMO_WORDS and not w.startswith("shop-app-")]
+
+
+def test_the_stop_list_sees_what_it_is_about():
+    """Positive control, in the shape of the mutations that were green against the first version of this arm."""
+    lane = "サポー" + "ト7"   # written split, so this file holds no session's name itself
+    for text in ("オーケストレーターが範囲を決めました。", f"{lane} さん、決済の画面のテストは止まっていますか？",
+                 "Is acme-store-api's payment test stuck?", "The v2.3 train's scope is set.", "2.3 の範囲を決めました。",
+                 "The 2.3.7 scope is set.", "the orchestrator's call", "triage took it", "~/work/x", "/Users/x"):
+        assert leaks(text), text
+    for text in ("Added. doc_validate_spec is green.", "The sign-up screen is done", "subagent a3 (jsonui-define)",
+                 "8 characters or more", "shop-app-payment"):
+        assert not leaks(text), (text, leaks(text))
 
 
 def names_and_texts(d):
@@ -142,8 +166,8 @@ def test_no_name_or_message_is_a_real_folder_session_or_train(lang):
     d = data(lang)
     found = list(names_and_texts(d))
     assert any(k == "name" for k, _ in found) and any(k == "text" for k, _ in found), "the walk saw no names or texts"
-    leaked = sorted({(k, v) for k, v in found if NOT_IN_THE_DEMO.search(v)})
-    assert not leaked, f"a real folder, session or train in the demo: {leaked}"
+    leaked = sorted({(k, v[:80], tuple(leaks(v))) for k, v in found if leaks(v)})
+    assert not leaked, f"a real folder, session, role or train in the demo: {leaked}"
     subagents = {c["peer"]["name"] for l in d["lists"].values() for c in l["items"] if c["peer"]["kind"] == "subagent"}
     foreign = sorted({v for k, v in found if k in ("name", "fromName", "toName")
                       and not DEMO_PEER.fullmatch(v) and v not in subagents})
