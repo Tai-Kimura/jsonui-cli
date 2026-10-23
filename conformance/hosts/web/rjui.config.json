@@ -13,5 +13,10 @@
   "use_tailwind": true,
   "typescript": true,
   "generate_viewmodels": false,
-  "generate_hooks": false
+  "generate_hooks": false,
+  "web_framework": {
+    "name": "conformance-vite",
+    "use_client_directive": "\"use client\";",
+    "link_import_line": "import Link from '@/conformanceLink';"
+  }
 }
