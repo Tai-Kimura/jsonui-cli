@@ -260,17 +260,17 @@ module KjuiTools
             code += Helpers::FontSpecHelper.emit_resolve_block(tf_resolved_var, tf_font_args, depth, required_imports) + "\n"
           end
 
-          # Focus chain (fieldId / nextFocusId).
+          # Focus chain (id / nextFocus).
           #
           # Compose's standard `FocusRequester` is per-component. To support
-          # spec-driven `nextFocusId` lookups we emit `val focusRequester_<id>
-          # = remember { FocusRequester() }` for every field that declares
-          # `fieldId`, then reference `focusRequester_<nextFocusId>` from the
-          # source field's KeyboardActions.
+          # spec-driven `nextFocus` lookups we emit `val focusRequester_<id>
+          # = remember { FocusRequester() }` for every field with an `id`,
+          # then reference `focusRequester_<nextFocus>` from the source
+          # field's KeyboardActions.
           #
           # Contract:
-          #   - Target field MUST set `fieldId: "<id>"` to be referenceable
-          #   - Source field references it via `nextFocusId: "<id>"`
+          #   - Target field MUST set `id: "<id>"` to be referenceable
+          #   - Source field references it via `nextFocus: "<id>"`
           #   - Both fields MUST share the same composable scope (siblings
           #     under the same parent layout); cross-screen focus chain is
           #     out of scope (matches the previous broken intent).
@@ -278,10 +278,9 @@ module KjuiTools
           # Regression: kjui-keyboardactions-import-missing — the original
           # emit referenced a non-existent `FocusManager.requestFocus(...)`
           # helper. Refactored to use Compose stdlib `FocusRequester` only.
-          # `fieldId` is an undeclared legacy override for the requester name;
-          # `id` is the declared attribute and is what a nextFocus target is
-          # named by, so it is the fallback right below.
-          focus_field_id = json_data['fieldId']
+          # (`fieldId` / `nextFocusId`, the undeclared spellings this was
+          # written against, are retired in 2.3.22: retired_attribute_spellings.json
+          # names `id` and `nextFocus`.)
 
           # ViewModel-driven focus binding — sjui parity
           # (kjui-textfield-isfocused-focus-binding-not-generated): every
@@ -290,14 +289,24 @@ module KjuiTools
           # field and opens the keyboard (the invisible code-entry pattern —
           # e.g. a 2FA hidden input — has no tappable surface and relies on
           # this). The Data property is auto-added by DataModelUpdater.
-          # The requester is shared with the fieldId/nextFocusId focus chain:
-          # `fieldId` keeps naming priority so nextFocusId lookups still work.
-          focus_requester_name = focus_field_id || json_data['id']
+          # The requester is shared with the id/nextFocus focus chain.
+          #
+          # `autoFocus` (2.3.22, ticket rjui-textfield-autofocus-read-but-not-defined):
+          # the field takes the focus when the screen appears — the requester
+          # asked once the field is composed. A field with no id is named by
+          # its position (view_id), so it needs none.
+          auto_focus = json_data['autoFocus'] == true
+          focus_requester_name = json_data['id'] ||
+                                 (auto_focus ? Helpers::ModifierBuilder.view_id(json_data).to_s.gsub(/[^A-Za-z0-9_]/, '_') : nil)
           focus_prop = json_data['id'] ? "#{snake_to_camel(json_data['id'])}IsFocused" : nil
           if focus_requester_name
             required_imports&.add(:focus_requester)
             required_imports&.add(:remember)
             code += indent("val focusRequester_#{focus_requester_name} = remember { FocusRequester() }", depth) + "\n"
+          end
+          if auto_focus
+            required_imports&.add(:launched_effect)
+            code += indent("LaunchedEffect(Unit) { focusRequester_#{focus_requester_name}.requestFocus() }", depth) + "\n"
           end
           if focus_prop
             required_imports&.add(:launched_effect)
@@ -664,16 +673,14 @@ module KjuiTools
             code += ",\n" + indent("#{event} = { #{invocation} }", depth + 1)
           end
 
-          # Focus management — `fieldId` is already wired above (the
-          # `val focusRequester_<id> = remember { FocusRequester() }`
+          # Focus management — the field's requester is already wired above
+          # (the `val focusRequester_<id> = remember { FocusRequester() }`
           # declaration + `.focusRequester(...)` modifier). Here we
-          # only need to wire KeyboardActions for `nextFocusId` lookup
+          # only need to wire KeyboardActions for the `nextFocus` lookup
           # and `onSubmit`.
           # `nextFocus` is the declared attribute (and what the iOS converter
-          # reads); `nextFocusId` is the undeclared legacy spelling this file was
-          # written against, so a layout that used the declared name got no focus
-          # chain at all. Both work, declared name first.
-          next_focus_id = json_data['nextFocus'] || json_data['nextFocusId']
+          # reads); the legacy `nextFocusId` is retired (2.3.22).
+          next_focus_id = json_data['nextFocus']
           on_submit = json_data['onSubmit']
 
           # KeyboardActions for focus chain / submit
@@ -681,7 +688,7 @@ module KjuiTools
             required_imports&.add(:keyboard_actions)
             actions = []
             if next_focus_id
-              # Target field MUST have `fieldId: "<next_focus_id>"` set so
+              # Target field MUST have `id: "<next_focus_id>"` set so
               # `focusRequester_<next_focus_id>` exists in the same
               # composable scope. Spec-side contract; codegen does not
               # validate cross-field reachability.
@@ -775,7 +782,7 @@ module KjuiTools
             end
             keyboard_options << "imeAction = #{ime_action}"
           elsif next_focus_id && !json_data['returnKeyType']
-            # Auto-set ImeAction.Next when nextFocusId is specified
+            # Auto-set ImeAction.Next when nextFocus is specified
             required_imports&.add(:ime_action)
             keyboard_options << "imeAction = ImeAction.Next"
           end

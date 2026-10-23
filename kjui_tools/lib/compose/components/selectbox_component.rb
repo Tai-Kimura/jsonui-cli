@@ -196,7 +196,7 @@ module KjuiTools
             end
           else
             # Options (use 'items' or 'options') - only for non-date SelectBox
-            options_data = json_data['items'] || json_data['options']
+            options_data = json_data['items']
             if options_data
             if options_data.is_a?(String) && options_data.match(/@\{([^}]+)\}/)
               # Dynamic options from data binding

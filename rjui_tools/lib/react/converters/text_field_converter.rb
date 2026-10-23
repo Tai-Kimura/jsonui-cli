@@ -233,10 +233,10 @@ module RjuiTools
           end
 
           # Auto focus
-          attrs << ' autoFocus' if attributes['autoFocus'] || attributes['becomeFirstResponder']
+          attrs << ' autoFocus' if attributes['autoFocus']
 
           # Read only
-          attrs << ' readOnly' if attributes['readOnly'] || attributes['editable'] == false
+          attrs << ' readOnly' if attributes['editable'] == false
 
           # Native browser validation. Both are declared `platform: react`, i.e.
           # they exist FOR the web, so there is no other surface to defer to.
@@ -396,7 +396,7 @@ module RjuiTools
 
         def build_on_change
           # If custom handler is defined, use it (passing the event object)
-          handler = attributes['onTextChange'] || attributes['onChange']
+          handler = attributes['onTextChange']
           if handler
             if has_binding?(handler)
               prop = extract_binding_property(handler)

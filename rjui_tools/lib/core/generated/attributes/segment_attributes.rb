@@ -19,6 +19,8 @@ module JsonUI
         { name: 'apportionsSegmentWidthsByContent', kind: :boolean }.freeze,
         # Label color of the UNSELECTED segments - hex string or color name from colors.json
         { name: 'fontColor', kind: :string, aliases: ['normalColor'].freeze }.freeze,
+        # Font size of the segments' text (rjui segment_converter).
+        { name: 'fontSize', kind: :number }.freeze,
         # Segment items array. Static labels; an entry may be a strings key, resolved at render time on every face. [required]
         { name: 'items', kind: :array }.freeze,
         # Momentary selection mode

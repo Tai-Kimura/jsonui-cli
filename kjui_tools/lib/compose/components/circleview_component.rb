@@ -54,7 +54,7 @@ module KjuiTools
           # reads first), else the declared `background`. Painted after the
           # circle clip, so it is the circle Dynamic paints with
           # `.background(color, CircleShape)`.
-          fill = json_data['color'] || json_data['background']
+          fill = json_data['background']
           if fill
             required_imports&.add(:background)
             modifiers << ".background(#{Helpers::ResourceResolver.process_color(fill, required_imports)})"

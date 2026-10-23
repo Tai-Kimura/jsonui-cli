@@ -100,7 +100,7 @@ module RjuiTools
           # matches nothing — so it rides a custom property. It has to be
           # recorded here, in build_class_name, which owns @dynamic_styles and
           # runs before the style attribute is rendered.
-          hint_color = attributes['hintColor'] || attributes['placeholderColor']
+          hint_color = attributes['hintColor']
           @select_hint_color = hint_color || 'gray-400'
           @declared_hint_color = hint_color
           @select_hint_class =
@@ -361,7 +361,7 @@ module RjuiTools
         # read, so a bound selectedItem reached the page as nothing — no value,
         # no onChange (ticket selectbox-selected-item-binding-is-read-once).
         def selection_attr
-          attributes['selectedItem'] || attributes['selectedValue'] || attributes['value']
+          attributes['selectedItem'] || attributes['selectedValue']
         end
 
         def selected_value_bound?
@@ -561,7 +561,7 @@ module RjuiTools
         end
 
         def build_on_change
-          handler = attributes['onValueChange'] || attributes['onValueChanged'] || attributes['onChange']
+          handler = attributes['onValueChange'] || attributes['onValueChanged']
           if handler
             if has_binding?(handler)
               return operation_attr('onChange', '(e)', declared_handler_call(handler, changed_value_expr, handler_index_expr))
@@ -796,7 +796,7 @@ module RjuiTools
                        end
 
           # Custom handler takes priority
-          handler = attributes['onValueChange'] || attributes['onChange']
+          handler = attributes['onValueChange']
           if handler && has_binding?(handler)
             return operation_attr('onChange', '(e)', declared_handler_call(handler, value_expr, nil))
           end

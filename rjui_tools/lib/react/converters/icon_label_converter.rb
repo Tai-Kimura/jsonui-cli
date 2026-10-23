@@ -130,17 +130,17 @@ module RjuiTools
           # Support selected state with icon_on/icon_off
           if attributes['selected'] && has_binding?(attributes['selected'])
             binding_expr = extract_binding_property(attributes['selected'])
-            icon_on = attributes['icon_on'] || attributes['iconOn'] || ''
-            icon_off = attributes['icon_off'] || attributes['iconOff'] || ''
+            icon_on = attributes['icon_on'] || ''
+            icon_off = attributes['icon_off'] || ''
             "{#{binding_expr} ? #{JsonUIShared::StringLiterals.ts_single(icon_on)} : #{JsonUIShared::StringLiterals.ts_single(icon_off)}}"
           elsif attributes['selected'] == true || attributes['selected'] == 'true'
             # A literal selected state (or its alias isOn) draws icon_on, as
             # the text takes selectedFontColor: it fell to the branch below
             # and drew icon_off, the icon alone left unselected (ticket
             # rjui-iconlabel-static-selected-draws-icon-off).
-            attributes['icon_on'] || attributes['iconOn'] || attributes['icon_off'] || attributes['iconOff'] || attributes['icon'] || ''
+            attributes['icon_on'] || attributes['icon_off'] || ''
           else
-            attributes['icon_off'] || attributes['iconOff'] || attributes['icon_on'] || attributes['iconOn'] || attributes['icon'] || ''
+            attributes['icon_off'] || attributes['icon_on'] || ''
           end
         end
 
@@ -163,7 +163,7 @@ module RjuiTools
           icon_position = JsonUIShared::EnumSpelling.lowered(attributes['iconPosition'] || 'Left', 'IconLabel', 'iconPosition').to_s
           # 5 is the cross-platform canonical default (IconLabelView.swift and
           # both mobile dynamic converters) — 4 was an rjui-only deviation.
-          margin = attributes['iconMargin'] || attributes['spacing'] || 5
+          margin = attributes['iconMargin'] || 5
           margin_class = case icon_position
                         when 'top' then "mb-#{TailwindMapper.spacing_value(margin)}"
                         when 'bottom' then "mt-#{TailwindMapper.spacing_value(margin)}"
@@ -173,7 +173,7 @@ module RjuiTools
           classes << margin_class
 
           # Icon tint color (for SVG)
-          tint_color = attributes['iconTintColor'] || attributes['tintColor']
+          tint_color = attributes['tintColor']
           # Note: CSS filter or mix-blend-mode would be needed for actual color tinting
 
           finalize_classes(classes)

@@ -77,9 +77,9 @@ RSpec.describe RjuiTools::React::Converters::BlurConverter do
       end
     end
 
-    context 'with custom backgroundColor' do
+    context 'with custom background' do
       it 'uses custom background color' do
-        converter = create_converter({ 'class' => 'Blur', 'backgroundColor' => 'rgba(0, 0, 255, 0.3)' })
+        converter = create_converter({ 'class' => 'Blur', 'background' => 'rgba(0, 0, 255, 0.3)' })
         result = converter.convert
         expect(result).to include("backgroundColor: 'rgba(0, 0, 255, 0.3)'")
       end

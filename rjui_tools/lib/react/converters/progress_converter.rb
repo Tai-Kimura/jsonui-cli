@@ -23,7 +23,7 @@ module RjuiTools
           # Canonical Progress value range is 0..1 (ios/android render it so);
           # max=100 shrank a 0.5 value to a 0.5% sliver — invisible, which is
           # how every web tint measured inert (33 cross-effect).
-          literal_value = attributes['progress'] || attributes['value']
+          literal_value = attributes['progress']
           default_max = literal_value.is_a?(Numeric) && literal_value <= 1 ? 1 : 100
           max_attr = " max={#{attributes['maximumValue'] || default_max}}"
 
@@ -56,7 +56,7 @@ module RjuiTools
           classes << 'w-full' if attributes['width'].nil?
 
           # Height
-          height = attributes['progressHeight'] || attributes['barHeight']
+          height = attributes['progressHeight']
           if height
             classes << "h-[#{height}px]"
           else
@@ -70,7 +70,7 @@ module RjuiTools
           classes << '[&::-webkit-progress-bar]:rounded-full'
 
           # Track color (CSS variable — see the tint comment below).
-          track_color = attributes['trackTintColor'] || attributes['trackColor']
+          track_color = attributes['trackTintColor']
           if track_color
             @dynamic_styles['--pb-color'] = color_style_expr(track_color)
             classes << '[&::-webkit-progress-bar]:bg-[color:var(--pb-color)]'
@@ -100,7 +100,7 @@ module RjuiTools
         def build_value_attr
           # `progress` is canonical; `value` is the legacy spelling
           # (shared/core/attribute_semantics.json → progressValue).
-          value = attributes['progress'] || attributes['value'] || 0
+          value = attributes['progress'] || 0
 
           if has_binding?(value)
             prop = extract_binding_property(value)

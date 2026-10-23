@@ -31,6 +31,8 @@ module JsonUI
         { name: 'range', kind: :array }.freeze,
         # Step increment value
         { name: 'step', kind: :number }.freeze,
+        # Colour of the thumb; tintColor when absent (kjui slider_component).
+        { name: 'thumbTintColor', kind: :string }.freeze,
         # Tint color - hex string or color name from colors.json
         { name: 'tintColor', kind: :string }.freeze,
         # Colour of the unfilled track - hex string or color name from colors.json. Deprecation retracted with progressTintColor: SwiftUI Progress reaches the same result through .background().

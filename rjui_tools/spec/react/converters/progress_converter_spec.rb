@@ -13,7 +13,7 @@ RSpec.describe RjuiTools::React::Converters::ProgressConverter do
   describe '#convert' do
     context 'basic progress bar' do
       it 'generates progress element' do
-        converter = create_converter({ 'class' => 'Progress', 'value' => 50 })
+        converter = create_converter({ 'class' => 'Progress', 'progress' => 50 })
         result = converter.convert
         expect(result).to include('<progress')
         expect(result).to include('value={50}')
@@ -31,7 +31,7 @@ RSpec.describe RjuiTools::React::Converters::ProgressConverter do
 
     context 'with value binding' do
       it 'generates value binding' do
-        converter = create_converter({ 'class' => 'Progress', 'value' => '@{progressValue}' })
+        converter = create_converter({ 'class' => 'Progress', 'progress' => '@{progressValue}' })
         result = converter.convert
         expect(result).to include('value={data.progressValue}')
       end
@@ -80,9 +80,9 @@ RSpec.describe RjuiTools::React::Converters::ProgressConverter do
       end
     end
 
-    context 'with barHeight' do
-      it 'uses barHeight for height' do
-        converter = create_converter({ 'class' => 'Progress', 'value' => 50, 'barHeight' => 4 })
+    context 'with progressHeight' do
+      it 'uses progressHeight for height' do
+        converter = create_converter({ 'class' => 'Progress', 'progress' => 50, 'progressHeight' => 4 })
         result = converter.convert
         expect(result).to include('h-[4px]')
       end

@@ -13,7 +13,7 @@ RSpec.describe RjuiTools::React::Converters::IconLabelConverter do
   describe '#convert' do
     context 'basic icon label' do
       it 'generates div with icon and text' do
-        converter = create_converter({ 'class' => 'IconLabel', 'text' => 'Label Text', 'icon' => 'icon.png' })
+        converter = create_converter({ 'class' => 'IconLabel', 'text' => 'Label Text', 'icon_off' => 'icon.png' })
         result = converter.convert
         expect(result).to include('<div')
         expect(result).to include('<img')

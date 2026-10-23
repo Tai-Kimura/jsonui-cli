@@ -80,7 +80,7 @@ RSpec.describe 'kjui codegen: layout boxes the frame-parity inventory found off'
     end
 
     it 'stays a group when it lists options (control)' do
-      out = radio('options' => %w[a b])
+      out = radio('items' => %w[a b])
       expect(out).to include('Column(')
       expect(out).to include('"a"')
     end

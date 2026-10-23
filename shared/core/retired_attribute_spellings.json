@@ -1,0 +1,21 @@
+{
+  "_comment": "Spellings a converter used to read as a fallback beside a declared attribute, and no longer reads (2.3.22, ticket rjui-textfield-autofocus-read-but-not-defined). A layout that writes one is warned with the declared name to use instead. Component -> {retired spelling: declared attribute}. Checked by jui_tools/tests/test_converter_reads_are_declared.py: no converter reads a retired spelling, and each target is declared on its component.",
+  "spellings": {
+    "Blur": {"backgroundColor": "background"},
+    "CheckBox": {"tint": "tintColor"},
+    "CircleView": {"backgroundColor": "background", "color": "background", "fillColor": "background", "strokeColor": "borderColor", "strokeWidth": "borderWidth"},
+    "Collection": {"contentInset": "insets", "contentPadding": "insets", "scrollDirection": "orientation", "spacing": "itemSpacing"},
+    "GradientView": {"direction": "gradientDirection", "items": "gradient"},
+    "IconLabel": {"icon": "icon_off", "iconColor": "tintColor", "iconOff": "icon_off", "iconOn": "icon_on", "iconTintColor": "tintColor", "spacing": "iconMargin", "src": "icon_off"},
+    "Image": {"iconColor": "tintColor", "url": "src"},
+    "NetworkImage": {"circleImage": "circle", "imageUrl": "src", "scaleType": "contentMode"},
+    "Progress": {"barHeight": "progressHeight", "trackColor": "trackTintColor", "value": "progress"},
+    "Radio": {"options": "items", "selectedColor": "checkedColor", "textColor": "fontColor", "unselectedColor": "uncheckedColor"},
+    "Segment": {"backgroundColor": "background"},
+    "SelectBox": {"onChange": "onValueChange", "options": "items", "placeholderColor": "hintColor", "value": "selectedValue"},
+    "Slider": {"max": "maximum", "maximumTrackTintColor": "trackTintColor", "min": "minimum", "minimumTrackTintColor": "tintColor"},
+    "TextField": {"becomeFirstResponder": "autoFocus", "fieldId": "id", "nextFocusId": "nextFocus", "onChange": "onTextChange", "readOnly": "editable"},
+    "TextView": {"becomeFirstResponder": "autoFocus", "lines": "rows", "onChange": "onTextChange", "placeholderColor": "hintColor", "readOnly": "editable"},
+    "Web": {"accessibilityLabel": "title", "htmlContent": "html", "loading": "lazyLoad", "src": "url"}
+  }
+}

@@ -898,11 +898,11 @@ module KjuiTools
         # kjui's extra spelling of itemSpacing and keeps its place after it.
         # nil where nothing is declared (Compose's own 0).
         def self.horizontal_scroll_spacing(json_data)
-          json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['itemSpacing'] || json_data['spacing']
+          json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['itemSpacing']
         end
 
         def self.horizontal_lane_spacing(json_data)
-          json_data['columnSpacing'] || json_data['itemSpacing'] || json_data['spacing']
+          json_data['columnSpacing'] || json_data['itemSpacing']
         end
 
         # Whether defaultScrollAnchor moves a lazy list (resting_default_anchor),
@@ -1184,8 +1184,8 @@ module KjuiTools
           # the canonical one, so the alias fixture measured a parity gap
           # against the dynamic render (d=18, run 31202080745). Canonical
           # spelling wins when both are written.
-          line_spacing = json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['itemSpacing'] || json_data['spacing']
-          column_spacing = json_data['columnSpacing'] || json_data['itemSpacing'] || json_data['spacing']
+          line_spacing = json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['itemSpacing']
+          column_spacing = json_data['columnSpacing'] || json_data['itemSpacing']
 
           if is_horizontal
             # The horizontal rule (horizontal_scroll_spacing): the scroll axis
@@ -2316,8 +2316,8 @@ module KjuiTools
           # Spacing. Undeclared means 0, the platform default — the dynamic
           # renderer falls back to 0f, and the silent 8 here was the parity
           # residue on Collection/layout__flow_2 after the enum fix.
-          h_spacing = json_data['columnSpacing'] || json_data['itemSpacing'] || json_data['spacing'] || 0
-          v_spacing = json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['itemSpacing'] || json_data['spacing'] || 0
+          h_spacing = json_data['columnSpacing'] || json_data['itemSpacing'] || 0
+          v_spacing = json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['itemSpacing'] || 0
 
           # Flow alignment
           flow_alignment = json_data['flowAlignment'] || 'leading'
@@ -2690,7 +2690,7 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
           # Spacing
-          line_spacing = json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['itemSpacing'] || json_data['spacing']
+          line_spacing = json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['itemSpacing']
 
           code = (places ? prelude : '') + indent("Column(", depth)
           places = false if places == :gate_only
@@ -2985,7 +2985,7 @@ module KjuiTools
                            # columnSpacing, then lineSpacing until jsonui-cli 1.9.0.
                            horizontal_scroll_spacing(json_data)
                          else
-                           json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['itemSpacing'] || json_data['spacing']
+                           json_data['lineSpacing'] || json_data['sectionSpacing'] || json_data['itemSpacing']
                          end
 
           # userScrollEnabled (binding aware)
@@ -3233,7 +3233,7 @@ module KjuiTools
         # one method (the grid path and the stack path, chosen by
         # `single_column_sections?`).
         def self.collection_stack_content_padding_expr(json_data, is_horizontal:)
-          declared = [json_data['contentPadding'], json_data['insets']].lazy.map { |v| content_padding_values(v) }.find(&:itself)
+          declared = content_padding_values(json_data['insets'])
           inset_h = json_data['insetHorizontal']
           inset_v = json_data['insetVertical']
           safe = Helpers::ContentInsetHelper.safe_area_padding(json_data['contentInsetAdjustmentBehavior'], horizontal: is_horizontal)

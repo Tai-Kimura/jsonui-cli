@@ -34,7 +34,7 @@ RSpec.describe KjuiTools::Compose::Components::ProgressComponent do
 
     context 'determinate progress' do
       it 'generates progress with value' do
-        json_data = { 'type' => 'Progress', 'value' => '0.5' }
+        json_data = { 'type' => 'Progress', 'progress' => '0.5' }
         result = described_class.generate(json_data, 0, required_imports)
         expect(result).to include('LinearProgressIndicator(')
         expect(result).to include('progress = {')
@@ -49,7 +49,7 @@ RSpec.describe KjuiTools::Compose::Components::ProgressComponent do
       end
 
       it 'generates progress with value data binding' do
-        json_data = { 'type' => 'Progress', 'value' => '@{downloadProgress}' }
+        json_data = { 'type' => 'Progress', 'progress' => '@{downloadProgress}' }
         result = described_class.generate(json_data, 0, required_imports)
         expect(result).to include('progress = { data.downloadProgress.toFloat() }')
       end

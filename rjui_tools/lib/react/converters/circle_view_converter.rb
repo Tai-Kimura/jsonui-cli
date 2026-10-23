@@ -52,7 +52,7 @@ module RjuiTools
           style_parts = []
 
           # Fill color (takes precedence over background for circle)
-          fill_color = attributes['fillColor'] || attributes['background'] || attributes['backgroundColor']
+          fill_color = attributes['background']
           if fill_color
             if has_binding?(fill_color)
               binding_expr = convert_binding(fill_color).gsub(/^\{|\}$/, '')
@@ -63,8 +63,8 @@ module RjuiTools
           end
 
           # Border/Stroke
-          stroke_color = attributes['strokeColor'] || attributes['borderColor']
-          stroke_width = attributes['strokeWidth'] || attributes['borderWidth']
+          stroke_color = attributes['borderColor']
+          stroke_width = attributes['borderWidth']
           stroke_style = attributes['borderStyle'] || 'solid'
 
           if stroke_color || stroke_width

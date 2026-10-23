@@ -120,12 +120,14 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
         expect(result).to include("'--jui-hint-color'")
       end
 
-      it 'accepts the placeholderColor alias' do
+      # placeholderColor was read here as a fallback spelling of hintColor; it
+      # is retired (retired_attribute_spellings.json: the build names hintColor)
+      it 'no longer reads the retired placeholderColor spelling' do
         converter = create_converter(
           'class' => 'SelectBox', 'items' => ['A', 'B'],
           'prompt' => 'Choose', 'placeholderColor' => '#FF0000'
         )
-        expect(converter.convert).to include('[&:has(option:first-child:checked)]:text-[var(--jui-hint-color)]')
+        expect(converter.convert).not_to include('#FF0000')
       end
 
       it 'keeps the bound colour on the same custom property' do
@@ -245,15 +247,15 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
 
     context 'with static default value' do
       it 'generates defaultValue' do
-        converter = create_converter({ 'class' => 'SelectBox', 'items' => ['A', 'B'], 'value' => 'B' })
+        converter = create_converter({ 'class' => 'SelectBox', 'items' => ['A', 'B'], 'selectedValue' => 'B' })
         result = converter.convert
         expect(result).to include('defaultValue="B"')
       end
     end
 
-    context 'with onChange handler' do
+    context 'with onValueChange handler' do
       it 'generates onChange with optional chaining' do
-        converter = create_converter({ 'class' => 'SelectBox', 'items' => ['A', 'B'], 'onChange' => '@{handleChange}' })
+        converter = create_converter({ 'class' => 'SelectBox', 'items' => ['A', 'B'], 'onValueChange' => '@{handleChange}' })
         result = converter.convert
         expect(result).to include('onChange={(e) => data.handleChange?.(e.target.value)}')
       end

@@ -175,7 +175,7 @@ RSpec.describe 'kjui image contentDescription from alt' do
 
   it 'reads nothing from the icon of an IconLabel, whose label names it' do
     result = KjuiTools::Compose::Components::IconLabelComponent.generate(
-      { 'type' => 'IconLabel', 'text' => 'Home', 'icon' => 'ic_home' }, 0, Set.new
+      { 'type' => 'IconLabel', 'text' => 'Home', 'icon_off' => 'ic_home' }, 0, Set.new
     )
     expect(spoken(result)).to eq('null')
   end

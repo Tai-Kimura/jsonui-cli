@@ -20,189 +20,14 @@ module KjuiTools
             return generate_radio_group_with_items(json_data, depth, required_imports, parent_type)
           end
           
-          # Handle individual Radio item (not a group). `label` is the
-          # cross-platform spelling of the row text (web's ToggleConverter and
-          # sjui read it too). A bare Radio — no text and no options — is one
-          # item too: the options branch had nothing to list and emitted an
-          # empty Column, 0 high, where web draws the indicator (ticket
-          # kjui-radio-without-a-label-draws-nothing). Same rule as KotlinJsonUI
-          # Dynamic's DynamicRadioComponent.rendersAsItem.
-          if json_data['group'] || json_data['text'] || json_data['label'] || !json_data['options']
-            return generate_radio_item(json_data, depth, required_imports, parent_type)
-          end
-          # The group's selection: its `selectedValue` (SSoT common.bind
-          # primaryValue: Radio [selectedValue]; a lone `bind` arrives as it,
-          # JsonUIShared::BindFold at the dispatch). This path read `bind` —
-          # the items group and the single Radio read selectedValue.
-          selected = if json_data['selectedValue'].is_a?(String) && json_data['selectedValue'].match(/@\{([^}]+)\}/)
-            variable = $1
-            "data.#{variable}"
-          else
-            '""'
-          end
-          
-          code = indent("Column(", depth)
-          # `enabled` is the Radio's own controls' parameter — each RadioButton,
-          # and the row that selects it: a disabled Radio neither selects nor calls
-          # the declared onClick (operation_click_call).
-          enabled = Helpers::ModifierBuilder.enabled_expression(json_data)
-          row_enabled = enabled ? "(enabled = #{enabled})" : ''
-
-          # Build modifiers
-          modifiers = stage_modifiers(json_data, parent_type, required_imports)
-          modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
-
-          code += Helpers::ModifierBuilder.format(modifiers, depth) if modifiers.any?
-          code += "\n" + indent(") {", depth)
-          
-          # Radio options
-          if json_data['options']
-            if json_data['options'].is_a?(Array)
-              json_data['options'].each do |option|
-                option_value = option.is_a?(Hash) ? option['value'] : option
-                option_label = option.is_a?(Hash) ? option['label'] : option
-                value_literal = JsonUIShared::StringLiterals.kotlin(option_value)
-                
-                code += "\n" + indent("Row(", depth + 1)
-                code += "\n" + indent("verticalAlignment = Alignment.CenterVertically,", depth + 2)
-                code += "\n" + indent("modifier = Modifier", depth + 2)
-                code += "\n" + indent("    .fillMaxWidth()", depth + 2)
-                code += "\n" + indent("    .clickable#{row_enabled} {", depth + 2)
-                
-                view_id = Helpers::ModifierBuilder.view_id(json_data)
-                if json_data['selectedValue'].is_a?(String) && json_data['selectedValue'].match(/@\{([^}]+)\}/)
-                  variable = $1
-                  if json_data['onValueChange'] && Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
-                    handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, value_literal)
-                    code += "\n" + indent("        viewModel.updateData(mapOf(\"#{variable}\" to #{value_literal}))", depth + 2)
-                    code += "\n" + indent("        #{handler_call}", depth + 2)
-                  else
-                    code += "\n" + indent("        viewModel.updateData(mapOf(\"#{variable}\" to #{value_literal}))", depth + 2)
-                  end
-                elsif json_data['onValueChange']
-                  # onValueChange (camelCase) -> binding format only (@{functionName})
-                  if Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
-                    handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, value_literal)
-                    code += "\n" + indent("        #{handler_call}", depth + 2)
-                  else
-                    code += "\n" + indent("        // ERROR: #{Helpers::ModifierBuilder.comment_text(json_data['onValueChange'])} - camelCase events require binding format @{functionName}", depth + 2)
-                  end
-                end
-                
-                # The declared onClick, from the selection (operation_click_call).
-                if (click = Helpers::ModifierBuilder.operation_click_call(json_data))
-                  code += "\n" + indent("        #{click}", depth + 2)
-                end
-                code += "\n" + indent("    }", depth + 2)
-                code += "\n" + indent(") {", depth + 1)
-                
-                # RadioButton
-                code += "\n" + indent("RadioButton(", depth + 2)
-                code += "\n" + indent("selected = (#{selected} == #{value_literal}),", depth + 3)
-                code += "\n" + indent("enabled = #{enabled},", depth + 3) if enabled
-                code += "\n" + indent("onClick = {", depth + 3)
-                
-                if json_data['selectedValue'].is_a?(String) && json_data['selectedValue'].match(/@\{([^}]+)\}/)
-                  variable = $1
-                  if json_data['onValueChange'] && Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
-                    handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, value_literal)
-                    code += "\n" + indent("viewModel.updateData(mapOf(\"#{variable}\" to #{value_literal}))", depth + 4)
-                    code += "\n" + indent("#{handler_call}", depth + 4)
-                  else
-                    code += "\n" + indent("viewModel.updateData(mapOf(\"#{variable}\" to #{value_literal}))", depth + 4)
-                  end
-                elsif json_data['onValueChange']
-                  # onValueChange (camelCase) -> binding format only (@{functionName})
-                  if Helpers::ModifierBuilder.is_binding?(json_data['onValueChange'])
-                    handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onValueChange'], view_id, value_literal)
-                    code += "\n" + indent("#{handler_call}", depth + 4)
-                  else
-                    code += "\n" + indent("// ERROR: #{Helpers::ModifierBuilder.comment_text(json_data['onValueChange'])} - camelCase events require binding format @{functionName}", depth + 4)
-                  end
-                end
-
-                if (click = Helpers::ModifierBuilder.operation_click_call(json_data))
-                  code += "\n" + indent(click, depth + 4)
-                end
-                code += "\n" + indent("}", depth + 3)
-                
-                # RadioButton colors — always emitted: the selected colour is
-                # the Radio's own, else the tint a container handed down
-                # (selected_accent).
-                begin
-                  required_imports&.add(:radio_colors)
-                  colors_params = []
-
-                  colors_params << "selectedColor = #{selected_accent(json_data, required_imports)}"
-                  
-                  # `uncheckedColor` is the cross-platform spelling of the
-                  # same colour; the Compose-native name wins when both exist.
-                  # iconColor tints the (unselected) glyph as the last resort.
-                  unselected = json_data['unselectedColor'] || json_data['uncheckedColor'] || json_data['iconColor']
-                  if unselected
-                    unselectedcolor_resolved = Helpers::ResourceResolver.process_color(unselected, required_imports)
-                    colors_params << "unselectedColor = #{unselectedcolor_resolved}"
-                  end
-                  
-                  if colors_params.any?
-                    code += ",\n" + indent("colors = RadioButtonDefaults.colors(", depth + 3)
-                    code += "\n" + colors_params.map { |param| indent(param, depth + 4) }.join(",\n")
-                    code += "\n" + indent(")", depth + 3)
-                  end
-                end
-                
-                code += "\n" + indent(")", depth + 2)
-                
-                # Label text
-                code += "\n" + indent("Spacer(modifier = Modifier.width(8.dp))", depth + 2)
-                code += "\n" + indent("Text(#{JsonUIShared::StringLiterals.kotlin(option_label)})", depth + 2)
-                
-                code += "\n" + indent("}", depth + 1)
-              end
-            elsif json_data['options'].is_a?(String) && json_data['options'].match(/@\{([^}]+)\}/)
-              # Dynamic options from data binding
-              options_var = $1
-              code += "\n" + indent("data.#{options_var}.forEach { option ->", depth + 1)
-              code += "\n" + indent("Row(", depth + 2)
-              code += "\n" + indent("verticalAlignment = Alignment.CenterVertically,", depth + 3)
-              code += "\n" + indent("modifier = Modifier.fillMaxWidth().clickable#{row_enabled} {", depth + 3)
-              
-              if json_data['selectedValue'].is_a?(String) && json_data['selectedValue'].match(/@\{([^}]+)\}/)
-                variable = $1
-                code += "\n" + indent("viewModel.updateData(mapOf(\"#{variable}\" to option))", depth + 4)
-              end
-              
-              if (click = Helpers::ModifierBuilder.operation_click_call(json_data))
-                code += "\n" + indent(click, depth + 4)
-              end
-              code += "\n" + indent("}", depth + 3)
-              code += "\n" + indent(") {", depth + 2)
-              code += "\n" + indent("RadioButton(", depth + 3)
-              code += "\n" + indent("selected = (#{selected} == option),", depth + 4)
-              code += "\n" + indent("enabled = #{enabled},", depth + 4) if enabled
-              code += "\n" + indent("onClick = {", depth + 4)
-              
-              if json_data['selectedValue'].is_a?(String) && json_data['selectedValue'].match(/@\{([^}]+)\}/)
-                variable = $1
-                code += "\n" + indent("viewModel.updateData(mapOf(\"#{variable}\" to option))", depth + 5)
-              end
-              
-              if (click = Helpers::ModifierBuilder.operation_click_call(json_data))
-                code += "\n" + indent(click, depth + 5)
-              end
-              code += "\n" + indent("},", depth + 4)
-              required_imports&.add(:radio_colors)
-              code += "\n" + indent("colors = RadioButtonDefaults.colors(selectedColor = #{selected_accent(json_data, required_imports)})", depth + 4)
-              code += "\n" + indent(")", depth + 3)
-              code += "\n" + indent("Spacer(modifier = Modifier.width(8.dp))", depth + 3)
-              code += "\n" + indent("Text(option)", depth + 3)
-              code += "\n" + indent("}", depth + 2)
-              code += "\n" + indent("}", depth + 1)
-            end
-          end
-          
-          code += "\n" + indent("}", depth)
-          code
+          # Otherwise one item (`label` is the cross-platform spelling of the
+          # row text: web's ToggleConverter and sjui read it too). A bare Radio
+          # — no text — is one item too: KotlinJsonUI Dynamic's
+          # DynamicRadioComponent.rendersAsItem (ticket
+          # kjui-radio-without-a-label-draws-nothing). The undeclared `options`
+          # group (a list or a bound list of options beside the declared `items`)
+          # is retired in 2.3.22: retired_attribute_spellings.json names `items`.
+          generate_radio_item(json_data, depth, required_imports, parent_type)
         end
         
         private
@@ -383,8 +208,8 @@ module KjuiTools
               # One tint for the whole glyph, so both states share it.
               icon_color = Helpers::ResourceResolver.process_color(json_data['iconColor'], required_imports)
               code += "\n" + indent("            tint = #{icon_color}", depth)
-            elsif json_data['selectedColor'] || json_data['tintColor']
-              color = json_data['selectedColor'] || json_data['tintColor']
+            elsif json_data['tintColor']
+              color = json_data['tintColor']
               selected_color = Helpers::ResourceResolver.process_color(color, required_imports)
               code += "\n" + indent("            tint = if (isSelected) #{selected_color} else Color.Gray", depth)
             else
@@ -414,8 +239,8 @@ module KjuiTools
             # Radio.spacing, C0 unread + C1 dropped).
             code += "\n" + indent("    Spacer(modifier = Modifier.width(#{radio_spacing_dp(json_data)}))", depth)
             # Add text with color
-            if json_data['fontColor'] || json_data['textColor']
-              text_color = json_data['fontColor'] || json_data['textColor']
+            if json_data['fontColor']
+              text_color = json_data['fontColor']
               color_resolved = Helpers::ResourceResolver.process_color(text_color, required_imports)
               code += "\n" + indent("    Text(#{text_expr}, color = #{color_resolved}#{label_font_args(json_data, required_imports)})", depth)
             else
@@ -508,8 +333,8 @@ module KjuiTools
           
           # Add label if present
           if json_data['text']
-            if json_data['fontColor'] || json_data['textColor']
-              text_color = json_data['fontColor'] || json_data['textColor']
+            if json_data['fontColor']
+              text_color = json_data['fontColor']
               color_resolved = Helpers::ResourceResolver.process_color(text_color, required_imports)
               code += "\n" + indent("    Text(#{JsonUIShared::StringLiterals.kotlin(json_data['text'])}, color = #{color_resolved})", depth)
             else
@@ -577,15 +402,22 @@ module KjuiTools
               code += "\n" + indent("                #{click}", depth)
             end
             code += "\n" + indent("            },", depth)
+            # The declared pair checkedColor / uncheckedColor, as the single
+            # Radio reads them (icon_appearance_args); only the retired
+            # `options` group read them for a group until 2.3.22
             required_imports&.add(:radio_colors)
-            code += "\n" + indent("            colors = RadioButtonDefaults.colors(selectedColor = #{selected_accent(json_data, required_imports)})", depth)
+            checked = json_data['checkedColor'] && Helpers::ResourceResolver.process_color(json_data['checkedColor'], required_imports)
+            unchecked = json_data['uncheckedColor'] && Helpers::ResourceResolver.process_color(json_data['uncheckedColor'], required_imports)
+            group_colors = ["selectedColor = #{checked || selected_accent(json_data, required_imports)}"]
+            group_colors << "unselectedColor = #{unchecked}" if unchecked
+            code += "\n" + indent("            colors = RadioButtonDefaults.colors(#{group_colors.join(', ')})", depth)
             code += "\n" + indent("        )", depth)
             code += "\n" + indent("        Spacer(modifier = Modifier.width(#{radio_spacing_dp(json_data)}))", depth)
             # The option's label: fontColor, and fontSize / font as the single
             # radio's label reads them (label_font_args) — the options drew
             # the colour only.
-            if json_data['fontColor'] || json_data['textColor']
-              text_color = json_data['fontColor'] || json_data['textColor']
+            if json_data['fontColor']
+              text_color = json_data['fontColor']
               color_resolved = Helpers::ResourceResolver.process_color(text_color, required_imports)
               code += "\n" + indent("        Text(#{item_text}, color = #{color_resolved}#{label_font_args(json_data, required_imports)})", depth)
             else
@@ -616,7 +448,7 @@ module KjuiTools
         # KotlinJsonUI Dynamic's buttonColorValues reads) — else the tint a
         # container handed down (InheritedTint).
         def self.selected_accent(json_data, required_imports)
-          own = json_data['selectedColor'] || json_data['checkedColor'] || json_data['tintColor']
+          own = json_data['checkedColor'] || json_data['tintColor']
           return Helpers::InheritedTint.accent(required_imports) unless own
 
           Helpers::ResourceResolver.process_color(own, required_imports)
@@ -643,11 +475,11 @@ module KjuiTools
             # and was honoured at the group level but not here, while its pair
             # `uncheckedColor` WAS honoured just below — an asymmetric alias
             # (plan 49 lane C: Radio.checkedColor).
-            selected_decl = json_data['selectedColor'] || json_data['checkedColor']
+            selected_decl = json_data['checkedColor']
             selected = selected_decl &&
                        Helpers::ResourceResolver.process_color(selected_decl, required_imports)
-            unselected = (json_data['unselectedColor'] || json_data['uncheckedColor']) &&
-                         Helpers::ResourceResolver.process_color(json_data['unselectedColor'] || json_data['uncheckedColor'], required_imports)
+            unselected = json_data['uncheckedColor'] &&
+                         Helpers::ResourceResolver.process_color(json_data['uncheckedColor'], required_imports)
             selected ||= icon_color
             unselected ||= icon_color
             # Then the Radio's tintColor (the control's accent), else the tint

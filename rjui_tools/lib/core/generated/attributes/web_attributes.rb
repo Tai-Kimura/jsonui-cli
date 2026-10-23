@@ -16,20 +16,50 @@ module JsonUI
       ATTRS = [
         # Iframe allow attribute for feature policy
         { name: 'allow', kind: :string }.freeze,
+        # Adds camera to the iframe's allow list (rjui web_converter).
+        { name: 'allowCamera', kind: :boolean }.freeze,
+        # Adds allow-downloads to the iframe's sandbox (rjui web_converter).
+        { name: 'allowDownloads', kind: :boolean }.freeze,
+        # Adds geolocation to the iframe's allow list (rjui web_converter).
+        { name: 'allowGeolocation', kind: :boolean }.freeze,
+        # Adds microphone to the iframe's allow list (rjui web_converter).
+        { name: 'allowMicrophone', kind: :boolean }.freeze,
+        # Adds allow-modals to the iframe's sandbox (rjui web_converter).
+        { name: 'allowModals', kind: :boolean }.freeze,
+        # Adds allow-popups-to-escape-sandbox to the iframe's sandbox (rjui web_converter).
+        { name: 'allowPopupsToEscapeSandbox', kind: :boolean }.freeze,
+        # Turns the WebView's zoom controls on (kjui web_component).
+        { name: 'allowZoom', kind: :boolean }.freeze,
         # Enable swipe navigation
         { name: 'allowsBackForwardNavigationGestures', kind: :boolean }.freeze,
+        # fullscreen is in the iframe's allow list unless this is false (rjui web_converter).
+        { name: 'allowsFullScreen', kind: :boolean }.freeze,
+        # Adds autoplay to the iframe's allow list (rjui web_converter).
+        { name: 'allowsInlineMediaPlayback', kind: :boolean }.freeze,
         # Enable link preview
         { name: 'allowsLinkPreview', kind: :boolean }.freeze,
         # HTML content
         { name: 'html', kind: :string }.freeze,
+        # Adds allow-popups to the iframe's sandbox (rjui web_converter).
+        { name: 'javaScriptCanOpenWindowsAutomatically', kind: :boolean }.freeze,
+        # JavaScript runs unless this is false (kjui web_component: settings.javaScriptEnabled; rjui web_converter: allow-scripts in the sandbox).
+        { name: 'javaScriptEnabled', kind: :boolean }.freeze,
+        # Draws the iframe with loading="lazy" (rjui web_converter).
+        { name: 'lazyLoad', kind: :boolean }.freeze,
         # Handler called when the MAIN-FRAME load fails - binding only (@{functionName}), called with no arguments. A failure is either the navigation itself failing (no connection, timeout, DNS, TLS) or the main-frame response carrying HTTP 4xx/5xx. Never called for a subresource (image, CSS, script) or a subframe, and never for a navigation that was cancelled because another one replaced it - a reloadToken change during a load is exactly that (iOS reports it as NSURLErrorCancelled, which is excluded; Android excludes net::ERR_ABORTED should it be reported). At most one call per load. The page a server returns with a 4xx/5xx is still displayed; to show an error face instead, hide the Web from the handler. iOS: WKNavigationDelegate didFail / didFailProvisionalNavigation and the status in decidePolicyFor(navigationResponse:). Android: WebViewClient onReceivedError / onReceivedHttpError, both gated on request.isForMainFrame. Not declared for react: an iframe reports neither the HTTP status of its document nor a cross-origin load failure (its load event fires for the browser's error page too, and error never fires for a document), so a web face could not honour this declaration. [binding: one-way]
         { name: 'onLoadFailed', kind: :binding }.freeze,
         # Binding to a plain value (declare it Int) that reloads the component's own source each time the value CHANGES - the current `url`, or `html` when there is no url. Increment it in the ViewModel to retry after onLoadFailed. The value present when the view is created loads nothing extra; only a later change does. Writing the same url back does not reload (a url is compared with the last one loaded), which is why this exists. It reloads the declared source, not a page the user navigated to inside the view. Not declared for react: an iframe could be re-keyed, but the attribute exists to retry what onLoadFailed reports and the web face has no onLoadFailed.
         { name: 'reloadToken', kind: :binding }.freeze,
         # Iframe sandboxing kill-switch. `false` emits no sandbox attribute at all; otherwise the permission list is built from the other Web attributes (javaScriptEnabled, javaScriptCanOpenWindowsAutomatically, allowPopupsToEscapeSandbox, allowModals, ...) rather than from a value written here.
         { name: 'sandbox', kind: :boolean }.freeze,
+        # false hides the iframe's overflow (rjui web_converter).
+        { name: 'scrollEnabled', kind: :boolean }.freeze,
+        # The iframe's title, read by screen readers (rjui web_converter).
+        { name: 'title', kind: :string }.freeze,
         # Web page URL (can be data binding)
         { name: 'url', kind: :string, bindable: true }.freeze,
+        # The WebView's user agent string (kjui web_component).
+        { name: 'userAgent', kind: :string }.freeze,
       ].freeze
 
       # Returns a Hash keyed by canonical attribute name.

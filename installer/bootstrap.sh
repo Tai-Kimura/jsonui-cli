@@ -304,7 +304,7 @@ INSTALL_DIR="$(pwd -P)"
 # repository links them from each tool's lib/core; the installed tree holds
 # the files themselves)
 info "Setting up shared resources..."
-for shared_json in attribute_definitions.json type_synonyms.json; do
+for shared_json in attribute_definitions.json type_synonyms.json retired_attribute_spellings.json; do
     src="shared/core/$shared_json"
     if [ -f "$src" ]; then
         for tool_dir in sjui_tools kjui_tools rjui_tools; do

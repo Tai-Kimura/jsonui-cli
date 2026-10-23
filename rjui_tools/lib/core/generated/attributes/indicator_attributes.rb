@@ -18,10 +18,18 @@ module JsonUI
         { name: 'animating', kind: :boolean, bindable: true }.freeze,
         # Indicator color - hex string or color name from colors.json (binding supported). `tint` folds here (sjui indicator_converter.rb:77 reads `color || tintColor || tint`).
         { name: 'color', kind: :string, bindable: true, aliases: ['tint'].freeze }.freeze,
+        # Draws the spinner's ring half coloured (rjui indicator_converter).
+        { name: 'halfSpinner', kind: :boolean }.freeze,
         # Hide when stopped. Decides SPACE: `true` collapses the stopped indicator out of the layout, `false` keeps it drawn AND laid out. Full ruling in attribute_semantics.json -> indicatorStopped.
         { name: 'hidesWhenStopped', kind: :boolean }.freeze,
         # Indicator style: `small` / `medium` / `large` are the spinner's size and `linear` a bar instead of a spinner. Each size is the platform's own value, `small` and `large` as well as `medium` (2026-10-05 user ruling): the faces need not draw the same small or large spinner. A declared width / height wins over the style's size. The legacy spellings `style` (naming one of these values) and `size` (a length) are folded by the layout normalizer, with a warning: `style` into this attribute, `size` into width and height.
         { name: 'indicatorStyle', kind: :enum, values: ['small', 'medium', 'large', 'linear'].freeze }.freeze,
+        # small, medium (default) or large when width/height are not given (rjui indicator_converter).
+        { name: 'size', kind: :string }.freeze,
+        # Width of the spinner's stroke (kjui indicator_component: circular only; rjui indicator_converter: border width, 2 by default).
+        { name: 'strokeWidth', kind: :number }.freeze,
+        # Track colour of a linear indicator (kjui indicator_component).
+        { name: 'trackColor', kind: :string }.freeze,
       ].freeze
 
       # Returns a Hash keyed by canonical attribute name.

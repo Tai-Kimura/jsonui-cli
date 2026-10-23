@@ -47,8 +47,8 @@ module RjuiTools
         end
 
         def build_src_attr
-          url = attributes['url'] || attributes['src']
-          html = attributes['html'] || attributes['htmlContent']
+          url = attributes['url']
+          html = attributes['html']
 
           if url
             if has_binding?(url)
@@ -136,14 +136,14 @@ module RjuiTools
         end
 
         def build_title_attr
-          title = attributes['title'] || attributes['accessibilityLabel']
+          title = attributes['title']
           return '' unless title
 
           jsx_attr_text('title', title)
         end
 
         def build_loading_attr
-          lazy = attributes['lazyLoad'] || attributes['loading']
+          lazy = attributes['lazyLoad']
           return '' unless lazy
 
           ' loading="lazy"'

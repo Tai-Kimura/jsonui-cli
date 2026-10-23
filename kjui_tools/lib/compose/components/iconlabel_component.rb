@@ -106,7 +106,7 @@ module KjuiTools
         # `iconMargin` is the declared row; `spacing` is the legacy spelling the
         # dynamic runtime reads.
         def self.icon_spacing(json_data)
-          json_data['iconMargin'] || json_data['spacing'] || DEFAULT_ICON_MARGIN
+          json_data['iconMargin'] || DEFAULT_ICON_MARGIN
         end
 
         # `selected` chooses between icon_on/icon_off and between
@@ -123,7 +123,7 @@ module KjuiTools
 
         def self.icon_code(json_data, depth, required_imports)
           on_icon = json_data['icon_on']
-          off_icon = json_data['icon_off'] || json_data['icon'] || json_data['src']
+          off_icon = json_data['icon_off']
           return nil if on_icon.nil? && off_icon.nil?
 
           condition = selected_condition(json_data)
@@ -166,7 +166,7 @@ module KjuiTools
         # is the behaviour to match. selectedFontColor still reaches the icon,
         # because recolouring on selection is the point of the attribute.
         def self.icon_color_filter(json_data, condition, required_imports)
-          explicit = json_data['iconColor'] || json_data['tintColor']
+          explicit = json_data['tintColor']
           selected_color = json_data['selectedFontColor']
           resting = explicit ? tint(explicit, required_imports) : 'null'
 

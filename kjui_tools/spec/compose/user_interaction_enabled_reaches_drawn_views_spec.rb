@@ -161,7 +161,6 @@ RSpec.describe 'kjui userInteractionEnabled reaches what is drawn in a composabl
     controls = {
       'Button' => { 'text' => 't' }, 'Switch' => { 'isOn' => '@{on}' }, 'Toggle' => { 'isOn' => '@{on}' },
       'CheckBox' => { 'isOn' => '@{on}' }, 'Radio items' => { 'type' => 'Radio', 'items' => %w[a b], 'selectedValue' => '@{sel}' },
-      'Radio options' => { 'type' => 'Radio', 'options' => %w[a b], 'bind' => '@{sel}' },
       'Segment' => { 'items' => %w[a b], 'selectedIndex' => '@{idx}' }, 'Slider' => { 'value' => '@{v}' },
       'SelectBox' => { 'items' => %w[a b], 'selectedIndex' => '@{idx}' }
     }

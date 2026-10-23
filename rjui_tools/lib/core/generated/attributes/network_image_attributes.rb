@@ -18,6 +18,8 @@ module JsonUI
         { name: 'alt', kind: :string, bindable: true, aliases: ['accessibilityLabel', 'contentDescription'].freeze }.freeze,
         # Cache policy
         { name: 'cachePolicy', kind: :string }.freeze,
+        # Clips the image to a circle; cornerRadius is then not applied (rjui network_image_converter).
+        { name: 'circle', kind: :boolean }.freeze,
         # Content mode (binding supported)
         { name: 'contentMode', kind: :enum, bindable: true, values: ['fit', 'fill', 'center', 'top', 'bottom', 'left', 'right', 'AspectFill', 'AspectFit', 'Center'].freeze }.freeze,
         # Default image name
@@ -36,6 +38,8 @@ module JsonUI
         { name: 'placeholder', kind: :string }.freeze,
         # Rendering mode. Declared from the implementation, which already read it: sjui network_image_converter.rb:67-68 (plan 51-E).
         { name: 'renderingMode', kind: :enum, values: ['original', 'template'].freeze }.freeze,
+        # Width and height in dp when width/height are not given (kjui networkimage_component).
+        { name: 'size', kind: :number }.freeze,
         # Image URL (can be data binding)
         { name: 'src', kind: :string, bindable: true }.freeze,
         # Download timeout in seconds

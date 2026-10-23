@@ -1238,6 +1238,12 @@
         "binding"
       ],
       "description": "Vertical offset applied after layout, in pt / dp / px. Measurement and sibling placement are unchanged — the layout is computed first and the offset moves only this view. Its INTERACTIVE region moves with it: an offset control is tappable where it is drawn, which is what rules out a draw-only translation. Absolute, not RTL-mirroring, like leftMargin/rightMargin rather than startMargin/endMargin. Pairs with offsetX; either one alone implies 0 for the other. Full ruling (including the android primitive) in attribute_semantics.json -> offset."
+    },
+    "zIndex": {
+      "type": "number",
+      "description": "Stacking order among siblings; wins over indexAbove / indexBelow (rjui base_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
     }
   },
   "Label": {
@@ -2063,6 +2069,28 @@
     "hintLineHeightMultiple": {
       "type": "number",
       "description": "Placeholder line height multiplier. Declared from the implementation, which already read it: sjui textfield_converter.rb:153 and textview_converter.rb:93,117 (EditText/Input follow via _alias_of) (plan 51-E)."
+    },
+    "autoFocus": {
+      "type": "boolean",
+      "description": "Focuses the field when the screen appears (the keyboard opens): iOS SwiftUI sets the field's @FocusState on appear, Android Compose requests focus with a FocusRequester, web draws autoFocus."
+    },
+    "editable": {
+      "type": "boolean",
+      "description": "false draws the input readOnly (rjui text_field_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
+    },
+    "name": {
+      "type": "string",
+      "description": "The input's form name attribute (rjui text_field_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
+    },
+    "outlined": {
+      "type": "boolean",
+      "description": "Draws the outlined text field style (kjui textfield_component; borderColor / borderWidth also select it).",
+      "platform": "kotlin",
+      "warn_outside_mode": true
     }
   },
   "TextView": {
@@ -2377,6 +2405,22 @@
         "array"
       ],
       "description": "The UIKit spelling of containerInset (content inset). Same accepted shapes: a single number, or an array of 1/2/4 numbers. Was declared deprecated on kotlin (\"Compose Text has no edgeInset\"); retracted 2026-08-05 because Label.edgeInset maps to .padding() on Compose in both the codegen and the dynamic renderer. Unimplemented on the Compose TextView path, not impossible."
+    },
+    "autoFocus": {
+      "type": "boolean",
+      "description": "Focuses the field when the screen appears (the keyboard opens): iOS SwiftUI sets the field's @FocusState on appear, Android Compose requests focus with a FocusRequester, web draws autoFocus."
+    },
+    "maxLines": {
+      "type": "number",
+      "description": "Most lines shown before the text scrolls (kjui textview_component).",
+      "platform": "kotlin",
+      "warn_outside_mode": true
+    },
+    "name": {
+      "type": "string",
+      "description": "The textarea's form name attribute (rjui text_view_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
     }
   },
   "EditText": {
@@ -2570,6 +2614,12 @@
           }
         }
       }
+    },
+    "href": {
+      "type": "string",
+      "description": "Draws the button as a link to this URL (rjui button_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
     }
   },
   "Image": {
@@ -2707,6 +2757,12 @@
     "defaultImage": {
       "type": "string",
       "description": "Default image name. Declared from the implementation, which already read it: sjui image_converter.rb:36,42 (defaultImage || errorImage || loadingImage) (plan 51-E)."
+    },
+    "size": {
+      "type": "number",
+      "description": "Width and height in dp when width/height are not given (kjui image_component).",
+      "platform": "kotlin",
+      "warn_outside_mode": true
     }
   },
   "NetworkImage": {
@@ -2829,6 +2885,18 @@
         "swift",
         "kotlin"
       ]
+    },
+    "circle": {
+      "type": "boolean",
+      "description": "Clips the image to a circle; cornerRadius is then not applied (rjui network_image_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
+    },
+    "size": {
+      "type": "number",
+      "description": "Width and height in dp when width/height are not given (kjui networkimage_component).",
+      "platform": "kotlin",
+      "warn_outside_mode": true
     }
   },
   "SelectBox": {
@@ -3149,6 +3217,18 @@
         "binding"
       ],
       "description": "Selected value (binding for two-way)"
+    },
+    "cancelButtonBackgroundColor": {
+      "type": "string",
+      "description": "Background colour of the picker dialog's cancel button (kjui selectbox_component).",
+      "platform": "kotlin",
+      "warn_outside_mode": true
+    },
+    "cancelButtonTextColor": {
+      "type": "string",
+      "description": "Text colour of the picker dialog's cancel button (kjui selectbox_component).",
+      "platform": "kotlin",
+      "warn_outside_mode": true
     }
   },
   "Switch": {
@@ -3359,6 +3439,12 @@
     "onValueChange": {
       "type": "binding",
       "description": "Value change handler - binding only (@{functionName})"
+    },
+    "fontSize": {
+      "type": "number",
+      "description": "Font size of the segments' text (rjui segment_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
     }
   },
   "Slider": {
@@ -3433,6 +3519,12 @@
     "range": {
       "type": "array",
       "description": "Both bounds at once, as [minimum, maximum] — a shorthand for declaring `minimum` and `maximum` separately. It is NOT an alias: one spelling carries two values, so the normalizer cannot fold it. Read only when it is a two-element array; anything else leaves `minimum` / `maximum` to speak for themselves. Declared from the implementation, which already read it: sjui slider_converter.rb:16-19 (plan 51-E)."
+    },
+    "thumbTintColor": {
+      "type": "string",
+      "description": "Colour of the thumb; tintColor when absent (kjui slider_component).",
+      "platform": "kotlin",
+      "warn_outside_mode": true
     }
   },
   "Progress": {
@@ -3502,6 +3594,18 @@
       "description": "ActivityIndicator color, distinct from tintColor for historical reasons.",
       "platform": "swift",
       "mode": "swiftui"
+    },
+    "maximumValue": {
+      "type": "number",
+      "description": "The value that fills the bar, the <progress> max (rjui progress_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
+    },
+    "progressHeight": {
+      "type": "number",
+      "description": "Height of the bar (rjui progress_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
     }
   },
   "View": {
@@ -3668,6 +3772,12 @@
       "type": "array",
       "acceptsSingle": true,
       "description": "Child components (alias for child). A single component node (object) is accepted as a one-element array."
+    },
+    "size": {
+      "type": "number",
+      "description": "Diameter in dp when width/height are not given (kjui circleview_component).",
+      "platform": "kotlin",
+      "warn_outside_mode": true
     }
   },
   "ScrollView": {
@@ -3852,6 +3962,12 @@
         "bottom"
       ],
       "description": "Initial scroll position anchor. Sets where the scroll view starts. Declared from the implementation, which already read it: sjui scrollview_converter.rb:207-215. Scope is deliberately all three platforms: the anchor is a portable concept and the declaration says an attribute EXISTS, not which face has caught up — the coverage ledger carries the android and web gaps. The \"(iOS 17+)\" note this description was copied with belonged to Collection's ios implementation, not to the contract, and has been dropped here (plan 51-E, raised by C)."
+    },
+    "contentInset": {
+      "type": ["number", "array"],
+      "description": "Padding inside the scroll area: one, two or four values (rjui scroll_view_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
     }
   },
   "Collection": {
@@ -4152,6 +4268,12 @@
       ],
       "default": "plain",
       "description": "Which list chrome the collection is drawn with: plain (the default), grouped, insetGrouped or sidebar; an unrecognised value falls back to plain. ORTHOGONAL to hideSeparator — that one hides the separators, this one picks the chrome, and neither overrides the other. Full ruling in attribute_semantics.json -> collectionSeparators."
+    },
+    "flowAlignment": {
+      "type": "string",
+      "description": "Row alignment of a flow layout: leading (default), center, trailing/end (kjui collection_component).",
+      "platform": "kotlin",
+      "warn_outside_mode": true
     }
   },
   "Radio": {
@@ -4488,6 +4610,30 @@
       "description": "Hide when stopped. Decides SPACE: `true` collapses the stopped indicator out of the layout, `false` keeps it drawn AND laid out. Full ruling in attribute_semantics.json -> indicatorStopped.",
       "platform": "swift",
       "mode": "swiftui"
+    },
+    "halfSpinner": {
+      "type": "boolean",
+      "description": "Draws the spinner's ring half coloured (rjui indicator_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
+    },
+    "size": {
+      "type": "string",
+      "description": "small, medium (default) or large when width/height are not given (rjui indicator_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
+    },
+    "strokeWidth": {
+      "type": "number",
+      "description": "Width of the spinner's stroke (kjui indicator_component: circular only; rjui indicator_converter: border width, 2 by default).",
+      "platform": ["kotlin", "react"],
+      "warn_outside_mode": true
+    },
+    "trackColor": {
+      "type": "string",
+      "description": "Track colour of a linear indicator (kjui indicator_component).",
+      "platform": "kotlin",
+      "warn_outside_mode": true
     }
   },
   "GradientView": {
@@ -4560,6 +4706,24 @@
           "description": "0 = top, 0.5 = middle, 1 = bottom"
         }
       }
+    },
+    "orientation": {
+      "type": "string",
+      "description": "How the children stack inside the gradient: vertical (default, a flex column) or horizontal (rjui gradient_view_converter). Not the gradient's direction — that is gradientDirection.",
+      "platform": "react",
+      "warn_outside_mode": true
+    },
+    "angle": {
+      "type": "number",
+      "description": "Angle of a linear gradient in degrees; wins over gradientDirection (rjui gradient_view_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
+    },
+    "gradientType": {
+      "type": "string",
+      "description": "linear (default) or radial (rjui gradient_view_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
     }
   },
   "Blur": {
@@ -4589,6 +4753,12 @@
       "type": "array",
       "acceptsSingle": true,
       "description": "Child components (alias for child). Declared from the implementation, which already read it: sjui blur_converter.rb:16 (child || children) (plan 51-E). A single component node (object) is accepted as a one-element array."
+    },
+    "intensity": {
+      "type": "number",
+      "description": "Blur strength 0-1, drawn as a backdrop blur of intensity x 20 px (rjui blur_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
     }
   },
   "IconLabel": {
@@ -4660,6 +4830,30 @@
         "array"
       ],
       "description": "Icon size. A number sizes both edges; a two-element [width, height] sizes them separately (rjui icon_label_converter.rb:130-138 reads both, and its spec covers both). NOT the same shape as CheckBox.iconSize, which is a square glyph and takes a number only. sjui icon_label_converter.rb:50-51 interpolates the value straight into `iconSize:`, so the array form is web-only today — declared here because the attribute's value space is a property of the attribute, not of whichever face lags (plan 51-E)."
+    },
+    "contentDescription": {
+      "type": "string",
+      "description": "Accessibility description of the icon (kjui iconlabel_component).",
+      "platform": "kotlin",
+      "warn_outside_mode": true
+    },
+    "fontWeight": {
+      "type": ["string", "number"],
+      "description": "Weight of the label's text (kjui iconlabel_component, rjui icon_label_converter).",
+      "platform": ["kotlin", "react"],
+      "warn_outside_mode": true
+    },
+    "strikethrough": {
+      "type": "boolean",
+      "description": "Strikes the label's text through (rjui icon_label_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
+    },
+    "underline": {
+      "type": "boolean",
+      "description": "Underlines the label's text (rjui icon_label_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
     }
   },
   "Web": {
@@ -4710,6 +4904,96 @@
         "swift",
         "kotlin"
       ]
+    },
+    "allowCamera": {
+      "type": "boolean",
+      "description": "Adds camera to the iframe's allow list (rjui web_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
+    },
+    "allowDownloads": {
+      "type": "boolean",
+      "description": "Adds allow-downloads to the iframe's sandbox (rjui web_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
+    },
+    "allowGeolocation": {
+      "type": "boolean",
+      "description": "Adds geolocation to the iframe's allow list (rjui web_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
+    },
+    "allowMicrophone": {
+      "type": "boolean",
+      "description": "Adds microphone to the iframe's allow list (rjui web_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
+    },
+    "allowModals": {
+      "type": "boolean",
+      "description": "Adds allow-modals to the iframe's sandbox (rjui web_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
+    },
+    "allowPopupsToEscapeSandbox": {
+      "type": "boolean",
+      "description": "Adds allow-popups-to-escape-sandbox to the iframe's sandbox (rjui web_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
+    },
+    "allowZoom": {
+      "type": "boolean",
+      "description": "Turns the WebView's zoom controls on (kjui web_component).",
+      "platform": "kotlin",
+      "warn_outside_mode": true
+    },
+    "allowsFullScreen": {
+      "type": "boolean",
+      "description": "fullscreen is in the iframe's allow list unless this is false (rjui web_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
+    },
+    "allowsInlineMediaPlayback": {
+      "type": "boolean",
+      "description": "Adds autoplay to the iframe's allow list (rjui web_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
+    },
+    "javaScriptCanOpenWindowsAutomatically": {
+      "type": "boolean",
+      "description": "Adds allow-popups to the iframe's sandbox (rjui web_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
+    },
+    "javaScriptEnabled": {
+      "type": "boolean",
+      "description": "JavaScript runs unless this is false (kjui web_component: settings.javaScriptEnabled; rjui web_converter: allow-scripts in the sandbox).",
+      "platform": ["kotlin", "react"],
+      "warn_outside_mode": true
+    },
+    "lazyLoad": {
+      "type": "boolean",
+      "description": "Draws the iframe with loading=\"lazy\" (rjui web_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
+    },
+    "scrollEnabled": {
+      "type": "boolean",
+      "description": "false hides the iframe's overflow (rjui web_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
+    },
+    "title": {
+      "type": "string",
+      "description": "The iframe's title, read by screen readers (rjui web_converter).",
+      "platform": "react",
+      "warn_outside_mode": true
+    },
+    "userAgent": {
+      "type": "string",
+      "description": "The WebView's user agent string (kjui web_component).",
+      "platform": "kotlin",
+      "warn_outside_mode": true
     }
   },
   "SafeAreaView": {

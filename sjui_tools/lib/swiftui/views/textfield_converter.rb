@@ -263,8 +263,14 @@ module SjuiTools
           blur_handlers = [@component['onBlur'], @component['onEndEditing']].compact
 
           focus_var = nil
+          # `autoFocus` (2.3.22, ticket rjui-textfield-autofocus-read-but-not-defined):
+          # the field takes the focus when the screen appears — its FocusState
+          # set once it is on screen (the next run loop turn: a FocusState set
+          # in the same pass as the view's first appearance is dropped by
+          # SwiftUI inside a navigation transition).
+          auto_focus = @component['autoFocus'] == true
           needs_focus_state = @component['id'] || focus_handlers.any? || blur_handlers.any? ||
-                              clear_button_needs_focus?
+                              clear_button_needs_focus? || auto_focus
           if needs_focus_state
             # No id: its position (position_name), not camelCased — `field`
             # was every id-less field's focus.
@@ -300,6 +306,10 @@ module SjuiTools
               end
               add_line "}"
             end
+          end
+
+          if auto_focus
+            add_modifier_line ".onAppear { DispatchQueue.main.async { #{focus_var} = true } }"
           end
 
           apply_clear_button_mode(text_binding, focus_var)

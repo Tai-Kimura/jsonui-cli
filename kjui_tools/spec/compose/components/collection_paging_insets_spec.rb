@@ -10,7 +10,7 @@ require_relative '../../support/kotlin_compiler'
 # Dynamic its page box — not the HorizontalPager's `contentPadding`, which
 # narrows the page and lets the neighbouring pages show in the padding. The
 # padding is the one every other Collection route takes
-# (collection_stack_content_padding_expr): contentPadding / insets (1, 2 or 4
+# (collection_stack_content_padding_expr): insets (1, 2 or 4
 # values, [top, right, bottom, left], an array or a `|` string), plus
 # insetHorizontal / insetVertical, plus the safe area, side by side; a binding
 # in the insets array is its own term. The pager read no insets through
@@ -83,7 +83,7 @@ RSpec.describe 'kjui codegen: a paging Collection pads each page cell by its ins
       'oneValue' => emit('insets' => 12),
       'twoValues' => emit('insets' => [8, 4]),
       'pipeString' => emit('insets' => '8|4|12|6'),
-      'contentPadding' => emit('contentPadding' => [1, 2, 3, 4]),
+      'fourValues' => emit('insets' => [1, 2, 3, 4]),
       'axesOnly' => emit('insetHorizontal' => 16, 'insetVertical' => 2),
       'added' => emit('insets' => [8, 4], 'insetHorizontal' => 10, 'insetVertical' => 2),
       'bound' => emit('insets' => ['@{t}', 0, 0, 0], 'insetVertical' => 4),
@@ -115,7 +115,7 @@ RSpec.describe 'kjui codegen: a paging Collection pads each page cell by its ins
     expect(lines['oneValue']).to eq(pages.('pad(12/12/12/12) ')), lines.inspect
     expect(lines['twoValues']).to eq(pages.('pad(8/4/8/4) ')), lines.inspect
     expect(lines['pipeString']).to eq(pages.('pad(8/4/12/6) ')), lines.inspect
-    expect(lines['contentPadding']).to eq(pages.('pad(1/2/3/4) ')), lines.inspect
+    expect(lines['fourValues']).to eq(pages.('pad(1/2/3/4) ')), lines.inspect
     expect(lines['axesOnly']).to eq(pages.('pad(2/16/2/16) ')), lines.inspect
     # Added side by side: [8, 4] + insetVertical 2 + insetHorizontal 10.
     expect(lines['added']).to eq(pages.('pad(10/14/10/14) ')), lines.inspect

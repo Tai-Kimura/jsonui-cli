@@ -121,7 +121,7 @@ RSpec.describe 'kjui a container\'s tintColor reaches the controls inside it' do
     it 'a more specific accent of its own wins too' do
       expect(emit.call(controls['Switch'].merge('onTintColor' => '#0000FF')).first).not_to include(inherited)
       expect(emit.call(controls['Progress'].merge('progressTintColor' => '#0000FF')).first).not_to include(inherited)
-      expect(emit.call(controls['Radio'].merge('selectedColor' => '#0000FF')).first).not_to include(inherited)
+      expect(emit.call(controls['Radio'].merge('checkedColor' => '#0000FF')).first).not_to include(inherited)
     end
   end
 

@@ -91,11 +91,11 @@ module RjuiTools
           #
           # `progressTintColor` / `trackTintColor` are the spellings
           # attribute_definitions declares: the filled track and the unfilled
-          # one. `tintColor` is the generic accent behind the first, and
-          # minimum/maximumTrackTintColor are the undeclared UIKit legacy
-          # behind both (slider.trackColors in attribute_semantics.json).
-          progress_tint = attributes['progressTintColor'] || attributes['tintColor'] ||
-                          attributes['minimumTrackTintColor']
+          # one. `tintColor` is the generic accent behind the first
+          # (slider.trackColors in attribute_semantics.json). The undeclared
+          # UIKit spellings minimum/maximumTrackTintColor are no longer read:
+          # retired_attribute_spellings.json names the declared ones.
+          progress_tint = attributes['progressTintColor'] || attributes['tintColor']
           @dynamic_styles['accentColor'] = color_style_expr(progress_tint) if progress_tint
 
           # The UNFILLED track is drawn by ::-webkit-slider-runnable-track, and
@@ -104,7 +104,7 @@ module RjuiTools
           # pixel-identical to no colour at all, while the pseudo-element
           # accepts one (and does NOT need `appearance: none`, which would
           # take the thumb with it).
-          track_tint = attributes['trackTintColor'] || attributes['maximumTrackTintColor']
+          track_tint = attributes['trackTintColor']
           if track_tint
             classes << TailwindMapper.map_color(
               track_tint, '[&::-webkit-slider-runnable-track]:bg'

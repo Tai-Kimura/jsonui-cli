@@ -125,11 +125,11 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
       end
     end
 
-    context 'with options array' do
+    context 'with items (the retired options spelling moved here)' do
       it 'generates radio with static options' do
         json_data = {
           'type' => 'Radio',
-          'options' => ['Red', 'Green', 'Blue'],
+          'items' => ['Red', 'Green', 'Blue'],
           'bind' => '@{color}'
         }
         result = described_class.generate(json_data, 0, required_imports)
@@ -143,7 +143,7 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
       it 'generates radio with hash options' do
         json_data = {
           'type' => 'Radio',
-          'options' => [
+          'items' => [
             { 'value' => '1', 'label' => 'First' },
             { 'value' => '2', 'label' => 'Second' }
           ],
@@ -157,7 +157,7 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
       it 'generates radio with dynamic options binding' do
         json_data = {
           'type' => 'Radio',
-          'options' => '@{availableOptions}',
+          'items' => '@{availableOptions}',
           'bind' => '@{selectedOption}'
         }
         result = described_class.generate(json_data, 0, required_imports)
@@ -167,7 +167,7 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
       it 'handles onValueChange callback' do
         json_data = {
           'type' => 'Radio',
-          'options' => ['A', 'B'],
+          'items' => ['A', 'B'],
           'onValueChange' => '@{handleChange}'
         }
         result = described_class.generate(json_data, 0, required_imports)
@@ -177,10 +177,10 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
       it 'handles selectedColor and unselectedColor' do
         json_data = {
           'type' => 'Radio',
-          'options' => ['Yes', 'No'],
+          'items' => ['Yes', 'No'],
           'bind' => '@{answer}',
-          'selectedColor' => '#007AFF',
-          'unselectedColor' => '#CCCCCC'
+          'checkedColor' => '#007AFF',
+          'uncheckedColor' => '#CCCCCC'
         }
         result = described_class.generate(json_data, 0, required_imports)
         expect(result).to include('RadioButtonDefaults.colors')
@@ -239,8 +239,8 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
       json_data = {
         'type' => 'Radio',
         'id' => 'genderRadio',
-        'options' => ['Male', 'Female'],
-        'selectedValue' => '@{gender}', # the options group's selection (a lone bind arrives as it: BindFold)
+        'items' => ['Male', 'Female'],
+        'selectedValue' => '@{gender}', # the items group's selection (a lone bind arrives as it: BindFold)
         'onValueChange' => '@{onRadioChange}'
       }
 
@@ -258,8 +258,8 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
       json_data = {
         'type' => 'Radio',
         'id' => 'genderRadio',
-        'options' => ['Male', 'Female'],
-        'selectedValue' => '@{gender}', # the options group's selection (a lone bind arrives as it: BindFold)
+        'items' => ['Male', 'Female'],
+        'selectedValue' => '@{gender}', # the items group's selection (a lone bind arrives as it: BindFold)
         'onValueChange' => '@{onRadioChange}'
       }
 
@@ -277,7 +277,7 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
       json_data = {
         'type' => 'Radio',
         'id' => 'sizeRadio',
-        'options' => ['Small', 'Large'],
+        'items' => ['Small', 'Large'],
         'onValueChange' => '@{onRadioChange}'
       }
 
@@ -295,8 +295,8 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
       json_data = {
         'type' => 'Radio',
         'id' => 'genderRadio',
-        'options' => ['Male', 'Female'],
-        'selectedValue' => '@{gender}', # the options group's selection (a lone bind arrives as it: BindFold)
+        'items' => ['Male', 'Female'],
+        'selectedValue' => '@{gender}', # the items group's selection (a lone bind arrives as it: BindFold)
         'onValueChange' => '@{onRadioChange}'
       }
 
@@ -313,7 +313,7 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
 
       json_data = {
         'type' => 'Radio',
-        'options' => ['Yes', 'No'],
+        'items' => ['Yes', 'No'],
         'onValueChange' => '@{onRadioChange}'
       }
 

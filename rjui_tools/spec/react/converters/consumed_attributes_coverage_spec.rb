@@ -15,7 +15,11 @@ require_relative '../../../lib/core/typed_attributes'
 #    in the UNDECLARED allowlist below. The allowlist is the live record
 #    of "converter reads not covered by the SSoT definitions" — shrink
 #    it by declaring the attribute in attribute_definitions.json, never
-#    grow it silently.
+#    grow it silently. The three faces' undeclared reads, each with its
+#    reason, are jui_tools/tests/test_converter_reads_are_declared.py's
+#    closed table (2.3.22); what is left here is base_converter's
+#    per-component reads and toggle_converter's CheckBox reads, which this
+#    scan files under the common table and Switch.
 #
 # base_converter is checked against the common table only (its reads run
 # for every component; per-component tables cover keys like fontColor).
@@ -24,9 +28,9 @@ RSpec.describe 'Converter consumed-attribute coverage' do
 
   CONSUMED = {
     'base_converter.rb' => %w[accessibilityLabel alignBottom alignBottomOfView alignBottomView alignCenterHorizontalView alignCenterVerticalView alignLeft alignLeftOfView alignLeftView alignRight alignRightOfView alignRightView alignTop alignTopOfView alignTopView alt background borderColor borderStyle borderWidth bottomMargin bottomPadding canTap centerHorizontal centerInParent centerVertical className clipToBounds contentDescription cornerRadius direction distribution effectStyle enabled endMargin font fontColor fontFamily fontSize fontWeight gravity height hidden id indexAbove indexBelow insetHorizontal insets key leftMargin leftPadding margins maxHeight maxWidth minHeight minWidth offsetX offsetY onClick onclick opacity orientation padding paddingBottom paddingEnd paddingLeft paddingRight paddingStart paddingTop paddings propertyName rightMargin rightPadding shadow startMargin tag tapBackground testId textAlign tintColor topMargin topPadding userInteractionEnabled visibility weight width zIndex],
-    'blur_converter.rb' => %w[backgroundColor blurRadius cornerRadius intensity onClick onclick],
+    'blur_converter.rb' => %w[background blurRadius cornerRadius intensity onClick onclick],
     'button_converter.rb' => %w[buttonType cornerRadius disabledBackground disabledFontColor enabled fontColor highlightBackground highlightColor href image partialAttributes tapBackground text tintColor],
-    'circle_view_converter.rb' => %w[background backgroundColor borderColor borderStyle borderWidth fillColor onClick onclick shadow strokeColor strokeWidth],
+    'circle_view_converter.rb' => %w[background borderColor borderStyle borderWidth onClick onclick shadow],
     'collection_converter.rb' => %w[
       autoChangeTrackingId
       cellClasses
@@ -36,7 +40,6 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       columnCount
       columnSpacing
       columns
-      contentInset
       contentInsetAdjustmentBehavior
       currentPage
       defaultScrollAnchor
@@ -58,35 +61,28 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       onValueChange
       orientation
       paging
-      scrollDirection
       scrollEnabled
       scrollTo
       sectionSpacing
       sections
       showsHorizontalScrollIndicator
       showsVerticalScrollIndicator
-      spacing
     ],
     'embed_converter.rb' => %w[events id navigationMode params screen],
-    'gradient_view_converter.rb' => %w[angle colors cornerRadius direction endPoint gradient gradientDirection gradientType locations onClick onclick orientation startPoint],
+    'gradient_view_converter.rb' => %w[angle colors cornerRadius endPoint gradient gradientDirection gradientType locations onClick onclick orientation startPoint],
     'icon_label_converter.rb' => %w[
       fontColor
       fontSize
       fontWeight
-      icon
       iconMargin
-      iconOff
-      iconOn
       iconPosition
       iconSize
-      iconTintColor
       icon_off
       icon_on
       onClick
       onclick
       selected
       selectedFontColor
-      spacing
       strikethrough
       text
       textShadow
@@ -103,7 +99,6 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       onclick
       src
       srcName
-      url
     ],
     'include_converter.rb' => %w[id shared_data],
     'indicator_converter.rb' => %w[borderWidth color halfSpinner height size strokeWidth tintColor width],
@@ -151,23 +146,20 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     'network_image_converter.rb' => %w[
       canTap
       circle
-      circleImage
       contentMode
       cornerRadius
       defaultImage
       errorImage
       hint
-      imageUrl
       loading
       loadingImage
       onClick
       onclick
       placeholder
-      scaleType
       src
       url
     ],
-    'progress_converter.rb' => %w[barHeight height maximumValue progress progressHeight progressTintColor tintColor trackColor trackTintColor value width],
+    'progress_converter.rb' => %w[height maximumValue progress progressHeight progressTintColor tintColor trackTintColor width],
     'radio_converter.rb' => %w[
       checked
       enabled
@@ -200,7 +192,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       showsVerticalScrollIndicator
     ],
     'segment_converter.rb' => %w[
-      backgroundColor
+      background
       enabled
       fontColor
       fontSize
@@ -214,8 +206,8 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       valueChange
       width
     ],
-    'select_box_converter.rb' => %w[background borderColor caretAttributes colorScheme datePickerMode datePickerStyle dateStringFormat enabled font fontColor fontSize hint hintColor items labelAttributes maximumDate minimumDate minuteInterval multiple onChange onValueChange onValueChanged placeholder placeholderColor prompt selectItemType selectedDate selectedIndex selectedItem selectedValue size textAlign value],
-    'slider_converter.rb' => %w[enabled maximum maximumTrackTintColor minimum minimumTrackTintColor onValueChange progressTintColor range step tintColor trackTintColor value width],
+    'select_box_converter.rb' => %w[background borderColor caretAttributes colorScheme datePickerMode datePickerStyle dateStringFormat enabled font fontColor fontSize hint hintColor items labelAttributes maximumDate minimumDate minuteInterval multiple onValueChange onValueChanged placeholder prompt selectItemType selectedDate selectedIndex selectedItem selectedValue size textAlign],
+    'slider_converter.rb' => %w[enabled maximum minimum onValueChange progressTintColor range step tintColor trackTintColor value width],
     'switch_converter.rb' => %w[checked enabled isOn label offTintColor onTintColor onValueChange text thumbTintColor tint tintColor trackTintColor value],
     'tab_view_converter.rb' => %w[background enabled height onValueChange selectedIndex showLabels tabBarBackground tabs tintColor unselectedColor width],
     'text_field_converter.rb' => %w[
@@ -223,7 +215,6 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       autocapitalizationType
       autocorrectionType
       background
-      becomeFirstResponder
       borderStyle
       borderWidth
       caretAttributes
@@ -244,7 +235,6 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       nextFocus
       onBeginEditing
       onBlur
-      onChange
       onEndEditing
       onFocus
       onSubmit
@@ -253,7 +243,6 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       pattern
       placeholder
       placeholderColor
-      readOnly
       required
       returnKeyType
       secure
@@ -265,7 +254,6 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     'text_view_converter.rb' => %w[
       autoFocus
       background
-      becomeFirstResponder
       borderColor
       borderWidth
       cols
@@ -287,18 +275,14 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       input
       keyboardType
       lineBreakMode
-      lines
       maxHeight
       maxLength
       minHeight
       name
-      onChange
       onTextChange
       padding
       pattern
       placeholder
-      placeholderColor
-      readOnly
       required
       resize
       returnKeyType
@@ -308,43 +292,43 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       text
       tintColor
     ],
-    'toggle_converter.rb' => %w[checked enabled icon isOn label onTintColor onValueChange selectedIcon spacing src text tint tintColor value],
+    'toggle_converter.rb' => %w[checked enabled icon isOn label onTintColor onValueChange selectedIcon spacing src text tintColor value],
     'view_converter.rb' => %w[bottomPadding centerHorizontal centerInParent centerVertical disabledBackground distribution draggable enabled flexWrap height highlightBackground highlighted leftPadding onClick onDragEnter onDragLeave onDragOver onDragStart onDrop onLongPress onPan onPinch onclick orientation padding paddingBottom paddingEnd paddingLeft paddingRight paddingStart paddingTop paddings rightPadding safeAreaInsetPositions spacing topPadding width],
-    'web_converter.rb' => %w[accessibilityLabel allow allowCamera allowDownloads allowGeolocation allowMicrophone allowModals allowPopupsToEscapeSandbox allowsFullScreen allowsInlineMediaPlayback html htmlContent javaScriptCanOpenWindowsAutomatically javaScriptEnabled lazyLoad loading sandbox scrollEnabled src title url]
+    'web_converter.rb' => %w[allow allowCamera allowDownloads allowGeolocation allowMicrophone allowModals allowPopupsToEscapeSandbox allowsFullScreen allowsInlineMediaPlayback html javaScriptCanOpenWindowsAutomatically javaScriptEnabled lazyLoad sandbox scrollEnabled title url]
   }.freeze
 
   UNDECLARED = {
-    'base_converter.rb' => %w[accessibilityLabel alt contentDescription direction font fontColor fontFamily fontSize fontWeight insetHorizontal insets key orientation textAlign zIndex],
-    'blur_converter.rb' => %w[backgroundColor intensity],
-    'button_converter.rb' => %w[href],
-    'circle_view_converter.rb' => %w[backgroundColor fillColor strokeColor strokeWidth],
+    'base_converter.rb' => %w[accessibilityLabel alt contentDescription direction font fontColor fontFamily fontSize fontWeight insetHorizontal insets key orientation textAlign],
+    'blur_converter.rb' => %w[],
+    'button_converter.rb' => %w[],
+    'circle_view_converter.rb' => %w[],
     # onItemAppear left this list in 49-E: it was the SSoT's only `callback`-typed
     # attribute, which attr-codegen skips as "not extractable from JSON", so it
     # had no declaration for this scan to find. A layout carries `@{handler}` as a
     # string, so it is declared like every other handler now and the allowlist
     # tightens by one.
-    'collection_converter.rb' => %w[contentInset scrollDirection spacing],
+    'collection_converter.rb' => %w[],
     'embed_converter.rb' => %w[],
-    'gradient_view_converter.rb' => %w[angle direction gradientType orientation],
-    'icon_label_converter.rb' => %w[fontWeight icon iconOff iconOn iconTintColor spacing strikethrough underline],
-    'image_converter.rb' => %w[url],
+    'gradient_view_converter.rb' => %w[],
+    'icon_label_converter.rb' => %w[],
+    'image_converter.rb' => %w[],
     'include_converter.rb' => %w[],
-    'indicator_converter.rb' => %w[halfSpinner size strokeWidth],
+    'indicator_converter.rb' => %w[],
     'label_converter.rb' => %w[],
-    'network_image_converter.rb' => %w[circle circleImage imageUrl scaleType],
-    'progress_converter.rb' => %w[barHeight maximumValue progressHeight trackColor value],
+    'network_image_converter.rb' => %w[],
+    'progress_converter.rb' => %w[],
     'radio_converter.rb' => %w[],
-    'scroll_view_converter.rb' => %w[contentInset],
-    'segment_converter.rb' => %w[backgroundColor fontSize],
-    'select_box_converter.rb' => %w[onChange placeholderColor textAlign value],
-    'slider_converter.rb' => %w[maximumTrackTintColor minimumTrackTintColor],
+    'scroll_view_converter.rb' => %w[],
+    'segment_converter.rb' => %w[],
+    'select_box_converter.rb' => %w[textAlign],
+    'slider_converter.rb' => %w[],
     'switch_converter.rb' => %w[],
     'tab_view_converter.rb' => %w[],
-    'text_field_converter.rb' => %w[autoFocus becomeFirstResponder editable name onChange readOnly],
-    'text_view_converter.rb' => %w[autoFocus becomeFirstResponder lines name onChange placeholderColor readOnly],
+    'text_field_converter.rb' => %w[],
+    'text_view_converter.rb' => %w[],
     'toggle_converter.rb' => %w[icon selectedIcon spacing src],
     'view_converter.rb' => %w[],
-    'web_converter.rb' => %w[accessibilityLabel allowCamera allowDownloads allowGeolocation allowMicrophone allowModals allowPopupsToEscapeSandbox allowsFullScreen allowsInlineMediaPlayback htmlContent javaScriptCanOpenWindowsAutomatically javaScriptEnabled lazyLoad loading scrollEnabled src title]
+    'web_converter.rb' => %w[]
   }.freeze
 
   def scan_consumed(file)

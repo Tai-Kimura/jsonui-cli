@@ -50,11 +50,12 @@ RSpec.describe RjuiTools::React::Converters::SegmentConverter do
       end
     end
 
-    context 'with backgroundColor' do
-      it 'applies background color' do
-        converter = create_converter({ 'class' => 'Segment', 'items' => ['A'], 'backgroundColor' => '#EEEEEE' })
+    context 'with background' do
+      it 'applies background color in place of the control grey' do
+        converter = create_converter({ 'class' => 'Segment', 'items' => ['A'], 'background' => '#EEEEEE' })
         result = converter.convert
         expect(result).to include('bg-[#EEEEEE]')
+        expect(result).not_to include('bg-gray-100')
       end
     end
 

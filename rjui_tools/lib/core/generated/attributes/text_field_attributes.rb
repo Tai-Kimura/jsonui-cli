@@ -23,6 +23,8 @@ module JsonUI
         { name: 'accessoryTextColor', kind: :string }.freeze,
         # Apply liquid glass effect. SUPERSEDED by the common attribute 'glass' as of 2026-09-14. The fold from this spelling to glass belongs to the normalizer and IS NOT IMPLEMENTED YET, so both spellings are live: this one stays TextField-only, UIKit-only and backed by UIBlurEffect, while glass is declared on common for SwiftUI and UIKit. Nothing breaks while both exist - they do not overlap in platform, mode or component - but a layout should be written against glass.
         { name: 'applyLiquidGlass', kind: :boolean }.freeze,
+        # Focuses the field when the screen appears (the keyboard opens): iOS SwiftUI sets the field's @FocusState on appear, Android Compose requests focus with a FocusRequester, web draws autoFocus.
+        { name: 'autoFocus', kind: :boolean }.freeze,
         # Auto-capitalization type. UIKit's vocabulary, honoured on every platform (.textInputAutocapitalization / KeyboardCapitalization / the HTML autocapitalize attribute). `characters` is an accepted alias spelling of allCharacters.
         { name: 'autocapitalizationType', kind: :enum, values: ['none', 'words', 'sentences', 'allCharacters', 'characters'].freeze }.freeze,
         # Auto-correction type. UIKit's vocabulary; `on`/`true` and `off`/`false` are accepted alias spellings of yes/no. `default` means "leave it to the platform" — web deliberately emits nothing for it.
@@ -39,6 +41,8 @@ module JsonUI
         { name: 'disabledBackground', kind: :string }.freeze,
         # Text of the input accessory toolbar's Done button. UIKit only (see accessoryBackground).
         { name: 'doneText', kind: :string }.freeze,
+        # false draws the input readOnly (rjui text_field_converter).
+        { name: 'editable', kind: :boolean }.freeze,
         # Field padding
         { name: 'fieldPadding', kind: :number }.freeze,
         # Font name or 'bold' (binding supported)
@@ -77,6 +81,8 @@ module JsonUI
         { name: 'leftViewMode', kind: :string }.freeze,
         # Maximum input length
         { name: 'maxLength', kind: :number }.freeze,
+        # The input's form name attribute (rjui text_field_converter).
+        { name: 'name', kind: :string }.freeze,
         # ID of the next field to focus on submit (for focus chain)
         { name: 'nextFocus', kind: :string }.freeze,
         # Begin editing event handler
@@ -105,6 +111,8 @@ module JsonUI
         { name: 'onSubmit', kind: :string }.freeze,
         # Text change event handler
         { name: 'onTextChange', kind: :string }.freeze,
+        # Draws the outlined text field style (kjui textfield_component; borderColor / borderWidth also select it).
+        { name: 'outlined', kind: :boolean }.freeze,
         # Input validation pattern
         { name: 'pattern', kind: :string }.freeze,
         # Placeholder text (alias for hint)

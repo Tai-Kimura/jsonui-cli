@@ -23,6 +23,8 @@ module JsonUI
         { name: 'children', kind: :array }.freeze,
         # Blur effect style
         { name: 'effectStyle', kind: :enum, values: ['Light', 'Dark', 'ExtraLight'].freeze }.freeze,
+        # Blur strength 0-1, drawn as a backdrop blur of intensity x 20 px (rjui blur_converter).
+        { name: 'intensity', kind: :number }.freeze,
       ].freeze
 
       # Returns a Hash keyed by canonical attribute name.

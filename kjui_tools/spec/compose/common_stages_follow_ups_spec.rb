@@ -36,7 +36,7 @@ RSpec.describe 'kjui codegen: the common stages, follow-ups' do
     'CircleImage' => { 'srcName' => 'ic_a' },
     'Switch' => {}, 'Switch label' => { 'label' => 'L' }, 'Toggle' => {},
     'CheckBox' => {}, 'CheckBox label' => { 'label' => 'L' }, 'CheckBox icons' => { 'src' => 'ic_a', 'selectedIcon' => 'ic_b' },
-    'Radio' => { 'text' => 'r' }, 'Radio options' => { 'options' => %w[a b], 'bind' => '@{sel}' },
+    'Radio' => { 'text' => 'r' },
     'Radio items' => { 'items' => %w[a b] },
     'Slider' => {}, 'Progress' => {}, 'Indicator' => {}, 'SelectBox' => { 'items' => %w[a b] },
     'Segment' => { 'items' => %w[a b] },

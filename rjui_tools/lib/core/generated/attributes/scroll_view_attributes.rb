@@ -20,6 +20,8 @@ module JsonUI
         { name: 'child', kind: :array }.freeze,
         # Child components. A single component node (object) is accepted as a one-element array.
         { name: 'children', kind: :array }.freeze,
+        # Padding inside the scroll area: one, two or four values (rjui scroll_view_converter). [accepts: number | array]
+        { name: 'contentInset', kind: :raw }.freeze,
         # Content inset adjustment
         { name: 'contentInsetAdjustmentBehavior', kind: :enum, values: ['never', 'always', 'automatic', 'scrollableAxes'].freeze }.freeze,
         # Initial offset [x, y]

@@ -51,8 +51,6 @@ module RjuiTools
             end
           elsif attributes['src']
             convert_src_value(attributes['src'], 'src')
-          elsif attributes['url']
-            convert_src_value(attributes['url'], 'url')
           elsif attributes['defaultImage']
             "/images/#{resolve_image_extension(attributes['defaultImage'])}"
           else

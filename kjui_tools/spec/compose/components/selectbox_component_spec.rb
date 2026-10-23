@@ -36,7 +36,7 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
       it 'generates SelectBox with static options array' do
         json_data = {
           'type' => 'SelectBox',
-          'options' => ['Option 1', 'Option 2', 'Option 3']
+          'items' => ['Option 1', 'Option 2', 'Option 3']
         }
         result = described_class.generate(json_data, 0, required_imports)
         expect(result).to include('options = listOf(')
@@ -56,7 +56,7 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
       it 'generates SelectBox with hash options' do
         json_data = {
           'type' => 'SelectBox',
-          'options' => [
+          'items' => [
             { 'value' => '1', 'label' => 'First' },
             { 'value' => '2', 'label' => 'Second' }
           ]
@@ -69,7 +69,7 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
       it 'generates SelectBox with dynamic options binding' do
         json_data = {
           'type' => 'SelectBox',
-          'options' => '@{availableOptions}'
+          'items' => '@{availableOptions}'
         }
         result = described_class.generate(json_data, 0, required_imports)
         expect(result).to include('options = data.availableOptions')
@@ -79,7 +79,7 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
         json_data = {
           'type' => 'SelectBox',
           'selectedItem' => '@{selectedValue}',
-          'options' => ['A', 'B']
+          'items' => ['A', 'B']
         }
         result = described_class.generate(json_data, 0, required_imports)
         expect(result).to include('value = data.selectedValue')
@@ -92,7 +92,7 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
         json_data = JsonUIShared::BindFold.fold({
           'type' => 'SelectBox',
           'bind' => '@{choice}',
-          'options' => ['A', 'B']
+          'items' => ['A', 'B']
         })
         result = described_class.generate(json_data, 0, required_imports)
         expect(result).to include('value = data.choice')
@@ -482,7 +482,7 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
         'type' => 'SelectBox',
         'id' => 'countrySelect',
         'selectedItem' => '@{country}',
-        'options' => ['USA', 'Japan', 'UK'],
+        'items' => ['USA', 'Japan', 'UK'],
         'onValueChange' => '@{onSelectionChange}'
       }
 
@@ -501,7 +501,7 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
         'type' => 'SelectBox',
         'id' => 'countrySelect',
         'selectedItem' => '@{country}',
-        'options' => ['USA', 'Japan', 'UK'],
+        'items' => ['USA', 'Japan', 'UK'],
         'onValueChange' => '@{onSelectionChange}'
       }
 
@@ -518,7 +518,7 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
       json_data = {
         'type' => 'SelectBox',
         'id' => 'languageSelect',
-        'options' => ['English', 'Japanese'],
+        'items' => ['English', 'Japanese'],
         'onValueChange' => '@{onSelectionChange}'
       }
 
@@ -536,7 +536,7 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
         'type' => 'SelectBox',
         'id' => 'countrySelect',
         'selectedItem' => '@{country}',
-        'options' => ['USA', 'Japan', 'UK'],
+        'items' => ['USA', 'Japan', 'UK'],
         'onValueChange' => '@{onSelectionChange}'
       }
 
@@ -553,7 +553,7 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
 
       json_data = {
         'type' => 'SelectBox',
-        'options' => ['A', 'B'],
+        'items' => ['A', 'B'],
         'onValueChange' => '@{onSelectionChange}'
       }
 

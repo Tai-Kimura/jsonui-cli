@@ -45,7 +45,7 @@ RSpec.describe 'kjui codegen: viewId by position' do
     'CheckBox onValueChange' => [{ 'type' => 'CheckBox', 'onValueChange' => '@{h}' }, 'checkBox_0_1'],
     'Slider onValueChange' => [{ 'type' => 'Slider', 'onValueChange' => '@{h}' }, 'slider_0_1'],
     'Segment onValueChange' => [{ 'type' => 'Segment', 'items' => %w[a b], 'onValueChange' => '@{h}' }, 'segment_0_1'],
-    'Radio options onValueChange' => [{ 'type' => 'Radio', 'options' => %w[a b], 'bind' => '@{sel}', 'onValueChange' => '@{h}' }, 'radio_0_1'],
+    'Radio items onValueChange' => [{ 'type' => 'Radio', 'items' => %w[a b], 'bind' => '@{sel}', 'onValueChange' => '@{h}' }, 'radio_0_1'],
     'TextField onTextChange' => [{ 'type' => 'TextField', 'text' => '@{t}', 'onTextChange' => '@{h}' }, 'textField_0_1'],
     'TextView onTextChange' => [{ 'type' => 'TextView', 'text' => '@{t}', 'onTextChange' => '@{h}' }, 'textView_0_1'],
     'Button onClick' => [{ 'type' => 'Button', 'text' => 't', 'onClick' => '@{h}' }, 'button_0_1'],

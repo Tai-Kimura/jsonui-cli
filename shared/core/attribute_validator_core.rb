@@ -244,8 +244,8 @@ module JsonUIShared
             add_platform_info(key, attr_def, type)
           end
         else
-          # Unknown attribute
-          add_warning("Unknown attribute '#{key}' for component type '#{type}'")
+          # Unknown attribute (a retired spelling names the declared one)
+          add_warning(unknown_attribute_message(key, type))
         end
       end
 
@@ -603,6 +603,26 @@ module JsonUIShared
     #
     # A spelling in neither (Button, IconLabel, TabView, Embed, ...)
     # resolves by the identity fallback to its own definition section.
+    # The warning for a key the component does not declare. A spelling a
+    # converter used to read as a fallback beside a declared attribute, and
+    # stopped reading in 2.3.22 (retired_attribute_spellings.json beside the
+    # definitions: component -> {spelling: declared attribute}), is named
+    # with the attribute to write instead — a layout that used it built the
+    # same until then, so the plain "Unknown attribute" would not say what to
+    # do. A missing table loses the hint only: the warning itself is the same.
+    def unknown_attribute_message(key, type)
+      message = "Unknown attribute '#{key}' for component type '#{type}'"
+      use = retired_spellings.fetch(map_type_to_definition(type), {})[key]
+      use ? "#{message} — no such name; use '#{use}'" : message
+    end
+
+    def retired_spellings
+      @retired_spellings ||= begin
+        path = File.join(File.dirname(__FILE__), 'retired_attribute_spellings.json')
+        File.exist?(path) ? (JSON.parse(File.read(path))['spellings'] || {}) : {}
+      end
+    end
+
     def map_type_to_definition(type)
       entry = type_synonyms[type]
       resolve_component_alias(entry ? entry['canonical'] : type)

@@ -35,14 +35,16 @@ RSpec.describe RjuiTools::React::Converters::ImageConverter do
       end
     end
 
+    # Inverted in 2.3.22: Image declares `src`; the `url` fallback is retired
+    # (retired_attribute_spellings.json). NetworkImage declares url.
     context 'with url instead of src' do
-      it 'uses url as src' do
+      it 'does not read the retired url spelling' do
         converter = create_converter({
           'type' => 'Image',
           'url' => 'https://example.com/image.jpg'
         })
         result = converter.convert
-        expect(result).to include('src="https://example.com/image.jpg"')
+        expect(result).not_to include('src="https://example.com/image.jpg"')
       end
     end
 

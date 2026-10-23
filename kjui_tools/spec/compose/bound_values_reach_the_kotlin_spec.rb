@@ -69,7 +69,7 @@ RSpec.describe 'kjui codegen: bound values reach the Kotlin' do
   # declared form; kept here by name so a new leak is red and a fixed one says
   # so.
   not_numbers = {
-    'TextField' => %w[fieldId nextFocus nextFocusId],
+    'TextField' => %w[nextFocus],
     'TextView' => %w[hideOnFocused], 'Radio' => %w[group],
     'WebView' => %w[userAgent], 'Web' => %w[userAgent]
   }

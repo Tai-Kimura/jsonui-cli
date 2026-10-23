@@ -94,13 +94,9 @@ module RjuiTools
           classes << 'flex'
           classes << 'rounded-lg'
 
-          # Background color
-          bg_color = attributes['backgroundColor']
-          if bg_color
-            classes << TailwindMapper.map_color(bg_color, 'bg')
-          else
-            classes << 'bg-gray-100'
-          end
+          # Background color: a declared `background` is drawn by the base
+          # converter; without one the control's grey
+          classes << 'bg-gray-100' unless attributes['background']
 
           classes << 'p-1'
 

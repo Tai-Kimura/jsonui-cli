@@ -21,8 +21,12 @@ module JsonUI
         { name: 'hidesWhenStopped', kind: :boolean }.freeze,
         # ActivityIndicator size style.
         { name: 'indicatorStyle', kind: :enum, values: ['medium', 'large'].freeze }.freeze,
+        # The value that fills the bar, the <progress> max (rjui progress_converter).
+        { name: 'maximumValue', kind: :number }.freeze,
         # Progress value (0-1, can be binding)
         { name: 'progress', kind: :number, bindable: true }.freeze,
+        # Height of the bar (rjui progress_converter).
+        { name: 'progressHeight', kind: :number }.freeze,
         # Custom progress image
         { name: 'progressImage', kind: :string }.freeze,
         # Progress portion color - hex string or color name from colors.json (binding supported)

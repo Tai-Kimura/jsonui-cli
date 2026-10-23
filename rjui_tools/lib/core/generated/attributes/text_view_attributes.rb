@@ -17,6 +17,8 @@ module JsonUI
       ATTRS = [
         # Allow editing text attributes
         { name: 'allowsEditingTextAttributes', kind: :boolean }.freeze,
+        # Focuses the field when the screen appears (the keyboard opens): iOS SwiftUI sets the field's @FocusState on appear, Android Compose requests focus with a FocusRequester, web draws autoFocus.
+        { name: 'autoFocus', kind: :boolean }.freeze,
         # Number of visible columns
         { name: 'cols', kind: :number }.freeze,
         # Container inset [accepts: number | array]
@@ -61,6 +63,10 @@ module JsonUI
         { name: 'lineBreakMode', kind: :enum, values: ['Char', 'Clip', 'Word', 'Head', 'Middle', 'Tail'].freeze }.freeze,
         # Maximum input length
         { name: 'maxLength', kind: :number }.freeze,
+        # Most lines shown before the text scrolls (kjui textview_component).
+        { name: 'maxLines', kind: :number }.freeze,
+        # The textarea's form name attribute (rjui text_view_converter).
+        { name: 'name', kind: :string }.freeze,
         # Begin editing event handler
         { name: 'onBeginEditing', kind: :string }.freeze,
         # Selection change event handler

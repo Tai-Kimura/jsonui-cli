@@ -39,7 +39,7 @@ module KjuiTools
           # the black/white default (ios/web read the declaration; the kotlin
           # pair was the outlier — parity family kjui-codegen-gradientview).
           # A legacy object wrapper { colors:, items: } is tolerated.
-          colors = json_data['gradient'] || json_data['colors'] || json_data['items']
+          colors = json_data['gradient'] || json_data['colors']
           colors = colors['colors'] || colors['items'] if colors.is_a?(Hash)
           colors = ['#000000', '#FFFFFF'] unless colors.is_a?(Array) && !colors.empty?
 
@@ -55,28 +55,18 @@ module KjuiTools
           when 'vertical'
             'verticalGradient'
           else
-            if json_data['orientation']
-              case json_data['orientation']
-              when 'horizontal'
-                'horizontalGradient'
-              when 'vertical'
-                'verticalGradient'
-              when 'diagonal'
-                'linearGradient'
-              else
-                'verticalGradient'
-              end
+            # `orientation` was read here as a gradient direction; it is not
+            # one (web: how the children stack, declared react-only) — the
+            # direction is gradientDirection, or the start/end points
+            start_point = json_data['startPoint'] || 'top'
+            end_point = json_data['endPoint'] || 'bottom'
+            case [start_point, end_point]
+            when ['top', 'bottom'], ['bottom', 'top']
+              'verticalGradient'
+            when ['left', 'right'], ['leading', 'trailing'], ['right', 'left'], ['trailing', 'leading']
+              'horizontalGradient'
             else
-              start_point = json_data['startPoint'] || 'top'
-              end_point = json_data['endPoint'] || 'bottom'
-              case [start_point, end_point]
-              when ['top', 'bottom'], ['bottom', 'top']
-                'verticalGradient'
-              when ['left', 'right'], ['leading', 'trailing'], ['right', 'left'], ['trailing', 'leading']
-                'horizontalGradient'
-              else
-                'linearGradient'
-              end
+              'linearGradient'
             end
           end
           

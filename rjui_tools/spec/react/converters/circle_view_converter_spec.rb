@@ -21,9 +21,9 @@ RSpec.describe RjuiTools::React::Converters::CircleViewConverter do
       end
     end
 
-    context 'with fillColor' do
+    context 'with background' do
       it 'applies background color' do
-        converter = create_converter({ 'class' => 'CircleView', 'fillColor' => '#FF5500' })
+        converter = create_converter({ 'class' => 'CircleView', 'background' => '#FF5500' })
         result = converter.convert
         expect(result).to include("backgroundColor: '#FF5500'")
       end
@@ -31,21 +31,21 @@ RSpec.describe RjuiTools::React::Converters::CircleViewConverter do
 
     context 'with background color binding' do
       it 'generates dynamic background color' do
-        converter = create_converter({ 'class' => 'CircleView', 'fillColor' => '@{circleColor}' })
+        converter = create_converter({ 'class' => 'CircleView', 'background' => '@{circleColor}' })
         result = converter.convert
         expect(result).to include('backgroundColor: data.circleColor')
       end
     end
 
-    context 'with strokeColor' do
+    context 'with borderColor and borderWidth' do
       it 'applies border' do
-        converter = create_converter({ 'class' => 'CircleView', 'strokeColor' => '#000000', 'strokeWidth' => 2 })
+        converter = create_converter({ 'class' => 'CircleView', 'borderColor' => '#000000', 'borderWidth' => 2 })
         result = converter.convert
         expect(result).to include("border: '2px solid #000000'")
       end
     end
 
-    context 'with borderColor (alternative to strokeColor)' do
+    context 'with borderColor' do
       it 'uses border properties' do
         converter = create_converter({ 'class' => 'CircleView', 'borderColor' => '#333333', 'borderWidth' => 3 })
         result = converter.convert
@@ -55,7 +55,7 @@ RSpec.describe RjuiTools::React::Converters::CircleViewConverter do
 
     context 'with borderStyle' do
       it 'applies border style' do
-        converter = create_converter({ 'class' => 'CircleView', 'strokeColor' => '#000000', 'borderStyle' => 'dashed' })
+        converter = create_converter({ 'class' => 'CircleView', 'borderColor' => '#000000', 'borderStyle' => 'dashed' })
         result = converter.convert
         expect(result).to include('dashed')
       end

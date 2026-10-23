@@ -35,6 +35,8 @@ module JsonUI
         { name: 'highlightBackground', kind: :string }.freeze,
         # Highlight color - hex string or color name from colors.json (binding supported)
         { name: 'highlightColor', kind: :string, bindable: true, aliases: ['hilightColor'].freeze }.freeze,
+        # Draws the button as a link to this URL (rjui button_converter).
+        { name: 'href', kind: :string }.freeze,
         # Button image - asset name (binding supported)
         { name: 'image', kind: :string, bindable: true }.freeze,
         # Partial text styling: apply font/size/color/underline/shadow to a substring selected by 'range' (a [start, end] pair, a text pattern, or a binding), and optionally make it tappable with 'onClick' (alias 'onclick'). This is the supported way to get emphasis or a link inside a Label, since 'text' is plain text and markdown is not interpreted, and it is the portable way to express a cross-reference: the handler navigates (and scrolls to the target) in host code, so the same layout works everywhere, where a URL-based link would only work on web. All three platforms resolve partials at RUNTIME against the resolved string, so a pattern range and a localized or bound 'text' both work. Semantics, identical across platforms and verified against each runtime: an array range is [start, end) with the end exclusive; a string range is the FIRST occurrence and the partial is skipped (not an error) when the pattern is absent; a range that is out of bounds or inverted is skipped; partials apply in declaration order and MERGE where they overlap, later declarations winning per property. Declared from the implementation, which already read it: sjui button_converter.rb:68-129 (plan 51-E).

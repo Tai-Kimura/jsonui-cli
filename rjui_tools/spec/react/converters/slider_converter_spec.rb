@@ -117,9 +117,9 @@ RSpec.describe RjuiTools::React::Converters::SliderConverter do
       end
     end
 
-    context 'with minimumTrackTintColor' do
-      it 'uses minimum track color as accent' do
-        converter = create_converter({ 'class' => 'Slider', 'minimumTrackTintColor' => '#00FF00' })
+    context 'with progressTintColor' do
+      it 'uses the filled track colour as accent' do
+        converter = create_converter({ 'class' => 'Slider', 'progressTintColor' => '#00FF00' })
         result = converter.convert
         expect(result).to include("accentColor: '#00FF00'")
       end
@@ -156,12 +156,17 @@ RSpec.describe RjuiTools::React::Converters::SliderConverter do
         expect(result).to include('[&::-webkit-slider-runnable-track]:bg-[#222222]')
       end
 
-      it 'falls back to the legacy spellings when the declared ones are absent' do
+      # Inverted in 2.3.22: the UIKit spellings are retired
+      # (retired_attribute_spellings.json names the declared ones)
+      it 'no longer reads the retired UIKit spellings' do
         converter = create_converter({
           'class' => 'Slider',
+          'minimumTrackTintColor' => '#444444',
           'maximumTrackTintColor' => '#555555'
         })
-        expect(converter.convert).to include('[&::-webkit-slider-runnable-track]:bg-[#555555]')
+        result = converter.convert
+        expect(result).not_to include('#444444')
+        expect(result).not_to include('#555555')
       end
 
       # Measured in Chromium: a background-color on the <input type="range">

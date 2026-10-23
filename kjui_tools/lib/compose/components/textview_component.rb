@@ -191,6 +191,18 @@ module KjuiTools
             code += indent("val keyboardController_#{json_data['id']} = LocalSoftwareKeyboardController.current", depth) + "\n"
             code += indent("LaunchedEffect(data.#{focus_prop}) { if (data.#{focus_prop}) { focusRequester_#{json_data['id']}.requestFocus(); keyboardController_#{json_data['id']}?.show() } }", depth) + "\n"
           end
+          # `autoFocus` (2.3.22, as TextFieldComponent): the field takes the
+          # focus when the screen appears. Its requester is the id's, or one
+          # named by its position (view_id) for a field with no id.
+          auto_focus_requester = nil
+          if json_data['autoFocus'] == true
+            auto_focus_requester = focus_prop ? json_data['id'] : Helpers::ModifierBuilder.view_id(json_data).to_s.gsub(/[^A-Za-z0-9_]/, '_')
+            required_imports&.add(:focus_requester)
+            required_imports&.add(:remember)
+            required_imports&.add(:launched_effect)
+            code += indent("val focusRequester_#{auto_focus_requester} = remember { FocusRequester() }", depth) + "\n" unless focus_prop
+            code += indent("LaunchedEffect(Unit) { focusRequester_#{auto_focus_requester}.requestFocus() }", depth) + "\n"
+          end
 
           if has_margins
             required_imports&.add(:box)
@@ -280,6 +292,7 @@ module KjuiTools
               textfield_modifiers << ".onFocusChanged { if (it.isFocused != data.#{focus_prop}) viewModel.updateData(mapOf(\"#{focus_prop}\" to it.isFocused)) }"
               textfield_modifiers << ".focusRequester(focusRequester_#{json_data['id']})"
             end
+            textfield_modifiers << ".focusRequester(focusRequester_#{auto_focus_requester})" if auto_focus_requester && !focus_prop
 
             if textfield_modifiers.any?
               code += "\n" + indent("textFieldModifier = Modifier", depth + 1)
@@ -349,6 +362,7 @@ module KjuiTools
               modifiers << ".onFocusChanged { if (it.isFocused != data.#{focus_prop}) viewModel.updateData(mapOf(\"#{focus_prop}\" to it.isFocused)) }"
               modifiers << ".focusRequester(focusRequester_#{json_data['id']})"
             end
+            modifiers << ".focusRequester(focusRequester_#{auto_focus_requester})" if auto_focus_requester && !focus_prop
 
             if modifiers.any?
               code += "\n" + indent("modifier = Modifier", depth + 1)

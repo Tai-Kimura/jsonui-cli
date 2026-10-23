@@ -89,7 +89,7 @@ module KjuiTools
           colors_params = []
 
           # Background color (containerColor) - default to transparent
-          bg_value = json_data['backgroundColor'] || json_data['background']
+          bg_value = json_data['background']
           if bg_value
             bg_color = Helpers::ResourceResolver.process_color(bg_value, required_imports)
             colors_params << "containerColor = #{bg_color}"

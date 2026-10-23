@@ -99,7 +99,7 @@ RSpec.describe 'author text reaches generated Kotlin through the one escaper' do
     components::CircleImageComponent.generate({ 'type' => 'CircleImage', 'url' => t }, 0, Set.new)
   end
   path('IconLabelComponent.quote — IconLabel.contentDescription', around: 'contentDescription = %s') do |t|
-    components::IconLabelComponent.generate({ 'type' => 'IconLabel', 'text' => 'a', 'icon' => 'x', 'contentDescription' => t }, 0, Set.new)
+    components::IconLabelComponent.generate({ 'type' => 'IconLabel', 'text' => 'a', 'icon_off' => 'x', 'contentDescription' => t }, 0, Set.new)
   end
   path('NetworkImageComponent.quote — NetworkImage.url', around: 'model = %s,') do |t|
     components::NetworkImageComponent.generate({ 'type' => 'NetworkImage', 'url' => t }, 0, Set.new)
@@ -160,8 +160,8 @@ RSpec.describe 'author text reaches generated Kotlin through the one escaper' do
     selectbox('items' => [t], 'selectedIndex' => '@{i}', 'onValueChange' => '@{onPick}')
   end
   path('SelectBox items — a static selectedIndex (the seed)', around: 'mutableStateOf(%s)') { |t| selectbox('items' => [t], 'selectedIndex' => 0) }
-  path('SelectBox options', around: 'options = listOf(%s),') { |t| selectbox('options' => [t]) }
-  path('SelectBox options — a Hash label', around: 'options = listOf(%s),') { |t| selectbox('options' => [{ 'label' => t }]) }
+  path('SelectBox items', around: 'options = listOf(%s),') { |t| selectbox('items' => [t]) }
+  path('SelectBox items — a Hash label', around: 'options = listOf(%s),') { |t| selectbox('items' => [{ 'label' => t }]) }
   path('SelectBox dateFormat', around: 'dateFormat = %s,') { |t| selectbox('selectItemType' => 'Date', 'dateFormat' => t) }
   path('SelectBox datePickerMode', around: 'datePickerMode = %s,') { |t| selectbox('selectItemType' => 'Date', 'datePickerMode' => t) }
   path('SelectBox datePickerStyle', around: 'datePickerStyle = %s,') { |t| selectbox('selectItemType' => 'Date', 'datePickerStyle' => t) }
@@ -171,14 +171,7 @@ RSpec.describe 'author text reaches generated Kotlin through the one escaper' do
   def self.radio(json)
     KjuiTools::Compose::Components::RadioComponent.generate({ 'type' => 'Radio', 'id' => 'target' }.merge(json), 0, Set.new)
   end
-  # the options group is bound through its selectedValue (a lone `bind`
-  # arrives as it: JsonUIShared::BindFold at the dispatch)
-  path('Radio options value — written to the binding', around: 'mapOf("sel" to %s))') { |t| radio('options' => [t], 'selectedValue' => '@{sel}') }
-  path('Radio options value — compared for selected', around: '== %s),') { |t| radio('options' => [t], 'selectedValue' => '@{sel}') }
-  path('Radio options value — the onValueChange argument', around: 'invoke("target", %s)') do |t|
-    radio('options' => [t], 'onValueChange' => '@{onPick}')
-  end
-  path('Radio options label', around: 'Text(%s)') { |t| radio('options' => [{ 'value' => 'v', 'label' => t }]) }
+  # (the `options` group, retired in 2.3.22, had its own four paths here)
   path('Radio items value — written to the binding', around: 'mapOf("sel" to %s))') { |t| radio('items' => [t], 'selectedValue' => '@{sel}') }
   path('Radio items value — compared for selected', around: '== %s,') { |t| radio('items' => [t], 'selectedValue' => '@{sel}') }
   path('Radio items label', around: 'Text(%s, color') { |t| radio('items' => [t], 'selectedValue' => '@{sel}') }
@@ -305,7 +298,7 @@ RSpec.describe 'author text reaches generated Kotlin through the one escaper' do
       'button' => cut.call(components::ButtonComponent.generate({ 'type' => 'Button', 'text' => t }, 0, Set.new), /^\s*Text\((.*?)\)$/m),
       'hint' => cut.call(components::TextFieldComponent.generate({ 'type' => 'TextField', 'hint' => t }, 0, Set.new), /^\s*text = (.*?),$/m),
       'tabTitle' => cut.call(tab, /label = \{ Text\((.*?)\) \},$/m),
-      'selectItems' => cut.call(self.class.selectbox('options' => [t, 'b']), /options = (listOf\(.*?\)),$/m),
+      'selectItems' => cut.call(self.class.selectbox('items' => [t, 'b']), /options = (listOf\(.*?\)),$/m),
       'dataDefault' => self.class.updater.send(:format_default_value, t, 'String'),
       'bindingDefault' => helpers::ResourceResolver.process_text("@{name ?? '#{STRING_PATH_DEFAULT_SPECIMEN}'}")
     }

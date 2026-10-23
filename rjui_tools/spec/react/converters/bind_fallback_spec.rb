@@ -221,9 +221,11 @@ RSpec.describe 'z-order and tint spellings on web' do
         .to include('#FF0000')
     end
 
-    it 'colours the Toggle' do
+    # ToggleConverter draws CheckBox, which declares no `tint`: its
+    # fallback read is retired (retired_attribute_spellings.json: tintColor)
+    it 'does not colour the CheckBox from the retired tint spelling' do
       expect(control(RjuiTools::React::Converters::ToggleConverter, 'tint' => '#FF0000'))
-        .to include('#FF0000')
+        .not_to include('#FF0000')
     end
 
     # Same precedence as kjui's switch_component: onTintColor || tint || tintColor.

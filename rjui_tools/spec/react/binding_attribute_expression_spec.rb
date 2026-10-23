@@ -55,12 +55,11 @@ module BindingAttributeExpressionSpec
   image_name = ->(t) { "/images/#{t}" }
   SITES = [
     site.('Image src', '<img', 'src', 'src', ->(v) { C::ImageConverter.new({ 'type' => 'Image', 'src' => v }, CONFIG.dup).convert }),
-    site.('Image url', '<img', 'src', 'src', ->(v) { C::ImageConverter.new({ 'type' => 'Image', 'url' => v }, CONFIG.dup).convert }),
     site.('Image srcName', '<img', 'src', 'src',
           ->(v) { C::ImageConverter.new({ 'type' => 'Image', 'srcName' => v }, CONFIG.dup).convert },
           expect: image_name, alone: '{`/images/${data.img}`}', bound_only: true),
-    site.('IconLabel icon', '<img', 'src', 'src',
-          ->(v) { C::IconLabelConverter.new({ 'type' => 'IconLabel', 'text' => 't', 'icon' => v }, CONFIG.dup).convert }),
+    site.('IconLabel icon_off', '<img', 'src', 'src',
+          ->(v) { C::IconLabelConverter.new({ 'type' => 'IconLabel', 'text' => 't', 'icon_off' => v }, CONFIG.dup).convert }),
     site.('Button image', '<img', 'src', 'src',
           ->(v) { C::ButtonConverter.new({ 'type' => 'Button', 'text' => 't', 'image' => v }, CONFIG.dup).convert },
           expect: image_name, alone: '{`/images/${data.img}`}', bound_only: true),

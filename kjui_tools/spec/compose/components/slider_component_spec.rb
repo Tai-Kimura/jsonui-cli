@@ -88,13 +88,13 @@ RSpec.describe KjuiTools::Compose::Components::SliderComponent do
     end
 
     it 'generates Slider with min and max' do
-      json_data = { 'type' => 'Slider', 'min' => 0, 'max' => 50 }
+      json_data = { 'type' => 'Slider', 'minimum' => 0, 'maximum' => 50 }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('valueRange = 0f..50f')
     end
 
     it 'generates Slider with step' do
-      json_data = { 'type' => 'Slider', 'min' => 0, 'max' => 100, 'step' => 10 }
+      json_data = { 'type' => 'Slider', 'minimum' => 0, 'maximum' => 100, 'step' => 10 }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('steps = 9')
     end
@@ -126,13 +126,13 @@ RSpec.describe KjuiTools::Compose::Components::SliderComponent do
     end
 
     it 'generates Slider with minimumTrackTintColor' do
-      json_data = { 'type' => 'Slider', 'minimumTrackTintColor' => '#00FF00' }
+      json_data = { 'type' => 'Slider', 'progressTintColor' => '#00FF00' }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('activeTrackColor =')
     end
 
     it 'generates Slider with maximumTrackTintColor' do
-      json_data = { 'type' => 'Slider', 'maximumTrackTintColor' => '#CCCCCC' }
+      json_data = { 'type' => 'Slider', 'trackTintColor' => '#CCCCCC' }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('inactiveTrackColor =')
     end
@@ -141,8 +141,8 @@ RSpec.describe KjuiTools::Compose::Components::SliderComponent do
       json_data = {
         'type' => 'Slider',
         'thumbTintColor' => '#007AFF',
-        'minimumTrackTintColor' => '#00FF00',
-        'maximumTrackTintColor' => '#CCCCCC'
+        'progressTintColor' => '#00FF00',
+        'trackTintColor' => '#CCCCCC'
       }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('thumbColor =')

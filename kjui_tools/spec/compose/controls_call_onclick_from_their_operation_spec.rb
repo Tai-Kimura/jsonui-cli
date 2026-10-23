@@ -52,8 +52,6 @@ RSpec.describe 'kjui controls call onClick from their own operation' do
     'CheckBox with a label' => [{ 'type' => 'CheckBox', 'label' => 'L' }, 1, op.call('onCheckedChange = ')],
     'CheckBox with icons' => [{ 'type' => 'CheckBox', 'src' => 'a', 'selectedIcon' => 'b' }, 1, op.call('onCheckedChange = ')],
     'Radio' => [{ 'type' => 'Radio', 'text' => 'r' }, 1, op.call('onClick = ')],
-    'Radio options' => [{ 'type' => 'Radio', 'options' => %w[a b], 'bind' => '@{sel}' }, 4,
-                        /(?:\.clickable(?:\(enabled = [^)]*\))? |onClick = )\{[^{}]*#{Regexp.escape(call)}/m],
     'Radio items' => [{ 'type' => 'Radio', 'items' => %w[a b], 'selectedValue' => '@{sel}' }, 4,
                       /(?:\.clickable(?:\(enabled = [^)]*\))? |onClick = )\{[^{}]*#{Regexp.escape(call)}/m],
     'Segment' => [{ 'type' => 'Segment', 'items' => %w[a b], 'bind' => '@{idx}' }, 2, op.call('onClick = ')],

@@ -166,7 +166,7 @@ module RjuiTools
 
         def build_checkbox_style
           # Same precedence as kjui's switch_component: onTintColor || tint || tintColor.
-          tint_color = attributes['onTintColor'] || attributes['tint'] || attributes['tintColor']
+          tint_color = attributes['onTintColor'] || attributes['tintColor']
           return '' unless tint_color
 
           # color_style_expr, not raw interpolation: a colors.json token

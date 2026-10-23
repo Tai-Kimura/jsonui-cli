@@ -62,7 +62,7 @@ RSpec.describe KjuiTools::Compose::Components::IconLabelComponent do
     # DynamicIconLabelComponent reads `spacing`; a layout must not change
     # meaning between dynamic and generated mode.
     it 'accepts the legacy spacing spelling' do
-      expect(generate('icon_off' => 'home', 'spacing' => 9))
+      expect(generate('icon_off' => 'home', 'iconMargin' => 9))
         .to include('Arrangement.spacedBy(9.dp)')
     end
   end
@@ -95,9 +95,11 @@ RSpec.describe KjuiTools::Compose::Components::IconLabelComponent do
       expect(result).not_to include('if (')
     end
 
-    it 'accepts the legacy icon / src spellings' do
-      expect(generate('icon' => 'legacy')).to include('R.drawable.legacy')
-      expect(generate('src' => 'legacy2')).to include('R.drawable.legacy2')
+    # Inverted in 2.3.22: the undeclared icon / src spellings are retired
+    # (retired_attribute_spellings.json names icon_off)
+    it 'no longer reads the retired icon / src spellings' do
+      expect(generate('icon' => 'legacy')).not_to include('R.drawable.legacy')
+      expect(generate('src' => 'legacy2')).not_to include('R.drawable.legacy2')
     end
   end
 
@@ -137,7 +139,7 @@ RSpec.describe KjuiTools::Compose::Components::IconLabelComponent do
 
     it 'tints on tintColor / iconColor' do
       expect(generate('icon_off' => 'home', 'tintColor' => '#00FF00')).to include('ColorFilter.tint(')
-      expect(generate('icon_off' => 'home', 'iconColor' => '#00FF00')).to include('ColorFilter.tint(')
+      expect(generate('icon_off' => 'home', 'tintColor' => '#00FF00')).to include('ColorFilter.tint(')
     end
 
     it 'lets selectedFontColor take over the selected state' do

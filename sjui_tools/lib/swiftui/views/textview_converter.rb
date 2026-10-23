@@ -49,6 +49,7 @@ module SjuiTools
 
           # TextViewWithPlaceholderを使用
           add_line "TextViewWithPlaceholder("
+          auto_focus_var = nil   # set inside the argument block (autoFocus), read after it
           indent do
             # onTextChange is called from this binding's setter — the user's
             # edits only; a programmatic change of the value does not fire it
@@ -234,9 +235,19 @@ module SjuiTools
             # TextViewWithPlaceholder `isFocused:` param, v10.3.0+).
             # Declared LAST in the library init — Swift requires call-site
             # argument order to match the declaration, so emit it last.
+            # `autoFocus` (2.3.22): the field takes the focus when the screen
+            # appears. With an id it is data.<id>IsFocused set on appear; with
+            # none, a local state named by its position bound the same way.
             if @component['id']
               focus_var = "#{to_camel_case(@component['id'])}IsFocused"
               add_line "isFocused: $data.#{focus_var},"
+              auto_focus_var = "data.#{focus_var}" if @component['autoFocus'] == true
+            elsif @component['autoFocus'] == true
+              local_focus = "#{position_name('textView')}IsFocused"
+              @state_variables ||= []
+              @state_variables << "@State private var #{local_focus}: Bool = false"
+              add_line "isFocused: $#{local_focus},"
+              auto_focus_var = local_focus
             end
 
             # The id on the TextEditor itself, not around the hint
@@ -252,6 +263,7 @@ module SjuiTools
             end
           end
           add_line ")"
+          add_modifier_line ".onAppear { DispatchQueue.main.async { #{auto_focus_var} = true } }" if auto_focus_var
 
           # Modifiers below attach to the CLOSED call — emitting them inside
           # the argument block put raw `.modifier(...)` lines between

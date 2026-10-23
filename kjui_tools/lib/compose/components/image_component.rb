@@ -119,7 +119,7 @@ module KjuiTools
 
         def self.rendering_color_filter(json_data, required_imports)
           mode = JsonUIShared::EnumSpelling.lowered(json_data['renderingMode'], 'Image', 'renderingMode').to_s
-          tint = json_data['tintColor'] || json_data['iconColor']
+          tint = json_data['tintColor']
 
           case mode
           when 'template'

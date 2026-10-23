@@ -57,7 +57,7 @@ RSpec.describe 'kjui codegen: bind folded at the dispatch' do
     { 'type' => 'Progress' } => 'data.b',
     { 'type' => 'SelectBox', 'items' => %w[x y] } => 'data.b',
     { 'type' => 'SelectBox', 'selectItemType' => 'Date' } => 'data.b',
-    { 'type' => 'Radio', 'options' => %w[x y] } => 'data.b',
+    { 'type' => 'Radio', 'items' => %w[x y] } => 'data.b',
     { 'type' => 'TextField' } => 'data.b',
     { 'type' => 'TextView' } => 'data.b'
   }.each do |node, expected|
@@ -74,7 +74,7 @@ RSpec.describe 'kjui codegen: bind folded at the dispatch' do
       { 'type' => 'Switch' }, { 'type' => 'Toggle' }, { 'type' => 'CheckBox' }, { 'type' => 'Check' },
       { 'type' => 'Slider' }, { 'type' => 'Segment', 'items' => %w[x y] }, { 'type' => 'Progress' },
       { 'type' => 'SelectBox', 'items' => %w[x y] }, { 'type' => 'SelectBox', 'selectItemType' => 'Date' },
-      { 'type' => 'Radio', 'options' => %w[x y] }, { 'type' => 'TextField' }, { 'type' => 'TextView' }
+      { 'type' => 'Radio', 'items' => %w[x y] }, { 'type' => 'TextField' }, { 'type' => 'TextView' }
     ].each do |node|
       expect { emit.call(node) }.not_to raise_error, node.inspect
       static = JsonUIShared::BindFold.attributes_for(node['type'], node).first

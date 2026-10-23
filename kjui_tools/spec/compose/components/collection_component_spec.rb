@@ -38,13 +38,13 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
     end
 
     it 'applies content padding as array' do
-      json_data = { 'type' => 'Collection', 'contentPadding' => [16, 8, 16, 8] }
+      json_data = { 'type' => 'Collection', 'insets' => [16, 8, 16, 8] }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('contentPadding = PaddingValues')
     end
 
     it 'applies content padding as number' do
-      json_data = { 'type' => 'Collection', 'contentPadding' => 16 }
+      json_data = { 'type' => 'Collection', 'insets' => 16 }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('contentPadding = PaddingValues(16.dp)')
     end
@@ -57,7 +57,7 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
     end
 
     it 'applies spacing attribute' do
-      json_data = { 'type' => 'Collection', 'spacing' => 12 }
+      json_data = { 'type' => 'Collection', 'itemSpacing' => 12 }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('Arrangement.spacedBy(12.dp)')
     end

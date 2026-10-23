@@ -305,6 +305,8 @@ module JsonUI
         { name: 'widthWeight', kind: :number, bindable: true }.freeze,
         # Wrap content
         { name: 'wrapContent', kind: :boolean }.freeze,
+        # Stacking order among siblings; wins over indexAbove / indexBelow (rjui base_converter).
+        { name: 'zIndex', kind: :number }.freeze,
       ].freeze
 
       # Returns a Hash keyed by canonical attribute name.

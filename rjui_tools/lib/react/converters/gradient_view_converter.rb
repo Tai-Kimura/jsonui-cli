@@ -87,7 +87,7 @@ module RjuiTools
           # (RightToLeft, BottomToTop, LeftToRight, TopToBottom, Diagonal)
           # belong to View.gradientDirection (platform swift), which no
           # GradientView converter reads — sjui and kjui draw the same three.
-          direction = JsonUIShared::EnumSpelling.lowered(attributes['gradientDirection'] || attributes['direction'] || 'Vertical', 'GradientView', 'gradientDirection').to_s
+          direction = JsonUIShared::EnumSpelling.lowered(attributes['gradientDirection'] || 'Vertical', 'GradientView', 'gradientDirection').to_s
           case direction
           when 'horizontal'
             'to right'

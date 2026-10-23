@@ -103,7 +103,7 @@ module RjuiTools
           # This reader had it backwards for fontColor and did not read the
           # bag's other keys at all.
           hint_bag = attributes['hintAttributes'].is_a?(Hash) ? attributes['hintAttributes'] : {}
-          hint_color = hint_bag['fontColor'] || attributes['hintColor'] || attributes['placeholderColor']
+          hint_color = hint_bag['fontColor'] || attributes['hintColor']
           if hint_color
             classes << (bound_state_color_class(hint_color, custom_property: '--jui-hint-color', prefix: 'placeholder') ||
                         TailwindMapper.map_color(hint_color, 'placeholder'))
@@ -273,8 +273,8 @@ module RjuiTools
           end
 
           # Rows
-          if attributes['lines'] || attributes['rows']
-            rows = attributes['lines'] || attributes['rows']
+          if attributes['rows']
+            rows = attributes['rows']
             attrs << " rows={#{rows}}"
           end
 
@@ -282,10 +282,10 @@ module RjuiTools
           attrs << " maxLength={#{attributes['maxLength']}}" if attributes['maxLength']
 
           # Read only
-          attrs << ' readOnly' if attributes['readOnly'] || attributes['editable'] == false
+          attrs << ' readOnly' if attributes['editable'] == false
 
           # Auto focus
-          attrs << ' autoFocus' if attributes['autoFocus'] || attributes['becomeFirstResponder']
+          attrs << ' autoFocus' if attributes['autoFocus']
 
           # Soft-keyboard hints — same UIKit-spelling vocabulary as TextField,
           # mapped by the shared base helpers. A textarea has no `type`, so
@@ -345,7 +345,7 @@ module RjuiTools
 
         def build_on_change
           # If custom handler is defined, use it (passing the event object)
-          handler = attributes['onTextChange'] || attributes['onChange']
+          handler = attributes['onTextChange']
           if handler
             if has_binding?(handler)
               prop = extract_binding_property(handler)

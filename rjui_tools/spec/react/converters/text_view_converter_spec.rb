@@ -232,11 +232,11 @@ RSpec.describe RjuiTools::React::Converters::TextViewConverter do
   end
 
   describe '#build_attributes' do
-    context 'with rows/lines' do
-      it 'adds rows attribute from lines' do
+    context 'with rows' do
+      it 'adds rows attribute' do
         converter = create_converter({
           'type' => 'TextView',
-          'lines' => 5
+          'rows' => 5
         })
         result = converter.convert
         expect(result).to include('rows={5}')
@@ -274,11 +274,11 @@ RSpec.describe RjuiTools::React::Converters::TextViewConverter do
       end
     end
 
-    context 'with readOnly' do
+    context 'with editable false' do
       it 'adds readOnly attribute' do
         converter = create_converter({
           'type' => 'TextView',
-          'readOnly' => true
+          'editable' => false
         })
         result = converter.convert
         expect(result).to include('readOnly')

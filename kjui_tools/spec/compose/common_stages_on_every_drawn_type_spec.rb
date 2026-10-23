@@ -111,7 +111,6 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
     'Toggle with a label' => { 'type' => 'Toggle', 'label' => 'L' },
     'CheckBox with a label' => { 'type' => 'CheckBox', 'label' => 'L' },
     'CheckBox with icons' => { 'type' => 'CheckBox', 'src' => 'ic_a', 'selectedIcon' => 'ic_b' },
-    'Radio options' => { 'type' => 'Radio', 'options' => %w[a b], 'bind' => '@{sel}' },
     'Radio items' => { 'type' => 'Radio', 'items' => %w[a b] },
     'Collection flow' => { 'type' => 'Collection', 'items' => [], 'layout' => 'flow' },
     'Collection paging' => { 'type' => 'Collection', 'items' => '@{list}', 'layout' => 'horizontal', 'paging' => true },
@@ -457,7 +456,7 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
     every = stages.values.reduce({}) { |acc, attrs| acc.merge(attrs) }
     compiled = base.map { |type, extra| [type, { 'type' => type }.merge(extra)] }.to_h
     compiled.merge!(variants.slice('Switch with a label', 'CheckBox with a label', 'CheckBox with icons',
-                                   'Radio options', 'Radio items'))
+                                   'Radio items'))
     # the pressed background (tapBackground on a type with a click, which the
     # `enabled: false` and `userInteractionEnabled: false` stages would take
     # away), gated
@@ -472,6 +471,12 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
     # stage; these reach the other one
     compiled['TextField without margins'] = { 'type' => 'TextField', 'text' => '@{t}', '-' => %w[margins] }
     compiled['TextView without margins'] = { 'type' => 'TextView', 'text' => '@{t}', '-' => %w[margins] }
+    # autoFocus (2.3.22): the id's requester asked on appear, and one named
+    # by position for a field with no id
+    compiled['TextField with autoFocus'] = { 'type' => 'TextField', 'text' => '@{t}', 'autoFocus' => true }
+    compiled['TextField with autoFocus and no id'] = { 'type' => 'TextField', 'text' => '@{t}', 'autoFocus' => true, '-' => %w[id] }
+    compiled['TextView with autoFocus'] = { 'type' => 'TextView', 'text' => '@{t}', 'autoFocus' => true }
+    compiled['TextView with autoFocus and no id'] = { 'type' => 'TextView', 'text' => '@{t}', 'autoFocus' => true, '-' => %w[id] }
     functions = compiled.map.with_index do |(label, node), i|
       drop = node['-'] || []
       attrs = node.reject { |k, _| k == '-' }.merge(every).reject { |k, _| drop.include?(k) }
@@ -480,6 +485,7 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
     emitted = functions.join("\n\n")
     expect(emitted.scan('.dropShadow(').size).to be >= compiled.size
     expect(emitted.scan('isPressed = true').size).to be >= 3
+    expect(emitted.scan('LaunchedEffect(Unit) { focusRequester_').size).to eq(4)
     expect(<<~KOTLIN).to compile_as_kotlin
       #{ComposeStubUniverse.common_stages(emitted)}
       class Data(

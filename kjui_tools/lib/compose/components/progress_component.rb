@@ -16,7 +16,7 @@ module KjuiTools
           # A lone `bind` arrives as `progress` (JsonUIShared::BindFold at the
           # dispatch); it was read here before `progress`, so a `bind` beside
           # a bound `progress` drew the other value.
-          literal = json_data['progress'] || json_data['value']
+          literal = json_data['progress']
           has_value = literal
 
           if has_value

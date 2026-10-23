@@ -33,8 +33,8 @@ module KjuiTools
           # so an undeclared slider runs 0 .. 1 — the same unitless-track
           # convention Progress.progress and opacity already carry. Only the
           # DEFAULT moves; a layout that declares its own bounds is untouched.
-          min_value = Core::Normalization.attr_lookup(json_data, 'minimum', 'minimumValue', 'minValue') || json_data['min'] || 0
-          max_value = Core::Normalization.attr_lookup(json_data, 'maximum', 'maximumValue', 'maxValue') || json_data['max'] || 1
+          min_value = Core::Normalization.attr_lookup(json_data, 'minimum', 'minimumValue', 'minValue') || 0
+          max_value = Core::Normalization.attr_lookup(json_data, 'maximum', 'maximumValue', 'maxValue') || 1
 
           # A static value is the seed of the slider's own state
           # (Helpers::StaticSeed); with no value the thumb starts at the
@@ -149,9 +149,8 @@ module KjuiTools
           # `tintColor` is the UIKit accent: it colours the thumb and the
           # active track when nothing more specific is declared.
           thumb_tint = json_data['thumbTintColor'] || json_data['tintColor']
-          active_tint = json_data['progressTintColor'] ||
-                        json_data['minimumTrackTintColor'] || json_data['tintColor']
-          inactive_tint = json_data['trackTintColor'] || json_data['maximumTrackTintColor']
+          active_tint = json_data['progressTintColor'] || json_data['tintColor']
+          inactive_tint = json_data['trackTintColor']
           # The thumb and the filled track are the accent: the Slider's own,
           # else the tint a container handed down (InheritedTint) — so the
           # colors are always emitted.

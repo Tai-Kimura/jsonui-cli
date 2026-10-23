@@ -71,7 +71,7 @@ RSpec.describe "a binding on an attribute the declaration gives no binding" do
                   JsonUIShared::AttributeValidatorCore.binding_disallowed_by_declaration?(spec)
       end
     end
-    expect(n).to eq(43)
+    expect(n).to eq(44)   # 2.3.22: ScrollView.contentInset (number or array, react)
   end
 
   # `Segment.items` keeps its own 1.8.39 arm: that one warns and drops

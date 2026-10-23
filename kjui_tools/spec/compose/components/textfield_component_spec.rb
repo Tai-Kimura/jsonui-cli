@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'compose/components/textfield_component'
+require 'compose/components/textview_component'
 require 'compose/helpers/modifier_builder'
 require 'compose/helpers/resource_resolver'
 
@@ -637,21 +638,21 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
     end
 
     # Focus chain refactor (paired with kjui-keyboardactions-import-missing).
-    # Before: `fieldId` / `nextFocusId` emitted a dead-code reference to a
+    # Before: the focus chain emitted a dead-code reference to a
     # non-existent `FocusManager.requestFocus(...)` helper. After: each
-    # `fieldId` field declares its own `FocusRequester` via `remember`,
+    # field with an `id` declares its own `FocusRequester` via `remember`,
     # attaches it via the `.focusRequester(...)` modifier, and sibling
-    # fields look up the target by `focusRequester_<nextFocusId>`.
-    context 'fieldId emits FocusRequester declaration and modifier' do
+    # fields look up the target by `focusRequester_<nextFocus>`. (The
+    # undeclared `fieldId` / `nextFocusId` are retired in 2.3.22.)
+    context 'an id emits FocusRequester declaration and modifier' do
       let(:json_data) do
         {
           'type' => 'TextField',
-          'id' => 'first_input',
-          'fieldId' => 'email_field'
+          'id' => 'email_field'
         }
       end
 
-      it 'emits `val focusRequester_<fieldId> = remember { FocusRequester() }` before the component call' do
+      it 'emits `val focusRequester_<id> = remember { FocusRequester() }` before the component call' do
         result = described_class.generate(json_data, 0, required_imports)
         expect(result).to include('val focusRequester_email_field = remember { FocusRequester() }')
       end
@@ -668,17 +669,17 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
       end
     end
 
-    context 'nextFocusId emits FocusRequester.requestFocus() in onNext/onDone' do
+    context 'nextFocus emits FocusRequester.requestFocus() in onNext/onDone' do
       let(:json_data) do
         {
           'type' => 'TextField',
           'id' => 'first_input',
-          'nextFocusId' => 'password_field',
+          'nextFocus' => 'password_field',
           'returnKeyType' => 'Next'
         }
       end
 
-      it 'emits onNext = { focusRequester_<nextFocusId>.requestFocus() }' do
+      it 'emits onNext = { focusRequester_<nextFocus>.requestFocus() }' do
         result = described_class.generate(json_data, 0, required_imports)
         expect(result).to include('onNext = { focusRequester_password_field.requestFocus() }')
         expect(result).to include('onDone = { focusRequester_password_field.requestFocus() }')
@@ -774,13 +775,12 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
       end
     end
 
-    context 'fieldId + nextFocusId + onSubmit combined' do
+    context 'id + nextFocus + onSubmit combined' do
       let(:json_data) do
         {
           'type' => 'TextField',
-          'id' => 'first_input',
-          'fieldId' => 'email_field',
-          'nextFocusId' => 'password_field',
+          'id' => 'email_field',
+          'nextFocus' => 'password_field',
           'onSubmit' => '@{onSubmitForm}'
         }
       end
@@ -962,12 +962,19 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
       expect(result).to include('.onFocusChanged { if (it.isFocused != data.codeFieldIsFocused)')
     end
 
-    it 'shares the requester with the fieldId focus chain (fieldId keeps naming priority)' do
-      json_data = { 'type' => 'TextField', 'id' => 'email_field', 'fieldId' => 'email' }
+    it 'shares the requester with the id focus chain' do
+      json_data = { 'type' => 'TextField', 'id' => 'email_field' }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('val focusRequester_email = remember { FocusRequester() }')
+      expect(result).to include('val focusRequester_email_field = remember { FocusRequester() }')
       expect(result.scan('remember { FocusRequester() }').size).to eq(1)
-      expect(result).to include('LaunchedEffect(data.emailFieldIsFocused) { if (data.emailFieldIsFocused) { focusRequester_email.requestFocus()')
+      expect(result).to include('LaunchedEffect(data.emailFieldIsFocused) { if (data.emailFieldIsFocused) { focusRequester_email_field.requestFocus()')
+    end
+
+    # The retired fieldId no longer names the requester (2.3.22)
+    it 'does not read the retired fieldId' do
+      result = described_class.generate({ 'type' => 'TextField', 'id' => 'email_field', 'fieldId' => 'email' }, 0, required_imports)
+      expect(result).not_to include('focusRequester_email ')
+      expect(result).to include('val focusRequester_email_field = remember')
     end
 
     it 'emits no focus binding for an id-less TextField' do
@@ -990,20 +997,13 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent, 'nextFocus' d
   end
 
   # `nextFocus` is the declared attribute (and what the iOS converter reads);
-  # `nextFocusId` is the undeclared legacy spelling this file was written
-  # against, so a layout using the declared name got no focus chain at all.
+  # the legacy `nextFocusId` this file was written against is retired (2.3.22).
   it 'wires the chain from the declared nextFocus' do
     expect(field('nextFocus' => 'password')).to include('focusRequester_password')
   end
 
-  it 'still accepts the legacy nextFocusId' do
-    expect(field('nextFocusId' => 'password')).to include('focusRequester_password')
-  end
-
-  it 'prefers the declared name when both are set' do
-    result = field('nextFocus' => 'declared', 'nextFocusId' => 'legacy')
-    expect(result).to include('focusRequester_declared')
-    expect(result).not_to include('focusRequester_legacy')
+  it 'no longer reads the retired nextFocusId' do
+    expect(field('nextFocusId' => 'password')).not_to include('focusRequester_password')
   end
 
   it 'emits no chain when neither is set' do
@@ -1026,5 +1026,46 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent, 'nextFocus' d
     it 'emits nothing when undeclared' do
       expect(field({})).not_to include('enabled =')
     end
+  end
+end
+
+# `autoFocus` (2.3.22, ticket rjui-textfield-autofocus-read-but-not-defined):
+# declared on TextField and TextView for every face; on Android the field's
+# FocusRequester is asked once it is composed. Compiled with every common
+# stage in common_stages_on_every_drawn_type_spec.rb.
+RSpec.describe 'kjui autoFocus (TextField and TextView)' do
+  def field(extra)
+    KjuiTools::Compose::Components::TextFieldComponent.generate({ 'type' => 'TextField', 'text' => '@{email}' }.merge(extra), 0, Set.new)
+  end
+
+  def text_view(extra)
+    KjuiTools::Compose::Components::TextViewComponent.generate({ 'type' => 'TextView', 'text' => '@{note}' }.merge(extra), 0, Set.new)
+  end
+
+  it 'asks the id requester of a TextField' do
+    code = field('id' => 'email_field', 'autoFocus' => true)
+    expect(code).to include('LaunchedEffect(Unit) { focusRequester_email_field.requestFocus() }')
+    expect(code).to include('.focusRequester(focusRequester_email_field)')
+  end
+
+  it 'names a requester by position for a TextField with no id' do
+    code = field('autoFocus' => true)
+    name = code[/val focusRequester_(\w+) = remember \{ FocusRequester\(\) \}/, 1]
+    expect(name).not_to be_nil
+    expect(code).to include("LaunchedEffect(Unit) { focusRequester_#{name}.requestFocus() }")
+    expect(code).to include(".focusRequester(focusRequester_#{name})")
+  end
+
+  it 'asks the id requester of a TextView, and one by position without an id' do
+    expect(text_view('id' => 'note', 'autoFocus' => true)).to include('LaunchedEffect(Unit) { focusRequester_note.requestFocus() }')
+    code = text_view('autoFocus' => true)
+    name = code[/val focusRequester_(\w+) = remember \{ FocusRequester\(\) \}/, 1]
+    expect(name).not_to be_nil
+    expect(code).to include("LaunchedEffect(Unit) { focusRequester_#{name}.requestFocus() }", ".focusRequester(focusRequester_#{name})")
+  end
+
+  it 'emits nothing for a field without it' do
+    expect(field({})).not_to include('requestFocus')
+    expect(text_view({})).not_to include('requestFocus')
   end
 end

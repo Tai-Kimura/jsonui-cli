@@ -196,9 +196,9 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
       end
     end
 
-    context 'with contentInset' do
+    context 'with insets' do
       it 'applies padding from insets' do
-        converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'], 'contentInset' => [10, 20, 10, 20] })
+        converter = create_converter({ 'class' => 'Collection', 'cellClasses' => ['ItemCell'], 'insets' => [10, 20, 10, 20] })
         result = converter.convert
         expect(result).to include('pt-[0.625rem]')
         expect(result).to include('pl-[1.25rem]')

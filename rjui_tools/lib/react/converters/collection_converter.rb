@@ -47,8 +47,7 @@ module RjuiTools
           # Collection carousels).
           return true if attributes['horizontalScroll'] == true
 
-          layout = attributes['orientation'] || attributes['layout'] ||
-                   attributes['scrollDirection'] || 'vertical'
+          layout = attributes['orientation'] || attributes['layout'] || 'vertical'
           JsonUIShared::EnumSpelling.lowered(layout, 'Collection', 'layout') == 'horizontal'
         end
 
@@ -87,11 +86,11 @@ module RjuiTools
         # itemSpacing; between lanes columnSpacing, else itemSpacing — on
         # every horizontal Collection, one lane or many. nil: nothing declared.
         def horizontal_scroll_spacing
-          attributes['lineSpacing'] || attributes['sectionSpacing'] || attributes['itemSpacing'] || attributes['spacing']
+          attributes['lineSpacing'] || attributes['sectionSpacing'] || attributes['itemSpacing']
         end
 
         def horizontal_lane_spacing
-          attributes['columnSpacing'] || attributes['itemSpacing'] || attributes['spacing']
+          attributes['columnSpacing'] || attributes['itemSpacing']
         end
 
         # A section block of `lanes` rows: a grid that flows by column, so a
@@ -316,7 +315,7 @@ module RjuiTools
               dynamic_styles['overflowY'] = "#{lazy_expr} === 'none' ? 'visible' : 'auto'" if lazy_expr
             end
             # lineSpacing for vertical spacing between items
-            spacing = attributes['lineSpacing'] || attributes['itemSpacing'] || attributes['spacing']
+            spacing = attributes['lineSpacing'] || attributes['itemSpacing']
             classes << "gap-#{TailwindMapper.spacing_value(spacing)}" if spacing
             # listStyle / hideSeparator — the List chrome, on the one branch
             # that IS a list (sjui parity: TableConverter takes the List path
@@ -381,16 +380,6 @@ module RjuiTools
           if attributes['paging']
             classes << (is_horizontal ? 'snap-x snap-mandatory' : 'snap-y snap-mandatory')
             classes << '[&>*]:snap-start'
-          end
-
-          # Content insets as padding
-          content_inset = attributes['contentInset']
-          if content_inset.is_a?(Array) && content_inset.length == 4
-            top, left, bottom, right = content_inset
-            classes << "pt-#{TailwindMapper.spacing_value(top)}" if top&.positive?
-            classes << "pl-#{TailwindMapper.spacing_value(left)}" if left&.positive?
-            classes << "pb-#{TailwindMapper.spacing_value(bottom)}" if bottom&.positive?
-            classes << "pr-#{TailwindMapper.spacing_value(right)}" if right&.positive?
           end
 
           # The content insets: insets with insetHorizontal / insetVertical,
@@ -577,7 +566,7 @@ module RjuiTools
         def grid_gap_classes
           line = attributes['lineSpacing']
           column = attributes['columnSpacing']
-          both = attributes['itemSpacing'] || attributes['spacing']
+          both = attributes['itemSpacing']
           return both ? ["gap-#{TailwindMapper.spacing_value(both)}"] : [] if line.nil? && column.nil?
 
           row = line || both
@@ -586,7 +575,7 @@ module RjuiTools
         end
 
         def grid_row_gap
-          attributes['lineSpacing'] || attributes['itemSpacing'] || attributes['spacing']
+          attributes['lineSpacing'] || attributes['itemSpacing']
         end
 
         # A grid per section (the orchestrator's round 9): with two or more sections that

@@ -14,12 +14,16 @@ module JsonUI
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
+        # Accessibility description of the icon (kjui iconlabel_component).
+        { name: 'contentDescription', kind: :string }.freeze,
         # Font name
         { name: 'font', kind: :string }.freeze,
         # Text color - hex string or color name from colors.json
         { name: 'fontColor', kind: :string }.freeze,
         # Font size
         { name: 'fontSize', kind: :number }.freeze,
+        # Weight of the label's text (kjui iconlabel_component, rjui icon_label_converter). [accepts: string | number]
+        { name: 'fontWeight', kind: :raw }.freeze,
         # Icon-text spacing
         { name: 'iconMargin', kind: :number }.freeze,
         # Icon position relative to text
@@ -34,10 +38,14 @@ module JsonUI
         { name: 'selected', kind: :boolean, bindable: true, aliases: ['isOn'].freeze }.freeze,
         # Selected text color - hex string or color name from colors.json
         { name: 'selectedFontColor', kind: :string }.freeze,
+        # Strikes the label's text through (rjui icon_label_converter).
+        { name: 'strikethrough', kind: :boolean }.freeze,
         # Label text (can be data binding)
         { name: 'text', kind: :string, bindable: true }.freeze,
         # Text shadow — same object contract as Label ({color, blur, offset: [x, y]}; the UIKit runtime passes the identical JSON to both) [accepts: string | object]
         { name: 'textShadow', kind: :raw }.freeze,
+        # Underlines the label's text (rjui icon_label_converter).
+        { name: 'underline', kind: :boolean }.freeze,
       ].freeze
 
       # Returns a Hash keyed by canonical attribute name.
