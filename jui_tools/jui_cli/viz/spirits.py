@@ -611,11 +611,14 @@ def words(value, language: str) -> str:
     return got if isinstance(got, str) else ""
 
 
-def _report(model: dict, language: str = "en") -> list[str]:
+def _report(model: dict, strings=None) -> list[str]:
     # spirit.json's name, in the report's language: the one place it is read (the page draws no name)
-    title = words(model.get("title"), language)
-    named = (f"（{title}）" if language == "ja" else f": {title}") if title else ""
-    lines = [f"{'OK' if model['ok'] else 'NG'}  {model['name']}{named} ({model['dir']})"]
+    from . import i18n
+
+    strings = strings or i18n.load()
+    title = words(model.get("title"), strings.language)
+    name = i18n.lookup(strings, "spirit.report.named", {"name": model["name"], "title": title}) if title else model["name"]
+    lines = [f"{'OK' if model['ok'] else 'NG'}  {name} ({model['dir']})"]
     for name, f in model["files"].items():
         lines.append(f"      {name}: {f['bytes']:,} bytes, {f['triangles']:,} triangles"
                      + (f", textures {', '.join(f'{w}x{h}' for w, h in f['textures'])}" if f["textures"] else "")
@@ -644,21 +647,21 @@ def main(argv: list[str] | None = None) -> int:
             for p in found["problems"]:
                 print(f"--  {t}: {p}")
             models += found["models"]
-    language = _language()
+    strings = _strings()
     for m in models:
-        print("\n".join(_report(m, language)))
+        print("\n".join(_report(m, strings)))
     return 0 if all(m["ok"] for m in models) else 1
 
 
-def _language() -> str:
-    """The report's language: config.json's (and JUI_VIZ_LANGUAGE), as the view's words take it."""
+def _strings():
+    """The report's words: config.json's language (and JUI_VIZ_LANGUAGE), as the view's words take it."""
     from . import i18n
     from .config import load_config
 
     try:
-        return i18n.from_config(load_config()).language
+        return i18n.from_config(load_config())
     except Exception:   # a config the check cannot read never stops the check
-        return i18n.DEFAULT_LANGUAGE
+        return i18n.load()
 
 
 if __name__ == "__main__":
