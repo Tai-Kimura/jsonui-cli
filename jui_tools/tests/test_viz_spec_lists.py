@@ -370,7 +370,7 @@ process.stdout.write(JSON.stringify([w({ advancedAt: at(2026, 10, 23, 0, 5), adv
   w({ advancedAt: at(2026, 10, 22, 18, 0, 30), advancedBy: 'layout' }), w({ advancedAt: at(2026, 10, 21, 9, 7), advancedBy: 'test' }),
   w({ advancedAt: 0 }), w({})]));""")
     assert got[0] == {"text": "00:05", "title": "最終更新 2026/10/23 00:05:00（spec の書き込み）"}
-    assert got[1] == {"text": "昨日 18:00", "title": "最終更新 2026/10/22 18:00:30（Layout の書き込み）"}
+    assert got[1] == {"text": "昨日 18:00", "title": "最終更新 2026/10/22 18:00:30（レイアウトの書き込み）"}
     assert got[2] == {"text": "10/21 09:07", "title": "最終更新 2026/10/21 09:07:00（テストの結果）"}
     assert got[3] is None and got[4] is None   # none sent (the demo): no time
 

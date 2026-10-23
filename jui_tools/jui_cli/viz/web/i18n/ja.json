@@ -390,7 +390,7 @@
   "demo.status.note.writing": "{chars} 文字 · ファイル監視で {section} の書き込みを検知",
   "demo.status.note.written": "{chars} 文字 · 全セクション記述済み",
   "demo.status.implementing": "実装中 {pct}%",
-  "demo.status.verify.matching": "未実行（構造は Layout の部品 id で照合中）",
+  "demo.status.verify.matching": "未実行（構造はレイアウトの部品 id で照合中）",
   "demo.status.verify.checking": "確認中…",
   "demo.status.verify.notrun": "未実行",
   "demo.status.testing": "テスト中 {passed}/8",
@@ -1578,7 +1578,7 @@
   "panel.meta.platforms": "対応",
   "panel.meta.layout": "レイアウト",
   "panel.meta.created": "作成日",
-  "panel.comp.more": "ほか {n} 個の部品（Layout が大きいので先頭の {max} 個だけ）",
+  "panel.comp.more": "ほか {n} 個の部品（レイアウトが大きいので先頭の {max} 個だけ）",
   "panel.wf.aria": "{id} の中に並ぶ部品の配置図",
   "panel.ev.title": "イベント",
   "panel.th.var": "変数",
@@ -2315,6 +2315,6 @@
   "spec.when.beside": "{status} · {when}",
   "spec.when.title": "最終更新 {full}（{what}）",
   "spec.when.by.spec": "spec の書き込み",
-  "spec.when.by.layout": "Layout の書き込み",
+  "spec.when.by.layout": "レイアウトの書き込み",
   "spec.when.by.test": "テストの結果"
 }
