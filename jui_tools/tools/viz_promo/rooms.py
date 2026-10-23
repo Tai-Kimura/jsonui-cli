@@ -69,12 +69,35 @@ def copy_demo_shop(dest: Path, lang: str, src: Path = DEMO_SHOP) -> Path:
     git(dest, "init", "-q", "-b", "main")
     commit_all(dest, "demo-shop")
     if lang == "en":
-        # the project's own generators, with the copy's own scripts, into the copy's docs/infra
-        for script, out in (("make_infra.py", dest / "docs" / "infra"), ("make_load.py", dest / "docs" / "infra" / "load")):
+        # the project's own generators, with the copy's own scripts, into the copy's docs/infra; the loads written by
+        # hand since (rows for the nodes the migration plans bring, demo-shop 041ad59 / f5cd19d) are kept: the
+        # generator does not know them, and without them the English plans' months differ from the Japanese
+        load_dir = dest / "docs" / "infra" / "load"
+        by_hand = {f.name: json.loads(f.read_text(encoding="utf-8")) for f in load_dir.glob("*.json")} if load_dir.is_dir() else {}
+        for script, out in (("make_infra.py", dest / "docs" / "infra"), ("make_load.py", load_dir)):
             subprocess.run([sys.executable, str(dest / "tools" / script), "--lang", "en", "--out", str(out)],
                            cwd=dest, check=True, capture_output=True)
+        keep_hand_loads(load_dir, by_hand)
         commit_all(dest, "English labels")
     return dest
+
+
+def keep_hand_loads(load_dir: Path, by_hand: dict) -> int:
+    """Rows of `by_hand` ({file name: the load document as committed}) for nodes the regenerated file of the same name
+    does not load, added to it (their numbers only: a row has no words). Returns how many rows were added."""
+    added = 0
+    for name, doc in by_hand.items():
+        path = load_dir / name
+        if not path.is_file():
+            continue
+        new = json.loads(path.read_text(encoding="utf-8"))
+        have = {row.get("node") for row in new.get("loads", [])}
+        extra = [row for row in doc.get("loads", []) if row.get("node") not in have]
+        if extra:
+            new.setdefault("loads", []).extend(extra)
+            path.write_text(json.dumps(new, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+            added += len(extra)
+    return added
 
 
 def small_room(dest: Path, name: str, lang: str) -> Path:

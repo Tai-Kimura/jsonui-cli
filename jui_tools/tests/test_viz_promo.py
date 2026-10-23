@@ -414,6 +414,19 @@ def test_chapter_2_opens_sorts_by_state_and_folds_the_robot_list():
         assert idle < ev[0].at and ev[-1].at < T.chapters(lang)["2"].end
 
 
+def test_the_english_copy_keeps_the_loads_written_by_hand(tmp_path):
+    """make_load.py --lang en writes the loads it knows; the rows added by hand for the migration plans' nodes are put
+    back (numbers only), so the English plans' months are the Japanese ones."""
+    from viz_promo.rooms import keep_hand_loads
+    (tmp_path / "a.json").write_text(json.dumps({"label": "An ordinary month", "loads": [{"node": "api", "quantities": {"q": 1}}]}))
+    by_hand = {"a.json": {"label": "普段の月", "loads": [{"node": "api", "quantities": {"q": 9}}, {"node": "reco-fn", "quantities": {"q": 2}}]},
+               "gone.json": {"loads": [{"node": "x"}]}}
+    assert keep_hand_loads(tmp_path, by_hand) == 1
+    doc = json.loads((tmp_path / "a.json").read_text())
+    assert doc["label"] == "An ordinary month" and doc["loads"] == [{"node": "api", "quantities": {"q": 1}}, {"node": "reco-fn", "quantities": {"q": 2}}]
+    assert not (tmp_path / "gone.json").exists()
+
+
 def test_frame_intervals_are_summed_as_percentiles():
     from viz_promo import capture
     got = capture.percentiles([16.0] * 8 + [50.0, 120.0])
