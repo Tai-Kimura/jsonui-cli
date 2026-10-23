@@ -53,7 +53,11 @@ module RjuiTools
           classes << 'bg-white' unless attributes['background']
           classes << 'cursor-pointer'
           classes << 'outline-none'
-          classes << 'focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+          # The focus sign is the ring outside the border, as a TextField's: a border colour of the layout's (fixed or
+          # bound, an error colour a VM sets) stays while it has focus. Without one, the border turns the ring's blue too,
+          # as it always did.
+          classes << 'focus:ring-2 focus:ring-blue-500'
+          classes << 'focus:border-blue-500' unless attributes['borderColor']
 
           # Border color
           # A bound one is the base's (css_border_classes: a custom property
