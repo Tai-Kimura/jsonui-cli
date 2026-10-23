@@ -12,6 +12,7 @@ panel is taken, as a person takes it, and the project it lands on is checked wit
   * the 止められた操作 chip (C's only): C chosen, c1's stopped call on the board;
   * the sum of the block beside a1's open card (b1 and c1 wait: two projects): すべて chosen, both on the board;
   * a question's notification clicked (notifyOpen; an OS notification cannot be pressed from a page): B, the question;
+  * a permission's notification clicked, from すべて: C, its card open on the board;
   * b1's bubble over its robot, from すべて: B chosen, its question card in the panel.
 With `video`, the 質問 chip and the block's sum recorded.
 """
@@ -170,6 +171,22 @@ async def run_wait_project(pw, out, failures, video: pathlib.Path | None = None)
         await page.evaluate("([id, w]) => window.__dbg.notifyOpen('ask', { id, who: w })", [qid, who["b1"]])
         got = await landed("a question's notification: B and its question", B, q=True)
         check(failures, got.get("project") == B and got.get("q"), f"a question's notification from A: B chosen, its question on the board: {got}")
+        await board_closed()
+
+        # a permission's notification, clicked, from すべて (where its card is in scope already: only the wait's project
+        # chosen makes it C): C, its card on the board
+        await pick("all")
+        pid = await page.evaluate("() => window.__dbg.pendingPerms()[0] || null")
+        await page.evaluate("([id, w]) => window.__dbg.notifyOpen('perm', { id, who: w, task: null })", [pid, who["c1"]])
+        try:
+            got = res["a permission's notification: C and its card"] = await until(
+                page, "(w) => { const b = window.__dbg.board(); return b.open && window.__dbg.project() === w.p && b.detail === `perm:${w.id}` ? { project: window.__dbg.project(), detail: b.detail } : null; }",
+                "a permission's notification: C and its card", arg={"p": C, "id": pid}, timeout=15000,
+                why="() => ({ project: window.__dbg.project(), board: window.__dbg.board() })")
+        except WaitTimeout as e:
+            failures.append(f"wait-project: {e}")
+            got = {}
+        check(failures, pid and got.get("project") == C, f"a permission's notification from すべて: C chosen, its card open on the board: {pid} {got}")
         await board_closed()
 
         # c1's call stopped by auto mode; from A, the 止められた操作 chip

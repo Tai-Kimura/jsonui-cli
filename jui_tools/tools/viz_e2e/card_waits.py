@@ -18,7 +18,10 @@ Checked, with host's card open at 1440 px:
   * answered where listed (ticket 2026-10-24-viz-card-waits-answer-in-place; qa, qb and pa held by `forward.py --ask` /
     `--decide`): qa's row opens its question in the pane, beside the card and under the block; Red and 送る reach the
     waiting hook, and the row and the pane go, the card staying; pa's permission allowed there reaches its hook; qb
-    answered in the panel's card goes from the open pane too; the row again, and Esc, close the pane, the card staying.
+    answered in the panel's card goes from the open pane too; the row again, and Esc, close the pane, the card staying;
+    after an answer in the pane the keyboard is on the block's rows (not lost, not on the board's button); den
+    (launched with the development channel, a stand-in process) has its 実行してよいと伝える confirmation drawn in the
+    pane, and its stopped call closed in the panel goes from the pane; the room's list keeps off the pane.
     Stills of the open pane (1440 and 390, light and dark); with `video`, the presses recorded.
   * at 1920 px: the block beside the card again.
 Stills (out/card-waits/*.png) at 1920, 1440 and 390, light and dark.
@@ -61,6 +64,7 @@ PANE = """() => { const p = document.getElementById('rb-wait-pane');
     left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, cardLeft: c.left, blockBottom: b.bottom, blockShown: !document.getElementById('rb-waits').hidden,
     focusIn: p.contains(document.activeElement), vw: innerWidth, vh: innerHeight,
     hit: (() => { const e = document.elementFromPoint(r.left + r.width / 2, r.top + Math.min(r.height / 2, 40)); return !!e && p.contains(e); })() }; }"""
+FOCUS = "() => { const a = document.activeElement; return { inBlock: !!a && document.getElementById('rb-waits').contains(a), inPane: !!a && document.getElementById('rb-wait-pane').contains(a), at: a ? (a.id || a.dataset.fk || a.tagName) : null }; }"
 CARD_ON = "(id) => window.__dbg.board().robot === id && !document.getElementById('rb').hidden && getComputedStyle(document.getElementById('rb')).opacity === '1'"
 
 
@@ -94,6 +98,7 @@ async def run_card_waits(pw, out, failures, jt=None, video: pathlib.Path | None 
     res: dict = {}
     browser = None
     ctx = None
+    stand_ins: list = []   # our own stand-in for den's claude process (its pid recorded here, stopped in finally)
     t0 = time.monotonic()
     try:
         def hook(k, **payload):
@@ -126,6 +131,17 @@ async def run_card_waits(pw, out, failures, jt=None, video: pathlib.Path | None 
                 hook(k, hook_event_name="SessionStart", source="startup")
         await until(page, "(n) => window.__dbg.robots.length >= n", "a robot for each session", arg=len([k for k in SID if k not in MORE]),
                     timeout=40000, why="() => window.__dbg.settleInfo()")
+        # den launched with the development channel (a stand-in process, as denied.py): its stopped call can be told
+        # to go ahead from the page, the confirmation step drawn where the card is (the pane too)
+        proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(900)", "--dangerously-load-development-channels", "plugin:jui-viz@jsonui"],
+                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        stand_ins.append(proc)
+        (sessions / f"{proc.pid}.json").write_text(json.dumps({"pid": proc.pid, "sessionId": SID["den"], "cwd": CWD, "kind": "interactive",
+                                                               "entrypoint": "cli", "status": "idle", "procStart": f"t{proc.pid}"}))
+        token = json.loads((home / ".local" / "state" / "jui-viz" / "server.json").read_text())["token"]   # the server's local token
+        req = urllib.request.Request(f"{url}/channel/hello", method="POST", headers={"Content-Type": "application/json", "X-Jui-Viz-Token": token},
+                                     data=json.dumps({"ppid": 1, "cwd": "/", "sessionId": SID["den"], "version": "2", "accepts": ["prompt"], "via": "plugin"}).encode())
+        res["denHello"] = urllib.request.urlopen(req, timeout=10).status
         ids = await page.evaluate("() => Object.fromEntries(window.__dbg.robots.map((R) => [R.def.sessionId, R.def.id]))")
         rid = {k: ids[SID[k]] for k in SID if k not in MORE}
         res["ids"] = rid
@@ -320,6 +336,8 @@ async def run_card_waits(pw, out, failures, jt=None, video: pathlib.Path | None 
         await block("qa answered: its row gone", [rid[k] for k in ("perm", "ask", "den", "qb", "pa")], timeout=20000)
         p = res["qaAfter"] = await until(page, f"() => {{ const p = ({PANE})(); return p.shown ? null : p; }}", "qa answered: the pane closed", timeout=10000, why=PANE)
         check(failures, not p.get("shown"), f"qa answered: the pane closed: {p}")
+        foc = res["qaFocus"] = await page.evaluate(FOCUS)
+        check(failures, foc["inBlock"], f"qa answered in the pane: the keyboard on the block's rows, not lost: {foc}")
         check(failures, await page.evaluate(CARD_ON, rid["host"]), "qa answered: the host's card stays")
         await pause(1500)
         # pa: its permission in the pane, 許可
@@ -333,6 +351,8 @@ async def run_card_waits(pw, out, failures, jt=None, video: pathlib.Path | None 
         check(failures, isinstance(decision, dict) and decision.get("behavior") == "allow", f"pa: allowed in the pane, the hook got allow: {got}")
         await block("pa allowed: its row gone", [rid[k] for k in ("perm", "ask", "den", "qb")], timeout=20000)
         p = res["paAfter"] = await until(page, f"() => {{ const p = ({PANE})(); return p.shown ? null : p; }}", "pa allowed: the pane closed", timeout=10000, why=PANE)
+        foc = res["paFocus"] = await page.evaluate(FOCUS)
+        check(failures, foc["inBlock"], f"pa allowed in the pane: the keyboard on the block's rows, not on the board's button or lost: {foc}")
         check(failures, await page.evaluate(CARD_ON, rid["host"]), "pa allowed: the host's card stays")
         await pause(1500)
         # qb: open in the pane, answered in the panel's card: gone from the pane too (one state)
@@ -354,6 +374,24 @@ async def run_card_waits(pw, out, failures, jt=None, video: pathlib.Path | None 
         p = res["esc"] = await until(page, f"() => {{ const p = ({PANE})(); return p.shown ? null : p; }}", "Esc closes the pane", timeout=10000, why=PANE)
         check(failures, not p.get("shown") and await page.evaluate(CARD_ON, rid["host"]), f"Esc: the pane closed, the host's card stays: {p}")
         await pause(1500)
+        # den: its stopped call in the pane; 「実行してよいと伝える」 asks to confirm there (the denial's own step drawn in
+        # the pane), やめる goes back; then そのまま pressed in the panel's card: gone from the open pane too
+        await page.click(f"#rb-waits [data-rbw-robot='{rid['den']}']")
+        await until(page, "() => !!document.querySelector('#rb-wait-pane [data-dask]')", "den's stopped call in the pane, with its ask", timeout=15000,
+                    why="() => (document.getElementById('rb-wait-pane') || {}).innerText")
+        # pressed and read in one task: drawn by the press itself (the denial's repaint), not by a later redraw
+        res["denConfirm"] = conf = await page.evaluate("""() => { document.querySelector('#rb-wait-pane [data-dask]').click();
+          return document.querySelector('#rb-wait-pane [data-dgo]') ? (document.querySelector('#rb-wait-pane [data-dprompt]') || {}).textContent || '' : null; }""")
+        check(failures, bool(conf), f"den: 実行してよいと伝える opens its confirmation in the pane, at once: {conf!r}")
+        await pause(1500)
+        await page.click("#rb-wait-pane [data-dback]")
+        await until(page, "() => !document.querySelector('#rb-wait-pane [data-dgo]') && !!document.querySelector('#rb-wait-pane [data-dask]')", "やめる: back", timeout=10000)
+        res["denElsewhere"] = await page.evaluate("""(id) => { const c = [...document.querySelectorAll('#denied [data-dcard]')].find((x) => x.querySelector('[data-ddismiss]'));
+          if (!c) return null; c.querySelector('[data-ddismiss]').click(); return c.dataset.dcard; }""", rid["den"])
+        p = res["denAfter"] = await until(page, f"() => {{ const p = ({PANE})(); return p.shown ? null : p; }}", "den dismissed in the panel: gone from the pane", timeout=15000, why=PANE)
+        check(failures, res["denElsewhere"] and not p.get("shown"), f"den's stopped call closed in the panel: gone from the open pane too: {res['denElsewhere']} {p}")
+        await block("den closed: its row gone", [rid[k] for k in ("perm", "ask")], timeout=15000)
+        await pause(1500)
 
         # nine robots waiting: six listed, the rest said as ほか N
         for k in MORE:
@@ -361,14 +399,20 @@ async def run_card_waits(pw, out, failures, jt=None, video: pathlib.Path | None 
             hook(k, hook_event_name="UserPromptSubmit", prompt="go")
             hook(k, hook_event_name="PreToolUse", tool_name="Bash", tool_use_id=f"toolu_{k}", tool_input={"command": "ls"})
             hook(k, hook_event_name="PermissionRequest", tool_name="Bash", tool_input={"command": "ls"})
-        want_more = await page.evaluate("() => window.__dbg.tl('rbw.more', { n: 3 })")
+        want_more = await page.evaluate("() => window.__dbg.tl('rbw.more', { n: 2 })")   # perm, ask and the six: eight (den closed above)
         more = res["more"] = await until(page, "(w) => { const b = document.getElementById('rb-waits'), m = b.querySelector('.rbw-more');"
                                          " return m && m.textContent === w ? [b.querySelectorAll('[data-rbw-robot]').length, m.textContent] : null; }",
-                                         "nine waiting: six and ほか 3", arg=want_more, timeout=30000,
+                                         "eight waiting: six and ほか 2", arg=want_more, timeout=30000,
                                          why="() => { const b = document.getElementById('rb-waits'); return [b.querySelectorAll('[data-rbw-robot]').length, (b.querySelector('.rbw-more') || {}).textContent || null]; }")
-        check(failures, more[0] == 6, f"nine waiting: six robots listed and {want_more!r}: {more}")
+        check(failures, more[0] == 6, f"eight waiting: six robots listed and {want_more!r}: {more}")
         (out / "result.json").write_text(json.dumps(res, ensure_ascii=False, indent=1, default=str))
     finally:
+        for proc in stand_ins:   # ours, by the pid recorded above
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
         if video and ctx is not None:
             await ctx.close()   # the video is written whole only when its context closes
         if browser is not None:

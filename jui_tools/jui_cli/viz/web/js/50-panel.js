@@ -284,7 +284,7 @@ function refreshNow() {
 function decide(id, behavior, btn) {
   const p = latestModel.pending.find((q) => q.id === id);
   if (!p) return;
-  const where = btn.closest('#tasks, #perm-strip, #kanban, #tb-detail, #rb, #rb-wait-pane');
+  const where = btn.closest('#tasks, #perm-strip, #kanban, #tb-detail, #rb');   // the waits' pane keeps its own focus (53-waits.js cardWaitPanePaint)
   // the reason box of the very card pressed (the card is on the board, the robot's card and its 応答の履歴 tab at once)
   const card = btn.closest('.tbd-perm'), reasonEl = card ? card.querySelector('.tbd-reason input') : null;
   const reason = behavior === 'deny' && reasonEl ? reasonEl.value.trim() : '';

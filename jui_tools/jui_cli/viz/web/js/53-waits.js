@@ -210,7 +210,26 @@ function paneHTML(name, head, robots, who, items, mine) {
   return `<div class="rbwp-head"><p class="rbwp-title">${esc(tl('rbw.pane.title', { name }))}</p>${head ? `<button type="button" class="link-btn" data-rbw-board data-fk="rbwp-board">${esc(tl('rbw.pane.board'))}</button>` : ''}<button type="button" class="rbwp-x" data-rbwp-close data-fk="rbwp-x" aria-label="${esc(tl('rbw.pane.close'))}" title="${esc(tl('rbw.pane.close'))}">×</button></div>`
     + `${head ? paneRobotsHTML(robots, who, items) : ''}<div class="rbwp-items">${mine.map(paneItemHTML).join('')}</div>`;
 }
+/* Where the keyboard goes when an answer in the pane took its control away: the pane's next control while it stays
+   open, else the block's first row (or the card's ← 3D に戻る when the block has gone too). */
+function cardWaitPaneFocusNext() {
+  if (!paneEl.hidden) return paneEl.querySelector('.rbwp-items input:not([disabled]), .rbwp-items button:not([disabled]), [data-rbwp-close]');
+  const box = $('rb-waits');
+  return (!box.hidden && box.querySelector('[data-rbw-robot], [data-rbw-board]')) || rbEl.querySelector('#rb-close');
+}
 function cardWaitPanePaint() {
+  // the keyboard in the pane before it is drawn again — or dropped from it to the page (a send button disables itself
+  // when pressed, before the answer comes back and the pane is drawn)
+  const a0 = document.activeElement;
+  const had = paneEl.contains(a0) || (CARD_WAITS.keyIn && (!a0 || a0 === document.body));
+  cardWaitPanePaintNow();
+  const a = document.activeElement;
+  if (had && (paneEl.hidden || !paneEl.contains(a) || !a.isConnected)) {
+    const next = cardWaitPaneFocusNext();
+    if (next) next.focus({ preventScroll: true });
+  }
+}
+function cardWaitPanePaintNow() {
   const head = !!rbState.id && cardWaitInHead();
   const items = (head || !$('rb-waits').hidden) && rbState.id ? cardWaitItems() : [];
   const robots = [...new Set(items.map((x) => x.who))];
@@ -288,6 +307,8 @@ function cardWaitClick(e) {
 }
 $('rb-waits').addEventListener('click', cardWaitClick);
 rbEl.addEventListener('click', (e) => { if (e.target.closest('[data-rbw-board], [data-rbw-pane]')) cardWaitClick(e); });
+// whether the keyboard was last in the pane (focus going to the page's body is not leaving it: see cardWaitPanePaint)
+document.addEventListener('focusin', (e) => { CARD_WAITS.keyIn = paneEl.contains(e.target); });
 paneEl.addEventListener('click', (e) => {
   if (e.target.closest('[data-rbwp-close]')) { cardWaitPaneClose(); return; }
   const r = e.target.closest('[data-rbwp-robot]');
