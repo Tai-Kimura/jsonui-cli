@@ -181,6 +181,19 @@ def test_the_command_checks_a_model_folder_and_exits_1_when_it_is_broken(tmp_pat
     assert "OK  good" in out and "NG  bad" in out and "error: spirit.json spirit.at: 'tail' is not one of" in out
 
 
+@pytest.mark.parametrize("language,line", [("ja", "OK  named（墨の書生） ("), ("en", "OK  named: Ink Scholar (")])
+def test_the_report_names_the_model_by_its_name_in_the_language(tmp_path, monkeypatch, capsys, language, line):
+    # spirit.json's name passes the checks; the page draws no name, so the report is where it is read
+    monkeypatch.setenv("JUI_VIZ_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("JUI_VIZ_LANGUAGE", language)
+    named = model(tmp_path, {"version": 1, "name": {"ja": "墨の書生", "en": "Ink Scholar"}}, name="named")
+    plain = model(tmp_path, {"version": 1}, name="plain")
+    assert spirits.main([str(named)]) == 0 and spirits.main([str(plain)]) == 0
+    out = capsys.readouterr().out
+    assert line in out
+    assert f"OK  plain ({plain})" in out
+
+
 @pytest.mark.parametrize("name", ["robot-a.glb/../x", "robot-a.glb\\x", "robot-a.glb.txt", "robot-a.glbx", "../robot-a.glb",
                                   "/tmp/robot-a.glb"])
 def test_a_part_file_is_a_whole_name_in_the_folder_never_a_path(tmp_path, name):

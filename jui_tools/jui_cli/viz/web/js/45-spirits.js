@@ -174,7 +174,8 @@ async function spiritWear(R, S) {
     if (sp.material && sp.material.kind === 'ghost') S.ghost = spiritGhostShader(figure, sp);
     else spiritGhost(figure, sp);
     spiritOutline(figure, sp);
-    S.holders.push(spiritPut(r, figure, sp.at || 'back'));
+    // its offset and rotate as a part's; its scale is the one above, not given again
+    S.holders.push(spiritPut(r, figure, sp.at || 'back', { offset: sp.offset, rotate: sp.rotate }));
     S.figure = figure;
     S.clips = gltfs[figureFile].animations || [];
     S.names = sp.clips || {};
