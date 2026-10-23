@@ -3,7 +3,7 @@
   "generatedBy": "jui generate attr-bindings --lang all",
   "source": {
     "file": "shared/core/attribute_definitions.json",
-    "sha256": "6b875ed2cfcb662b30461f2a003cc7282f23625831ae3b78bdf2106a9495ccdc"
+    "sha256": "914c7f17da54d1685e208afd4921866d353a0378929e12f5b2b047846b29a338"
   },
   "files": {
     "kotlin/AttrCodegenSupport.kt": "3f56c8021ab16a32d0ed4a38e7839c27a08237bd095c4469255c800d1600b165",
@@ -13,7 +13,7 @@
     "kotlin/CheckAttributes.kt": "bb5433460fc0c85f13f5bc80069facd8e74f4d8fab4f054f1f5e048090c58905",
     "kotlin/CheckBoxAttributes.kt": "322709f373a4c70b4d7b082425d422ef604b2b3e97ed4e0736294970ae6c4637",
     "kotlin/CircleViewAttributes.kt": "adcf50dff774ab2bc658743ba40b9a707b7f02f599dcb3e28ebc40c7578dffdf",
-    "kotlin/CollectionAttributes.kt": "a9b8f4d8e10ecab8e2f7af6cf63915a39959d318e70d2528185746b4f1d94e84",
+    "kotlin/CollectionAttributes.kt": "dcb70a5d0bc0c8f2b383240d9ca4466f253d9fa84b4df9dea7e35ee67cfe37a5",
     "kotlin/CommonAttributes.kt": "810b529b5db352fb6d8cc7810c81a53d294984a2e35d94f17c424b3cc229da81",
     "kotlin/ComponentAliases.kt": "0ed03b2a8cbfcbc519ea44e68aa455b7750c6c8b3a1848c1539db74ab5fe8ab2",
     "kotlin/EditTextAttributes.kt": "2aba28ab978e6b3bf362c9f3771d86981fe1e0251c7abad2ab611e9c3d99ba19",
@@ -46,7 +46,7 @@
     "ruby/check_attributes.rb": "0f97af1745d1d671dbb4984f8c15385bec4fe5142a90ddffcf9eb804e26e92c2",
     "ruby/check_box_attributes.rb": "c4722801098b129a5c8f23b77cc431bd6f910c1d57251154afa5971b74069c8d",
     "ruby/circle_view_attributes.rb": "da495dfee762d4f041051f691a91fa59932909e525a988db453bccd1282d33fe",
-    "ruby/collection_attributes.rb": "4cef528284fee669c2e595861c06ad310615f823dddb08d3a152e3d03cea269e",
+    "ruby/collection_attributes.rb": "0bbf74b19db2a2bd43352f6b4842451bc1bddcf850bfd5cd18c7ed78d09b7e77",
     "ruby/common_attributes.rb": "b3fb397cfced4ff7566a0bff93b4bda13e5b2fea0428bb2ac803cdf4a2a9a9d8",
     "ruby/edit_text_attributes.rb": "61aa16f9ff57761419debb426dc60932023c136e638fdff484e2dbb83b8daf09",
     "ruby/embed_attributes.rb": "39a9958d0d8a6e33a8d9a1d762322a9ec027e3d4934be85428b98bf79b477937",
@@ -79,7 +79,7 @@
     "swift/CheckAttributes.swift": "a7d8d79c5c365caa1ce5be6918d33d789fac3ae6bbd97d6ca21458f0527983cd",
     "swift/CheckBoxAttributes.swift": "e7b64ffe7f654de52abf23da5b7d7d4d388c2bb17690e660ac47bc31a14a1a2a",
     "swift/CircleViewAttributes.swift": "acb60e313f195918753f8531add1f2d7fd05d2fad48055d825a77565ee729da0",
-    "swift/CollectionAttributes.swift": "f46713536a25e73822ef7366c645bfa1780ca9bdee9370ad83b5cbc7b7ba61a4",
+    "swift/CollectionAttributes.swift": "35dee58351528278eb9e63d3c0fad7cfa63e01963a9f1cd314a4bfaa19864ee0",
     "swift/CommonAttributes.swift": "0418161fd4f51d1a6ebbdf284f171d1058da5874b75196a3f338aeb0ee70e3c3",
     "swift/ComponentAliases.swift": "747ee66302406116021e66bde682de85856e53b14d45b89c1c09e1015c7e5132",
     "swift/EditTextAttributes.swift": "d0e89f9ee228a4b295d0a96e89676b0249446b01af448f2f4d164eb4a49f5a40",

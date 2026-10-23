@@ -8,11 +8,11 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "6b875ed2cfcb662b30461f2a003cc7282f23625831ae3b78bdf2106a9495ccdc",
+  "generatedFrom": "914c7f17da54d1685e208afd4921866d353a0378929e12f5b2b047846b29a338",
   "counts": {
-    "fixtures": 1258,
+    "fixtures": 1257,
     "assertable": 51,
-    "visual": 955,
+    "visual": 954,
     "interactive": 41,
     "control": 133,
     "declarationOnly": 77,
@@ -21884,33 +21884,6 @@
       "deprecated": null,
       "layout": "fixtures/Collection/flowAlignment__trailing.layout.json",
       "test": "fixtures/Collection/flowAlignment__trailing.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "peerGroup": "Collection/flowAlignment@Collection__layout-flow_width-150",
-      "control": "__control/Collection__layout-flow_width-150",
-      "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json",
-        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
-        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
-      ]
-    },
-    {
-      "id": "Collection/flowAlignment__end",
-      "component": "Collection",
-      "attribute": "flowAlignment",
-      "case": "end",
-      "class": "visual",
-      "host": "Collection",
-      "writtenKey": "flowAlignment",
-      "aliasOf": null,
-      "value": "end",
-      "platforms": [
-        "android"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/Collection/flowAlignment__end.layout.json",
-      "test": "fixtures/Collection/flowAlignment__end.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": "Collection/flowAlignment@Collection__layout-flow_width-150",

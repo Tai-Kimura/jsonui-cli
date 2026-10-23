@@ -4272,7 +4272,8 @@
     "flowAlignment": {
       "type": "string",
       "enum": ["leading", "center", "trailing", "end"],
-      "description": "Row alignment of a flow layout: leading (default), center, trailing/end (kjui collection_component).",
+      "valueAliases": {"end": "trailing"},
+      "description": "Row alignment of a flow layout: leading (default), center or trailing (kjui collection_component). end is an accepted alias spelling of trailing.",
       "platform": "kotlin",
       "warn_outside_mode": true
     }
