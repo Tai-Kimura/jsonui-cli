@@ -216,10 +216,13 @@ module RjuiTools
             @dynamic_styles['maxHeight'] = "'#{attributes['maxHeight']}px'"
           end
 
-          # Border
+          # Border. A bound width or colour is the base's
+          # (css_border_classes: the width inline, the colour a custom property
+          # and its class); written here as well, the colour went inline over
+          # that class and a bound width became `'@{…}px'`.
           if attributes['borderWidth'] && attributes['borderColor']
-            @dynamic_styles['borderWidth'] = "'#{attributes['borderWidth']}px'"
-            @dynamic_styles['borderColor'] = color_style_expr(attributes['borderColor'])
+            @dynamic_styles['borderWidth'] = "'#{attributes['borderWidth']}px'" unless has_binding?(attributes['borderWidth'])
+            @dynamic_styles['borderColor'] = color_style_expr(attributes['borderColor']) unless has_binding?(attributes['borderColor'])
             @dynamic_styles['borderStyle'] = "'solid'"
           end
 

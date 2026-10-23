@@ -55,8 +55,10 @@ module RjuiTools
           style_parts << "WebkitBackdropFilter: 'blur(#{blur_amount}px)'" # Safari support
 
           # Get background color based on effect style
+          # A bound background is the base's (`--jui-bg` and its class); an
+          # inline backgroundColor here held the `@{…}` text.
           bg_color = attributes['background'] || get_background_color
-          style_parts << "backgroundColor: '#{bg_color}'" if bg_color
+          style_parts << "backgroundColor: '#{bg_color}'" if bg_color && !has_binding?(bg_color)
 
           existing_style = build_style_attr
           if existing_style.empty?

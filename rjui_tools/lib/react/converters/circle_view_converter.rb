@@ -52,22 +52,19 @@ module RjuiTools
           style_parts = []
 
           # Fill color (takes precedence over background for circle)
+          # A bound fill is the base's (`--jui-bg` and its class); an inline
+          # backgroundColor here beat it, unresolved by ColorManager.
           fill_color = attributes['background']
-          if fill_color
-            if has_binding?(fill_color)
-              binding_expr = convert_binding(fill_color).gsub(/^\{|\}$/, '')
-              style_parts << "backgroundColor: #{binding_expr}"
-            else
-              style_parts << "backgroundColor: '#{fill_color}'"
-            end
-          end
+          style_parts << "backgroundColor: '#{fill_color}'" if fill_color && !has_binding?(fill_color)
 
           # Border/Stroke
           stroke_color = attributes['borderColor']
           stroke_width = attributes['borderWidth']
           stroke_style = attributes['borderStyle'] || 'solid'
 
-          if stroke_color || stroke_width
+          # A bound border is the base's (`--jui-border-*` on the ::after);
+          # written here as well it went inline with the `@{…}` text in it.
+          if (stroke_color || stroke_width) && !border_bound?
             stroke_width ||= 1
             stroke_color ||= '#000000'
             style_parts << "border: '#{stroke_width}px #{stroke_style} #{stroke_color}'"

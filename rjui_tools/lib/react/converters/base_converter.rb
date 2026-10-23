@@ -1259,9 +1259,14 @@ module RjuiTools
             else
               @dynamic_styles['borderWidth'] = "'#{attributes['borderWidth']}px'"
             end
-            @dynamic_styles['borderColor'] = color_style_expr(attributes['borderColor'])
+            # The colour rides a custom property read by a class, not an
+            # inline borderColor: an inline style beats every class, and a
+            # control's own state border (SelectBox's focus:border-*) has to
+            # show over a bound colour as over a fixed one.
+            @dynamic_styles['--jui-border-color'] = color_style_expr(attributes['borderColor'])
             @dynamic_styles['borderStyle'] = convert_binding(attributes['borderStyle']) if has_binding?(attributes['borderStyle'])
-            attributes['borderStyle'] ? '' : 'border-solid'
+            colour_class = attributes['borderColor'] ? 'border-[color:var(--jui-border-color)]' : ''
+            [attributes['borderStyle'] ? '' : 'border-solid', colour_class].reject(&:empty?).join(' ')
           else
             TailwindMapper.map_border(attributes['borderWidth'], attributes['borderColor'], attributes['borderStyle'])
           end

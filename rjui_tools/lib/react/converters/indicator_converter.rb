@@ -8,6 +8,8 @@ module RjuiTools
       class IndicatorConverter < BaseConverter
         def convert(indent = 2)
           class_name = build_class_name
+          # before the style: a bound colour puts its custom property there
+          spinner_class = build_spinner_class
           style_attr = build_style_attr
           id_attr = build_id_attr
           testid_attr = build_testid_attr
@@ -15,7 +17,7 @@ module RjuiTools
 
           jsx = <<~JSX.chomp
             #{indent_str(indent)}<div#{id_attr}#{class_name_attr(class_name)}#{style_attr}#{testid_attr}#{tag_attr}>
-            #{indent_str(indent + 2)}<div className="#{build_spinner_class}" />
+            #{indent_str(indent + 2)}<div className="#{spinner_class}" />
             #{indent_str(indent)}</div>
           JSX
 
@@ -62,7 +64,13 @@ module RjuiTools
 
           # Color
           color = attributes['color'] || attributes['tintColor'] || '#3B82F6'
-          if color.start_with?('#')
+          if has_binding?(color)
+            # A bound colour rides a custom property on the outer element,
+            # inherited by the spinner; as a class name it was `border-t-@{…}`.
+            @dynamic_styles['--jui-indicator-color'] = color_style_expr(color)
+            classes << 'border-t-[color:var(--jui-indicator-color)]'
+            classes << 'border-r-[color:var(--jui-indicator-color)]' if attributes['halfSpinner']
+          elsif color.start_with?('#')
             classes << "border-t-[#{color}]"
             classes << "border-r-[#{color}]" if attributes['halfSpinner']
           else

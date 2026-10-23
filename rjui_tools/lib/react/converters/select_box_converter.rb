@@ -56,8 +56,10 @@ module RjuiTools
           classes << 'focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
 
           # Border color
+          # A bound one is the base's (css_border_classes: a custom property
+          # and its class); handed to map_color it was read as a colour name.
           border_color = attributes['borderColor']
-          classes << TailwindMapper.map_color(border_color, 'border') if border_color
+          classes << TailwindMapper.map_color(border_color, 'border') if border_color && !has_binding?(border_color)
 
           # fontColor and fontSize are emitted by base_converter already; this
           # converter used to emit them a second time, which put two `text-*`

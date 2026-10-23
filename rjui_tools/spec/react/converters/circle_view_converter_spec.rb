@@ -30,10 +30,14 @@ RSpec.describe RjuiTools::React::Converters::CircleViewConverter do
     end
 
     context 'with background color binding' do
+      # The base's custom property and its class (ticket
+      # rjui-selectbox-bound-border-color): an inline backgroundColor here
+      # beat it, unresolved by ColorManager.
       it 'generates dynamic background color' do
         converter = create_converter({ 'class' => 'CircleView', 'background' => '@{circleColor}' })
         result = converter.convert
-        expect(result).to include('backgroundColor: data.circleColor')
+        expect(result).to include("'--jui-bg': ColorManager.resolveColor(data.circleColor)", 'bg-[var(--jui-bg)]')
+        expect(result).not_to include('backgroundColor:')
       end
     end
 
