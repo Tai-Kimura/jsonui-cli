@@ -341,8 +341,9 @@ def chapters(lang: str) -> dict:
     # way is easy to follow, then pull back to the large system). Close on the shop's group (its focus, then a little
     # nearer: its nodes stand as models), flow "order" at 0.5x among them, its first branch taken; at 1x its second;
     # then the camera pulls back steadily (eased, 6.8 x) until the whole system is in view, and flow "payment" runs
-    # across the regions at 2x; then 「2D」 in the header and the same room from straight above (2.3.21, requester 10-23:
-    # 「デモのサーバーの章に2dと3d切り替えられるって内容も追加しといて」), held to the chapter's end.
+    # across the regions at 2x (自動: no stop at a fork); then 「2D」 in the header and the same room from straight above
+    # (2.3.21, requester 10-23: 「デモのサーバーの章に2dと3d切り替えられるって内容も追加しといて」), the payment flow played
+    # again there (requester: its light keeps moving in 2D), to the chapter's end.
     sr_prelude = up_close("demo-shop") + [P("door"), P("dbg", call="srSelectGroup", group="shop-core"),
                                           P("click", target={"css": "#sr-board [data-sr-act='focus']"}),
                                           P("dbg", call="srZoom", factor=0.82), P("settle")]
@@ -358,8 +359,13 @@ def chapters(lang: str) -> dict:
         E(78.2, "dbg", call="srSelect", node="api", expect="flowlist:payment"),
         E(78.4, "dbg", call="srFlowSpeed", speed=2),
         E(78.7, "click", target={"css": "#sr-board [data-sr-flow='payment']"}, expect="flow:payment"),
-        # the same room from straight above (2.3.21): 「2D」 in the header, held to the chapter's end
-        E(81.4, "click", target={"css": "#sr-mode-2d"}, expect="sr2d"),
+        # 自動 (the default way at each branch): the light never stops at a fork, here or in 2D
+        E(79.3, "click", target={"css": "#sr-player [data-sr-fp='auto']"}),
+        # the same room from straight above (2.3.21): 「2D」 in the header. The room drawn again stops the flow, so the
+        # payment flow is pressed again in 2D and its light runs over the flat tiles to the chapter's end
+        E(80.6, "click", target={"css": "#sr-mode-2d"}, expect="sr2d"),
+        E(81.3, "dbg", call="srSelect", node="api", expect="flowlist:payment"),
+        E(81.9, "click", target={"css": "#sr-board [data-sr-flow='payment']"}, expect="flow:payment"),
     ], needs=("rooms", "server_room", "flows", "sr2d"))
 
     # the migration plan played through (requester 10-22: many migrations, smoothly), as the promo's chapter 4m (86–120)
@@ -408,7 +414,10 @@ def chapters(lang: str) -> dict:
                      P("spec_reset", room="demo-shop", rel=spec, keep=["type", "version", "metadata"]), P("settle"),
                      P("worktree", room="demo-shop", branch=WORKTREE["branch"], name=WORKTREE["name"], changes=worktree_files(w)),
                      P("dbg", call="press", css="#btn-side"),   # the side panel closed: the sheet takes the page
-                     P("dbg", call="openSpec", room="demo-shop", rel=spec, expect="board"), P("settle")]
+                     P("dbg", call="openSpec", room="demo-shop", rel=spec, expect="board"),
+                     # the board scoped to the room (a worktree with its own jui.config.json is a room of its own wherever
+                     # it is: rooms.find_root), so its list has only the room's rows, each tagged ⎇ main or ⎇ <branch>
+                     P("dbg", call="setProject", room="demo-shop"), P("settle")]
     # then (2.3.21, requester 10-23: 「specの章には別ワークツリーの作業も進捗見れるって内容追加で」) a session starts in a git
     # worktree of the room on its own branch (one new spec half written, the cart's spec changed): the board's list
     # gains the worktree's rows, each tagged ⎇ with its branch beside main's, and the new spec opens from it.
@@ -425,6 +434,8 @@ def chapters(lang: str) -> dict:
         # the row tagged with the branch (its tag, then its name): the worktree's own room lists the same spec untagged
         E(36.0, "click", target={"css": "#wb-side-list .ws-item", "text": f"⎇ {wt['branch']}{w['wt_spec']}"},
           ready=WT_ROW.format(w["wt_spec"]), expect="wbtitle:" + w["wt_spec"], js=True),
+        # the opened row moves in the list: the cursor follows it there
+        E(36.7, "hover", target={"css": "#wb-side-list .ws-item[aria-current='true']"}),
     ], needs=("rooms", "spec_worktrees"), viewport=SPLIT_VIEWPORT)
 
     # 6 (134–142): back to the whole floor

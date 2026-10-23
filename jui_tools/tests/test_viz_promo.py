@@ -50,6 +50,17 @@ def test_the_chapters_are_the_promos_viz_chapters():
     assert set(T.BOARDS.values()) <= set(T.TERM_CHAPTER_IDS)
 
 
+def test_chapter_4s_2d_plays_the_payment_flow_again_with_auto_on():
+    """The room drawn again in 2D stops the flow: it is pressed again there, after 自動 is ticked, so its light keeps
+    moving to the chapter's end (requester 10-23)."""
+    for lang in ("ja", "en"):
+        ev = T.chapters(lang)["4"].events
+        at = lambda css: [e.at for e in ev if e.kind == "click" and css in e.args["target"].get("css", "")]  # noqa: E731
+        pays, auto, flat = at("data-sr-flow='payment'"), at("data-sr-fp='auto'"), at("#sr-mode-2d")
+        assert len(pays) == 2 and len(auto) == 1 and len(flat) == 1, lang
+        assert pays[0] < auto[0] < flat[0] < pays[1] < T.chapters(lang)["4"].end, lang
+
+
 def test_every_chapter_that_shows_a_room_folds_its_robot_list_first():
     """2.3.20's この部屋のロボット covered the room and its task board on camera: a chapter that enters a room (before
     frame 0 or on camera) folds the list with the page's own button before frame 0."""
@@ -76,6 +87,9 @@ def test_the_board_ends_on_a_worktrees_spec_tagged_with_its_branch(tmp_path):
         last_write = max(ev.at for ev in c.events if ev.kind == "spec_write")
         assert last_write < start.at < opened.at < c.end and opened.args["expect"] == "wbtitle:" + T.WORDS[lang]["wt_spec"], lang
         assert opened.args["target"]["text"].startswith("⎇ " + T.WORKTREE["branch"]), "the tagged row, not the worktree room's own"
+        assert any(ev.kind == "dbg" and ev.args.get("call") == "setProject" for ev in c.prelude), "the list scoped to the room"
+        follow = [ev for ev in c.events if ev.kind == "hover" and ev.at > opened.at]
+        assert follow and "aria-current" in follow[0].args["target"]["css"], "the cursor follows the opened row"
     assert term.TERM_SPAN["1b"] == 16.0 and T.BOUNDS["1b"][1] - T.BOUNDS["1b"][0] > 16.0
     # the worktree as the stage makes it: on its branch, the new file written, the cart's description edited, nothing committed
     room = tmp_path / "room"
