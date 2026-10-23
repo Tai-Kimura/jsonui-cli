@@ -144,7 +144,7 @@ function cardWaits() {
       setHTML(box, `<p class="rbw-title">${esc(tl('rbw.title'))}</p><button type="button" class="rbw-sum" data-rbw-board data-fk="rbw-board">${esc(sum)}</button>`
         + `<ul class="rbw-list">${robots.slice(0, CARD_WAIT_MAX).map((id) => {
           const ks = kindsOf(id), k = ks[0] === 'ask' ? 'ask' : 'perm';
-          return `<li><button type="button" class="rbw-robot${newWho.has(id) ? ' rbw-new' : ''}" data-rbw-robot="${esc(id)}" data-rbw-kind="${esc(k)}" data-fk="rbw-${esc(id)}" title="${esc(tl('rbw.open', { name: DEF[id].agent || id, what: rbwKinds(ks) }))}">${pill(id, DEF[id].role)}<span>${esc(rbwKinds(ks))}</span></button></li>`;
+          return `<li><button type="button" class="rbw-robot${newWho.has(id) ? ' rbw-new' : ''}" data-rbw-robot="${esc(id)}" data-rbw-kind="${esc(k)}" data-fk="rbw-${esc(id)}" title="${esc(tl('rbw.open', { name: DEF[id].title || DEF[id].agent || id, what: rbwKinds(ks) }))}">${pill(id, DEF[id].role)}${DEF[id].title ? `<span class="rbw-name">${esc(DEF[id].title)}</span>` : ''}<span>${esc(rbwKinds(ks))}</span></button></li>`;
         }).join('')}${robots.length > CARD_WAIT_MAX ? `<li class="rbw-more">${esc(tl('rbw.more', { n: robots.length - CARD_WAIT_MAX }))}</li>` : ''}</ul>`);
       if (fresh.length) { box.classList.remove('rbw-arrive'); void box.offsetWidth; box.classList.add('rbw-arrive'); }
     }

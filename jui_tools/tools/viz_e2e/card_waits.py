@@ -32,7 +32,8 @@ from waits import WaitTimeout, settled, until
 
 CWD = "/work/card-waits-app"
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
-SID = {k: f"e2e00000-0000-4000-8000-0000000007{i:02d}" for i, k in enumerate(("host", "perm", "ask", "den"), 1)}
+SID = {k: f"e2e00000-0000-4000-8000-0000000007{i:02d}" for i, k in enumerate(("host", "perm", "ask", "den", "m1", "m2", "m3", "m4", "m5", "m6"), 1)}
+MORE = ("m1", "m2", "m3", "m4", "m5", "m6")   # with perm, ask and den: nine robots waiting, past the six listed
 QUESTION = {"questions": [{"question": "Which colour?", "header": "Colour", "multiSelect": False,
                            "options": [{"label": "Red", "description": "a"}, {"label": "Blue", "description": "b"}]}]}
 BLOCK = """() => { const b = document.getElementById('rb-waits'), rb = document.getElementById('rb');
@@ -61,6 +62,13 @@ async def run_card_waits(pw, out, failures, jt=None):
     jt = pathlib.Path(jt) if jt else pathlib.Path(__file__).resolve().parents[2]
     forward = jt / "jui_cli" / "viz" / "forward.py"
     port = free_port()
+    sessions = home / ".claude" / "sessions"   # watched by the server from its start: perm's name, renamed below
+    sessions.mkdir(parents=True, exist_ok=True)
+
+    def name_perm(title):
+        (sessions / "93001.json").write_text(json.dumps({"pid": 93001, "sessionId": SID["perm"], "cwd": CWD, "status": "idle", "entrypoint": "cli",
+                                                         "name": title, "nameSource": "user"}))
+    name_perm("Perm lane")
     base_env = {k: v for k, v in os.environ.items() if k not in ISOLATE}
     log = open(out / "serve.log", "w")
     srv = subprocess.Popen([sys.executable, str(jt / "bin" / "jui"), "viz", "serve", "--port", str(port)], stdout=log, stderr=subprocess.STDOUT,
@@ -90,10 +98,11 @@ async def run_card_waits(pw, out, failures, jt=None):
         await ready(page)
         await until(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", "connected")
         for k in SID:
-            hook(k, hook_event_name="SessionStart", source="startup")
+            if k not in MORE:
+                hook(k, hook_event_name="SessionStart", source="startup")
         await until(page, "() => window.__dbg.robots.length >= 4", "four robots", timeout=40000, why="() => window.__dbg.settleInfo()")
         ids = await page.evaluate("() => Object.fromEntries(window.__dbg.robots.map((R) => [R.def.sessionId, R.def.id]))")
-        rid = {k: ids[SID[k]] for k in SID}
+        rid = {k: ids[SID[k]] for k in SID if k not in MORE}
         res["ids"] = rid
 
         async def open_host():
@@ -197,6 +206,28 @@ async def run_card_waits(pw, out, failures, jt=None):
         await open_host()
         b = res["reduced"] = await block("reduced motion: the block")
         check(failures, b.get("anim") == "none", f"reduced motion: no movement: {b}")
+
+        # a rename while the block shows: its row and title say the new name
+        named = res["named"] = await page.evaluate("(id) => { const b = document.querySelector(`#rb-waits [data-rbw-robot=\"${id}\"]`); return b ? [b.title, b.textContent] : null; }", rid["perm"])
+        check(failures, named and "Perm lane" in named[0] and "Perm lane" in named[1], f"the block names perm's session: {named}")
+        name_perm("Renamed lane")
+        res["renamed"] = r = await until(page, "(id) => { const b = document.querySelector(`#rb-waits [data-rbw-robot=\"${id}\"]`); return b && b.title.includes('Renamed lane') && b.textContent.includes('Renamed lane') ? [b.title, b.textContent] : null; }",
+                                         "the block says perm's new name", arg=rid["perm"], timeout=20000,
+                                         why="(id) => { const b = document.querySelector(`#rb-waits [data-rbw-robot=\"${id}\"]`); return b ? [b.title, b.textContent] : null; }")
+        check(failures, "Perm lane" not in r[0] and "Perm lane" not in r[1], f"renamed: no old name left in the block: {r}")
+
+        # nine robots waiting: six listed, the rest said as ほか N
+        for k in MORE:
+            hook(k, hook_event_name="SessionStart", source="startup")
+            hook(k, hook_event_name="UserPromptSubmit", prompt="go")
+            hook(k, hook_event_name="PreToolUse", tool_name="Bash", tool_use_id=f"toolu_{k}", tool_input={"command": "ls"})
+            hook(k, hook_event_name="PermissionRequest", tool_name="Bash", tool_input={"command": "ls"})
+        want_more = await page.evaluate("() => window.__dbg.tl('rbw.more', { n: 3 })")
+        more = res["more"] = await until(page, "(w) => { const b = document.getElementById('rb-waits'), m = b.querySelector('.rbw-more');"
+                                         " return m && m.textContent === w ? [b.querySelectorAll('[data-rbw-robot]').length, m.textContent] : null; }",
+                                         "nine waiting: six and ほか 3", arg=want_more, timeout=30000,
+                                         why="() => { const b = document.getElementById('rb-waits'); return [b.querySelectorAll('[data-rbw-robot]').length, (b.querySelector('.rbw-more') || {}).textContent || null]; }")
+        check(failures, more[0] == 6, f"nine waiting: six robots listed and {want_more!r}: {more}")
         (out / "result.json").write_text(json.dumps(res, ensure_ascii=False, indent=1, default=str))
     finally:
         if browser is not None:

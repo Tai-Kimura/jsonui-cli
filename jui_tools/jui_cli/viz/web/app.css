@@ -901,6 +901,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .rbw-list { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; }
 .rbw-robot { display: inline-flex; align-items: center; gap: 6px; padding: 2px 6px 2px 2px; border: 0; border-radius: 8px; background: none; color: var(--ink); font: 600 12px/1.5 var(--font-body); text-align: left; cursor: pointer; }
 .rbw-robot:hover { background: var(--chip); }
+.rbw-name { max-width: 9em; overflow: hidden; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .rbw-more { color: var(--ink-soft); font: 500 11.5px/1.5 var(--font-body); }
 .rbw-slot { display: contents; }
 .rbw-badge { padding: 2px 9px; border: 1px solid #7a4b00; border-radius: 999px; background: #ffb020; color: #1f1400; font: 800 12px/1.5 var(--font-body); white-space: nowrap; cursor: pointer; }
