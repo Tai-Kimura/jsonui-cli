@@ -247,7 +247,12 @@ function cardWaitPanePaint() {
     const right = parent.clientWidth - rbEl.offsetLeft + 10;
     paneEl.style.top = `${box.offsetTop + box.offsetHeight + 8}px`;
     paneEl.style.right = `${right}px`;
-    paneEl.style.width = `${Math.max(220, Math.min(360, parent.clientWidth - right - 12))}px`;
+    // the room's list keeps left of the pane at its own height (53-roster.js rosterPlace): the pane leaves it its
+    // width when that still leaves the pane 280; narrower than that, the list goes below the pane instead
+    const roster = document.getElementById('roster');
+    const listW = roster && !roster.hidden && !rosterNarrow() ? roster.getBoundingClientRect().width + 12 + ROSTER_GAP + 4 : 0;
+    const room = parent.clientWidth - right - 12;
+    paneEl.style.width = `${Math.max(220, Math.min(360, room - listW >= 280 ? room - listW : room))}px`;
   }
   paneEl.style.maxHeight = `${Math.max(160, parent.clientHeight - paneEl.offsetTop - 12)}px`;
 }

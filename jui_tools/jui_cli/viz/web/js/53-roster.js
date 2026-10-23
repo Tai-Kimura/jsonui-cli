@@ -181,7 +181,8 @@ function rosterShowCurrent(current) {
    stand where they are, so it is the list that moves (the gate, 2.3.21: the list beside the card lay on their sum and
    robots at 1920; under 1300 px, where app.css leaves the list at the right, on the card itself): to their left
    (--roster-shift), the list keeping its height; where the 3D has no room left of the waits, below them as the parts
-   above (under them on a short page the list had no height left: its selected row could not be shown). */
+   above (under them on a short page the list had no height left: its selected row could not be shown). The pane a
+   robot's row opens under the waits (#rb-wait-pane) is kept clear the same way. */
 const ROSTER_AROUND = ['room-solo', 'floor-nav', 'live-error', 'tower-legend', 'tower-weather', 'live-empty'];
 const ROSTER_GAP = 8;
 function rosterPlace(box) {
@@ -195,11 +196,13 @@ function rosterPlace(box) {
   let shift = 0, around = ROSTER_AROUND;
   const card = shown(document.querySelector('#rb.show'));
   if (card && card.left < r.right && r.left < card.right) shift = Math.max(0, r.right - (card.left - ROSTER_GAP));
-  const w = shown(document.getElementById('rb-waits'));
-  if (w && w.left < r.right - shift && r.left - shift < w.right) {
-    const want = r.right - (w.left - ROSTER_GAP);   // the list's right edge left of the waits
-    if (r.left - want >= S.left + 12) shift = want;
-    else around = [...ROSTER_AROUND, 'rb-waits'];
+  // the waits, and a robot's waits opened under them (#rb-wait-pane, wider than the block): left of both, or below
+  for (const id of ['rb-waits', 'rb-wait-pane']) {
+    const w = shown(document.getElementById(id));
+    if (!(w && w.left < r.right - shift && r.left - shift < w.right)) continue;
+    const want = r.right - (w.left - ROSTER_GAP);   // the list's right edge left of it
+    if (r.left - want >= S.left + 12) shift = Math.max(shift, want);
+    else around = [...around, id];
   }
   shift = Math.round(shift);
   if (shift !== had) box.style.setProperty('--roster-shift', `${shift}px`);

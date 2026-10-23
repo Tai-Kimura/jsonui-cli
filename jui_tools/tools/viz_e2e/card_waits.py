@@ -296,6 +296,13 @@ async def run_card_waits(pw, out, failures, jt=None, video: pathlib.Path | None 
         exp = res["qaExpanded"] = await page.evaluate("(id) => document.querySelector(`#rb-waits [data-rbw-robot=\"${id}\"]`).getAttribute('aria-expanded')", rid["qa"])
         check(failures, exp == "true", f"qa's row says the pane is open: {exp}")
         check(failures, await page.evaluate(CARD_ON, rid["host"]), "qa's row: the host's card stays")
+        # the room's list keeps off the open pane, as off the card and the block (53-roster.js rosterPlace)
+        apart = "(([a, b, c, d], [e, f, g, h]) => c <= e || g <= a || d <= f || h <= b)"
+        try:
+            res["rosterPane"] = await until(page, f"() => {{ const r = window.__dbg.roster(); return r.rect && r.pane && r.rect[3] - r.rect[1] > 80 && {apart}(r.rect, r.pane) ? [r.rect, r.pane] : null; }}",
+                                            "the room's list off the open pane", timeout=10000, why="() => { const r = window.__dbg.roster(); return [r.rect, r.pane, r.waits]; }")
+        except WaitTimeout as e:
+            failures.append(f"card-waits: the room's list and the open pane overlap: {e}")
         for scheme in ("light", "dark"):
             await page.emulate_media(color_scheme=scheme)
             await settled(page, f"1440 pane {scheme}")
