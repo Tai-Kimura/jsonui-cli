@@ -43,7 +43,7 @@ module RjuiTools
             #{skew_comment}#{indent_str(indent)}<EmbedContainer
             #{indent_str(indent + 2)}embedId="#{embed_id}"
             #{indent_str(indent + 2)}screen="#{screen}"
-            #{indent_str(indent + 2)}navigationMode="#{navigation_mode}"#{isolated_attrs}#{params_attr}#{event_bridge_attr}#{class_attr}
+            #{indent_str(indent + 2)}navigationMode="#{navigation_mode}"#{isolated_attrs}#{params_attr}#{event_bridge_attr}#{class_attr}#{build_testid_attr}
             #{indent_str(indent)}>
             #{indent_str(indent + 2)}<#{embedded_component} />
             #{indent_str(indent)}</EmbedContainer>

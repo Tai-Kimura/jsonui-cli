@@ -70,6 +70,7 @@ export const EmbedContainer = ({
   screenResolver,
   eventBridge,
   className,
+  "data-testid": testId,
   children
 }) => {
   const [stack, setStack] = useState([]);
@@ -126,6 +127,7 @@ export const EmbedContainer = ({
     data-embed-navigation-mode={navigationMode}
     data-embed-stack-depth={navigationMode === "isolated" ? stack.length : void 0}
     className={className}
+    data-testid={testId}
   >
         {
     /* The embed root stays mounted underneath pushed entries so its

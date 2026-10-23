@@ -43,6 +43,7 @@ module RjuiTools
           data_prop = build_data_prop(merged_data, including_data_pairs(merged_data))
 
           id_attr = include_id_attr + include_path_attr(base_name)
+          warn_test_id_on_include(include_path)
 
           if data_prop.empty?
             "#{indent_str(indent)}<#{component_name}#{id_attr} />"
@@ -52,6 +53,22 @@ module RjuiTools
         end
 
         private
+
+        # An include is a component call on the web, not an element: a testId
+        # on the include node has nothing to sit on (the include node's own id
+        # is not an element either — shared/core/include_ids_fixture.json). It
+        # was dropped without a word until jsonui-cli 2.3.21; the partial's
+        # root is where it takes.
+        def warn_test_id_on_include(include_path)
+          return unless attributes['testId']
+
+          Core::Logger.warn(
+            "Include '#{include_path}' has testId '#{attributes['testId']}', which the web output does not apply: " \
+            "an include renders the partial's component, not an element of its own. Write the testId on the " \
+            "partial's root view instead. / Include '#{include_path}' の testId '#{attributes['testId']}' は Web " \
+            'の出力に付きません（include は部品の呼び出しで、自分の要素がありません）。partial の root の view に書いてください。'
+          )
+        end
 
         # `jsonuiPath` for a layout that takes it (IncludePaths): this include
         # node's position in the expanded tree — `"0_3"`, or, where this

@@ -202,6 +202,8 @@ export interface EmbedContainerProps {
   eventBridge?: (event: EmbeddedEvent) => void;
   /** Optional className applied to the container div. */
   className?: string;
+  /** The layout's testId, on the container div (as every other component carries it). */
+  'data-testid'?: string;
   /** The embedded screen component. */
   children: React.ReactNode;
 }
@@ -214,6 +216,7 @@ export const EmbedContainer: React.FC<EmbedContainerProps> = ({
   screenResolver,
   eventBridge,
   className,
+  'data-testid': testId,
   children,
 }) => {
   // Isolated mode: the embed owns a private in-memory stack. Stack lifetime
@@ -287,6 +290,7 @@ export const EmbedContainer: React.FC<EmbedContainerProps> = ({
         data-embed-navigation-mode={navigationMode}
         data-embed-stack-depth={navigationMode === 'isolated' ? stack.length : undefined}
         className={className}
+        data-testid={testId}
       >
         {/* The embed root stays mounted underneath pushed entries so its
             hook state survives push/pop round trips (parity with iOS
