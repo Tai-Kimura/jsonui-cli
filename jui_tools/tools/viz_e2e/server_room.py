@@ -312,6 +312,8 @@ def _routes_ok(failures, where, r):
           f"{where}: every cable ends on its nodes' sides, at a height within them: {r}")
     check(failures, r["flat"] > 0 and r["notFlat"] == 0, f"{where}: a cable with nothing on its way is flat: {r}")
     check(failures, r["notRising"] == 0 and r["under"] == 0, f"{where}: a cable with something on its way rises over it: {r}")
+    check(failures, r["offSide"] == 0, f"{where}: every end 0.3 above its node's foot (half its height at most): {r['offSide']} off")
+    check(failures, r["lowOver"] == 0, f"{where}: a rising cable passes 0.25 over what it crosses: {r['lowOver']} lower")
     check(failures, r["bundlesOff"] == 0, f"{where}: the far view's bundles run from box side to box side: {r['bundles']} bundles, {r['bundlesOff']} ends off")
 
 
@@ -345,7 +347,7 @@ async def run_cables_and_reach(page, out, failures, res):
     # little thinner than 2.3.20's, each layer measured in drawn pixels alone (srLayerWidth); low over the floors, from
     # one node's footprint edge to the other's, and not drawn over a node (its shapes, its model up close)
     widths = await page.evaluate("() => window.__dbg.srLines().px")
-    routes = res["cableRoutes"] = await page.evaluate("() => window.__dbg.srCableRoutes()")
+    routes = res["cableRoutes"] = await page.evaluate("() => window.__dbg.srCableRoutes({ side: 0.3, clear: 0.25, cross: 0.06 })")
     plain_fit = res["plainFit"] = await page.evaluate("() => window.__dbg.srLayerWidth('plainLines')")
     # the cables of a node all of whose cables are flat (one rising over a node is drawn over it, as asked), alone, seen
     # from straight above: their pixels stop at the nodes' outlines — pulled back, with the simple shapes, up close with
@@ -1118,7 +1120,7 @@ async def run_server_room(pw, out, failures):
         px_near = await page.evaluate("() => window.__dbg.srZoom(0.05)")
         await until(page, "() => window.__dbg.sr().lod === 'near'", "near", timeout=5000)
         await until(page, "(n) => window.__dbg.sr().labels > n", "near labels", arg=far["labels"], timeout=5000)
-        lr = res["largeRoutes"] = await page.evaluate("() => window.__dbg.srCableRoutes()")
+        lr = res["largeRoutes"] = await page.evaluate("() => window.__dbg.srCableRoutes({ side: 0.3, clear: 0.25, cross: 0.06 })")
         _routes_ok(failures, "the large room", lr)
         check(failures, lr["rising"] > 0, f"the large room: cables rise over what stands on their way (else the arm proves nothing): {lr}")
         await page.screenshot(path=str(out / "large-routes.png"))

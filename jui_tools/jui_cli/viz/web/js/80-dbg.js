@@ -117,8 +117,11 @@ window.__dbg = {
     return { cable, over, share: cable ? +(over / cable).toFixed(3) : null, detail: V.detail, lod: V.lod }; },
   // every cable laid: its ends on its nodes' outlines (as drawn) at a height within each node; flat (two points) when
   // nothing stands on its straight line; rising when something does, and over that thing's top at its middle
-  srCableRoutes: () => { const V = SR.view; if (!V) return null; const grid = srFootGrid(V), feet = [...new Set(grid.feet.values())];
-    const out = { cables: 0, ends: 0, offOutline: 0, offHeight: 0, flat: 0, notFlat: 0, rising: 0, notRising: 0, under: 0, worst: null, flatNodes: [] };
+  // want: the heights promised, from the arm (not read from SR_ROUTE, so a changed number is caught): side above a node's
+  // foot (half its height at most), clear over the tallest thing crossed, cross the crossing cables' lift
+  srCableRoutes: (want) => { const V = SR.view; if (!V) return null; const grid = srFootGrid(V), feet = [...new Set(grid.feet.values())];
+    const W = Object.assign({ side: 0.3, clear: 0.25, cross: 0.06 }, want || {});
+    const out = { cables: 0, ends: 0, offOutline: 0, offHeight: 0, offSide: 0, flat: 0, notFlat: 0, rising: 0, notRising: 0, under: 0, lowOver: 0, worst: null, flatNodes: [] };
     const allFlat = new Map();   // a node's cables, all flat?
     const yAt = (pts, x, z) => { let best = null, bd = Infinity;   // the path's height at the point of it nearest (x, z)
       for (let k = 0; k + 1 < pts.length; k++) { const a = pts[k], b = pts[k + 1], dx = b[0] - a[0], dz = b[2] - a[2], l2 = dx * dx + dz * dz;
@@ -133,7 +136,9 @@ window.__dbg = {
         const d = Math.hypot(end[0] - f.x, end[2] - f.z), ux = (other[0] - f.x), uz = (other[2] - f.z), ul = Math.hypot(ux, uz) || 1;
         const want = srFootExit(f, ux / ul, uz / ul);
         if (Math.abs(d - want) > 0.05) { out.offOutline++; out.worst = out.worst || { id, d: +d.toFixed(3), want: +want.toFixed(3) }; }
-        if (end[1] < f.y0 - 1e-3 || end[1] > f.y1 + 1e-3) out.offHeight++; }
+        if (end[1] < f.y0 - 1e-3 || end[1] > f.y1 + 1e-3) out.offHeight++;
+        const side = Math.min(f.y0 + W.side, (f.y0 + f.y1) / 2) + (e.crossProvider ? W.cross : 0);
+        if (Math.abs(end[1] - side) > 0.02) out.offSide++; }
       const fa = grid.feet.get(e.from), fb = grid.feet.get(e.to), P = [A[0], A[2]], Q = [Z[0], Z[2]];
       // what stands on its way: a node's or a box's foot, with the clearance a cable keeps (SR_ROUTE.margin)
       const hits = feet.map((f) => (f !== fa && f !== fb ? [f, srFootSpan(f, P, Q, SR_ROUTE.margin)] : null)).filter((h) => h && h[1]);
@@ -142,7 +147,8 @@ window.__dbg = {
       if (pts.length > 2) { out.rising++; if (!out.risingSample) out.risingSample = { from: e.from, to: e.to, pts }; } else out.notRising++;
       for (const [f, sp] of hits) {   // over it: the path's height where the straight line is inside the foot, at that stretch's middle
         const t = (sp[0] + sp[1]) / 2, y = yAt(pts, P[0] + (Q[0] - P[0]) * t, P[1] + (Q[1] - P[1]) * t);
-        if (y === null || y < f.y1) out.under++; } }
+        if (y === null || y < f.y1) out.under++;
+        if (y === null || y < f.y1 + W.clear - 0.02) out.lowOver++; } }
     out.flatNodes = [...allFlat].filter(([, v]) => v).map(([id]) => id).sort();
     // the far view's bundles: each from the side of one top group's box to the other's, at a height within the boxes
     out.bundles = 0; out.bundlesOff = 0;
