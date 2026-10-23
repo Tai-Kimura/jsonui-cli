@@ -1593,8 +1593,8 @@ module KjuiTools
           end
           if cell_name && property_name
             # The cells of the list `list` names, at depth `d`.
-            cells = lambda do |d, list = 'cellData.data'|
-              out = "\n" + indent("items(#{list}.size) { cellIndex ->", d)
+            cells = lambda do |d, list = 'cellData.data', key = nil|
+              out = "\n" + indent("items(#{list}.size#{key ? ", key = #{key}" : ''}) { cellIndex ->", d)
               out += "\n" + indent("Box(", d + 1)
               out += "\n" + indent("modifier = Modifier.fillMaxSize(),", d + 2)
               out += "\n" + indent("contentAlignment = #{gravity_alignment}", d + 2)
@@ -1608,7 +1608,17 @@ module KjuiTools
               code += "\n" + indent("// #{cell_name}: the declared list, one section", depth)
               code += "\n" + indent("#{array}.let { cellItems ->", depth)
               code += "\n" + indent("val sectionIndex = 0", depth + 1)
-              code += cells.call(depth + 1, 'cellItems')
+              # Keyed by the row's own cellIdProperty value as the sections
+              # path keys its cells (unique_keys_line; ticket 2026-10-23-rjui-
+              # collection-array-items-key-ignores-cell-id-property): with no
+              # key, a row inserted above moved every cell's state below.
+              cell_id_prop = json_data['cellIdProperty']
+              if cell_id_prop.is_a?(String) && !cell_id_prop.empty?
+                code += "\n" + indent(unique_keys_line('cellItems', cell_id_prop, 'lazyKeys'), depth + 1)
+                code += cells.call(depth + 1, 'cellItems', '{ lazyKeys[it] }')
+              else
+                code += cells.call(depth + 1, 'cellItems')
+              end
             elsif is_horizontal
               code += "\n" + indent("// #{cell_name}: the first data section", depth)
               code += "\n" + indent("#{sections_access(property_name)}.firstOrNull()?.cells?.let { cellData ->", depth)

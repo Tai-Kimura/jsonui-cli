@@ -23,7 +23,7 @@ module RjuiTools
           content = generate_collection_content(inner + 2)
 
           jsx = <<~JSX.chomp
-            #{indent_str(inner)}<div#{id_attr}#{ref_attr} className="#{class_name}"#{style_attr}#{scroll_attr}#{testid_attr}#{tag_attr}>
+            #{indent_str(inner)}<div#{id_attr}#{ref_attr}#{class_name_attr(class_name)}#{style_attr}#{scroll_attr}#{testid_attr}#{tag_attr}>
             #{content}
             #{indent_str(inner)}</div>
           JSX
@@ -1002,12 +1002,13 @@ module RjuiTools
               indent += 2
             end
             lines << "#{indent_str(indent)}{#{items_binding}?.map((item#{item_type}, index#{index_type}) => ("
+            key_expr = legacy_array_key_expr
             if (cell_size = cell_size_style)
-              lines << "#{indent_str(indent + 2)}<div key={index} className=\"shrink-0 overflow-hidden\"#{cell_size}>"
+              lines << "#{indent_str(indent + 2)}<div key={#{key_expr}} className=\"shrink-0 overflow-hidden\"#{cell_size}>"
               lines << "#{indent_str(indent + 4)}<#{cell_view}#{cell_item_id_attr('index')} data={item} />"
               lines << "#{indent_str(indent + 2)}</div>"
             else
-              lines << "#{indent_str(indent + 2)}<#{cell_view} key={index}#{cell_item_id_attr('index')} data={item} />"
+              lines << "#{indent_str(indent + 2)}<#{cell_view} key={#{key_expr}}#{cell_item_id_attr('index')} data={item} />"
             end
             lines << "#{indent_str(indent)}))}"
             if lanes
@@ -1019,6 +1020,20 @@ module RjuiTools
           end
           lines << "#{indent_str(indent)}<#{footer_view} />" if footer_view
           lines.join("\n")
+        end
+
+        # A plain array's cell key (ticket 2026-10-23-rjui-collection-array-items-
+        # key-ignores-cell-id-property; ruling: this path is an ordinary one):
+        # the row's own cellIdProperty value, the index when the row has none
+        # (as the sections path falls back to cellIndex); the index alone when
+        # the Collection names no cellIdProperty. Keyed by index, a row inserted
+        # above moved every cell's state to the row below.
+        def legacy_array_key_expr
+          prop = attributes['cellIdProperty']
+          return 'index' unless prop.is_a?(String) && !prop.empty?
+
+          row = typescript? ? '(item as unknown as Record<string, unknown>)' : 'item'
+          "String(#{row}[\"#{prop}\"] ?? index)"
         end
 
         # One class-list cell; the key rides the outermost element of the map

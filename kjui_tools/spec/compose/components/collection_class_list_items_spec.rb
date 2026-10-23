@@ -120,7 +120,7 @@ RSpec.describe 'kjui codegen: a class-list Collection whose items are a declared
     class LazyGridItemSpanScope { val maxLineSpan: Int = 1; val maxCurrentLineSpan: Int = 1 }
     class LazyGridScope {
         fun item(span: (LazyGridItemSpanScope.() -> GridItemSpan)? = null, content: () -> Unit) {}
-        fun items(count: Int, itemContent: (Int) -> Unit) {}
+        fun items(count: Int, key: ((index: Int) -> Any)? = null, itemContent: (Int) -> Unit) {}   // Compose LazyGridScope.items
     }
     fun LazyVerticalGrid(columns: GridCells.Fixed, modifier: Modifier = Modifier, content: LazyGridScope.() -> Unit) {}
     fun LazyHorizontalGrid(rows: GridCells.Fixed, modifier: Modifier = Modifier, content: LazyGridScope.() -> Unit) {}
@@ -148,6 +148,34 @@ RSpec.describe 'kjui codegen: a class-list Collection whose items are a declared
     functions = CLASS_LIST_ITEMS_DECLARATIONS.each_with_index.flat_map do |(declared, (definition, _list, kotlin)), d|
       ["class Data#{d}(#{kotlin})"] + CLASS_LIST_ITEMS_ROUTES.each_with_index.map do |(route, extra), r|
         "// #{declared}, #{route}\n@Composable fun route#{d}_#{r}(data: Data#{d}, viewModel: Any) {\n#{emit(extra, definition)}\n}"
+      end
+    end
+    expect("#{CLASS_LIST_ITEMS_STUBS}\n#{functions.join("\n\n")}\n").to compile_as_kotlin
+  end
+  # A cell's key: the row's own cellIdProperty value, as the sections path keys
+  # its cells (ticket 2026-10-23-rjui-collection-array-items-key-ignores-cell-
+  # id-property): with no key a row inserted above moved every cell's state.
+  # No cellIdProperty: no key, as before.
+  %w[lazy\ vertical lazy\ grid lazy\ horizontal].each do |route|
+    it "items a declared list, #{route}: keyed by cellIdProperty, with none unkeyed" do
+      allow(KjuiTools::Core::Logger).to receive(:warn)
+      definition = CLASS_LIST_ITEMS_DECLARATIONS['[RowCellData] = []'][0]
+      keyed = emit(CLASS_LIST_ITEMS_ROUTES[route].merge('cellIdProperty' => 'id'), definition)
+      expect(keyed).to include('val lazyKeys = HashSet<String>().let { seen -> cellItems.mapIndexed')
+      expect(keyed).to include('(cell["id"] as? String)')
+      expect(keyed).to include('items(cellItems.size, key = { lazyKeys[it] }) { cellIndex ->')
+      plain = emit(CLASS_LIST_ITEMS_ROUTES[route], definition)
+      expect(plain).to include('items(cellItems.size) { cellIndex ->')
+      expect(plain).not_to include('lazyKeys')
+    end
+  end
+
+  it 'every route with cellIdProperty compiles' do
+    allow(KjuiTools::Core::Logger).to receive(:warn)
+    functions = CLASS_LIST_ITEMS_DECLARATIONS.each_with_index.flat_map do |(declared, (definition, _list, kotlin)), d|
+      ["class KeyedData#{d}(#{kotlin})"] + CLASS_LIST_ITEMS_ROUTES.each_with_index.map do |(route, extra), r|
+        "// #{declared}, #{route}, cellIdProperty\n@Composable fun keyed#{d}_#{r}(data: KeyedData#{d}, viewModel: Any) {\n" \
+          "#{emit(extra.merge('cellIdProperty' => 'id'), definition)}\n}"
       end
     end
     expect("#{CLASS_LIST_ITEMS_STUBS}\n#{functions.join("\n\n")}\n").to compile_as_kotlin
