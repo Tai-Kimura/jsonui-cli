@@ -19,7 +19,9 @@ E2E = Path(__file__).resolve().parents[1] / "tools" / "viz_e2e"
 
 def test_the_japanese_table_says_layout_in_japanese():
     ja = json.loads((WEB / "i18n" / "ja.json").read_text(encoding="utf-8"))
-    latin = {k: v for k, v in ja.items() if isinstance(v, str) and re.search(r"\blayout\b", v, re.I)}
+    # bounded by Latin letters only: Python's \b takes a Japanese letter for a word letter, and 「はlayoutの」 has no
+    # \b around layout (the very shape of the ticket); layoutFile, a key's name, is not the word
+    latin = {k: v for k, v in ja.items() if isinstance(v, str) and re.search(r"(?<![A-Za-z])layout(?![A-Za-z])", v, re.I)}
     assert latin == {}
 
 
