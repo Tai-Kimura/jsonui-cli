@@ -31,8 +31,8 @@
     "chip": "許可待ち 2",
     "rows": [
      "task t-in_progress has-perm | b4 #2ProductDetail のレイアウトを実装許可待ちf2 jsonui-implementshop-app/Bash jui build許可今後も許可拒否",
-     "task t-in_progress has-perm | c9 #1spec の構造ページの HTML を生成許可待ちc9 セッション c91e…JsonUIDocument/Bash jsonui-doc generate html -",
-     "task t-in_progress | 7c #1jsonui-test にケースごとの進捗出力を足す作業中7c セッション 7c3f…jsonui-cli/"
+     "task t-in_progress has-perm | c9 #1spec の構造ページの HTML を生成許可待ちc9 セッション c91e…docs-site/Bash jsonui-doc generate html -",
+     "task t-in_progress | 7c #1jsonui-test にケースごとの進捗出力を足す作業中7c セッション 7c3f…shop-tools/"
     ],
     "sum": "未着手 5待ち 8作業中 11完了 4許可待ち 2"
    }
@@ -102,8 +102,8 @@
     "chip": "許可待ち 2",
     "rows": [
      "task t-in_progress has-perm | b4 #2ProductDetail のレイアウトを実装許可待ちf2 jsonui-implementshop-app/Bash jui build許可今後も許可拒否",
-     "task t-in_progress has-perm | c9 #1spec の構造ページの HTML を生成許可待ちc9 セッション c91e…JsonUIDocument/Bash jsonui-doc generate html -",
-     "task t-in_progress | 7c #1jsonui-test にケースごとの進捗出力を足す作業中7c セッション 7c3f…jsonui-cli/"
+     "task t-in_progress has-perm | c9 #1spec の構造ページの HTML を生成許可待ちc9 セッション c91e…docs-site/Bash jsonui-doc generate html -",
+     "task t-in_progress | 7c #1jsonui-test にケースごとの進捗出力を足す作業中7c セッション 7c3f…shop-tools/"
     ],
     "sum": "未着手 5待ち 8作業中 11完了 4許可待ち 2"
    }
@@ -187,29 +187,29 @@
    ],
    "groups": [
     "shop-app/3 セッション · 作業中 2",
-    "jsonui-cli/2 セッション · 許可待ち 1",
-    "JsonUIDocument/2 セッション · 許可待ち 1 · 作業中 1"
+    "shop-tools/2 セッション · 許可待ち 1",
+    "docs-site/2 セッション · 許可待ち 1 · 作業中 1"
    ],
    "scope": "プロジェクトすべて",
    "sessFilter": "すべて7動いている5許可待ち2質問待ち0裏で作業中0待機2",
    "specGroups": [
     "shop-app/5",
-    "JsonUIDocument/1"
+    "docs-site/1"
    ]
   },
   "cli": {
-   "scope": "プロジェクトjsonui-cli/",
-   "specs": "jsonui-cli/ には画面の spec がない",
-   "tagOn": "jsonui-cli/"
+   "scope": "プロジェクトshop-tools/",
+   "specs": "shop-tools/ には画面の spec がない",
+   "tagOn": "shop-tools/"
   },
   "doc": {
    "chips": "セッション 2 / 7",
    "focus": "scope-top",
    "groups": [
-    "JsonUIDocument/2 セッション · 許可待ち 1 · 作業中 1"
+    "docs-site/2 セッション · 許可待ち 1 · 作業中 1"
    ],
    "popHidden": true,
-   "scope": "プロジェクトJsonUIDocument/",
+   "scope": "プロジェクトdocs-site/",
    "specs": [
     "属性リファレンス書き込み中 19%e1"
    ],
@@ -221,7 +221,7 @@
     "c9 #2コンポーネント一覧に新しい属性を反映未着手担当なし",
     "c9 #3検索ページの文言を直す完了c9 セッション c91e…"
    ],
-   "tests": "JsonUIDocument/ で動いているテストはない",
+   "tests": "docs-site/ で動いているテストはない",
    "ticker": [
     "14:20:20e1Writedocs/screens/json/attribu",
     "14:20:16c9PermissionRequestBash jsonui-d",
@@ -231,13 +231,13 @@
   "docSpecs": {
    "cards": 6,
    "side": 7,
-   "title": "spec ボード · JsonUIDocument/"
+   "title": "spec ボード · docs-site/"
   },
   "docTasks": {
    "notes": 6,
    "sess": "セッションすべて（2）",
    "strip": "許可を求めています1ターミナルでも答えられ、先に答えた方が使われるc9セッション c91e…Bash jsonui-doc generate html --spec docs/screens/json/spec-anatomy.spec.json待ち 0:15c9セッション c91e…待ち 0:15Bash jsonui-doc generate html --spec docs/screens/",
-   "title": "タスクボード · JsonUIDocument/"
+   "title": "タスクボード · docs-site/"
   },
   "folded": {
    "expanded": "false",
@@ -245,11 +245,11 @@
   },
   "lanes": {
    "lanes": [
-    "7cjsonui-cli/許可待ち2 件",
-    "c9JsonUIDocument/許可待ち4 件",
+    "7cshop-tools/許可待ち2 件",
+    "c9docs-site/許可待ち4 件",
     "a0shop-app/作業中9 件",
     "b4shop-app/作業中6 件",
-    "4fjsonui-cli/待機4 件",
+    "4fshop-tools/待機4 件",
     "d8shop-app/待機1 件"
    ],
    "sess": "セッション6 / 7",
@@ -268,8 +268,8 @@
   "pop": [
    "すべてのプロジェクト3 プロジェクト · 7 セッション許可待ち 2作業中 6 体作業中の spec 6",
    "shop-app/~/work/shop-app · 3 セッション作業中 5 体作業中の spec 5",
-   "jsonui-cli/~/resource/jsonui-cli · 2 セッション許可待ち 1",
-   "JsonUIDocument/~/resource/JsonUIDocument · 2 セッション許可待ち 1作業中 1 体作業中の spec 1"
+   "shop-tools/~/work/shop-tools · 2 セッション許可待ち 1",
+   "docs-site/~/work/docs-site · 2 セッション許可待ち 1作業中 1 体作業中の spec 1"
   ],
   "popClosed": {
    "focus": "tb-sess",
@@ -379,8 +379,8 @@
   "pop": [
    "すべてのプロジェクト3 プロジェクト · 7 セッション許可待ち 2作業中 7 体作業中の spec 6",
    "shop-app/~/work/shop-app · 3 セッション作業中 6 体作業中の spec 5",
-   "jsonui-cli/~/resource/jsonui-cli · 2 セッション許可待ち 1",
-   "JsonUIDocument/~/resource/JsonUIDocument · 2 セッション許可待ち 1作業中 1 体作業中の spec 1"
+   "shop-tools/~/work/shop-tools · 2 セッション許可待ち 1",
+   "docs-site/~/work/docs-site · 2 セッション許可待ち 1作業中 1 体作業中の spec 1"
   ],
   "waitingRows": [
    "7cセッション 7c3f…許可待ち",

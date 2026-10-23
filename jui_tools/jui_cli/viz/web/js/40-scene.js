@@ -34,7 +34,7 @@ function tileFocus(x, y, w, h, g, k) {
   return k >= 0 ? [x + g.pad + k * (sw + g.segGap) + sw / 2, y + h - g.segBottom - g.segH / 2] : [x + w / 2, y + g.nameY - 10];
 }
 function sbFocus(pos, k) { const p = sbTile(pos); return tileFocus(p.x, p.y, SB.tw, SB.th, SBG, k); }
-/* The other project rooms: a wall board in jsonui-cli/, an easel in JsonUIDocument/. */
+/* The other project rooms: a wall board in shop-tools/, an easel in docs-site/. */
 const PBOARDS = [
   { project: 'cli', W: 1024, H: 560, w: 3.4, h: 1.86, wall: { cx: 6.6, cy: 2.35, z: -4.98 } },
   { project: 'doc', W: 1024, H: 720, w: 2.15, h: 1.51, easel: { x: 4.35, z: 1.2, ry: 0.42, bottom: 0.95 } },

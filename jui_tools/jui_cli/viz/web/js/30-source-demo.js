@@ -10,8 +10,8 @@ const BASE_CLOCK = 14 * 3600 + 20 * 60;
 
 const ROOMS = [
   { id: 'shop', name: 'shop-app/', path: '~/work/shop-app', x0: -9.6, x1: 2.6, z0: -5.0, z1: 4.2, floor: '--floor-a', back: 3.9, left: 3.9, infraDocs: { files: 2, dir: 'docs/infra' } },
-  { id: 'cli', name: 'jsonui-cli/', path: '~/resource/jsonui-cli', x0: 3.1, x1: 10.2, z0: -5.0, z1: -0.25, floor: '--floor-b', back: 3.9, left: 0.55 },
-  { id: 'doc', name: 'JsonUIDocument/', path: '~/resource/JsonUIDocument', x0: 3.1, x1: 10.2, z0: 0.25, z1: 4.2, floor: '--floor-c', back: 0.55, left: 0.55 },
+  { id: 'cli', name: 'shop-tools/', path: '~/work/shop-tools', x0: 3.1, x1: 10.2, z0: -5.0, z1: -0.25, floor: '--floor-b', back: 3.9, left: 0.55 },
+  { id: 'doc', name: 'docs-site/', path: '~/work/docs-site', x0: 3.1, x1: 10.2, z0: 0.25, z1: 4.2, floor: '--floor-c', back: 0.55, left: 0.55 },
 ];
 /* One room per project folder; a project can hold any number of sessions. */
 const PROJECT = Object.fromEntries(ROOMS.map((r) => [r.id, r]));
@@ -269,7 +269,7 @@ Object.assign(SPEC_DOCS, {
       transitions: [[tl('demo.spec.tap.help.button'), 'Help']],
       branches: [['togglePush', tl('demo.spec.notifications.denied.os'), tl('demo.spec.show.how.open.settings.app')], ['deleteAccount', 'success', tl('demo.spec.go.login')]] }),
 });
-/* The documentation site (JsonUIDocument) is a JsonUI project of its own. */
+/* The documentation site (docs-site/) is a JsonUI project of its own. */
 Object.assign(SPEC_DOCS, {
   top: doc('top', tl('demo.spec.introduces.jsonui.links.getting.started'), '2026-09-10',
     `SafeAreaView top_root ${tl('demo.spec.whole.screen')}|Label hero_title ${tl('demo.spec.heading')}|Label hero_lead ${tl('demo.spec.intro.text')}|Button start_button ${tl('demo.spec.get.started')}|Collection platform_cards ${tl('demo.spec.ios.android.web.guides')}|Collection news_list ${tl('demo.spec.news')}`,
