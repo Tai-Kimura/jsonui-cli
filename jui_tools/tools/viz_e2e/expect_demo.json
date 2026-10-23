@@ -31,7 +31,7 @@
     "chip": "許可待ち 2",
     "rows": [
      "task t-in_progress has-perm | b4 #2ProductDetail のレイアウトを実装許可待ちf2 jsonui-implementshop-app/Bash jui build許可今後も許可拒否",
-     "task t-in_progress has-perm | c9 #1spec の構造ページの HTML を生成許可待ちc9 セッション c91e…docs-site/Bash jsonui-doc generate html -",
+     "task t-in_progress has-perm | c9 #1spec の構造ページの HTML を生成許可待ちc9 セッション c91e…docs-site/Bash jsonui-doc generate html --spec",
      "task t-in_progress | 7c #1jsonui-test にケースごとの進捗出力を足す作業中7c セッション 7c3f…shop-tools/"
     ],
     "sum": "未着手 5待ち 8作業中 11完了 4許可待ち 2"
@@ -102,7 +102,7 @@
     "chip": "許可待ち 2",
     "rows": [
      "task t-in_progress has-perm | b4 #2ProductDetail のレイアウトを実装許可待ちf2 jsonui-implementshop-app/Bash jui build許可今後も許可拒否",
-     "task t-in_progress has-perm | c9 #1spec の構造ページの HTML を生成許可待ちc9 セッション c91e…docs-site/Bash jsonui-doc generate html -",
+     "task t-in_progress has-perm | c9 #1spec の構造ページの HTML を生成許可待ちc9 セッション c91e…docs-site/Bash jsonui-doc generate html --spec",
      "task t-in_progress | 7c #1jsonui-test にケースごとの進捗出力を足す作業中7c セッション 7c3f…shop-tools/"
     ],
     "sum": "未着手 5待ち 8作業中 11完了 4許可待ち 2"
