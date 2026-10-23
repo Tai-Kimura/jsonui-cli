@@ -163,19 +163,20 @@
           <span class="sr-room" id="sr-room"></span>
           <span class="sr-ctl sr-mode" role="group" aria-label="{{tl:page.sr.mode.aria}}表示{{/tl}}"><button type="button" class="wb-btn" id="sr-mode-3d" aria-pressed="true">3D</button><button type="button" class="wb-btn" id="sr-mode-2d" aria-pressed="false">2D</button><button type="button" class="wb-btn" id="sr-mode-cost" aria-pressed="false">{{tl:page.sr.mode.cost}}コスト{{/tl}}</button></span>
           <label class="sr-ctl" id="sr-scn-ctl" hidden>{{tl:page.sr.scn}}負荷{{/tl}} <select id="sr-scn"></select></label>
+          <button type="button" class="wb-btn" id="sr-boxzoom" aria-pressed="false" title="{{tl:page.sr.boxzoom.title}}次のドラッグで四角を描き、そこへ寄ります（Option を押しながらのドラッグでも描けます。Esc でやめる）{{/tl}}">{{tl:page.sr.boxzoom}}範囲で寄る{{/tl}}</button>
           <label class="sr-ctl">{{tl:page.sr.env}}環境{{/tl}} <select id="sr-env"></select></label>
           <label class="sr-ctl"><input type="checkbox" id="sr-fold"> {{tl:page.sr.fold}}細かいもの（IAM・アラームなど）{{/tl}}</label>
           <span class="grow"></span>
           <label class="sr-ctl">{{tl:page.sr.lines}}線{{/tl}} <select id="sr-lines"><option value="all">{{tl:page.sr.lines.all}}すべて（薄く）{{/tl}}</option><option value="cross">{{tl:page.sr.lines.cross}}跨ぐ線だけ{{/tl}}</option><option value="focus">{{tl:page.sr.lines.focus}}選んだものだけ{{/tl}}</option></select></label>
           <button type="button" class="wb-btn" id="sr-zin" aria-label="{{tl:page.sr.zoom.in}}寄る{{/tl}}">{{tl:page.sr.zoom.in.mark}}＋{{/tl}}</button>
           <button type="button" class="wb-btn" id="sr-zout" aria-label="{{tl:page.sr.zoom.out}}引く{{/tl}}">−</button>
-          <button type="button" class="wb-btn" id="sr-boxzoom" aria-pressed="false" title="{{tl:page.sr.boxzoom.title}}次のドラッグで四角を描き、そこへ寄ります（Option を押しながらのドラッグでも描けます。Esc でやめる）{{/tl}}">{{tl:page.sr.boxzoom}}範囲で寄る{{/tl}}</button>
           <button type="button" class="wb-btn" id="sr-fit">{{tl:page.sr.fit}}全体を見る{{/tl}}</button>
           <button type="button" class="wb-btn" id="sr-board-btn" aria-pressed="true" aria-controls="sr-board">{{tl:page.sr.board}}ボード{{/tl}}</button>
           <button type="button" class="wb-btn" id="sr-log-btn" aria-pressed="false" aria-controls="sr-log">{{tl:page.sr.log}}ログ{{/tl}}</button>
         </header>
         <div class="sr-main">
-          <div class="sr-stage"><canvas id="sr-canvas" aria-label="{{tl:page.sr.canvas.aria}}インフラの構成の 3D（ドラッグで回す、ホイールで寄る・引く、右ドラッグで動かす、Option＋ドラッグで範囲に寄る）{{/tl}}"></canvas><div class="sr-box" id="sr-box" hidden></div><div class="sr-toasts" id="sr-toasts" aria-live="polite"></div><div class="sr-choices" id="sr-choices" hidden role="group" aria-label="{{tl:page.sr.choices.aria}}分かれ道{{/tl}}"></div><div class="sr-player" id="sr-player" hidden role="toolbar" aria-label="{{tl:page.sr.player.aria}}流れの再生{{/tl}}"></div><div class="sr-player sr-mplayer" id="sr-mplayer" hidden role="toolbar" aria-label="{{tl:page.sr.mplayer.aria}}移管の再生{{/tl}}"></div><div class="sr-labels" id="sr-labels" aria-hidden="true"></div><div class="sr-cost" id="sr-cost" hidden aria-label="{{tl:page.sr.cost.aria}}コストのシミュレーション{{/tl}}"></div></div>
+          <aside class="sr-route" id="sr-route" hidden aria-label="{{tl:page.sr.route.aria}}流れの経路{{/tl}}"><h3 class="sr-route-title" id="sr-route-title"></h3><ol class="sr-route-list" id="sr-route-list"></ol><div class="sr-choices" id="sr-choices" hidden role="group" aria-label="{{tl:page.sr.choices.aria}}分かれ道{{/tl}}"></div></aside>
+          <div class="sr-stage"><canvas id="sr-canvas" aria-label="{{tl:page.sr.canvas.aria}}インフラの構成の 3D（ドラッグで回す、ホイールで寄る・引く、右ドラッグで動かす、Option＋ドラッグで範囲に寄る）{{/tl}}"></canvas><div class="sr-box" id="sr-box" hidden></div><div class="sr-toasts" id="sr-toasts" aria-live="polite"></div><div class="sr-player" id="sr-player" hidden role="toolbar" aria-label="{{tl:page.sr.player.aria}}流れの再生{{/tl}}"></div><div class="sr-player sr-mplayer" id="sr-mplayer" hidden role="toolbar" aria-label="{{tl:page.sr.mplayer.aria}}移管の再生{{/tl}}"></div><div class="sr-labels" id="sr-labels" aria-hidden="true"></div><div class="sr-cost" id="sr-cost" hidden aria-label="{{tl:page.sr.cost.aria}}コストのシミュレーション{{/tl}}"></div></div>
           <aside class="sr-board" id="sr-board" aria-label="{{tl:page.sr.board.aria}}構成のボード{{/tl}}"></aside>
         </div>
         <div class="sr-log" id="sr-log" hidden aria-label="{{tl:page.sr.log.aria}}サーバールームのログ{{/tl}}"></div>

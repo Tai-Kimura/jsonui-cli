@@ -7,7 +7,7 @@
    The model's flows (infra/flows.py checked them: every move leaves the node the flow is at). A node that starts a
    flow drawn now carries a small green cone; choosing the node lists its flows on the board, and a flow chosen plays:
    - light runs through each move's edge, a bright head and a fading tail inside the cable (requester 10-22: 「ボールが跳ねる
-     んじゃなくて同線に光が流れていくイメージで」), and the node it reaches glows; a toast over that node says what happened
+     んじゃなくて同線に光が流れていくイメージで」), and the node it reaches glows; a row in the side bar says what happened
      (the action's mark and verb after the node's name: 「💾 d1 に保存」, the step's label on a second line), and the
      first one says what started it (the trigger's mark: 👤 ⏰ 📡 ⚡, with a schedule as written);
    - a branch stops the light: its choices are buttons over the node, the first edge of each glows faintly ahead, and
@@ -15,8 +15,8 @@
      elsewhere), join goes on at that step; the choices taken are listed (「KV に結果が有る？ → 無い」);
    - lanes side by side run at once, and the flow goes on when all of them are done;
    - play / pause, one step on, one step back (to a branch: choose again), stop; the speed one of SR_FLOW_SPEEDS,
-     changed while it plays (the light and the toasts go by the same clock).
-   A rebuild of the 3D (the environment, the clouds chosen, the theme) stops the flow playing: its light and toasts
+     changed while it plays (the light and the rests go by the same clock).
+   A rebuild of the 3D (the environment, the clouds chosen, the theme) stops the flow playing: its light and side bar
    belonged to the 3D that went.
    The pace (ticket 2026-10-23-viz-sr-flow-replay-pace-and-focus; requester 10-23: 「遠いところの移動が目が追いつかない。
    距離/sで設定して / スピード調整が欲しい。0.5-3.0くらいで / 各喉についた時にそれぞれ少し留まって欲しい。 / 再生中は関係ない
@@ -30,6 +30,10 @@
      shape, icon, model, tag, cone and cables; the floors stay, faint, as a map (srFlowShowApply);
    - the camera follows a light about to leave the page (SR_FLOW.follow), at the same distance, never while the whole
      room is in view.
+   The words (requester 10-24: 「3d/2dのオブジェクト上に文字が出るのみづらいからサイドに光に合わせて順番に履歴として出て
+   それが下矢印で繋がっていく感じにしようか / 選択肢を選ぶのもそのサイドバーで選ぶ」): nothing is written over the room;
+   each step is a row of the side bar left of it (#sr-route), joined to the one before by a down arrow, the newest the
+   current one (its .sr-rt-step marked current), pressed to choose its node; a branch's ways are chosen under the last row.
    SR_ACTIONS and SR_TRIGGERS are the schema's x-label / x-icon (test_viz_bundle holds them to the schema). */
 const SR_FLOW_SPEEDS = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0];
 const SR_FLOW_SHOWS = { all: [tl('sr.flow.show.all'), tl('sr.flow.show.all.title')], now: [tl('sr.flow.show.now'), tl('sr.flow.show.now.title')],
@@ -39,7 +43,7 @@ const SR_TRIGGERS = { user: ['👤', tl('sr.flow.trigger.user')], device: ['📡
 const SR_FLOW_STATE = { play: tl('sr.flow.state.play'), pause: tl('sr.flow.state.pause'), branch: tl('sr.flow.state.branch'), done: tl('sr.flow.state.done') };
 // follow: the light past `out` of the page's half (NDC) starts the camera after it, back inside `in` it stops; `ms` how
 // quickly it catches up
-const SR_FLOW = { speed: 1.0, auto: false, unitsPerSec: 10, restMs: 400, branchRest: 2, nodeMs: 450, toastMs: 2600, show: 'flow', floorFade: 0.6,
+const SR_FLOW = { speed: 1.0, auto: false, unitsPerSec: 10, restMs: 400, branchRest: 2, nodeMs: 450, show: 'flow', floorFade: 0.6,
   follow: { out: 0.8, in: 0.45, ms: 280 }, player: null };
 
 /* Speed and the nodes shown, per room: {project: {speed, show}} in the page's own storage. */
@@ -100,9 +104,16 @@ function srFlowPlay(id) {
   srFlowStop();
   // departs / reached / chose: where and when (the e2e reads the pace and the rests from them)
   const P = SR_FLOW.player = { flow, frames: [{ steps: flow.steps, i: 0 }], pos: flow.start, state: 'play', anim: null, history: [],
-    chosen: [], toasts: [], lights: [], branch: null, arrivals: [], reached: [], departs: [], chose: [], log: [], dirty: true,
+    chosen: [], lights: [], branch: null, arrivals: [], reached: [], departs: [], chose: [], log: [], dirty: true,
     all: srFlowNodesOf(flow), seen: new Set([flow.start]) };
   const t = SR_TRIGGERS[flow.trigger] || SR_TRIGGERS.user;
+  $('sr-route-list').replaceChildren();
+  $('sr-route-title').textContent = `${t[0]} ${flow.label || flow.id}`;
+  // the side bar takes its column from the room: a room seen whole stays whole
+  const whole = srFlowWhole(V);
+  $('sr-route').hidden = false;
+  srResize(V);
+  if (whole && !srFlowWhole(V)) srFit(true);
   srFlowToast(P, flow.start, `${t[0]} ${flow.label || flow.id}`, flow.schedule || t[1]);
   srFlowGlow(P, flow.start);
   srFlowRenderBar();
@@ -127,7 +138,8 @@ function srFlowNodesOf(flow, out = new Set(), done = new Set()) {
 function srFlowStop() {
   const P = SR_FLOW.player;
   if (!P) return;
-  for (const x of P.toasts) x.el.remove();
+  $('sr-route-list').replaceChildren();
+  $('sr-route').hidden = true;
   const layer = SR.view && SR.view.flowLayer;
   if (layer) for (const o of [...layer.children]) if (!o.userData.flowStarts) { layer.remove(o); if (o.userData.flowLight) srFlowLightDispose(o); else if (o.geometry) o.geometry.dispose(); }
   SR_FLOW.player = null;
@@ -136,7 +148,7 @@ function srFlowStop() {
   if (SR.view && SR.view.flowLayer) srFlowShowApply(SR.view);   // every node drawn again
 }
 function srFlowSnapshot(P) {
-  return { flow: P.flow, frames: P.frames.map((f) => ({ steps: f.steps, i: f.i })), pos: P.pos, chosen: P.chosen.slice(), seen: new Set(P.seen) };
+  return { flow: P.flow, frames: P.frames.map((f) => ({ steps: f.steps, i: f.i })), pos: P.pos, chosen: P.chosen.slice(), seen: new Set(P.seen), rows: P.log.length };
 }
 /* Take the next step (or wait at a branch). One step at a time: the frame loop calls it when the last one is done. */
 function srFlowNext(P) {
@@ -272,10 +284,17 @@ function srFlowAtBranch(P, b) {
   P.state = 'branch';
   P.stepOnce = false;        // a step taken to here ends here: the choice made plays on
   srFlowHints(P, b.choices);
-  const box = $('sr-choices');
-  setHTML(box, `<p class="sr-choice-q">${esc(b.label)}</p>${b.choices.map((c) => `<button type="button" class="wb-btn" data-sr-choice="${esc(c.id)}"${c.id === b.default ? ' data-default' : ''}>${esc(c.label)}${c.id === b.default ? ` <small>${esc(tl('sr.flow.choice.default'))}</small>` : ''}</button>`).join('')}`);
-  box.hidden = false;
+  srFlowChoices();
   srFlowRenderBar();
+}
+/* The branch's question and its ways, in the side bar under the last row (Auto on: the default says it is taken by itself). */
+function srFlowChoices() {
+  const P = SR_FLOW.player, box = $('sr-choices');
+  if (!P || !P.branch) { box.hidden = true; return; }
+  const b = P.branch.b, mark = tl(SR_FLOW.auto ? 'sr.flow.choice.auto' : 'sr.flow.choice.default');
+  setHTML(box, `<span class="sr-rt-arrow" aria-hidden="true">↓</span><p class="sr-choice-q">${esc(b.label)}</p>${b.choices.map((c) => `<button type="button" class="wb-btn" data-sr-choice="${esc(c.id)}"${c.id === b.default ? ' data-default' : ''}>${esc(c.label)}${c.id === b.default ? ` <small>${esc(mark)}</small>` : ''}</button>`).join('')}`);
+  box.hidden = false;
+  srFlowRouteScroll(box);
 }
 /* Each choice's first edge, faint, while the branch waits (and the chosen one's alone while it rests there). */
 function srFlowHints(P, choices) {
@@ -301,6 +320,7 @@ function srFlowChoose(id) {
   P.chose.push([P.branch.at, c.id, srNow()]);
   // it rests at the branch twice as long as at a node, the way chosen lit, before it goes on
   const at = P.branch.at;
+  srFlowToast(P, at, `${b.label} → ${c.label}`, '');
   P.branch = null;
   $('sr-choices').hidden = true;
   srFlowHintsOff(P);
@@ -328,6 +348,10 @@ function srFlowBack() {
   const s = P.history.pop();
   P.flow = s.flow; P.frames = s.frames; P.pos = s.pos; P.chosen = s.chosen; P.seen = s.seen;
   P.branch = null; $('sr-choices').hidden = true;
+  P.log.length = s.rows;   // the side bar back to the rows it had then
+  const list = $('sr-route-list');
+  while (list.children.length > s.rows) list.lastElementChild.remove();
+  if (list.lastElementChild) { for (const x of list.querySelectorAll('.sr-rt-step[aria-current]')) x.removeAttribute('aria-current'); list.lastElementChild.querySelector('.sr-rt-step').setAttribute('aria-current', 'true'); }
   srFlowHintsOff(P);
   for (const d of P.lights) { SR.view.flowLayer.remove(d); if (d.userData.flowLight) srFlowLightDispose(d); }
   P.lights = []; P.anim = null; P.state = 'pause';
@@ -338,13 +362,30 @@ function srFlowHintsOff(P) {
   if (!P.hints) return;
   SR.view.flowLayer.remove(P.hints); P.hints.geometry.dispose(); P.hints.material.dispose(); P.hints = null;
 }
+/* A step said in the side bar (requester 10-24: 「3d/2dのオブジェクト上に文字が出るのみづらいからサイドに光に合わせて順番に
+   履歴として出てそれが下矢印で繋がっていく感じに」): a row at the end, a down arrow from the one before, it the current one;
+   pressed, its node is chosen. Nothing is written over the room. */
 function srFlowToast(P, at, head, sub) {
-  const el = document.createElement('div');
-  el.className = 'sr-toast';
-  el.innerHTML = `<b>${esc(head)}</b>${sub ? `<span>${esc(sub)}</span>` : ''}`;
-  $('sr-toasts').append(el);
-  P.toasts.push({ el, at, left: SR_FLOW.toastMs });
+  const list = $('sr-route-list'), li = document.createElement('li');
+  const part = (tag, cls, text) => { const el = document.createElement(tag); if (cls) el.className = cls; if (text) el.textContent = text; return el; };
+  if (list.children.length) { const arrow = part('span', 'sr-rt-arrow', '↓'); arrow.setAttribute('aria-hidden', 'true'); li.append(arrow); }
+  const step = part('button', 'sr-rt-step');
+  step.type = 'button';
+  if (at) step.dataset.srRt = at;
+  step.append(part('b', '', head));
+  if (sub) step.append(part('span', '', sub));
+  li.append(step);
+  for (const x of list.querySelectorAll('.sr-rt-step[aria-current]')) x.removeAttribute('aria-current');
+  li.className = 'sr-rt'; li.querySelector('.sr-rt-step').setAttribute('aria-current', 'true');
+  list.append(li);
+  srFlowRouteScroll(li);
   P.log.push(head);
+}
+/* The side bar turned so el (the current row, or the branch's ways) is in view. */
+function srFlowRouteScroll(el) {
+  const box = $('sr-route'), top = el.offsetTop, bottom = top + el.offsetHeight;
+  if (bottom > box.scrollTop + box.clientHeight) box.scrollTop = bottom - box.clientHeight + 8;
+  else if (top < box.scrollTop) box.scrollTop = top - 8;
 }
 function srFlowGlow(P, at) {
   const p = srFlowPos(SR.view, at);
@@ -460,7 +501,7 @@ function srFlowFollow(V, P, dt) {
   P.follows = (P.follows || 0) + 1;   // frames the camera went after the light (the e2e)
 }
 
-/* ---- each frame: the light along its edge, the toasts' places and lives, the next step when one is done */
+/* ---- each frame: the light along its edge, the next step when one is done */
 function srFlowTick(V, dt) {
   const P = SR_FLOW.player;
   if (!P) return;
@@ -503,20 +544,6 @@ function srFlowTick(V, dt) {
     V.flowLayer.remove(o); P.lights = P.lights.filter((x) => x !== o);
     if (o.userData.flowLight) srFlowLightDispose(o);
   }
-  // the toasts over their nodes, stacked when several are on one
-  const w = V.renderer.domElement.clientWidth, h = V.renderer.domElement.clientHeight, per = {};
-  P.toasts = P.toasts.filter((x) => { x.left -= step; if (x.left > 0) return true; x.el.remove(); return false; });
-  for (const x of P.toasts.slice().reverse()) {
-    const p = srFlowPos(V, x.at);
-    if (!p) continue;
-    const v = p.clone(); v.y += 1.6; v.project(V.camera);
-    const n = per[x.at] = (per[x.at] || 0) + 1;
-    x.el.style.transform = `translate(${Math.round((v.x + 1) / 2 * w)}px, ${Math.round((1 - v.y) / 2 * h - (n - 1) * 44)}px) translate(-50%, -100%)`;
-  }
-  if (P.branch) {
-    const p = srFlowPos(V, P.branch.at);
-    if (p) { const v = p.clone(); v.y -= 1.0; v.project(V.camera); $('sr-choices').style.transform = `translate(${Math.round((v.x + 1) / 2 * w)}px, ${Math.round((1 - v.y) / 2 * h)}px) translate(-50%, 0)`; }
-  }
 }
 
 /* The player's bar over the 3D: the flow, play / pause, one step, back, stop, the speed, 自動, the nodes shown, the
@@ -552,7 +579,7 @@ $('sr-player').addEventListener('click', (e) => {
 $('sr-player').addEventListener('change', (e) => {
   const t = e.target;
   if (t.dataset.srFp === 'speed') { SR_FLOW.speed = Number(t.value); srFlowPrefSet('speed', SR_FLOW.speed); }
-  else if (t.dataset.srFp === 'auto') SR_FLOW.auto = t.checked;
+  else if (t.dataset.srFp === 'auto') { SR_FLOW.auto = t.checked; srFlowChoices(); }
 });
 function srFlowShowSet(how) {
   if (!SR_FLOW_SHOWS[how]) return;
@@ -564,4 +591,8 @@ function srFlowShowSet(how) {
 $('sr-choices').addEventListener('click', (e) => {
   const b = e.target.closest('[data-sr-choice]');
   if (b) srFlowChoose(b.dataset.srChoice);
+});
+$('sr-route-list').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-sr-rt]');
+  if (b) srSelect(b.dataset.srRt);
 });

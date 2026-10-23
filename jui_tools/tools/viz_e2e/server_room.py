@@ -115,14 +115,6 @@ def check(failures, cond, text):
 
 
 FLOW = "() => window.__dbg.srFlow()"
-# when the next toast is put up and when it is taken down (the start's, as the flow is pressed): the first one added
-# after this, not one already there (a stop that left its toasts behind is the rebuild arm's to say)
-TOAST_LIFE = """() => { const box = document.getElementById('sr-toasts'), L = window.__toastLife = { born: 0, gone: 0 }; let el = null;
-  const before = new Set(box.children);
-  const mo = new MutationObserver(() => { const now = performance.now();
-    if (!el) { el = [...box.children].find((c) => !before.has(c)) || null; if (el) L.born = now; }
-    if (el && !el.isConnected) { L.gone = now; mo.disconnect(); } });
-  mo.observe(box, { childList: true }); }"""
 
 
 DRAWN = "() => window.__dbg.srFlowDrawn()"
@@ -230,8 +222,8 @@ async def run_flow_pace(page, out, failures, res):
     shown = fp["shown"] = {}
     for how in ("now", "seen", "all", "flow"):
         await page.click(f"#sr-player [data-sr-fp-show='{how}']")
-        d = await until(page, f"(w) => {{ const d = ({DRAWN})(); return d.tags.every((t) => w.includes(t)) ? d : null; }}", f"shown: {how}",
-                        arg=sorted(want[how]), timeout=5000, why=DRAWN)
+        await page.wait_for_timeout(300)          # the tags are placed again on the next frames (srPlaceLabels)
+        d = await page.evaluate(DRAWN)
         pressed = await page.evaluate("() => [...document.querySelectorAll('#sr-player [data-sr-fp-show]')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.dataset.srFpShow)")
         cables_want = sorted(c for c in every["cables"] if set(c.split(">")) <= want[how])
         shown[how] = {"nodes": d["nodes"], "cables": d["cables"], "cablesWant": cables_want, "tags": d["tags"], "models": d["models"], "pressed": pressed,
@@ -240,6 +232,12 @@ async def run_flow_pace(page, out, failures, res):
         check(failures, d["nodes"] == sorted(want[how]) and d["cables"] == cables_want and set(d["tags"]) <= want[how] and set(d["models"]) <= want[how]
               and pressed == [how],
               f"{how}: the nodes drawn are {sorted(want[how])}, their cables only, no other tag or model: {shown[how]}")
+        if how == "now":   # a node chosen while it plays: its strong cables only to the nodes shown
+            await page.evaluate("() => window.__dbg.srSelect('api')")
+            focus_want = len([c for c in every["cables"] if "api" in c.split(">") and set(c.split(">")) <= want[how]])
+            shown[how]["focus"] = [(await page.evaluate(DRAWN))["focus"], focus_want]
+            check(failures, focus_want >= 1 and shown[how]["focus"][0] == focus_want,
+                  f"now: a node chosen while it plays draws strong only its cables to the nodes shown: {shown[how]['focus']}")
         faint = shown[how]["floors"]
         if how == "all":
             check(failures, all(abs(g) < 0.02 for g in faint), f"all: the floors as built: {shown[how]['floors']}")
@@ -250,6 +248,20 @@ async def run_flow_pace(page, out, failures, res):
     fp["kept"] = await page.evaluate("() => { try { return Object.values(JSON.parse(localStorage.getItem('agent-view:srFlow')) || {}); } catch (e) { return null; } }")
     check(failures, fp["kept"] and fp["kept"][0].get("show") == "flow" and fp["kept"][0].get("speed") == 1,
           f"the nodes shown and the speed are kept for the room: {fp['kept']}")
+    # and chosen on the player's bar (its speed list, its buttons), they come back with the room built again
+    await page.select_option("#sr-player [data-sr-fp='speed']", "1.5")
+    await page.click("#sr-player [data-sr-fp-show='seen']")
+    await page.evaluate("() => window.__dbg.srRebuildHere()")
+    await until(page, "() => window.__dbg.sr().built && !window.__dbg.srFlow().playing", "rebuilt with a speed and a choice chosen", timeout=20000)
+    after = await page.evaluate(FLOW)
+    fp["keptRebuilt"] = {"speed": after["speed"], "show": after["show"]}
+    check(failures, fp["keptRebuilt"] == {"speed": 1.5, "show": "seen"},
+          f"the speed and the nodes shown chosen on the player's bar come back with the room built again: {fp['keptRebuilt']}")
+    await page.evaluate("() => { window.__dbg.srFlowSpeed(1); window.__dbg.srFlowShow('flow'); }")
+    await page.evaluate("() => window.__dbg.srSelect('browser')")
+    await page.click("#sr-board [data-sr-flow='search']")
+    await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'branch' && f.choices.length ? f : null; }}", "search: its branch again after the rebuild",
+                timeout=60000, why=FLOW)
     await page.click("#sr-player [data-sr-fp='stop']")
     back = await until(page, f"() => {{ const d = ({DRAWN})(); return d.nodes.length === d.all.length ? d : null; }}", "stopped: every node again", timeout=5000, why=DRAWN)
     fp["back"] = {"nodes": back["nodes"] == back["all"], "cables": back["cables"] == every["cables"], "floors": sorted({x["toGround"] for x in back["floors"]})}
@@ -259,6 +271,12 @@ async def run_flow_pace(page, out, failures, res):
     # the camera: the whole room in view, it never moves — pulled back from fit and moved over until the flow's start is
     # near the page's edge, past where a light would be followed, the whole room still in view (at fit the flow's nodes
     # sit well inside: nothing would be followed anyway); up close on api, it goes after the light as it leaves the page
+    # (the flow started and paused first: the side bar it opens takes its column from the room)
+    await page.evaluate("() => { const b = document.querySelector(\"#sr-player [data-sr-fp='stop']\"); if (b) b.click(); }")
+    await page.evaluate("() => window.__dbg.srFlowSpeed(3)")
+    await page.evaluate("() => window.__dbg.srSelect('browser')")
+    await page.click("#sr-board [data-sr-flow='search']")
+    await page.click("#sr-player [data-sr-fp='toggle']")
     await page.click("#sr-fit")
     await page.wait_for_timeout(400)
     await page.evaluate("() => window.__dbg.srZoom(1.6)")
@@ -272,7 +290,10 @@ async def run_flow_pace(page, out, failures, res):
             break
     snug = await page.evaluate(DRAWN)
     cam0 = snug["cam"]
-    whole = await _play_search(page, 3.0, "hit")
+    await page.click("#sr-player [data-sr-fp='toggle']")
+    await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'branch' && f.choices.length ? f : null; }}", "search, whole: its branch", timeout=60000, why=FLOW)
+    await page.click("#sr-choices [data-sr-choice='hit']")
+    whole = await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'done' ? f : null; }}", "search, whole: the end", timeout=90000, why=FLOW)
     cam1 = (await page.evaluate(DRAWN))["cam"]
     fp["whole"] = {"follows": whole["follows"], "moved": round(sum((a - b) ** 2 for a, b in zip(cam0, cam1)) ** 0.5, 3), "whole": snug["whole"],
                    "browserNdc": snug["ndc"]["browser"]}
@@ -292,6 +313,97 @@ async def run_flow_pace(page, out, failures, res):
           f"up close, a light leaving the page is followed: {fp['near']}")
     await page.evaluate("() => { const b = document.querySelector(\"#sr-player [data-sr-fp='stop']\"); if (b) b.click(); }")
     await page.click("#sr-fit")
+
+
+# the side bar's rows read in the page: each row's arrow sits between the row before and its own step, the current row's
+# edge colour against the others', and whether the current row is in the side bar's view
+ROUTE_GEOM = """() => { const rows = [...document.querySelectorAll('#sr-route-list > .sr-rt')], R = document.getElementById('sr-route').getBoundingClientRect();
+  const between = rows.slice(1).map((li, i) => { const a = li.querySelector(':scope > .sr-rt-arrow'), prev = rows[i].querySelector('.sr-rt-step').getBoundingClientRect(),
+    own = li.querySelector('.sr-rt-step').getBoundingClientRect(); if (!a) return false; const r = a.getBoundingClientRect(); return r.height > 0 && r.top >= prev.bottom - 1 && r.bottom <= own.top + 1; });
+  const cur = rows.find((li) => li.querySelector('.sr-rt-step').getAttribute('aria-current') === 'true');
+  const edge = (li) => getComputedStyle(li.querySelector('.sr-rt-step')).borderLeftColor;
+  const c = cur && cur.querySelector('.sr-rt-step').getBoundingClientRect();
+  const ch = document.getElementById('sr-choices'), q = !ch.hidden && ch.getBoundingClientRect(), box = document.getElementById('sr-route');
+  return { between, curEdge: cur ? edge(cur) : null, otherEdges: [...new Set(rows.filter((li) => li !== cur).map(edge))],
+           curInView: !!c && c.top >= R.top - 1 && c.bottom <= R.bottom + 1, overflows: box.scrollHeight > box.clientHeight + 4,
+           choicesInView: q ? q.top >= R.top - 1 && q.bottom <= R.bottom + 1 : null }; }"""
+# the top bar: 範囲で寄る just left of 環境, both on one line, and what each part of the page covers
+BAR_ORDER = """() => { const head = document.querySelector('#sr .sr-head'), kids = [...head.children], bz = document.getElementById('sr-boxzoom'),
+  env = document.getElementById('sr-env').closest('label'), a = bz.getBoundingClientRect(), b = env.getBoundingClientRect();
+  return { order: kids.indexOf(env) - kids.indexOf(bz), leftOf: a.right <= b.left + 1, oneLine: Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) < 6,
+           beforeGrow: kids.indexOf(bz) < kids.indexOf(head.querySelector('.grow')) }; }"""
+OVERLAP = """() => { const box = (el) => { if (!el || el.hidden || !el.getClientRects().length) return null; const r = el.getBoundingClientRect(); return r.width && r.height ? r : null; };
+  const route = box(document.getElementById('sr-route')), hit = (o) => !!(route && o && route.left < o.right - 1 && o.left < route.right - 1 && route.top < o.bottom - 1 && o.top < route.bottom - 1);
+  return { route: !!route, board: hit(box(document.getElementById('sr-board'))), player: hit(box(document.getElementById('sr-player'))), roster: hit(box(document.getElementById('roster'))) }; }"""
+
+
+async def run_flow_route(page, out, failures, res):
+    """The route's words in a side bar (the requester 10-24: 「3d/2dのオブジェクト上に文字が出るのみづらいからサイドに光に合わせて
+    順番に履歴として出てそれが下矢印で繋がっていく感じにしようか / 選択肢を選ぶのもそのサイドバーで選ぶ / あとは範囲を絞るの
+    メニューは右すぎて気づきづらいから環境絞り込みの左に移動させて残りをずらして」): nothing written over the room, a row
+    per step in the light's order joined by down arrows, the current one set apart, a branch chosen there (自動 too), a
+    row pressed choosing its node, and 範囲で寄る left of 環境."""
+    rt = res["flowRoute"] = {}
+    rt["bar"] = await page.evaluate(BAR_ORDER)
+    check(failures, rt["bar"] == {"order": 1, "leftOf": True, "oneLine": True, "beforeGrow": True},
+          f"範囲で寄る sits just left of 環境 on the top bar, the rest after it: {rt['bar']}")
+    await page.evaluate("() => { const b = document.querySelector(\"#sr-player [data-sr-fp='stop']\"); if (b) b.click(); }")
+    # a short page, so the side bar runs longer than it shows and must turn to its newest row (and to the branch's ways)
+    size = page.viewport_size
+    await page.set_viewport_size({"width": size["width"], "height": 520})
+    await page.click("#sr-fit")
+    await page.evaluate("() => window.__dbg.srFlowSpeed(1)")
+    await page.evaluate("() => window.__dbg.srSelect('browser')")
+    await page.click("#sr-board [data-sr-flow='search']")
+    over = []      # the words over the room, read on every arrival
+    first = await until(page, f"() => {{ const f = ({FLOW})(); return f.arrivals.length >= 1 ? f : null; }}", "route: the first arrival", timeout=30000, why=FLOW)
+    over.append(first["toasts"])
+    at = await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'branch' && f.choices.length ? f : null; }}", "route: its branch", timeout=60000, why=FLOW)
+    over.append(at["toasts"])
+    rt["atBranch"] = {"rows": at["rows"], "route": at["route"], "geom": await page.evaluate(ROUTE_GEOM), "overlap": await page.evaluate(OVERLAP)}
+    check(failures, at["route"] and at["route"]["choicesIn"] and at["choices"] == ["hit", "miss"] and rt["atBranch"]["geom"]["choicesInView"] is True,
+          f"at the branch its ways are in the side bar, in its view, none over the room: {rt['atBranch']['route']} {at['choices']} {rt['atBranch']['geom']}")
+    check(failures, rt["atBranch"]["overlap"] == {"route": True, "board": False, "player": False, "roster": False},
+          f"the side bar covers neither the board, the player's bar nor the robot list: {rt['atBranch']['overlap']}")
+    await page.screenshot(path=str(out / "flow-route-branch.png"))
+    await page.click("#sr-route #sr-choices [data-sr-choice='miss']")
+    done = await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'done' ? f : null; }}", "route: the end", timeout=90000, why=FLOW)
+    over.append(done["toasts"])
+    geom = await page.evaluate(ROUTE_GEOM)
+    rows = done["rows"]
+    arrivals = [r for r in rows[1:-1] if " → " not in r["text"]]
+    rt["done"] = {"rows": [[r["text"], r["node"], r["arrow"], r["current"]] for r in rows], "reached": [t for t, _ in done["reached"]], "geom": geom, "over": over}
+    check(failures, all(not o for o in over), f"nothing of the route is written over the room while it plays: {over}")
+    check(failures, done["chosen"] == ["KV に結果が有る？ → 無い"] and say("📖", "d1", "read") in [r["text"] for r in rows],
+          f"the way chosen in the side bar is the way played: {done['chosen']}")
+    check(failures, len(rows) == 1 + len(done["reached"]) + len(done["chose"]) + 1 and [r["node"] for r in arrivals] == rt["done"]["reached"]
+          and rows[0]["text"] == "👤 検索する" and rows[-1]["text"] == T("sr.flow.end") and [r["text"] for r in rows] == done["log"],
+          f"a row per step in the light's order: the start, each node reached, the way chosen, the end: {rt['done']['rows']} / {rt['done']['reached']}")
+    check(failures, [r["arrow"] for r in rows] == [False] + [True] * (len(rows) - 1) and all(geom["between"]) and len(geom["between"]) == len(rows) - 1,
+          f"each row joined to the one before by a down arrow between them: {geom['between']}")
+    check(failures, [r["current"] for r in rows] == [False] * (len(rows) - 1) + [True] and geom["curEdge"] not in geom["otherEdges"],
+          f"the newest row is the current one, set apart: {geom}")
+    check(failures, geom["overflows"] and geom["curInView"], f"the side bar runs longer than it shows and is turned to its newest row: {geom}")
+    await page.set_viewport_size(size)
+    # a row pressed: its node chosen on the board
+    await page.click("#sr-route-list [data-sr-rt='d1']")
+    rt["pressed"] = await page.evaluate("() => { const dt = [...document.querySelectorAll('#sr-board dt')].find((d) => d.textContent === 'id'); return dt ? dt.nextElementSibling.textContent : null; }")
+    check(failures, rt["pressed"] == "d1", f"a row pressed chooses its node: {rt['pressed']}")
+    # 自動 in the side bar: the default says it is taken by itself, and is
+    await page.click("#sr-player [data-sr-fp='stop']")
+    await page.evaluate("() => window.__dbg.srSelect('browser')")
+    await page.click("#sr-board [data-sr-flow='search']")
+    await page.check("#sr-player [data-sr-fp='auto']")
+    shown = await until(page, "() => { const b = document.querySelector('#sr-route #sr-choices:not([hidden]) [data-default] small'); return b ? b.textContent : null; }",
+                        "route: 自動's mark at the branch", timeout=60000, why=FLOW)
+    auto = await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'done' ? f : null; }}", "route, 自動: the end", timeout=90000, why=FLOW)
+    rt["auto"] = {"mark": shown, "chosen": auto["chosen"]}
+    check(failures, shown == T("sr.flow.choice.auto") and auto["chosen"] == ["KV に結果が有る？ → 有る"],
+          f"自動: the side bar's default marked as taken by itself, and taken: {rt['auto']}")
+    await page.uncheck("#sr-player [data-sr-fp='auto']")
+    await page.click("#sr-player [data-sr-fp='stop']")
+    rt["closed"] = await page.evaluate("() => document.getElementById('sr-route').hidden")
+    check(failures, rt["closed"] is True, f"stopped: the side bar goes: {rt['closed']}")
 
 
 async def run_flows(page, out, failures, res):
@@ -330,14 +442,14 @@ async def run_flows(page, out, failures, res):
     check(failures, fl["boardInView"] == {"overflows": True, "inView": True, "beforeEdges": True},
           f"a chosen node's flows sit under its rows and the board turns to them: pressable without a scroll: {fl['boardInView']}")
 
-    # played step by step: the toasts, the branch's choices and the edges ahead
+    # played step by step: the side bar's rows, the branch's choices and the edges ahead
     await page.click("#sr-board [data-sr-flow='search']")
     at_branch = await until(page, f"() => {{ const f = ({FLOW})(); return f.state === 'branch' ? f : null; }}", "search: at its branch",
                             timeout=30000, why=FLOW)
     fl["atBranch"] = {k: at_branch[k] for k in ("log", "choices", "hints", "pos", "history")}
     check(failures, at_branch["log"][:3] == ["👤 検索する", say("→", "web", "request"), say("→", "api", "request")] and at_branch["choices"] == ["hit", "miss"]
           and at_branch["hints"] == 2 and at_branch["pos"] == "api",
-          f"the start's toast, a verb's toast per move, then the branch stops with its choices and their first edges: {fl['atBranch']}")
+          f"the start's row, a verb's row per move, then the branch stops with its choices and their first edges: {fl['atBranch']}")
     await page.click("#sr-choices [data-sr-choice='miss']")
     lanes = await until(page, f"() => {{ const f = ({FLOW})(); return f.lights >= 2 ? f : null; }}", "search: the two lanes at once",
                         timeout=30000, why=FLOW)
@@ -372,23 +484,16 @@ async def run_flows(page, out, failures, res):
           f"back to the branch and the other way chosen: {fl['back']}")
 
     # the speed: the time between the first two arrivals at 1.0 and at 2.0; 自動 takes the default
-    # and how long the start's toast stays up: the toasts go by the same clock as the light
-    gaps, lives = {}, {}
+    gaps = {}
     for speed in (1.0, 2.0):
         await page.click("#sr-player [data-sr-fp='stop']")
         await page.evaluate("(s) => window.__dbg.srFlowSpeed(s)", speed)
-        await page.evaluate(TOAST_LIFE)
         await page.click("#sr-board [data-sr-flow='search']")
         f = await until(page, f"() => {{ const f = ({FLOW})(); return f.arrivals.length >= 2 ? f : null; }}", f"two arrivals at {speed}", timeout=30000, why=FLOW)
         gaps[speed] = f["arrivals"][1] - f["arrivals"][0]
-        life = await until(page, "() => { const L = window.__toastLife; return L.gone ? L : null; }", f"the start's toast gone at {speed}", timeout=15000)
-        lives[speed] = life["gone"] - life["born"]
-    fl["gaps"], fl["toastLives"] = gaps, lives
+    fl["gaps"] = gaps
     ratio = gaps[1.0] / gaps[2.0] if gaps[2.0] else 0
     check(failures, 1.5 <= ratio <= 2.6, f"twice the speed, half the time between two steps: {gaps} (ratio {ratio:.2f})")
-    toast_ratio = lives[1.0] / lives[2.0] if lives[2.0] else 0
-    check(failures, 1.5 <= toast_ratio <= 2.6 and abs(toast_ratio - ratio) <= 0.5,
-          f"twice the speed, a toast up half as long, as the light's step: {lives} (ratio {toast_ratio:.2f}, the light's {ratio:.2f})")
     await page.click("#sr-player [data-sr-fp='stop']")
     await page.evaluate("() => window.__dbg.srFlowSpeed(3)")
     await page.click("#sr-board [data-sr-flow='search']")
@@ -424,13 +529,13 @@ async def run_flows(page, out, failures, res):
     await page.click("#sr-player [data-sr-fp='stop']")
     await page.evaluate("() => window.__dbg.srSelect('r2')")
     await page.click("#sr-board [data-sr-flow='nightly-copy']")
-    night = await until(page, f"() => {{ const f = ({FLOW})(); return f.toasts.length ? f : null; }}", "毎晩の写し: its first toast", timeout=10000, why=FLOW)
-    fl["schedule"] = night["toasts"][0]
-    check(failures, night["toasts"][0] == "⏰ 毎晩の写しcron(0 3 * * ? *)", f"a schedule's flow starts with ⏰ and its schedule: {night['toasts']}")
+    night = await until(page, f"() => {{ const f = ({FLOW})(); return f.rows.length ? f : null; }}", "毎晩の写し: its first row", timeout=10000, why=FLOW)
+    fl["schedule"] = [night["rows"][0]["text"], night["rows"][0]["sub"]]
+    check(failures, fl["schedule"] == ["⏰ 毎晩の写し", "cron(0 3 * * ? *)"], f"a schedule's flow starts with ⏰ and its schedule: {night['rows']}")
     await page.click("#sr-player [data-sr-fp='stop']")
     await page.evaluate("() => window.__dbg.srFlowSpeed(1)")
 
-    # the 3D rebuilt while it plays (the theme turned): the flow stops, its light and toasts gone, nothing plays on
+    # the 3D rebuilt while it plays (the theme turned): the flow stops, its light and side bar gone, nothing plays on
     await page.evaluate("() => window.__dbg.srSelect('browser')")
     await page.click("#sr-board [data-sr-flow='search']")
     await until(page, f"() => {{ const f = ({FLOW})(); return f.arrivals.length >= 1 && f.state === 'play' ? f : null; }}", "search: playing",
@@ -441,11 +546,11 @@ async def run_flows(page, out, failures, res):
     rebuilt = await page.evaluate(FLOW)
     await page.wait_for_timeout(1500)                    # at 1.0 that is past the next step: a player left alive would have said it
     later = await page.evaluate(FLOW)
-    fl["rebuilt"] = {k: (rebuilt[k], later[k]) for k in ("playing", "toasts", "lights", "choices")}
-    fl["rebuilt"]["dom"] = await page.evaluate("() => [document.querySelectorAll('#sr-toasts .sr-toast').length, document.getElementById('sr-choices').hidden]")
-    check(failures, all(r["playing"] is None and not r["toasts"] and r["lights"] == 0 and not r["choices"] for r in (rebuilt, later))
-          and fl["rebuilt"]["dom"] == [0, True],
-          f"a rebuild while it plays stops the flow, its light and toasts gone, nothing played on: {fl['rebuilt']}")
+    fl["rebuilt"] = {k: (rebuilt[k], later[k]) for k in ("playing", "rows", "lights", "choices")}
+    fl["rebuilt"]["dom"] = await page.evaluate("() => [document.querySelectorAll('#sr-route-list > li').length, document.getElementById('sr-choices').hidden, document.getElementById('sr-route').hidden]")
+    check(failures, all(r["playing"] is None and not r["rows"] and r["lights"] == 0 and not r["choices"] for r in (rebuilt, later))
+          and fl["rebuilt"]["dom"] == [0, True, True],
+          f"a rebuild while it plays stops the flow, its light and side bar gone, nothing played on: {fl['rebuilt']}")
     await page.emulate_media(color_scheme="dark" if dark else "light")
     await until(page, f"(d) => window.__dbg.sr().built && window.__dbg.srTheme().dark === d", "the theme back", arg=dark)
     # and while it waits at a branch, its choices shown: the rebuild takes them away too
@@ -474,7 +579,7 @@ async def run_flows(page, out, failures, res):
     fl["cost"] = {"playing": f["playing"], "choicesHidden": await page.evaluate("() => document.getElementById('sr-choices').hidden"),
                   "z": await page.evaluate("() => ['sr-cost', 'sr-player', 'sr-choices', 'sr-toasts'].map((id) => Number(getComputedStyle(document.getElementById(id)).zIndex) || 0)")}
     check(failures, f["playing"] is None and fl["cost"]["choicesHidden"] and fl["cost"]["z"][0] > max(fl["cost"]["z"][1:]),
-          f"コスト stops the flow and is drawn over its player, choices and toasts: {fl['cost']}")
+          f"コスト stops the flow and is drawn over its player, choices and the migration's tags: {fl['cost']}")
     await page.click("#sr-mode-3d")
     await until(page, "() => { const c = window.__dbg.srCost(); return c.mode === '3d' && !c.paused; }", "the 3D after コスト")
 
@@ -1305,6 +1410,7 @@ async def run_server_room(pw, out, failures, flat=False):
         await run_cables_and_reach(page, out, failures, res)
         await run_flows(page, out, failures, res)
         await run_flow_pace(page, out, failures, res)
+        await run_flow_route(page, out, failures, res)
         await page.keyboard.press("Escape")
         await up_close("icons")
         await press_door()

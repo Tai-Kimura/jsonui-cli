@@ -238,7 +238,13 @@ window.__dbg = {
     lightHead: (() => { const d = P ? P.lights.filter((o) => o.userData.flowLight && o.userData.moving) : [];
       return d.length ? +(d[0].userData.k || 0).toFixed(3) : null; })(),   // on its whole path (srFlowLightAt)
     hints: P && P.hints ? P.hints.userData.hints : 0, choices: [...document.querySelectorAll('#sr-choices:not([hidden]) [data-sr-choice]')].map((b) => b.dataset.srChoice),
-    toasts: [...document.querySelectorAll('#sr-toasts .sr-toast')].map((t) => t.textContent), history: P ? P.history.length : 0,
+    // words over the room (none since 10-24: the side bar has them), and the side bar's rows: their words, node, arrow
+    // and whether each is the current one; its place on the page
+    toasts: [...document.querySelectorAll('.sr-stage .sr-toast, .sr-stage [data-sr-choice], .sr-stage .sr-rt')].map((t) => t.textContent), history: P ? P.history.length : 0,
+    rows: [...document.querySelectorAll('#sr-route-list > .sr-rt')].map((li) => ({ text: li.querySelector('b').textContent, sub: (li.querySelector('.sr-rt-step > span') || { textContent: '' }).textContent, node: (li.querySelector('[data-sr-rt]') || { dataset: {} }).dataset.srRt || null,
+      arrow: !!li.querySelector(':scope > .sr-rt-arrow'), current: li.querySelector('.sr-rt-step').getAttribute('aria-current') === 'true' })),
+    route: (() => { const r = $('sr-route'); if (r.hidden) return null; const b = r.getBoundingClientRect(); return { box: [b.left, b.top, b.right, b.bottom].map(Math.round), scroll: [r.scrollTop, r.scrollHeight, r.clientHeight],
+      title: $('sr-route-title').textContent, choicesIn: !!r.querySelector('#sr-choices') }; })(),
     // the pace (ticket 2026-10-23-viz-sr-flow-replay-pace-and-focus): each move's start [from, to, t], each choice [at, id, t],
     // each move's cable length, the frames the camera followed
     show: SR_FLOW.show, departs: P ? P.departs.slice() : [], chose: P ? P.chose.slice() : [], follows: P ? P.follows || 0 : 0,
@@ -258,7 +264,7 @@ window.__dbg = {
     return { nodes: [...nodes].sort(), all: [...V.L.pos.values()].filter((x) => !x.hiddenIn).map((x) => x.n.id).sort(), cables: cables.sort(),
       tags: [...document.querySelectorAll('#sr-labels .sr-label:not([hidden])')].filter((t) => t.dataset.node).map((t) => t.dataset.node).sort(),
       models: V.models ? [...V.models].filter(([, g]) => g.visible).map(([id]) => id).sort() : [], floors,
-      cam: V.controls.target.toArray().map((x) => +x.toFixed(3)), whole: srFlowWhole(V),
+      cam: V.controls.target.toArray().map((x) => +x.toFixed(3)), whole: srFlowWhole(V), focus: V.focusCount || 0,   // focus: the strong layer's cables
       ndc: Object.fromEntries([...V.L.pos.values()].filter((x) => !x.hiddenIn).map((x) => { const v = new THREE.Vector3(x.x, x.y, x.z).project(V.camera); return [x.n.id, +Math.max(Math.abs(v.x), Math.abs(v.y)).toFixed(3)]; })) }; },   // how near each node is to the page's edge (NDC)
   // the camera moved over the floor, away from a node (`units` world units): the e2e puts that node near the page's edge
   srPanFrom: (id, units) => { const V = SR.view, p = V && V.L.pos.get(id); if (!p) return null; const d = new THREE.Vector3(V.controls.target.x - p.x, 0, V.controls.target.z - p.z).normalize().multiplyScalar(units);

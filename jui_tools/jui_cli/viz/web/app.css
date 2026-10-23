@@ -1662,11 +1662,21 @@ button.talk-peer:focus-visible { outline: 2px solid var(--focus); outline-offset
 .sr-box[hidden] { display: none; }
 .sr-stage[data-box="armed"] canvas { cursor: crosshair; }
 #sr-boxzoom[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--panel); }
-/* a flow playing (59-sr-flows.js): toasts over the nodes, a branch's choices, the player's bar */
+/* a migration's tags over the nodes (59-sr-migration.js); a flow playing: the player's bar */
 .sr-toasts { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 2; }
-.sr-toast { position: absolute; left: 0; top: 0; display: grid; gap: 1px; max-width: 260px; padding: 4px 9px; border: 1px solid var(--line); border-left: 4px solid #e0a800; border-radius: 6px; background: var(--panel); color: var(--ink); font: 600 12.5px/1.4 var(--font-body); box-shadow: 0 2px 6px var(--shadow); white-space: nowrap; }
-.sr-toast span { font-weight: 400; color: var(--ink-soft); white-space: normal; }
-.sr-choices { position: absolute; left: 0; top: 0; z-index: 3; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; max-width: 320px; padding: 6px 8px; border: 2px solid #e0a800; border-radius: 8px; background: var(--panel); color: var(--ink); box-shadow: 0 2px 8px var(--shadow); }
+/* the flow's route (59-sr-flows.js): a column left of the room while a flow plays, a row a step, a down arrow between */
+.sr-route { position: relative; width: min(260px, 30vw); overflow: auto; padding: 8px 10px; border-right: 1px solid var(--line); background: var(--panel); color: var(--ink); font: 13px/1.4 var(--font-body); }
+.sr-route[hidden] { display: none; }
+.sr-route-title { margin: 0 0 6px; font: 700 13px/1.3 var(--font-body); }
+.sr-route-list { margin: 0; padding: 0; list-style: none; }
+.sr-rt { display: grid; }
+.sr-rt-arrow { display: block; text-align: center; color: var(--ink-soft); font-size: 14px; line-height: 18px; }
+.sr-rt-step { display: grid; gap: 1px; width: 100%; padding: 4px 8px; border: 1px solid var(--line); border-left: 4px solid transparent; border-radius: 6px; background: var(--bg); color: var(--ink); font: 500 12.5px/1.4 var(--font-body); text-align: left; cursor: pointer; }
+.sr-rt-step span { font-weight: 400; color: var(--ink-soft); }
+.sr-rt-step[aria-current="true"] { border-left-color: var(--ink); background: var(--panel); font-weight: 700; box-shadow: 0 1px 4px var(--shadow); }
+.sr-choices { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 0 0 4px; }
+.sr-choices > .sr-rt-arrow { width: 100%; }
+.sr-choices .sr-choice-q { width: 100%; margin: 0; padding: 4px 8px; border: 2px solid #e0a800; border-radius: 6px; font-weight: 700; }
 .sr-choices[hidden] { display: none; }
 .sr-choice-q { width: 100%; margin: 0; font: 700 12.5px/1.4 var(--font-body); }
 .sr-player { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 3; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font: 13px/1.4 var(--font-body); }
@@ -1773,6 +1783,7 @@ button.talk-peer:focus-visible { outline: 2px solid var(--focus); outline-offset
   .sr-main { flex-direction: column; }
   .sr-stage { flex: 1 1 60%; }
   .sr-board { width: auto; max-height: 40%; border-left: 0; border-top: 1px solid var(--line); }
+  .sr-route { width: auto; max-height: 30%; border-right: 0; border-bottom: 1px solid var(--line); }
 }
 .sr-board h3 { margin: 10px 0 4px; font: 700 13px/1.3 var(--font-body); }
 .sr-board dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0; }
