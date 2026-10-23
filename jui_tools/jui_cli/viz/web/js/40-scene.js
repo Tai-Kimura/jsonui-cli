@@ -1207,6 +1207,17 @@ function liveUpdateRobots(nowSec, dt) {
    that room, wider (layoutRooms, SOLO_GROW), with the way back at the top left. The other rooms' robots keep their
    desks for when the floor comes back. */
 const liveSolo = () => (SOURCE.mode === 'live' ? soloRoomId() : null);
+/* The room's bar (left) and the floor buttons (right) share the top of the stage: the bar keeps the floor buttons' width free
+   (--floor-nav-w on their parent, app.css .room-solo), measured whenever they change size or show / hide. */
+{
+  const nav = document.getElementById('floor-nav');
+  if (nav && typeof ResizeObserver === 'function') {
+    new ResizeObserver(() => {
+      const w = nav.hidden ? 0 : Math.ceil(nav.getBoundingClientRect().width);
+      nav.parentElement.style.setProperty('--floor-nav-w', `${w}px`);
+    }).observe(nav);
+  }
+}
 function liveSoloSync() {
   const solo = liveSolo();
   for (const [id, R] of Object.entries(LIVE3D.rooms)) { const on = !solo || id === solo; R.group.visible = on; R.rt.el.hidden = !!solo; }   // alone, its name is in the box
