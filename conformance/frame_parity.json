@@ -760,6 +760,19 @@
       "reason": "the platform's own spinner, as Indicator/animating__*"
     },
     {
+      "fixture": "Indicator/strokeWidth__static",
+      "id": "target",
+      "outliers": [
+        "android",
+        "web"
+      ],
+      "fields": [
+        "height",
+        "width"
+      ],
+      "reason": "the platform's own spinner, as __control/Indicator: android 40, web 24; strokeWidth is declared for kotlin and react, so ios draws no fixture"
+    },
+    {
       "fixture": "Label/autoShrink__false",
       "id": "target",
       "outliers": [
@@ -3133,6 +3146,32 @@
       "reason": "Switch control chrome: an unlabelled wrapContent Switch is the platform's own control — measured ios 61 x 28, android 52 x 48 (the switch centred in a 48 touch row), web 51 x 31; with a declared width the width is drawn on every face, and the expected sizes refuse anything else"
     },
     {
+      "fixture": "TextField/autoFocus__false",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "TextField control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (skinIdioms; TextField.borderStyle is a member) — triage K"
+    },
+    {
+      "fixture": "TextField/autoFocus__true",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "TextField control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (skinIdioms; TextField.borderStyle is a member) — triage K"
+    },
+    {
       "fixture": "TextField/autocapitalizationType__allcharacters",
       "id": "target",
       "outliers": [
@@ -4308,13 +4347,14 @@
       "id": "target",
       "outliers": [
         "android",
-        "ios"
+        "ios",
+        "web"
       ],
       "fields": [
         "height",
         "width"
       ],
-      "reason": "the platform's own spinner, as Indicator/animating__*"
+      "reason": "the platform's own spinner, as Indicator/animating__*; web draws rjui's medium spinner (w-6 h-6, 24) since 2.3.21 — before it, a wrapContent width was written as the class w-[wrapContentpx], which Tailwind does not have, and web drew nothing"
     },
     {
       "fixture": "__control/Label",

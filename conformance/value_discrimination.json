@@ -33,6 +33,17 @@
     },
     {
       "component": "Collection",
+      "attribute": "flowAlignment",
+      "platform": "android",
+      "cases": [
+        "end",
+        "trailing"
+      ],
+      "owner": "kjui_tools — the SSoT lists a synonym as a value",
+      "reason": "end is kjui's synonym of trailing (collection_component.rb: `when 'trailing', 'end'` -> Alignment.End), so the two draw the same row by design; the SSoT's enum lists both spellings as values (2.3.21 declared what the converter accepts). The faithful form is a valueAliases entry end -> trailing, as Collection.layout has; recorded until that lands. Measured: conformance-mobile run 39948010429 (release/2.3.21 @ ea30b223, SwiftJsonUI ab83ba4)"
+    },
+    {
+      "component": "Collection",
       "attribute": "listStyle",
       "platform": "ios",
       "cases": [

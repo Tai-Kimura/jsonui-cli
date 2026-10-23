@@ -927,7 +927,16 @@
         "width",
         "height"
       ],
-      "reason": "the platform's own spinner, as Indicator/animating__*"
+      "reason": "the platform's own spinner, as Indicator/animating__*; web draws rjui's medium spinner (w-6 h-6, 24) since 2.3.21 — before it, a wrapContent width was written as the class w-[wrapContentpx], which Tailwind does not have, and web drew nothing"
+    },
+    {
+      "fixture": "Indicator/strokeWidth__*",
+      "id": "target",
+      "fields": [
+        "width",
+        "height"
+      ],
+      "reason": "the platform's own spinner, as __control/Indicator: android 40, web 24; strokeWidth is declared for kotlin and react, so ios draws no fixture"
     },
     {
       "fixture": "Indicator/indicatorStyle__linear",

@@ -3,6 +3,15 @@
   "_comment": "Accepted dynamic≢codegen deviations, per screenshot, platform and render environment (a deviation measured against the local baselines says nothing about the CI renderer's). The codegen host's render of this screenshot does NOT match the committed dynamic baseline (status 'mismatch', with the measured distance) or was never produced (status 'missing'). Every entry needs a reason: fix the codegen and drop the entry, or justify the difference here. Unrecorded deviations fail `jui conformance gate --parity`; entries the measurement no longer supports are stale and must be pruned (re-run `jui conformance parity --update`). Reason 'unreviewed-initial-measurement' marks the initial-measurement backlog — consume it.",
   "entries": [
     {
+      "screenshot": "TextView_autoFocus__true.png",
+      "platform": "android",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 15,
+      "reason": "KotlinJsonUI's dynamic renderer does not implement autoFocus: the generated Compose (kjui, 2.3.21) requests focus on first composition, so the codegen picture draws the TextView's focused (thicker) outline and the dynamic one its resting outline. No soft keyboard on either: the emulator has a hardware keyboard (hw.keyboard=yes). The launcher taskbar's recent-app order also differs, outside the app. The codegen face is the intended one; the dynamic face is the gap. Measured: conformance-mobile run 39948010429 (release/2.3.21 @ ea30b223)",
+      "note": "Implement autoFocus in KotlinJsonUI's dynamic TextView (and TextField, whose outline difference stays under the threshold here), then this row goes stale."
+    },
+    {
       "screenshot": "TabView_selectedIndex__alias_selectedTabIndex.png",
       "platform": "android",
       "env": "local",
@@ -118,6 +127,24 @@
       "distance": 11,
       "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
       "note": ""
+    },
+    {
+      "screenshot": "TextField_autoFocus__true.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 563,
+      "reason": "SwiftJsonUI's dynamic renderer does not implement autoFocus: the generated SwiftUI (sjui, 2.3.21) focuses the field on appear, so the codegen picture has the caret and the software keyboard and the dynamic one has neither. The codegen face is the intended one; the dynamic face is the gap. Measured: conformance-mobile run 39948010429 (release/2.3.21 @ ea30b223, SwiftJsonUI ab83ba4)",
+      "note": "Implement autoFocus in SwiftJsonUI's dynamic TextField / TextView, then this row goes stale."
+    },
+    {
+      "screenshot": "TextView_autoFocus__true.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 570,
+      "reason": "SwiftJsonUI's dynamic renderer does not implement autoFocus: the generated SwiftUI (sjui, 2.3.21) focuses the field on appear, so the codegen picture has the caret and the software keyboard and the dynamic one has neither. The codegen face is the intended one; the dynamic face is the gap. Measured: conformance-mobile run 39948010429 (release/2.3.21 @ ea30b223, SwiftJsonUI ab83ba4)",
+      "note": "Implement autoFocus in SwiftJsonUI's dynamic TextField / TextView, then this row goes stale."
     }
   ]
 }
