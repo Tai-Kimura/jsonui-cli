@@ -26,14 +26,12 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, T, Watch, dump, new_page, ready
 
 A = "e2e00000-0000-4000-8000-0000000000ea"
 B = "e2e00000-0000-4000-8000-0000000000eb"
 CWD = "/work/look-app"
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
-TAG = {"ball": "キャッチボール中", "highfive": "ハイタッチ中", "rps": "じゃんけん中"}
-GOING = "遊びに行く"
 BALL_PX = 10        # the ticket: the ball 10 px or more in the default view
 HAND_TOUCH = 0.25   # two hand spheres of radius 0.095 touch at 0.19
 APPROACH = 0.8      # how much nearer the two get at highfive
@@ -207,7 +205,7 @@ async def run_play_look(pw, out, failures):
             way, G = await start(kind, kind)
             going_tags = sorted({s["tags"].get(i, "") for s in way for i in s["going"]})
             r["goingTags"] = going_tags
-            check(failures, going_tags == [GOING], f"{kind}: the name tag says {GOING} on the way: {going_tags}")
+            check(failures, going_tags == [T("scene.play.going")], f"{kind}: the name tag says {T('scene.play.going')} on the way: {going_tags}")
             room, players = G["room"], G["players"]
             r["room"], r["players"] = room, players
             samples = await page.evaluate(SAMPLER, 9000 if kind == "rps" else 6000)
@@ -215,7 +213,7 @@ async def run_play_look(pw, out, failures):
             r["n"] = len(on)
             tags = sorted({s["tags"].get(i, "") for s in on for i in players})
             r["tags"] = tags
-            check(failures, len(on) > 30 and tags == [TAG[kind]], f"{kind}: the name tag says {TAG[kind]} while they play: {tags} ({len(on)} frames)")
+            check(failures, len(on) > 30 and tags == [T(f"scene.play.{kind}")], f"{kind}: the name tag says {T(f'scene.play.{kind}')} while they play: {tags} ({len(on)} frames)")
             if kind == "ball":
                 pxs = [s["ballPx"] for s in on if "ballPx" in s]
                 r["ballPx"] = {"min": min(pxs) if pxs else None, "max": max(pxs) if pxs else None, "n": len(pxs)}
@@ -266,7 +264,7 @@ async def run_play_look(pw, out, failures):
             await page.wait_for_timeout(700)
             card = await page.evaluate("() => { const el = document.querySelector('#rb [data-rb-state]'); return el ? el.textContent : null; }")
             r["card"] = card
-            check(failures, card is not None and TAG[kind] in card, f"{kind}: the robot's card says {TAG[kind]}: {card!r}")
+            check(failures, card is not None and T(f"scene.play.{kind}") in card, f"{kind}: the robot's card says {T(f'scene.play.{kind}')}: {card!r}")
             await page.click("#rb-close")
             await wait(page, "() => document.getElementById('rb').hidden", label="the card closed")
             await page.wait_for_timeout(1500)                     # the camera back to the floor
@@ -301,7 +299,7 @@ async def run_play_look(pw, out, failures):
             on = [s for s in samples if s["started"] and s.get("bots")]
             tags = sorted({s["tags"].get(i, "") for s in on for i in G["players"]})
             r["tags"] = tags
-            check(failures, tags == [TAG[kind]], f"{kind} (far): the name tag says {TAG[kind]}: {tags}")
+            check(failures, tags == [T(f"scene.play.{kind}")], f"{kind} (far): the name tag says {T(f'scene.play.{kind}')}: {tags}")
             if kind == "ball":
                 pxs = [s["ballPx"] for s in on if "ballPx" in s]
                 r["ballPx"] = {"min": min(pxs) if pxs else None, "max": max(pxs) if pxs else None, "n": len(pxs)}
@@ -313,7 +311,7 @@ async def run_play_look(pw, out, failures):
                 await wait(page, "() => window.__dbg.floors().tower === true", label="in the building")
                 await page.wait_for_timeout(2500)
                 tp = r["tower"] = await page.evaluate("() => window.__dbg.towerPlay()")
-                check(failures, any(TAG[kind] in b for f in tp for b in f), f"{kind}: the building's window says {TAG[kind]}: {tp}")
+                check(failures, any(T(f"scene.play.{kind}") in b for f in tp for b in f), f"{kind}: the building's window says {T(f'scene.play.{kind}')}: {tp}")
             else:
                 await page.evaluate("() => window.__dbg.tower(true)")
                 await page.wait_for_timeout(2500)

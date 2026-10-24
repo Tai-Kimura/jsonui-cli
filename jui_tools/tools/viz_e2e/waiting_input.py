@@ -21,7 +21,7 @@ import sys
 import time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from common import DESKTOP, ISOLATE, LAUNCH_ARGS, Watch, dump, ready  # noqa: E402
+from common import DESKTOP, ISOLATE, LAUNCH_ARGS, T, Watch, dump, ready  # noqa: E402
 from notify import CHIMES, SHOWN, STUB, wait  # noqa: E402
 
 SID = "1d1e0000-0000-4000-8000-00000000000a"
@@ -82,7 +82,7 @@ async def run_waiting_input(pw, out, failures):
         await wait(a, "() => Object.keys(window.__dbg.robotState()).length >= 1", timeout=30000, label="the robot")
         await a.click("#btn-notify")
         await a.click("#notify-ask-perm")
-        await wait(a, "() => document.getElementById('notify-perm-state').textContent.includes('許可済み')", label="granted")
+        await wait(a, f"() => document.getElementById('notify-perm-state').textContent.includes({json.dumps(T('panel.nt.granted'))})", label="granted")
         res["switch"] = await a.evaluate("() => { const e = document.querySelector('[data-notify-kind=\"idle\"]'); return e ? [e.checked, e.closest('label').textContent.trim()] : null; }")
         check(failures, bool(res["switch"]) and res["switch"][0] is True, f"the settings have the waiting-for-input switch, on: {res['switch']}")
         await a.keyboard.press("Escape")
@@ -117,7 +117,7 @@ async def run_waiting_input(pw, out, failures):
 
         # 1. nothing done since the turn's end: the waiting for input rings once, a reminder, with its chime
         c = await case("reminder")
-        check(failures, c["done"] == 1 and c["idle"] == 1 and c["chime"] == 1 and "入力待ち" in c["text"][0],
+        check(failures, c["done"] == 1 and c["idle"] == 1 and c["chime"] == 1 and T("status.input") in c["text"][0],
               f"waiting for input after an unanswered turn end: one notification and its chime: {c}")
 
         # 1b. an event over 2 minutes old by the page's clock (one delivered late, not a replay): not rung — right after 1,

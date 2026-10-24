@@ -24,7 +24,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from common import DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, T, T_pattern, Watch, dump, new_page, ready
 
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
 LAT, LON = 35.681236, 139.767125
@@ -120,7 +120,7 @@ async def run_weather(pw, out, failures):
           checked: document.getElementById('weather-switch').getAttribute('aria-checked'), note: document.getElementById('weather-note').textContent,
           outside: window.__dbg.outside() })""")
         check(failures, r["geo"] == 0, f"opening the page asks for no position: {r['geo']} call(s)")
-        check(failures, r["shown"] and r["checked"] == "false" and "外への通信はしません" in r["note"], f"the switch shows, off: {r}")
+        check(failures, r["shown"] and r["checked"] == "false" and T("scene.weather.off") in r["note"], f"the switch shows, off: {r}")
         check(failures, r["outside"]["weather"] is None, f"no weather while off: {r['outside']}")
         check(failures, meteo.queries == [] and watch.foreign == [], f"nothing asked of anyone while off: {meteo.queries} {watch.foreign}")
         await page.screenshot(path=str(out / "opened.png"))
@@ -170,7 +170,7 @@ async def run_weather(pw, out, failures):
         await ctx.grant_permissions(["geolocation"], origin=url)
         await ctx.set_geolocation({"latitude": LAT, "longitude": LON})
         await page.click("#weather-switch")
-        await wait(page, "() => document.getElementById('weather-switch').getAttribute('aria-checked') === 'true' && /雨/.test(document.getElementById('weather-note').textContent)",
+        await wait(page, f"() => document.getElementById('weather-switch').getAttribute('aria-checked') === 'true' && document.getElementById('weather-note').textContent.includes({json.dumps(T('scene.weather.rain'))})",
                    label="on, with the answer")
         frames = [f for f in sent if '"weather.set"' in f]
         res["frames"] = frames
@@ -207,7 +207,7 @@ async def run_weather(pw, out, failures):
         check(failures, len(a) == 5 and a == b, f"petals still under reduced motion: {a} -> {b}")
         await page2.evaluate("() => window.__dbg.outside({ season: null })")
         await page2.click("#weather-switch")
-        await wait(page2, "() => /オフのまま/.test(document.getElementById('weather-note').textContent)", label="denied")
+        await wait(page2, f"() => document.getElementById('weather-note').textContent.includes({json.dumps(T('scene.weather.stays', why=''))})", label="denied")
         r = res["denied"] = await page2.evaluate("() => ({ checked: document.getElementById('weather-switch').getAttribute('aria-checked'), note: document.getElementById('weather-note').textContent })")
         check(failures, r["checked"] == "false" and len(meteo.queries) == 1, f"a denied position leaves it off: {r} {meteo.queries}")
         await page2.screenshot(path=str(out / "denied.png"))
@@ -276,17 +276,17 @@ async def run_weather_few(pw, out, failures):
           tower: !document.getElementById('tower-weather').hidden, panel: !document.getElementById('sec-settings').hidden,
           checked: document.getElementById('weather-switch-panel').getAttribute('aria-checked'), note: document.getElementById('weather-note-panel').textContent })""")
         check(failures, r["floors"] < 2 and not r["tower"], f"few rooms: no building view: {r}")
-        check(failures, r["panel"] and r["checked"] == "false" and "外への通信はしません" in r["note"] and r["geo"] == 0, f"the panel's switch, off, nothing asked: {r}")
+        check(failures, r["panel"] and r["checked"] == "false" and T("scene.weather.off") in r["note"] and r["geo"] == 0, f"the panel's switch, off, nothing asked: {r}")
         check(failures, meteo.queries == [] and watch.foreign == [], f"nothing outside while off: {meteo.queries} {watch.foreign}")
         await page.locator("#sec-settings").screenshot(path=str(out / "panel-off.png"))
         ctx = page.context
         await ctx.grant_permissions(["geolocation"], origin=url)
         await ctx.set_geolocation({"latitude": LAT, "longitude": LON})
         await page.click("#weather-switch-panel")
-        await wait(page, "() => document.getElementById('weather-switch-panel').getAttribute('aria-checked') === 'true' && /最後に取れた時刻/.test(document.getElementById('weather-note-panel').textContent)",
+        await wait(page, f"() => document.getElementById('weather-switch-panel').getAttribute('aria-checked') === 'true' && new RegExp({json.dumps(T_pattern('scene.weather.at', stale=re.compile('.*?')).pattern)}).test(document.getElementById('weather-note-panel').textContent)",
                    label="on, with the time it was read")
         r = res["on"] = await page.evaluate(f"() => ({{ geo: window.__geoCalls, note: ({note})() }})")
-        check(failures, r["geo"] == 1 and "雨" in r["note"], f"on from the panel, one position asked: {r}")
+        check(failures, r["geo"] == 1 and T("scene.weather.rain") in r["note"], f"on from the panel, one position asked: {r}")
         check(failures, len(meteo.queries) == 1 and "latitude=35.68&" in meteo.queries[0], f"one query, rounded: {meteo.queries}")
         await page.locator("#sec-settings").screenshot(path=str(out / "panel-on.png"))
         # a failure shows its reason: off, the stand-in breaks, on again
@@ -294,7 +294,7 @@ async def run_weather_few(pw, out, failures):
         await wait(page, "() => document.getElementById('weather-switch-panel').getAttribute('aria-checked') === 'false'", label="off")
         meteo.status = 500
         await page.click("#weather-switch-panel")
-        await wait(page, "() => /失敗/.test(document.getElementById('weather-note-panel').textContent)", label="the failure's reason")
+        await wait(page, f"() => [{json.dumps(T_pattern('scene.weather.failed').pattern)}, {json.dumps(T_pattern('scene.weather.none').pattern)}].some((p) => new RegExp(p).test(document.getElementById('weather-note-panel').textContent))", label="the failure's reason")
         r = res["failed"] = await page.evaluate(f"() => ({{ note: ({note})(), checked: document.getElementById('weather-switch-panel').getAttribute('aria-checked') }})")
         check(failures, r["checked"] == "true" and "HTTPError" in r["note"] and "500" in r["note"], f"the failure's reason shows: {r}")
         await page.locator("#sec-settings").screenshot(path=str(out / "panel-failed.png"))

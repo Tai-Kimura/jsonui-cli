@@ -22,7 +22,7 @@ import json
 import pathlib
 import time
 
-from common import dump, stamp
+from common import T, dump, stamp
 from hist_wide import A, B, CWD_A, CWD_B, Stage, check as _check
 from waits import until
 
@@ -92,7 +92,7 @@ async def run_hist_peers(pw, out, failures):
                   f"{scheme}: a name with a ref is linked to B, the summary beside it: {byname}")
             check(failures, bypid["link"] == rb, f"{scheme}: a uds address found by the pid in its file name links to B too: {bypid}")
             check(failures, far["link"] is None and far["plain"] and far["plain"]["tag"] == "SPAN" and far["plain"]["tabIndex"] == -1
-                  and far["plain"]["title"] == "この viz にいないセッション", f"{scheme}: an unmatched name is plain and not focusable: {far}")
+                  and far["plain"]["title"] == T("hist.peer.unseen"), f"{scheme}: an unmatched name is plain and not focusable: {far}")
             # the long summary: cut, whole in the tag on hover
             check(failures, byname["headCut"], f"{scheme}: the long summary is cut to one line: {byname}")
             head = page.locator("[data-rb-hist] details.h-tool .h-to:has([data-h-go]) ~ .h-head").first
@@ -110,7 +110,7 @@ async def run_hist_peers(pw, out, failures):
             check(failures, card["tab"] == "true", f"{scheme}: the 応答の履歴 tab stays: {card}")
             await until(page, "() => document.querySelectorAll('[data-rb-hist] details.h-peer').length >= 1", f"{scheme}: B's history")
             frm = r["from"] = await page.evaluate(FROM)
-            check(failures, frm and frm[-1]["text"] == f"{NAME_A} から" and frm[-1]["tag"] == "BUTTON" and frm[-1]["link"] == ra,
+            check(failures, frm and frm[-1]["text"] == f"{T('hist.peer.from.pre')}{NAME_A}{T('hist.peer.from')}" and frm[-1]["tag"] == "BUTTON" and frm[-1]["link"] == ra,
                   f"{scheme}: in B's history the sender is a link back to A: {frm}")
             await page.screenshot(path=str(out / f"peers-b-{scheme}.png"))
             await page.locator("[data-rb-hist] details.h-peer [data-h-go]").last.click()
