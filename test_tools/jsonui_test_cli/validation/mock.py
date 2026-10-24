@@ -29,8 +29,8 @@ VALID_SOURCE_KEYS = ["swagger", "operationId", "method", "path"]
 #: `contractViolations` / `undeclaredStatus` are authoring-time declarations
 #: the checker reads and the server never does.
 VALID_SCENARIO_KEYS = ["status", "body", "delayMs", "contentType",
-                       "bodyFile", "contractViolations", "undeclaredStatus",
-                       "skipRequestValidation"]
+                       "bodyFile", "headers", "contractViolations",
+                       "undeclaredStatus", "skipRequestValidation"]
 VALID_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]
 
 
@@ -419,6 +419,14 @@ class MockValidator:
                     message=f"'delayMs' must not be negative, got: {delay!r} "
                             "— the mock server raises inside the request "
                             "handler and the caller hangs with no response"))
+            # A header the server would not send is an error, not a warning:
+            # the row that reads it would fail with nothing on the response to
+            # say why (mock/headers.py says which ones and why).
+            if "headers" in scenario:
+                from ..mock.headers import header_problems
+                for problem in header_problems(scenario["headers"]):
+                    result.errors.append(ValidationMessage(
+                        path=f"{spath}.headers", message=problem))
             # `undeclaredStatus` is honoured ONLY as `{"reason": "<why>"}`;
             # `_declares_undeclared_status` requires the object form and a
             # non-empty reason. Anything else is read as no declaration at

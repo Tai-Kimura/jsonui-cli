@@ -26,6 +26,7 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
 from .generate import route_match_order
+from .headers import served_headers
 
 ADMIN_PREFIX = "/__jsonui__"
 #: Seconds a kept-alive connection may sit idle before the server closes it.
@@ -564,7 +565,7 @@ def _make_handler(server: "MockServer"):
             pass  # keep stdout clean; panel shows requests
 
         # -- helpers ----------------------------------------------------
-        def _send(self, status, body=b"", content_type="application/json", cors=False):
+        def _send(self, status, body=b"", content_type="application/json", cors=False, headers=None):
             if isinstance(body, (dict, list)):
                 body = json.dumps(body, ensure_ascii=False).encode("utf-8")
             elif isinstance(body, str):
@@ -572,10 +573,16 @@ def _make_handler(server: "MockServer"):
             self.send_response(status)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
+            for name, value in (headers or {}).items():   # a scenario's own (mock/headers.py)
+                self.send_header(name, value)
             if cors:
                 self.send_header("Access-Control-Allow-Origin", "*")
                 self.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,PATCH,OPTIONS")
                 self.send_header("Access-Control-Allow-Headers", "*")
+                if headers:
+                    # A page on another origin reads only the safelisted headers
+                    # (Content-Type and a few) unless these are named.
+                    self.send_header("Access-Control-Expose-Headers", ", ".join(headers))
             self.end_headers()
             if self.command != "HEAD":
                 self.wfile.write(body)
@@ -756,10 +763,11 @@ def _make_handler(server: "MockServer"):
             status = scenario.get("status", 200)
             ctype = scenario.get("contentType", "application/json")
             payload = scenario.get("body")
+            headers = served_headers(scenario)
             if payload is None:
-                self._send(status, b"", content_type=ctype, cors=True)
+                self._send(status, b"", content_type=ctype, cors=True, headers=headers)
             else:
-                self._send(status, payload, content_type=ctype, cors=True)
+                self._send(status, payload, content_type=ctype, cors=True, headers=headers)
 
     return Handler
 

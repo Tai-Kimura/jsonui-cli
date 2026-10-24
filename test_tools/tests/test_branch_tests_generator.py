@@ -434,7 +434,7 @@ class TestFileBackedScenarios:
         assert '(200, "", "text/csv")' in sw
         for runtime, header in (
             (kotlin.runtime_file.read_text(encoding="utf-8"), 'setHeader("Content-Type", sc.third)'),
-            (swift.runtime_file.read_text(encoding="utf-8"), 'headerFields: ["Content-Type": contentType]'),
+            (swift.runtime_file.read_text(encoding="utf-8"), 'headers.merging(["Content-Type": contentType]) { _, type in type }'),
         ):
             assert header in runtime
 

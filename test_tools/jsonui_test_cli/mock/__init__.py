@@ -4,4 +4,5 @@ Sub-modules:
 - openapi:  dependency-free OpenAPI loader, $ref resolver, sample-value synthesis
 - generate: scaffold tests/mocks/<tag>/<operationId>.mock.json + --check drift report
 - server:   local mock server (routing, scenarios, admin API, control panel, run trigger)
+- headers:  a scenario's response headers: which are sent (the validator, the server and branch-tests read it)
 """
