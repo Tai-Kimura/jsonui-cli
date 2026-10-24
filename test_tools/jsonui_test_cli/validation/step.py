@@ -229,6 +229,12 @@ class StepValidator:
     def _check_keys_of_the_kind(self, step: dict, path: str, result: ValidationResult):
         """A key VALID_STEP_KEYS knows on a step whose kind does not take it
         (the canonical schema's additionalProperties: false, per kind)."""
+        # An action's or an assertion's: a non-empty element id string.
+        if "within" in step and (not isinstance(step["within"], str) or not step["within"].strip()):
+            result.errors.append(ValidationMessage(
+                path=path,
+                message="'within' must be a non-empty element id string"
+            ))
         kind = step.get("action") or step.get("assert")
         table = SUPPORTED_ACTIONS if "action" in step else SUPPORTED_ASSERTIONS
         spec = table.get(kind) if isinstance(kind, str) else None
@@ -746,13 +752,6 @@ class StepValidator:
                     path=path,
                     message=f"index must be a non-negative integer, got: {index}"
                 ))
-
-        # Validate within is a non-empty element id string
-        if "within" in step and (not isinstance(step["within"], str) or not step["within"].strip()):
-            result.errors.append(ValidationMessage(
-                path=path,
-                message="'within' must be a non-empty element id string"
-            ))
 
         # Validate container is a non-empty string (scrollUntilVisible)
         if "container" in step:
