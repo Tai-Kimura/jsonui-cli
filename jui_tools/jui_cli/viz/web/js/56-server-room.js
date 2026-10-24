@@ -1086,6 +1086,52 @@ function srLod(V) {
 function srTagWidth(text) { return 12 + [...text].reduce((a, ch) => a + (ch.charCodeAt(0) > 0x2e7f ? 12 : 7), 0); }
 /* A node's tag as srPlaceLabels writes it, and the point it stands on. */
 function srTagOf(V, p) { return { text: `${p.n.label || p.n.id}${p.n.count > 1 ? ` ×${p.n.count}` : ''}`, at: [p.x, p.y + 1.9, V.flat ? p.z - 0.85 : p.z] }; }
+/* A group's tag's width on the page (px): measured as drawn, in a hidden tag of its own kind beside the others (its font, padding and
+   border; beside the tags' pool, so nothing reading the tags shown counts it), once a text while the fonts are in. Not srTagWidth's estimate: that is wider than the tag, and where the inner floors'
+   tags sit a few px apart it left one out; nor a canvas's measureText, which reads the CJK in another font than the page. */
+const SR_GROUP_TAG_W = new Map();
+function srGroupTagWidth(V, text) {
+  const got = SR_GROUP_TAG_W.get(text);
+  if (got) return got;
+  const stage = V.labels && V.labels[0] && V.labels[0].parentNode && V.labels[0].parentNode.parentNode;   // beside #sr-labels, not in it
+  if (!stage) return srTagWidth(text);
+  let m = V.tagRuler;
+  if (!m || !m.isConnected) {
+    m = V.tagRuler = document.createElement('span');
+    m.className = 'sr-label'; m.dataset.kind = 'group'; m.style.visibility = 'hidden'; m.setAttribute('aria-hidden', 'true');
+    stage.append(m);
+  }
+  m.textContent = text;
+  const wd = Math.ceil(m.getBoundingClientRect().width);
+  if (!wd) return srTagWidth(text);   // not laid out (the room hidden): the estimate, not kept
+  if (document.fonts.status === 'loaded') SR_GROUP_TAG_W.set(text, wd);
+  return wd;
+}
+/* The groups' tags up close, as given out (srPlaceLabels) and as the flow frames the room (59-sr-flows.js): each from its floor's
+   corner rightward, inside the floor. A nested floor's head is shorter on the page than a tag, so a floor's tag and its inner
+   floors' would cover each other: given out nearest first (an inner floor's corner is the nearer where the two meet), a tag that
+   would cover one already given out stands a row higher (up to two rows) over its corner, else it is left out. In view only,
+   the ones out of it listed apart. */
+function srGroupTagBoxes(V) {
+  const cam = V.camera, w = V.renderer.domElement.clientWidth, h = V.renderer.domElement.clientHeight, v = new THREE.Vector3(), boxes = [], outside = [];
+  const floors = V.L.floors.filter((G) => G.g.id && !(V.migFloorShown && !V.migFloorShown.includes(G.g.id))).map((G) => {
+    const at = [G.x + 0.15, 0.2 + G.level * 0.06, G.z + 0.5];
+    v.set(...at).project(cam);
+    return { G, text: G.g.label || G.g.id, sx: (v.x + 1) / 2 * w, sy: (1 - v.y) / 2 * h, z: v.z, d: cam.position.distanceToSquared(new THREE.Vector3(...at)) };
+  });
+  floors.sort((a, b) => a.d - b.d);
+  for (const f of floors) {
+    const wd = srGroupTagWidth(V, f.text);
+    if (f.z < -1 || f.z > 1 || f.sx < -0.05 * w || f.sx > 1.05 * w || f.sy < -0.05 * h || f.sy > 1.05 * h) { outside.push({ ...f, box: [f.sx, f.sy - 20, f.sx + wd, f.sy] }); continue; }
+    for (let row = 0; row < 3; row++) {
+      const b = [f.sx, f.sy - 20 * (row + 1), f.sx + wd, f.sy - 20 * row];
+      if (boxes.some((q) => b[0] < q.box[2] && b[2] > q.box[0] && b[1] < q.box[3] && b[3] > q.box[1])) continue;
+      boxes.push({ ...f, row, box: b });
+      break;
+    }
+  }
+  return { boxes, outside };
+}
 function srPlaceLabels(V) {
   const cam = V.camera, w = V.renderer.domElement.clientWidth, h = V.renderer.domElement.clientHeight, v = new THREE.Vector3(), out = [];
   const consider = (x, y, z, text, kind, weight, n = null) => {
@@ -1096,7 +1142,7 @@ function srPlaceLabels(V) {
   if (V.lod === 'far') {
     for (const G of V.L.tops) consider(G.x + G.w / 2, G.boxH + 0.8, G.z + G.d / 2, `${G.g.label || G.g.id} · ${G.nodeCount}`, 'group', 1);
   } else {
-    for (const G of V.L.floors) if (G.g.id && !(V.migFloorShown && !V.migFloorShown.includes(G.g.id))) { consider(G.x + 0.15, 0.2 + G.level * 0.06, G.z + 0.5, G.g.label || G.g.id, 'group', 0.6); out[out.length - 1] && out[out.length - 1].kind === 'group' && (out[out.length - 1].left = true); }
+    for (const t of srGroupTagBoxes(V).boxes) out.push({ sx: t.box[0], sy: t.box[3], text: t.text, kind: 'group', n: null, d: t.d, box: t.box });
     for (const p of V.L.pos.values()) if (!p.hiddenIn && !srMigHides(p.n.id) && !srFlowHides(p.n.id) && !(SR.reach && !SR.reach.ids.has(p.n.id))) { const t = srTagOf(V, p); consider(...t.at, t.text, p.external ? 'external' : 'node', 1, p.n); }
   }
   // up close (§5): how many nodes are in view decides the look, with room between going in and coming back
@@ -1111,7 +1157,8 @@ function srPlaceLabels(V) {
   const groups = out.filter((o) => o.kind === 'group').slice(0, SR.labels.max - SR.labels.nodes);
   const rest = out.filter((o) => o.kind !== 'group').slice(0, SR.labels.nodes);
   const placed = [], clear = (o) => {   // a label that would cover one already given out is left out (its width from its text)
-    const wd = srTagWidth(o.text), x0 = o.left ? o.sx : o.sx - wd / 2, b = [x0, o.sy - 20, x0 + wd, o.sy];
+    // a group's tag up close: where srGroupTagBoxes gave it out (from its floor's corner rightward); far, over its box's middle
+    const wd = srTagWidth(o.text), b = o.box || [o.sx - wd / 2, o.sy - 20, o.sx + wd / 2, o.sy];
     if (placed.some((q) => b[0] < q[2] && b[2] > q[0] && b[1] < q[3] && b[3] > q[1])) return false;
     placed.push(b); return true;
   };
@@ -1121,7 +1168,7 @@ function srPlaceLabels(V) {
     if (!o) { s.hidden = true; return; }
     s.hidden = false; s.dataset.kind = o.kind; s.dataset.node = o.n ? o.n.id : '';
     if (s.textContent !== o.text) s.textContent = o.text;
-    s.style.transform = `translate(${Math.round(o.sx)}px, ${Math.round(o.sy)}px) translate(${o.left ? '0' : '-50%'}, -100%)`;   // a group's tag from its floor's corner, inside it
+    s.style.transform = `translate(${Math.round(o.sx)}px, ${Math.round(o.sy)}px) translate(${o.box ? '0' : '-50%'}, -100%)`;   // a group's tag from its floor's corner, inside it
   });
   V.shownLabels = shown.length;
 }

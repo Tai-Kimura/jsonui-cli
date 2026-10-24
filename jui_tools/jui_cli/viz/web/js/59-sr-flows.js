@@ -493,10 +493,11 @@ function srFlowRoomRects(V) {
     const t = srTagOf(V, p), a = px(...t.at), wd = srTagWidth(t.text);
     out.push({ id: p.n.id, kind: 'tag', box: [a[0] - wd / 2, a[1] - 20, a[0] + wd / 2, a[1]], behind: a[2] > 1 });
   }
-  for (const G of V.L.floors) {   // a group's tag, from its floor's corner rightward (srPlaceLabels)
-    if (!G.g.id) continue;
-    const a = px(G.x + 0.15, 0.2 + G.level * 0.06, G.z + 0.5), wd = srTagWidth(G.g.label || G.g.id);
-    out.push({ id: G.g.id, kind: 'group', box: [a[0], a[1] - 20, a[0] + wd, a[1]], behind: a[2] > 1 });
+  // the groups' tags up close, where they are given out (srGroupTagBoxes: from the floor's corner rightward, a row higher where
+  // an inner floor's tag is under it); one out of view is counted where it would stand, so a frame that leaves it out does not fit
+  if (V.lod !== 'far') {
+    const g = srGroupTagBoxes(V);
+    for (const t of [...g.boxes, ...g.outside]) out.push({ id: t.G.g.id, kind: 'group', box: t.box, behind: t.z > 1 });
   }
   return out;
 }

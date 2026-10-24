@@ -467,6 +467,76 @@ async def run_flow_route(page, out, failures, res):
     check(failures, rt["closed"] is True, f"stopped: the side bar goes: {rt['closed']}")
 
 
+GROUP_TAGS = "() => ({ g: window.__dbg.srGroupTags(), fit: window.__dbg.srFlowRoomFit() })"
+
+
+def _group_tags_read(r):
+    """What the arms read off srGroupTags (+ srFlowRoomFit): each floor's tag as shown, against its floor's corner, the other group
+    tags it covers and the box the flow's frame counts it at (page px)."""
+    g, fit = r["g"], r["fit"]
+    cv = fit["canvas"]
+    frame = {x["id"]: [x["box"][0] + cv[0], x["box"][1] + cv[1], x["box"][2] + cv[0], x["box"][3] + cv[1]] for x in fit["rects"] if x["kind"] == "group"}
+    tags = {f["id"]: f["tag"] for f in g["floors"] if f["tag"]}
+    rows = []
+    for f in g["floors"]:
+        t, q = f["tag"], f["quad"]
+        left = min(q[0][0], q[3][0])                      # the floor's left edge on the page (its back and front corners)
+        rows.append({"id": f["id"], "level": f["level"], "parent": f["parent"], "tag": t, "floorLeft": [q[0][0], q[3][0]],
+                     "row": round((f["corner"][1] - t[3]) / 20) if t else None,   # how many rows over its corner it stands
+                     "atCorner": t is not None and left - 1 <= t[0] <= max(q[0][0], q[3][0]) + 6,
+                     "covers": [o for o, u in tags.items() if o != f["id"] and t and t[0] < u[2] and t[2] > u[0] and t[1] < u[3] and t[3] > u[1]],
+                     "frame": frame.get(f["id"]), "inPage": t is not None and t[0] >= g["canvas"][0] and t[2] <= g["canvas"][2]})
+    return {"lod": g["lod"], "canvas": g["canvas"], "rows": rows}
+
+
+async def run_group_tags(page, out, failures, res, flat):
+    """A group's tag inside its floor (ticket 2026-10-24-viz-sr-group-tag-overhangs-floor; the requester 10-24: 入れる、札の並べ方も
+    直す): from its floor's corner rightward, never centred on it (half of it off the floor, cut by the page's edge on a narrow
+    room). A tag that would cover one already given out stands a row higher, so at 1280 every group's tag is
+    shown, Cloudflare のアカウント too, in and out of a flow; none covers another; the flow's frame counts each where it is given out."""
+    gt = res["groupTags"] = {}
+    size = page.viewport_size
+    await page.evaluate("() => { const b = document.querySelector(\"#sr-player [data-sr-fp='stop']\"); if (b) b.click(); }")
+    was_flat = (await page.evaluate("() => window.__dbg.srCam()"))["flat"]
+    if was_flat != flat:                                  # the 2D suite reads them from straight above, the 3D one in 3D
+        await page.click("#sr-mode-2d" if flat else "#sr-mode-3d")
+        await until(page, f"() => window.__dbg.srCam() && window.__dbg.srCam().flat === {'true' if flat else 'false'}", "the view for the group tags")
+    for w in (1280, 900):
+        await page.set_viewport_size({"width": w, "height": 760})
+        await page.wait_for_timeout(300)
+        await page.click("#sr-fit")
+        await page.wait_for_timeout(500)                  # the tags are placed again on the next frames (srPlaceLabels)
+        gt[f"w{w}"] = _group_tags_read(await page.evaluate(GROUP_TAGS))
+        await page.evaluate("() => window.__dbg.srSelect('browser')")
+        await page.click("#sr-board [data-sr-flow='search']")
+        await page.click("#sr-player [data-sr-fp='toggle']")
+        await page.wait_for_timeout(500)
+        gt[f"w{w}-flow"] = _group_tags_read(await page.evaluate(GROUP_TAGS))
+        await page.screenshot(path=str(out / f"group-tags-w{w}{'-2d' if flat else ''}.png"))
+        await page.click("#sr-player [data-sr-fp='stop']")
+    await page.set_viewport_size(size)
+    if was_flat != flat:
+        await page.click("#sr-mode-2d" if was_flat else "#sr-mode-3d")
+        await until(page, f"() => window.__dbg.srCam() && window.__dbg.srCam().flat === {'true' if was_flat else 'false'}", "the view as it was")
+    await page.wait_for_timeout(300)
+    for k, r in gt.items():
+        rows = r["rows"]
+        shown = [x for x in rows if x["tag"]]
+        check(failures, r["lod"] == "near" and len(rows) >= 5 and shown, f"{k}: up close, the room's floors read with their tags (else the next arms prove nothing): {r}")
+        check(failures, all(x["atCorner"] for x in shown), f"{k}: each group's tag starts at its floor's corner, inside it (not centred on it): "
+              f"{[[x['id'], x['tag'], x['floorLeft']] for x in shown if not x['atCorner']]}")
+        check(failures, not any(x["covers"] for x in shown), f"{k}: no group's tag covers another: {[[x['id'], x['covers']] for x in shown if x['covers']]}")
+        check(failures, all(x["inPage"] for x in shown), f"{k}: no group's tag is cut by the room's edge on the page: {[[x['id'], x['tag']] for x in shown if not x['inPage']]}")
+        # the flow's frame counts a group's tag where it is given out (one function, srGroupTagBoxes): the box the tag is drawn in
+        check(failures, all(x["frame"] and all(abs(a - b) <= 3 for a, b in zip(x["frame"][:3:2], x["tag"][:3:2])) and abs(x["frame"][3] - x["tag"][3]) <= 3 for x in shown),
+              f"{k}: the flow's frame counts each group's tag where it is shown: {[[x['id'], x['tag'], x['frame']] for x in shown]}")
+        by = {x["id"]: x for x in shown}
+        nested = [[x["id"], x["row"], x["parent"], by[x["parent"]]["row"]] for x in shown if x["parent"] in by]
+        check(failures, all(x[1] <= x[3] for x in nested), f"{k}: an inner floor's tag stays at its corner under its outer floor's (that one stands higher): {nested}")
+        if k.startswith("w1280"):
+            check(failures, len(shown) == len(rows), f"{k}: at 1280 every group's tag is given out (Cloudflare のアカウント too): left out {[x['id'] for x in rows if not x['tag']]}")
+
+
 async def run_flows(page, out, failures, res):
     """Flows played (the server room ticket's item 7) on the multi-provider room's two: 検索する (browser, a branch with a
     default, lanes side by side) and 毎晩の写し (r2, a schedule)."""
@@ -1472,6 +1542,7 @@ async def run_server_room(pw, out, failures, flat=False):
         await run_flows(page, out, failures, res)
         await run_flow_pace(page, out, failures, res)
         await run_flow_route(page, out, failures, res)
+        await run_group_tags(page, out, failures, res, flat)
         await page.keyboard.press("Escape")
         await up_close("icons")
         await press_door()
