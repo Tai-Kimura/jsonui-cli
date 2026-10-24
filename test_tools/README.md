@@ -1024,6 +1024,21 @@ Test files must be valid JSON with `.test.json` extension.
 | text | id | equals, contains, timeout | Text matches |
 | count | id, equals | timeout | Element count |
 
+### `within`: one cell's child
+
+Every step that targets an element by id (the actions and assertions above, `readText`, `scrollUntilVisible`, a screenshot's `cropId`) and every `when` / `while` condition with `visible` / `notVisible` / `hidden` takes `within`: the id is looked up among the descendants of the element with that id, not on the whole screen. A Collection's n-th cell is `<collectionId>_item_<n>` (0-based):
+
+```json
+{ "assert": "text", "id": "itemTitle", "within": "productList_item_1", "equals": "B" },
+{ "assert": "hidden", "id": "saleBadge", "within": "productList_item_1" },
+{ "action": "tap", "id": "favoriteButton", "within": "productList_item_2" },
+{ "assert": "visible", "id": "itemTitle", "when": { "visible": "saleBadge", "within": "productList_item_0" } }
+```
+
+- With no element with the `within` id on screen, the step fails as a missing element does — `count` too (it does not read 0: a cell that is not drawn has no badge either).
+- `index` is not "the n-th match". It is `tapItem`'s and `selectTab`'s derived id and `selectOption`'s option, and only there; `validate` reports an `index` on any other kind as an error, as it does a `within` on a step that targets no id. A condition with `within` and none of `visible` / `notVisible` / `hidden` is an error.
+- Drivers: web 1.18.0, iOS 2.2.0, Android 1.20.0 (an older one ignores `within` and reads the first element with the id; `validate` names a test that uses it against an older installed driver).
+
 ## Running Tests
 
 ```bash
