@@ -293,9 +293,10 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-body); 
 .sess-groups { display: grid; gap: 10px; }
 .pgroup { display: grid; gap: 6px; }
 .pg-toggle { display: flex; align-items: baseline; gap: 8px; width: 100%; min-width: 0; padding: 2px 0; border: 0; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
-.pg-toggle b { font: 700 13px/1.5 var(--font-mono); }
+/* a folder name never breaks inside itself ("shop-" / "app/"): one line, cut with … beside its count line, which takes the rest (ticket 2026-10-24-viz-english-phone-chip-and-folder-wrap, the requester's A) */
+.pg-toggle b { flex: 0 1 auto; min-width: 0; max-width: 65%; overflow: hidden; font: 700 13px/1.5 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 /* min-width: 0 above: a grid item, the button is otherwise as wide as its summary unshortened (English on a phone: 441 on 390) */
-.pg-toggle small { overflow: hidden; color: var(--ink-soft); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.pg-toggle small { flex: 1 1 0; min-width: 0; overflow: hidden; color: var(--ink-soft); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
 .pg-caret { width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 7px solid var(--ink-soft); transform: rotate(90deg); transition: transform 0.15s ease; }
 .pg-toggle[aria-expanded="false"] .pg-caret { transform: none; }
 .sl-group { display: flex; justify-content: space-between; margin-top: 6px; padding: 0 2px; color: var(--ink-soft); font: 700 11.5px/1.5 var(--font-mono); }
@@ -322,12 +323,12 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .pop-list [role="option"]:hover { background: var(--bg); }
 .pop-list [role="option"][aria-selected="true"] { background: var(--info-bg); box-shadow: inset 3px 0 0 var(--info); }
 .po-main { display: grid; min-width: 0; }
-.po-main b { font: 700 13px/1.45 var(--font-mono); }
+.po-main b { overflow: hidden; font: 700 13px/1.45 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .po-main small { overflow: hidden; color: var(--ink-soft); font: 500 11px/1.45 var(--font-body); text-overflow: ellipsis; white-space: nowrap; }
 .po-badges { display: flex; flex-wrap: wrap; gap: 3px; }
 .po-badges:empty { display: none; }
 .pop-groups { display: grid; gap: 2px; }
-.pg-label { margin: 8px 2px 2px; color: var(--ink-soft); font: 700 11.5px/1.5 var(--font-mono); }
+.pg-label { overflow: hidden; margin: 8px 2px 2px; color: var(--ink-soft); font: 700 11.5px/1.5 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .pg-label:first-child { margin-top: 0; }
 .pg-item { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 8px; font-size: 12.5px; cursor: pointer; }
 .pg-item:hover { background: var(--bg); }

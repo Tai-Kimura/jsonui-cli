@@ -127,6 +127,95 @@ STRIP_HITS = """() => [...document.querySelectorAll('#perm-strip [data-do]')].fi
            hit: hit ? hit.tagName.toLowerCase() + (hit.className ? '.' + String(hit.className).split(' ')[0] : '') : null }; })"""
 
 
+# Folder names and the project picker's chips (ticket 2026-10-24-viz-english-phone-chip-and-folder-wrap, the requester's
+# choice A, 10-24): a chip's words never break inside it (its row may go to two); a folder name keeps one line, cut with
+# "…" when it does not fit, its count line taking the rest. Read on the page's own words, then on long ones laid over
+# them for the check (a long folder name, German's longer words), at 390 and 1440. Each is hit at its centre.
+LONG_FOLDER = "a-folder-name-much-too-long-to-fit-on-one-line-anywhere/"
+LONG_WORDS = {"st-waiting": "Wartet auf Erlaubnis 2", "st-busy": "7 Roboter arbeiten", "st-write": "Specs in Bearbeitung 6",
+              "count": "3 Sitzungen · 1 wartet auf Erlaubnis · 1 wartet auf eine Antwort · 2 arbeiten"}
+FOLDERS_JS = """([where, long, words]) => {
+  const one = (el) => { const r = el.getBoundingClientRect(), lh = parseFloat(getComputedStyle(el).lineHeight); return r.height > 0 && r.height < lh * 1.5; };
+  const cut = (el) => el.scrollWidth > el.clientWidth + 1;
+  const hit = (el) => { const r = el.getBoundingClientRect(), x = r.left + Math.min(r.width / 2, 24), y = r.top + r.height / 2, h = document.elementFromPoint(x, y);
+    return !!h && (h === el || el.contains(h)); };
+  const read = (els) => els.map((el) => ({ text: el.textContent, one: one(el), cut: cut(el), hit: hit(el), w: Math.round(el.getBoundingClientRect().width) }));
+  const kept = [];
+  const put = (el, text) => { kept.push([el, el.textContent]); el.textContent = text; };
+  const out = {};
+  if (where === 'pop') {
+    const names = () => [...document.querySelectorAll('#pop .po-main b')], chips = () => [...document.querySelectorAll('#pop .po-badges .state')];
+    const rows = () => [...document.querySelectorAll('#pop .po-badges')].map((b) => b.scrollWidth <= b.clientWidth + 1);
+    out.own = { names: read(names()), chips: read(chips()), rows: rows() };
+    if (names()[1]) put(names()[1], long);
+    for (const c of chips()) for (const k of ['st-waiting', 'st-busy', 'st-write']) if (c.classList.contains(k)) put(c, words[k]);
+    out.long = { names: read(names()), chips: read(chips()), rows: rows() };
+  } else if (where === 'picker') {
+    const labels = () => [...document.querySelectorAll('#pop .pg-label')];
+    out.own = { names: read(labels()) };
+    if (labels()[0]) put(labels()[0], long);
+    out.long = { names: labels()[0] ? read([labels()[0]]) : [] };
+  } else {
+    const heads = () => [...document.querySelectorAll('.pg-toggle')].filter((t) => t.offsetParent);
+    for (const t of heads()) t.scrollIntoView({ block: 'nearest' });
+    out.own = { names: read(heads().map((t) => t.querySelector('b'))) };
+    const t = heads()[0];
+    if (t) { t.scrollIntoView({ block: 'nearest' }); put(t.querySelector('b'), long); put(t.querySelector('small'), words.count); }
+    out.long = { names: t ? read([t.querySelector('b')]) : [], counts: t ? read([t.querySelector('small')]) : [] };
+  }
+  window.__foldersKept = kept;
+  return out; }"""
+FOLDERS_BACK_JS = "() => { for (const [el, text] of (window.__foldersKept || []).reverse()) el.textContent = text; window.__foldersKept = []; }"
+
+
+async def folder_lines(page, label, out):
+    """The pop open: its names and chips; then closed: the session list's folder headings; then the log strip's robot
+    picker (where it shows): its folders' labels. Each read on the page's words, then on the long ones (left on the page
+    for a still, then put back)."""
+    bad = []
+    for where in ("pop", "list", "picker"):
+        if where == "picker":   # in the full-screen log
+            await page.click("#btn-log")
+            await page.wait_for_function("() => !document.getElementById('log-overlay').hidden")
+            await page.click("#log-who")
+            await page.wait_for_function("() => !document.getElementById('pop').hidden && !!document.querySelector('#pop .pg-label')")
+            await page.wait_for_timeout(300)
+        if where == "list" and await page.evaluate("() => !document.getElementById('pop').hidden"):
+            await page.keyboard.press("Escape")
+            await page.wait_for_function("() => document.getElementById('pop').hidden")
+            await page.wait_for_timeout(300)
+        got = await page.evaluate(FOLDERS_JS, [where, LONG_FOLDER, LONG_WORDS])
+        await page.screenshot(path=f"{out}/folders-{label.replace('/', '-')}-{where}.png")
+        await page.evaluate(FOLDERS_BACK_JS)
+        for kind in ("own", "long"):
+            g = got[kind]
+            if not g["names"]:
+                bad.append(f"{where}/{kind}: no folder name found")
+            for n in g["names"]:
+                if not (n["one"] and n["hit"]):
+                    bad.append(f"{where}/{kind}: the folder name {n['text']!r} on one line and hit at its centre: {n}")
+            long_at = 1 if where == "pop" else 0   # the pop's first row is すべて, not a folder
+            if kind == "long" and len(g["names"]) > long_at and not g["names"][long_at]["cut"]:
+                bad.append(f"{where}/long: the long folder name is cut with …: {g['names'][long_at]}")
+            for c in g.get("chips", []):
+                if not (c["one"] and c["hit"]):
+                    bad.append(f"{where}/{kind}: the chip {c['text']!r} on one line and hit at its centre: {c}")
+            if not all(g.get("rows", [True])):
+                bad.append(f"{where}/{kind}: a chips' row wider than the picker: {g['rows']}")
+            for c in g.get("counts", []):
+                if not (c["one"] and c["hit"] and c["w"] >= 60):
+                    bad.append(f"{where}/{kind}: the count line beside the folder name takes the rest (60 px or more), hit: {c}")
+        if where == "pop" and not got["own"]["chips"]:
+            bad.append("pop/own: no chip in the picker")
+    if await page.evaluate("() => !document.getElementById('pop').hidden"):
+        await page.keyboard.press("Escape")
+        await page.wait_for_function("() => document.getElementById('pop').hidden")
+    if await page.evaluate("() => !document.getElementById('log-overlay').hidden"):
+        await page.keyboard.press("Escape")
+        await page.wait_for_function("() => document.getElementById('log-overlay').hidden")
+    CHECKS.extend(f"demo/phone/{label}: {b}" for b in bad)
+
+
 async def strip_hits(page, label):
     """Every strip button hit-testable, with the question strip as it is and with it absent (hidden for the check, in the
     same call, so no redraw comes in between)."""
@@ -403,6 +492,13 @@ async def phone(browser, url, watch, out):
           const rows = [...document.querySelectorAll('#pop .po-badges')].map((b) => ({ h: Math.round(b.getBoundingClientRect().height), over: b.scrollWidth > b.clientWidth }));
           return { left: Math.round(r.left), right: Math.round(r.right), sw: document.documentElement.scrollWidth, rows }; }""")
         await page.screenshot(path=f"{out}/ph-pop-{scheme}.png")
+        await folder_lines(page, f"390-{scheme}", out)
+        await page.set_viewport_size(DESKTOP["viewport"])
+        await page.wait_for_timeout(800)
+        await page.click("#scope-top")
+        await page.wait_for_function("() => !document.getElementById('pop').hidden")
+        await page.wait_for_timeout(600)
+        await folder_lines(page, f"1440-{scheme}", out)
         await page.close()
     return res
 
