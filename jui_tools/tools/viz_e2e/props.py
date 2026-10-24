@@ -177,6 +177,9 @@ async def run_props(pw, out, failures, jt=None, shots_only=False):
             await page.click("#room-back")
             await wait(page, "() => window.__dbg.props().room === null", label="out")
             await page.wait_for_timeout(300)
+            # the floor's own frame first: its first render after the room puts back what the room took (23 -> 33);
+            # on a busy machine 300 ms can pass with no frame, and the first visit read as smaller than the rest
+            await page.evaluate(NEXT_FRAME)
             mem.append((await page.evaluate("() => window.__dbg.props()"))["memory"])
         res["memory"] = mem
         check(failures, mem[-1]["geometries"] <= mem[0]["geometries"] and mem[-1]["textures"] <= mem[0]["textures"],
