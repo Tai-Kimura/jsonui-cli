@@ -243,7 +243,13 @@ export class AssertionExecutor {
     const within = step.within;
     await this.pollUntil(timeout, async () => {
       // Exactly not `visible`: absent, hidden, or nothing of it in the viewport.
-      // With `within`, a container that is not there holds (nothing is drawn).
+      // With `within`, a container that is not there FAILS, as count does: a
+      // cell that is not drawn would otherwise pass "this cell's badge is not
+      // shown". To claim the cell itself is gone, assert on the cell's id
+      // without `within`.
+      if (!(await containerPresent(this.page, within))) {
+        return notFound(this.page, id, within);
+      }
       return (await viewportState(this.getLocator(id, within))) === 'in'
         ? `Element ${label(id, within)} should not be visible but it is`
         : null;
@@ -257,10 +263,16 @@ export class AssertionExecutor {
     // the id (inside `within`, when given) is drawn — every match is looked
     // at, so one drawn copy among invisible ones fails. Unlike notVisible it
     // does not pass for an element below the fold or under a dialog: those
-    // are drawn. A `within` container that is not there holds.
-    await this.pollUntil(timeout, async () =>
-      (await isHidden(this.getLocator(id, within))) ? null : `Element ${label(id, within)} should be hidden but it is shown`
-    );
+    // are drawn. A `within` container that is not there FAILS (see
+    // assertNotVisible).
+    await this.pollUntil(timeout, async () => {
+      if (!(await containerPresent(this.page, within))) {
+        return notFound(this.page, id, within);
+      }
+      return (await isHidden(this.getLocator(id, within)))
+        ? null
+        : `Element ${label(id, within)} should be hidden but it is shown`;
+    });
   }
 
   private async assertEnabled(step: TestStep, timeout: number): Promise<void> {

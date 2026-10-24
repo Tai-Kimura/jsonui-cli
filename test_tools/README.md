@@ -1035,7 +1035,7 @@ Every step that targets an element by id (the actions and assertions above, `rea
 { "assert": "visible", "id": "itemTitle", "when": { "visible": "saleBadge", "within": "productList_item_0" } }
 ```
 
-- With no element with the `within` id on screen, the step fails as a missing element does — `count` too (it does not read 0: a cell that is not drawn has no badge either).
+- With no element with the `within` id on screen, the step fails naming it — `visible`, `notVisible`, `hidden` and `count` alike (a cell that is not drawn would otherwise pass "this cell's badge is not shown") — and a condition with `within` is not met. To claim that a cell itself is not shown, write `hidden` on the cell's id without `within`. When two elements carry the `within` id (two sections each have an `_item_0`), the first is the container.
 - `index` is not "the n-th match". It is `tapItem`'s and `selectTab`'s derived id and `selectOption`'s option, and only there; `validate` reports an `index` on any other kind as an error, as it does a `within` on a step that targets no id. A condition with `within` and none of `visible` / `notVisible` / `hidden` is an error.
 - Drivers: web 1.18.0, iOS 2.2.0, Android 1.20.0 (an older one ignores `within` and reads the first element with the id; `validate` names a test that uses it against an older installed driver).
 
