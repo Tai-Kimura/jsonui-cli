@@ -118,6 +118,15 @@
       "distance": 11,
       "reason": "kjui-codegen-tabview-glyph: selection index, outlined-unselected convention and the primary/onSurfaceVariant color fallbacks match dynamic (d 19/15 -> 11-12, visually identical); the residual is the icon glyph SOURCE only — codegen draws Material vector icons while dynamic uses the drawable pair private to library-dynamic. PERMANENT accepted deviation by user ruling 2026-08-03: promoting the private drawables into the base library was considered and REJECTED; the semantics match and the glyph-source difference stays ledger-recorded.",
       "note": ""
+    },
+    {
+      "screenshot": "TextField_autoFocus__true.png",
+      "platform": "ios",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 51,
+      "reason": "When returnKeyType is not written, only SwiftJsonUI's Dynamic renderer defaults the return key to .done (FocusableTextField's submitLabel default); the SSoT gives returnKeyType no default, and the generated SwiftUI (sjui) sets none, so the system's return key shows. A difference from before 2.3.22, seen now that autoFocus brings the keyboard up on both faces (conformance-mobile run 40037689097). Ruling (2026-10-24): the default is none. When SwiftJsonUI's next patch stops setting it, this row goes stale and is removed.",
+      "note": "ticket 2026-10-24-sjui-dynamic-return-key-defaults-to-done (2.3.23, SwiftJsonUI 10.30.7)"
     }
   ]
 }
