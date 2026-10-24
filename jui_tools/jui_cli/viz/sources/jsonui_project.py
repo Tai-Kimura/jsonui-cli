@@ -223,7 +223,7 @@ def find_configs(root: Path, depth: int = SOURCE_DEPTH) -> list[Path]:
     return found + below
 
 
-def boundary_roots(spec_path: Path, ceiling: Path | None = None) -> list[Path]:
+def boundary_roots(spec_path: Path, ceiling: Path | None = None, memo: dict | None = None) -> list[Path]:
     """The folders a path a spec declares may be written from: the spec's own folder, then every declared boundary
     above it — a folder holding jui.config.json or .git — up to the nearest .git, or up to ``ceiling`` (the room's
     root) when the spec is inside it.
@@ -238,25 +238,51 @@ def boundary_roots(spec_path: Path, ceiling: Path | None = None) -> list[Path]:
     room's repository stops at its own; a room is the parent repository with its submodules in it (bar/,
     orders/ … each with a .git of its own), and their specs spell paths from the parent. The room's root is
     a bound the room already has, not a guess about the machine.
+
+    ``memo`` (one build's answers, ticket 2026-10-24-viz-serve-loop-stalls-in-spec-summaries-stat): the roots depend
+    on the spec's folder only, so every spec of a folder shares one walk, and each path is asked once.
     """
+    key = ("roots", spec_path.parent, ceiling)
+    if memo is not None and key in memo:
+        return list(memo[key])
     within = ceiling is not None and spec_path.is_relative_to(ceiling)
     roots = [spec_path.parent]
     for parent in spec_path.parents:
-        if quiet_fs.is_file(parent / "jui.config.json") or quiet_fs.exists(parent / ".git"):
+        if _is_file(parent / "jui.config.json", memo) or _exists(parent / ".git", memo):
             if parent not in roots:
                 roots.append(parent)
-        if (parent == ceiling) if within else quiet_fs.exists(parent / ".git"):
+        if (parent == ceiling) if within else _exists(parent / ".git", memo):
             break
+    if memo is not None:
+        memo[key] = tuple(roots)
     return roots
 
 
-def resolve_declared(value: str, roots: list[Path]) -> tuple[Path, bool]:
+def _exists(path: Path, memo: dict | None) -> bool:
+    if memo is None:
+        return quiet_fs.exists(path)
+    key = ("exists", path)
+    if key not in memo:
+        memo[key] = quiet_fs.exists(path)
+    return memo[key]
+
+
+def _is_file(path: Path, memo: dict | None) -> bool:
+    if memo is None:
+        return quiet_fs.is_file(path)
+    key = ("is_file", path)
+    if key not in memo:
+        memo[key] = quiet_fs.is_file(path)
+    return memo[key]
+
+
+def resolve_declared(value: str, roots: list[Path], memo: dict | None = None) -> tuple[Path, bool]:
     """(where the declared path is, whether it exists): the first root it exists under, else the first root."""
     path = Path(value)
     if path.is_absolute():
-        return path, quiet_fs.exists(path)
+        return path, _exists(path, memo)
     for root in roots:
-        if quiet_fs.exists(root / path):
+        if _exists(root / path, memo):
             return root / path, True
     return (roots[0] / path if roots else path), False
 
@@ -470,6 +496,10 @@ class JsonUIProject:
         self.base_sources = list(self.sources)   # the room's own apps; self.sources adds the worktrees shown
         self.specs: dict[str, SpecEntry] = {}
         self._layout_cache: dict[Path, tuple[int, list[dict]]] = {}
+        # Set by the live server (World.off_loop): the summaries and specs_touching read ``facts``, built in its
+        # worker, and ask the file system nothing on the loop. spec id -> JsonUIProject.facts_of.
+        self.off_loop = False
+        self.facts: dict[str, dict] = {}
         self.test_results: dict[str, dict] = {}  # spec id -> {passed, failed, running}
         self._tests_by_name: dict[str, list[tuple[Source, str]]] | None = None  # test file name -> (app, key)
 
@@ -526,31 +556,45 @@ class JsonUIProject:
         """Show the worktrees sessions work in (worktree_sources): a new one's specs read, a gone one's dropped, and
         each of the room's apps marked with its own branch while one of its worktrees is shown. True when the apps
         changed (the caller watches the new folders)."""
+        return self.apply_worktrees(self.worktree_plan(cwds), at)
+
+    def worktree_plan(self, cwds, sources: list[Source] | None = None) -> dict | None:
+        """set_worktrees' reading (the live server's worker runs it): which apps to show, the new ones' specs and
+        every app's tests, read now; None when the apps shown stay the same. ``sources``: self.sources as the loop
+        had it when it asked."""
+        sources = list(self.sources if sources is None else sources)
         wanted = {s.key: s for s in self.worktree_sources(cwds)}
-        shown = {s.key: s for s in self.sources if s.base is not None}
+        shown = {s.key: s for s in sources if s.base is not None}
         same = {k for k in wanted if k in shown and shown[k].root == wanted[k].root}
         if same == set(wanted) == set(shown):
-            return False
-        for key, source in shown.items():
-            if key in same:
-                continue
-            for sid in [sid for sid, e in self.specs.items() if e.source is source]:
-                del self.specs[sid]
+            return None
         kept = [shown[k] for k in sorted(same)]
         added = [wanted[k] for k in sorted(wanted) if k not in same]
         with_twins = {s.base for s in kept + added}
+        checkouts = {}
         for base in self.base_sources:
             repo = repo_root(base.root, self.root) if base.key in with_twins else None
             gd = git_dir(repo) if repo is not None else None
-            base.checkout = {"branch": head_branch(gd)} if gd is not None else None
-        self.sources = self.base_sources + kept + added
-        for source in added:
-            if quiet_fs.is_dir(source.spec_dir):
-                for path in sorted(source.spec_dir.rglob("*.spec.json")):
-                    if not SKIP_DIRS.intersection(path.relative_to(source.spec_dir).parts):
-                        self.reload_spec(path, at, by=None, initial=True, source=source)
-        self._tests_by_name = None
-        self.load_tests()
+            checkouts[base.key] = {"branch": head_branch(gd)} if gd is not None else None
+        reads = [(source, path, read_spec_file(path)) for source in added for path in spec_files(source)]
+        after = self.base_sources + kept + added
+        return {"shown": list(shown.values()), "kept": kept, "sources": after, "checkouts": checkouts, "reads": reads,
+                "tests": self.scan_tests(after)}
+
+    def apply_worktrees(self, plan: dict | None, at: int) -> bool:
+        """worktree_plan's answer applied (on the loop). True when the apps changed."""
+        if plan is None:
+            return False
+        for source in self.sources:
+            if source.base is not None and not any(source is k for k in plan["kept"]):
+                for sid in [sid for sid, e in self.specs.items() if e.source is source]:
+                    del self.specs[sid]
+        for base in self.base_sources:
+            base.checkout = plan["checkouts"].get(base.key)
+        self.sources = plan["sources"]
+        for source, path, read in plan["reads"]:
+            self.apply_spec_read(path, at, None, read, initial=True, source=source)
+        self.apply_tests(plan["tests"])
         return True
 
     # ---------------------------------------------------------------- loading
@@ -574,27 +618,26 @@ class JsonUIProject:
 
     def load_all(self, at: int) -> None:
         for source in self.sources:
-            if quiet_fs.is_dir(source.spec_dir):
-                for path in sorted(source.spec_dir.rglob("*.spec.json")):
-                    if not SKIP_DIRS.intersection(path.relative_to(source.spec_dir).parts):
-                        self.reload_spec(path, at, by=None, initial=True, source=source)
+            for path in spec_files(source):
+                self.reload_spec(path, at, by=None, initial=True, source=source)
         self.load_tests()
 
     def reload_spec(self, path: Path, at: int, by: str | None, initial: bool = False,
                     source: Source | None = None) -> list[str]:
         """Read one spec again. Returns the sections that changed (written now)."""
+        return self.apply_spec_read(path, at, by, read_spec_file(path), initial, source)
+
+    def apply_spec_read(self, path: Path, at: int, by: str | None, read: dict | None, initial: bool = False,
+                        source: Source | None = None) -> list[str]:
+        """reload_spec with the file already read (read_spec_file: the live server reads it in its worker)."""
         source = source or self.source_of(path)
         sid = self.spec_id(path, source)
         entry = self.specs.get(sid) or SpecEntry(path=path, source=source)
         self.specs[sid] = entry
-        if not quiet_fs.exists(path):
+        if read is None:
             del self.specs[sid]
             return []
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            if not isinstance(data, dict):
-                raise ValueError("not an object")
-        except (OSError, ValueError):
+        if read.get("broken"):
             entry.broken = True  # mid-write: keep the previous summary
             if by:
                 entry.by, entry.by_until = by, at + WRITING_MS
@@ -602,34 +645,46 @@ class JsonUIProject:
         entry.broken = False
         changed = []
         for key in SECTIONS:
-            h = section_hash(data, key)   # the JSON as written: a texts file edited alone changes no section
+            h = read["hashes"][key]
             if not initial and entry.hashes.get(key) not in (None, h):
                 changed.append(key)
                 entry.writing_until[key] = at + WRITING_MS
             entry.hashes[key] = h
-        entry.data = with_texts(data, path)
+        entry.data = read["data"]
         if by:
             entry.by, entry.by_until = by, at + WRITING_MS
         return changed
 
+    def texts_reads(self, path: Path, rows: list[tuple] | None = None) -> list[tuple]:
+        """The specs a texts file reaches, read again: [(path, app, read_spec_file)]. ``rows``: fact_rows as the loop
+        had them when it asked (the worker reads those, not self.specs)."""
+        rows = self.fact_rows() if rows is None else rows
+        return [(spec_path, source, read_spec_file(spec_path)) for _sid, spec_path, _data, source in rows
+                if source is not None and path.is_relative_to(source.spec_dir)]
+
     def reload_texts(self, path: Path, at: int) -> None:
         """A texts file (``*.texts.yaml``) changed: every spec of the app whose folder holds it reads its prose again
         (a reference may name a file other than its paired one, relative to the spec's folder)."""
-        for entry in list(self.specs.values()):
-            if entry.source is not None and path.is_relative_to(entry.source.spec_dir):
-                self.reload_spec(entry.path, at, by=None, source=entry.source)
+        for spec_path, source, read in self.texts_reads(path):
+            self.apply_spec_read(spec_path, at, None, read, source=source)
 
     def load_tests(self) -> None:
         """Every test file under each app's test folder (jsonui-test's rule: test.testDir, recursive)."""
+        self.apply_tests(self.scan_tests(self.sources))
+
+    def scan_tests(self, sources: list[Source]) -> list[tuple]:
+        """load_tests' reading (the live server's worker runs it): [(app, test_cases, test_file_keys,
+        test_file_paths)] for each of ``sources``."""
         rules = test_dirs()
         # A test folder inside another app's (the room's tests/ holding the user app's tests/user): its files
         # are the inner app's only. The outer key (user/flows/x) agrees with a driver's path for longer than the
         # inner one (flows/x), so the outer app — no specs — won every saved row (10-19 ticket
         # 2026-10-19-jui-viz-saved-results-tie-to-the-outer-tests-folder).
-        folders = {id(s): _resolved(s.tests_dir) for s in self.sources if s.tests_dir is not None}
-        for source in self.sources:
-            source.test_cases, source.test_file_keys, source.test_file_paths = {}, {}, {}
-            self._tests_by_name = None
+        folders = {id(s): _resolved(s.tests_dir) for s in sources if s.tests_dir is not None}
+        out = []
+        for source in sources:
+            test_cases, test_file_keys, test_file_paths = {}, {}, {}
+            out.append((source, test_cases, test_file_keys, test_file_paths))
             if rules is None or source.tests_dir is None:
                 continue
             mine = folders[id(source)]
@@ -647,10 +702,19 @@ class JsonUIProject:
                 n = sum(1 for c in cases if isinstance(c, dict) and c.get("name"))
                 keys = self._test_keys(data)
                 key = path.relative_to(source.tests_dir).as_posix()
-                source.test_file_keys[key] = keys
-                source.test_file_paths[key] = self.room_path(path)
+                test_file_keys[key] = keys
+                test_file_paths[key] = self.room_path(path)
                 for key in keys:
-                    source.test_cases[key] = source.test_cases.get(key, 0) + n
+                    test_cases[key] = test_cases.get(key, 0) + n
+        return out
+
+    def apply_tests(self, scanned: list[tuple]) -> None:
+        """scan_tests' answer applied (on the loop). An app the scan did not see (shown after it was asked) is read
+        again on the next scan; until then it has none."""
+        by_app = {id(source): rest for source, *rest in scanned}
+        for source in self.sources:
+            source.test_cases, source.test_file_keys, source.test_file_paths = by_app.get(id(source), ({}, {}, {}))
+        self._tests_by_name = None
 
     def room_path(self, path: Path) -> str:
         """A test file as a path under the room ("tests/admin/screens/x.test.json"), else its whole path."""
@@ -699,16 +763,6 @@ class JsonUIProject:
 
     # ---------------------------------------------------------------- lookups
 
-    @staticmethod
-    def _changed_after(at_ms: int, *paths: Path | None) -> bool:
-        for path in paths:
-            try:
-                if path is not None and path.stat().st_mtime * 1000 > at_ms:
-                    return True
-            except OSError:
-                pass
-        return False
-
     def layout_nodes_cached(self, path: Path | None) -> list[dict]:
         if path is None:
             return []
@@ -729,12 +783,13 @@ class JsonUIProject:
     def _source(self, source: Source | None) -> Source | None:
         return source or (self.sources[0] if self.sources else None)
 
-    def _roots(self, source: Source | None, spec_path: Path | None) -> list[Path]:
+    def _roots(self, source: Source | None, spec_path: Path | None, memo: dict | None = None) -> list[Path]:
         if spec_path is not None:
-            return boundary_roots(spec_path, self.root)
+            return boundary_roots(spec_path, self.root, memo)
         return [source.root] if source else [self.root]
 
-    def layout_path(self, spec: dict, source: Source | None = None, spec_path: Path | None = None) -> Path | None:
+    def layout_path(self, spec: dict, source: Source | None = None, spec_path: Path | None = None,
+                    memo: dict | None = None) -> Path | None:
         """The Layout file a spec names: under the declared layouts folder first, then as relatedFiles are (the
         validator's ``_declared_path_roots("layout")``)."""
         meta = spec.get("metadata") if isinstance(spec.get("metadata"), dict) else {}
@@ -743,26 +798,66 @@ class JsonUIProject:
         if not isinstance(name, str) or not name or source is None:
             return None
         name = name if name.endswith(".json") else f"{name}.json"
-        roots = [source.layouts_dir] + (boundary_roots(spec_path, self.root) if spec_path is not None else [])
-        return resolve_declared(name, roots)[0]
+        roots = [source.layouts_dir] + (boundary_roots(spec_path, self.root, memo) if spec_path is not None else [])
+        return resolve_declared(name, roots, memo)[0]
 
-    def related_paths(self, spec: dict, source: Source | None = None, spec_path: Path | None = None) -> list[Path]:
-        roots = self._roots(self._source(source), spec_path)
-        return [resolve_declared(item["path"], roots)[0] for item in spec.get("relatedFiles") or []
+    def related_paths(self, spec: dict, source: Source | None = None, spec_path: Path | None = None,
+                      memo: dict | None = None) -> list[Path]:
+        roots = self._roots(self._source(source), spec_path, memo)
+        return [resolve_declared(item["path"], roots, memo)[0] for item in spec.get("relatedFiles") or []
                 if isinstance(item, dict) and isinstance(item.get("path"), str)]
 
+    # ---------------------------------------------------------------- what the files say (read off the loop)
+
+    def fact_rows(self) -> list[tuple]:
+        """What spec_facts reads, taken on the loop: (id, path, data, app) of each spec. The worker reads these, never
+        self.specs, which the loop changes while it works."""
+        return [(sid, e.path, e.data, e.source) for sid, e in self.specs.items()]
+
+    def spec_facts(self, rows: list[tuple], memo: dict | None = None) -> dict[str, dict]:
+        """Everything the summaries, the implementation count and specs_touching ask the file system, per spec, for
+        the rows of fact_rows (ticket 2026-10-24-viz-serve-loop-stalls-in-spec-summaries-stat). The live server
+        builds these in its worker and the loop reads them; one ``memo`` serves the whole build (B: 31,798 stats for
+        434 specs were 8,992 paths)."""
+        memo = {} if memo is None else memo
+        out = {}
+        for sid, path, data, source in rows:
+            out[sid] = self.facts_of(data or {}, source, path, memo)
+        return out
+
+    def facts_of(self, spec: dict, source: Source | None, spec_path: Path | None, memo: dict | None = None) -> dict:
+        source = self._source(source)
+        roots = self._roots(source, spec_path, memo)
+        related = [resolve_declared(item["path"], roots, memo)[1] for item in spec.get("relatedFiles") or []
+                   if isinstance(item, dict) and isinstance(item.get("path"), str)]
+        lp = self.layout_path(spec, source, spec_path, memo)
+        return {"roots": tuple(roots), "layout": lp, "layoutExists": None if lp is None else _exists(lp, memo),
+                "nodes": self.layout_nodes_cached(lp), "related": related,
+                "specMtime": _mtime(spec_path), "layoutMtime": _mtime(lp)}
+
     def specs_touching(self, file_path: str) -> list[str]:
-        """Spec ids a file edit belongs to: the spec itself, its Layout, its relatedFiles."""
+        """Spec ids a file edit belongs to: the spec itself, its Layout, its relatedFiles.
+
+        Off the loop (``off_loop``) the Layout and the folders are the last build's facts, asked nothing now: a file
+        made where the last build found none belongs to its spec from the next build on, so the 書いている tag lights
+        one beat late and nothing else shows it (ticket 2026-10-24-viz-serve-loop-stalls-in-spec-summaries-stat, C)."""
         target = Path(file_path)
         hits = []
+        memo: dict = {}
         for sid, entry in self.specs.items():
             if target == entry.path:
                 hits.append(sid)
                 continue
             data = entry.data or {}
-            lp = self.layout_path(data, entry.source, entry.path)
+            if self.off_loop:
+                facts = self.facts.get(sid)
+                if facts is None:
+                    continue
+                lp, roots = facts["layout"], facts["roots"]
+            else:
+                lp = self.layout_path(data, entry.source, entry.path, memo)
+                roots = self._roots(self._source(entry.source), entry.path, memo)
             # Every place a relatedFile may be written from: a file being created does not exist anywhere yet.
-            roots = self._roots(self._source(entry.source), entry.path)
             declared = [Path(item["path"]) for item in data.get("relatedFiles") or []
                         if isinstance(item, dict) and isinstance(item.get("path"), str)]
             if (lp and target == lp) or any(target == (d if d.is_absolute() else r / d) for d in declared for r in roots):
@@ -780,18 +875,7 @@ class JsonUIProject:
         Nothing here measures a state, a data-flow item, a user action or a transition one by one: the inputs say
         nothing about them, and the board says so instead of guessing.
         """
-        related = [quiet_fs.exists(p) for p in self.related_paths(spec, source, spec_path)]
-        lp = self.layout_path(spec, source, spec_path)
-        layout = None if lp is None else quiet_fs.exists(lp)
-        ids = component_ids(spec)
-        components = None
-        if ids:
-            present = self.layout_ids_cached(lp) if lp else set()
-            components = {"total": len(ids), "done": sum(1 for i in ids if i in present)}
-        total = len(related) + (layout is not None) + (components["total"] if components else 0)
-        done = sum(related) + bool(layout) + (components["done"] if components else 0)
-        return {"total": total, "done": done, "related": {"total": len(related), "done": sum(related)},
-                "layout": layout, "components": components}
+        return impl_of(spec, self.facts_of(spec, source, spec_path))
 
     def specs_for_test_file(self, rel: str, only: list[Source] | None = None) -> list[str]:
         """Spec ids a test file belongs to, *rel* as a driver names it (any of the three spellings).
@@ -822,20 +906,27 @@ class JsonUIProject:
     # ---------------------------------------------------------------- slice
 
     def summaries(self, at: int) -> list[dict]:
+        """The specs slice. Asks the file system nothing off the loop (``off_loop``): it is built from ``facts``, the
+        worker's last reading, and a spec read since then is shown from the next build on. Otherwise (tests, a
+        replay) the facts are read here, every build, as they always were."""
+        if not self.off_loop:
+            self.facts = self.spec_facts(self.fact_rows())
         out = []
         for sid, entry in sorted(self.specs.items()):
+            facts = self.facts.get(sid)
+            if facts is None:
+                continue
             data = entry.data or {}
             meta = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
             stem = entry.path.name.replace(".spec.json", "")
             sections = []
-            nodes = len(self.layout_nodes_cached(self.layout_path(data, entry.source, entry.path)))
+            nodes = len(facts["nodes"])
             for key in SECTIONS:
                 items = section_items(data, key, nodes)
                 writing = entry.writing_until.get(key, 0) > at or (entry.broken and entry.by_until > at)
                 state = "writing" if writing else ("written" if items else "empty")
                 sections.append({"key": key, "state": state, "items": items})
-            impl = self.impl(data, entry.source, entry.path)
-            layout = self.layout_path(data, entry.source, entry.path)
+            impl = impl_of(data, facts)
             layout_name = meta.get("layoutFile") if isinstance(meta.get("layoutFile"), str) else None
             test_cases = entry.source.test_cases if entry.source else {}
             cases = test_cases.get(stem, 0) + (test_cases.get(layout_name, 0) if layout_name and layout_name != stem else 0)
@@ -848,7 +939,7 @@ class JsonUIProject:
             if result.get("latest"):
                 tests["at"] = result["latest"]
                 # mtime moves on a git checkout too, so this can only say "may be stale" (10-18).
-                if self._changed_after(result["latest"], entry.path, layout):
+                if any(m is not None and m > result["latest"] for m in (facts["specMtime"], facts["layoutMtime"])):
                     tests["maybeStale"] = True
             by = entry.by if entry.by_until > at else None
             written_any = any(s["items"] for s in sections)
@@ -871,12 +962,35 @@ class JsonUIProject:
                 "updatedAt": at,
                 # when it last moved on (ticket 2026-10-23-viz-spec-list-not-recent-first): the newest of the spec's
                 # write, its Layout's write and its newest test result; the lists put the newest first
-                **_advanced(_mtime_ms(entry.path), _mtime_ms(layout), result.get("lastAt") or 0),
+                **_advanced(int(facts["specMtime"] or 0), int(facts["layoutMtime"] or 0), result.get("lastAt") or 0),
             }
             if by:
                 item["by"] = by
             out.append(item)
         return out
+
+
+def spec_files(source: Source) -> list[Path]:
+    """An app's spec files (SKIP_DIRS pruned), in order."""
+    if not quiet_fs.is_dir(source.spec_dir):
+        return []
+    return [path for path in sorted(source.spec_dir.rglob("*.spec.json"))
+            if not SKIP_DIRS.intersection(path.relative_to(source.spec_dir).parts)]
+
+
+def read_spec_file(path: Path) -> dict | None:
+    """One spec file read (reload_spec's reading; any thread): None when it is gone, {"broken": True} when it does not
+    parse (mid-write), else {"hashes": each section's hash, "data": the spec with its texts}."""
+    if not quiet_fs.exists(path):
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("not an object")
+    except (OSError, ValueError):
+        return {"broken": True}
+    # the JSON as written: a texts file edited alone changes no section
+    return {"hashes": {key: section_hash(data, key) for key in SECTIONS}, "data": with_texts(data, path)}
 
 
 def _checkout_view(checkout: dict) -> dict:
@@ -885,11 +999,27 @@ def _checkout_view(checkout: dict) -> dict:
     return {"branch": checkout["branch"], **({"worktree": tilde(checkout["worktree"])} if checkout.get("worktree") else {})}
 
 
-def _mtime_ms(path: Path | None) -> int:
+def _mtime(path: Path | None) -> float | None:
+    """A file's mtime in ms; None when there is none (no path, or it cannot be read)."""
     try:
-        return int(path.stat().st_mtime * 1000) if path is not None else 0
+        return path.stat().st_mtime * 1000 if path is not None else None
     except OSError:
-        return 0
+        return None
+
+
+def impl_of(spec: dict, facts: dict) -> dict:
+    """JsonUIProject.impl from a spec and its facts (JsonUIProject.facts_of), asking the file system nothing."""
+    related = facts["related"]
+    layout = facts["layoutExists"]
+    ids = component_ids(spec)
+    components = None
+    if ids:
+        present = {n["id"] for n in facts["nodes"] if "id" in n} if facts["layout"] else set()
+        components = {"total": len(ids), "done": sum(1 for i in ids if i in present)}
+    total = len(related) + (layout is not None) + (components["total"] if components else 0)
+    done = sum(related) + bool(layout) + (components["done"] if components else 0)
+    return {"total": total, "done": done, "related": {"total": len(related), "done": sum(related)},
+            "layout": layout, "components": components}
 
 
 def _advanced(spec: int, layout: int, test: int) -> dict:

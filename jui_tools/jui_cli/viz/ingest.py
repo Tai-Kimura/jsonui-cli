@@ -17,7 +17,7 @@ from pathlib import Path
 
 from . import clockout, data_docs, gitbox, i18n, infra_docs, prices, robots
 from .rooms import Rooms, tilde
-from .sources.jsonui_project import TEXTS_SUFFIX, JsonUIProject, is_linked, test_dirs
+from .sources.jsonui_project import TEXTS_SUFFIX, JsonUIProject, is_linked, read_spec_file, test_dirs
 from .attachments import Attachments
 from .calls import CallBook, peer_name
 from .denials import DenialBook
@@ -316,6 +316,16 @@ class World:
         self._checkout_tops: dict[str, str | None] = {}   # a folder -> the checkout it is in (None: none)
         self._test_cwds: dict[str, str] = {}   # test command id -> the cwd of its session (never sent to the page)
         self._worktrees_at = -WORKTREES_EVERY_MS
+        # The live server reads the JsonUI rooms' files off the loop (ticket
+        # 2026-10-24-viz-serve-loop-stalls-in-spec-summaries-stat): one worker reads, the loop applies what it read
+        # (in the order asked, at the next publish or tick). Off (tests, a replay): read on the spot, as before.
+        self.off_loop = False
+        self._files_pool = None
+        self._files_jobs: list[tuple] = []          # (future, apply) in the order submitted
+        self._facts_due: set[str] = set()           # rooms whose facts are to be read again
+        self._facts_running: set[str] = set()
+        self._loading: set[str] = set()             # rooms being loaded (jsonui_project answers None meanwhile)
+        self._worktrees_running = False
 
     # ---------------------------------------------------------------- labels
 
@@ -489,18 +499,43 @@ class World:
         if not project or not project["jsonui"] or project_id in self.jsonui_errors:
             return None
         root = self.rooms.root_of(project_id)
+        if self.off_loop:
+            # read in the worker; the room shows (and its tools are followed) from the apply on
+            if project_id not in self._loading:
+                self._loading.add(project_id)
+
+                def load():
+                    loaded = JsonUIProject(Path(root), project_id)
+                    loaded.load_all(at)
+                    loaded.off_loop = True
+                    loaded.facts = loaded.spec_facts(loaded.fact_rows())
+                    return loaded, tuple(d for _k, d, _r in data_docs.doc_dirs(loaded))
+
+                def apply(job) -> None:
+                    self._loading.discard(project_id)
+                    try:
+                        loaded, dirs = job.result()
+                    except (OSError, ValueError) as exc:
+                        self.jsonui_errors[project_id] = f"{type(exc).__name__}: {exc}"[:200]
+                        return
+                    self._install(project_id, loaded, dirs)
+                self._files_submit(load, apply)
+            return None
         try:
             loaded = JsonUIProject(Path(root), project_id)
             loaded.load_all(at)
         except (OSError, ValueError) as exc:
             self.jsonui_errors[project_id] = f"{type(exc).__name__}: {exc}"[:200]
             return None
+        return self._install(project_id, loaded)
+
+    def _install(self, project_id: str, loaded: JsonUIProject, dirs: tuple | None = None) -> JsonUIProject:
         self.jsonui[project_id] = loaded
         self._forget_ties()
         for other in self.jsonui.values():  # a new room's test files can make another room's row ambiguous
             self._merge_results(other)
         self._dirty |= {"specs", "tasks"}
-        self._data_docs_dirs[project_id] = tuple(d for _k, d, _r in data_docs.doc_dirs(loaded))
+        self._data_docs_dirs[project_id] = dirs if dirs is not None else tuple(d for _k, d, _r in data_docs.doc_dirs(loaded))
         self._data_docs_due[project_id] = 0   # counted by the worker on the next tick
         if self.on_project_loaded is not None:
             self.on_project_loaded(loaded)
@@ -633,14 +668,79 @@ class World:
         cwds |= {top for touched in self._touched.values() for top in touched}
         if cwds == self._worktree_cwds and at - self._worktrees_at < WORKTREES_EVERY_MS:
             return
+        if self.off_loop:
+            if self._worktrees_running:
+                return   # looked at again on the tick after it is applied
+            self._worktree_cwds, self._worktrees_at = cwds, at
+            self._worktrees_running = True
+            asked = [(project, list(project.sources)) for project in self.jsonui.values()]
+
+            def plan():
+                return [(project, sources, project.worktree_plan(cwds, sources)) for project, sources in asked]
+
+            def apply(job) -> None:
+                self._worktrees_running = False
+                for project, sources, answer in job.result():
+                    if len(project.sources) != len(sources) or any(a is not b for a, b in zip(project.sources, sources)):
+                        # the apps changed since: asked again on the next tick
+                        self._worktree_cwds = frozenset()
+                        continue
+                    if project.apply_worktrees(answer, at):
+                        self._sources_changed(project)
+            self._files_submit(plan, apply)
+            return
         self._worktree_cwds, self._worktrees_at = cwds, at
         for project in self.jsonui.values():
             if project.set_worktrees(cwds, at):
-                self._forget_ties()
-                self._merge_due.add(project.project_id)
+                self._sources_changed(project)
+
+    def _sources_changed(self, project) -> None:
+        self._forget_ties()
+        self._merge_due.add(project.project_id)
+        self._dirty.add("specs")
+        if self.on_sources_changed is not None:
+            self.on_sources_changed(project)
+
+    # ---------------------------------------------------------------- the rooms' files, off the loop
+
+    def _files_submit(self, read, apply) -> None:
+        """``read()`` in the worker, then ``apply(future)`` on the loop (_files_apply), in the order submitted."""
+        if self._files_pool is None:
+            from concurrent.futures import ThreadPoolExecutor
+            self._files_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="jui-viz-files")
+        self._files_jobs.append((self._files_pool.submit(read), apply))
+
+    def _files_apply(self) -> None:
+        """Apply the worker's finished readings, oldest first; one still running holds back the ones after it."""
+        while self._files_jobs and self._files_jobs[0][0].done():
+            job, apply = self._files_jobs.pop(0)
+            try:
+                apply(job)
+            except Exception as exc:  # noqa: BLE001 — one reading that failed must not stop the tick
+                import sys
+                print(f"jui viz: reading a room's files failed: {type(exc).__name__}: {exc}"[:300], file=sys.stderr, flush=True)
+        waiting = set()
+        for pid in sorted(self._facts_due):
+            if pid in self._facts_running:
+                waiting.add(pid)   # being read now: read again once it is applied
+            elif pid in self.jsonui:
+                self._facts_submit(self.jsonui[pid])
+        self._facts_due = waiting
+
+    def _facts_submit(self, project) -> None:
+        """The room's facts read again in the worker (JsonUIProject.spec_facts); when they changed, the specs slice is
+        built again with them."""
+        pid = project.project_id
+        self._facts_running.add(pid)
+        rows = project.fact_rows()
+
+        def apply(job) -> None:
+            self._facts_running.discard(pid)
+            facts = job.result()
+            if self.jsonui.get(pid) is project and facts != project.facts:
+                project.facts = facts
                 self._dirty.add("specs")
-                if self.on_sources_changed is not None:
-                    self.on_sources_changed(project)
+        self._files_submit(lambda: project.spec_facts(rows), apply)
 
     def _worktree_twins(self, project, path: str) -> list:
         """The other loaded rooms that show the file through a worktree of theirs (the session's room is its own)."""
@@ -682,14 +782,46 @@ class World:
         if target.suffix == ".json" and any(target.is_relative_to(d) for d in self._data_docs_dirs.get(project_id, ())):
             self._data_docs_due[project_id] = at   # counted off the loop once quiet (_data_docs_tick); read when pressed
             return
+        if self.off_loop:
+            # read in the worker, applied in the order the changes came
+            if target.name.endswith(TEXTS_SUFFIX):
+                rows = project.fact_rows()
+                read = lambda: project.texts_reads(target, rows)  # noqa: E731
+            elif target.name.endswith(".spec.json"):
+                read = lambda: read_spec_file(target)  # noqa: E731
+            elif target.name.endswith(".test.json"):
+                sources = list(project.sources)
+                read = lambda: project.scan_tests(sources)  # noqa: E731
+            else:
+                read = lambda: None  # noqa: E731
+            self._files_submit(read, lambda job: self._file_read(project, target, path, at, by, job.result()))
+            return
         if target.name.endswith(TEXTS_SUFFIX):
             project.reload_texts(target, at)
         elif target.name.endswith(".spec.json"):
             project.reload_spec(target, at, by)
+        elif target.name.endswith(".test.json"):
+            project.load_tests()
+        self._file_changed(project, target, path, at, by)
+
+    def _file_read(self, project, target: Path, path: str, at: int, by: str | None, read) -> None:
+        """file_changed's reading applied (off the loop's worker)."""
+        if self.jsonui.get(project.project_id) is not project:
+            return
+        if target.name.endswith(TEXTS_SUFFIX):
+            for spec_path, source, one in read:
+                project.apply_spec_read(spec_path, at, None, one, source=source)
+        elif target.name.endswith(".spec.json"):
+            project.apply_spec_read(target, at, by, read)
+        elif target.name.endswith(".test.json"):
+            project.apply_tests(read)
+        self._file_changed(project, target, path, at, by)
+
+    def _file_changed(self, project, target: Path, path: str, at: int, by: str | None) -> None:
+        if target.name.endswith(".spec.json"):
             self._forget_ties()  # a spec's name and layoutFile decide which spec a test file reaches
             self._merge_due.add(project.project_id)
         elif target.name.endswith(".test.json"):
-            project.load_tests()
             self._forget_ties()  # which app has a test file decides where a saved row goes
             self._merge_due.update(self.jsonui)
         for sid in project.specs_touching(path):
@@ -1782,6 +1914,8 @@ class World:
 
     def tick(self, at: int) -> None:
         self._now = max(self._now, at)
+        if self.off_loop:
+            self._files_apply()
         self.flush_results()
         if self.perms.tick(at):
             self._dirty |= {"perms", "sessions"}
@@ -2133,7 +2267,7 @@ class World:
     def close_pools(self) -> None:
         """The server stopping: each pool's idle thread goes now, a job still running is not waited for (the server
         does not wait for it either; ticket 2026-10-21-jui-viz-serve-does-not-exit-on-term)."""
-        for pool in (self._prices_pool, self._data_docs_pool, self._infra_pool):
+        for pool in (self._prices_pool, self._data_docs_pool, self._infra_pool, self._files_pool):
             if pool is not None:
                 pool.shutdown(wait=False, cancel_futures=True)
 
@@ -2191,6 +2325,8 @@ class World:
 
     def publish(self) -> None:
         """Write the changed slices into the state store (sorted for stable output)."""
+        if self.off_loop:
+            self._files_apply()
         if "projects" in self._dirty:
             used = {s["projectId"] for s in self.sessions.values()}
             # copies: a row changed in place (apply_mock) must compare unequal to the one published before, or
@@ -2230,6 +2366,8 @@ class World:
             specs = []
             for project in self.jsonui.values():
                 specs.extend(project.summaries(self._now))
+                if self.off_loop:   # what the files say now, for the next build (a change found there builds it)
+                    self._facts_due.add(project.project_id)
             self.state.set_slice("specs", specs)
         if "tasks" in self._dirty:
             self.state.set_slice("tasks", self.tasks.items())
@@ -2245,3 +2383,5 @@ class World:
         if "machine" in self._dirty:
             self.state.set_slice("machine", dict(self.machine))
         self._dirty.clear()
+        if self.off_loop:
+            self._files_apply()   # submits the facts asked for above; applies what is done already
