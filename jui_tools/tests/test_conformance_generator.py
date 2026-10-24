@@ -19,6 +19,7 @@ import hashlib
 import pathlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -745,7 +746,16 @@ class ConformanceGeneratorRealDefinitionsTest(unittest.TestCase):
             env=env,
         )
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        self.assertIn("Errors: 0, Warnings: 0", proc.stdout)
+        # The one warning a fixture may carry: a step key's driver floor that
+        # cannot be checked here — the hosts vendor their drivers, so there is
+        # no installed one to read (`within`, one line per platform). Any
+        # other warning is a fixture's, and fails.
+        warns = [line for line in proc.stdout.splitlines() if line.startswith("[WARN]")]
+        floor = re.compile(r"^\[WARN\] 'within' requires the (android|ios|web) driver [0-9.]+ or newer; "
+                           r"the installed version could not be read")
+        self.assertEqual([w for w in warns if not floor.match(w)], [], proc.stdout)
+        self.assertEqual(sorted(floor.match(w).group(1) for w in warns), ["android", "ios", "web"], proc.stdout)
+        self.assertIn(f"Errors: 0, Warnings: {len(warns)}", proc.stdout)
 
 
 class ConformanceCommandTest(unittest.TestCase):
