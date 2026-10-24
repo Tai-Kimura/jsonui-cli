@@ -748,6 +748,21 @@ every required one; `--update-default` adds a required one the default lacks;
 a required one absent and a value its schema does not take — a
 `contractViolations` line subtracts it as it does a body's.
 
+### A scenario's `bodyFile`: a file as the body
+
+`"bodyFile": "files/export.default.csv"` (with `contentType`, and no `body`)
+sends that file as the response: its bytes from `mock serve`, read on each
+request, and its text from all three faces of the generated tests (embedded,
+so `--check` reports the tests stale when the file changes). The path is
+relative to the mock file that declares the scenario — a hand-written file's
+scenario reads beside the hand-written file. `validate` names a `bodyFile`
+that is not a file, an absolute path, and one beside a `body` (the `body` is
+what is sent). A file that is not UTF-8 text (a PDF) is served by
+`mock serve` and refused by `generate branch-tests` by name: the generated
+tests embed the body in source. A string `body` reaches the web tests as
+written, as it does `mock serve` and the mobile tests (before 2.3.23 the web
+runtime JSON-encoded it, and sent a `null` body as the text `null`).
+
 ### Web: `settle` and `settleQuiet`
 
 The web runtime (`tests/unit/generated/jsonui-branch-runtime.ts`) exports the

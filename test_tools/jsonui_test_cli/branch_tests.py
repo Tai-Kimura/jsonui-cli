@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from . import branch_runtime_prose as prose
+from .mock.body_file import declares_body_file, read_body_file_text
 from .mock.headers import served_headers
 from .swift_isolation import TEST_METHOD_ISOLATION, xctest_class_header
 
@@ -566,6 +567,9 @@ class MockFile:
     #: differed). An `apiOutcomeRules` side call names an operationId, and
     #: this is where it is found.
     operation_id: str | None = None
+    #: The file each scenario came from (an overlay replaces scenarios one
+    #: by one): a `bodyFile` is relative to it (mock/body_file.py).
+    scenario_files: dict = field(default_factory=dict)
 
 
 def index_mock_files(mocks_dir: Path) -> list[MockFile]:
@@ -613,6 +617,7 @@ def index_mock_files(mocks_dir: Path) -> list[MockFile]:
                 active_scenario=(active if explicit
                                  else next(iter(scenarios))),
                 scenarios=dict(scenarios),
+                scenario_files={name: f for name in scenarios},
                 operation_id=(operation_id
                               if _is_generated(f) and isinstance(operation_id, str)
                               else None))
@@ -622,10 +627,30 @@ def index_mock_files(mocks_dir: Path) -> list[MockFile]:
             # rewritten from the swagger); if it somehow does, first wins.
             continue
         entry.scenarios.update(scenarios)
+        entry.scenario_files.update({name: f for name in scenarios})
         if explicit:
             entry.active_scenario = active
         entry.file = f
     return list(merged.values())
+
+
+def served_scenarios(mock: MockFile) -> dict:
+    """The mock's scenarios as the runtimes serve them: a `bodyFile` scenario
+    carries the file's text as its `body` (mock/body_file.py), the way
+    `mock serve` sends the file. A file that cannot be embedded is refused
+    by name rather than served empty."""
+    out = {}
+    for name, scenario in mock.scenarios.items():
+        if not declares_body_file(scenario):
+            out[name] = scenario
+            continue
+        source = mock.scenario_files.get(name, mock.file)
+        text, problem = read_body_file_text(source, scenario)
+        if problem is not None:
+            raise BranchTestGenerationError(
+                f"scenario '{name}' of {mock.method} {mock.path} ({source}): {problem}")
+        out[name] = {**{k: v for k, v in scenario.items() if k != "bodyFile"}, "body": text}
+    return out
 
 
 def find_mock(mocks: list[MockFile], method: str, path: str) -> MockFile | None:
@@ -882,12 +907,11 @@ def _scenario_body(scenario: dict) -> str:
     records and took its error path, under EVERY scenario including the
     default. The UI tests, which go through the mock server, kept passing.
 
-    A file-backed response (`contentType` + `bodyFile`) has no inline body.
-    Serializing the absent value produced the literal `null`, which is a
-    body the server never sends — the server answers with an empty payload
-    and the declared content type, so this matches it. An explicit
-    `"body": null` takes the same path for the same reason (`server.py`
-    sends `b""` for either).
+    A file-backed response (`contentType` + `bodyFile`) reaches here with
+    the file's text as its `body` (`served_scenarios`), as the server sends
+    the file. An absent or explicit `"body": null` is an empty payload:
+    serializing it produced the literal `null`, a body the server never
+    sends (`server.py` sends `b""` for either).
     """
     body = scenario.get("body")
     if body is None:
@@ -1092,7 +1116,7 @@ def resolve_routes(
         route = Route(
             op=op, method=endpoint["method"], path=endpoint["path"],
             pattern=path_to_pattern(endpoint["path"]),
-            scenarios=mock.scenarios, default_scenario=mock.active_scenario,
+            scenarios=served_scenarios(mock), default_scenario=mock.active_scenario,
         )
         routes[op] = route
         return route
@@ -1138,7 +1162,7 @@ def resolve_routes(
             routes[op] = Route(
                 op=op, method=endpoint["method"], path=endpoint["path"],
                 pattern=path_to_pattern(endpoint["path"]),
-                scenarios=mock.scenarios, default_scenario=mock.active_scenario,
+                scenarios=served_scenarios(mock), default_scenario=mock.active_scenario,
             )
     # The order `mock serve` tries routes in (static paths first), so a call
     # both could match is recorded under the op whose mock answers it.
@@ -1810,7 +1834,7 @@ def side_routes(rules, mocks: list[MockFile], routes: list[Route],
                 continue
             added[operation_id] = Route(
                 op=operation_id, method=mock.method, path=mock.path,
-                pattern=path_to_pattern(mock.path), scenarios=mock.scenarios,
+                pattern=path_to_pattern(mock.path), scenarios=served_scenarios(mock),
                 default_scenario=mock.active_scenario, side=True)
     return list(added.values())
 
@@ -3013,9 +3037,10 @@ export function installFetchMock(
             );
           }
           // Same shape the project's own mock server serves: the declared
-          // content type, and an empty body when the scenario has none (a
-          // file-backed response names a file this runtime cannot embed —
-          // status and headers are still faithful).
+          // content type, a string body as it is written (an NDJSON or SSE
+          // stream, a CSV — a `bodyFile`'s text arrives here as one), any
+          // other body JSON-encoded, and an empty body when the scenario has
+          // none or an explicit null (mock/server.py `_send`).
           const contentType =
             typeof sc.contentType === "string" ? sc.contentType : "application/json";
           // `delayMs`: the whole response arrives that long after the request,
@@ -3035,7 +3060,9 @@ export function installFetchMock(
           // The scenario's own headers, as `mock serve` sends them (the
           // generator wrote only the ones it sends: mock/headers.py).
           return new Response(
-            sc.body === undefined ? null : JSON.stringify(sc.body),
+            sc.body === undefined || sc.body === null
+              ? null
+              : typeof sc.body === "string" ? sc.body : JSON.stringify(sc.body),
             { status: sc.status, headers: { ...(sc.headers ?? {}), "Content-Type": contentType } }
           );
         }

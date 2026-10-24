@@ -422,6 +422,13 @@ class MockValidator:
             # A header the server would not send is an error, not a warning:
             # the row that reads it would fail with nothing on the response to
             # say why (mock/headers.py says which ones and why).
+            # A bodyFile the server cannot read sends a 500 instead of the
+            # file; one beside an inline body is never sent (mock/body_file.py).
+            if "bodyFile" in scenario:
+                from ..mock.body_file import body_file_problems
+                for problem in body_file_problems(Path(path), scenario):
+                    result.errors.append(ValidationMessage(
+                        path=f"{spath}.bodyFile", message=problem))
             if "headers" in scenario:
                 from ..mock.headers import header_problems
                 for problem in header_problems(scenario["headers"]):

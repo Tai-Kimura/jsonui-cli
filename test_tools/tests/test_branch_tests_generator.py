@@ -416,7 +416,8 @@ class TestFileBackedScenarios:
         report = generate_branch_tests("checkout", self._project(tmp_path))
         runtime = report.runtime_file.read_text(encoding="utf-8")
         assert 'sc.contentType === "string" ? sc.contentType : "application/json"' in runtime
-        assert "sc.body === undefined ? null : JSON.stringify(sc.body)" in runtime
+        # A string body as written, a null one empty (test_mock_scenario_body_file runs it).
+        assert 'typeof sc.body === "string" ? sc.body : JSON.stringify(sc.body)' in runtime
 
     def test_kotlin_and_swift_carry_the_content_type(self, tmp_path):
         root = self._project(tmp_path)
