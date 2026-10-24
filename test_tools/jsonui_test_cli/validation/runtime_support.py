@@ -378,7 +378,8 @@ def collect_declared_keys(files: list[Path],
     one floor per key, pinned by test_schema_drift). Reading the top level
     alone let a file whose only initialState sits on a case pass an old
     driver in silence. A file is listed once per key however many of its
-    cases declare it.
+    cases declare it. A step key (STEP_LEVEL_KEYS) is read on the steps and
+    conditions only.
     """
     found: dict[str, list[Path]] = {}
     for path in files:
@@ -391,7 +392,7 @@ def collect_declared_keys(files: list[Path],
         cases = data.get("cases") if isinstance(data.get("cases"), list) else []
         objects = [data, *(case for case in cases if isinstance(case, dict))]
         declared = {key for obj in objects for key in keys & obj.keys()
-                    if _declares(key, obj[key])}
+                    if key not in STEP_LEVEL_KEYS and _declares(key, obj[key])}
         # A step key (`within`): on any step or condition, however nested
         # (cases, setup / teardown, a flow's steps, repeat / retry blocks).
         declared |= {key for obj in _step_objects(data) for key in keys & obj.keys()
