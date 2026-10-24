@@ -238,6 +238,16 @@ def dump(obj) -> str:
     return json.dumps(obj, ensure_ascii=False, indent=1, sort_keys=True)
 
 
+def expect_demo_file(language: str) -> Path:
+    """The demo's expected results in the run's language: expect_demo.json (Japanese, recorded from the prototype), or
+    expect_demo.<language>.json — the same results in that language's words, taken from a run of the port
+    (<out>/demo-results.json) and held to the Japanese one's shape, numbers and order by
+    tests/test_viz_demo_expect_languages.py (ticket 2026-10-21-viz-english-screen-checks §11: the demo's 140 checks
+    compared the page with the Japanese words)."""
+    here = Path(__file__).resolve().parent
+    return here / ("expect_demo.json" if language in ("", "ja") else f"expect_demo.{language}.json")
+
+
 # ---- the English screen (ticket 2026-10-21-viz-english-screen-checks) ---------------------------------------------
 # The page's words come from the language's table; a key it lacks or a slot left unfilled is a console warning (tl in
 # 05-i18n.js), which every suite already fails on. What a console cannot say is what the reader sees: a key drawn as

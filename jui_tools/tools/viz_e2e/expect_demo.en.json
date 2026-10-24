@@ -1,0 +1,390 @@
+{
+ "perm": {
+  "dark": {
+   "board": {
+    "permNotes": [
+     "Implement the ProductDetail layout",
+     "Generate the HTML for the Spec Anatomy page"
+    ],
+    "strip": [
+     "c9Session c91e…Waiting 0:11Bash jsonui-doc generate html --spec docs/screens/jso",
+     "f2jsonui-implementWaiting 0:01Bash jui buildb4 #2 Implement the ProductDetail la"
+    ]
+   },
+   "detail": {
+    "act": "Waiting for permission: Bash jui build",
+    "focus": "tbd-close",
+    "perm": true,
+    "title": "Implement the ProductDetail layout"
+   },
+   "robot": {
+    "act": "Write docs/screens/json/login.spec.json",
+    "name": "jsonui-define",
+    "recent": 2,
+    "spec": "The spec of Login (Login) Writing 39% · State",
+    "state": "Typing",
+    "tasks": [
+     "Workinga0 #2Write the Login screen spec"
+    ]
+   },
+   "side": {
+    "chip": "Waiting for permission 2",
+    "rows": [
+     "task t-in_progress has-perm | b4 #2Implement the ProductDetail layoutWaiting for permissionf2 jsonui-implementshop-app/B",
+     "task t-in_progress has-perm | c9 #1Generate the HTML for the Spec Anatomy pageWaiting for permissionc9 Session c91e…docs",
+     "task t-in_progress | 7c #1Add per-case progress output to jsonui-testWorking7c Session 7c3f…shop-tools/"
+    ],
+    "sum": "To do 5Waiting 8Doing 11Done 4Waiting for permission 2"
+   }
+  },
+  "light": {
+   "afterAlways": {
+    "chip": "Waiting for permission 1",
+    "focus": "tbd-close",
+    "hist": [
+     "14:20:27Allowed in the view, Bash(jui build:*) added · Bash jui build",
+     "14:20:27Allowed Bash jui build (always allow: Bash(jui build:*))"
+    ],
+    "rules": "Always-allow rules added in this demo: Bash(jui build:*) Undo",
+    "toast": "f2's Bash: allowed, and a rule added (demo; for real, the answer goes back to Claude Code)"
+   },
+   "afterDeny": {
+    "chipHidden": true,
+    "log": [
+     "14:20:27c9DeniedBash jsonui-doc generate html --spec docs/screens/json/spec-anatomy.spec.json",
+     "14:20:27f2AllowedBash jui build (always allow: Bash(jui build:*))"
+    ],
+    "stripCards": 0
+   },
+   "board": {
+    "permNotes": [
+     "Implement the ProductDetail layout",
+     "Generate the HTML for the Spec Anatomy page"
+    ],
+    "strip": [
+     "c9Session c91e…Waiting 0:11Bash jsonui-doc generate html --spec docs/screens/jso",
+     "f2jsonui-implementWaiting 0:01Bash jui buildb4 #2 Implement the ProductDetail la"
+    ]
+   },
+   "detail": {
+    "act": "Waiting for permission: Bash jui build",
+    "focus": "tbd-close",
+    "perm": true,
+    "title": "Implement the ProductDetail layout"
+   },
+   "detailClosed": {
+    "focus": "note-open",
+    "hidden": true
+   },
+   "fromRobot": {
+    "detail": "Implement the ProductDetail ViewModel",
+    "rbHidden": true
+   },
+   "robot": {
+    "act": "Write docs/screens/json/login.spec.json",
+    "name": "jsonui-define",
+    "recent": 2,
+    "spec": "The spec of Login (Login) Writing 39% · State",
+    "state": "Typing",
+    "tasks": [
+     "Workinga0 #2Write the Login screen spec"
+    ]
+   },
+   "robotB4": {
+    "name": "b4's main session",
+    "subs": [
+     "e6jsonui-defineWorkingWrite docs/screens/json/signup.spec.js",
+     "f2jsonui-implementWorkingBash jui build (allowed in the view"
+    ],
+    "tasks": 6
+   },
+   "side": {
+    "chip": "Waiting for permission 2",
+    "rows": [
+     "task t-in_progress has-perm | b4 #2Implement the ProductDetail layoutWaiting for permissionf2 jsonui-implementshop-app/B",
+     "task t-in_progress has-perm | c9 #1Generate the HTML for the Spec Anatomy pageWaiting for permissionc9 Session c91e…docs",
+     "task t-in_progress | 7c #1Add per-case progress output to jsonui-testWorking7c Session 7c3f…shop-tools/"
+    ],
+    "sum": "To do 5Waiting 8Doing 11Done 4Waiting for permission 2"
+   }
+  },
+  "phone": {
+   "perm": true,
+   "rbPos": "fixed",
+   "sw": 390
+  }
+ },
+ "phone": {
+  "pop-dark": {
+   "left": 8,
+   "right": 382,
+   "rows": [
+    {
+     "h": 42,
+     "over": false
+    },
+    {
+     "h": 42,
+     "over": false
+    },
+    {
+     "h": 19,
+     "over": false
+    },
+    {
+     "h": 42,
+     "over": false
+    }
+   ],
+   "sw": 390
+  },
+  "pop-light": {
+   "left": 8,
+   "right": 382,
+   "rows": [
+    {
+     "h": 42,
+     "over": false
+    },
+    {
+     "h": 42,
+     "over": false
+    },
+    {
+     "h": 19,
+     "over": false
+    },
+    {
+     "h": 42,
+     "over": false
+    }
+   ],
+   "sw": 390
+  },
+  "tasks-dark": {
+   "kanbanScroll": true,
+   "notesOut": false,
+   "overlap": false,
+   "sw": 390
+  },
+  "tasks-light": {
+   "kanbanScroll": true,
+   "notesOut": false,
+   "overlap": false,
+   "sw": 390
+  }
+ },
+ "scope": {
+  "afterUncheck": {
+   "count": "Showing 1 / 2",
+   "notes": 4,
+   "sess": "Sessionc9"
+  },
+  "all": {
+   "chips": [
+    "7 sessions",
+    "Waiting for permission 2"
+   ],
+   "groups": [
+    "shop-app/3 sessions · 2 working",
+    "shop-tools/2 sessions · 1 waiting for permission",
+    "docs-site/2 sessions · 1 waiting for permission · 1 working"
+   ],
+   "scope": "ProjectAll",
+   "sessFilter": "All7Active5Waiting for permission2Waiting for an answer0Working in the background0Idle2",
+   "specGroups": [
+    "shop-app/5",
+    "docs-site/1"
+   ]
+  },
+  "cli": {
+   "scope": "Projectshop-tools/",
+   "specs": "shop-tools/ has no screen specs",
+   "tagOn": "shop-tools/"
+  },
+  "doc": {
+   "chips": "Sessions 2 / 7",
+   "focus": "scope-top",
+   "groups": [
+    "docs-site/2 sessions · 1 waiting for permission · 1 working"
+   ],
+   "popHidden": true,
+   "scope": "Projectdocs-site/",
+   "specs": [
+    "Attribute ReferenceWriting 19%e1"
+   ],
+   "tasks": [
+    "c9 #1Generate the HTML for the Spec Anatomy pageWaiting for ",
+    "c9 Prompt 1Generate the Spec Anatomy pageWorkingc9 Session c",
+    "e1 #1Write the Attribute Reference specWorkinge1 Session e1d",
+    "e1 #2Implement the Attribute ReferenceWaiting for #1Unassign",
+    "c9 #2Add the new attributes to the component listNot started",
+    "c9 #3Fix the wording on the search pageDonec9 Session c91e…"
+   ],
+   "tests": "No tests running in docs-site/",
+   "ticker": [
+    "14:20:20e1Writedocs/screens/json/attribu",
+    "14:20:16c9PermissionRequestBash jsonui-d",
+    "14:20:00c9Readdocs/screens/json/spec-ana"
+   ]
+  },
+  "docSpecs": {
+   "cards": 6,
+   "side": 7,
+   "title": "Spec board · docs-site/"
+  },
+  "docTasks": {
+   "notes": 6,
+   "sess": "SessionAll (2)",
+   "strip": "Asking for permission1You can answer in the terminal too; the first answer is usedc9Session c91e…Bash jsonui-doc generate html --spec docs/screens/json/spec-anatomy.spec.jsonWaiting 0:15c9Session c91e",
+   "title": "Task board · docs-site/"
+  },
+  "folded": {
+   "expanded": "false",
+   "shopSessions": 0
+  },
+  "lanes": {
+   "lanes": [
+    "7cshop-tools/Waiting for permission2 tasks",
+    "c9docs-site/Waiting for permission4 tasks",
+    "a0shop-app/Working9 tasks",
+    "b4shop-app/Working6 tasks",
+    "4fshop-tools/Idle4 tasks",
+    "d8shop-app/Idle1 task"
+   ],
+   "sess": "Session6 / 7",
+   "stripCards": 2
+  },
+  "log": {
+   "count": "11 of 21",
+   "rowsWithA0": 0,
+   "who": "Robot8 / 13"
+  },
+  "phone": {
+   "left": 8,
+   "right": 382,
+   "sw": 390
+  },
+  "pop": [
+   "All projects3 projects · 7 sessionsWaiting for permission 26 robots workingSpecs in progress 6",
+   "shop-app/~/work/shop-app · 3 sessions5 robots workingSpecs in progress 5",
+   "shop-tools/~/work/shop-tools · 2 sessionsWaiting for permission 1",
+   "docs-site/~/work/docs-site · 2 sessionsWaiting for permission 11 robot workingSpecs in progress 1"
+  ],
+  "popClosed": {
+   "focus": "tb-sess",
+   "hidden": true,
+   "tbOpen": true
+  },
+  "sessPop": [
+   "c9Session c91e…4 tasksWaiting for permission",
+   "e1Session e1d4…2 tasksWorking"
+  ],
+  "waitingOnly": [
+   "7cSession 7c3f…Waiting for permission",
+   "c9Session c91e…Waiting for permission"
+  ]
+ },
+ "shots": {
+  "click_board": {
+   "tb": false,
+   "title": "Spec board",
+   "wb": true
+  },
+  "click_tasks": {
+   "tb": true,
+   "title": "Spec board",
+   "wb": false
+  },
+  "click_tile-login": {
+   "tb": false,
+   "title": "Login (Login)",
+   "wb": true
+  },
+  "home": {
+   "nav": [
+    "-:OverviewWritten",
+    "c-impl:StructureImplemented 8/12",
+    "-:StateImplemented 0/5",
+    "-:DataImplemented 0/6",
+    "-:ActionsImplemented 0/4",
+    "-:TransitionsImplemented 0/2",
+    "-:BranchesTests 0/3"
+   ]
+  },
+  "login": {
+   "act": "wb-sec-2",
+   "empty": 5,
+   "focus": "wb-code",
+   "title": "Login (Login)",
+   "writing": 1
+  },
+  "overview": {
+   "cards": 30,
+   "groups": [
+    "Working6",
+    "Partly done8",
+    "Not started6",
+    "Done10"
+   ]
+  },
+  "panel": {
+   "filters": [
+    "Working6",
+    "Partly done8",
+    "Not started6",
+    "Done10",
+    "All30"
+   ],
+   "rows": [
+    "LoginWriting 39%a3",
+    "Sign UpWriting 31%e6",
+    "HomeImplementing 28%a5",
+    "Product DetailsImplementing 36%f2",
+    "CartTesting 1/8a2",
+    "Attribute ReferenceWriting 12%e1"
+   ],
+   "taskSum": "To do 5Waiting 8Doing 11Done 4Waiting for permission 2"
+  },
+  "phone": {
+   "sw": 390
+  },
+  "phoneDrawer": {
+   "open": true,
+   "pos": "absolute"
+  },
+  "phoneDrawerClosed": true,
+  "phoneTasks": {
+   "cols": "346px",
+   "sw": 390
+  },
+  "wideBtn": "Open panel"
+ },
+ "waiting": {
+  "chips": [
+   "All7",
+   "Active5",
+   "Waiting for permission2",
+   "Waiting for an answer0",
+   "Working in the background0",
+   "Idle2"
+  ],
+  "groupNotes": [
+   "No sessions match"
+  ],
+  "idleRows": [
+   "d8Session d8a5…Idle",
+   "4fSession 4f2b…Idle"
+  ],
+  "pop": [
+   "All projects3 projects · 7 sessionsWaiting for permission 27 robots workingSpecs in progress 6",
+   "shop-app/~/work/shop-app · 3 sessions6 robots workingSpecs in progress 5",
+   "shop-tools/~/work/shop-tools · 2 sessionsWaiting for permission 1",
+   "docs-site/~/work/docs-site · 2 sessionsWaiting for permission 11 robot workingSpecs in progress 1"
+  ],
+  "waitingRows": [
+   "7cSession 7c3f…Waiting for permission",
+   "c9Session c91e…Waiting for permission"
+  ]
+ }
+}
