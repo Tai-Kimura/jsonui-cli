@@ -562,6 +562,20 @@ jobs:
             --uitests SwiftJsonUI/ConformanceHost/UITests --manifest conformance/manifest.json \
             --out merged shards/ios-shard-*
           python3 .github/scripts/ios_shards.py meta shards/ios-shard-* | tee -a "$GITHUB_OUTPUT"
+      # A fixture that passed only on a second tap names it (SwiftJsonUI results[].retap; ticket
+      # 2026-10-24-ios-conformance-tap-not-delivered-recurred, the requester's choice B). Every retap is printed here,
+      # and the run's list is kept 90 days: the report's next run reads it to fail the same fixture twice in a row.
+      - name: Name the retaps (fixtures that passed on a second tap)
+        run: >-
+          python3 .github/scripts/ios_retaps.py write merged/results/ios.results.json merged/retaps.json
+          --run-id "${{ github.run_id }}" --attempt "${{ github.run_attempt }}" --sha "${{ github.sha }}"
+      - name: Upload the retaps record
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-retaps-a${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90
+          path: merged/retaps.json
       - name: Every probe whose switch was raised ran
         if: ${{ !cancelled() && (inputs.ios_probes || github.event_name == 'schedule') }}
         run: python3 .github/scripts/ios_probe_gates.py check merged/xctests.txt SwiftJsonUI/ConformanceHost/UITests
@@ -1070,6 +1084,10 @@ jobs:
     # nothing". The verdict step below keeps the run RED whenever a face is
     # missing — an incomplete report is "not judged", never "passed".
     if: ${{ always() && !inputs.tap_repro && !inputs.android_library_only }}
+    permissions:
+      contents: read
+      # ios_retaps.py reads the run before's ios-retaps record (GET /actions/runs, /artifacts)
+      actions: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -1181,6 +1199,23 @@ jobs:
           [ "${{ needs.web.result }}" = success ] && args+=(--rendered-by "rjui.src=${{ needs.web.outputs.library_sha }}" --rendered-by "chromium=${{ needs.web.outputs.chromium }}")
           printf 'gate args:'; printf ' %s' "${args[@]}"; printf '\n'
           python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(sys.argv[1:]))" "${args[@]}"
+      - name: Download the retaps record
+        if: ${{ always() && contains(steps.faces.outputs.judged, 'ios') }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-retaps-a${{ github.run_attempt }}
+          path: retaps
+      - name: Retaps — more than two in the run, or the same fixture on the run before
+        # A retap is a pass that names itself, not a fix (ticket 2026-10-24-ios-conformance-tap-not-delivered-
+        # recurred): red when this run retapped more than two fixtures, or a fixture the run before (this run's
+        # attempt before, else the last earlier run that left a record) retapped too. A run before that cannot be
+        # read is said and not counted. A second tap that did not pass either is the fixture's own error above.
+        if: ${{ always() && contains(steps.faces.outputs.judged, 'ios') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python3 .github/scripts/ios_retaps.py judge retaps/retaps.json --repo "${{ github.repository }}"
+          --run-id "${{ github.run_id }}" --attempt "${{ github.run_attempt }}" --workflow conformance-mobile.yml
       - name: Verdict — an incomplete run is NOT a pass
         # 🔴 THE STEP THAT STOPS "4/5 GREEN" FROM EXISTING. The gate above now
         # judges whatever was measured, which is the point — but a run missing
