@@ -35,8 +35,8 @@ def test_a_group_with_group_ok_is_said_and_runs():
 
 
 def test_one_suites_name_runs_as_before_saying_nothing():
-    """Every --only choice but the two groups names one suite: nothing said, nothing stopped."""
-    singles = [c for c in _choices() if c not in ("live", "demo")]
+    """Every --only choice but the three groups names one suite: nothing said, nothing stopped."""
+    singles = [c for c in _choices() if c not in ("live", "demo", "en-reps")]
     assert len(singles) > 40 and G.check(singles, group_ok=False) == ([], False)
     assert all(G.suites_of(c) == [c] for c in singles), [c for c in singles if G.suites_of(c) != [c]]
     assert G.check(None, group_ok=False) == ([], False)   # no --only: the whole run before a distribution
@@ -45,3 +45,24 @@ def test_one_suites_name_runs_as_before_saying_nothing():
 def test_run_py_checks_the_group_before_it_takes_a_ticket():
     assert RUN.index("only_groups.check(a.only, a.group_ok)") < RUN.index("e2e_lock.hold(") < RUN.index("asyncio.run(go())")
     assert '"--group-ok"' in RUN and re.search(r"if stop:\n\s+return 2", RUN)
+
+
+EN_REPS = ["demo", "live", "ask", "notify", "history", "usage", "server-room", "data-server", "cost-bill", "talk-ui",
+           "lang-checks", "denied", "devices"]
+
+
+def test_en_reps_is_the_english_representatives_and_nothing_else():
+    """The gate's English step (ticket 2026-10-21-viz-english-screen-checks §5: one suite per family of the page, run
+    in English; lang-checks reads the page in the run's language): --only en-reps runs those blocks, each once, and
+    is a group (said, and stopped without --group-ok)."""
+    assert G.suites_of("en-reps") == EN_REPS
+    lines, stop = G.check(["en-reps"], group_ok=False)
+    assert stop and lines[0] == f"--only en-reps = {len(EN_REPS)} suites: {', '.join(EN_REPS)}"
+    assert "en-reps" in _choices()
+
+
+def test_lang_says_the_runs_language_before_the_japanese_default():
+    """--lang en sets JUI_VIZ_LANGUAGE outright; without it the run keeps the Japanese its checks were written on."""
+    assert '"--lang"' in RUN
+    assert RUN.index('os.environ["JUI_VIZ_LANGUAGE"] = a.lang') < RUN.index('os.environ.setdefault("JUI_VIZ_LANGUAGE", "ja")')
+    assert 'print(f"language: {os.environ[\'JUI_VIZ_LANGUAGE\']}"' in RUN
