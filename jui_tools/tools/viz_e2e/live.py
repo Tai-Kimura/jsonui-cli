@@ -510,8 +510,15 @@ async def scenario_building(browser, srv, out, failures, res):
     # the sky follows the local hour: dawn, day, dusk, night
     skies = {}
     for hour in (6, 12, 17.5, 23):
+        was = await page.evaluate("() => window.__dbg.sky()")
         await page.evaluate("(h) => { const d = new Date(); d.setHours(Math.floor(h), (h % 1) * 60, 0, 0); window.__dbg.setClock(d.getTime()); }", hour)
-        await page.wait_for_timeout(250)
+        # the sky is drawn on the page's next frame (skySync): waited for to change, not 250 ms (a busy machine read the
+        # hour before's); one that stays (6 when the machine's own hour is dawn) is read after the wait and judged below
+        try:
+            await page.wait_for_function("(was) => { const s = window.__dbg.sky(); return s.phase !== was.phase || s.background !== was.background; }",
+                                         arg=was, timeout=5000, polling="raf")
+        except Exception:   # noqa: BLE001 - the arm below says what was read
+            pass
         skies[hour] = await page.evaluate("() => window.__dbg.sky()")
     res["skies"] = skies
     check(failures, [skies[h]["phase"] for h in (6, 12, 17.5, 23)] == ["dawn", "day", "dusk", "night"] and len({v["background"] for v in skies.values()}) == 4,
