@@ -312,3 +312,39 @@ def test_a_spec_deleted_leaves_the_slice(tmp_path, off_loop):
 def test_serve_reads_off_the_loop_and_a_replay_on_the_spot():
     source = Path(jsonui_project.__file__).parents[2].joinpath("commands", "viz_cmd.py").read_text(encoding="utf-8")
     assert "world.off_loop = not replay" in source
+
+
+def test_a_build_asked_while_the_facts_are_read_reads_them_again(tmp_path):
+    """The facts being read when another build asks for them: once that reading is applied it is read again by itself
+    (here a relatedFile made by another program during the first reading, which the first reading did not see)."""
+    root = _room(tmp_path, n=1, related=1)
+    world, state, pid = _world(root, off_loop=True)
+    project = world.jsonui[pid]
+    s0 = lambda: next(s for s in _specs(state, pid) if s["name"] == "s0")  # noqa: E731
+    assert s0()["impl"]["related"]["done"] == 0
+    real, started, gate = project.spec_facts, threading.Event(), threading.Event()
+
+    def held(rows, memo=None):
+        out = real(rows, memo)
+        if not started.is_set():
+            started.set()
+            gate.wait(30)
+        return out
+    project.spec_facts = held
+    world._dirty.add("specs")
+    world.publish()                      # asks for the facts: the worker reads them, then waits
+    assert started.wait(30)
+    (root / "src").mkdir()
+    (root / "src" / "s0_0.swift").write_text("x", encoding="utf-8")
+    world._dirty.add("specs")
+    world.publish()                      # another build asks while the first reading runs
+    gate.set()
+    _settle(world, 200)
+    assert s0()["impl"]["related"]["done"] == 1
+
+
+def test_the_worker_is_one_thread_so_the_readings_end_in_the_order_asked(tmp_path):
+    """_files_apply applies the oldest reading first and holds back the ones after it; one worker is what makes a
+    reading never wait behind a later one (a second worker would need the order kept another way)."""
+    world, _state, _pid = _world(_room(tmp_path), off_loop=True)
+    assert world._files_pool is not None and world._files_pool._max_workers == 1
