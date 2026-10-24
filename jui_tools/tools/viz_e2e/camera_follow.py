@@ -22,7 +22,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, ISOLATE, LAUNCH_ARGS, Watch, dump, new_page, ready
+from common import DESKTOP, ISOLATE, LAUNCH_ARGS, T, T_pattern, Watch, dump, new_page, ready
 
 SIDS = {"a1": "e2e00000-0000-4000-8000-0000000000f1", "a2": "e2e00000-0000-4000-8000-0000000000f2",
         "a3": "e2e00000-0000-4000-8000-0000000000f4", "b1": "e2e00000-0000-4000-8000-0000000000f3"}
@@ -122,7 +122,7 @@ async def run_camera_follow(pw, out, failures):
         await wait(page, "(p) => window.__dbg.project() === p", arg=B, label="the view follows a1 to B")
         await wait(page, ON_ROBOT, label="the camera on a1 in B")
         fol, cam = await step("one room A, a1's card open, a1 moves to B: B, a1, the camera on it", "a1", B)
-        check(fol["toast"] == f"{who['a1']} を追って {name[1]} へ移りました", f"the toast says it followed: {fol['toast']!r}")
+        check(fol["toast"] == T("panel.rb.follow.moved.toast", id=who['a1'], room=name[1]), f"the toast says it followed: {fol['toast']!r}")
         check(not fol["moved"] and not await page.locator("#rb [data-rb-moved]").count(), f"no mark when it followed: {fol}")
         await page.screenshot(path=str(out / "followed-to-b.png"))
 
@@ -138,8 +138,8 @@ async def run_camera_follow(pw, out, failures):
                                 "sinceHand": await page.evaluate("() => Date.now() - window.__dbg.follow().handAt")}
         fol, cam = await step("A picked by hand just before, a2 moves to B: A still, a2's card marked", "a2", A)
         mark = (await page.locator("#rb [data-rb-moved]").inner_text()).strip()
-        check(mark.startswith(f"{name[1]} へ移った"), f"the mark names where it went: {mark!r}")
-        check(not fol["toast"].endswith("へ移りました"), f"no follow toast: {fol['toast']!r}")
+        check(mark.startswith(T("panel.rb.follow.moved", room=name[1])), f"the mark names where it went: {mark!r}")
+        check(not T_pattern("panel.rb.follow.moved.toast").search(fol["toast"] or ""), f"no follow toast: {fol['toast']!r}")
         await page.click("#rb [data-rb-moved-go]")
         await wait(page, "(p) => window.__dbg.project() === p", arg=B, label="the mark's button goes to B")
         await wait(page, ON_ROBOT, label="the camera on a2 in B")

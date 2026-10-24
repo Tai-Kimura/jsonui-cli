@@ -18,7 +18,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, LAUNCH_ARGS, Watch, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, T, Watch, new_page, ready
 
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
 SID = "e2e00000-0000-4000-8000-000000000501"
@@ -134,12 +134,12 @@ async def run_dataflow_mermaid(pw, out, failures, jt=None, shots_only=False):
         pwned = await page.evaluate("() => window.__pwned === undefined ? null : window.__pwned")
         check(failures, pwned is None, f"nothing ran: {pwned}")
         # at the sheet's text size (0.75 of its own): this flow is still wider than the section, so a scroll bar; 幅に合わせる fits it, and back
-        check(failures, st["scroll"][0] > st["scroll"][1] and st["zoom"] == "幅に合わせる",
+        check(failures, st["scroll"][0] > st["scroll"][1] and st["zoom"] == T("panel.flow.fit"),
               f"its own size, a scroll bar: svg {st['svgW']} scroll {st['scroll']} button {st['zoom']}")
         await page.click("#wb-sec-3 [data-flow-zoom]")
         await page.wait_for_timeout(400)
         z = res["fitted"] = await page.evaluate(STATE_JS)
-        check(failures, z["svgW"] < st["svgW"] * 0.8 and z["scroll"][0] <= z["scroll"][1] + 1 and z["zoom"] == "実際の大きさ",
+        check(failures, z["svgW"] < st["svgW"] * 0.8 and z["scroll"][0] <= z["scroll"][1] + 1 and z["zoom"] == T("panel.flow.actual"),
               f"幅に合わせる: within the section, no scroll bar: {st['svgW']} -> {z['svgW']} scroll {z['scroll']} button {z['zoom']}")
         await page.click("#wb-sec-3 [data-flow-zoom]")
         await page.wait_for_timeout(300)

@@ -17,7 +17,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, LAUNCH_ARGS, Watch, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, T, Watch, new_page, ready
 from waits import settled
 
 CWD = "/work/tags-app"
@@ -159,7 +159,7 @@ async def run_name_tags(pw, out, failures, jt=None, shots_only=False):
         await settled(page, "at play")
         rects = await read("play")
         check(failures, not res["play"]["cross"], f"at play: {res['play']['cross']}")
-        playing = [x for x in rects if any(w in x["text"] for w in ("キャッチボール中", "ハイタッチ中", "じゃんけん中"))]
+        playing = [x for x in rects if any(T(f"scene.play.{k}") in x["text"] for k in ("ball", "highfive", "rps"))]
         check(failures, len(playing) == 2, f"at play: both players' tags say the game (and still cross none): {[x['text'][:30] for x in rects]}")
         await page.screenshot(path=str(out / "after-play-light.png"))
         # two in the smoking booth (2.3.3): their タバコ休憩 tags cross none either
@@ -173,7 +173,7 @@ async def run_name_tags(pw, out, failures, jt=None, shots_only=False):
         await wait(page, "() => window.__dbg.brk().robots.filter((x) => x.kind === 'smoke' && x.at).length >= 2", timeout=40000, label="two in the booth")
         await settled(page, "two in the booth")
         rects = await read("booth")
-        smokers = [x for x in rects if "タバコ休憩" in x["text"]]
+        smokers = [x for x in rects if T("scene.brk.smoke") in x["text"]]
         check(failures, len(smokers) == 2 and not res["booth"]["cross"], f"two in the booth: タバコ休憩 on both, no crossing: {res['booth']['cross']} {[x['text'][:30] for x in rects]}")
         await page.screenshot(path=str(out / "after-booth-light.png"))
         await page.evaluate("() => window.__dbg.brk({ p: { smoke: 0, vend: 0 }, endAll: true })")

@@ -19,7 +19,7 @@ import sys
 import time
 
 from waits import WaitTimeout, settled, until
-from common import DESKTOP, LAUNCH_ARGS, Watch, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, T, T_head, Watch, new_page, ready
 
 CWD = "/work/name-app"
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
@@ -156,7 +156,7 @@ async def run_name_tag_role(pw, out, failures, jt=None, shots_only=False):
             check(failures, row and title in row["text"] and row["pill"] and row["text"].startswith(lab[i]) and not row["cut"],
                   f"{i}: the session row shows the mark and the whole name, not cut: {row}")
         row = await page.evaluate(PANEL_JS, lab[3])
-        check(failures, row and row["text"].startswith(lab[3]) and "セッション" in row["text"], f"no name: the row as before: {row}")
+        check(failures, row and row["text"].startswith(lab[3]) and T_head("live.session.head", "id").strip() in row["text"], f"no name: the row as before: {row}")
         check(failures, (await page.evaluate(PANEL_JS, lab[2]))["b"] == 0, "the session row's name is text, not HTML")
         await page.click(f"#sessions [data-robot-open='{lab[1]}']")
         await wait(page, "() => !document.getElementById('rb').hidden && document.getElementById('rb-title')", label="the robot's card")

@@ -18,7 +18,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, T, Watch, dump, new_page, ready
 from waits import settled, until
 from rooms import SEG_JS
 
@@ -310,7 +310,7 @@ async def run_play(pw, out, failures):
         look = res["soloLook"]
         check(failures, look.get("nap") and look["nap"]["w"] >= 1.0 and look.get("bento") and look["bento"]["w"] >= 0.55,
               f"the zzz and the bento are big enough to see: {look}")
-        check(failures, res.get("soloTags") == {"nap": "zzz 居眠り", "bento": "弁当"}, f"the name tag says it too: {res.get('soloTags')}")
+        check(failures, res.get("soloTags") == {"nap": T("scene.solo.nap"), "bento": T("scene.solo.bento")}, f"the name tag says it too: {res.get('soloTags')}")
         await page.evaluate("() => window.__dbg.play({ solo: { p: 0, kinds: ['nap', 'bento'] } })")
         # the one change the server makes without moving updatedAt: a busy session quiet for THINKING_AFTER_MS (30 s)
         # turns 考え中. Every robot in the other room gets an instruction (busy, still idle), a pair plays, and the

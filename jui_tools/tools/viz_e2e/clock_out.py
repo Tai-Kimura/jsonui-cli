@@ -23,7 +23,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, ISOLATE, LAUNCH_ARGS, PHONE, Watch, dump, new_page, ready
+from common import DESKTOP, ISOLATE, LAUNCH_ARGS, PHONE, T, T_head, T_pattern, Watch, dump, new_page, ready
 
 S_TERM = "e2e00000-0000-4000-8000-0000000000e1"
 S_VSC = "e2e00000-0000-4000-8000-0000000000e2"
@@ -150,7 +150,7 @@ async def run_clock_out(pw, out, failures):
         await wait(page, "() => document.querySelectorAll('#sessions [data-robot-open]').length >= 3", label="three sessions")
 
         # VS Code and the desktop app: the button is there, disabled, with the reason
-        for sid, words, name in ((S_VSC, "VS Code ではタブがエラーで残る", "vscode"), (S_DESK, "デスクトップアプリでは画面が変わらない", "desktop")):
+        for sid, words, name in ((S_VSC, T("panel.clk.why.vscode"), "vscode"), (S_DESK, T("panel.clk.why.desktop"), "desktop")):
             await open_robot(page, labels[sid])
             await page.wait_for_timeout(600)
             r = res[name] = await page.evaluate(CARD)
@@ -163,18 +163,18 @@ async def run_clock_out(pw, out, failures):
         await wait(page, "(l) => (document.querySelector('#rb .rb-badge') || {}).textContent === l", arg=sub_label, label="the subagent's card")
         await page.wait_for_timeout(400)
         r = res["sub"] = await page.evaluate(CARD)
-        check(r and r["disabled"] and "サブエージェント" in r["why"], f"a subagent: disabled with the reason: {r}")
+        check(r and r["disabled"] and T_pattern("panel.clk.why.sub").search(r["why"]), f"a subagent: disabled with the reason: {r}")
         await page.screenshot(path=str(out / "sub-disabled.png"))
 
         # the terminal session: enabled; the dialog; やめる and Escape send nothing
         await open_robot(page, labels[S_TERM])
         await page.wait_for_timeout(600)
         r = res["terminal"] = await page.evaluate(CARD)
-        check(r and not r["disabled"] and r["why"] == "" and r["above"] and r["nearX"] and r["text"] == "退勤…", f"terminal: enabled, above 「← 3D に戻る」: {r}")
+        check(r and not r["disabled"] and r["why"] == "" and r["above"] and r["nearX"] and r["text"] == T("panel.clk.button"), f"terminal: enabled, above 「← 3D に戻る」: {r}")
         await page.screenshot(path=str(out / "terminal-card-light.png"))
         await page.click("#rb [data-rb-clock]")
         r = res["dialog"] = await page.evaluate(DIALOG)
-        check(r and r["focus"] and labels[S_TERM] in r["robot"] and r["session"] == TITLES[S_TERM] and "clock-term" in r["cwd"] and r["client"] == "ターミナル"
+        check(r and r["focus"] and labels[S_TERM] in r["robot"] and r["session"] == TITLES[S_TERM] and "clock-term" in r["cwd"] and r["client"] == T("panel.client.terminal")
               and r["role"] == "alertdialog", f"the dialog names the robot, the session, the folder and the client, with やめる focused: {r}")
         await page.screenshot(path=str(out / "dialog-light.png"))
         await page.keyboard.press("Enter")   # the focused button is やめる
@@ -232,8 +232,9 @@ async def run_clock_out(pw, out, failures):
         _, snap = local("GET", "/api/snapshot")
         s = next(x for x in snap["slices"]["sessions"] if x["id"] == S_TERM)
         check(s["status"] == "ended" and s.get("clockedOut"), f"the session is ended: {s.get('status')}")
-        res["log"] = await page.evaluate("() => [...document.querySelectorAll('body *')].map((n) => n.childElementCount ? '' : n.textContent).find((t) => t.includes('退勤の合図')) || ''")
-        check(f"退勤の合図 → {lbl}" in res["log"] and "終わった" in res["log"], f"the event log has the line: {res['log']!r}")
+        head = T_head("ev.clockout", "label", pid="", how="", why="")   # "Clock-out signal → " / "退勤の合図 → "
+        res["log"] = await page.evaluate("(head) => [...document.querySelectorAll('body *')].map((n) => n.childElementCount ? '' : n.textContent).find((t) => t.includes(head)) || ''", head)
+        check(f"{head}{lbl}" in res["log"] and T("ev.clockout.ended") in res["log"], f"the event log has the line: {res['log']!r}")
         ledger = {e["session_id"]: e.get("ended_reason") for e in json.loads((sr / "active.json").read_text())}
         res["ledger"] = ledger
         check(ledger == {S_TERM: "clocked-out", S_VSC: None, S_DESK: None}, f"the ledger: {ledger}")

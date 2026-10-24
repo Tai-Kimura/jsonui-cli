@@ -24,7 +24,7 @@ import pathlib
 import time
 
 import scenarios as S
-from common import DESKTOP, LAUNCH_ARGS, PHONE, Watch, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, PHONE, T, Watch, new_page, ready
 from live import step
 
 EVENTS = [["onDateChange", "日付の変更（SelectBox の onValueChange。引数 fieldId: String, value: String）。VM の onDateChange(value:) に value を渡す。"
@@ -47,10 +47,10 @@ def scenario():
             S.slices(0, projects=P, sessions=sess, agents=A, specs=specs, server=S.server_slice()), {"mark": "end"}]
 
 
-TABLE_JS = """(sel) => { const t = document.querySelector(sel); if (!t) return null;
+TABLE_JS = """([sel, state]) => { const t = document.querySelector(sel); if (!t) return null;
   const R = (el) => { const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; };
   const lines = (el) => { const rg = document.createRange(); rg.selectNodeContents(el); return new Set([...rg.getClientRects()].filter((x) => x.width > 0).map((x) => Math.round(x.top))).size; };
-  return { cls: t.className, heads: [...t.querySelectorAll('thead th')].map((th) => th.textContent).filter((x) => x !== '状態'),
+  return { cls: t.className, heads: [...t.querySelectorAll('thead th')].map((th) => th.textContent).filter((x) => x !== state),
     rows: [...t.querySelectorAll('tbody tr')].map((tr) => { const tds = [...tr.children].filter((td) => !td.classList.contains('mk'));
       return { cells: tds.map((td) => td.textContent), cls: tds.map((td) => td.className), rects: tds.map(R), nameLines: tds[0] ? lines(tds[0]) : 0 }; }) }; }"""
 SHEET_JS = "() => { const s = document.getElementById('wb-code'); return { sw: s.scrollWidth, cw: s.clientWidth, docSW: document.documentElement.scrollWidth, docCW: document.documentElement.clientWidth }; }"
@@ -65,7 +65,7 @@ def judge(failures, key, ev, ac, events, actions, heads, narrow):
     check(failures, ev is not None and ac is not None, f"{key}: an events table and an actions table: {ev is not None} {ac is not None}")
     if ev is None or ac is None:
         return
-    check(failures, ev["heads"] == ["イベント", "説明"], f"{key}: the events' columns are the spec's fields, イベント・説明: {ev['heads']}")
+    check(failures, ev["heads"] == [T("panel.ev.title"), T("panel.meta.description")], f"{key}: the events' columns are the spec's fields, イベント・説明: {ev['heads']}")
     check(failures, [r["cells"] for r in ev["rows"]] == [list(e) for e in events], f"{key}: one row per event, its name and its description: {[r['cells'] for r in ev['rows']]}")
     check(failures, ac["heads"] == heads, f"{key}: the actions' columns are the spec's fields: {ac['heads']} (want {heads})")
     want = [list(a[:2]) + ([a[2]] if len(heads) == 3 else []) for a in actions]
@@ -111,10 +111,10 @@ async def run_spec_tables(pw, out, failures, Server, before=False):
                     await page.wait_for_timeout(250)
                     await page.screenshot(path=str(out / f"{'before' if before else 'after'}-{spec_name}-sec{sec}-{width}.png"))
                 if not before:
-                    r = res[f"{spec_name}-{width}"] = {"events": await page.evaluate(TABLE_JS, "#wb-sec-2 table.nt"),
-                                                        "actions": await page.evaluate(TABLE_JS, "#wb-sec-4 table.nt"), "sheet": await page.evaluate(SHEET_JS)}
+                    r = res[f"{spec_name}-{width}"] = {"events": await page.evaluate(TABLE_JS, ["#wb-sec-2 table.nt", T("panel.th.state")]),
+                                                        "actions": await page.evaluate(TABLE_JS, ["#wb-sec-4 table.nt", T("panel.th.state")]), "sheet": await page.evaluate(SHEET_JS)}
                     events = EVENTS if spec_name == "plan" else [["onOpen", "開く"]]
-                    actions, heads = (ACTIONS_PLAIN, ["操作", "結果"]) if spec_name == "plan" else (ACTIONS_DEST, ["操作", "結果", "行き先"])
+                    actions, heads = (ACTIONS_PLAIN, [T("panel.th.action"), T("panel.th.result")]) if spec_name == "plan" else (ACTIONS_DEST, [T("panel.th.action"), T("panel.th.result"), T("panel.th.dest")])
                     judge(failures, f"{spec_name}-{width}", r["events"], r["actions"], events, actions, heads, width == "390")
                     sh = r["sheet"]
                     check(failures, sh["sw"] <= sh["cw"] and sh["docSW"] <= sh["docCW"], f"{spec_name}-{width}: nothing sideways: {sh}")

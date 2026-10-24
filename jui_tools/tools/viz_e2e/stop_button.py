@@ -25,7 +25,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, ISOLATE, LAUNCH_ARGS, PHONE, T, T_head, Watch, dump, new_page, ready
+from common import DESKTOP, ISOLATE, LAUNCH_ARGS, PHONE, T, T_head, T_pattern, Watch, dump, new_page, ready
 
 S_NEW = "e2e00000-0000-4000-8000-0000000000f1"
 S_OLD = "e2e00000-0000-4000-8000-0000000000f2"
@@ -186,7 +186,7 @@ async def run_stop_button(pw, out, failures, video: pathlib.Path | None = None):
         r = res["stopped"] = await page.evaluate(STOP)
         s = snapshot_session(S_NEW)
         check(s["status"] == "idle" and s.get("stoppedAt", 0) > 0 and "stopAt" not in s, f"the turn ended on the server: {s.get('status')}")
-        check(not r["shown"] and re.fullmatch(T("hist.stop.done", time=r"\d\d:\d\d").replace("(", r"\(").replace(")", r"\)"), r["line"]),
+        check(not r["shown"] and T_pattern("hist.stop.done", time=re.compile(r"\d\d:\d\d(?:\s[AP]M)?")).fullmatch(r["line"]),   # HH:MM in the page's locale (en-US: 09:09 AM)
               f"stopped: the button is gone, the line says when: {r}")
         await page.screenshot(path=str(out / "stopped.png"))
         if pause:
