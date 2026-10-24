@@ -184,7 +184,7 @@ async def close_three_ways(page, btn, where, key, r, failures):
         elif how == "backdrop":
             await page.mouse.click(4, 300)
         else:
-            close = page.locator(f"#spec-help [data-sh-close], [role='dialog'][aria-modal='true']:visible button:has-text({json.dumps(T('panel.close'))})").first
+            close = page.locator(f"#spec-help [data-sh-close], [role='dialog'][aria-modal='true']:visible button:has-text({json.dumps(T('panel.close'), ensure_ascii=False)})").first
             if await close.count():
                 await close.click()
         await page.wait_for_timeout(250)

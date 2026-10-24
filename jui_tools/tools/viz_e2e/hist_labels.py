@@ -58,8 +58,10 @@ PEER_STACK = """() => {
 # The tool rows' times (2.3.7, ticket 2026-10-20-jui-viz-history-tool-row-time): every row shows HH:MM of its tool_use
 # record, after the エラー / 結果待ち mark and at the right end; a long description is cut with …, the time never.
 TOOL_TIMES = """(isos) => {
-  // in the page's own locale (LOCALE, 05-i18n.js: the run's language), as the row writes it
-  const want = isos.map((t) => new Date(t).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' }));
+  // in the page's own locale (LOCALE, 05-i18n.js: the run's language, read through __dbg: a module's const is not the page's
+  // global), as the row writes it
+  const locale = window.__dbg.locale();
+  const want = isos.map((t) => new Date(t).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }));
   const rows = [...document.querySelectorAll('[data-rb-hist] .h-tool > summary')].map((s) => {
     const kids = [...s.children], at = s.querySelector(':scope > .h-at'), head = s.querySelector(':scope > .h-head');
     const mark = s.querySelector(':scope > .h-err, :scope > .h-run');

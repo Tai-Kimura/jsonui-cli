@@ -372,7 +372,7 @@ async def run_fulltext(pw, out, failures, jt=None, shots_only=False):
         await page.mouse.move(5, 5)
         await until(page, TAG_HIDDEN, "the strip's tag gone")
         clock_in = T("ev.clock_in", source="").strip()
-        await page.hover(f"#ticker .what:has-text({json.dumps(clock_in)})")
+        await page.hover(f"#ticker .what:has-text({json.dumps(clock_in, ensure_ascii=False)})")   # 出勤 as itself, not \u51fa\u52e4
         r = res["stripShort"] = await page.evaluate(STRIP_JS, clock_in)
         check(failures, r and not r["cut"] and not r["shown"] and r["tabindex"] is None, f"a short strip line: no tag, not focusable: {r}")
         await page.mouse.move(5, 5)
