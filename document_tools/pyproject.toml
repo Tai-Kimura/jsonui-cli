@@ -14,7 +14,7 @@ include = ["jsonui_doc_cli*"]
 
 [project]
 name = "jsonui-doc-cli"
-version = "2.3.22"
+version = "2.3.23"
 description = "CLI tool for generating documentation from JsonUI test files and specifications"
 requires-python = ">=3.10"
 license = "MIT"
@@ -39,7 +39,7 @@ keywords = ["jsonui", "documentation", "html", "markdown", "mermaid"]
 # `pip install` — so the launcher-only path (no pip run) still documents
 # every spec that does not.
 dependencies = [
-    "jsonui-test-cli @ git+https://github.com/Tai-Kimura/jsonui-cli.git@v2.3.22#subdirectory=test_tools",
+    "jsonui-test-cli @ git+https://github.com/Tai-Kimura/jsonui-cli.git@v2.3.23#subdirectory=test_tools",
     "PyYAML>=6.0",
     "markdown-it-py>=3.0",
 ]
