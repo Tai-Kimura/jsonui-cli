@@ -30,7 +30,7 @@ import sys
 import time
 
 from waits import frame_log_js, settled, until
-from common import DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, ready, stamp
+from common import DESKTOP, LAUNCH_ARGS, T, Watch, dump, new_page, ready, stamp
 
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
 ONE = "e2e00000-0000-4000-8000-0000000001a0"            # alone in its room
@@ -302,17 +302,17 @@ async def run_breaks(pw, out, failures, jt=None, shots_only=False):
         b = res["oneSmoke"] = await page.evaluate(BRK)
         me = next(x for x in b["robots"] if x["id"] == one_id)
         bx = b["place"]["booth"]
-        check(failures, me["tag"] == "タバコ休憩" and me["hand"] == "smoke" and not me["desk"] and me["lamp"] == "idle",
+        check(failures, me["tag"] == T("scene.brk.smoke") and me["hand"] == "smoke" and not me["desk"] and me["lamp"] == "idle",
               f"1 robot smokes: the tag タバコ休憩, a cigarette, no desk, the idle lamp: {me}")
         check(failures, bx["x0"] < me["x"] < bx["x1"] and bx["z0"] < me["z"] < bx["z1"], f"it is in the booth: {me} {bx}")
         check(failures, 0 < b["smoke"] <= b["smokeMax"] <= 10, f"smoke, under its cap: {b['smoke']} of {b['smokeMax']}")
         await page.evaluate(f"() => window.__dbg.openRobot('{one_id}')")
         try:
-            await page.wait_for_function("() => { const e = document.querySelector('[data-rb-cond]'); return e && !e.hidden && e.textContent.includes('タバコ休憩'); }", timeout=6000, polling=200)
+            await page.wait_for_function(f"() => {{ const e = document.querySelector('[data-rb-cond]'); return e && !e.hidden && e.textContent.includes({json.dumps(T('scene.brk.smoke'))}); }}", timeout=6000, polling=200)
         except Exception:
             pass
         cond = res["cardSmoke"] = await page.evaluate("() => { const e = document.querySelector('[data-rb-cond]'); return e && !e.hidden ? e.textContent : ''; }")
-        check(failures, "タバコ休憩" in cond, f"the robot card says it too: {cond!r}")
+        check(failures, T("scene.brk.smoke") in cond, f"the robot card says it too: {cond!r}")
         await page.click("#rb-close")
         await page.wait_for_timeout(1200)
         try:   # the picture right after a puff, while the smoke is out
@@ -329,7 +329,7 @@ async def run_breaks(pw, out, failures, jt=None, shots_only=False):
         await wait(page, f"() => window.__dbg.brk().robots.some((x) => x.id === '{one_id}' && x.kind === 'vend' && x.at)", timeout=40000, label="the lone robot at the machine")
         b = await page.evaluate(BRK)
         me = next(x for x in b["robots"] if x["id"] == one_id)
-        check(failures, me["tag"] == "飲み物を買いに" and not me["desk"], f"1 robot at the machine: the tag 飲み物を買いに: {me}")
+        check(failures, me["tag"] == T("scene.brk.vend") and not me["desk"], f"1 robot at the machine: the tag 飲み物を買いに: {me}")
         await page.wait_for_timeout(3000)          # past buySec: the can in its hand
         b = res["oneDrink"] = await page.evaluate(BRK)
         me = next(x for x in b["robots"] if x["id"] == one_id)
@@ -391,7 +391,7 @@ async def run_breaks(pw, out, failures, jt=None, shots_only=False):
         await page.evaluate("() => window.__dbg.play({ p: 0, solo: { p: 0 }, endAll: true, restMinSec: 0, restMaxSec: 0 })")
         b = res["manySmoke"] = seen[0]
         smokers = [x for x in b["robots"] if x["room"] == many_room and x["kind"] == "smoke" and x["at"]]
-        check(failures, len(smokers) == 2 and all(x["tag"] == "タバコ休憩" for x in smokers), f"two smoke together: {[(x['id'], x['kind'], x['at']) for x in b['robots']]}")
+        check(failures, len(smokers) == 2 and all(x["tag"] == T("scene.brk.smoke") for x in smokers), f"two smoke together: {[(x['id'], x['kind'], x['at']) for x in b['robots']]}")
         both = [x for s in seen for x in s["robots"] if x["kind"] and (x["play"] or x["solo"])]
         check(failures, not both, f"never a break and a game, a nap or a bento at once: {both[:3]}")
         most = max(sum(1 for x in s["robots"] if x["kind"] == "smoke") for s in seen)

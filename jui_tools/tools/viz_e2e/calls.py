@@ -18,7 +18,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, ready, stamp
+from common import DESKTOP, LAUNCH_ARGS, T, Watch, dump, new_page, ready, stamp
 
 A = "e2e00000-0000-4000-8000-0000000000ca"
 B = "e2e00000-0000-4000-8000-0000000000cb"
@@ -115,7 +115,7 @@ async def run_calls(pw, out, failures):
         callee = next((c for c in r.values() if c["call"] and c["call"]["role"] == "callee"), None)
         check(failures, caller and caller["handset"] and not caller["ring"], f"the caller holds a handset: {caller}")
         check(failures, callee and callee["ring"] and not callee["handset"], f"the callee's phone rings: {callee}")
-        check(failures, caller and callee and caller["tag"] == f"☎ 呼び出し中 {callee['id']}" and callee["tag"] == f"☎ 着信 {caller['id']}",
+        check(failures, caller and callee and caller["tag"] == f"☎ {T('scene.call.ringing')} {callee['id']}" and callee["tag"] == f"☎ {T('scene.call.incoming')} {caller['id']}",
               f"the name tags: {caller and caller['tag']!r} / {callee and callee['tag']!r}")
         await page.screenshot(path=str(out / "ringing.png"))
         hook(A, hook_event_name="PostToolUse", tool_name="SendMessage", tool_use_id="toolu_call1",
@@ -132,7 +132,7 @@ async def run_calls(pw, out, failures):
         await wait(page, "() => window.__dbg.calls().filter((c) => c.handset).length === 2", timeout=10000, label="both on the line")
         res["pickUpSec"] = round(time.monotonic() - t1, 1)
         r = res["answered"] = await page.evaluate(calls_js)
-        check(failures, not any(c["ring"] for c in r.values()) and all(c["tag"].startswith("☎ 通話中") for c in r.values()),
+        check(failures, not any(c["ring"] for c in r.values()) and all(c["tag"].startswith("☎ " + T("scene.call.answered")) for c in r.values()),
               f"picked up: no ring, both 通話中: {r}")
         await page.screenshot(path=str(out / "answered.png"))
         tags = await page.evaluate("() => document.getElementById('tags').textContent")

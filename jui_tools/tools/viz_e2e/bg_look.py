@@ -34,7 +34,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, stamp
+from common import DESKTOP, LAUNCH_ARGS, T, Watch, dump, new_page, stamp
 from waits import settled, until
 
 IDLE = "e2e00000-0000-4000-8000-0000000002a1"
@@ -246,7 +246,7 @@ async def run_bg_look(pw, out, failures):
         await page.evaluate("(i) => window.__dbg.openRobot(i)", ids[BACK])
         await wait(page, "() => { const el = document.querySelector('[data-rb-looks]'); return el && !el.hidden; }", "the card's legend")
         res["legend"] = legend = await page.evaluate("() => document.querySelector('[data-rb-looks]').textContent")
-        check(failures, "裏で作業中でも、サブエージェント 3 体以上なら笛" in legend, f"the card's legend says the whistle shows in background work: {legend!r}")
+        check(failures, T("panel.heavy.legend").split(" · ")[-1] in legend, f"the card's legend says the whistle shows in background work: {legend!r}")
         await page.keyboard.press("Escape")
         await wait(page, "() => !window.__dbg.focus().zoomed && !window.__dbg.focus().tween", "back from the card")
         # with the launch whistle (2.3.6): a background Agent called, then the turn ends with background work, within its

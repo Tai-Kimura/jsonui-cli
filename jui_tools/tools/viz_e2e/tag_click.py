@@ -23,7 +23,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, LAUNCH_ARGS, Watch, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, T, Watch, new_page, ready
 from waits import settled, until
 
 CWD = "/work/click-app"
@@ -291,7 +291,7 @@ async def run_tag_click(pw, out, failures, jt=None):
         await page.evaluate("() => window.__dbg.brk({ p: { smoke: 0, vend: 0 } })")
         await settled(page, "in the booth", ids=[smoker])
         mark = await page.evaluate(PART_JS, [smoker, ".call-mark"])
-        check(failures, mark and "休憩" in mark["text"], f"the smoker's tag shows its break: {mark}")
+        check(failures, mark and T("scene.brk.smoke") in mark["text"], f"the smoker's tag shows its break: {mark}")
         await click_part("break mark on the tag", smoker, ".call-mark")
         res["family"] = await page.evaluate("""() => [...document.getElementById('tags').children].reduce((m, el) => {
           const k = el.classList.contains('bill') ? 'bill' : el.classList.contains('room') ? 'room sign' : el.classList.contains('tray') ? 'tray' : el.classList.contains('bot') ? 'robot tag' : el.className;

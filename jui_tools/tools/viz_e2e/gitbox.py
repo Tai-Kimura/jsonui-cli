@@ -19,7 +19,7 @@ import subprocess
 import sys
 import time
 
-from common import ISOLATE, LAUNCH_ARGS, Watch, dump, new_page, ready
+from common import ISOLATE, LAUNCH_ARGS, T, T_head, Watch, dump, new_page, ready
 from waits import frame_log_js
 
 # Frames SLOW_MS apart (the e2e's own requestAnimationFrame wrapper) for one trip: its time at the box starts in the
@@ -207,7 +207,7 @@ async def run_gitbox(pw, out, failures):
         back_big = [s for s in big if s[0] == "back"]
         check(failures, back_big and back_big[0][2] == "stroll", f"back from a push with empty hands: {back_big}")
         check(failures, fill2 > fill1 > fill0, f"the box fills: {fill0} -> {fill1} -> {fill2}")
-        check(failures, said == "↑ push main 1 コミット +400 −0", f"the line over the robot: {said!r}")
+        check(failures, said == f"↑ push main {T('srv.git.commits', n=1)} +400 −0", f"the line over the robot: {said!r}")
 
         # 2. a pull: there empty, back with a stack; the box empties a little
         bash("git pull", stdout=f"From example.invalid:team/box-app\n * branch            main       -> FETCH_HEAD\nUpdating {revs['small']}..{revs['big']}\n"
@@ -366,10 +366,10 @@ async def run_gitbox(pw, out, failures):
         await wait(page, "() => { const el = document.querySelector('[data-rb-git]'); return !!el && !el.hidden; }",
                    label="the card's git line")
         res["card"] = await page.evaluate("() => document.querySelector('[data-rb-git]').textContent")
-        check(failures, res["card"].startswith("最近の git: ↑ push main"), f"the card says the last push: {res['card']!r}")
+        check(failures, res["card"].startswith(T_head("panel.rb.git", "label", time="") + "↑ push main"), f"the card says the last push: {res['card']!r}")
         # the whole log, not the ticker (it shows the last 5 only)
         res["log"] = await page.evaluate("() => window.__dbg.gitLog()")
-        check(failures, any("↑ push main 1 コミット +400 −0" in t for t in res["log"]) and any("↓ pull main" in t for t in res["log"]),
+        check(failures, any(f"↑ push main {T('srv.git.commits', n=1)} +400 −0" in t for t in res["log"]) and any("↓ pull main" in t for t in res["log"]),
               f"the log has the pushes and the pulls: {res['log'][:6]}")
         await page.keyboard.press("Escape")
         await page.emulate_media(color_scheme="dark")
