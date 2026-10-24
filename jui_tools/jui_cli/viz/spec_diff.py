@@ -330,9 +330,32 @@ def spec_diff(project, spec_id: str | None = None, *, app: str | None = None, de
         return {"ok": False, "reason": e.reason, "detail": e.detail}
 
 
-def list_diff(project, app: str) -> dict:
+def job_for(world, message: dict):
+    """What /ws's spec.diff and spec.diffList run (server.py): on the loop, the room found and its specs copied (the
+    rooms' dicts are the loop's); the returned call runs git, in the executor."""
+    text = lambda k: message.get(k) if isinstance(message.get(k), str) else None   # noqa: E731
+    unknown = {"ok": False, "reason": "unknown-spec", "detail": ""}
+    if message.get("type") == "spec.diffList" or text("deleted"):
+        project = world.jsonui.get(text("project") or "")
+        if project is None:
+            return lambda: unknown
+        if message.get("type") == "spec.diffList":
+            app, entries = text("app") or "", list(project.specs.items())
+            return lambda: list_diff(project, app, entries)
+        app, deleted = text("app"), text("deleted")
+        return lambda: spec_diff(project, app=app, deleted=deleted)
+    sid = text("specId")
+    for project in world.jsonui.values():
+        if sid in project.specs:
+            return lambda: spec_diff(project, sid)
+    return lambda: unknown
+
+
+def list_diff(project, app: str, entries: list | None = None) -> dict:
     """A worktree's whole list against its base: {ok, base, marks: {specId: {add, del, chg, isNew}}, deleted: [{file,
-    name}]}, or {ok: False, reason, detail}."""
+    name}]}, or {ok: False, reason, detail}. ``entries``: project.specs' (id, entry) pairs copied on the loop (job_for);
+    the loop changes that dict while this runs in the executor (ticket 2026-10-24-viz-executor-iterates-dicts-the-loop-changes)."""
+    pairs = project.specs.items() if entries is None else entries   # None: on the loop (the tests), read as it is
     try:
         source = next((s for s in project.sources if s.key == app), None)
         worktree, room_repo = _where(project, source)
@@ -340,7 +363,7 @@ def list_diff(project, app: str) -> dict:
         layouts_rel = _rel(source.layouts_dir, worktree)
         in_base = set(spec_files(worktree, sha, _rel(source.spec_dir, worktree)))
         marks, now = {}, set()
-        entries = sorted(((sid, e) for sid, e in project.specs.items() if e.source is source), key=lambda x: str(x[1].path))
+        entries = sorted(((sid, e) for sid, e in pairs if e.source is source), key=lambda x: str(x[1].path))
         for sid, entry in entries[:LIST_MAX]:
             rel = _rel(entry.path, worktree)
             now.add(rel)

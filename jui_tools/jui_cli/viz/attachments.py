@@ -160,7 +160,9 @@ class Attachments:
         if len(data) > FILE_MAX:
             raise Refused(413, "file too large")
         kept = self.files.get(sid, {})
-        if len(kept) >= SESSION_FILES_MAX or sum(f["size"] for f in kept.values()) + len(data) > SESSION_BYTES_MAX:
+        # list(): copied in one step — remove() pops from this dict in another executor thread while this runs (ticket
+        # 2026-10-24-viz-executor-iterates-dicts-the-loop-changes)
+        if len(kept) >= SESSION_FILES_MAX or sum(f["size"] for f in list(kept.values())) + len(data) > SESSION_BYTES_MAX:
             raise Refused(413, "too many attachments for this session")
         shown = display_name(name, media)
         ext = extension(shown, media, data[:16])

@@ -144,9 +144,9 @@ class ServerContext:
     on_hook: Callable[[dict], Awaitable[None] | None] | None = None
     # spec id -> the sheet's doc (P4), or None when the spec is unknown.
     sheet: Callable[[str], dict | None] | None = None
-    # a worktree's spec beside its base (spec_diff.py; 2.3.23): the message's fields -> {ok, ...}. Blocking (git), so
-    # run off the loop.
-    spec_diff: Callable[[dict], dict] | None = None
+    # a worktree's spec beside its base (spec_diff.job_for; 2.3.23): the message's fields -> a call returning {ok, ...}.
+    # Called on the loop (it copies what it reads of the rooms); the call it returns is blocking (git), run off the loop.
+    spec_diff: Callable[[dict], Callable[[], dict]] | None = None
     # The World (P5: channel_hello / channel_request / decide / perms), and
     # what to call after changing it.
     world: object | None = None
@@ -1314,7 +1314,7 @@ async def _handle_browser_message(ctx: ServerContext, sock, message: dict) -> No
             await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": "no spec diff here"})
             return
         loop = asyncio.get_running_loop()
-        got = await loop.run_in_executor(None, ctx.spec_diff, message)
+        got = await loop.run_in_executor(None, ctx.spec_diff(message))
         await sock.send_json({"type": "specDiff", "reqId": req_id, "kind": kind,
                               **{k: message.get(k) for k in ("specId", "project", "app", "deleted")}, "diff": got})
         await sock.send_json({"type": "ack", "reqId": req_id, "ok": True})

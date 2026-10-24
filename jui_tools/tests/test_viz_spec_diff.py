@@ -7,14 +7,23 @@ merge-base, git missing, git too slow, a new spec, a deleted one.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
+import socket
 import subprocess
+import threading
 from pathlib import Path
 
+import pytest
+from aiohttp.test_utils import TestClient, TestServer
+
 from jui_cli.viz import spec_diff as sd
-from jui_cli.viz.sources.jsonui_project import JsonUIProject
+from jui_cli.viz.config import VizConfig
+from jui_cli.viz.server import ServerContext, make_app
+from jui_cli.viz.sources.jsonui_project import JsonUIProject, SpecEntry
+from jui_cli.viz.state import VizState
 
 
 def _spec(name: str, description: str = "d", **extra) -> dict:
@@ -237,3 +246,99 @@ def test_git_runs_only_when_a_diff_is_asked_for(tmp_path, monkeypatch):
     assert ran == []
     assert sd.spec_diff(project, sid)["ok"]
     assert ran and all(a[3] in ("merge-base", "show") for a in ran)   # git -C <folder> <command>
+
+
+# ---------------------------------------------------------------- what the executor walks is a copy (ticket
+# 2026-10-24-viz-executor-iterates-dicts-the-loop-changes): since 2.3.23 the loop adds and drops a room's specs while
+# the list's git runs in the executor; a dict walked in Python while it changes size raises RuntimeError. The fake
+# changes it from inside the walk (the same thread, so the moment is certain).
+
+class _Rooms:
+    def __init__(self, **rooms):
+        self.jsonui = rooms
+
+
+def _changing_entry(specs: dict) -> SpecEntry:
+    """An entry whose ``source``, read while the list is walked, adds a spec to ``specs`` (the loop applying a read)."""
+    class Changing(SpecEntry):
+        @property
+        def source(self):
+            specs.setdefault("p:@feat/x/new.spec.json", SpecEntry(path=Path("/nowhere/new.spec.json")))
+            return None
+
+        @source.setter
+        def source(self, value):
+            pass
+    return Changing(path=Path("/nowhere/a.spec.json"))
+
+
+def test_the_list_walks_a_copy_of_the_specs_taken_on_the_loop(tmp_path):
+    root, wt = _room(tmp_path)
+    project = _project(root, wt)
+    project.specs["p:@feat/x/a.spec.json"] = _changing_entry(project.specs)
+    with pytest.raises(RuntimeError, match="changed size during iteration"):
+        sd.list_diff(project, "@feat/x")             # the old way: the dict itself, walked where the git runs
+    project.specs.pop("p:@feat/x/new.spec.json")
+    job = sd.job_for(_Rooms(p=project), {"type": "spec.diffList", "project": "p", "app": "@feat/x"})
+    got = job()
+    assert got["ok"] and any(k.endswith("login.spec.json") for k in got["marks"])
+    assert "p:@feat/x/new.spec.json" in project.specs   # it did change while the copy was walked
+
+
+def test_job_for_runs_no_git_and_its_call_does(tmp_path, monkeypatch):
+    root, wt = _room(tmp_path)
+    project = _project(root, wt)
+    sd._BASE_CACHE.clear()
+    calls = []
+    real = sd._git
+    monkeypatch.setattr(sd, "_git", lambda *a, **k: (calls.append(a[1:2]), real(*a, **k))[1])
+    rooms = _Rooms(p=project)
+    sid = next(s for s, e in project.specs.items() if e.source.key == "@feat/x" and e.path.name == "login.spec.json")
+    jobs = [sd.job_for(rooms, m) for m in ({"type": "spec.diffList", "project": "p", "app": "@feat/x"},
+                                           {"type": "spec.diff", "specId": sid},
+                                           {"type": "spec.diff", "project": "p", "app": "@feat/x", "deleted": "docs/screens/json/gone.spec.json"},
+                                           {"type": "spec.diff", "specId": "p:nope"})]
+    assert calls == []
+    got = [job() for job in jobs]
+    assert calls and [g["ok"] for g in got] == [True, True, True, False] and got[3]["reason"] == "unknown-spec"
+
+
+def test_the_server_copies_on_the_loop_and_runs_the_git_off_it(tmp_path):
+    root, wt = _room(tmp_path)
+    project = _project(root, wt)
+    where = {}
+
+    def handler(message):
+        where["copied"] = threading.current_thread() is threading.main_thread()
+        job = sd.job_for(_Rooms(p=project), message)
+
+        def run():
+            where["git"] = threading.current_thread() is threading.main_thread()
+            return job()
+        return run
+
+    async def main():
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+        ctx = ServerContext(config=VizConfig(), port=port, token="t" * 43, state=VizState(), spec_diff=handler)
+        client = TestClient(TestServer(make_app(ctx), host="127.0.0.1", port=port))
+        await client.start_server()
+        try:
+            ws = await client.ws_connect("/ws", headers={"Host": f"127.0.0.1:{port}", "Origin": f"http://127.0.0.1:{port}"})
+            await ws.receive_json()
+            await ws.send_json({"type": "auth", "token": "t" * 43})
+            await ws.receive_json()
+            await ws.receive_json()
+            await ws.send_json({"type": "spec.diffList", "reqId": 1, "project": "p", "app": "@feat/x"})
+            while True:
+                reply = await ws.receive_json(timeout=30)
+                if reply.get("type") == "specDiff":
+                    break
+            assert reply["reqId"] == 1 and reply["diff"]["ok"]
+            await ws.close()
+        finally:
+            await client.close()
+
+    asyncio.run(main())
+    assert where == {"copied": True, "git": False}

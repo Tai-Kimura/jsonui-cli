@@ -456,3 +456,25 @@ def test_attach_image_has_the_checks_and_serves_the_kept_image(viz):
     assert (res.status, got, ctype, nosniff) == (200, PNG, "image/png", "nosniff")
     (viz.state / "uploads" / S_NEW / f"{one['id']}.png").unlink()
     assert _attach_image(viz, body) == (200, '{"gone": true}')   # not an error: the browser logs every 404
+
+
+def test_a_save_sums_a_copy_of_the_sessions_files(tmp_path):
+    book = Attachments(home=tmp_path)
+    sid = "s1"
+    first = book.save(sid, "a.png", "image/png", b"\x89PNG\r\n\x1a\n" + b"0" * 8)
+
+    class Removing(dict):
+        """A record whose size, read while the files are summed, takes another file off (remove() in another thread)."""
+        def __getitem__(self, key):
+            if key == "size":
+                book.files[sid].pop(first["id"], None)
+            return dict.__getitem__(self, key)
+    book.files[sid]["zz"] = Removing(size=1)
+    book.files[sid]["zz2"] = {"size": 1}
+    got = book.save(sid, "b.png", "image/png", b"\x89PNG\r\n\x1a\n" + b"1" * 8)
+    assert got["id"] in book.files[sid] and first["id"] not in book.files[sid]
+    kept = {"x": Removing(size=1), "y": {"size": 1}}
+    first = {"id": "y"}
+    book.files[sid] = kept
+    with pytest.raises(RuntimeError, match="changed size during iteration"):
+        sum(f["size"] for f in kept.values())       # the old sum
