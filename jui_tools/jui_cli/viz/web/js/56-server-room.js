@@ -1096,7 +1096,7 @@ function srPlaceLabels(V) {
   if (V.lod === 'far') {
     for (const G of V.L.tops) consider(G.x + G.w / 2, G.boxH + 0.8, G.z + G.d / 2, `${G.g.label || G.g.id} · ${G.nodeCount}`, 'group', 1);
   } else {
-    for (const G of V.L.floors) if (G.g.id && !(V.migFloorShown && !V.migFloorShown.includes(G.g.id))) consider(G.x + 0.6, 0.2 + G.level * 0.06, G.z + 0.5, G.g.label || G.g.id, 'group', 0.6);
+    for (const G of V.L.floors) if (G.g.id && !(V.migFloorShown && !V.migFloorShown.includes(G.g.id))) { consider(G.x + 0.15, 0.2 + G.level * 0.06, G.z + 0.5, G.g.label || G.g.id, 'group', 0.6); out[out.length - 1] && out[out.length - 1].kind === 'group' && (out[out.length - 1].left = true); }
     for (const p of V.L.pos.values()) if (!p.hiddenIn && !srMigHides(p.n.id) && !srFlowHides(p.n.id) && !(SR.reach && !SR.reach.ids.has(p.n.id))) { const t = srTagOf(V, p); consider(...t.at, t.text, p.external ? 'external' : 'node', 1, p.n); }
   }
   // up close (§5): how many nodes are in view decides the look, with room between going in and coming back
@@ -1111,7 +1111,7 @@ function srPlaceLabels(V) {
   const groups = out.filter((o) => o.kind === 'group').slice(0, SR.labels.max - SR.labels.nodes);
   const rest = out.filter((o) => o.kind !== 'group').slice(0, SR.labels.nodes);
   const placed = [], clear = (o) => {   // a label that would cover one already given out is left out (its width from its text)
-    const wd = srTagWidth(o.text), b = [o.sx - wd / 2, o.sy - 20, o.sx + wd / 2, o.sy];
+    const wd = srTagWidth(o.text), x0 = o.left ? o.sx : o.sx - wd / 2, b = [x0, o.sy - 20, x0 + wd, o.sy];
     if (placed.some((q) => b[0] < q[2] && b[2] > q[0] && b[1] < q[3] && b[3] > q[1])) return false;
     placed.push(b); return true;
   };
@@ -1121,7 +1121,7 @@ function srPlaceLabels(V) {
     if (!o) { s.hidden = true; return; }
     s.hidden = false; s.dataset.kind = o.kind; s.dataset.node = o.n ? o.n.id : '';
     if (s.textContent !== o.text) s.textContent = o.text;
-    s.style.transform = `translate(${Math.round(o.sx)}px, ${Math.round(o.sy)}px) translate(-50%, -100%)`;
+    s.style.transform = `translate(${Math.round(o.sx)}px, ${Math.round(o.sy)}px) translate(${o.left ? '0' : '-50%'}, -100%)`;   // a group's tag from its floor's corner, inside it
   });
   V.shownLabels = shown.length;
 }

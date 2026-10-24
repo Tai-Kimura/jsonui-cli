@@ -493,6 +493,11 @@ function srFlowRoomRects(V) {
     const t = srTagOf(V, p), a = px(...t.at), wd = srTagWidth(t.text);
     out.push({ id: p.n.id, kind: 'tag', box: [a[0] - wd / 2, a[1] - 20, a[0] + wd / 2, a[1]], behind: a[2] > 1 });
   }
+  for (const G of V.L.floors) {   // a group's tag, from its floor's corner rightward (srPlaceLabels)
+    if (!G.g.id) continue;
+    const a = px(G.x + 0.15, 0.2 + G.level * 0.06, G.z + 0.5), wd = srTagWidth(G.g.label || G.g.id);
+    out.push({ id: G.g.id, kind: 'group', box: [a[0], a[1] - 20, a[0] + wd, a[1]], behind: a[2] > 1 });
+  }
   return out;
 }
 /* The shapes and tags not inside the seen part of the canvas ([id, kind]). */
