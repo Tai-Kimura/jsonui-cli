@@ -18,7 +18,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, LAUNCH_ARGS, Watch, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, T, Watch, new_page, ready
 
 CWD = "/work/shred-app"
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
@@ -150,7 +150,7 @@ async def run_shredder(pw, out, failures, jt=None, shots_only=False):
 
         # not up close: the act names what went, no errand
         bash(sids[a], "rm stale.log")
-        await wait(page, f"() => window.__dbg.shred().robots.find((x) => x.id === '{a}').act.includes('シュレッダー stale.log')", label="act, floor view")
+        await wait(page, f"() => window.__dbg.shred().robots.find((x) => x.id === '{a}').act.includes({json.dumps(T('act.shred', label='stale.log'))})", label="act, floor view")
         await page.wait_for_timeout(800)
         r = res["floor"] = await page.evaluate(shred)
         mine = next(x for x in r["robots"] if x["id"] == a)
@@ -175,7 +175,7 @@ async def run_shredder(pw, out, failures, jt=None, shots_only=False):
         bash(sids[a], "cd /work/shred-app && rm -rf build a.txt")
         await wait(page, f"() => window.__dbg.shred().robots.find((x) => x.id === '{a}').phase === 'going'", label="goes")
         g = res["going"] = next(x for x in (await page.evaluate(shred))["robots"] if x["id"] == a)
-        check(failures, g["held"] and "シュレッダー build、a.txt" in g["tag"], f"carries the papers, the name over its head: {g}")
+        check(failures, g["held"] and T("act.shred", label="build" + T("srv.list.sep") + "a.txt") in g["tag"], f"carries the papers, the name over its head: {g}")
         await wait(page, f"() => window.__dbg.shred().robots.find((x) => x.id === '{a}').phase === 'feeding'", timeout=20000, label="at the shredder")
         at = next(x for x in (await page.evaluate(shred))["robots"] if x["id"] == a)
         res["at"] = at
@@ -202,13 +202,13 @@ async def run_shredder(pw, out, failures, jt=None, shots_only=False):
         await wait(page, f"() => window.__dbg.shred().robots.find((x) => x.id === '{a}').tilt", label="a tilt")
         r = next(x for x in (await page.evaluate(shred))["robots"] if x["id"] == a)
         res["nothing"] = r
-        check(failures, r["phase"] is None and r["path"] == 0 and "削除できず nope.txt" in r["tag"], f"nothing there: no errand, 削除できず: {r}")
+        check(failures, r["phase"] is None and r["path"] == 0 and T("act.shred.failed", label="nope.txt") in r["tag"], f"nothing there: no errand, 削除できず: {r}")
 
         # only mentions rm: nothing
         bash(sids[a], "grep -rn 'rm -rf' docs/ && echo rm")
         await page.wait_for_timeout(1000)
         r = next(x for x in (await page.evaluate(shred))["robots"] if x["id"] == a)
-        check(failures, r["phase"] is None and "シュレッダー" not in r["tag"], f"a command that only mentions rm: {r}")
+        check(failures, r["phase"] is None and T("act.shred", label="").strip() not in r["tag"], f"a command that only mentions rm: {r}")
 
         # stopped at once by a new instruction
         bash(sids[a], "rm -f tmp.txt")

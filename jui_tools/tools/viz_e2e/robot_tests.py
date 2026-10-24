@@ -20,7 +20,7 @@ import sys
 import time
 import urllib.request
 
-from common import ISOLATE, DESKTOP, e2e_run_id, LAUNCH_ARGS, Watch, dump, new_page, ready, stamp
+from common import ISOLATE, DESKTOP, e2e_run_id, LAUNCH_ARGS, T, Watch, dump, new_page, ready, stamp
 
 SID_A = "aaaa0000-0000-4000-8000-0000000000c1"
 SID_B = "bbbb0000-0000-4000-8000-0000000000c2"
@@ -157,11 +157,11 @@ async def run_robot_tests(pw, out, failures):
         a, b = cards["A"], cards["B"]
         check(failures, a["inNowTab"] and b["inNowTab"], "the section is on the 今の様子 tab")
         check(failures, a["runs"] == ["run-a"] and b["runs"] == ["run-b"], f"each card shows its own run only: A {a['runs']} B {b['runs']}")
-        check(failures, a["fails"] == [n for n, s in A_CASES if s == "failed"][:FAILED_SHOWN] and a["more"] == f"ほか {8 - FAILED_SHOWN} 件",
+        check(failures, a["fails"] == [n for n, s in A_CASES if s == "failed"][:FAILED_SHOWN] and a["more"] == T("panel.run.more", n=8 - FAILED_SHOWN),
               f"A's failed cases by name, at most {FAILED_SHOWN}: {a['fails']} {a['more']!r}")
         check(failures, "b-running-case" not in a["text"] and "a-case-" not in b["text"], "no case of the other robot's run")
-        check(failures, b["fails"] == [] and "実行中" in b["head"][0], f"B is running, nothing failed: {b['head']} {b['fails']}")
-        check(failures, "失敗" in a["head"][0], f"A failed: {a['head']}")
+        check(failures, b["fails"] == [] and T("live.run.running") in b["head"][0], f"B is running, nothing failed: {b['head']} {b['fails']}")
+        check(failures, T("live.run.fail") in a["head"][0], f"A failed: {a['head']}")
 
         # The server restarts. A's first run is saved now, from before this server started: it is no robot's run here.
         # A runs again; the live progress has two cases, the saved file three — the card shows the saved outcome.
@@ -192,7 +192,7 @@ async def run_robot_tests(pw, out, failures):
         await page.wait_for_timeout(1500)
         saved(run_c, [("c-1", "passed"), ("c-2", "failed"), ("c-3", "failed")])
         await page.evaluate("(p) => [...document.querySelectorAll('#sessions [data-robot-open]')].find((b) => b.textContent.includes(p)).click()", "aaaa")
-        await wait(page, "() => (document.querySelector('#rb [data-rb-tests]') || {}).textContent && document.querySelector('#rb [data-rb-tests]').textContent.includes('保存された結果')",
+        await wait(page, f"() => (document.querySelector('#rb [data-rb-tests]') || {{}}).textContent && document.querySelector('#rb [data-rb-tests]').textContent.includes({json.dumps(T('panel.run.saved'))})",
                    timeout=15000, label="the saved result on A's card")
         res["restart"] = r = await page.evaluate(CARD)
         await page.screenshot(path=str(out / "robot-A-restart.png"))
