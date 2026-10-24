@@ -10,6 +10,13 @@ conformance runner executes the exact same action/assertion semantics as
 the production Playwright driver, without requiring a sibling checkout at
 run time.
 
+Re-vendored 2026-10-24 from web driver feat/step-within (aee5879, the
+1.18.0 train, on 4a9d3c2): a step's `within` — `resolve.ts` is new (byId,
+the one place an id becomes a locator, scoped to `within`'s descendants;
+its import is rewritten to `./resolve.ts`), and `ActionExecutor.ts`,
+`AssertionExecutor.ts` and `types.ts` carry the driver's within diff
+(4a9d3c2..aee5879) applied onto the vendored copies. `reasonHistory.ts`,
+`visibility.ts`, `StateProvider.ts` and `StateBridge.ts` are unchanged.
 Checked 2026-10-16 against web driver 1.15.0 (088c2d3, afterLaunch + the
 payload's writtenAt): the seven vendored files are byte-for-byte what a1a7d9c
 gave (the change is in InitialState.ts / JsonUITestRunner.ts, not vendored);

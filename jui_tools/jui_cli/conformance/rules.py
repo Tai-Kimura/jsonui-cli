@@ -3142,6 +3142,109 @@ SUPPORT_LAYOUTS: dict[str, dict[str, Any]] = {
             }
         ],
     },
+    #: The `within` family (within_fixtures): every cell repeats the same
+    #: child ids, so only a lookup scoped to one cell tells the cells apart.
+    #: `within_gone` is gone in every cell: `hidden` within a cell holds on
+    #: it and not on the drawn `within_badge` beside it.
+    "fixtures/Collection/__cells/conformance_cell_within.layout.json": {
+        "type": "View",
+        "width": 60,
+        "height": 40,
+        "background": "#3366CC",
+        "data": [
+            {"name": "title", "class": "String", "defaultValue": ""}
+        ],
+        "child": [
+            {
+                "type": "Label",
+                "id": "within_title",
+                "width": "wrapContent",
+                "height": "wrapContent",
+                "text": "@{title}",
+                "fontSize": 11,
+                "fontColor": "#FFFFFF",
+                "padding": 2,
+            },
+            {
+                "type": "Label",
+                "id": "within_badge",
+                "width": "wrapContent",
+                "height": "wrapContent",
+                "text": "b",
+                "fontSize": 11,
+                "fontColor": "#FFFFFF",
+                "padding": 2,
+            },
+            {
+                "type": "Label",
+                "id": "within_gone",
+                "width": "wrapContent",
+                "height": "wrapContent",
+                "text": "g",
+                "fontSize": 11,
+                "fontColor": "#FFFFFF",
+                "visibility": "gone",
+            },
+        ],
+    },
+    #: One child: the single-child merge could put the cell's address on the
+    #: child and leave nothing under the address to look inside.
+    "fixtures/Collection/__cells/conformance_cell_within_single.layout.json": {
+        "type": "View",
+        "width": 60,
+        "height": 28,
+        "background": "#3366CC",
+        "data": [
+            {"name": "title", "class": "String", "defaultValue": ""}
+        ],
+        "child": [
+            {
+                "type": "Label",
+                "id": "within_only",
+                "width": "wrapContent",
+                "height": "wrapContent",
+                "text": "@{title}",
+                "fontSize": 11,
+                "fontColor": "#FFFFFF",
+                "padding": 4,
+            }
+        ],
+    },
+    #: A clickable cell root: a clickable node can merge its children's
+    #: semantics into itself (Compose), which would leave no child to find.
+    "fixtures/Collection/__cells/conformance_cell_within_tap.layout.json": {
+        "type": "View",
+        "width": 60,
+        "height": 40,
+        "background": "#3366CC",
+        "data": [
+            {"name": "title", "class": "String", "defaultValue": ""},
+            {"name": "onCellTap", "class": "() -> Void"},
+        ],
+        "onClick": "@{onCellTap}",
+        "child": [
+            {
+                "type": "Label",
+                "id": "within_tap_title",
+                "width": "wrapContent",
+                "height": "wrapContent",
+                "text": "@{title}",
+                "fontSize": 11,
+                "fontColor": "#FFFFFF",
+                "padding": 2,
+            },
+            {
+                "type": "Label",
+                "id": "within_tap_badge",
+                "width": "wrapContent",
+                "height": "wrapContent",
+                "text": "b",
+                "fontSize": 11,
+                "fontColor": "#FFFFFF",
+                "padding": 2,
+            },
+        ],
+    },
     "fixtures/Collection/__cells/conformance_cell.layout.json": {
         "type": "View",
         "id": "cell_root",

@@ -1,0 +1,44 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/within__tap.layout.json"
+  },
+  "metadata": {
+    "name": "conformance within__tap",
+    "description": "A clickable cell's children are still found inside the cell.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection",
+      "within"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "within__tap",
+      "description": "A clickable cell's children are still found inside the cell.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "waitFor",
+          "id": "target_item_2"
+        },
+        {
+          "assert": "text",
+          "id": "within_tap_title",
+          "within": "target_item_1",
+          "equals": "Cell 1"
+        },
+        {
+          "assert": "visible",
+          "id": "within_tap_badge",
+          "within": "target_item_2"
+        }
+      ]
+    }
+  ]
+}
