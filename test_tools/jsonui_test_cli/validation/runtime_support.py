@@ -351,6 +351,24 @@ def _declares(key: str, value) -> bool:
     return True
 
 
+#: Keys a driver reads on a step (or a step's condition), not on a file or
+#: case: collected from every step object in the file.
+STEP_LEVEL_KEYS = frozenset({"within"})
+
+
+def _step_objects(node):
+    """Every object under `node` that is a step or a condition: it has
+    `action` / `assert`, or a condition key."""
+    if isinstance(node, dict):
+        if "action" in node or "assert" in node or {"visible", "notVisible", "hidden"} & node.keys():
+            yield node
+        for value in node.values():
+            yield from _step_objects(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _step_objects(value)
+
+
 def collect_declared_keys(files: list[Path],
                           keys: set[str]) -> dict[str, list[Path]]:
     """Which of `keys` each file declares, at the top level or on a case.
@@ -374,6 +392,10 @@ def collect_declared_keys(files: list[Path],
         objects = [data, *(case for case in cases if isinstance(case, dict))]
         declared = {key for obj in objects for key in keys & obj.keys()
                     if _declares(key, obj[key])}
+        # A step key (`within`): on any step or condition, however nested
+        # (cases, setup / teardown, a flow's steps, repeat / retry blocks).
+        declared |= {key for obj in _step_objects(data) for key in keys & obj.keys()
+                     if key in STEP_LEVEL_KEYS and _declares(key, obj[key])}
         for key in sorted(declared):
             found.setdefault(key, []).append(Path(path))
     return found

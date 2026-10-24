@@ -12,6 +12,7 @@ from .mock import find_mock_index, validate_mock_reference
 from .responsive import validate_responsive_field
 from .screen_ids import check_screen_value, load_screen_index
 from ..schema import (
+    COMMON_STEP_ATTRIBUTES,
     CONDITION_PLATFORMS,
     CONDITION_PLATFORM_ARRAY_ITEMS,
     RESPONSIVE_ORIENTATIONS,
@@ -179,6 +180,7 @@ class StepValidator:
 
         action = step.get("action")
         assertion = step.get("assert")
+        self._check_keys_of_the_kind(step, path, result)
 
         # Top-level inline flow steps must name their screen — the drivers'
         # FlowTestStep.isInlineStep requires screen != null, so a screen-less
@@ -216,6 +218,43 @@ class StepValidator:
                 path=path,
                 message="Step must have either 'action' or 'assert'"
             ))
+
+    #: Keys that change what a step targets: on a kind that does not take
+    #: them the driver ignores them and the step reads the FIRST element with
+    #: the id — the opposite of what was written — so they are errors. `index`
+    #: is one of three things (tapItem's / selectTab's derived id, selectOption's
+    #: option), never "the n-th match" (that is `within`).
+    MEANING_KEYS = ("index", "within")
+
+    def _check_keys_of_the_kind(self, step: dict, path: str, result: ValidationResult):
+        """A key VALID_STEP_KEYS knows on a step whose kind does not take it
+        (the canonical schema's additionalProperties: false, per kind)."""
+        kind = step.get("action") or step.get("assert")
+        table = SUPPORTED_ACTIONS if "action" in step else SUPPORTED_ASSERTIONS
+        spec = table.get(kind) if isinstance(kind, str) else None
+        if spec is None:
+            return
+        allowed = (set(spec["required"]) | set(spec["optional"]) | set(COMMON_STEP_ATTRIBUTES)
+                   | {"action", "assert", "screen", "steps", "times", "while", "maxRetries"})
+        for key in step:
+            if key in allowed or key not in VALID_STEP_KEYS:
+                continue
+            if key == "index":
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message=(f"'index' does nothing on {kind} — the drivers read the first element "
+                             f"with the id, not the n-th. To name one cell's child, look it up inside "
+                             f"the cell: \"within\": \"<collectionId>_item_<n>\" ('index' is tapItem's, "
+                             f"selectTab's and selectOption's only)")))
+            elif key == "within":
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message=f"'within' does nothing on {kind} — it scopes a step that targets an element by id"))
+            else:
+                result.warnings.append(ValidationMessage(
+                    path=path,
+                    message=f"'{key}' is not a key of {kind} — the drivers ignore it",
+                    level="warning"))
 
     def _validate_common_attributes(self, step: dict, path: str, result: ValidationResult):
         """Validate common step attributes: label, optional, when."""
@@ -288,6 +327,19 @@ class StepValidator:
                 result.errors.append(ValidationMessage(
                     path=path,
                     message=f"Unknown condition key: {key}. Must be one of: {VALID_CONDITION_KEYS}"
+                ))
+
+        if "within" in condition:
+            within = condition["within"]
+            if not isinstance(within, str) or not within.strip():
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message="Condition 'within' must be a non-empty element id string"
+                ))
+            if not {"visible", "notVisible", "hidden"} & condition.keys():
+                result.errors.append(ValidationMessage(
+                    path=path,
+                    message="Condition 'within' scopes visible / notVisible / hidden — the condition has none of them"
                 ))
 
         for key in ("visible", "notVisible", "hidden"):
@@ -694,6 +746,13 @@ class StepValidator:
                     path=path,
                     message=f"index must be a non-negative integer, got: {index}"
                 ))
+
+        # Validate within is a non-empty element id string
+        if "within" in step and (not isinstance(step["within"], str) or not step["within"].strip()):
+            result.errors.append(ValidationMessage(
+                path=path,
+                message="'within' must be a non-empty element id string"
+            ))
 
         # Validate container is a non-empty string (scrollUntilVisible)
         if "container" in step:
