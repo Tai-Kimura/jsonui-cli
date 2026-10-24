@@ -136,7 +136,8 @@ SD_JS = """() => ({ open: !document.getElementById('sd').hidden, title: document
   band: [...document.querySelectorAll('#sd-body .sd-band')].map((b) => b.textContent),
   notes: [...document.querySelectorAll('#sd-body .sd-note')].map((b) => b.textContent),
   rows: [...document.querySelectorAll('#sd-body .sd-sec')].map((sec) => ({ h: sec.querySelector('h3').firstChild.textContent,
-    rows: [...sec.querySelectorAll('.sd-row')].map((r) => [r.className.replace('sd-row ', ''), r.children[0].textContent.slice(1), r.children[1].textContent.slice(1)]) })),
+    rows: [...sec.querySelectorAll('.sd-row')].map((r) => [r.className.replace('sd-row ', ''), r.children[0].textContent.slice(1), r.children[1].textContent.slice(1),
+      [...r.children].map((c) => [...c.querySelectorAll('mark.sd-x')].map((m) => m.textContent))]) })),
   hscroll: document.scrollingElement.scrollWidth > window.innerWidth + 1 })"""
 
 
@@ -256,7 +257,13 @@ async def run_spec_diff(pw, out, failures, jt=None):
             check(failures, ch.get("counts") == "+5−2~2",
                   f"{tag}: ログイン's counts (added heading, forgotButton, rememberMe, onForgotTap, an action; removed title, password; rewritten the description and isLoading): {ch.get('counts')!r}")
             sections = {s["h"]: s["rows"] for s in ch.get("rows", [])}
-            variables = [(st, l or rr) for st, l, rr in next((v for k, v in sections.items() if "変数" in k), [])]
+            variables = [(st, l or rr) for st, l, rr, _m in next((v for k, v in sections.items() if "変数" in k), [])]
+            # the changed column only, on both sides: isLoading's type, the description's text (not its name)
+            marks = {(l or rr).split(":")[0]: m for _h, rows in sections.items() for st, l, rr, m in rows if st == "sd-chg"}
+            check(failures, marks.get("isLoading") == [["Bool"], ["LoadState"]],
+                  f"{tag}: isLoading: the type is marked on both sides, the name is not: {marks.get('isLoading')}")
+            check(failures, marks.get("description") == [["メールとパスワードでログインする"], ["メールかSMSでログインする"]],
+                  f"{tag}: the description: its text is marked on both sides, its name is not: {marks.get('description')}")
             check(failures, [st for st, _ in variables] == ["sd-same", "sd-del", "sd-chg", "sd-add"],
                   f"{tag}: the variables: email same, password removed, isLoading rewritten, rememberMe added: {variables}")
             check(failures, r.get("focus-back") == "wb-diff", f"{tag}: Esc gives the focus back to the button: {r.get('focus-back')!r}")
