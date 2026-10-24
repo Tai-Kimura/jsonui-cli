@@ -45,22 +45,22 @@ SUPPORTED_ACTIONS = {
     "tap": {
         "description": "Tap on an element",
         "required": ["id"],
-        "optional": ["text", "retryTapIfNoChange", "timeout"]
+        "optional": ["text", "retryTapIfNoChange", "timeout", "within"]
     },
     "doubleTap": {
         "description": "Double tap on an element",
         "required": ["id"],
-        "optional": ["timeout"]
+        "optional": ["timeout", "within"]
     },
     "longPress": {
         "description": "Long press on an element",
         "required": ["id"],
-        "optional": ["duration", "timeout"]
+        "optional": ["duration", "timeout", "within"]
     },
     "input": {
         "description": "Input text into a field",
         "required": ["id", "value"],
-        "optional": ["timeout"]
+        "optional": ["timeout", "within"]
     },
     "typeText": {
         "description": "Type text into the currently-focused field via the keyboard "
@@ -72,32 +72,32 @@ SUPPORTED_ACTIONS = {
     "clear": {
         "description": "Clear text from an input field",
         "required": ["id"],
-        "optional": ["timeout"]
+        "optional": ["timeout", "within"]
     },
     "scroll": {
         "description": "Scroll within an element",
         "required": ["id", "direction"],
-        "optional": ["amount", "timeout"]
+        "optional": ["amount", "timeout", "within"]
     },
     "scrollUntilVisible": {
         "description": "Scroll until the target element becomes visible",
         "required": ["id"],
-        "optional": ["container", "direction", "timeout"]
+        "optional": ["container", "direction", "timeout", "within"]
     },
     "swipe": {
         "description": "Swipe gesture on an element",
         "required": ["id", "direction"],
-        "optional": ["timeout"]
+        "optional": ["timeout", "within"]
     },
     "waitFor": {
         "description": "Wait for an element to appear",
         "required": ["id"],
-        "optional": ["timeout"]
+        "optional": ["timeout", "within"]
     },
     "waitForAny": {
         "description": "Wait for any of multiple elements to appear",
         "required": ["ids"],
-        "optional": ["timeout"]
+        "optional": ["timeout", "within"]
     },
     "wait": {
         "description": "Wait for a specified duration",
@@ -129,22 +129,22 @@ SUPPORTED_ACTIONS = {
     "selectOption": {
         "description": "Select an option from a select/dropdown element (Web: standard select, iOS/Android: SelectBox picker)",
         "required": ["id"],
-        "optional": ["value", "label", "index", "timeout"]
+        "optional": ["value", "label", "index", "timeout", "within"]
     },
     "tapItem": {
         "description": "Tap an item at a specific index in a collection (CollectionView, List, etc.)",
         "required": ["id", "index"],
-        "optional": ["timeout"]
+        "optional": ["timeout", "within"]
     },
     "selectTab": {
         "description": "Select a tab by index in a TabView/TabBar (tab is resolved as {id}_tab_{index})",
         "required": ["id", "index"],
-        "optional": ["timeout"]
+        "optional": ["timeout", "within"]
     },
     "readText": {
         "description": "Read the element's text into a runtime variable (referenced later as @{name})",
         "required": ["id", "variable"],
-        "optional": ["timeout"]
+        "optional": ["timeout", "within"]
     },
     "repeat": {
         "description": "Repeat a block of steps ('times' and/or 'while' condition)",
@@ -172,7 +172,7 @@ SUPPORTED_ACTIONS = {
                        "input[type=file]; paths resolve relative to the test file). "
                        "Seeding accumulates across runs — assert existence/app state, not counts.",
         "required": ["paths"],
-        "optional": ["id", "timeout"]
+        "optional": ["id", "timeout", "within"]
     },
     "setMocks": {
         "description": "Switch API mock scenarios (map of operationId -> scenario name). "
@@ -210,37 +210,37 @@ SUPPORTED_ASSERTIONS = {
     "visible": {
         "description": "Assert element is visible",
         "required": ["id"],
-        "optional": ["timeout"]
+        "optional": ["timeout", "within"]
     },
     "notVisible": {
         "description": "Assert element is not visible",
         "required": ["id"],
-        "optional": ["timeout"]
+        "optional": ["timeout", "within"]
     },
     "hidden": {
         "description": "Assert element is not drawn, wherever it is (absent, gone, or invisible / hidden on itself or an ancestor; off screen or under a modal is drawn)",
         "required": ["id"],
-        "optional": ["timeout"]
+        "optional": ["timeout", "within"]
     },
     "enabled": {
         "description": "Assert element is enabled",
         "required": ["id"],
-        "optional": ["timeout"]
+        "optional": ["timeout", "within"]
     },
     "disabled": {
         "description": "Assert element is disabled",
         "required": ["id"],
-        "optional": ["timeout"]
+        "optional": ["timeout", "within"]
     },
     "text": {
         "description": "Assert element text matches",
         "required": ["id"],
-        "optional": ["equals", "contains", "timeout"]
+        "optional": ["equals", "contains", "timeout", "within"]
     },
     "count": {
         "description": "Assert element count",
         "required": ["id", "equals"],
-        "optional": ["timeout"]
+        "optional": ["timeout", "within"]
     },
     "state": {
         "description": "Assert ViewModel state value (requires a state provider)",
@@ -250,7 +250,7 @@ SUPPORTED_ASSERTIONS = {
     "screenshot": {
         "description": "Visual regression: compare capture against a named baseline",
         "required": ["name"],
-        "optional": ["cropId", "threshold", "timeout"]
+        "optional": ["cropId", "threshold", "timeout", "within"]
     },
     "openedUrl": {
         "description": "Assert the most recent window.open call (recorded by the "
@@ -280,7 +280,9 @@ VALID_DIRECTIONS = ["up", "down", "left", "right"]
 COMMON_STEP_ATTRIBUTES = ["label", "optional", "when"]
 
 # Valid keys in a condition object (when / repeat.while). Unknown keys are errors.
-VALID_CONDITION_KEYS = ["visible", "notVisible", "hidden", "platform", "responsive", "state"]
+# `within` scopes the condition's visible / notVisible / hidden to the descendants of
+# the element with that id, as a step's `within` does.
+VALID_CONDITION_KEYS = ["visible", "notVisible", "hidden", "within", "platform", "responsive", "state"]
 
 # Valid keys in a condition 'state' object
 VALID_CONDITION_STATE_KEYS = ["path", "equals"]
@@ -368,6 +370,13 @@ KEY_DRIVER_REQUIREMENTS = {
     # (it was the harness's job, through `applyLaunchConfig`, which 1.15.0
     # removes). iOS and Android applied it before the key carried a floor.
     "launch": {"web": "1.15.0"},
+    # A STEP key (and a condition's), not a file's: the first release of
+    # each driver that reads it — the next minor of each when it was added
+    # (web 1.17.2 -> 1.18.0, ios 2.1.2 -> 2.2.0, android 1.19.1 -> 1.20.0).
+    # An older driver ignores it and reads the first element with the id on
+    # the screen, which is the defect it exists to fix, silently.
+    # `runtime_support.collect_declared_keys` walks steps for it.
+    "within": {"android": "1.20.0", "ios": "2.2.0", "web": "1.18.0"},
 }
 
 # `screenReady` string forms. The object form is {"marker": "<screen id>"}.
@@ -428,7 +437,7 @@ VALID_CASE_KEYS = ["name", "description", "descriptionFile", "skip", "platform",
 VALID_STEP_KEYS = [
     "action", "assert", "id", "ids", "value", "direction",
     "duration", "timeout", "ms", "name", "equals", "contains",
-    "path", "amount", "screen", "text", "button", "label", "index",
+    "path", "amount", "screen", "text", "button", "label", "index", "within",
     # Common step attributes
     "optional", "when",
     # New action parameters
@@ -476,6 +485,7 @@ PARAMETER_DESCRIPTIONS = {
     "button": "Button text to tap in alert dialog (for alertTap action)",
     "label": "Human-readable step name for logs/reports. On selectOption: option label (visible text) to select — lowest precedence after index and value",
     "index": "Item/option/tab index, 0-based",
+    "within": "Element id to look the step's element up inside — a Collection cell's container `<collectionId>_item_<n>`, so `id` names that cell's child when every cell has one (the cell must be drawn: scrollUntilVisible to it first); count counts inside it",
     "args": "Arguments for variable substitution. In screen test cases, defines default values. In flow file references, overrides defaults",
     "optional": "When true, a failure of this step is recorded as a warning and execution continues",
     "when": "Pre-condition object; if not satisfied the step is skipped",

@@ -9,6 +9,19 @@
       "description": "The id attribute of the target element in JsonUI layout",
       "minLength": 1
     },
+    "within": {
+      "type": "string",
+      "minLength": 1,
+      "x-requires-driver": {
+        "android": "1.20.0",
+        "ios": "2.2.0",
+        "web": "1.18.0"
+      },
+      "x-doc": {
+        "ja": "この id の要素の中で探す（Collection のセルの入れ物 `<collectionId>_item_<n>` など）"
+      },
+      "description": "Look the step's element up among the descendants of the element with this id — normally a Collection cell's container `<collectionId>_item_<n>` (the id tapItem taps), so that `id` names one cell's child when every cell has a child with that id. Without it the first element with the id on the screen is used. The container is found as an id is (a cell is in the tree only while it is drawn: scrollUntilVisible to it first). count counts inside it; hidden / notVisible hold when the container is absent."
+    },
     "direction": {
       "type": "string",
       "enum": [
@@ -102,6 +115,10 @@
         "hidden": {
           "$ref": "#/definitions/elementId",
           "description": "Instant check: the element is not drawn, wherever it is — absent, gone, or invisible / hidden on itself or an ancestor. Off screen, under a modal, under another view, at opacity 0 or disabled is drawn (not hidden)"
+        },
+        "within": {
+          "$ref": "#/definitions/within",
+          "description": "Scope this condition's visible / notVisible / hidden check to the descendants of the element with this id (as a step's 'within')."
         },
         "platform": {
           "oneOf": [
@@ -305,6 +322,9 @@
         "id": {
           "$ref": "#/definitions/elementId"
         },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
         "text": {
           "type": "string",
           "description": "Specific text portion to tap within the element (e.g., tap '利用規約' within '利用規約に同意する')"
@@ -345,6 +365,9 @@
         "id": {
           "$ref": "#/definitions/elementId"
         },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
         "label": {
           "$ref": "#/definitions/label"
         },
@@ -375,6 +398,9 @@
         },
         "id": {
           "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
         },
         "duration": {
           "type": "integer",
@@ -412,6 +438,9 @@
         },
         "id": {
           "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
         },
         "value": {
           "type": "string",
@@ -487,6 +516,9 @@
         "id": {
           "$ref": "#/definitions/elementId"
         },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
         "label": {
           "$ref": "#/definitions/label"
         },
@@ -517,6 +549,9 @@
         },
         "id": {
           "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
         },
         "direction": {
           "$ref": "#/definitions/direction"
@@ -558,6 +593,9 @@
         "id": {
           "$ref": "#/definitions/elementId",
           "description": "Target element to bring into view"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
         },
         "container": {
           "$ref": "#/definitions/elementId",
@@ -605,6 +643,9 @@
         "id": {
           "$ref": "#/definitions/elementId"
         },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
         "direction": {
           "$ref": "#/definitions/direction"
         },
@@ -639,6 +680,9 @@
         },
         "id": {
           "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
         },
         "timeout": {
           "type": "integer",
@@ -681,6 +725,9 @@
           },
           "minItems": 1,
           "description": "Element ids; the step succeeds when any of them appears"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
         },
         "timeout": {
           "type": "integer",
@@ -879,6 +926,9 @@
         "id": {
           "$ref": "#/definitions/elementId"
         },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
         "value": {
           "type": "string",
           "description": "Option value (machine key) to select. Precedence when more than one selector is given: index, then value, then label — a step carrying 'index' selects by index and ignores 'value'/'label'; a step carrying 'value' without 'index' selects by value and ignores 'label'. All three drivers (ios, android, web) resolve in this order. Write exactly one selector per step."
@@ -927,6 +977,9 @@
           "$ref": "#/definitions/elementId",
           "description": "Collection element id; item is resolved as {id}_item_{index}"
         },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
         "index": {
           "type": "integer",
           "minimum": 0,
@@ -971,6 +1024,9 @@
           "$ref": "#/definitions/elementId",
           "description": "Tab view element id; tab is resolved as {id}_tab_{index}"
         },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
         "index": {
           "type": "integer",
           "minimum": 0,
@@ -1013,6 +1069,9 @@
         },
         "id": {
           "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
         },
         "variable": {
           "type": "string",
@@ -1216,6 +1275,9 @@
           "$ref": "#/definitions/elementId",
           "description": "Web: the file input to target (the input itself, or an element containing one). Omit to use the page's first input[type=file]"
         },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
         "timeout": {
           "type": "integer",
           "minimum": 1,
@@ -1285,6 +1347,9 @@
         "id": {
           "$ref": "#/definitions/elementId"
         },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
         "timeout": {
           "$ref": "#/definitions/assertionTimeout"
         },
@@ -1318,6 +1383,9 @@
         },
         "id": {
           "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
         },
         "timeout": {
           "$ref": "#/definitions/assertionTimeout"
@@ -1353,6 +1421,9 @@
         "id": {
           "$ref": "#/definitions/elementId"
         },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
         "timeout": {
           "$ref": "#/definitions/assertionTimeout"
         },
@@ -1386,6 +1457,9 @@
         },
         "id": {
           "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
         },
         "timeout": {
           "$ref": "#/definitions/assertionTimeout"
@@ -1421,6 +1495,9 @@
         "id": {
           "$ref": "#/definitions/elementId"
         },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
         "timeout": {
           "$ref": "#/definitions/assertionTimeout"
         },
@@ -1454,6 +1531,9 @@
         },
         "id": {
           "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
         },
         "equals": {
           "type": "string",
@@ -1508,6 +1588,9 @@
         },
         "id": {
           "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
         },
         "equals": {
           "type": "integer",
@@ -1594,6 +1677,9 @@
         "cropId": {
           "$ref": "#/definitions/elementId",
           "description": "Crop the capture to this element's bounding box before comparing"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
         },
         "threshold": {
           "type": "number",

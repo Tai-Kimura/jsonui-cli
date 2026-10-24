@@ -375,7 +375,9 @@ def test_driver_requirements_match_the_schemas():
 
 def _schema_driver_requirements(schemas=None):
     """`x-requires-driver` per key, read where the schemas declare it: the
-    top level of screen-test and flow-test, and a screen-test case.
+    top level of screen-test and flow-test, a screen-test case, and a step
+    key's definition in actions (`within`, which a step and a condition
+    reference).
 
     KEY_DRIVER_REQUIREMENTS is keyed by name alone, and
     `runtime_support.collect_declared_keys` counts a case-level declaration
@@ -384,12 +386,14 @@ def _schema_driver_requirements(schemas=None):
     rather than the last one read silently winning — which is what the first
     version of this loop did across the two schemas.
     """
-    schemas = schemas or {name: _load(name) for name in ("screen-test", "flow-test")}
+    schemas = schemas or {name: _load(name) for name in ("screen-test", "flow-test", "actions")}
     found: dict = {}
     for name, schema in schemas.items():
         places = [("", schema.get("properties", {}))]
         if name == "screen-test":
             places.append((".cases[]", schema["properties"]["cases"]["items"]["properties"]))
+        if name == "actions":
+            places = [(".definitions", schema.get("definitions", {}))]
         for where, props in places:
             for key, spec in props.items():
                 if isinstance(spec, dict) and "x-requires-driver" in spec:

@@ -64,10 +64,10 @@ from pathlib import Path
 from .models import ValidationMessage, ValidationResult
 
 #: Keys of a step whose value is one element id.
-ID_KEYS = ("id", "container", "cropId")
+ID_KEYS = ("id", "container", "cropId", "within")
 #: Keys of a step whose value is a condition, and the condition's id keys.
 CONDITION_KEYS = ("when", "while")
-CONDITION_ID_KEYS = ("visible", "notVisible", "hidden")
+CONDITION_ID_KEYS = ("visible", "notVisible", "hidden", "within")
 
 #: What a layout id can be spelled with.
 LAYOUT_ID = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
