@@ -19,7 +19,7 @@ import subprocess
 import sys
 import time
 
-from common import ISOLATE, LAUNCH_ARGS, Watch, desk_pins_js, dump, new_page, ready
+from common import ISOLATE, LAUNCH_ARGS, T, Watch, desk_pins_js, dump, new_page, ready
 from waits import settled, until
 
 DESKTOP = {"viewport": {"width": 1440, "height": 900}, "device_scale_factor": 1}
@@ -181,7 +181,7 @@ async def run_callbell(pw, out, failures):
           return { focus: document.activeElement === t, all: t.selectionStart === 0 && t.selectionEnd === t.value.length && t.value.length > 0,
                    why: document.getElementById('call-why').textContent }; }""")
         await page.evaluate("() => { navigator.clipboard.writeText = window.__clipWrite; }")
-        check(failures, sel["focus"] and sel["all"] and "できなかった" in sel["why"], f"a refused copy selects the line and says so: {sel}")
+        check(failures, sel["focus"] and sel["all"] and T("panel.call.nocopy") in sel["why"], f"a refused copy selects the line and says so: {sel}")
 
         # nothing to copy: an empty name, a NUL
         await page.fill("#call-name", "")
@@ -214,7 +214,7 @@ async def run_callbell(pw, out, failures):
         await page.fill("#call-name", "dev-flag")
         await until(page, "() => document.getElementById('call-cmd').value.includes('--dangerously-load-development-channels')", "the development flag", timeout=20000)
         res["devWhy"] = await page.evaluate("() => document.getElementById('call-why').textContent")
-        check(failures, "警告" in res["devWhy"], f"the development flag says its warning: {res['devWhy']}")
+        check(failures, T("panel.call.ready.dev") in res["devWhy"], f"the development flag says its warning: {res['devWhy']}")
 
         # Esc closes; the header's 呼び出し opens it from the keyboard and gets the focus back
         await page.keyboard.press("Escape")

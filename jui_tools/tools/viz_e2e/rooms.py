@@ -20,7 +20,7 @@ import pathlib
 import time
 
 import hooks
-from common import DESKTOP, LAUNCH_ARGS, PHONE, Watch, dump, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, PHONE, T, Watch, dump, new_page, ready
 
 # A segment against the wall rectangles (each grown by PAD, the robot's half width): Liang–Barsky clipping.
 SEG_JS = """
@@ -223,11 +223,11 @@ async def run_rooms(pw, out, failures, RealServer):
         check(failures, by.get("01", [0, 0, ""])[2] == "done" and by.get("02", [0, 0, ""])[2] == "wait" and by.get("00", [0, 0, ""])[2] == "doing",
               f"Stop → done, a permission → 待ち, working → 作業中: {[by.get(k) for k in ('00', '01', '02')]}")
         # waiting on background work: lit (the robot at its desk), counted apart in the session filter
-        bgw = await page.evaluate("""() => ({ state: (window.__dbg.robotState()['07'] || {}).state,
-          chip: [...document.querySelectorAll('#sess-filter button')].map((b) => b.textContent).find((t) => t.startsWith('裏で作業中')),
-          rank: window.__dbg.floors().rank[window.__dbg.robots.find((x) => x.def.id === '07').def.room] })""")
+        bgw = await page.evaluate("""(bg) => ({ state: (window.__dbg.robotState()['07'] || {}).state,
+          chip: [...document.querySelectorAll('#sess-filter button')].map((b) => b.textContent).find((t) => t.startsWith(bg)),
+          rank: window.__dbg.floors().rank[window.__dbg.robots.find((x) => x.def.id === '07').def.room] })""", T("status.background"))
         res["background"] = bgw
-        check(failures, bgw == {"state": "background", "chip": "裏で作業中1", "rank": 1} and by.get("07", [0, 0, ""])[2] == "doing",
+        check(failures, bgw == {"state": "background", "chip": T("status.background") + "1", "rank": 1} and by.get("07", [0, 0, ""])[2] == "doing",
               f"a session waiting on background work stays lit (rank 1) and its card working: {bgw} {by.get('07')}")
         await page.click("#btn-taskboard")
         await page.wait_for_selector("#tb:not([hidden])")

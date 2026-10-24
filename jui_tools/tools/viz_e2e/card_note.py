@@ -20,13 +20,12 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, ISOLATE, LAUNCH_ARGS, Watch, dump, new_page, ready, stamp
+from common import DESKTOP, ISOLATE, LAUNCH_ARGS, T, Watch, dump, new_page, ready, stamp
 
 S_C1 = "e2e00000-0000-4000-8000-0000000000e1"
 S_C2 = "e2e00000-0000-4000-8000-0000000000e2"
 S_PLAIN = "e2e00000-0000-4000-8000-0000000000e3"
 CWDS = {S_C1: "/work/note-one", S_C2: "/work/note-two", S_PLAIN: "/work/note-plain"}
-NOTE = "--channels で起動したセッション"
 NO_STORAGE = "Object.defineProperty(window, 'localStorage', { get() { throw new Error('blocked'); } });"
 COMPOSE = """() => {
   const b = document.querySelector('[data-h-compose]');
@@ -153,7 +152,7 @@ async def run_card_note(pw, out, failures):
 
         page = await fresh("card-note")
         r = res["before"] = await open_robot(page, S_C1)
-        check(r["note"] and NOTE in r["why"] and r["x"] and not r["disabled"] and r["back"] and r["back"]["disabled"],
+        check(r["note"] and T("hist.launch.channels") in r["why"] and r["x"] and not r["disabled"] and r["back"] and r["back"]["disabled"],
               f"a --channels session: the note shows with its ×, 設定's way back has nothing to bring back: {r}")
         await page.screenshot(path=str(out / "note.png"))
         await page.click("[data-h-note-x]")
@@ -162,7 +161,7 @@ async def run_card_note(pw, out, failures):
         r = res["other"] = await open_robot(page, S_C2)
         check(not r["why"] and not r["x"], f"the other --channels robot's card shows no note either: {r}")
         r = res["plain"] = await open_robot(page, S_PLAIN)
-        check(r["disabled"] and "起動に channel の指定が無い" in r["why"] and not r["note"] and not r["x"],
+        check(r["disabled"] and T("hist.launch.noflag") in r["why"] and not r["note"] and not r["x"],
               f"the flagless session's reason still shows after the dismissal (no × on it): {r}")
         await page.screenshot(path=str(out / "reason.png"))
         res["pref"] = await page.evaluate("() => localStorage.getItem('agent-view:cardNote')")
@@ -171,11 +170,11 @@ async def run_card_note(pw, out, failures):
         await ready(page)
         await wait(page, "() => document.querySelectorAll('#sessions [data-robot-open]').length >= 3", label="sessions after the reload")
         r = res["reloaded"] = await open_robot(page, S_C2)
-        check(not r["why"] and not r["x"] and r["back"] and not r["back"]["disabled"] and "消してある" in r["back"]["state"],
+        check(not r["why"] and not r["x"] and r["back"] and not r["back"]["disabled"] and T("hist.cardnote.off") in r["back"]["state"],
               f"after a reload the note stays hidden, and 設定 says so: {r}")
         await page.evaluate("() => document.getElementById('card-note-back').click()")
         r = res["back"] = await page.evaluate(COMPOSE)
-        check(r["note"] and NOTE in r["why"] and r["x"] and r["back"]["disabled"], f"設定 › カードの説明をまた出す brings the note back: {r}")
+        check(r["note"] and T("hist.launch.channels") in r["why"] and r["x"] and r["back"]["disabled"], f"設定 › カードの説明をまた出す brings the note back: {r}")
         r = res["backOther"] = await open_robot(page, S_C1)
         check(r["note"] and r["x"], f"... on the other card too: {r}")
         res["prefBack"] = await page.evaluate("() => localStorage.getItem('agent-view:cardNote')")
@@ -191,7 +190,7 @@ async def run_card_note(pw, out, failures):
         r2 = res["ns-other"] = await open_robot(p2, S_C2)
         r3 = res["ns-plain"] = await open_robot(p2, S_PLAIN)
         check(not r["why"] and not r2["why"] and not r2["x"], f"no storage: the × hides it on this card and the other: {r} {r2}")
-        check(r3["disabled"] and "起動に channel の指定が無い" in r3["why"], f"no storage: the flagless session's reason still shows: {r3}")
+        check(r3["disabled"] and T("hist.launch.noflag") in r3["why"], f"no storage: the flagless session's reason still shows: {r3}")
         await p2.evaluate("() => document.getElementById('card-note-back').click()")
         r = res["ns-back"] = await open_robot(p2, S_C1)
         check(r["note"] and r["x"], f"no storage: the way back works for the page view: {r}")
