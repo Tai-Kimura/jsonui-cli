@@ -15,7 +15,8 @@ Re-vendored 2026-10-24 from web driver feat/step-within (aee5879, the
 the one place an id becomes a locator, scoped to `within`'s descendants;
 its import is rewritten to `./resolve.ts`), and `ActionExecutor.ts`,
 `AssertionExecutor.ts` and `types.ts` carry the driver's within diff
-(4a9d3c2..aee5879) applied onto the vendored copies. `reasonHistory.ts`,
+(4a9d3c2..aee5879, then cb2380b: a missing container fails notVisible
+and hidden too) applied onto the vendored copies. `reasonHistory.ts`,
 `visibility.ts`, `StateProvider.ts` and `StateBridge.ts` are unchanged.
 Checked 2026-10-16 against web driver 1.15.0 (088c2d3, afterLaunch + the
 payload's writtenAt): the seven vendored files are byte-for-byte what a1a7d9c
