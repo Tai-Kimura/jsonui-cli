@@ -794,6 +794,7 @@ _TYPE_CHECKS = {
     "boolean": lambda v: isinstance(v, bool),
     "array": lambda v: isinstance(v, list),
     "object": lambda v: isinstance(v, dict),
+    "null": lambda v: v is None,   # a oneOf / anyOf's null branch takes null only
 }
 
 
@@ -825,6 +826,23 @@ def _declares_null(schema) -> bool:
     return isinstance(branches, list) and any(_declares_null(b) for b in branches)
 
 
+def _union_branches(doc: OpenApiDoc, schema) -> list:
+    """The branches of a oneOf / anyOf, through any `$ref` to it; [] for any other schema."""
+    for _ in range(12):
+        if not isinstance(schema, dict) or "$ref" not in schema:
+            break
+        schema = doc._resolve_ref(schema["$ref"])
+    branches = schema.get("oneOf") or schema.get("anyOf") if isinstance(schema, dict) else None
+    return branches if isinstance(branches, list) else []
+
+
+def _same_value(a, b) -> bool:
+    """JSON equality: `true` is not `1`, as Python's `==` would have it."""
+    if isinstance(a, bool) or isinstance(b, bool):
+        return isinstance(a, bool) and isinstance(b, bool) and a == b
+    return a == b
+
+
 def compare_to_schema(doc: OpenApiDoc, schema, value, path: str = "",
                       _depth: int = 0) -> BodyFindings:
     """Walk a body and its schema together.
@@ -841,6 +859,12 @@ def compare_to_schema(doc: OpenApiDoc, schema, value, path: str = "",
         return out
     if value is None and _declares_null(schema):
         return out
+    branches = _union_branches(doc, schema)
+    if len(branches) > 1:
+        # oneOf / anyOf: the value is the contract's when one branch takes it whole. `resolve_schema` keeps the
+        # first branch only, so a value of the second (a `const` of its own, another type) read as drift.
+        tried = [compare_to_schema(doc, branch, value, path, _depth + 1) for branch in branches]
+        return next((t for t in tried if not t.violations and not t.missing), tried[0])
     schema = doc.resolve_schema(schema, _depth)
     if not isinstance(schema, dict):
         return out
@@ -871,6 +895,8 @@ def compare_to_schema(doc: OpenApiDoc, schema, value, path: str = "",
     enum = schema.get("enum")
     if isinstance(enum, list) and enum and value not in enum:
         out.violations.append(f"{path or '.'}: {value!r} is not one of {enum}")
+    if "const" in schema and not _same_value(value, schema["const"]):
+        out.violations.append(f"{path or '.'}: {value!r} is not the contract's const {schema['const']!r}")
 
     if stype == "object":
         properties = schema.get("properties") or {}

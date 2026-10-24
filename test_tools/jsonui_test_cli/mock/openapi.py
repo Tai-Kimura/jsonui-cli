@@ -167,8 +167,14 @@ class OpenApiDoc:
                     merged["properties"].update(rs.get("properties", {}))
                     merged["required"].extend(rs.get("required", []))
                 else:
-                    # non-object branch (rare) — fall back to it
-                    return rs
+                    # Not an object: the branches are one value's constraints (`{"type": "string"}` beside
+                    # `{"const": "item"}`), read together, not the first alone (ticket
+                    # 2026-10-24-jsonui-test-mock-generate-ignores-const).
+                    out: dict = {}
+                    for branch in schema["allOf"]:
+                        out.update(self.resolve_schema(branch, _depth + 1))
+                    out.update({k: v for k, v in schema.items() if k != "allOf"})
+                    return out
             # carry sibling keywords (e.g. example) alongside allOf
             for k, v in schema.items():
                 if k != "allOf":
@@ -201,13 +207,16 @@ class OpenApiDoc:
             # shared schema was given (OpenAPI 3.1 allows it there); resolving
             # first would drop it for the referenced schema's own, or none.
             found, value = _schema_example(schema)
-            if found:
+            if found and "const" not in self.resolve_schema(schema, _depth):
                 return value
             _seen = _seen + (ref,)
         schema = self.resolve_schema(schema, _depth)
         if not isinstance(schema, dict):
             return None
 
+        # A `const` is the only value the field may hold: before an example or a default that says otherwise.
+        if "const" in schema:
+            return schema["const"]
         # Prefer explicit examples when present.
         found, value = _schema_example(schema)
         if found:
@@ -245,6 +254,8 @@ class OpenApiDoc:
         schema = self.resolve_schema(schema, _depth)
         if not isinstance(schema, dict):
             return None
+        if "const" in schema:
+            return schema["const"]   # a tag, not data: an empty result still carries it
         stype = schema.get("type")
         if stype == "array" or (isinstance(stype, list) and "array" in stype):
             return []   # an array is [], nullable or not: that is what an empty result of one is
@@ -378,7 +389,13 @@ def _stop_value(schema):
     """
     if not isinstance(schema, dict):
         return None
+    if "const" in schema:
+        return schema["const"]
+    if isinstance(schema.get("enum"), list) and schema["enum"]:
+        return schema["enum"][0]
     stype = schema.get("type")
+    if isinstance(stype, list):   # OpenAPI 3.1: ["string", "null"]
+        stype = next((t for t in stype if t != "null"), None)
     if stype is None and "properties" in schema:
         stype = "object"
     if stype == "object":
