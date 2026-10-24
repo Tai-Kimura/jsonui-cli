@@ -143,7 +143,8 @@ FOLDERS_JS = """([where, long, words]) => {
   const hit = (el) => { el.scrollIntoView({ block: 'nearest' });   // a row below a picker's fold: scrolled to, as a person would
     const r = el.getBoundingClientRect(), x = r.left + Math.min(r.width / 2, 24), y = r.top + r.height / 2, h = document.elementFromPoint(x, y);
     return !!h && (h === el || el.contains(h)); };
-  const read = (els) => els.map((el) => ({ text: el.textContent, one: one(el), cut: cut(el), hit: hit(el), w: Math.round(el.getBoundingClientRect().width) }));
+  const read = (els) => els.map((el) => ({ text: el.textContent, one: one(el), cut: cut(el), hit: hit(el), w: Math.round(el.getBoundingClientRect().width),
+    ellipsis: getComputedStyle(el).textOverflow === 'ellipsis', title: el.getAttribute('title') }));
   const kept = [];
   const put = (el, text) => { kept.push([el, el.textContent]); el.textContent = text; };
   const out = {};
@@ -174,6 +175,20 @@ FOLDERS_JS = """([where, long, words]) => {
 FOLDERS_BACK_JS = "() => { for (const [el, text] of (window.__foldersKept || []).reverse()) el.textContent = text; window.__foldersKept = []; }"
 
 
+def cut_named(what: str, n: dict, kind: str, named: bool) -> list[str]:
+    """A name cut is cut with … (text-overflow: ellipsis — overflow alone is a clip, which says nothing), and a name
+    carries itself whole in its title: the page's own words exactly; a long one laid over for the check (its title
+    still the page's) has a title at all, the page's way of showing the whole name."""
+    bad = []
+    if n["cut"] and not n["ellipsis"]:
+        bad.append(f"{what} {n['text']!r} is cut, but not with … (text-overflow is not ellipsis): {n}")
+    if named and kind == "own" and n["title"] != n["text"]:
+        bad.append(f"{what} {n['text']!r} has its whole name as its title: {n['title']!r}")
+    if named and kind == "long" and not n["title"]:
+        bad.append(f"{what} {n['text']!r} (laid over) keeps a title, the page's whole name: {n['title']!r}")
+    return bad
+
+
 async def folder_lines(page, label, out):
     """The pop open: its names and chips; then closed: the session list's folder headings; then the log strip's robot
     picker (where it shows): its folders' labels. Each read on the page's words, then on the long ones (left on the page
@@ -197,10 +212,11 @@ async def folder_lines(page, label, out):
             g = got[kind]
             if not g["names"]:
                 bad.append(f"{where}/{kind}: no folder name found")
-            for n in g["names"]:
+            long_at = 1 if where == "pop" else 0   # the pop's first row is すべて, not a folder
+            for i, n in enumerate(g["names"]):
                 if not (n["one"] and n["hit"]):
                     bad.append(f"{where}/{kind}: the folder name {n['text']!r} on one line and hit at its centre: {n}")
-            long_at = 1 if where == "pop" else 0   # the pop's first row is すべて, not a folder
+                bad += cut_named(f"{where}/{kind}: the folder name", n, kind, i >= long_at)
             if kind == "long" and len(g["names"]) > long_at and not g["names"][long_at]["cut"]:
                 bad.append(f"{where}/long: the long folder name is cut with …: {g['names'][long_at]}")
             for c in g.get("chips", []):
@@ -211,6 +227,7 @@ async def folder_lines(page, label, out):
             for n in g.get("robots", []):
                 if not (n["one"] and n["hit"]):
                     bad.append(f"{where}/{kind}: the robot's name {n['text']!r} on one line and hit at its centre: {n}")
+                bad += cut_named(f"{where}/{kind}: the robot's name", n, kind, True)
             if where == "picker" and not g.get("robots"):
                 bad.append(f"picker/{kind}: no robot's name found")
             if kind == "long" and g.get("robots") and not g["robots"][0]["cut"]:
