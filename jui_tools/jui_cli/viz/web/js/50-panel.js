@@ -795,7 +795,7 @@ wbSideList.addEventListener('click', (e) => {
   openWhiteboard(Number(b.dataset.idx));
   if (narrowWb()) { wbSideOpen = false; applyWbSide(); wbCode.focus({ preventScroll: true }); }
 });
-wbCode.addEventListener('click', (e) => { const b = e.target.closest('.ov-card'); if (b) { openWhiteboard(Number(b.dataset.idx)); wbCode.focus({ preventScroll: true }); } });
+wbCode.addEventListener('click', (e) => { const b = e.target.closest('.ov-card[data-idx]'); if (b) { openWhiteboard(Number(b.dataset.idx)); wbCode.focus({ preventScroll: true }); } });
 wbNav.addEventListener('click', (e) => {
   const b = e.target.closest('button[data-sec]');
   if (!b) return;
@@ -988,16 +988,17 @@ function renderOverview(model) {
   setHead(title, tl('panel.ov.file', { where, n: inS.length }), 'st-busy', tl('panel.ov.counts', { live: c.live, partial: c.partial, todo: c.todo, done: c.done }), '');
   wbNav.hidden = true; $('wb-follow-label').hidden = true;
   wbHelpMode(true);
-  const sig = JSON.stringify(['ov', UI.project, wb.app, model.specs.map((s) => `${s.bucket}:${s.by || ''}:${s.advancedAt || 0}`)]);
+  sdHeadButton(model, null);   // a worktree's list: its 「ベースとの差分」 (50-spec-diff.js)
+  const sig = JSON.stringify(['ov', UI.project, wb.app, model.specs.map((s) => `${s.bucket}:${s.by || ''}:${s.advancedAt || 0}`), sdListSig(model)]);
   if (wbCode._sig !== sig) {
     wbCode.innerHTML = !inS.length ? `<p class="sc-ph ov-none">${esc(tl('panel.ov.none', { scope: scopeLabel() }))}</p>` : BUCKETS.map(([b, label]) => {
       const items = model.specs.map((s, i) => [s, i]).filter(([s]) => s.bucket === b && inScope(s.project) && inApp(s)).sort(specNewer);
       if (!items.length) return '';
-      return `<section class="ov-group" aria-label="${esc(label)}"><h3>${esc(label)}<small>${items.length}</small></h3><div class="ov-grid">${items.map(([s, i]) => `<button type="button" class="ov-card b-${esc(s.bucket)}" data-idx="${i}"${roleVar(s)}><span class="ov-top"><strong>${coTag(s)}${esc(s.name)}</strong><span class="state"></span></span><code class="ov-file">${UI.project === 'all' ? `${esc(PROJECT[s.project].name)} · ` : ''}${esc(s.file)}</code><span class="ov-who"></span><span class="ov-secs">${SEGS}<span class="ov-labels" aria-hidden="true">${SECTIONS.map((x) => `<span>${esc(x)}</span>`).join('')}</span></span><span class="ov-sum"></span></button>`).join('')}</div></section>`;
-    }).join('');
+      return `<section class="ov-group" aria-label="${esc(label)}"><h3>${esc(label)}<small>${items.length}</small></h3><div class="ov-grid">${items.map(([s, i]) => `<button type="button" class="ov-card b-${esc(s.bucket)}" data-idx="${i}"${roleVar(s)}><span class="ov-top"><strong>${coTag(s)}${esc(s.name)}</strong>${sdCardMarkHTML(model, s)}<span class="state"></span></span><code class="ov-file">${UI.project === 'all' ? `${esc(PROJECT[s.project].name)} · ` : ''}${esc(s.file)}</code><span class="ov-who"></span><span class="ov-secs">${SEGS}<span class="ov-labels" aria-hidden="true">${SECTIONS.map((x) => `<span>${esc(x)}</span>`).join('')}</span></span><span class="ov-sum"></span></button>`).join('')}</div></section>`;
+    }).join('') + sdListHTML(model);
     wbCode._sig = sig; wbCode._html = null;
   }
-  wbCode.querySelectorAll('.ov-card').forEach((card) => {
+  wbCode.querySelectorAll('.ov-card[data-idx]').forEach((card) => {
     const s = model.specs[+card.dataset.idx], st = card.querySelector('.state'), cls = `state ${STATUS_CLASS[s.status.kind]}`;
     if (st.className !== cls) st.className = cls;
     paintStatus(st, specStatus(s));
@@ -1155,6 +1156,7 @@ function renderSheet(model, force) {
     liveWantSheet(s);
     if (!d) {
       setHead(s.name, s.file, STATUS_CLASS[s.status.kind], specStatus(s), s.by ? robotWho(s.by) : '');
+      sdHeadButton(model, s);
       wbNav.hidden = false; $('wb-follow-label').hidden = false;
       setHTML($('wb-legend'), SHEET_LEGEND_LIVE); wbHelpMode(false);
       renderNav(s);
@@ -1166,6 +1168,7 @@ function renderSheet(model, force) {
   }
   if (SOURCE.mode === 'live') setHead(s.name, s.checkout ? `⎇ ${s.checkout.branch} · ${s.file}` : s.file, STATUS_CLASS[s.status.kind], specStatus(s), s.by ? robotWho(s.by) : '');
   else setHead(tl('panel.sheet.head', { name: s.name, screen: s.screen }), `docs/screens/json/${s.file}`, STATUS_CLASS[s.status.kind], specStatus(s), s.by ? pill(s.by, DEF[s.by].role) : '');
+  sdHeadButton(model, s);   // a worktree's spec: its 「ベースとの差分」 (50-spec-diff.js)
   wbNav.hidden = false; $('wb-follow-label').hidden = false;
   setHTML($('wb-legend'), SOURCE.mode === 'live' ? SHEET_LEGEND_LIVE : SHEET_LEGEND); wbHelpMode(false);
   renderNav(s);

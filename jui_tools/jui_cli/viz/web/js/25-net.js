@@ -79,6 +79,7 @@ function netConnect() {
         break;
       }
       case 'history': { const w = NET.waits.get(msg.reqId); if (w) { NET.waits.delete(msg.reqId); w({ ok: true, data: msg }); } break; }   // history.get's answer
+      case 'specDiff': { const w = NET.waits.get(msg.reqId); if (w) { NET.waits.delete(msg.reqId); w({ ok: true, data: msg }); } break; }   // spec.diff / spec.diffList's answer (2.3.23)
       case 'talk.list': case 'talk.messages': case 'talk.update': case 'talk.badges': {   // トーク (TALK_CONTRACT.md)
         if (H && H.talk) H.talk(msg);
         const w = msg.reqId !== undefined && NET.waits.get(msg.reqId);

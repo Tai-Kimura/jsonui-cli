@@ -217,6 +217,8 @@ const SOURCE = {
   },
   /* The 応答の履歴 tab (55-history.js): one robot's last turns, read by the server when asked. */
   // opts (2.3.12): { before } the items before that byte (「もっと前を読む」), { stop } from that byte to the end
+  specDiff(body) { return netRequest('spec.diff', body); },   // a worktree's spec beside its base (50-spec-diff.js, 2.3.23)
+  specDiffList(body) { return netRequest('spec.diffList', body); },   // a worktree's whole list against its base
   history(label, opts) { return netRequest('history.get', { agentId: (DEF[label] && DEF[label].realId) || label, ...(opts || {}) }); },
   /* One picture of that history (2.3.4): the robot and the picture's place, under the same checks as a prompt
      (server.prompt_checks). The bytes come back as a Blob; nothing is kept but what the page holds. */

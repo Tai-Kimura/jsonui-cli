@@ -748,6 +748,24 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
         return None
 
     ctx.sheet = sheet
+
+    def spec_diff(message: dict) -> dict:
+        from ..viz import spec_diff as sd
+
+        text = lambda k: message.get(k) if isinstance(message.get(k), str) else None   # noqa: E731
+        if message.get("type") == "spec.diffList" or text("deleted"):
+            project = world.jsonui.get(text("project") or "")
+            if project is None:
+                return {"ok": False, "reason": "unknown-spec", "detail": ""}
+            if message.get("type") == "spec.diffList":
+                return sd.list_diff(project, text("app") or "")
+            return sd.spec_diff(project, app=text("app"), deleted=text("deleted"))
+        for project in world.jsonui.values():
+            if text("specId") in project.specs:
+                return sd.spec_diff(project, text("specId"))
+        return {"ok": False, "reason": "unknown-spec", "detail": ""}
+
+    ctx.spec_diff = spec_diff
     ctx.world = world
     ctx.publish = world.publish
 
