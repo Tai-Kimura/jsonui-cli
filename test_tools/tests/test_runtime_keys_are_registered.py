@@ -236,31 +236,25 @@ class TestTheSchemaAcceptsWhatTheToolsAccept:
                         {m.lower() for m in VALID_METHODS})
 
 
-class TestTheInertKeyIsGone:
-    """`headers` was declared in both registries and read by nobody.
+class TestHeadersIsReadNow:
+    """`headers` was declared in both registries and read by nobody, and was
+    removed for it (a key that can be written and is then ignored is the tool
+    disagreeing with itself). It is back because it is read now: `mock serve`
+    sends a scenario's headers and the three branch-test runtimes put them on
+    their responses (ticket
+    2026-10-24-jsonui-test-mock-scenario-cannot-set-response-headers;
+    tests/test_mock_scenario_headers.py runs them). The arms that held its
+    absence are turned round: registered in both, written without a warning,
+    and read by the server."""
 
-    Measured three ways before removing it: the mock server never reads it
-    (the scenario walk in `server.py` copies scenarios verbatim and `_send`
-    writes only Content-Type, Content-Length and CORS), the contract checker
-    never reads it, and the three drivers do not parse mock documents at
-    all. Zero occurrences across every consumer face.
-
-    A key that can be written and is then ignored is the same defect as one
-    that cannot be written at all — both are the tool disagreeing with
-    itself about what the document means.
-    """
-
-    def test_it_is_absent_from_both_registries(self):
+    def test_it_is_in_both_registries(self):
         from jsonui_test_cli.validation.mock import VALID_SCENARIO_KEYS
 
-        assert "headers" not in VALID_SCENARIO_KEYS
-        assert "headers" not in _schema_properties(
+        assert "headers" in VALID_SCENARIO_KEYS
+        assert "headers" in _schema_properties(
             "properties", "scenarios", "additionalProperties")
 
-    def test_a_scenario_using_it_is_now_told_so(self, tmp_path):
-        """Removing it has to be VISIBLE, not silent: a project that still
-        writes it must hear that nothing reads it, rather than carrying a
-        key with no effect for another release."""
+    def test_a_scenario_using_it_is_not_told_otherwise(self, tmp_path):
         from jsonui_test_cli.validation.validator import TestValidator
 
         mock = tmp_path / "getX.mock.json"
@@ -272,6 +266,10 @@ class TestTheInertKeyIsGone:
 
         result = TestValidator().validate_file(mock)
 
-        assert any("Unknown scenario key: headers" in str(w)
-                   for w in result.warnings)
+        assert not any("headers" in str(w) for w in result.warnings)
         assert result.errors == []
+
+    def test_the_server_reads_it(self):
+        server = (Path(__file__).parent.parent / "jsonui_test_cli" / "mock" / "server.py").read_text(encoding="utf-8")
+        headers = (Path(__file__).parent.parent / "jsonui_test_cli" / "mock" / "headers.py").read_text(encoding="utf-8")
+        assert "served_headers(scenario)" in server and 'scenario.get("headers")' in headers

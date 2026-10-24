@@ -732,6 +732,22 @@ each arrival, so `then` reads the state after they landed; past 31000 ms
 (one capped delay and a margin) it fails the test by name, with how long it
 waited. A screen with no `delayMs` generates what it did.
 
+### A scenario's `headers`: what a response is sent with
+
+`"headers": {"Retry-After": "30"}` on a scenario is sent with its response by
+`mock serve` (under CORS, the names are listed in
+`Access-Control-Expose-Headers`, so a page on another origin can read them)
+and by all three faces of the generated tests — so a branch that reads a
+header (`Retry-After`, `Content-Disposition`, `X-Request-ID`) can be a row.
+A name is an HTTP token and a value a string with no line break;
+`Content-Type` and `Content-Length` are the server's own (`contentType` and
+the body). `mock generate` writes each header the OpenAPI response declares
+with a value (its example, the first of its examples, or its schema's), and
+every required one; `--update-default` adds a required one the default lacks;
+`--check` names, at `headers.<name>`, a header the response does not declare,
+a required one absent and a value its schema does not take — a
+`contractViolations` line subtracts it as it does a body's.
+
 ### Web: `settle` and `settleQuiet`
 
 The web runtime (`tests/unit/generated/jsonui-branch-runtime.ts`) exports the

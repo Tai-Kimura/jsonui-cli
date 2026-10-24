@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from . import branch_runtime_prose as prose
+from .mock.headers import served_headers
 from .swift_isolation import TEST_METHOD_ISOLATION, xctest_class_header
 
 
@@ -946,6 +947,17 @@ def _scenario_delay_ms(scenario: dict) -> int:
     if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
         return 0
     return int(min(value, DELAY_CAP_MS))
+
+
+def _web_scenario(scenario):
+    """A scenario as the web runtime is handed it: whole, with its `headers`
+    the ones `mock serve` sends (mock/headers.py) — none, the key left out."""
+    if not isinstance(scenario, dict) or "headers" not in scenario:
+        return scenario
+    out = {k: v for k, v in scenario.items() if k != "headers"}
+    if served_headers(scenario):
+        out["headers"] = served_headers(scenario)
+    return out
 
 
 def _scenario_content_type(scenario: dict) -> str:
@@ -2282,7 +2294,7 @@ def render_test_file(
     route_specs = ",\n".join(
         "  { op: %s, method: %s, pattern: %s, scenario: %s,\n    scenarios: %s }"
         % (_ts(r.op), _ts(r.method), _ts(r.pattern), _ts(r.default_scenario),
-           _ts(r.scenarios))
+           _ts({name: _web_scenario(sc) for name, sc in r.scenarios.items()}))
         for r in routes
     )
 
@@ -2570,6 +2582,7 @@ export interface RouteSpec {
     contentType?: string;
     bodyFile?: string | null;
     delayMs?: number;
+    headers?: Record<string, string>;
     [key: string]: unknown;
   }>;
 }
@@ -3019,9 +3032,11 @@ export function installFetchMock(
               lastDeliveryAt = realClock.now();
             }
           }
+          // The scenario's own headers, as `mock serve` sends them (the
+          // generator wrote only the ones it sends: mock/headers.py).
           return new Response(
             sc.body === undefined ? null : JSON.stringify(sc.body),
-            { status: sc.status, headers: { "Content-Type": contentType } }
+            { status: sc.status, headers: { ...(sc.headers ?? {}), "Content-Type": contentType } }
           );
         }
       }
@@ -3792,6 +3807,11 @@ def render_kotlin_test_file(
         # what it was (the parameter defaults to empty).
         tail = (",\n    mapOf(" + ", ".join(f"{_kt_str(n)} to {d}L" for n, d in delays.items()) + ")"
                 if delays else "")
+        heads = {name: served_headers(sc) for name, sc in r.scenarios.items() if served_headers(sc)}
+        if heads:   # only a route with headers names them, by name (the delays may be absent)
+            tail += (",\n    headers = mapOf(" + ", ".join(
+                f"{_kt_str(n)} to mapOf(" + ", ".join(f"{_kt_str(k)} to {_kt_str(v)}" for k, v in h.items()) + ")"
+                for n, h in heads.items()) + ")")
         route_lines.append(
             f"  RouteSpec({_kt_str(r.op)}, {_kt_str(r.method)}, "
             f"Regex({_kt_str(r.pattern)}), {_kt_str(r.default_scenario)},\n"
@@ -4042,6 +4062,9 @@ data class RouteSpec(
    * after the request, as `mock serve` sends it. Written only for a route
    * that has one, so a screen without `delayMs` generates what it did. */
   val delays: Map<String, Long> = emptyMap(),
+  /** A scenario's `headers`, sent with its response as `mock serve` sends
+   * them. Written only for a route that has some. */
+  val headers: Map<String, Map<String, String>> = emptyMap(),
 )
 
 /** What the mock server is doing, for `settle()`: every request, with when
@@ -4388,6 +4411,7 @@ fun runBranchTest(
             .setResponseCode(sc.first)
             .setHeader("Content-Type", sc.third)
             .setBody(sc.second)
+          for ((k, v) in r.headers[name] ?: emptyMap()) response.setHeader(k, v)
           val delay = (r.delays[name] ?: 0L).coerceIn(0L, BranchDeliveries.CAP_MS)
           // Every request counts for `settle()`, delayed or not.
           BranchDeliveries.schedule(delay)
@@ -4917,6 +4941,11 @@ def render_swift_test_file(
         # what it was (the member defaults to empty).
         tail = (",\n      delays: [" + ", ".join(f"{_swift_str(n)}: {d}" for n, d in delays.items()) + "]"
                 if delays else "")
+        heads = {name: served_headers(sc) for name, sc in r.scenarios.items() if served_headers(sc)}
+        if heads:   # only a route with headers names them
+            tail += (",\n      headers: [" + ", ".join(
+                f"{_swift_str(n)}: [" + ", ".join(f"{_swift_str(k)}: {_swift_str(v)}" for k, v in h.items()) + "]"
+                for n, h in heads.items()) + "]")
         route_lines.append(
             f"    RouteSpec(op: {_swift_str(r.op)}, method: {_swift_str(r.method)},\n"
             f"      pattern: {_swift_str(r.pattern)}, defaultScenario: {_swift_str(r.default_scenario)},\n"
@@ -5143,6 +5172,9 @@ nonisolated struct RouteSpec {
   /// the request, as `mock serve` sends it. Written only for a route that has
   /// one, so a screen without `delayMs` generates what it did.
   var delays: [String: Int] = [:]
+  /// A scenario's `headers`, sent with its response as `mock serve` sends
+  /// them. Written only for a route that has some.
+  var headers: [String: [String: String]] = [:]
 }
 
 /// What the protocol is doing, for `settle()`: the requests it holds (every
@@ -5458,6 +5490,7 @@ nonisolated final class BranchURLProtocol: URLProtocol {
   /// not with a Timer block, which is @Sendable and cannot capture `self`
   /// without a warning in every Swift mode.
   private var delayed: (Int, String, String)?
+  private var delayedHeaders: [String: String] = [:]
   /// Held from startLoading until the response is handed to the client (or
   /// the load is cancelled): the request is in flight for `settle()` until
   /// then, delayed or not.
@@ -5470,7 +5503,7 @@ nonisolated final class BranchURLProtocol: URLProtocol {
   @objc private func deliverDelayed() {
     guard let response = delayed else { return }
     delayed = nil
-    respond(status: response.0, body: response.1, contentType: response.2)
+    respond(status: response.0, body: response.1, contentType: response.2, headers: delayedHeaders)
     answered()
   }
   override func stopLoading() {
@@ -5526,12 +5559,14 @@ nonisolated final class BranchURLProtocol: URLProtocol {
         return
       }
       let delay = min(max(route.delays[name] ?? 0, 0), BranchDeliveries.shared.capMs)
+      let headers = route.headers[name] ?? [:]
       if delay > 0 {
         delayed = scenario
+        delayedHeaders = headers
         perform(#selector(deliverDelayed), with: nil, afterDelay: Double(delay) / 1000.0,
                 inModes: [.common])
       } else {
-        respond(status: scenario.0, body: scenario.1, contentType: scenario.2)
+        respond(status: scenario.0, body: scenario.1, contentType: scenario.2, headers: headers)
         answered()
       }
       return
@@ -5543,11 +5578,11 @@ nonisolated final class BranchURLProtocol: URLProtocol {
     answered()
   }
 
-  private func respond(status: Int, body: String, contentType: String) {
+  private func respond(status: Int, body: String, contentType: String, headers: [String: String] = [:]) {
     guard let url = request.url,
           let response = HTTPURLResponse(
             url: url, statusCode: status, httpVersion: "HTTP/1.1",
-            headerFields: ["Content-Type": contentType])
+            headerFields: headers.merging(["Content-Type": contentType]) { _, type in type })
     else { return }
     client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
     client?.urlProtocol(self, didLoad: Data(body.utf8))
