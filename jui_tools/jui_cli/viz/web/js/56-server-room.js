@@ -1110,7 +1110,9 @@ function srGroupTagWidth(V, text) {
 /* The groups' tags up close, as given out (srPlaceLabels) and as the flow frames the room (59-sr-flows.js): each from its floor's
    corner rightward, inside the floor. A nested floor's head is shorter on the page than a tag, so a floor's tag and its inner
    floors' would cover each other: given out nearest first (an inner floor's corner is the nearer where the two meet), a tag that
-   would cover one already given out stands a row higher (up to two rows) over its corner, else it is left out. In view only,
+   would cover one already given out stands a row higher (up to two rows) over its corner, else it is left out. A floor's tag
+   stands no lower a row than its inner floors' and an inner floor's no higher than its outer floor's (on a crowded canvas the
+   inner ones climbed over the outer one's: en at 900, 2.3.23), else it is left out too. In view only,
    the ones out of it listed apart. */
 function srGroupTagBoxes(V) {
   const cam = V.camera, w = V.renderer.domElement.clientWidth, h = V.renderer.domElement.clientHeight, v = new THREE.Vector3(), boxes = [], outside = [];
@@ -1123,7 +1125,10 @@ function srGroupTagBoxes(V) {
   for (const f of floors) {
     const wd = srGroupTagWidth(V, f.text);
     if (f.z < -1 || f.z > 1 || f.sx < -0.05 * w || f.sx > 1.05 * w || f.sy < -0.05 * h || f.sy > 1.05 * h) { outside.push({ ...f, box: [f.sx, f.sy - 20, f.sx + wd, f.sy] }); continue; }
-    for (let row = 0; row < 3; row++) {
+    // a floor's tag no lower a row than its inner floors' given out, an inner floor's no higher than its outer floor's
+    const id = f.G.g.id, up = boxes.find((q) => q.G.g.id === f.G.g.parent);
+    const from = Math.max(0, ...boxes.filter((q) => q.G.g.parent === id).map((q) => q.row)), to = up ? up.row : 2;
+    for (let row = from; row <= to; row++) {
       const b = [f.sx, f.sy - 20 * (row + 1), f.sx + wd, f.sy - 20 * row];
       if (boxes.some((q) => b[0] < q.box[2] && b[2] > q.box[0] && b[1] < q.box[3] && b[3] > q.box[1])) continue;
       boxes.push({ ...f, row, box: b });
