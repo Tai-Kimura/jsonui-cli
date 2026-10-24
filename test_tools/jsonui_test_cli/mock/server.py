@@ -26,6 +26,7 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
 from .generate import route_match_order
+from .body_file import body_file_path, declares_body_file, read_body_file
 from .headers import served_headers
 
 ADMIN_PREFIX = "/__jsonui__"
@@ -47,6 +48,10 @@ class MockEndpoint:
     file_path: Path
     regex: "re.Pattern"
     is_static: bool
+    #: The mock file each scenario came from: a hand-written file overlays
+    #: the generated one per scenario, and a `bodyFile` is relative to the
+    #: file that declares it (mock/body_file.py).
+    scenario_files: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -108,6 +113,7 @@ class MockStore:
                     "method": method,
                     "path": path,
                     "scenarios": dict(scenarios),
+                    "scenario_files": {name: f for name in scenarios},
                     "active": data.get("activeScenario", "default"),
                     "file_path": f,
                     "generated": generated,
@@ -119,6 +125,7 @@ class MockStore:
                 continue
             # Hand-written overlay.
             entry["scenarios"].update(scenarios)
+            entry["scenario_files"].update({name: f for name in scenarios})
             if data.get("activeScenario"):
                 entry["active"] = data["activeScenario"]
             if src.get("operationId"):
@@ -140,6 +147,7 @@ class MockStore:
                 file_path=entry["file_path"],
                 regex=_path_to_regex(entry["path"]),
                 is_static="{" not in entry["path"],
+                scenario_files=entry["scenario_files"],
             ))
         # One order with the generated branch tests (see route_match_order).
         endpoints.sort(key=lambda e: route_match_order(e.path))
@@ -227,6 +235,7 @@ class MockStore:
             if ep is None:
                 return False
             ep.scenarios[scenario] = payload
+            ep.scenario_files[scenario] = ep.file_path
             try:
                 with open(ep.file_path, "r", encoding="utf-8") as fh:
                     data = json.load(fh)
@@ -764,6 +773,17 @@ def _make_handler(server: "MockServer"):
             ctype = scenario.get("contentType", "application/json")
             payload = scenario.get("body")
             headers = served_headers(scenario)
+            if payload is None and declares_body_file(scenario):
+                # The file's bytes, read per request so an edit to it is
+                # served without a reload (mock/body_file.py).
+                source = ep.scenario_files.get(ep.active_scenario, ep.file_path)
+                payload = read_body_file(source, scenario)
+                if payload is None:
+                    self._send(500, {"error": "the scenario's bodyFile cannot be read",
+                                     "bodyFile": scenario.get("bodyFile"),
+                                     "path": str(body_file_path(source, scenario))},
+                               cors=True)
+                    return
             if payload is None:
                 self._send(status, b"", content_type=ctype, cors=True, headers=headers)
             else:
