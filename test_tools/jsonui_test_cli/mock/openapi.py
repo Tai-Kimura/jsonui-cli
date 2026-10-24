@@ -340,6 +340,34 @@ class OpenApiDoc:
                     return True, entry["value"]
         return False, None
 
+    def response_headers(self, response) -> dict:
+        """`{name: header object}` a response declares, each header's `$ref` chain followed (`components/headers`).
+        `Content-Type` is left out: OpenAPI says a response's Content-Type header is ignored (the media type says it,
+        and a scenario's `contentType` serves it)."""
+        headers = (response or {}).get("headers") if isinstance(response, dict) else None
+        if not isinstance(headers, dict):
+            return {}
+        return {name: self.resolve_object(h) for name, h in headers.items()
+                if isinstance(name, str) and name.lower() != "content-type"}
+
+    def header_value(self, header: dict, required: bool = False) -> tuple[bool, str]:
+        """`(found, text)` for the value a scenario serves a declared header with: its `example` or first of
+        `examples` (media_example's rule), else its schema's own value (`const`, an example, `default`, an enum's
+        first). A required header with none of them gets one built from its schema, so a generated scenario carries
+        every header the contract requires; an optional one with none is not written ("string" in a header is noise)."""
+        found, value = self.media_example(header)
+        if not found:
+            schema = self.resolve_schema(header.get("schema") or {})
+            if not (required or "const" in schema or _schema_example(schema)[0] or "default" in schema
+                    or (isinstance(schema.get("enum"), list) and schema["enum"])):
+                return False, ""
+            value = self.sample_for_schema(header.get("schema") or {})
+        if isinstance(value, bool):
+            return True, "true" if value else "false"
+        if isinstance(value, (dict, list)):
+            return True, json.dumps(value, ensure_ascii=False)
+        return True, "" if value is None else str(value)
+
     def body_for_media(self, media):
         """The body a scenario serves for one media type object: its own
         example (`media_example`), else one built from its schema."""

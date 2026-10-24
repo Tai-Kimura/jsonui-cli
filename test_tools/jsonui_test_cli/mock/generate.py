@@ -308,6 +308,9 @@ def build_mock_definition(doc: OpenApiDoc, op: Operation) -> dict:
     else:
         default_scenario["body"] = {}
 
+    headers = _scenario_headers(doc, op, success_code)
+    if headers:
+        default_scenario["headers"] = headers
     scenarios: dict = {"default": default_scenario}
 
     # An empty variant helps test empty-state UI when the body is a collection: drawn from the schema as an empty
@@ -331,6 +334,9 @@ def build_mock_definition(doc: OpenApiDoc, op: Operation) -> dict:
             scen["body"] = doc.body_for_media(err_media)
         else:
             scen["body"] = {"detail": f"HTTP {code}"}
+        headers = _scenario_headers(doc, op, code)
+        if headers:
+            scen["headers"] = headers
         scenarios[f"error_{code}"] = scen
 
     return {
@@ -353,6 +359,29 @@ def _first_success_code(op: Operation) -> int:
     return 200
 
 
+def _response_obj(op: Operation, code) -> dict:
+    """The response object declared for one status code, or the `default`
+    response, which OpenAPI allows in place of an explicit code ({} for none)."""
+    resp = op.responses.get(str(code))
+    if resp is None:
+        resp = op.responses.get("default")
+    return resp if isinstance(resp, dict) else {}
+
+
+def _scenario_headers(doc: OpenApiDoc, op: Operation, code) -> dict:
+    """The `headers` a generated scenario serves for one status code: each
+    header the response declares that has a value (OpenApiDoc.header_value) —
+    every required one, an optional one only with an example. Strings, as a
+    response sends them (ticket
+    2026-10-24-jsonui-test-mock-scenario-cannot-set-response-headers)."""
+    out = {}
+    for name, header in doc.response_headers(_response_obj(op, code)).items():
+        found, value = doc.header_value(header, required=header.get("required") is True)
+        if found:
+            out[name] = value
+    return out
+
+
 def _response_media(op: Operation, code):
     """(media_type_object, content_type) for one declared status code, or
     (None, None).
@@ -360,10 +389,7 @@ def _response_media(op: Operation, code):
     Falls back to the `default` response, which OpenAPI allows in place of an
     explicit code.
     """
-    resp = op.responses.get(str(code))
-    if resp is None:
-        resp = op.responses.get("default")
-    resp = resp or {}
+    resp = _response_obj(op, code)
     content = resp.get("content") or {}
     if "application/json" in content:
         return content["application/json"] or {}, "application/json"
@@ -735,6 +761,8 @@ def update_default(
                                          if declared is not None else ()))
                     else:
                         report_added = []
+                    report_added = report_added + add_missing_headers(
+                        doc, op, current.get("status", fresh_default.get("status")), current)
                     if report_added:
                         added[rel] = report_added
                     if schema is not None and current.get("body") is not None:
@@ -1978,28 +2006,33 @@ def _check_bodies(
             _report_declaration_only(rel, name, decl_problems, bodies, generated)
             continue
 
+        # The headers first: a file response (a CSV's Content-Disposition) has
+        # no body to compare and still has its headers.
+        heads = header_findings(doc, op, status, scenario)
         schema, content_type = _response_schema(op, status)
         if content_type is not None and content_type != "application/json":
             # binary/file response — the author supplies the fixture
             non_json.append(
                 f"{rel}  {name}: declared {content_type}, no JSON body to compare")
-            _report_declaration_only(rel, name, decl_problems, bodies, generated)
+            _report_headers_only(rel, name, heads, decl, decl_problems, bodies, generated)
             continue
         if schema is None:
             no_schema.append(
                 f"{rel}  {name}: status {status} declares no response body")
-            _report_declaration_only(rel, name, decl_problems, bodies, generated)
+            _report_headers_only(rel, name, heads, decl, decl_problems, bodies, generated)
             continue
 
         actual_body = scenario.get("body")
         if actual_body is None:
             compared += 1
-            bodies.append(BodyDrift(rel, name, ["<body>"], [], generated=generated,
+            heads, _ = _subtract_declared(heads, decl)
+            bodies.append(BodyDrift(rel, name, ["<body>"] + sorted(heads.missing), sorted(heads.extra),
+                                    violations=heads.violations, generated=generated,
                                     declaration=decl_problems))
             continue
 
         compared += 1
-        found = compare_to_schema(doc, schema, actual_body)
+        found = compare_to_schema(doc, schema, actual_body).merge(heads)
         found, used = _subtract_declared(found, decl)
         if decl is not None and not decl.errors:
             # A declaration that matches nothing is the dangerous half: the
@@ -2026,6 +2059,31 @@ def _check_bodies(
     return compared
 
 
+def _report_headers_only(rel: str, name: str, heads: "BodyFindings", decl,
+                         problems: list, bodies: list, generated: bool) -> None:
+    """A scenario with no body to compare: its headers' findings, less what
+    its `contractViolations` declares (a line that matches nothing is named,
+    as on a body — its headers are what such a declaration can be for). With
+    neither it is `_report_declaration_only`."""
+    if not (heads.missing or heads.extra or heads.violations) and decl is None:
+        _report_declaration_only(rel, name, problems, bodies, generated)
+        return
+    heads, used = _subtract_declared(heads, decl)
+    if decl is not None and not decl.errors:
+        problems = problems + [
+            f"contractViolations.{category} declares {text!r}, which this "
+            f"scenario no longer violates — the negative case it was "
+            f"written for is gone; remove the line or restore the case"
+            for category in _VIOLATION_CATEGORIES
+            for text in decl.paths[category]
+            if (category, text) not in used
+        ]
+    if heads.missing or heads.extra or heads.violations or problems:
+        bodies.append(BodyDrift(rel, name, sorted(heads.missing), sorted(heads.extra),
+                                violations=heads.violations, generated=generated,
+                                declaration=list(problems)))
+
+
 def _report_declaration_only(rel: str, name: str, problems: list,
                              bodies: list, generated: bool) -> None:
     """Surface declaration problems on a scenario whose body is not compared.
@@ -2035,6 +2093,53 @@ def _report_declaration_only(rel: str, name: str, problems: list,
     if problems:
         bodies.append(BodyDrift(rel, name, [], [], generated=generated,
                                 declaration=list(problems)))
+
+
+def header_findings(doc: OpenApiDoc, op: Operation, status, scenario: dict) -> "BodyFindings":
+    """A scenario's `headers` against the ones its response declares, by name
+    whatever its case (HTTP's rule): one the response does not declare is
+    extra, a required one absent is missing, a value its schema does not take
+    (read as the declared type, as a query value is) a violation — each at
+    `headers.<name>`, so a `contractViolations` line subtracts it as it does a
+    body's."""
+    from .contract import _coerce
+    found = BodyFindings()
+    given = scenario.get("headers")
+    given = given if isinstance(given, dict) else {}
+    declared = doc.response_headers(_response_obj(op, status))
+    by_lower = {name.lower(): (name, header) for name, header in declared.items()}
+    for name, value in given.items():
+        hit = by_lower.get(str(name).lower())
+        if hit is None:
+            found.extra.append(f"headers.{name}")
+            continue
+        schema = hit[1].get("schema")
+        if isinstance(schema, dict) and isinstance(value, str):
+            resolved = doc.resolve_schema(schema)
+            found.violations += compare_to_schema(
+                doc, schema, _coerce(resolved, value), f"headers.{name}").violations
+    lowered = {str(n).lower() for n in given}
+    for name, header in declared.items():
+        if header.get("required") is True and name.lower() not in lowered:
+            found.missing.append(f"headers.{name}")
+    return found
+
+
+def add_missing_headers(doc: OpenApiDoc, op: Operation, status, scenario: dict) -> list:
+    """Adds to a scenario the required headers its response declares and it
+    lacks (the generated value, OpenApiDoc.header_value), as `add_missing_required`
+    adds a body's; nothing it has is changed. Returns the paths added."""
+    given = scenario.get("headers")
+    if given is not None and not isinstance(given, dict):
+        return []
+    lowered = {str(n).lower() for n in (given or {})}
+    added = {}
+    for name, header in doc.response_headers(_response_obj(op, status)).items():
+        if header.get("required") is True and name.lower() not in lowered:
+            added[name] = doc.header_value(header, required=True)[1]
+    if added:
+        scenario["headers"] = {**(given or {}), **added}
+    return [f"headers.{name}" for name in added]
 
 
 def validate_against_schema(doc: OpenApiDoc, schema, value, path: str = "") -> list:

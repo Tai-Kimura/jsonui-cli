@@ -47,6 +47,12 @@
           "delayMs": { "type": "number", "minimum": 0 },
           "contentType": { "type": "string" },
           "bodyFile": { "type": ["string", "null"] },
+          "headers": {
+            "description": "Response headers sent with this scenario, by mock serve and by the generated branch tests (Retry-After, Content-Disposition, X-Request-ID...). A name is an HTTP token; Content-Type and Content-Length are the server's own (contentType and the body decide them). Under CORS their names are listed in Access-Control-Expose-Headers. mock generate writes the ones the OpenAPI response declares with a value; --check compares them as it does the body (headers.<name>).",
+            "type": "object",
+            "propertyNames": { "pattern": "^(?![Cc][Oo][Nn][Tt][Ee][Nn][Tt]-([Tt][Yy][Pp][Ee]|[Ll][Ee][Nn][Gg][Tt][Hh])$)[!#$%&'*+.^_`|~0-9A-Za-z-]+$" },
+            "additionalProperties": { "type": "string", "pattern": "^[^\\r\\n]*$" }
+          },
           "contractViolations": {
             "description": "Contract violations this scenario makes ON PURPOSE — a mock that omits a required field is how a test proves the client fails closed when the server omits it. The contract check subtracts exactly the paths named here; an undeclared violation in the same scenario still fails, and a declaration that stops matching is reported (a negative scenario that quietly turned positive). Paths use the checker's spelling; '[]' matches every element of an array, '[0]' one.",
             "type": "object",
