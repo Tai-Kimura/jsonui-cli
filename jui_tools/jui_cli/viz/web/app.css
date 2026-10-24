@@ -1856,3 +1856,58 @@ button.dev-row:hover { border-color: var(--info); }
 
 /* a Layout row's component type beside its Japanese name (View beside コンテナ): an identifier */
 .ty-raw { color: var(--wb-soft); font: 500 11px/1.4 var(--font-mono); }
+
+/* ---------- a worktree's spec beside its base (2.3.23, 50-spec-diff.js): full screen, the base left, the worktree right ---------- */
+body.sd-on { overflow: hidden; }
+.sd { position: fixed; inset: 0; z-index: 60; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--wb-bg); color: var(--wb-ink); }
+.sd[hidden] { display: none; }
+.sd-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 10px 16px; border-bottom: 1px solid var(--wb-line); background: var(--wb-card); }
+.sd-head h2 { margin: 0; color: var(--wb-ink); font: 400 20px/1.3 var(--font-display); overflow-wrap: anywhere; }
+.sd-head .grow { flex: 1 1 auto; }
+.sd .wb-btn { border-color: var(--wb-line); background: var(--wb-chip); color: var(--wb-ink); }
+.sd-only { display: flex; align-items: center; gap: 6px; color: var(--wb-soft); font-size: 12.5px; }
+.sd-sides { flex: 1 1 100%; margin: 0; color: var(--wb-soft); font: 500 12.5px/1.5 var(--font-mono); overflow-wrap: anywhere; }
+.sd-counts, .sd-mark { display: inline-flex; gap: 6px; font: 700 12.5px/1.4 var(--font-mono); }
+.sd-c-add { color: var(--ok); }
+.sd-c-del { color: var(--bad); }
+.sd-c-chg { color: var(--warn); }
+.sd-body { overflow: auto; padding: 12px 16px 32px; }
+.sd-body:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.sd-band { margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--wb-line); border-radius: 8px; background: var(--wb-chip); color: var(--wb-ink); }
+.sd-band-same { border-color: var(--ok); background: var(--ok-bg); color: var(--ok); font-weight: 700; }
+.sd-band-err { border-color: var(--bad); background: var(--bad-bg); color: var(--bad); }
+.sd-band code { font: 500 12px/1.5 var(--font-mono); overflow-wrap: anywhere; }
+.sd-cols-head, .sd-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 12px; }
+.sd-cols-head { position: sticky; top: -12px; z-index: 1; padding: 6px 0; background: var(--wb-bg); color: var(--wb-soft); font-weight: 700; font-size: 12.5px; }
+.sd-note { display: block; color: var(--wb-faint); font-weight: 400; }
+.sd-sec { margin: 14px 0 0; }
+.sd-sec h3 { margin: 0 0 6px; color: var(--wb-ink); font-size: 14px; }
+.sd-sec h3 small { margin-left: 8px; color: var(--wb-soft); font: 700 12px/1 var(--font-mono); }
+.sd-rows { display: grid; gap: 2px; }
+.sd-cell { display: flex; gap: 6px; min-width: 0; padding: 3px 8px; border-radius: 4px; font: 500 12.5px/1.55 var(--font-mono); overflow-wrap: anywhere; }
+.sd-sign { flex: none; width: 1ch; font-weight: 700; }
+.sd-t { min-width: 0; white-space: pre-wrap; }
+.sd-same .sd-cell { color: var(--wb-soft); }
+.sd-add .sd-cell:not(.sd-none) { background: var(--ok-bg); color: var(--wb-ink); box-shadow: inset 3px 0 var(--ok); }
+.sd-add .sd-sign { color: var(--ok); }
+.sd-del .sd-cell:not(.sd-none) { background: var(--bad-bg); color: var(--wb-ink); box-shadow: inset 3px 0 var(--bad); }
+.sd-del .sd-sign { color: var(--bad); }
+.sd-chg .sd-cell { background: var(--warn-bg); color: var(--wb-ink); box-shadow: inset 3px 0 var(--warn); }
+.sd-chg .sd-sign { color: var(--warn); }
+.sd-none { background: repeating-linear-gradient(135deg, transparent 0 6px, var(--wb-line) 6px 7px); opacity: 0.6; }
+.sd-x { padding: 0 2px; border-radius: 3px; background: var(--warn); color: var(--wb-card); }
+.sd-pre .sd-t { white-space: pre; overflow-x: auto; }
+/* the list's marks and the deleted cards (the overview of a worktree's app) */
+.ov-top .sd-mark { flex: none; }
+.sd-m-new { color: var(--ok); }
+.sd-m-same { color: var(--wb-faint); font-weight: 500; }
+.sd-m-gone { color: var(--bad); }
+.ov-card.sd-gone { opacity: 0.55; border-style: dashed; }
+.ov-card.sd-gone:hover, .ov-card.sd-gone:focus-visible { opacity: 0.85; }
+@media (max-width: 520px) {
+  .sd-head { padding: 8px 10px; }
+  .sd-head h2 { font-size: 17px; }
+  .sd-body { padding: 8px 10px 24px; }
+  .sd-cols-head, .sd-row { gap: 0 6px; }
+  .sd-cell { padding: 3px 4px; font-size: 11.5px; }
+}

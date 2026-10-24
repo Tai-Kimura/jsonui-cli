@@ -28,9 +28,9 @@ def web_text(*parts):
 
 def test_each_mode_is_its_parts_in_order():
     assert bundle.parts("demo", e2e=False) == ("05-i18n.js", "10-robot-core.js", "20-core.js", "30-source-demo.js", "31-talk-demo-data.js",
-                                               "40-scene.js", "45-spirits.js", "50-panel.js", "51-denials.js", "52-data-docs.js", "53-waits.js", "53-roster.js", "53-devices.js", "54-bills.js", "55-history.js", "56-server-room.js", "56-sr-models.js", "56-server-cost.js", "57-fulltext.js", "58-talk.js", "59-sr-flows.js", "59-sr-migration.js", "60-log.js", "70-main.js")
+                                               "40-scene.js", "45-spirits.js", "50-panel.js", "50-spec-diff.js", "51-denials.js", "52-data-docs.js", "53-waits.js", "53-roster.js", "53-devices.js", "54-bills.js", "55-history.js", "56-server-room.js", "56-sr-models.js", "56-server-cost.js", "57-fulltext.js", "58-talk.js", "59-sr-flows.js", "59-sr-migration.js", "60-log.js", "70-main.js")
     assert bundle.parts("live", e2e=False) == ("05-i18n.js", "10-robot-core.js", "20-core.js", "25-net.js", "30-source-live.js",
-                                               "40-scene.js", "45-spirits.js", "50-panel.js", "51-denials.js", "52-data-docs.js", "53-waits.js", "53-roster.js", "53-devices.js", "54-bills.js", "55-history.js", "56-server-room.js", "56-sr-models.js", "56-server-cost.js", "57-fulltext.js", "58-talk.js", "59-sr-flows.js", "59-sr-migration.js", "60-log.js", "70-main.js")
+                                               "40-scene.js", "45-spirits.js", "50-panel.js", "50-spec-diff.js", "51-denials.js", "52-data-docs.js", "53-waits.js", "53-roster.js", "53-devices.js", "54-bills.js", "55-history.js", "56-server-room.js", "56-sr-models.js", "56-server-cost.js", "57-fulltext.js", "58-talk.js", "59-sr-flows.js", "59-sr-migration.js", "60-log.js", "70-main.js")
 
 
 def test_build_joins_the_parts_in_that_order_with_a_marker_each():
@@ -193,6 +193,7 @@ BUILDERS = {
         "rbMovedHTML",   # the card's mark when its robot moved and the view did not follow (ticket 2026-10-21-jui-viz-camera-does-not-follow-robot-walking-rooms)
         "coTag",   # a spec's checkout, its branch (ticket 2026-10-23-jui-viz-spec-board-shows-worktree-in-progress)
     },
+    "50-spec-diff.js": {"sdCountsHTML", "sdCardMarkHTML", "sdListHTML", "sdCellHTML", "sdSectionHTML"},   # a worktree's spec beside its base (ticket 2026-10-24-viz-worktree-spec-diff-against-base)
     "51-denials.js": {"denialHTML"},   # a call stopped by auto mode (ticket 2026-10-20-jui-viz-auto-mode-denial-approve-from-page)
     "53-devices.js": {"devWhoHTML", "devRowHTML", "devLoadHTML", "devBarHTML"},
     # a robot's waits answered where they are listed: the panel's own cards (questionHTML, permBox, denialHTML) drawn here
@@ -204,7 +205,7 @@ BUILDERS = {
     "56-server-cost.js": {"srcSummary", "srcAccountHTML", "srcMonthSvg", "srcRow", "srcDayHtml", "srcPicked"},   # the cost simulator's month and day
 }
 # Builders a part may call that another part defines (each checked where it is defined).
-SHARED_BUILDERS = {"pill", "histOffHTML", "srFlowBoardHTML", "srMigBoardHTML", "srMigCostHTML", "srMigTotalHTML", "foldLine", "countB"}
+SHARED_BUILDERS = {"pill", "sdCardMarkHTML", "sdListHTML", "histOffHTML", "srFlowBoardHTML", "srMigBoardHTML", "srMigCostHTML", "srMigTotalHTML", "foldLine", "countB"}
 BUILDER_TABLES = {"bodies": "the sheet's section renderers, each a template checked here"}
 # Lookups into tables the page defines as literals (class names, labels, colours, icons).
 CONST_TABLES = {"ROLES", "ROLE_INK", "CASE_ICON", "COL_HINT", "COL_STATE", "EXACT_LABEL", "PLATFORM_JA",

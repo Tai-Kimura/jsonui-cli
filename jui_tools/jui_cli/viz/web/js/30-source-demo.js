@@ -713,6 +713,8 @@ const SOURCE = {
     tickerItems.unshift(item); logItems.unshift(item);
     showToast(tl('demo.perm.toast', { who: p.who, tool: p.tool, how: behavior === 'deny' ? tl('demo.perm.toast.denied') : behavior === 'always' ? tl('demo.perm.toast.always') : tl('demo.perm.toast.allowed') }));
   },
+  specDiff() { return Promise.resolve({ ok: false, error: 'demo' }); },   // the demo has no worktrees (50-spec-diff.js)
+  specDiffList() { return Promise.resolve({ ok: false, error: 'demo' }); },
   history() { return Promise.resolve({ ok: false, error: 'demo' }); },   // the demo has no transcripts
   historyImage() { return Promise.resolve({ ok: false, status: 0, error: 'demo' }); },
   historyFile() { return Promise.resolve({ ok: false, status: 0, error: 'demo' }); },

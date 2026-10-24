@@ -347,6 +347,8 @@
     "jui_tools/jui_cli/viz/sources/test_progress.py": "jsonui-test-runner の進捗の jsonl を読むだけ（CLI の transcript ではない）",
     "jui_tools/jui_cli/viz/sources/test_results.py": "jsonui-test-runner の結果を読むだけ",
     "jui_tools/jui_cli/viz/sources/weather.py": "天気（Open-Meteo）を読むだけ",
+    "jui_tools/jui_cli/viz/spec_diff.py": "ワークツリーのスペックと、分かれた所（merge-base）のスペックを並べるだけ。git を読むだけで走らせ（merge-base・show・ls-tree）、CLI の形も hooks の入力も読まない",
+    "jui_tools/jui_cli/viz/web/js/50-spec-diff.js": "spec_diff.py の答えを全画面に並べ、ボードの一覧に印と消したカードを出すだけ。CLI の形も hooks の入力も読まない",
     "jui_tools/jui_cli/viz/state.py": "サーバーの slice と rev の入れ物。中身の形は他のファイルが決める",
     "jui_tools/jui_cli/viz/web/app.css": "AskUserQuestion の名前は節のコメントにあるだけ。スタイルはツールの形に依らない（形は questions.py と 30-source-live.js が持つ）",
     "jui_tools/jui_cli/viz/web/boot.js": "/app.js を読み込むだけ",

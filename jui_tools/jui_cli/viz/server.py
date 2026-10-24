@@ -144,6 +144,9 @@ class ServerContext:
     on_hook: Callable[[dict], Awaitable[None] | None] | None = None
     # spec id -> the sheet's doc (P4), or None when the spec is unknown.
     sheet: Callable[[str], dict | None] | None = None
+    # a worktree's spec beside its base (spec_diff.py; 2.3.23): the message's fields -> {ok, ...}. Blocking (git), so
+    # run off the loop.
+    spec_diff: Callable[[dict], dict] | None = None
     # The World (P5: channel_hello / channel_request / decide / perms), and
     # what to call after changing it.
     world: object | None = None
@@ -1305,6 +1308,16 @@ async def _handle_browser_message(ctx: ServerContext, sock, message: dict) -> No
             await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": "unknown spec"})
             return
         await sock.send_json({"type": "sheet", "reqId": req_id, "specId": spec_id, "cards": cards})
+    elif kind in ("spec.diff", "spec.diffList"):
+        # only when the page's button is pressed: git runs here and nowhere else for a worktree (spec_diff.py)
+        if ctx.spec_diff is None:
+            await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": "no spec diff here"})
+            return
+        loop = asyncio.get_running_loop()
+        got = await loop.run_in_executor(None, ctx.spec_diff, message)
+        await sock.send_json({"type": "specDiff", "reqId": req_id, "kind": kind,
+                              **{k: message.get(k) for k in ("specId", "project", "app", "deleted")}, "diff": got})
+        await sock.send_json({"type": "ack", "reqId": req_id, "ok": True})
     elif kind == "history.get":
         # Only the robot whose 応答の履歴 tab is open, only when asked: never a slice, so never in a snapshot,
         # the event log or an export (sources/history.py).

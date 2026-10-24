@@ -119,6 +119,7 @@
             <code id="wb-file">docs/screens/json/</code>
             <span class="state" id="wb-status"></span>
             <span id="wb-who"></span>
+            <button type="button" class="wb-btn sd-open" id="wb-diff" hidden>{{tl:sd.button}}ベースとの差分{{/tl}}</button>
             <span class="grow"></span>
             <label for="wb-follow" id="wb-follow-label"><input type="checkbox" id="wb-follow" checked> {{tl:page.wb.follow}}進んでいる箇所に追従{{/tl}}</label>
           </div>
@@ -134,6 +135,17 @@
             </div>
           </div>
         </div>
+      </div>
+      <div class="sd" id="sd" hidden role="dialog" aria-modal="true" aria-labelledby="sd-title">
+        <div class="sd-head">
+          <button type="button" class="wb-btn" id="sd-close">{{tl:sd.close}}閉じる{{/tl}}</button>
+          <h2 id="sd-title"></h2>
+          <span class="sd-counts" id="sd-counts"></span>
+          <span class="grow"></span>
+          <label for="sd-only" class="sd-only"><input type="checkbox" id="sd-only"> {{tl:sd.only}}差だけ見せる{{/tl}}</label>
+          <p class="sd-sides" id="sd-sides"></p>
+        </div>
+        <div class="sd-body" id="sd-body" tabindex="0" aria-label="{{tl:sd.body.aria}}元と変更後のスペック{{/tl}}"></div>
       </div>
       <div class="wb" id="tb" hidden role="dialog" aria-modal="false" aria-labelledby="tb-title">
         <div class="wb-frame kb-frame">

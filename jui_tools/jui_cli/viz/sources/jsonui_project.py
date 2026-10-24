@@ -370,6 +370,9 @@ def discover_sources(root: Path) -> list[Source]:
 # integration's, a recording's). git is read, never written, and never run: the worktree list is the repository's
 # own files (<git dir>/worktrees/<name>/gitdir names each worktree's .git, its HEAD its branch), as `git worktree
 # list` reads them.
+# The one exception (2.3.23, ruled 10-24): the page's 「ベースとの差分」 buttons, and only when one is pressed, run git
+# read-only to read the base a worktree's spec started from (merge-base, show, ls-tree; GIT_OPTIONAL_LOCKS=0, 3
+# seconds) — viz/spec_diff.py. Nothing here runs it.
 
 def git_dir(folder: Path) -> Path | None:
     """The git directory of a checkout: its .git folder, or the one a .git file points at (a worktree, a submodule)."""

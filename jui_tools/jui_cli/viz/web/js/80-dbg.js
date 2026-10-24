@@ -3,6 +3,11 @@
 // Demo: setSim(seconds) jumps the script. Live: setSim(factor) sets the replay speed instead (25-net.js).
 const SPIRIT_DBG = { delay: 0 };   // spiritLoadDelay's wait (ms)
 window.__dbg = {
+  // a worktree's spec beside its base (spec_diff.py; ticket 2026-10-24-viz-worktree-spec-diff-against-base): a spec's place in the
+  // model by its name and app, the whiteboard opened on it (or on the overview, -1) with an app chosen, and how many worktree rows
+  sdIdx: (name, app) => latestModel.specs.findIndex((s) => s.name === name && (s.app || '') === app),
+  sdOpen: (i, app) => { if (app !== undefined) wb.app = app; openWhiteboard(i); return wb.open; },
+  sdWorktreeRows: () => latestModel.specs.filter((s) => s.checkout && s.checkout.worktree).length,
   // the server room (ticket 2026-10-20-jui-viz-server-room): the door's press, the keypad, the bubble, the view
   sr: () => {
     const k = srKeypad(SR.project, 0), V = SR.view;
