@@ -342,6 +342,15 @@ window.__dbg = {
       if (n === 1) { const c = new THREE.Vector3(p.x, p.y + 0.75, p.z).project(V.camera);
         first = { id, text: l.textContent, rect: [r.left, r.top, r.right, r.bottom].map(Math.round), center: Math.round(cv.top + (1 - c.y) / 2 * cv.height), topY: Math.round(topY), hz: f.hz, canvas: [cv.left, cv.top, cv.width, cv.height].map(Math.round), transform: l.style.transform, z: p.z }; } }
     return { tags: n, on: on.slice(0, 6), first }; },
+  // each group's floor on the page (its four corners at the tag's height, page px) and its tag as shown (null: left out)
+  srGroupTags: () => { const V = SR.view; if (!V) return null; const cv = V.renderer.domElement.getBoundingClientRect(), v = new THREE.Vector3();
+    const px = (x, y, z) => { v.set(x, y, z).project(V.camera); return [Math.round(cv.left + (v.x + 1) / 2 * cv.width), Math.round(cv.top + (1 - v.y) / 2 * cv.height)]; };
+    const tags = new Map([...document.querySelectorAll('#sr-labels .sr-label:not([hidden])')].filter((s) => s.dataset.kind === 'group')
+      .map((s) => { const r = s.getBoundingClientRect(); return [s.textContent, [r.left, r.top, r.right, r.bottom].map(Math.round)]; }));
+    return { lod: V.lod, canvas: [cv.left, cv.top, cv.right, cv.bottom].map(Math.round), floors: V.L.floors.filter((G) => G.g.id).map((G) => {
+      const y = 0.2 + G.level * 0.06, text = G.g.label || G.g.id;
+      return { id: G.g.id, text, level: G.level, parent: G.g.parent || null, corner: px(G.x + 0.15, y, G.z + 0.5),
+        quad: [px(G.x, y, G.z), px(G.x + G.w, y, G.z), px(G.x + G.w, y, G.z + G.d), px(G.x, y, G.z + G.d)], tag: tags.get(text) || null }; }) }; },
   srLabelRects: () => [...document.querySelectorAll('#sr-labels .sr-label:not([hidden])')].map((s) => { const r = s.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom].map(Math.round); }),
   // a robot of the room up close moved onto the line from the camera to the door, at a robot's height: it then stands in
   // front of the door from this view (D2: the door must still take the press, as the bell and the rack do)
