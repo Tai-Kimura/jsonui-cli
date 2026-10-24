@@ -126,3 +126,41 @@ def test_generate_writes_the_const_and_check_names_a_mock_that_is_not_it(tmp_pat
     report = generate([str(spec)], out, check=True)
     assert report.has_drift
     assert any("'string' is not the contract's const 'item'" in v for b in report.bodies for v in b.violations), report.bodies
+
+
+# The keys beside an allOf (ticket's family, the integrator's mutants): `{"allOf": [{"$ref": E}], "nullable": true}`
+# is E's value in a body and null in an empty result; a key beside the allOf beats the same key in a branch.
+NEIGHBOURS = {
+    "openapi": "3.0.3", "paths": {},
+    "components": {"schemas": {
+        "Status": {"type": "string", "enum": ["charged", "skipped"], "default": "charged"},
+        "Pick": {"oneOf": [{"type": "string", "const": "a"}, {"type": "string", "const": "b"}]},
+        "Row": {"type": "object", "properties": {
+            "status": {"allOf": [{"$ref": "#/components/schemas/Status"}], "nullable": True},
+            "chosen": {"allOf": [{"$ref": "#/components/schemas/Status"}], "default": "skipped"},
+            "pick": {"$ref": "#/components/schemas/Pick"}}}}},
+}
+
+
+def test_a_nullable_beside_an_allof_is_read_with_it():
+    doc = OpenApiDoc(NEIGHBOURS)
+    row = {"$ref": "#/components/schemas/Row"}
+    assert doc.sample_for_schema(row)["status"] == "charged"   # a body: the enum's value
+    assert doc.empty_for_schema(row)["status"] is None          # an empty result: null, as nullable says
+
+
+def test_a_key_beside_an_allof_beats_the_branch_s():
+    doc = OpenApiDoc(NEIGHBOURS)
+    assert doc.sample_for_schema({"$ref": "#/components/schemas/Row"})["chosen"] == "skipped"
+
+
+@pytest.mark.parametrize("types", [["string", "null"], ["null", "string"]])
+def test_a_stop_skips_null_in_a_type_list_in_either_order(types):
+    assert _stop_value({"type": types}) == "string"
+
+
+def test_a_second_branch_of_a_union_behind_a_ref_is_the_contract_s():
+    doc = OpenApiDoc(NEIGHBOURS)
+    pick = {"$ref": "#/components/schemas/Pick"}
+    assert compare_to_schema(doc, pick, "b").violations == []
+    assert compare_to_schema(doc, pick, "c").violations
