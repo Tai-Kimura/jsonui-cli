@@ -251,10 +251,31 @@ jobs:
       # Measured on ubuntu:24.04 (2026-09-24): rsvg-convert 2.58.0 honours
       # SOURCE_DATE_EPOCH, cairosvg 2.9.1 runs on cairo 1.18.0, and all nine
       # arms of test_ios_pdf_assets_are_deterministic.py pass with no skip.
-      - name: Install the SVG to PDF converters (exercises the iOS image arms)
+      #
+      # 🔻 THE APT PACKAGES COME FROM A CACHE, KEYED ON THE RUNNER IMAGE. The
+      # converters' apt-get and Playwright's --with-deps were the two steps a
+      # slow mirror held for minutes (2026-10-22: 7m13s; 2026-10-23: about 11
+      # minutes — the 25 → 35 above). apt_install_cached.sh downloads what this
+      # image lacks once per image version and installs from the cache after
+      # that, with no apt-get update. The list is Playwright's own: --dry-run
+      # prints the packages this image is missing for Chromium.
+      - name: Install Playwright (the package; Chromium and its libraries below)
+        run: python -m pip install "playwright==1.64.0"
+      - name: List the apt packages this image lacks (SVG converters, Chromium's libraries)
+        id: aptlist
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq librsvg2-bin
+          pkgs="librsvg2-bin $(python -m playwright install-deps --dry-run chromium | sed -n 's/^  //p' | tr '\n' ' ')"
+          echo "$pkgs"
+          echo "packages=$pkgs" >> "$GITHUB_OUTPUT"
+          echo "key=$ImageOS-$ImageVersion-$(printf '%s' "$pkgs" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - name: Cache the apt packages
+        uses: actions/cache@v4
+        with:
+          path: ~/apt-debs
+          key: apt-debs-${{ steps.aptlist.outputs.key }}
+      - name: Install the apt packages and the SVG to PDF converters (exercises the iOS image arms)
+        run: |
+          bash .github/scripts/apt_install_cached.sh "$HOME/apt-debs" ${{ steps.aptlist.outputs.packages }}
           python -m pip install cairosvg
       # test_api_model_enum_case_names.py compiles the generated Kotlin enum
       # with java + the compiler jars from a Gradle cache (the layout
@@ -279,10 +300,14 @@ jobs:
       # and its Chromium they skip, and the collection gate below stops the run
       # on the undeclared skip; they are not declared there, so they run here.
       # 1.64.0: the version the viz e2e's venv runs (no other pin in the repo).
-      - name: Install Playwright and Chromium (exercises the model export arms)
-        run: |
-          python -m pip install "playwright==1.64.0"
-          python -m playwright install --with-deps chromium
+      # The package and Chromium's system libraries went on above.
+      - name: Cache Chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-1.64.0-chromium-${{ runner.os }}-${{ runner.arch }}
+      - name: Install Chromium (exercises the model export arms)
+        run: python -m playwright install chromium
       # pytest, not `unittest discover`: the two runners disagree by 26 tests
       # here. Some modules are written pytest-style (bare asserts, `tmp_path`
       # fixtures) and `unittest discover` collects nothing from them — it walks
@@ -1114,3 +1139,45 @@ jobs:
           path: ${{ runner.temp }}/build27.log
           if-no-files-found: warn
           retention-days: 14
+
+  # TEMPORARY, MEASUREMENT ONLY — removed in the next commit. Runs after
+  # python-suite has saved the two caches and repeats the same install steps,
+  # so one run times the miss (python-suite) and the hit (here).
+  deps-cache-probe:
+    needs: python-suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Playwright (the package; Chromium and its libraries below)
+        run: python -m pip install "playwright==1.64.0"
+      - name: List the apt packages this image lacks (SVG converters, Chromium's libraries)
+        id: aptlist
+        run: |
+          pkgs="librsvg2-bin $(python -m playwright install-deps --dry-run chromium | sed -n 's/^  //p' | tr '\n' ' ')"
+          echo "$pkgs"
+          echo "packages=$pkgs" >> "$GITHUB_OUTPUT"
+          echo "key=$ImageOS-$ImageVersion-$(printf '%s' "$pkgs" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - name: Cache the apt packages
+        uses: actions/cache@v4
+        with:
+          path: ~/apt-debs
+          key: apt-debs-${{ steps.aptlist.outputs.key }}
+      - name: Install the apt packages and the SVG to PDF converters (exercises the iOS image arms)
+        run: |
+          bash .github/scripts/apt_install_cached.sh "$HOME/apt-debs" ${{ steps.aptlist.outputs.packages }}
+          python -m pip install cairosvg
+      - name: Cache Chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-1.64.0-chromium-${{ runner.os }}-${{ runner.arch }}
+      - name: Install Chromium (exercises the model export arms)
+        run: python -m playwright install chromium
+      - name: Chromium starts and rsvg-convert runs (the hit installed working packages)
+        run: |
+          rsvg-convert --version
+          python -c "from playwright.sync_api import sync_playwright as p; b=p().start().chromium.launch(); print('chromium', b.version); b.close()"
