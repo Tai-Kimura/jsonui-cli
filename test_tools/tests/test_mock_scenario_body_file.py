@@ -187,6 +187,26 @@ def test_a_branch_tests_bodyfile_is_relative_to_the_file_that_declares_it(tmp_pa
     assert bt._kt_str(CSV.decode("utf-8")) in kotlin.test_file.read_text(encoding="utf-8")
 
 
+def test_an_overlays_bodyfile_is_relative_to_the_overlay_not_the_last_file(tmp_path):
+    # generated/ declares the route; the first hand-written overlay adds the
+    # file response beside itself; a second overlay, sorting last, adds a
+    # scenario and no files.
+    root = _project(tmp_path, BASIC)
+    _write(root / "tests/mocks/generated/post_api-user-orders.mock.json", {
+        "source": {"method": "POST", "path": "/api/user/orders", "operationId": "createOrder"},
+        "scenarios": {"success": {"status": 200, "body": {"order": {"id": "o1"}}}}})
+    _write(root / "tests/mocks/orders/post_api-user-orders.mock.json", {
+        "source": {"method": "POST", "path": "/api/user/orders"},
+        "scenarios": {"conflict": {"status": 409, "contentType": "text/csv", "bodyFile": "files/conflict.csv"}}})
+    _write(root / "tests/mocks/orders/files/conflict.csv", CSV)
+    _write(root / "tests/mocks/zz/post_api-user-orders.mock.json", {
+        "source": {"method": "POST", "path": "/api/user/orders"},
+        "scenarios": {"drained": {"status": 204, "body": None}}})
+    kotlin = generate_branch_tests("checkout", root, platform="android", package="com.example.x",
+                                   out_dir="app/src/test/java", harness_dir="app/src/test/java")
+    assert bt._kt_str(CSV.decode("utf-8")) in kotlin.test_file.read_text(encoding="utf-8")
+
+
 def test_web_embeds_the_files_text_as_the_body(tmp_path):
     report = generate_branch_tests("checkout", _branch_project(tmp_path))
     test = report.test_file.read_text(encoding="utf-8")
