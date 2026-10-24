@@ -80,13 +80,13 @@ module KjuiTools
           # Size. The declared `width` / `height` (common) win and go through
           # the one size builder; they were dropped here, so a declared size
           # drew the 48dp default (kjui-dynamic-components-that-skip-the-
-          # common-modifiers). With neither declared, the `size` shorthand or
-          # the 48dp default stays as it was.
+          # common-modifiers). With neither declared, the 48dp default; the
+          # legacy `size` shorthand is retired (2026-10-24) and the normalizer
+          # folds it into width / height.
           if json_data['width'] || json_data['height'] || json_data['frame']
             modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           else
-            size = json_data['size'] || 48
-            modifiers << ".size(#{Helpers::BoundValue.dp(size)})"
+            modifiers << ".size(48.dp)"
           end
 
           # offset → alpha: the View slots after the size and before the

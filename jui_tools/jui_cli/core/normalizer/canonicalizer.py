@@ -33,6 +33,10 @@ SCHEMA_VERSION = 1
 # rewritten, since their keys are not component attributes.
 _CHILD_KEYS = ("child", "children")
 _SECTION_NODE_KEYS = ("header", "footer", "cell")
+# Components whose legacy `size` (a length) is retired: folded into width /
+# height like Indicator's. Ruled 2026-10-24 ("size を廃止する"): kjui read it
+# behind the required width / height, and no other face read it.
+_RETIRED_SIZE = ("Image", "CircleView")
 
 
 class Canonicalizer:
@@ -176,8 +180,13 @@ class Canonicalizer:
 
         self._fold_bind(rebuilt, node_type, warnings, source=source, label=label)
 
-        if self._table.definition_key_for(node_type) == "Indicator":
+        definition = self._table.definition_key_for(node_type)
+        if definition == "Indicator":
             self._fold_indicator_legacy(rebuilt, node_type, warnings, source=source, label=label)
+        elif definition in _RETIRED_SIZE:
+            self._fold_legacy_size(
+                rebuilt, definition, f"{definition} legacy spelling", warnings, source=source, label=label
+            )
 
         # Recurse into child nodes (structure keys are never aliases).
         for child_key in _CHILD_KEYS:
@@ -302,18 +311,30 @@ class Canonicalizer:
                     f"rewrote to 'indicatorStyle: {style}' (a style file named '{style}' is "
                     f"not applied to an Indicator)"))
             del node["style"]
-        if "size" in node:
-            size = node.pop("size")
-            if "width" in node or "height" in node or "frame" in node:
-                warnings.append(self._fmt(source, label,
-                    f"{tag}: 'size: {size}' and a declared width / height are both set — "
-                    f"keeping width / height, dropping size"))
-            else:
-                node["width"] = size
-                node["height"] = size
-                warnings.append(self._fmt(source, label,
-                    f"{tag}: 'size: {size}' is not declared on Indicator — rewrote to "
-                    f"'width: {size}, height: {size}'"))
+        self._fold_legacy_size(node, "Indicator", tag, warnings, source=source, label=label)
+
+    def _fold_legacy_size(
+        self, node: dict, definition: str, tag: str, warnings: list[str], *, source: str, label: str
+    ) -> None:
+        """``size`` (a length, undeclared) as the node's width and height.
+
+        Indicator's, and Image's (CircleImage included) and CircleView's since
+        2026-10-24. A declared width / height (or frame) wins and size is
+        dropped; either way the warning is named with ``tag``.
+        """
+        if "size" not in node:
+            return
+        size = node.pop("size")
+        if "width" in node or "height" in node or "frame" in node:
+            warnings.append(self._fmt(source, label,
+                f"{tag}: 'size: {size}' and a declared width / height are both set — "
+                f"keeping width / height, dropping size"))
+        else:
+            node["width"] = size
+            node["height"] = size
+            warnings.append(self._fmt(source, label,
+                f"{tag}: 'size: {size}' is not declared on {definition} — rewrote to "
+                f"'width: {size}, height: {size}'"))
 
     def _canonicalize_section(
         self, section: Any, warnings: list[str], *, source: str, path: str

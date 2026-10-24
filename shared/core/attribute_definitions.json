@@ -2757,12 +2757,6 @@
     "defaultImage": {
       "type": "string",
       "description": "Default image name. Declared from the implementation, which already read it: sjui image_converter.rb:36,42 (defaultImage || errorImage || loadingImage) (plan 51-E)."
-    },
-    "size": {
-      "type": "number",
-      "description": "Width and height in dp when width/height are not given (kjui image_component).",
-      "platform": "kotlin",
-      "warn_outside_mode": true
     }
   },
   "NetworkImage": {
@@ -3772,12 +3766,6 @@
       "type": "array",
       "acceptsSingle": true,
       "description": "Child components (alias for child). A single component node (object) is accepted as a one-element array."
-    },
-    "size": {
-      "type": "number",
-      "description": "Diameter in dp when width/height are not given (kjui circleview_component).",
-      "platform": "kotlin",
-      "warn_outside_mode": true
     }
   },
   "ScrollView": {

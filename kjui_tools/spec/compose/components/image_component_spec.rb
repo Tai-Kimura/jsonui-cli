@@ -15,10 +15,13 @@ RSpec.describe KjuiTools::Compose::Components::ImageComponent do
       expect(result).to include('icon_home')
     end
 
-    it 'generates Image with size' do
+    # The legacy `size` is retired (2026-10-24): the normalizer folds it into
+    # width / height, and the converter no longer reads it.
+    it 'reads no legacy size' do
       json_data = { 'type' => 'Image', 'src' => 'icon_home', 'size' => 48 }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('.size(48.dp)')
+      expect(result).not_to include('48')
+      expect(result).to eq(described_class.generate({ 'type' => 'Image', 'src' => 'icon_home' }, 0, Set.new))
     end
 
     it 'generates Image with width and height' do

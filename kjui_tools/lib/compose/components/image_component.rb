@@ -61,8 +61,6 @@ module KjuiTools
             else
               modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
             end
-          elsif json_data['size']
-            modifiers << ".size(#{Helpers::BoundValue.dp(json_data['size'])})"
           else
             modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           end

@@ -133,10 +133,13 @@ RSpec.describe KjuiTools::Compose::Components::CircleImageComponent do
         expect(result).to include('.size(48.dp)')
       end
 
-      it 'uses custom size' do
+      # The legacy `size` is retired (2026-10-24): the normalizer folds it
+      # into width / height, and the converter no longer reads it.
+      it 'reads no legacy size' do
         json_data = { 'type' => 'CircleImage', 'size' => 64 }
         result = described_class.generate(json_data, 0, required_imports)
-        expect(result).to include('.size(64.dp)')
+        expect(result).to include('.size(48.dp)')
+        expect(result).not_to include('64')
       end
 
       it 'clips to CircleShape' do
