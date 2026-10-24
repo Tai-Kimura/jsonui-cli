@@ -334,6 +334,8 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .pg-item:hover { background: var(--bg); }
 .pg-item.pg-sub { margin-left: 22px; }
 .pg-name { display: grid; min-width: 0; }
+/* a robot's name never breaks inside itself ("jsonui-" / "implement" beside a long state): one line, cut with …, whole in its title (ticket 2026-10-24-viz-robot-picker-name-breaks-after-hyphen) */
+.pg-nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pg-name small { color: var(--ink-soft); font: 500 11px/1.4 var(--font-mono); }
 .pop-none { margin: 4px 2px; color: var(--ink-soft); font-size: 12px; }
 .session { display: grid; gap: 4px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
