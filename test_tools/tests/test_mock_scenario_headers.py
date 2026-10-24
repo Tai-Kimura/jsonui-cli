@@ -115,6 +115,8 @@ def test_the_validator_takes_headers():
     (["Retry-After"], "must be an object"),
     ({"Retry-After": 30}, "a header's value is a string"),
     ({"Retry-After": "30\r\nX-Evil: 1"}, "line break"),
+    ({"Retry-After": "30\rX-Evil: 1"}, "line break"),   # a CR alone ends a header too
+    ({"Retry-After": "30\nX-Evil: 1"}, "line break"),
     ({"Retry After": "30"}, "is not a header name"),
     ({"content-type": "text/plain"}, "contentType"),
     ({"Content-Length": "3"}, "written by the server"),
@@ -161,6 +163,14 @@ def test_serve_sends_none_it_would_not(tmp_path):
     assert status == 200 and headers["X-Ok"] == "yes"
     assert headers.get("X-Evil") is None and headers.get("Set-Cookie") is None
     assert headers["Content-Type"] == "application/json" and headers["Access-Control-Expose-Headers"] == "X-Ok"
+
+
+@pytest.mark.parametrize("value", ["1\rSet-Cookie: a=b", "1\nSet-Cookie: a=b"], ids=["cr", "lf"])
+def test_serve_sends_no_header_with_a_line_break_alone(tmp_path, value):
+    status, headers = _serve(tmp_path, {"status": 200, "headers": {"X-Evil": value, "X-Ok": "yes"}, "body": {}})
+    assert status == 200 and headers["X-Ok"] == "yes"
+    assert headers.get("X-Evil") is None and headers.get("Set-Cookie") is None
+    assert headers["Access-Control-Expose-Headers"] == "X-Ok"
 
 
 def test_serve_without_headers_sends_what_it_did(tmp_path):
@@ -239,7 +249,7 @@ def test_update_default_adds_a_required_header(tmp_path):
 SCENARIOS = {
     "success": {"status": 200, "body": {"order": {"id": "o1"}}},
     "conflict": {"status": 409, "body": {"error": {"code": "sold_out"}},
-                 "headers": {"Retry-After": "30", "X-Evil": "a\nb"}},
+                 "headers": {"Retry-After": "30", "X-Evil": "a\nb", "X-Evil-Cr": "a\rb"}},
 }
 
 

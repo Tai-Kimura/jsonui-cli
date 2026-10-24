@@ -140,6 +140,18 @@ def test_a_bodyfile_is_relative_to_the_file_that_declares_the_scenario(tmp_path)
         srv.shutdown()
 
 
+def test_mock_serve_sends_the_body_when_both_are_set(tmp_path):
+    # validate says "'body' is what is sent"; serve sends it, not the file.
+    _write(tmp_path / "files/export.csv", CSV)
+    _csv_mock(tmp_path, {"status": 200, "contentType": "text/csv", "body": "inline,row",
+                         "bodyFile": "files/export.csv"})
+    srv = _serve(tmp_path)
+    try:
+        assert _get(srv, "/export")[2] == b"inline,row"
+    finally:
+        srv.shutdown()
+
+
 def test_an_unreadable_bodyfile_is_a_500_that_names_it(tmp_path):
     _csv_mock(tmp_path, {"status": 200, "contentType": "text/csv", "bodyFile": "files/nowhere.csv"})
     srv = _serve(tmp_path)
@@ -215,3 +227,24 @@ def test_a_file_that_is_not_utf8_is_refused_by_name(tmp_path):
     root = _branch_project(tmp_path, file_bytes=b"%PDF-1.7\n\xff\xfe\x00binary")
     with pytest.raises(BranchTestGenerationError, match=r"conflict.*not UTF-8 text"):
         generate_branch_tests("checkout", root)
+
+
+def test_the_runtimes_are_handed_the_body_when_both_are_set(tmp_path):
+    # The runtimes send what the generator embeds: the inline body, not the file's text.
+    root = _project(tmp_path, BASIC, scenarios={
+        "success": {"status": 200, "body": {"order": {"id": "o1"}}},
+        "conflict": {"status": 409, "contentType": "text/csv", "body": "inline,row",
+                     "bodyFile": "files/conflict.csv"},
+    })
+    _write(root / "tests/mocks/orders/files/conflict.csv", CSV)
+    text = CSV.decode("utf-8")
+    web = generate_branch_tests("checkout", root).test_file.read_text(encoding="utf-8")
+    assert '"inline,row"' in web and json.dumps(text, ensure_ascii=False) not in web
+    kotlin = generate_branch_tests("checkout", root, platform="android", package="com.example.x",
+                                   out_dir="app/src/test/java", harness_dir="app/src/test/java")
+    kt = kotlin.test_file.read_text(encoding="utf-8")
+    assert f'Triple(409, {bt._kt_str("inline,row")}, "text/csv")' in kt and bt._kt_str(text) not in kt
+    swift = generate_branch_tests("checkout", root, platform="ios", module="checkout_app",
+                                  out_dir="Tests/Generated", harness_dir="Tests/Generated")
+    sw = swift.test_file.read_text(encoding="utf-8")
+    assert f'(409, {bt._swift_str("inline,row")}, "text/csv")' in sw and bt._swift_str(text) not in sw
