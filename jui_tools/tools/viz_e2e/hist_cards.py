@@ -261,7 +261,7 @@ async def run_hist_cards(pw, out, failures):
         await page.click(f"{d1} [data-dback]")
         await page.click(f"{d1} [data-ddismiss]")
         await page.click("#rb [data-h-cards] [data-dcard]:has-text('rm -rf build') [data-ddismiss]")
-        await wait(page, "() => { const d = [...document.querySelectorAll('#denied [data-dcard]')]; return d.every((x) => x.textContent.includes('そのままにした')); }", label="そのまま everywhere")
+        await wait(page, f"() => {{ const d = [...document.querySelectorAll('#denied [data-dcard]')]; return d.every((x) => x.textContent.includes({json.dumps(T('deny.done.dismissed'))})); }}", label="そのまま everywhere")
         await page.screenshot(path=str(out / "answered.png"))
         # × on the four answered cards, in the history's cards only; one pressed per kind: that card off there, the other
         # of its kind still there, the panel keeping all

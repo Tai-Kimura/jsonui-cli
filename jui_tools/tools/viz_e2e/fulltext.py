@@ -34,7 +34,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, ISOLATE, LAUNCH_ARGS, Watch, dump, new_page, ready, stamp
+from common import DESKTOP, ISOLATE, LAUNCH_ARGS, T, Watch, dump, new_page, ready, stamp
 from waits import WaitTimeout, until
 
 SID_A = "a1f00000-0000-4000-8000-0000000000f1"
@@ -371,8 +371,9 @@ async def run_fulltext(pw, out, failures, jt=None, shots_only=False):
         await page.screenshot(path=str(out / "after-strip-light.png"))
         await page.mouse.move(5, 5)
         await until(page, TAG_HIDDEN, "the strip's tag gone")
-        await page.hover("#ticker .what:has-text('出勤')")
-        r = res["stripShort"] = await page.evaluate(STRIP_JS, "出勤")
+        clock_in = T("ev.clock_in", source="").strip()
+        await page.hover(f"#ticker .what:has-text({json.dumps(clock_in)})")
+        r = res["stripShort"] = await page.evaluate(STRIP_JS, clock_in)
         check(failures, r and not r["cut"] and not r["shown"] and r["tabindex"] is None, f"a short strip line: no tag, not focusable: {r}")
         await page.mouse.move(5, 5)
         await page.focus("#btn-log")

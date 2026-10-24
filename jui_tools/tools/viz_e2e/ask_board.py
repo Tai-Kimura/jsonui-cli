@@ -22,7 +22,7 @@ import subprocess
 import sys
 import time
 
-from common import ISOLATE, DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, ready
+from common import ISOLATE, DESKTOP, LAUNCH_ARGS, T, Watch, dump, new_page, ready
 from demo import STRIP_HITS
 
 Q = {"questions": [{"question": "どちらにしますか", "header": "選択", "multiSelect": False,
@@ -144,7 +144,7 @@ async def run_ask_board(pw, out, failures):
         b = res["opened"] = await page.evaluate(BOARD)
         check(failures, b["open"] and b["sideClosed"], f"Enter on the 質問 chip opens the board with the panel closed: {b}")
         check(failures, sorted(b["pend"]) == sorted(set(b["pend"])) and len(b["pend"]) == 2 and len(b["ids"]) == len(set(b["ids"])), f"every waiting question once: {b['ids']} {b['pend']}")
-        check(failures, b["chipAsk"] == f"質問 {len(b['pend'])}" and b["chipPerm"] == f"許可待ち {len(b['perms'])}" and len(b["perms"]) == 1 and len(set(b["perms"])) == 1,
+        check(failures, b["chipAsk"] == T("panel.chip.ask", n=len(b['pend'])) and b["chipPerm"] == T("panel.count.waiting", n=len(b['perms'])) and len(b["perms"]) == 1 and len(set(b["perms"])) == 1,
               f"the board's counts are the chips': {b}")
         check(failures, set(b["pend"]) == set(b["panelPend"]), f"the board's questions are the panel's: {b['pend']} vs {b['panelPend']}")
         # folded on open (ticket 2026-10-22-viz-taskboard-top-strips-hide-the-columns): the focus on the first question's line,
@@ -184,7 +184,7 @@ async def run_ask_board(pw, out, failures):
         await page.wait_for_timeout(1500)
         b2 = res["afterAnswer"] = await page.evaluate(BOARD)
         rob = res["robotsAfterAnswer"] = await page.evaluate(ROBOTS)
-        check(failures, first not in b2["pend"] and first not in b2["panelPend"] and b2["chipAsk"] == "質問 1", f"answered on the board: gone from the board and the panel, the chip counts 1: {b2}")
+        check(failures, first not in b2["pend"] and first not in b2["panelPend"] and b2["chipAsk"] == T("panel.chip.ask", n=1), f"answered on the board: gone from the board and the panel, the chip counts 1: {b2}")
         changed = [k for k in rob if before.get(k) == "waiting" and rob[k] != "waiting"]
         check(failures, len(changed) >= 1, f"the robot that asked stops waiting: {before} -> {rob}")
         # allow the permission on the board
@@ -231,7 +231,7 @@ async def run_ask_board(pw, out, failures):
             b4 = res["nothing"] = await page.evaluate(BOARD)
             note = await page.evaluate("() => document.getElementById('q-strip').textContent")
             res["noneNote"] = note
-            check(failures, b4["chipAsk"] is None and b4["chipPerm"] is None and b4["pend"] == [] and "答えを待っている質問はない" in note,
+            check(failures, b4["chipAsk"] is None and b4["chipPerm"] is None and b4["pend"] == [] and T("panel.q.none") in note,
                   f"nothing waiting: no chip, the board says so: {b4} {note[:80]!r}")
             await page.screenshot(path=str(out / "board-nothing.png"))
         # Space on the 許可待ち chip: a new permission, the panel closed
@@ -257,7 +257,7 @@ async def run_ask_board(pw, out, failures):
         await page.keyboard.press("Escape")
         await wait(page, "() => document.getElementById('tb').hidden", label="closed before the projects")
         ask("a", "ask-a2"), ask("b", "ask-b2")
-        await wait(page, "() => document.getElementById('chip-ask').textContent === '質問 2'", timeout=20000, label="two questions in two projects")
+        await wait(page, f"() => document.getElementById('chip-ask').textContent === {json.dumps(T('panel.chip.ask', n=2))}", timeout=20000, label="two questions in two projects")
 
         async def pick(name):
             await page.click("#scope-top")
@@ -273,13 +273,13 @@ async def run_ask_board(pw, out, failures):
         scoped = res["scoped"] = await page.evaluate("""() => { const n = document.querySelector('#q-strip [data-q-elsewhere]');
           return { chip: document.getElementById('chip-ask').textContent, pend: document.querySelectorAll('#q-strip [data-qcard].q-open').length,
                    elsewhere: n ? Number(n.dataset.qElsewhere) : 0, note: n ? n.textContent : '', button: !!(n && n.querySelector('[data-set-all]')) }; }""")
-        check(failures, scoped["chip"] == "質問 2" and scoped["pend"] == 1 and scoped["elsewhere"] == 1 and scoped["button"]
-              and "ほかのプロジェクトでも 1 件が答えを待っている" in scoped["note"], f"one project picked: the card in scope and the count elsewhere: {scoped}")
-        check(failures, scoped["chip"] == f"質問 {scoped['pend'] + scoped['elsewhere']}", f"the chip = the cards in scope + elsewhere: {scoped}")
+        check(failures, scoped["chip"] == T("panel.chip.ask", n=2) and scoped["pend"] == 1 and scoped["elsewhere"] == 1 and scoped["button"]
+              and T("panel.q.elsewhere", n=1) in scoped["note"], f"one project picked: the card in scope and the count elsewhere: {scoped}")
+        check(failures, scoped["chip"] == T("panel.chip.ask", n=scoped['pend'] + scoped['elsewhere']), f"the chip = the cards in scope + elsewhere: {scoped}")
         await page.click("#q-strip [data-set-all]")
         await wait(page, "() => document.querySelectorAll('#q-strip [data-qcard].q-open').length === 2", timeout=10000, label="all projects: both cards")
         allp = res["allProjects"] = await page.evaluate("() => ({ chip: document.getElementById('chip-ask').textContent, pend: document.querySelectorAll('#q-strip [data-qcard].q-open').length, note: !!document.querySelector('#q-strip [data-q-elsewhere]') })")
-        check(failures, allp["chip"] == f"質問 {allp['pend']}" and not allp["note"], f"after すべて: the cards equal the chip, no note: {allp}")
+        check(failures, allp["chip"] == T("panel.chip.ask", n=allp['pend']) and not allp["note"], f"after すべて: the cards equal the chip, no note: {allp}")
         # the 質問 chip from that one project, the questions waiting in two (requester 10-24: 「複数プロジェクト待ちの時は全ての
         # プロジェクト選択状態にして」, ticket 2026-10-24-viz-wait-to-board-keeps-the-wrong-project): すべて chosen, both cards,
         # no note — before, the chip kept board-a and its board said one waits elsewhere
@@ -294,7 +294,7 @@ async def run_ask_board(pw, out, failures):
         # one project waiting (b's answered in its terminal): the 質問 chip from board-b chooses a's project, its card on the board
         hook(body("b", hook_event_name="PostToolUse", tool_name="AskUserQuestion", tool_use_id="ask-b2",
                   tool_input={**Q, "answers": {"どちらにしますか": "右"}}, tool_response={"answers": {"どちらにしますか": "右"}}))
-        await wait(page, "() => document.getElementById('chip-ask').textContent === '質問 1'", timeout=20000, label="one question left (a's)")
+        await wait(page, f"() => document.getElementById('chip-ask').textContent === {json.dumps(T('panel.chip.ask', n=1))}", timeout=20000, label="one question left (a's)")
         await page.keyboard.press("Escape")
         await wait(page, "() => document.getElementById('tb').hidden", label="closed before the one-project chip")
         await pick("board-b")

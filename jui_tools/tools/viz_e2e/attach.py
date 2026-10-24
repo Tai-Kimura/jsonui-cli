@@ -27,7 +27,7 @@ import sys
 import time
 import zlib
 
-from common import DESKTOP, ISOLATE, LAUNCH_ARGS, PHONE, Watch, dump, new_page, ready, stamp
+from common import DESKTOP, ISOLATE, LAUNCH_ARGS, PHONE, T, T_pattern, Watch, dump, new_page, ready, stamp
 
 S_OK = "e2e00000-0000-4000-8000-0000000000e1"
 CWD = "/work/attach-ok"
@@ -200,7 +200,7 @@ async def run_attach(pw, out, failures):
         # a file over 20 MB: refused on the page, nothing kept
         await page.set_input_files("[data-h-file]", str(big))
         got = await chips_ready(page, 4, "the big file's chip")
-        check(got[3]["err"] and "大きすぎる" in got[3]["meta"], f"over 20 MB is refused on the page: {got[3]}")
+        check(got[3]["err"] and T("hist.attach.big") in got[3]["meta"], f"over 20 MB is refused on the page: {got[3]}")
         await page.click("[data-h-attach] li:nth-child(4) .h-attach-x")
         # × on the dropped file: off the page and off the disk
         dropped_id = chips[1]["id"]
@@ -223,10 +223,10 @@ async def run_attach(pw, out, failures):
         await page.click("[data-h-send]")
         preview = await page.evaluate("() => document.querySelector('[data-h-preview]').textContent")
         res["preview"] = preview
-        check(preview.count("添付: ") == 3 and preview.startswith("この 3 つを見て"), f"the confirmation lists the files: {preview!r}")
+        check(len(T_pattern("hist.confirm.file").findall(preview)) == 3 and preview.startswith("この 3 つを見て"), f"the confirmation lists the files: {preview!r}")
         await page.wait_for_timeout(500)
         await page.click("[data-h-go]")
-        await wait(page, "() => document.querySelector('[data-h-compose] [data-h-state]').textContent.startsWith('送信中')", label="送信中")
+        await wait(page, f"() => new RegExp({json.dumps('^' + T_pattern('hist.state.sending').pattern)}).test(document.querySelector('[data-h-compose] [data-h-state]').textContent)", label="送信中")
         check(await page.evaluate(CHIPS) == [], "the chips go once sent")
         _, polled = local("GET", f"/channel/poll?channelId={channel}", timeout=30)
         text = polled["prompts"][0]["text"] if polled["prompts"] else ""
@@ -296,7 +296,7 @@ async def run_attach(pw, out, failures):
           name: li.querySelector('.h-attach-name').textContent, thumb: !!li.querySelector('img'), title: li.title }))""")
         check(sum(m["thumb"] for m in res["marks"]) == 1 and any(image_id and image_id in m["title"] for m in res["marks"] if m["thumb"]),
               f"the pasted image's mark has its thumbnail: {res['marks']}")
-        await wait(page, "() => document.querySelector('[data-h-compose] [data-h-state]').textContent.startsWith('届いた')", timeout=15000, label="届いた")
+        await wait(page, f"() => new RegExp({json.dumps('^' + T_pattern('hist.state.arrived').pattern)}).test(document.querySelector('[data-h-compose] [data-h-state]').textContent)", timeout=15000, label="届いた")
         await page.screenshot(path=str(out / "history.png"))
         # 2.3.9 (ticket 2026-10-20-jui-viz-attachment-thumb-opens-large): the image's mark opens the history's large view
         THUMB = "[data-rb-hist] .h-attach-sent .h-thumb"
@@ -326,9 +326,9 @@ async def run_attach(pw, out, failures):
         await open_robot(page)
         await wait(page, f"() => {{ const b = document.querySelector('{THUMB}'); return b && b.classList.contains('h-thumb-bad'); }}", timeout=15000, label="the gone image's mark")
         res["goneMark"] = await page.evaluate(f"() => {{ const b = document.querySelector('{THUMB}'); return {{ note: b.querySelector('.h-thumb-note').textContent, src: !!b.querySelector('img').getAttribute('src') }}; }}")
-        check(res["goneMark"] == {"note": "消えました", "src": False}, f"a gone image: 消えました, no picture: {res['goneMark']}")
+        check(res["goneMark"] == {"note": T("hist.img.err.gone"), "src": False}, f"a gone image: 消えました, no picture: {res['goneMark']}")
         await page.click(THUMB)
-        await wait(page, f"() => {{ const g = ({LIGHT_IMG})(); return g && g.note === '消えました'; }}", label="the large view says 消えました")
+        await wait(page, f"() => {{ const g = ({LIGHT_IMG})(); return g && g.note === {json.dumps(T('hist.img.err.gone'))}; }}", label="the large view says 消えました")
         res["goneLight"] = await page.evaluate(LIGHT_IMG)
         check(not res["goneLight"]["src"], f"the large view shows no broken picture: {res['goneLight']}")
         await page.screenshot(path=str(out / "attach-gone.png"))

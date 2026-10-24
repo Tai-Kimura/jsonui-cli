@@ -18,15 +18,28 @@ It runs against an older page too and says what that page lacks (the screenshots
 
 from __future__ import annotations
 
+import json
 import pathlib
 import time
 
-from common import DESKTOP, PHONE, Watch, freeze, new_page, ready, shown
+from common import DESKTOP, PHONE, T, Watch, freeze, new_page, ready, shown
 
-NAME = "spec の進み具合の説明"
-GONE = ["ファイル監視で追い", "relatedFiles から割り出す", "行を押すとホワイトボードに寄って", "バーは", "7 区分", "カードを押すとその spec を開く"]
-MUST = ["ファイル監視で追い", "relatedFiles から割り出す", "概要・構造・状態・データ・操作・遷移・分岐", "書き込み中", "記入済み", "実装済み", "テスト済み", "未記入",
-        "行を押すとホワイトボードに寄って", "カードを押すとその spec を開く"]
+
+# read in the run's language when a check runs (run.py sets it after this module is imported)
+def NAME() -> str:
+    return T("page.spec.help")
+
+
+def GONE() -> list[str]:
+    """The explanation's three paragraphs: gone from the panel and the overview."""
+    return [T("panel.help.watch"), T("panel.help.bar"), T("panel.help.open")]
+
+
+def MUST() -> list[str]:
+    """The dialog: the three paragraphs and the five swatches' names."""
+    return GONE() + [T(f"panel.sw.{k}") for k in ("writing", "written", "impl", "tested", "empty")]
+
+
 HELP = "[data-spec-help]"
 
 # what a place shows outside the dialog: its text and how many colour swatches are visible
@@ -70,19 +83,19 @@ async def run_spec_help(pw, out, failures, Server):
                 await page.evaluate("() => document.getElementById('h-spec').scrollIntoView({ block: 'start' })")
                 await page.wait_for_timeout(300)
                 panel = r["panel"] = await page.evaluate(PLACE, "section[aria-labelledby='h-spec']")
-                check(failures, panel and not [g for g in GONE if g in panel["text"]] and panel["swatches"] == 0,
-                      f"{key}: the panel's explanation and legend are gone: {[g for g in GONE if panel and g in panel['text']]}, swatches {panel and panel['swatches']}")
+                check(failures, panel and not [g for g in GONE() if g in panel["text"]] and panel["swatches"] == 0,
+                      f"{key}: the panel's explanation and legend are gone: {[g for g in GONE() if panel and g in panel['text']]}, swatches {panel and panel['swatches']}")
                 rows = await page.evaluate("() => document.querySelectorAll('#spec-list .spec-row').length + ':' + document.querySelectorAll('#spec-filter button').length")
                 r["rowsChips"] = rows
                 check(failures, rows.split(":")[0] != "0" and rows.split(":")[1] != "0", f"{key}: the rows and the chips stay: {rows}")
                 await page.screenshot(path=str(out / f"panel-{key}.png"))
                 pbtn = page.locator(f"section[aria-labelledby='h-spec'] {HELP}")
-                named = await page.get_by_role("button", name=NAME, exact=True).count()
+                named = await page.get_by_role("button", name=NAME(), exact=True).count()
                 r["namedButtons"] = named
                 check(failures, await pbtn.count() == 1, f"{key}: a 「?」 next to the panel's heading")
                 dialogs = r.setdefault("dialogs", {})
                 if await pbtn.count() == 1:
-                    check(failures, (await pbtn.get_attribute("aria-label")) == NAME, f"{key}: the panel's 「?」 is named {NAME}")
+                    check(failures, (await pbtn.get_attribute("aria-label")) == NAME(), f"{key}: the panel's 「?」 is named {NAME()}")
                     # open, read, close with Esc
                     await pbtn.click()
                     await page.wait_for_timeout(250)
@@ -97,14 +110,14 @@ async def run_spec_help(pw, out, failures, Server):
                 ov = r["overview"] = await page.evaluate(PLACE, "#wb")
                 cards = await page.evaluate("() => document.querySelectorAll('.ov-card').length")
                 r["cards"] = cards
-                check(failures, ov and not [g for g in GONE if g in ov["text"]] and ov["swatches"] == 0,
-                      f"{key}: the overview's legend is gone: {[g for g in GONE if ov and g in ov['text']]}, swatches {ov and ov['swatches']}")
+                check(failures, ov and not [g for g in GONE() if g in ov["text"]] and ov["swatches"] == 0,
+                      f"{key}: the overview's legend is gone: {[g for g in GONE() if ov and g in ov['text']]}, swatches {ov and ov['swatches']}")
                 check(failures, cards > 0, f"{key}: the overview's cards stay: {cards}")
                 await page.screenshot(path=str(out / f"overview-{key}.png"))
                 obtn = page.locator(f"#wb {HELP}")
                 check(failures, await obtn.count() == 1 and await obtn.is_visible(), f"{key}: a 「?」 on the overview")
                 if await obtn.count() == 1 and await obtn.is_visible():
-                    check(failures, (await obtn.get_attribute("aria-label")) == NAME, f"{key}: the overview's 「?」 is named {NAME}")
+                    check(failures, (await obtn.get_attribute("aria-label")) == NAME(), f"{key}: the overview's 「?」 is named {NAME()}")
                     await obtn.click()
                     await page.wait_for_timeout(250)
                     dialogs["overview"] = await page.evaluate(DIALOG)
@@ -117,12 +130,12 @@ async def run_spec_help(pw, out, failures, Server):
                     await page.click('.ov-card[data-idx="1"]')
                     await page.wait_for_timeout(900)
                     sheet = r["sheet"] = await page.evaluate("() => ({ help: !!document.querySelector('#wb [data-spec-help]') && document.querySelector('#wb [data-spec-help]').offsetWidth > 0, legend: document.getElementById('wb-legend').innerText })")
-                    check(failures, not sheet["help"] and "書き込み中" in sheet["legend"], f"{key}: an open spec keeps its own legend, no 「?」: {sheet}")
+                    check(failures, not sheet["help"] and T("panel.lg.writing") in sheet["legend"], f"{key}: an open spec keeps its own legend, no 「?」: {sheet}")
                 # the two dialogs are one: the same text and markup, and all of it is there
                 for where, d in dialogs.items():
                     check(failures, d is not None, f"{key}: the {where} 「?」 opens a dialog (role dialog, aria-modal)")
                     if d:
-                        missing = [m for m in MUST if m not in d["text"]]
+                        missing = [m for m in MUST() if m not in d["text"]]
                         check(failures, not missing and d["swatches"] == 5 and d["title"], f"{key}: the {where} dialog has the explanation, a title and five swatches: missing {missing}, swatches {d['swatches']}, title {d['title']!r}")
                         check(failures, d["focusInside"], f"{key}: the focus is inside the {where} dialog")
                         if width == "390":
@@ -171,7 +184,7 @@ async def close_three_ways(page, btn, where, key, r, failures):
         elif how == "backdrop":
             await page.mouse.click(4, 300)
         else:
-            close = page.locator("#spec-help [data-sh-close], [role='dialog'][aria-modal='true']:visible button:has-text('閉じる')").first
+            close = page.locator(f"#spec-help [data-sh-close], [role='dialog'][aria-modal='true']:visible button:has-text({json.dumps(T('panel.close'))})").first
             if await close.count():
                 await close.click()
         await page.wait_for_timeout(250)

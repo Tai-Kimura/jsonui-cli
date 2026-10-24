@@ -27,7 +27,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, LAUNCH_ARGS, Watch, dump, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, T, Watch, dump, new_page, ready
 from waits import settled, until
 
 CWD = "/work/wait-kinds-app"
@@ -195,7 +195,7 @@ async def run_wait_kinds(pw, out, failures, jt=None):
                                f"{k}: the press picked its card", timeout=10000, why=CARD_JS)
         # the robot's card names the lamp and shows its colour: the question's violet, both (the independent verification)
         swatch = {}
-        for k, name in (("perm", "黄（許可待ち）"), ("ask", "紫（質問に回答待ち）")):
+        for k, name in (("perm", T("lamp.waiting")), ("ask", T("lamp.asking"))):
             await page.evaluate("(id) => window.__dbg.openRobot(id)", rid[k])
             await until(page, "(id) => window.__dbg.board().robot === id", f"{k}: its card", arg=rid[k])
             # the card is filled after it opens: its lamp's name first, then the swatch read
@@ -207,7 +207,7 @@ async def run_wait_kinds(pw, out, failures, jt=None):
             await page.click("#rb-close")
             await until(page, "() => !window.__dbg.board().robot", f"{k}: its card closed")
         res["swatch"] = swatch
-        check(failures, swatch["ask"] == ["rgb(180, 140, 255)", "紫（質問に回答待ち）"] and swatch["perm"] == ["rgb(255, 176, 32)", "黄（許可待ち）"],
+        check(failures, swatch["ask"] == ["rgb(180, 140, 255)", T("lamp.asking")] and swatch["perm"] == ["rgb(255, 176, 32)", T("lamp.waiting")],
               f"the card's lamp swatch is the colour its name says: {swatch}")
         c = await press("ask")
         q = await page.evaluate("(id) => { const e = document.querySelector('.wait-picked'); return e ? [e.dataset.qcard || null, document.activeElement && e.contains(document.activeElement)] : null; }", rid["ask"])
