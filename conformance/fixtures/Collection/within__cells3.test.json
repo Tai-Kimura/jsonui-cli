@@ -1,0 +1,66 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/within__cells3.layout.json"
+  },
+  "metadata": {
+    "name": "conformance within__cells3",
+    "description": "The second and third cell's children are read inside their cells: the title, a count of 1 where the screen holds 3, a drawn badge, and a gone child hidden.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection",
+      "within"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "within__cells3",
+      "description": "The second and third cell's children are read inside their cells: the title, a count of 1 where the screen holds 3, a drawn badge, and a gone child hidden.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "waitFor",
+          "id": "target_item_2"
+        },
+        {
+          "assert": "text",
+          "id": "within_title",
+          "within": "target_item_1",
+          "equals": "Cell 1"
+        },
+        {
+          "assert": "text",
+          "id": "within_title",
+          "within": "target_item_2",
+          "equals": "Cell 2"
+        },
+        {
+          "assert": "count",
+          "id": "within_title",
+          "equals": 3
+        },
+        {
+          "assert": "count",
+          "id": "within_title",
+          "within": "target_item_1",
+          "equals": 1
+        },
+        {
+          "assert": "visible",
+          "id": "within_badge",
+          "within": "target_item_1"
+        },
+        {
+          "assert": "hidden",
+          "id": "within_gone",
+          "within": "target_item_1"
+        }
+      ]
+    }
+  ]
+}

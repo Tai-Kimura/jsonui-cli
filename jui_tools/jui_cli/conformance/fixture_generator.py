@@ -988,6 +988,21 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
     summary.assertable_count += sum(
         1 for e in child_entries if e["class"] == rules.CLASS_ASSERTABLE)
 
+    # `within`: one cell's child looked up inside the cell — see
+    # within_fixtures module docstring.
+    from .within_fixtures import build_within_fixtures
+
+    within_files, within_entries = build_within_fixtures(source_label)
+    for rel_path, payload in within_files:
+        target = out_dir / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(_dump_json(payload), encoding="utf-8")
+        summary.files_written += 1
+    fixture_entries.extend(within_entries)
+    summary.fixture_count += len(within_entries)
+    summary.assertable_count += sum(
+        1 for e in within_entries if e["class"] == rules.CLASS_ASSERTABLE)
+
     # Flow Collection overflow fixtures (flow track): the rule that a flow
     # Collection scrolls when `lazy` is in effect and only wraps under
     # lazy:"none" is visible only when the cells overflow the box, and the

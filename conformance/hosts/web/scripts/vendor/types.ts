@@ -176,6 +176,11 @@ export interface FlowTestStep {
   retryTapIfNoChange?: boolean;
   /** Scrollable container id for scrollUntilVisible */
   container?: string;
+  /**
+   * Element id whose DESCENDANTS the step's id(s) are looked up among —
+   * normally a collection cell `<collectionId>_item_<n>` (src/resolve.ts)
+   */
+  within?: string;
   /** Runtime variable name for readText */
   variable?: string;
   /** Iteration count for repeat */
@@ -232,6 +237,8 @@ export interface WhenCondition {
   notVisible?: string;
   /** Instant check: element is not drawn (absent, gone or invisible), wherever it is */
   hidden?: string;
+  /** Element id whose descendants visible / notVisible / hidden look among (src/resolve.ts) */
+  within?: string;
   /** Current platform matches (same matching rules as the step-level platform field) */
   platform?: PlatformTarget;
   /** Current size class / viewport size matches (resolved at runtime from the live viewport) */
@@ -250,6 +257,7 @@ export const KNOWN_CONDITION_KEYS: ReadonlySet<string> = new Set([
   'visible',
   'notVisible',
   'hidden',
+  'within',
   'platform',
   'responsive',
   'state'
@@ -439,6 +447,11 @@ export interface TestStep {
   retryTapIfNoChange?: boolean;
   /** Scrollable container id for scrollUntilVisible */
   container?: string;
+  /**
+   * Element id whose DESCENDANTS the step's id(s) are looked up among —
+   * normally a collection cell `<collectionId>_item_<n>` (src/resolve.ts)
+   */
+  within?: string;
   /** Runtime variable name for readText */
   variable?: string;
   /** Iteration count for repeat */

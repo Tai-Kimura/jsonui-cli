@@ -11,6 +11,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { isHidden, viewportState, probe, DETACHED } from './visibility.ts';
+import { byId, label, notFound, containerPresent } from './resolve.ts';
 import { ReasonHistory } from './reasonHistory.ts';
 import type { Page, Locator } from 'playwright';
 import { PNG } from 'pngjs';
@@ -221,12 +222,17 @@ export class AssertionExecutor {
    * window's viewport and every clipping ancestor — not merely laid out. */
   private async assertVisible(step: TestStep, timeout: number): Promise<void> {
     const id = this.requireId(step, 'visible');
+    const within = step.within;
     await this.pollUntil(timeout, async () => {
       // viewportState counts first, and reads an element that leaves the DOM
       // while it is being measured as absent (src/visibility.ts probe).
-      switch (await viewportState(this.getLocator(id))) {
-        case 'absent': return `Element '${id}' should be visible but it does not exist`;
-        case 'out': return `Element '${id}' should be visible but it is not in the viewport`;
+      // A `within` container that is not there: nothing in it is visible.
+      switch (await viewportState(this.getLocator(id, within))) {
+        case 'absent':
+          return within
+            ? `${await notFound(this.page, id, within)}: it should be visible`
+            : `Element '${id}' should be visible but it does not exist`;
+        case 'out': return `Element ${label(id, within)} should be visible but it is not in the viewport`;
         case 'in': return null;
       }
     });
@@ -234,47 +240,54 @@ export class AssertionExecutor {
 
   private async assertNotVisible(step: TestStep, timeout: number): Promise<void> {
     const id = this.requireId(step, 'notVisible');
+    const within = step.within;
     await this.pollUntil(timeout, async () => {
       // Exactly not `visible`: absent, hidden, or nothing of it in the viewport.
-      return (await viewportState(this.getLocator(id))) === 'in'
-        ? `Element '${id}' should not be visible but it is`
+      // With `within`, a container that is not there holds (nothing is drawn).
+      return (await viewportState(this.getLocator(id, within))) === 'in'
+        ? `Element ${label(id, within)} should not be visible but it is`
         : null;
     });
   }
 
   private async assertHidden(step: TestStep, timeout: number): Promise<void> {
     const id = this.requireId(step, 'hidden');
-    // Not drawn, wherever it is (src/visibility.ts isHidden). Unlike
-    // notVisible it does not pass for an element below the fold or under a
-    // dialog: those are drawn.
+    const within = step.within;
+    // Not drawn, wherever it is (src/visibility.ts isHidden): no element with
+    // the id (inside `within`, when given) is drawn — every match is looked
+    // at, so one drawn copy among invisible ones fails. Unlike notVisible it
+    // does not pass for an element below the fold or under a dialog: those
+    // are drawn. A `within` container that is not there holds.
     await this.pollUntil(timeout, async () =>
-      (await isHidden(this.getLocator(id))) ? null : `Element '${id}' should be hidden but it is shown`
+      (await isHidden(this.getLocator(id, within))) ? null : `Element ${label(id, within)} should be hidden but it is shown`
     );
   }
 
   private async assertEnabled(step: TestStep, timeout: number): Promise<void> {
     const id = this.requireId(step, 'enabled');
+    const within = step.within;
     await this.pollUntil(timeout, async () => {
-      const element = this.getLocator(id).first();
+      const element = this.getLocator(id, within).first();
       if (await element.count() === 0) {
-        return `Element '${id}' not found by id`;
+        return notFound(this.page, id, within);
       }
       const disabled = await this.isElementDisabled(element);
-      if (disabled === DETACHED) return `Element '${id}' not found by id`;
-      return disabled ? `Element '${id}' should be enabled but it is disabled` : null;
+      if (disabled === DETACHED) return notFound(this.page, id, within);
+      return disabled ? `Element ${label(id, within)} should be enabled but it is disabled` : null;
     });
   }
 
   private async assertDisabled(step: TestStep, timeout: number): Promise<void> {
     const id = this.requireId(step, 'disabled');
+    const within = step.within;
     await this.pollUntil(timeout, async () => {
-      const element = this.getLocator(id).first();
+      const element = this.getLocator(id, within).first();
       if (await element.count() === 0) {
-        return `Element '${id}' not found by id`;
+        return notFound(this.page, id, within);
       }
       const disabled = await this.isElementDisabled(element);
-      if (disabled === DETACHED) return `Element '${id}' not found by id`;
-      return disabled ? null : `Element '${id}' should be disabled but it is enabled`;
+      if (disabled === DETACHED) return notFound(this.page, id, within);
+      return disabled ? null : `Element ${label(id, within)} should be disabled but it is enabled`;
     });
   }
 
@@ -283,22 +296,23 @@ export class AssertionExecutor {
     if (step.equals === undefined && step.contains === undefined) {
       throw new Error("text requires 'equals' or 'contains'");
     }
+    const within = step.within;
     await this.pollUntil(timeout, async () => {
-      const element = this.getLocator(id).first();
+      const element = this.getLocator(id, within).first();
       if (await element.count() === 0) {
-        return `Element '${id}' not found by id`;
+        return notFound(this.page, id, within);
       }
       const actualText = await this.readElementText(element);
-      if (actualText === DETACHED) return `Element '${id}' not found by id`;
+      if (actualText === DETACHED) return notFound(this.page, id, within);
       if (step.equals !== undefined) {
         const expected = String(step.equals);
         return actualText === expected
           ? null
-          : `Expected text '${expected}' but got '${actualText}' for element '${id}'`;
+          : `Expected text '${expected}' but got '${actualText}' for element ${label(id, within)}`;
       }
       return actualText.includes(step.contains as string)
         ? null
-        : `Expected text containing '${step.contains}' but got '${actualText}' for element '${id}'`;
+        : `Expected text containing '${step.contains}' but got '${actualText}' for element ${label(id, within)}`;
     });
   }
 
@@ -308,11 +322,18 @@ export class AssertionExecutor {
       throw new Error("count requires 'equals' with integer value");
     }
     const expected = step.equals as number;
+    const within = step.within;
     await this.pollUntil(timeout, async () => {
-      const actualCount = await this.getLocator(id).count();
+      // With `within`: the matches inside the container. A container that is
+      // not there is a failure, not 0 — "this cell has no badge" must not
+      // pass for a cell that is not drawn.
+      if (!(await containerPresent(this.page, within))) {
+        return notFound(this.page, id, within);
+      }
+      const actualCount = await this.getLocator(id, within).count();
       return actualCount === expected
         ? null
-        : `Expected ${expected} elements with id '${id}', but found ${actualCount}`;
+        : `Expected ${expected} elements with id '${id}'${within ? ` inside '${within}'` : ''}, but found ${actualCount}`;
     });
   }
 
@@ -385,9 +406,13 @@ export class AssertionExecutor {
     // Capture (optionally cropped to an element's bounding box)
     let capture: Buffer;
     if (step.cropId) {
-      const element = this.getLocator(step.cropId).first();
+      const element = this.getLocator(step.cropId, step.within).first();
       if (await element.count() === 0) {
-        throw new Error(`screenshot cropId '${step.cropId}' not found`);
+        throw new Error(
+          step.within
+            ? `screenshot cropId: ${await notFound(this.page, step.cropId, step.within)}`
+            : `screenshot cropId '${step.cropId}' not found`
+        );
       }
       capture = await element.screenshot();
     } else {
@@ -446,10 +471,11 @@ export class AssertionExecutor {
   }
 
   /**
-   * Get locator for element by id attribute
+   * Every element with the id attribute — among `within`'s descendants when
+   * given (src/resolve.ts byId)
    */
-  private getLocator(id: string): Locator {
-    return this.page.locator(`#${id}`);
+  private getLocator(id: string, within?: string): Locator {
+    return byId(this.page, id, within);
   }
 
   /** Bounded (src/visibility.ts probe): DETACHED when the element left the DOM. */

@@ -1,0 +1,53 @@
+{
+  "_generated": {
+    "sentinel": "@generated",
+    "source": "shared/core/attribute_definitions.json",
+    "generator": "jui conformance generate",
+    "doNotEdit": true,
+    "humanWarning": "Any manual edits will be OVERWRITTEN on next generation.",
+    "agentWarning": "LLM/Agent: you MUST NOT modify this file."
+  },
+  "type": "View",
+  "width": 60,
+  "height": 40,
+  "background": "#3366CC",
+  "data": [
+    {
+      "name": "title",
+      "class": "String",
+      "defaultValue": ""
+    }
+  ],
+  "child": [
+    {
+      "type": "Label",
+      "id": "within_title",
+      "width": "wrapContent",
+      "height": "wrapContent",
+      "text": "@{title}",
+      "fontSize": 11,
+      "fontColor": "#FFFFFF",
+      "padding": 2
+    },
+    {
+      "type": "Label",
+      "id": "within_badge",
+      "width": "wrapContent",
+      "height": "wrapContent",
+      "text": "b",
+      "fontSize": 11,
+      "fontColor": "#FFFFFF",
+      "padding": 2
+    },
+    {
+      "type": "Label",
+      "id": "within_gone",
+      "width": "wrapContent",
+      "height": "wrapContent",
+      "text": "g",
+      "fontSize": 11,
+      "fontColor": "#FFFFFF",
+      "visibility": "gone"
+    }
+  ]
+}
