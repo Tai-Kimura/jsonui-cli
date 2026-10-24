@@ -1,16 +1,18 @@
-"""A `bodyFile`'s text on the generated iOS and Android runtimes — RUN, not read (ticket
+"""A scenario's body on the generated web and iOS runtimes — RUN, not read (ticket
 2026-10-25-jsonui-test-mock-bodyfile-is-never-read).
 
-The generator embeds the file's text as the literal `_swift_str` / `_kt_str` writes; each probe serves that literal
-and prints the bytes the app's client receives, which must be the file's bytes — a BOM, CRLFs and non-ASCII kept.
-Needs swiftc and the Android jars: run with the compilers (run-suites.sh), as the header probes are.
+The web runtime JSON-encoded a string body (an NDJSON stream arrived as one quoted line) and sent a null as the
+text `null`, where `mock serve` sends both as written. A `bodyFile`'s text is embedded as the literal `_swift_str`
+writes; the iOS probe serves it and prints the bytes the app's client receives, which must be the file's — a BOM,
+CRLFs and non-ASCII kept. Needs node and swiftc: run with the compilers (ci.yml's branch-runtime step,
+run-suites.sh), not in python-suite. Android is test_branch_scenario_body_file_android.py.
 """
 from __future__ import annotations
 
+import json
 import subprocess
 
 from jsonui_test_cli import branch_tests as bt
-from tests import _android_runtime as android
 from tests import _toolchain as tc
 from tests.test_mock_scenario_body_file import CSV
 
@@ -52,33 +54,31 @@ def test_ios_runtime_sends_the_files_bytes(tmp_path):
     assert body == [CSV.hex()], run.stdout
 
 
-_KT_PROBE = '''package probe
-
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import kotlinx.coroutines.test.TestDispatcher
-
-class ProbeHarness(val baseUrl: String, dispatcher: TestDispatcher) : BaseBranchHarness(Any(), dispatcher) {
-  override fun expectTransition(destination: String) {}
-  override fun resolveString(key: String): String = key
+_TS_PROBE = '''import { installFetchMock } from "./runtime.ts";
+const SC: any = {
+  stream: { status: 200, contentType: "application/x-ndjson", body: "{\\"n\\":1}\\n{\\"n\\":2}\\n" },
+  drained: { status: 200, body: null }, obj: { status: 200, body: { a: 1 } }, none: { status: 200 } };
+for (const name of Object.keys(SC)) {
+  const rec = installFetchMock([{ op: "a", method: "GET", pattern: "^/a$", scenario: name, scenarios: SC } as any]);
+  const res = await fetch("https://x.test/a");
+  console.log(`${name} ${JSON.stringify(await res.text())}`);
+  rec.restore();
 }
-
-fun main() {
-  val routes = listOf(RouteSpec("a", "GET", Regex("^/a$"), "csv",
-                                mapOf("csv" to Triple(200, %s, "text/csv"))))
-  runBranchTest(routes, emptyMap<String, Any?>(), { url, d -> ProbeHarness(url, d) }) { h, _ ->
-    val client = OkHttpClient()
-    client.newCall(Request.Builder().url((h as ProbeHarness).baseUrl + "a").build()).execute().use { r ->
-      println("BODY " + r.body!!.bytes().joinToString("") { "%%02x".format(it) })
-    }
-    h.settle()
-    client.dispatcher.executorService.shutdown()
-  }
-  System.exit(0)
-}
+process.exit(0);
 '''
 
 
-def test_android_runtime_sends_the_files_bytes(tmp_path):
-    got = android.run(android.build(tmp_path, bt.KOTLIN_RUNTIME, _KT_PROBE % bt._kt_str(CSV.decode("utf-8"))))
-    assert got == {"BODY": CSV.hex()}, got
+def test_web_runtime_sends_a_body_the_way_mock_serve_does(tmp_path):
+    tc.tool("node")
+    (tmp_path / "runtime.ts").write_text(bt.RUNTIME_TS, encoding="utf-8")
+    (tmp_path / "probe.ts").write_text(_TS_PROBE, encoding="utf-8")
+    run = subprocess.run(["node", "--experimental-strip-types", "probe.ts"], cwd=tmp_path,
+                         capture_output=True, text=True, timeout=120)
+    assert run.returncode == 0, run.stderr[:3000]
+    got = dict(line.split(" ", 1) for line in run.stdout.strip().splitlines())
+    assert {k: json.loads(v) for k, v in got.items()} == {
+        "stream": '{"n":1}\n{"n":2}\n',  # as written, two records
+        "drained": "",
+        "obj": '{"a":1}',
+        "none": "",
+    }, got

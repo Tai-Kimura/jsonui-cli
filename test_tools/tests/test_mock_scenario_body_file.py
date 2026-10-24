@@ -1,14 +1,12 @@
 """A scenario's `bodyFile` is its response body (ticket 2026-10-25-jsonui-test-mock-bodyfile-is-never-read).
 
 Read relative to the mock file that declares the scenario, by `mock serve` (the bytes) and by the branch-test
-runtimes (the text, embedded); validate names one that would not be sent. The web runtime's string / null body
-is the same family: it JSON-encoded a string body (an NDJSON stream arrived as one quoted line) and sent a null
-as the text `null`, where `mock serve` sends both as written — measured by running it.
+runtimes (the text, embedded); validate names one that would not be sent. The runtimes are RUN in
+test_branch_scenario_body_file.py (web, iOS: the compilers) and _android.py (the Android leg).
 """
 from __future__ import annotations
 
 import json
-import subprocess
 import threading
 import urllib.request
 from pathlib import Path
@@ -20,7 +18,6 @@ from jsonui_test_cli.branch_tests import BranchTestGenerationError, generate_bra
 from jsonui_test_cli.mock.server import MockServer, MockStore, RunManager
 from jsonui_test_cli.validation.mock import MockValidator
 from jsonui_test_cli.validation.models import ValidationResult
-from tests import _toolchain as tc
 from tests.test_branch_tests_generator import BASIC, _project
 
 #: A CSV export as the reporting lane's API sends it: UTF-8 with a BOM, CRLF rows.
@@ -218,35 +215,3 @@ def test_a_file_that_is_not_utf8_is_refused_by_name(tmp_path):
     root = _branch_project(tmp_path, file_bytes=b"%PDF-1.7\n\xff\xfe\x00binary")
     with pytest.raises(BranchTestGenerationError, match=r"conflict.*not UTF-8 text"):
         generate_branch_tests("checkout", root)
-
-
-# ---------------------------------------------------------- the web runtime
-
-_TS_PROBE = '''import { installFetchMock } from "./runtime.ts";
-const SC: any = {
-  stream: { status: 200, contentType: "application/x-ndjson", body: "{\\"n\\":1}\\n{\\"n\\":2}\\n" },
-  drained: { status: 200, body: null }, obj: { status: 200, body: { a: 1 } }, none: { status: 200 } };
-for (const name of Object.keys(SC)) {
-  const rec = installFetchMock([{ op: "a", method: "GET", pattern: "^/a$", scenario: name, scenarios: SC } as any]);
-  const res = await fetch("https://x.test/a");
-  console.log(`${name} ${JSON.stringify(await res.text())}`);
-  rec.restore();
-}
-process.exit(0);
-'''
-
-
-def test_web_runtime_sends_a_body_the_way_mock_serve_does(tmp_path):
-    tc.tool("node")
-    (tmp_path / "runtime.ts").write_text(bt.RUNTIME_TS, encoding="utf-8")
-    (tmp_path / "probe.ts").write_text(_TS_PROBE, encoding="utf-8")
-    run = subprocess.run(["node", "--experimental-strip-types", "probe.ts"], cwd=tmp_path,
-                         capture_output=True, text=True, timeout=120)
-    assert run.returncode == 0, run.stderr[:3000]
-    got = dict(line.split(" ", 1) for line in run.stdout.strip().splitlines())
-    assert {k: json.loads(v) for k, v in got.items()} == {
-        "stream": '{"n":1}\n{"n":2}\n',  # as written, two records
-        "drained": "",
-        "obj": '{"a":1}',
-        "none": "",
-    }, got

@@ -457,6 +457,7 @@ say "== branch runtime, Android EXECUTED (delayMs, headers, seed state, settle, 
 _x="$(mktemp -t delay-android).xml"
 out=$( cd "$C/test_tools" && JSONUI_REQUIRE_ANDROID_JARS=1 python3 -m pytest -q -p no:cacheprovider \
          tests/test_branch_scenario_delay_android.py tests/test_branch_scenario_headers_android.py \
+         tests/test_branch_scenario_body_file_android.py \
          tests/test_branch_seed_state_android.py \
          tests/test_branch_settle_quiescence_android.py tests/test_branch_earlier_row_calls_android.py \
          --junitxml="$_x" 2>&1 )
