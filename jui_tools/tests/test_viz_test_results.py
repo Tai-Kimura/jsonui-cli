@@ -150,16 +150,40 @@ def test_a_saved_result_shows_before_any_progress_and_says_when_it_may_be_stale(
     world, state = _world(root)
     assert _login(state) == {"total": 2, "needed": 2, "passed": 0, "failed": 0, "running": False}
     shelf = tmp_path / "shelf"
-    _put(shelf / "web/app", time.time(), _results("web", RUN_A, "app", "screens/login.test.json", {"ok": "passed", "ng": "failed"}))
+    saved = time.time()
+    _put(shelf / "web/app", saved, _results("web", RUN_A, "app", "screens/login.test.json", {"ok": "passed", "ng": "failed"}))
     world.apply_saved_results(tr.ResultShelf(shelf).scan())
     world.publish()
     tests = _login(state)
     assert (tests["passed"], tests["failed"]) == (1, 1) and "maybeStale" not in tests
-    os.utime(root / "docs/screens/layouts/login.json", None)  # the layout changed after the run (or a checkout moved it)
+    # the layout changed after the run (or a checkout moved it): a second later, said outright. Not utime(path, None):
+    # Linux stamps a file from its coarse clock, a tick behind time.time() (up to 1.75 ms measured), so "now" can read
+    # as before the result's own millisecond (ticket 2026-10-24-viz-test-results-maybestale-arm-flaky-on-ci)
+    os.utime(root / "docs/screens/layouts/login.json", (saved + 1, saved + 1))
     world.apply_saved_results(tr.ResultShelf(shelf).scan())
     world._dirty.add("specs")
     world.publish()
     assert _login(state)["maybeStale"] is True
+
+
+def test_may_be_stale_only_for_a_change_after_the_results_millisecond(tmp_path):
+    """The rule at its edge: a result's time is its file name's millisecond; the spec or layout changed in that same
+    millisecond is not after it, one millisecond later is (and a millisecond before is not)."""
+    root = _project(tmp_path / "app")
+    world, state = _world(root)
+    saved = int(time.time()) - 100 + 0.25            # a whole millisecond: the name says .250
+    at_ns = int(round(saved * 1000)) * 1_000_000
+    shelf = tmp_path / "shelf"
+    _put(shelf / "web/app", saved, _results("web", RUN_A, "app", "screens/login.test.json", {"ok": "passed"}))
+    layout = root / "docs/screens/layouts/login.json"
+    got = {}
+    for name, ns in (("same", at_ns), ("later", at_ns + 1_000_000), ("earlier", at_ns - 1_000_000), ("a µs later", at_ns + 1000)):
+        os.utime(layout, ns=(ns, ns))
+        world.apply_saved_results(tr.ResultShelf(shelf).scan())
+        world._dirty.add("specs")
+        world.publish()
+        got[name] = _login(state).get("maybeStale", False)
+    assert got == {"same": False, "later": True, "earlier": False, "a µs later": True}, got
 
 
 def test_a_run_seen_live_and_then_saved_is_counted_once_and_newest_wins(tmp_path):
