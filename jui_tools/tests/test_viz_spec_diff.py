@@ -342,3 +342,27 @@ def test_the_server_copies_on_the_loop_and_runs_the_git_off_it(tmp_path):
 
     asyncio.run(main())
     assert where == {"copied": True, "git": False}
+
+
+class _RoomAdded(dict):
+    """world.jsonui after job_for returned: the loop adds a room (_install) at any moment, so a walk of it off the loop
+    may meet the change; here every read of it is that moment."""
+
+    def _met(self, *a, **k):
+        raise RuntimeError("dictionary changed size during iteration")
+    values = items = keys = get = __iter__ = __getitem__ = __contains__ = __len__ = _met
+
+
+def test_each_diff_decides_its_room_on_the_loop_and_its_call_reads_no_room(tmp_path):
+    root, wt = _room(tmp_path)
+    project = _project(root, wt)
+    rooms = _Rooms(p=project)
+    sid = next(s for s, e in project.specs.items() if e.source.key == "@feat/x" and e.path.name == "login.spec.json")
+    messages = [{"type": "spec.diff", "specId": sid},
+                {"type": "spec.diffList", "project": "p", "app": "@feat/x"},
+                {"type": "spec.diff", "project": "p", "app": "@feat/x", "deleted": "docs/screens/json/gone.spec.json"},
+                {"type": "spec.diff", "specId": "p:nope"}]
+    jobs = [sd.job_for(rooms, m) for m in messages]
+    rooms.jsonui = _RoomAdded(rooms.jsonui)
+    got = [job() for job in jobs]
+    assert [g["ok"] for g in got] == [True, True, True, False]
