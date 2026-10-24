@@ -46,7 +46,7 @@ def test_every_event_is_inside_its_chapter_and_the_preludes_are_untimed():
 
 def test_the_chapters_are_the_promos_viz_chapters():
     assert set(T.chapters("ja")) == set(T.CHAPTER_IDS) | set(T.BOARDS) | set(T.STANDALONE)
-    assert set(T.BOUNDS) == set(T.CHAPTER_IDS) | set(T.TERM_CHAPTER_IDS)
+    assert set(T.BOUNDS) == set(T.CHAPTER_IDS) | set(T.TERM_CHAPTER_IDS) | set(T.T_CHAPTER_IDS)
     assert set(T.BOARDS.values()) <= set(T.TERM_CHAPTER_IDS)
 
 
@@ -499,3 +499,28 @@ def test_the_home_has_the_settings_the_stand_ins_and_the_sessions(tmp_path):
     entry = json.loads((paths["sessions"] / f"{T.session_pid('s01')}.json").read_text())
     assert entry["name"] == T.WORDS["en"]["names"]["s01"] and entry["sessionId"] == T.session_id("s01")
     assert tr["s10"].parent.name == rooms.project_slug(work["demo-admin"])
+
+
+def test_2_3_23_adds_the_spec_diff_the_flow_views_and_chapter_t():
+    """2.3.23's re-take (requester 10-25): 1b-board ends on ベースとの差分 of the worktree's cart spec; chapter 4's last
+    seconds show 今関係 and 範囲で寄る after the 2D payment flow; Ta4 shows the two screen tests chapter T-a runs; the
+    chapters after 1b are moved on the new clock and every event stays inside its chapter."""
+    for lang in ("ja", "en"):
+        cs = T.chapters(lang)
+        board = cs["1b-board"]
+        assert (board.start, board.end) == (18, 46)
+        diff = [e for e in board.events if e.kind == "click" and e.args["target"].get("css") == "#wb-diff"]
+        assert len(diff) == 1 and diff[0].args["expect"] == "specdiff" and diff[0].at < board.end - 3
+        four = cs["4"]
+        assert (four.start, four.end) == T.BOUNDS["4"]
+        flat = max(e.at for e in four.events if e.kind == "click" and "data-sr-flow='payment'" in e.args["target"].get("css", ""))
+        now = [e.at for e in four.events if e.kind == "click" and "data-sr-fp-show='now'" in e.args["target"].get("css", "")]
+        drag = [e for e in four.events if e.kind == "drag"]
+        assert now and flat < now[0] and drag and now[0] < drag[0].at < four.end
+        ta4 = cs["Ta4"]
+        assert [e.args["name"] for e in ta4.events if e.kind == "tests_case"] == [n for _, _, n in T.T_CASES]
+        for cid, c in cs.items():
+            if cid in T.BOUNDS:
+                assert (c.start, c.end) == tuple(T.BOUNDS[cid]), cid
+                assert all(c.start <= e.at < c.end for e in c.events), cid
+

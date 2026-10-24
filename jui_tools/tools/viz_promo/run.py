@@ -29,7 +29,7 @@ TOOLS = Path(__file__).resolve().parent.parent
 if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))   # viz_promo is a package under tools/ (viz_e2e has a rooms.py and a run.py too)
 
-from viz_promo.timeline import ALL, BOARDS, CAPTURE_IDS, SEGMENTS, STANDALONE, TERM_CHAPTER_IDS, chapters, check_bounds, promo_timeline  # noqa: E402
+from viz_promo.timeline import ALL, BOARDS, CAPTURE_IDS, SEGMENTS, STANDALONE, T_CHAPTER_IDS, TERM_CHAPTER_IDS, chapters, check_bounds, promo_timeline  # noqa: E402
 
 PROMO = Path.home() / "resource" / "jsonui-promo"
 DEMO_SHOP = Path.home() / "resource" / "jsonui-demo-shop"
@@ -93,7 +93,24 @@ async def main_async(a) -> int:
     script = chapters(a.lang)
     results = []
     async with async_playwright() as pw:
+        t_done = False
         for cid in a.chapters:
+            if cid in T_CHAPTER_IDS:
+                # T-a and T-b on one start of the stage's web app and mock server (--demo-shop: the stage, with its web
+                # shell's node_modules installed)
+                if t_done:
+                    continue
+                t_done = True
+                from viz_promo.t_chapter import capture_t
+                print(f"{a.lang}/T: capturing", flush=True)
+                try:
+                    t = await capture_t(pw, a.out, a.lang, {i: promo[i] for i in T_CHAPTER_IDS}, a.demo_shop, a.jui_root, keep=a.keep)
+                    r = {"chapter": "T", "ok": True, "frames": t["Ta"]["frames"] + t["Tb"]["frames"], "t": t}
+                except Exception as e:  # noqa: BLE001 — reported like a chapter's failure
+                    r = {"chapter": "T", "ok": False, "frames": 0, "error": f"{type(e).__name__}: {e}"}
+                results.append(r)
+                print(f"{a.lang}/T: {'ok' if r['ok'] else 'FAIL'} {r['frames']} frames" + (f" — {r['error']}" if r.get("error") else ""), flush=True)
+                continue
             print(f"{a.lang}/{cid}: capturing", flush=True)
             if cid in SEGMENTS:
                 r = await capture_term(pw, cid, SEGMENTS[cid][1:3], a.out, a.lang, a.jui_root, a.demo_shop, keep=a.keep)

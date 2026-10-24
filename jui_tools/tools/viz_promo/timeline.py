@@ -29,12 +29,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 FPS = 30
-CHAPTER_IDS = ("hook", "2", "3", "4", "4m", "5", "6")   # 1a / 1b: term.py
+CHAPTER_IDS = ("hook", "2", "3", "4", "4m", "5", "Ta4", "6")   # 1a / 1b: term.py; Ta / Tb: t_chapter.py
 TERM_CHAPTER_IDS = ("1a", "1b")
-ALL = TERM_CHAPTER_IDS + CHAPTER_IDS
+#: chapter T's halves (2.3.23, requester 10-25: the mock server and the test runner): t_chapter.py, on the stage's own
+#: web app and mock server; each id is the left half, "<id>-app" the right half beside it
+T_CHAPTER_IDS = ("Ta", "Tb")
+ALL = TERM_CHAPTER_IDS + CHAPTER_IDS + T_CHAPTER_IDS
 #: window segments inside a viz chapter, captured by term.py into a folder of their own: id -> (chapter, start, end,
 #: the demo-shop file shown). The promo shows the segment over its seconds and the chapter's frames after it.
-SEGMENTS = {"5-json": ("5", 120.0, 123.0, "docs/infra/load/weekend-campaign.json")}
+SEGMENTS = {"5-json": ("5", 130.0, 133.0, "docs/infra/load/weekend-campaign.json")}
 #: a terminal chapter shown split: its terminal on the left half, the viz page beside it on the right half, captured
 #: by capture.py into a folder of its own: id -> the chapter it sits beside. The promo frames both halves at the same
 #: size (its SPLIT layout), so the terminal (term.py) and the board are both taken at SPLIT_VIEWPORT.
@@ -47,7 +50,11 @@ STANDALONE = {"mig": (0.0, 40.0)}
 #: what run.py captures: the promo's chapters and the segments (a chapter brings its segments and board with it)
 CAPTURE_IDS = ALL + tuple(SEGMENTS) + tuple(BOARDS) + tuple(STANDALONE)
 #: the bounds the events below were written for; tests hold them to the promo's timeline.json
-BOUNDS = {"hook": (0, 6), "1a": (6, 18), "1b": (18, 40), "2": (40, 52), "3": (52, 62), "4": (62, 86), "4m": (86, 120), "5": (120, 134), "6": (134, 142)}
+BOUNDS = {"hook": (0, 6), "1a": (6, 18), "1b": (18, 46), "2": (46, 58), "3": (58, 68), "4": (68, 96), "4m": (96, 130),
+          "5": (130, 144), "Ta": (144, 172), "Ta4": (172, 180), "Tb": (180, 206), "6": (206, 214)}
+#: the 2.3.21 cut's chapters, written on its clock, moved by this much on 2.3.23's (1b ends 6 s later with the spec's
+#: diff, 4 4 s later with the flow's 今関係 and 範囲で寄る, chapter T comes before 6)
+SHIFT = {"2": 6, "3": 6, "4": 6, "4m": 10, "5": 10, "6": 72}
 
 ROOMS = ("demo-shop", "demo-admin", "demo-docs", "demo-api", "demo-mobile")
 
@@ -69,7 +76,10 @@ SUBAGENT = ("a3f19c2e8b7d4a601", "jsonui-test")
 #: the event kinds the driver knows (capture.Driver.fire)
 KINDS = frozenset({"start", "prompt", "tool", "tool_end", "perm", "ask_pending", "ask", "ask_answered", "denied", "idle", "stop",
                    "sub_start", "sub_stop", "talk", "tests_start", "tests_case", "tests_end", "settle", "door", "dbg", "click",
-                   "hover", "select", "wheel", "spec_reset", "spec_write", "dolly", "worktree", "wt_session"})
+                   "hover", "select", "wheel", "spec_reset", "spec_write", "dolly", "worktree", "wt_session", "drag"})
+#: Ta4: the two screen tests chapter T-a runs (the stage's tests/screens), as the robot's card shows them
+T_CASES = (("tests/screens/product_list/product_list_paging.test.json", "product_list_paging", "page2_via_setMocks_then_cell_11_within"),
+           ("tests/screens/cart/cart_rate_limited.test.json", "cart_rate_limited", "busy_says_how_long_to_wait"))
 #: the migration player's buttons (59-sr-migration.js) and the plan demo-shop carries
 MIG_PLAN = "shop-to-managed"
 MIG_BTN = "#sr-mplayer [data-sr-mp='{}']"
@@ -115,6 +125,7 @@ WORDS = {
         "talk": {"t1": "カートの spec を更新しました。数量の上限を足しています", "t2": "了解です。テストを生成し直します",
                  "t3": "ブランチのテストが 12 件とも通りました"},
         "cases": ["カートが空のとき", "1 個入れたとき", "上限まで入れたとき", "在庫なしのとき", "通信に失敗したとき", "合計の表示"],
+        "t_command": "cd web && npx playwright test tests/screens  # jsonui-test-runner-web, mock serve",
         "files": {"spec": "docs/screens/json/cart.spec.json", "readme": "README.md"},
         "board_prompt": "カート画面の spec を書いて",
         "wt_prompt": "カートにクーポンを足して", "wt_spec": "クーポン", "wt_desc": "カートでクーポンを入れて、割引を受ける（書いている途中）",
@@ -155,6 +166,7 @@ WORDS = {
         "talk": {"t1": "I updated the cart spec: it has a quantity limit now", "t2": "Got it. Regenerating the tests",
                  "t3": "All 12 branch tests pass"},
         "cases": ["empty cart", "one item", "up to the limit", "out of stock", "network failure", "total shown"],
+        "t_command": "cd web && npx playwright test tests/screens  # jsonui-test-runner-web, mock serve",
         "files": {"spec": "docs/screens/json/cart.spec.json", "readme": "README.md"},
         "board_prompt": "Write the cart screen's spec",
         "wt_prompt": "Add coupons to the cart", "wt_spec": "クーポン", "wt_desc": "カートでクーポンを入れて、割引を受ける（書いている途中）",
@@ -204,6 +216,8 @@ def E(at, kind, **args) -> Event:
 #: it, its new spec and the spec it changes (relative to the room)
 WORKTREE = {"branch": "feat/cart-coupon", "name": "demo-shop-coupon", "sid": "0f0c0000-7d00-4000-8000-00000000c0de",
             "new": "docs/screens/json/coupon.spec.json", "cart": "docs/screens/json/cart.spec.json"}
+#: the cart spec's name on the board (demo-shop's displayName, in both languages): the worktree changes it (1b's diff)
+WT_CART = "カート"
 #: the worktree's row on the whiteboard's list (its name and a branch tag)
 WT_ROW = "() => [...document.querySelectorAll('#wb-side-list .ws-item')].some((b) => b.textContent.includes('{}') && b.textContent.includes('⎇'))"
 
@@ -367,7 +381,13 @@ def chapters(lang: str) -> dict:
         E(80.6, "click", target={"css": "#sr-mode-2d"}, expect="sr2d"),
         E(81.3, "dbg", call="srSelect", node="api", expect="flowlist:payment"),
         E(81.9, "click", target={"css": "#sr-board [data-sr-flow='payment']"}, expect="flow:payment"),
+        # 2.3.22 (requester 10-25: 「サーバールームのリクエスト再生の変更」): 今関係 shows only the nodes the light concerns
+        # now, then 範囲で寄る and one drag draws the box the camera moves in on (on 2.3.21's clock: +6 s below)
+        E(86.4, "click", target={"css": "#sr-player [data-sr-fp-show='now']"}),
+        E(88.0, "click", target={"css": "#sr-boxzoom"}),
+        E(88.7, "drag", p0=[0.38, 0.32], p1=[0.66, 0.66]),
     ], needs=("rooms", "server_room", "flows", "sr2d"))
+    out["4"].end = 90   # 2.3.21's 86 + the 4 s above (shifted with the chapter below)
 
     # the migration plan played through (requester 10-22: many migrations, smoothly), as the promo's chapter 4m (86–120)
     # and as the standalone clip (0–40). Its 12 steps touch the AWS groups on the left (search, payments, analytics,
@@ -437,7 +457,23 @@ def chapters(lang: str) -> dict:
           ready=WT_ROW.format(w["wt_spec"]), expect="wbtitle:" + w["wt_spec"], js=True),
         # the opened row moves in the list: the cursor follows it there
         E(36.7, "hover", target={"css": "#wb-side-list .ws-item[aria-current='true']"}),
+        # 2.3.23 (requester 10-25: 「ワークツリーの差分見える」): the worktree's cart spec, then ベースとの差分 — the spec
+        # where the branch left beside the worktree's own, full screen, the changed column marked
+        E(38.6, "click", target={"css": "#wb-side-list .ws-item", "text": f"⎇ {wt['branch']}{WT_CART}"},
+          ready=WT_ROW.format(WT_CART), expect="wbtitle:" + WT_CART, js=True),
+        E(40.4, "click", target={"css": "#wb-diff"}, expect="specdiff"),
     ], needs=("rooms", "spec_worktrees"), viewport=SPLIT_VIEWPORT)
+    out["1b-board"].end = 46
+
+    # Ta4 (172–180, chapter T): the screen tests chapter T-a ran, as a robot's card shows them case by case — the
+    # same two files and cases (T_CASES; their results are t_chapter.py's real run's)
+    out["Ta4"] = Chapter("Ta4", 172, 180, floor(w) + up_close("demo-shop"), [
+        E(172.4, "tests_start", key="s02", run="r2", command=w["t_command"]),
+        E(172.9, "click", target={"robot": "s02"}, expect="card:s02"),
+        E(174.0, "tests_case", run="r2", file=T_CASES[0][0], test=T_CASES[0][1], name=T_CASES[0][2], status="passed"),
+        E(175.6, "tests_case", run="r2", file=T_CASES[1][0], test=T_CASES[1][1], name=T_CASES[1][2], status="passed"),
+        E(176.6, "tests_end", key="s02", run="r2"),
+    ], needs=("rooms",))
 
     # 6 (134–142): back to the whole floor
     out["6"] = Chapter("6", 134, 142, floor(w) + waits(w) + up_close("demo-shop"), [
@@ -445,6 +481,11 @@ def chapters(lang: str) -> dict:
         E(136.0, "wheel", target={"css": "#scene-canvas"}, dy=300, dur=4.0),
         E(137.0, "tool_end", key="s13"),
     ], needs=("rooms",))
+    for cid, by in SHIFT.items():
+        c = out[cid]
+        c.start, c.end = c.start + by, c.end + by
+        for ev in c.events:
+            ev.at += by
     return out
 
 

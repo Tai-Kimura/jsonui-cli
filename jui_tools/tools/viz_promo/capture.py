@@ -133,6 +133,8 @@ EXPECT = {
     "roster_state": "() => { const r = document.querySelector('#roster-list .roster-row'); return document.getElementById('roster-sort').value === 'state' && !!r; }",
     # the sheet opened on a spec (its title is set at the press; the head's ⎇ branch comes with the page's next frame)
     "wbtitle": "(t) => document.getElementById('wb-title').textContent === t",
+    # the spec's diff against its base open, full screen, read (2.3.23)
+    "specdiff": "() => !document.getElementById('sd').hidden && !document.querySelector('#sd-body').textContent.includes('…')",
     "sr2d": "() => { const b = document.getElementById('sr-mode-2d'); return !!b && b.getAttribute('aria-pressed') === 'true'; }",
     "migcost": "() => { const m = window.__dbg.srMig(); return m.open && !!m.cost; }",
     "migtable": "() => !!document.querySelector('[data-src-mig]')",
@@ -583,10 +585,11 @@ class Driver:
             st.progress(a["run"], "run_start", files=1)
             st.runs[a["run"]] = []
         elif k == "tests_case":
-            name = self.w["cases"][a["case"]]
-            f = "tests/unit/generated/cart.branches.test.ts"
-            st.progress(a["run"], "case_start", file=f, test="cart", case=name, attempt=1)
-            st.progress(a["run"], "case_end", file=f, test="cart", case=name, attempt=1, status=a["status"], durationMs=40)
+            # a case of the sample's own (cases[case]), or one named in full (Ta4: the screen tests chapter T-a ran)
+            name = a.get("name") or self.w["cases"][a["case"]]
+            f, test = a.get("file", "tests/unit/generated/cart.branches.test.ts"), a.get("test", "cart")
+            st.progress(a["run"], "case_start", file=f, test=test, case=name, attempt=1)
+            st.progress(a["run"], "case_end", file=f, test=test, case=name, attempt=1, status=a["status"], durationMs=40)
             st.runs[a["run"]].append(a["status"])
         elif k == "tests_end":
             res = st.runs[a["run"]]
@@ -638,6 +641,16 @@ class Driver:
                 await self.page.mouse.click(at[0], at[1])
             elif k == "select":
                 await self.page.select_option(a["target"]["css"], a["value"])
+        elif k == "drag":
+            # one drag across the page (p0 to p1: fractions of the viewport), e.g. the box 範囲で寄る draws
+            vw, vh = self.page.viewport_size["width"], self.page.viewport_size["height"]
+            x0, y0, x1, y1 = a["p0"][0] * vw, a["p0"][1] * vh, a["p1"][0] * vw, a["p1"][1] * vh
+            await self.move([x0, y0])
+            await self.page.mouse.down()
+            for n in range(1, 11):
+                await self.page.mouse.move(x0 + (x1 - x0) * n / 10, y0 + (y1 - y0) * n / 10)
+            await self.page.mouse.up()
+            self.cursor = [x1, y1]
         elif k in ("wheel", "dolly"):
             pass   # the frames move it (capture); a prelude has none
         else:
