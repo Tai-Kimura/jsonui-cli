@@ -35,9 +35,10 @@ sys.path.insert(0, str(HERE))
 from playwright.async_api import async_playwright  # noqa: E402
 
 import demo  # noqa: E402
-from common import E2E_MARKS, ISOLATE, LAUNCH_ARGS, Watch, dump, progress_count, progress_grew, suite_guard  # noqa: E402
+from common import E2E_MARKS, ISOLATE, LAUNCH_ARGS, Watch, dump, expect_demo_file, progress_count, progress_grew, suite_guard  # noqa: E402
 
 EXPECT_DEMO = HERE / "expect_demo.json"
+
 
 
 def free_port() -> int:
@@ -251,7 +252,11 @@ def main(argv=None) -> int:
                     finally:
                         srv.stop()
                     (out / "demo-results.json").write_text(dump(res) + "\n")
-                    expect = json.loads(EXPECT_DEMO.read_text())
+                    expect_file = expect_demo_file(os.environ.get("JUI_VIZ_LANGUAGE", ""))
+                    if not expect_file.is_file():
+                        raise RuntimeError(f"no expected demo results for this language: {expect_file.name} (check "
+                                           f"{out / 'demo-results.json'} by eye, then copy it there)")
+                    expect = json.loads(expect_file.read_text())
                     for name in suites:
                         for line in diff(expect.get(name), res.get(name), f"demo/{name}"):
                             failures.append(line)
