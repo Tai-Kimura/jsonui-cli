@@ -131,9 +131,14 @@ class OpenApiDoc:
                     operation_id=op_id,
                     tag=tag,
                     id_was_synthesized=synthesized,
-                    responses=op.get("responses") or {},
+                    # Followed here, once, so every reader of a response or a request body sees its content:
+                    # `#/components/responses/*` is how OpenAPI 3 shares an error response, and read raw it had
+                    # no `content` — the error scenario became `{"detail": "HTTP 429"}`, `--check` filed the
+                    # status as declaring no body, and serve checked no request body (ticket
+                    # 2026-10-24-jui-mock-generate-ignores-response-ref).
+                    responses={code: self.resolve_object(resp) for code, resp in (op.get("responses") or {}).items()},
                     parameters=[self.resolve_schema(p) for p in parameters],
-                    request_body=op.get("requestBody") or {},
+                    request_body=self.resolve_object(op.get("requestBody")),
                 ))
         return ops
 
@@ -152,6 +157,18 @@ class OpenApiDoc:
             else:
                 return {}
         return node
+
+    def resolve_object(self, obj):
+        """A response, request body or example object with its `$ref` chain followed (`$ref` -> `$ref` -> object).
+
+        `{}` for a chain that loops or points nowhere: no content, as a response that declares none."""
+        seen: set = set()
+        while isinstance(obj, dict) and isinstance(obj.get("$ref"), str):
+            if obj["$ref"] in seen:
+                return {}
+            seen.add(obj["$ref"])
+            obj = self._resolve_ref(obj["$ref"])
+        return obj if isinstance(obj, dict) else {}
 
     def resolve_schema(self, schema, _depth: int = 0):
         """Return a schema with top-level $ref/allOf resolved (shallow, one hop of merge)."""
@@ -304,7 +321,7 @@ class OpenApiDoc:
         """`(found, value)` for the example a media type object carries.
 
         `example` first, then the first of `examples` that holds a `value`
-        (a `$ref` into `components/examples` is followed; an entry with only
+        (a `$ref` chain into `components/examples` is followed; an entry with only
         an `externalValue` is skipped — nothing is fetched). This is where
         OpenAPI 3 puts a response's example as often as on the schema, and
         a body synthesised from the types instead reads `0`, `"string"` and
@@ -318,9 +335,8 @@ class OpenApiDoc:
         examples = media.get("examples")
         if isinstance(examples, dict):
             for entry in examples.values():
-                if isinstance(entry, dict) and "$ref" in entry:
-                    entry = self._resolve_ref(entry["$ref"])
-                if isinstance(entry, dict) and "value" in entry:
+                entry = self.resolve_object(entry)
+                if "value" in entry:
                     return True, entry["value"]
         return False, None
 
