@@ -385,7 +385,8 @@ def chapters(lang: str) -> dict:
         # now, then 範囲で寄る and one drag draws the box the camera moves in on (on 2.3.21's clock: +6 s below)
         E(86.4, "click", target={"css": "#sr-player [data-sr-fp-show='now']"}),
         E(88.0, "click", target={"css": "#sr-boxzoom"}),
-        E(88.7, "drag", p0=[0.38, 0.32], p1=[0.66, 0.66]),
+        # the box around the payment's way out: the entrance and Stripe, with the light on its way there
+        E(88.7, "drag", p0=[0.22, 0.55], p1=[0.52, 0.96]),
     ], needs=("rooms", "server_room", "flows", "sr2d"))
     out["4"].end = 90   # 2.3.21's 86 + the 4 s above (shifted with the chapter below)
 
@@ -470,6 +471,8 @@ def chapters(lang: str) -> dict:
     out["Ta4"] = Chapter("Ta4", 172, 180, floor(w) + up_close("demo-shop"), [
         E(172.4, "tests_start", key="s02", run="r2", command=w["t_command"]),
         E(172.9, "click", target={"robot": "s02"}, expect="card:s02"),
+        # the side panel's テスト実行 (the run's cases by number and name; the card says only the count and a failure)
+        E(173.4, "dbg", call="scrollTo", css="#tests"),
         E(174.0, "tests_case", run="r2", file=T_CASES[0][0], test=T_CASES[0][1], name=T_CASES[0][2], status="passed"),
         E(175.6, "tests_case", run="r2", file=T_CASES[1][0], test=T_CASES[1][1], name=T_CASES[1][2], status="passed"),
         E(176.6, "tests_end", key="s02", run="r2"),

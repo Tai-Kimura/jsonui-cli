@@ -690,6 +690,9 @@ class Driver:
             await self.until("() => { const r = document.getElementById('roster'); return !!r && !r.hidden; }", what="the room's robot list", advance=True)
             await self.page.evaluate("() => { const b = document.getElementById('roster-fold'); if (b && b.getAttribute('aria-expanded') === 'true') b.click(); }")
             await self.until("() => document.getElementById('roster').classList.contains('roster-folded')", what="the robot list folded", advance=True)
+        elif call == "scrollTo":
+            # a panel scrolled so an element is in view (Ta4: the side panel's テスト実行, the run's cases by name)
+            await self.page.evaluate("(css) => document.querySelector(css).scrollIntoView({block: 'center'})", a["css"])
         elif call == "noop":   # only its expect: a wait before frame 0
             pass
         elif call == "srMigSpeed":
