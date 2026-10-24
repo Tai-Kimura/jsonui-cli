@@ -486,7 +486,7 @@ def _group_tags_read(r):
                      "atCorner": t is not None and left - 1 <= t[0] <= max(q[0][0], q[3][0]) + 6,
                      "covers": [o for o, u in tags.items() if o != f["id"] and t and t[0] < u[2] and t[2] > u[0] and t[1] < u[3] and t[3] > u[1]],
                      "frame": frame.get(f["id"]), "inPage": t is not None and t[0] >= g["canvas"][0] and t[2] <= g["canvas"][2]})
-    return {"lod": g["lod"], "canvas": g["canvas"], "rows": rows}
+    return {"lod": g["lod"], "canvas": g["canvas"], "rows": rows, "order": g.get("order", [])}
 
 
 async def run_group_tags(page, out, failures, res, flat):
@@ -514,6 +514,25 @@ async def run_group_tags(page, out, failures, res, flat):
         gt[f"w{w}-flow"] = _group_tags_read(await page.evaluate(GROUP_TAGS))
         await page.screenshot(path=str(out / f"group-tags-w{w}{'-2d' if flat else ''}.png"))
         await page.click("#sr-player [data-sr-fp='stop']")
+    if not flat:
+        # turned a quarter round from the fit, an outer floor's corner is the nearer of the two and its tag is given out
+        # first: an inner floor's tag then stays no higher than its outer floor's (left out where it cannot)
+        await page.set_viewport_size({"width": 1280, "height": 760})
+        await page.wait_for_timeout(300)
+        await page.click("#sr-fit")
+        await page.wait_for_timeout(500)
+        cam = await page.evaluate("() => window.__dbg.srCam()")
+        t, p = cam["target"], cam["pos"]
+        await page.evaluate("([p, q]) => window.__dbg.srCamSet(p, q)", [[t[0] - (p[2] - t[2]), p[1], t[2] + (p[0] - t[0])], t])
+        await page.wait_for_timeout(500)
+        r = res["groupTagsTurned"] = _group_tags_read(await page.evaluate(GROUP_TAGS))
+        order, by = r["order"], {x["id"]: x for x in r["rows"]}
+        first = [[x["id"], x["parent"]] for x in r["rows"] if x["parent"] in order and x["id"] in order and order.index(x["parent"]) < order.index(x["id"])]
+        check(failures, r["lod"] == "near" and first, f"turned: an outer floor's tag is given out before an inner one's (else the next arm proves nothing): {order}")
+        nested = [[x["id"], x["row"], x["parent"], by[x["parent"]]["row"]] for x in r["rows"] if x["tag"] and x["parent"] in by and by[x["parent"]]["tag"]]
+        check(failures, all(x[1] <= x[3] for x in nested), f"turned: an inner floor's tag stands no higher than its outer floor's, given out first: {nested}")
+        await page.click("#sr-fit")
+        await page.wait_for_timeout(500)
     await page.set_viewport_size(size)
     if was_flat != flat:
         await page.click("#sr-mode-2d" if was_flat else "#sr-mode-3d")

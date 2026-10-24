@@ -1135,7 +1135,7 @@ function srGroupTagBoxes(V) {
       break;
     }
   }
-  return { boxes, outside };
+  return { boxes, outside, order: floors.map((f) => f.G.g.id) };   // order: nearest first, as given out (the arms read it)
 }
 function srPlaceLabels(V) {
   const cam = V.camera, w = V.renderer.domElement.clientWidth, h = V.renderer.domElement.clientHeight, v = new THREE.Vector3(), out = [];

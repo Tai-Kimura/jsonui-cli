@@ -352,7 +352,8 @@ window.__dbg = {
     const px = (x, y, z) => { v.set(x, y, z).project(V.camera); return [Math.round(cv.left + (v.x + 1) / 2 * cv.width), Math.round(cv.top + (1 - v.y) / 2 * cv.height)]; };
     const tags = new Map([...document.querySelectorAll('#sr-labels .sr-label:not([hidden])')].filter((s) => s.dataset.kind === 'group')
       .map((s) => { const r = s.getBoundingClientRect(); return [s.textContent, [r.left, r.top, r.right, r.bottom].map(Math.round)]; }));
-    return { lod: V.lod, canvas: [cv.left, cv.top, cv.right, cv.bottom].map(Math.round), floors: V.L.floors.filter((G) => G.g.id).map((G) => {
+    const gb = V.lod === 'near' ? srGroupTagBoxes(V) : null;
+    return { lod: V.lod, order: gb ? gb.order : [], canvas: [cv.left, cv.top, cv.right, cv.bottom].map(Math.round), floors: V.L.floors.filter((G) => G.g.id).map((G) => {
       const y = 0.2 + G.level * 0.06, text = G.g.label || G.g.id;
       return { id: G.g.id, text, level: G.level, parent: G.g.parent || null, corner: px(G.x + 0.15, y, G.z + 0.5),
         quad: [px(G.x, y, G.z), px(G.x + G.w, y, G.z), px(G.x + G.w, y, G.z + G.d), px(G.x, y, G.z + G.d)], tag: tags.get(text) || null }; }) }; },
