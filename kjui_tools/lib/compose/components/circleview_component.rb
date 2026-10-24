@@ -19,8 +19,9 @@ module KjuiTools
       # type: CircleView`, while Dynamic drew it (component_metadata.json
       # declared kotlin_generated false and kotlin_dynamic true).
       class CircleviewComponent
-        # The diameter when neither width nor height is declared — Dynamic's
-        # default for its undeclared legacy `size`.
+        # The diameter when neither width nor height is declared, as Dynamic
+        # draws it. The legacy `size` is retired (2026-10-24): the normalizer
+        # folds it into width / height.
         DEFAULT_SIZE = 20
 
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil, is_root: false)
@@ -32,11 +33,11 @@ module KjuiTools
           modifiers = []
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           # The declared width / height, as on every component; without them,
-          # the legacy `size` (Dynamic reads it the same way).
+          # the default diameter (Dynamic draws the same).
           if json_data['width'] || json_data['height']
             modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           else
-            modifiers << ".size(#{legacy_size(json_data)}.dp)"
+            modifiers << ".size(#{DEFAULT_SIZE}.dp)"
           end
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
           # testTag after margins and offset, before alpha: the tagged box (resource-id
@@ -75,11 +76,6 @@ module KjuiTools
 
           # The parent draws the children (handle_container_result).
           { code: code, children: children, closing: "\n" + indent('}', depth), json_data: json_data }
-        end
-
-        def self.legacy_size(json_data)
-          size = json_data['size']
-          size.is_a?(Numeric) ? size : DEFAULT_SIZE
         end
 
         def self.indent(text, level)

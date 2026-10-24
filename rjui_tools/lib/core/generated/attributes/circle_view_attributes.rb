@@ -18,8 +18,6 @@ module JsonUI
         { name: 'child', kind: :array }.freeze,
         # Child components (alias for child). A single component node (object) is accepted as a one-element array.
         { name: 'children', kind: :array }.freeze,
-        # Diameter in dp when width/height are not given (kjui circleview_component).
-        { name: 'size', kind: :number }.freeze,
       ].freeze
 
       # Returns a Hash keyed by canonical attribute name.

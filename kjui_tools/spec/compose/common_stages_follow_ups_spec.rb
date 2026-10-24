@@ -328,6 +328,20 @@ RSpec.describe 'kjui codegen: the common stages, follow-ups' do
     expect(indicator.call('size' => 30)).to eq(plain)
   end
 
+  # The same legacy `size` on Image (CircleImage is its spelling) and CircleView
+  # is retired (2026-10-24, "size を廃止する"): the normalizer folds it into
+  # width / height, and the converters draw as if it were not written — the
+  # circles their default diameter (CircleImage 48, CircleView 20).
+  it 'Image, CircleImage and CircleView read no legacy `size`' do
+    { 'Image' => { 'srcName' => 'ic_a' }, 'CircleImage' => { 'srcName' => 'ic_a' }, 'CircleView' => {} }.each do |type, node|
+      plain = emit.call({ 'type' => type }.merge(node))
+      expect(emit.call({ 'type' => type, 'size' => 30 }.merge(node))).to eq(plain), type
+      expect(plain).not_to include('30.dp'), type
+    end
+    expect(emit.call({ 'type' => 'CircleImage', 'srcName' => 'ic_a' })).to include('.size(48.dp)')
+    expect(emit.call({ 'type' => 'CircleView' })).to include('.size(20.dp)')
+  end
+
   it 'C: the Compose validator takes indicatorStyle on Indicator, and only its values' do
     require 'core/attribute_validator'
     warnings_for = lambda do |node|

@@ -124,10 +124,10 @@ def test_no_converter_reads_a_retired_spelling_and_each_points_at_a_declared_nam
 # The attributes 2.3.22 declared for the faces that draw them (and those it declares for all): a layout written for
 # another face is warned. Every other narrowed declaration predates this and keeps its own reasons.
 NARROWED_IN_2_3_22 = {
-    ("Blur", "intensity"), ("Button", "href"), ("CircleView", "size"), ("Collection", "flowAlignment"),
+    ("Blur", "intensity"), ("Button", "href"), ("Collection", "flowAlignment"),
     ("GradientView", "angle"), ("GradientView", "gradientType"), ("GradientView", "orientation"),
     ("IconLabel", "contentDescription"), ("IconLabel", "fontWeight"), ("IconLabel", "strikethrough"),
-    ("IconLabel", "underline"), ("Image", "size"), ("Indicator", "halfSpinner"),
+    ("IconLabel", "underline"), ("Indicator", "halfSpinner"),
     ("Indicator", "strokeWidth"), ("Indicator", "trackColor"), ("NetworkImage", "circle"), ("NetworkImage", "size"),
     ("Progress", "maximumValue"), ("Progress", "progressHeight"), ("ScrollView", "contentInset"), ("Segment", "fontSize"),
     ("SelectBox", "cancelButtonBackgroundColor"), ("SelectBox", "cancelButtonTextColor"), ("Slider", "thumbTintColor"),
