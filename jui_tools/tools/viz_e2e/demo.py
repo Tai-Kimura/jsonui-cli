@@ -128,16 +128,20 @@ STRIP_HITS = """() => [...document.querySelectorAll('#perm-strip [data-do]')].fi
 
 
 # Folder names and the project picker's chips (ticket 2026-10-24-viz-english-phone-chip-and-folder-wrap, the requester's
-# choice A, 10-24): a chip's words never break inside it (its row may go to two); a folder name keeps one line, cut with
-# "…" when it does not fit, its count line taking the rest. Read on the page's own words, then on long ones laid over
-# them for the check (a long folder name, German's longer words), at 390 and 1440. Each is hit at its centre.
+# choice A, 10-24), and robots' names in the robot picker (ticket 2026-10-24-viz-robot-picker-name-breaks-after-hyphen):
+# a chip's words never break inside it (its row may go to two); a folder name, or a robot's, keeps one line, cut with
+# "…" when it does not fit, a folder's count line taking the rest. Read on the page's own words, then on long ones laid
+# over them for the check (a long folder name, a long robot name, German's longer words), at 390 and 1440. Each is hit
+# at its centre.
 LONG_FOLDER = "a-folder-name-much-too-long-to-fit-on-one-line-anywhere/"
 LONG_WORDS = {"st-waiting": "Wartet auf Erlaubnis 2", "st-busy": "7 Roboter arbeiten", "st-write": "Specs in Bearbeitung 6",
-              "count": "3 Sitzungen · 1 wartet auf Erlaubnis · 1 wartet auf eine Antwort · 2 arbeiten"}
+              "count": "3 Sitzungen · 1 wartet auf Erlaubnis · 1 wartet auf eine Antwort · 2 arbeiten",
+              "robot": "jsonui-navigation-android-with-a-name-longer-than-its-row"}
 FOLDERS_JS = """([where, long, words]) => {
   const one = (el) => { const r = el.getBoundingClientRect(), lh = parseFloat(getComputedStyle(el).lineHeight); return r.height > 0 && r.height < lh * 1.5; };
   const cut = (el) => el.scrollWidth > el.clientWidth + 1;
-  const hit = (el) => { const r = el.getBoundingClientRect(), x = r.left + Math.min(r.width / 2, 24), y = r.top + r.height / 2, h = document.elementFromPoint(x, y);
+  const hit = (el) => { el.scrollIntoView({ block: 'nearest' });   // a row below a picker's fold: scrolled to, as a person would
+    const r = el.getBoundingClientRect(), x = r.left + Math.min(r.width / 2, 24), y = r.top + r.height / 2, h = document.elementFromPoint(x, y);
     return !!h && (h === el || el.contains(h)); };
   const read = (els) => els.map((el) => ({ text: el.textContent, one: one(el), cut: cut(el), hit: hit(el), w: Math.round(el.getBoundingClientRect().width) }));
   const kept = [];
@@ -151,10 +155,12 @@ FOLDERS_JS = """([where, long, words]) => {
     for (const c of chips()) for (const k of ['st-waiting', 'st-busy', 'st-write']) if (c.classList.contains(k)) put(c, words[k]);
     out.long = { names: read(names()), chips: read(chips()), rows: rows() };
   } else if (where === 'picker') {
-    const labels = () => [...document.querySelectorAll('#pop .pg-label')];
-    out.own = { names: read(labels()) };
+    const labels = () => [...document.querySelectorAll('#pop .pg-label')], robots = () => [...document.querySelectorAll('#pop .pg-nm')];
+    out.own = { names: read(labels()), robots: read(robots()) };
+    const sub = document.querySelector('#pop .pg-sub .pg-nm');   // a subagent's row: its state chip beside it is the long one
     if (labels()[0]) put(labels()[0], long);
-    out.long = { names: labels()[0] ? read([labels()[0]]) : [] };
+    if (sub) put(sub, words.robot);
+    out.long = { names: labels()[0] ? read([labels()[0]]) : [], robots: sub ? read([sub]) : [] };
   } else {
     const heads = () => [...document.querySelectorAll('.pg-toggle')].filter((t) => t.offsetParent);
     for (const t of heads()) t.scrollIntoView({ block: 'nearest' });
@@ -202,6 +208,13 @@ async def folder_lines(page, label, out):
                     bad.append(f"{where}/{kind}: the chip {c['text']!r} on one line and hit at its centre: {c}")
             if not all(g.get("rows", [True])):
                 bad.append(f"{where}/{kind}: a chips' row wider than the picker: {g['rows']}")
+            for n in g.get("robots", []):
+                if not (n["one"] and n["hit"]):
+                    bad.append(f"{where}/{kind}: the robot's name {n['text']!r} on one line and hit at its centre: {n}")
+            if where == "picker" and not g.get("robots"):
+                bad.append(f"picker/{kind}: no robot's name found")
+            if kind == "long" and g.get("robots") and not g["robots"][0]["cut"]:
+                bad.append(f"picker/long: the long robot's name is cut with …: {g['robots'][0]}")
             for c in g.get("counts", []):
                 if not (c["one"] and c["hit"] and c["w"] >= 60):
                     bad.append(f"{where}/{kind}: the count line beside the folder name takes the rest (60 px or more), hit: {c}")
