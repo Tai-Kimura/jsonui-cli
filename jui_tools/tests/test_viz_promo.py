@@ -91,7 +91,7 @@ def test_the_board_ends_on_a_worktrees_spec_tagged_with_its_branch(tmp_path):
         assert any(ev.kind == "dbg" and ev.args.get("call") == "setProject" for ev in c.prelude), "the list scoped to the room"
         follow = [ev for ev in c.events if ev.kind == "hover" and ev.at > opened.at]
         assert follow and "aria-current" in follow[0].args["target"]["css"], "the cursor follows the opened row"
-    assert term.TERM_SPAN["1b"] == 16.0 and T.BOUNDS["1b"][1] - T.BOUNDS["1b"][0] > 16.0
+    assert term.TERM_SPAN["1b"] == 17.7 and T.BOUNDS["1b"][1] - T.BOUNDS["1b"][0] > 17.7
     # the worktree as the stage makes it: on its branch, the new file written, the cart's description edited, nothing committed
     room = tmp_path / "room"
     (room / "docs/screens/json").mkdir(parents=True)
@@ -279,7 +279,8 @@ def test_1a_ends_on_the_spec_document_held_long_enough_to_read(tmp_path):
     assert files[-1]["html"].startswith("<html>") and not files[-2]["generated"]
     assert files[-1]["sec"] >= 4.0 and files[-1]["stops"]
     start = T.BOUNDS["1a"][1] - files[-1]["sec"]
-    assert start - T.BOUNDS["1a"][0] <= 8.0, "the spec document is on screen for the whole of 1a's last subtitle (its last 4 s)"
+    # (1a drawn out 1.5 x for the narration, 2.3.23: its last subtitle is its last 6 s)
+    assert start - T.BOUNDS["1a"][0] <= 12.0, "the spec document is on screen for the whole of 1a's last subtitle (its last 6 s)"
     assert "html" not in files[0]
 
 
@@ -509,7 +510,7 @@ def test_2_3_23_adds_the_spec_diff_the_flow_views_and_chapter_t():
     for lang in ("ja", "en"):
         cs = T.chapters(lang)
         board = cs["1b-board"]
-        assert (board.start, board.end) == (18, 46)
+        assert (board.start, board.end) == (30, 61)   # drawn out for the narration (STRETCH)
         diff = [e for e in board.events if e.kind == "click" and e.args["target"].get("css") == "#wb-diff"]
         assert len(diff) == 1 and diff[0].args["expect"] == "specdiff" and diff[0].at < board.end - 3
         four = cs["4"]

@@ -33,7 +33,7 @@ from viz_promo.timeline import BOARDS, SEGMENTS, SPLIT_VIEWPORT, frame_count, fr
 
 PROMPT = "demo-shop $ "
 #: how long a window's own script runs (s); the chapter may be longer and holds its last frame state
-TERM_SPAN = {"1b": 16.0}
+TERM_SPAN = {"1b": 17.7}
 ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 
 # 1b's story (requester 10-22: the message is that the spec and the implementation do not drift apart, and that a
@@ -73,20 +73,21 @@ def make_drift(shop: Path) -> None:
 # 4–8 s under "the spec is the source; the rest is generated", 8–11.4 s the hand-written body under "you hand-write
 # only the minimum", then the spec document to the chapter's end under "you fix the spec" (requester 10-22: the spec
 # document went by too fast to read — it now stays 4.6 s and stops at each part)
+# (2.3.23: 1a is 18 s, the narration's length; each file's seconds are 1.5 x the 12 s cut's)
 GENERATED = (
-    ("docs/screens/json/cart.spec.json", 0.8),
-    ("docs/screens/layouts/cart.json", 0.5),
-    ("ios/ios/View/Cart/CartGeneratedView.swift", 0.5),
-    ("android/app/src/main/kotlin/com/example/demoshop/views/cart/CartGeneratedView.kt", 0.5),
-    ("web/src/generated/components/Cart.tsx", 0.5),
-    ("ios/ios/ViewModel/Protocol/CartViewModelProtocol.swift", 0.4),
-    ("ios/ios/Model/Generated/CartLineDto.swift", 0.4),
-    ("ios/Tests/Generated/CartBranchesTest.swift", 0.4),
+    ("docs/screens/json/cart.spec.json", 1.2),
+    ("docs/screens/layouts/cart.json", 0.75),
+    ("ios/ios/View/Cart/CartGeneratedView.swift", 0.75),
+    ("android/app/src/main/kotlin/com/example/demoshop/views/cart/CartGeneratedView.kt", 0.75),
+    ("web/src/generated/components/Cart.tsx", 0.75),
+    ("ios/ios/ViewModel/Protocol/CartViewModelProtocol.swift", 0.6),
+    ("ios/ios/Model/Generated/CartLineDto.swift", 0.6),
+    ("ios/Tests/Generated/CartBranchesTest.swift", 0.6),
 )
-HAND_WRITTEN = (("ios/ios/ViewModel/CartViewModel.swift", 3.4),)
+HAND_WRITTEN = (("ios/ios/ViewModel/CartViewModel.swift", 5.1),)
 # the spec document: (the spec it is made from, the name it is shown as, seconds, the headings it stops at after its
 # top — the overview, the screen's structure, the table of its parts — each reached in a short glide, then held)
-SPEC_HTML = ("docs/screens/json/cart.spec.json", "cart.html", 4.6, ("Screen Structure", "UI Components"))
+SPEC_HTML = ("docs/screens/json/cart.spec.json", "cart.html", 6.9, ("Screen Structure", "UI Components"))
 
 
 def clean(text: str, root: Path) -> str:

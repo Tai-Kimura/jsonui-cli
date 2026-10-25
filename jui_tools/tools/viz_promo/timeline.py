@@ -37,7 +37,7 @@ T_CHAPTER_IDS = ("Ta", "Tb")
 ALL = TERM_CHAPTER_IDS + CHAPTER_IDS + T_CHAPTER_IDS
 #: window segments inside a viz chapter, captured by term.py into a folder of their own: id -> (chapter, start, end,
 #: the demo-shop file shown). The promo shows the segment over its seconds and the chapter's frames after it.
-SEGMENTS = {"5-json": ("5", 168.0, 171.0, "docs/infra/load/weekend-campaign.json")}
+SEGMENTS = {"5-json": ("5", 183.0, 186.0, "docs/infra/load/weekend-campaign.json")}
 #: a terminal chapter shown split: its terminal on the left half, the viz page beside it on the right half, captured
 #: by capture.py into a folder of its own: id -> the chapter it sits beside. The promo frames both halves at the same
 #: size (its SPLIT layout), so the terminal (term.py) and the board are both taken at SPLIT_VIEWPORT.
@@ -50,13 +50,16 @@ STANDALONE = {"mig": (0.0, 40.0)}
 #: what run.py captures: the promo's chapters and the segments (a chapter brings its segments and board with it)
 CAPTURE_IDS = ALL + tuple(SEGMENTS) + tuple(BOARDS) + tuple(STANDALONE)
 #: the bounds the events below were written for; tests hold them to the promo's timeline.json
-BOUNDS = {"hook": (0, 6), "1a": (6, 18), "1b": (18, 46), "2": (46, 58), "3": (58, 68), "Ta": (68, 96), "Ta4": (96, 104),
-          "Tb": (104, 130), "4": (130, 168), "5": (168, 182), "4m": (182, 216), "4c": (216, 226), "6": (226, 234)}
+BOUNDS = {"hook": (0, 12), "1a": (12, 30), "1b": (30, 61), "2": (61, 73), "3": (73, 83), "Ta": (83, 111), "Ta4": (111, 119),
+          "Tb": (119, 145), "4": (145, 183), "5": (183, 197), "4m": (197, 231), "4c": (231, 241), "6": (241, 249)}
+#: chapters drawn out to fit the narration (requester 10-25: ずんだもん reads the subtitles): (old start, old end) ->
+#: (new start, new end), their events placed in proportion
+STRETCH = {"hook": ((0, 6), (0, 12)), "1b-board": ((18, 46), (30, 61))}
 #: the chapters written on an earlier cut's clock, moved by this much on 2.3.23's (requester 10-25: the tests before
 #: the infrastructure; the infrastructure's cost before its migration, then the migration's cost compared). 1b ends 6 s
 #: later with the spec's diff; 4 opens on the 1007-node system whole for 8 s and ends 4 s later with 今関係 and
 #: 範囲で寄る; chapter T (Ta, Ta4, Tb) comes after 3
-SHIFT = {"2": 6, "3": 6, "Ta4": -76, "5": 48, "4m": 96, "4c": 2, "6": 92}
+SHIFT = {"2": 21, "3": 21, "Ta4": -61, "4": 15, "5": 63, "4m": 111, "4c": 17, "6": 107}
 
 ROOMS = ("demo-shop", "demo-admin", "demo-docs", "demo-api", "demo-mobile")
 
@@ -498,6 +501,14 @@ def chapters(lang: str) -> dict:
         E(136.0, "wheel", target={"css": "#scene-canvas"}, dy=300, dur=4.0),
         E(137.0, "tool_end", key="s13"),
     ], needs=("rooms",))
+    for cid, ((a0, a1), (b0, b1)) in STRETCH.items():
+        c = out[cid]
+        k = (b1 - b0) / (a1 - a0)
+        c.start, c.end = b0, b1
+        for ev in c.events:
+            ev.at = round(b0 + (ev.at - a0) * k, 3)
+            if "dur" in ev.args:
+                ev.args["dur"] = round(ev.args["dur"] * k, 3)
     for cid, by in SHIFT.items():
         c = out[cid]
         c.start, c.end = c.start + by, c.end + by
