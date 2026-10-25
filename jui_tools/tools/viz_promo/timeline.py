@@ -470,7 +470,7 @@ def chapters(lang: str) -> dict:
     # same two files and cases (T_CASES; their results are t_chapter.py's real run's)
     out["Ta4"] = Chapter("Ta4", 172, 180, floor(w) + up_close("demo-shop"), [
         E(172.4, "tests_start", key="s02", run="r2", command=w["t_command"]),
-        E(172.9, "click", target={"robot": "s02"}, expect="card:s02"),
+        E(172.9, "click", target={"robot_tag": "s02"}, expect="card:s02"),   # its tag where it shows (en's lie over bodies)
         # the side panel's テスト実行 (the run's cases by number and name; the card says only the count and a failure)
         E(173.4, "dbg", call="scrollTo", css="#tests"),
         E(174.0, "tests_case", run="r2", file=T_CASES[0][0], test=T_CASES[0][1], name=T_CASES[0][2], status="passed"),
