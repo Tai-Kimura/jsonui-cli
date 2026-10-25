@@ -271,6 +271,45 @@ def test_an_upgrade_makes_a_run_due_at_once_and_a_failed_run_waits_its_day():
     assert not F.due(failed, 1)                                          # no fetch a minute: the bundled prices stand in
 
 
+
+# ---------------------------------------------------------------- a failed file, retried alone an hour later (ticket
+# 2026-10-26-viz-cloud-prices-failed-file-waits-a-day: one of 73 files timed out and waited its day)
+
+def test_a_failing_file_is_retried_alone_an_hour_after_the_run():
+    ok = {"files": {"aws/x.json": {"lastError": None}}, "lastRunAt": 0, "lastRunWriter": F.WRITER}
+    bad = {"files": {"aws/x.json": {"lastError": "TimeoutError: The read operation timed out"}}, "lastRunAt": 0,
+           "lastRunWriter": F.WRITER}
+    assert not F.retry_due(ok, F.RETRY_FAILED_MS) and not F.retry_due(bad, F.RETRY_FAILED_MS - 1)
+    assert F.retry_due(bad, F.RETRY_FAILED_MS) and not F.due(bad, F.RETRY_FAILED_MS)
+    assert not F.retry_due({**bad, "lastRetryAt": 10}, F.RETRY_FAILED_MS) and F.retry_due({**bad, "lastRetryAt": 10}, F.RETRY_FAILED_MS + 10)
+    assert not F.retry_due({**bad, "lastRunWriter": "2.3.13"}, F.RETRY_FAILED_MS)   # another version's: due() runs all
+    assert not F.retry_due({"files": bad["files"]}, F.RETRY_FAILED_MS)              # no run yet: due() runs all
+
+
+def test_a_retry_fetches_the_failing_files_only_and_keeps_the_days_time(tmp_path):
+    answers = azure_answers()
+    missing = answers.pop(AZ.query_url("Functions", "japaneast"))
+    F.run(azure_only(), tmp_path, at_ms=1000, get=fake_get(answers), provider="azure")
+    asked = []
+
+    def counting(url, limit):
+        asked.append(url)
+        return fake_get(answers)(url, limit)
+    answers[AZ.query_url("Functions", "japaneast")] = missing
+    at = 1000 + F.RETRY_FAILED_MS
+    index = F.run_due(azure_only(), tmp_path, at, get=counting)
+    assert {u.split("?")[0] for u in asked} == {AZ.query_url("Functions", "japaneast").split("?")[0]}
+    assert all("Functions" in u for u in asked)
+    e = index["files"]["azure/functions/japaneast.json"]
+    assert e["lastError"] is None and e["fetchedAt"] == at
+    assert index["files"]["azure/key-vault/japaneast.json"]["fetchedAt"] == 1000     # the others are not fetched again
+    assert index["lastRunAt"] == 1000 and index["lastRetryAt"] == at and F.summary(index)["failing"] == 0
+    assert not F.retry_due(index, at + F.RETRY_FAILED_MS) and F.due(index, 1000 + F.EVERY_MS)
+    asked.clear()
+    index = F.run_due(azure_only(), tmp_path, 1000 + F.EVERY_MS, get=counting)          # the day's run: every file
+    assert len(asked) > 1 and index["lastRunAt"] == 1000 + F.EVERY_MS
+
+
 def test_a_run_marks_each_file_and_the_run_with_this_version(tmp_path):
     """Each file fetched names this version, and so does the run; a later failure keeps the last success's writer (its
     file is still another version's until fetched again)."""
