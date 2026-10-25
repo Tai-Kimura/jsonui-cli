@@ -298,6 +298,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-body); 
 .pill.cli-codex { box-shadow: 0 0 0 2px var(--cli-codex); }
 .tag.bot > .pill { box-shadow: none; }
 /* The session list's word for it, beside the session's name */
+.cli-tag::after { content: attr(data-cli-name); }   /* drawn, not text: the row's own text is its name and state, as before */
 .cli-tag { flex: none; align-self: center; padding: 0 5px; border: 1.5px solid; border-radius: 4px; font: 700 9.5px/1.5 var(--font-mono); letter-spacing: 0.04em; }
 .cli-tag.cli-claude { border-color: var(--cli-claude); color: var(--cli-claude-text); }
 .cli-tag.cli-codex { border-color: var(--cli-codex); color: var(--ink); }
