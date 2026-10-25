@@ -299,6 +299,10 @@
   <div class="call-card">
     <h2 id="call-title">{{tl:page.call.title}}ロボットを呼ぶ{{/tl}}</h2>
     <p class="call-lead" id="call-lead"></p>
+    <div class="call-tabs" role="tablist" aria-label="{{tl:page.call.tabs}}どの CLI でセッションを起動するか{{/tl}}">
+      <button type="button" role="tab" class="call-tab cli-claude" id="call-tab-claude" data-call-cli="claude" aria-selected="true">Claude Code</button>
+      <button type="button" role="tab" class="call-tab cli-codex" id="call-tab-codex" data-call-cli="codex" aria-selected="false" tabindex="-1">Codex</button>
+    </div>
     <label for="call-name">{{tl:page.call.name}}担当名（必須、1 行）{{/tl}}</label>
     <input type="text" id="call-name" maxlength="64" autocomplete="off" spellcheck="false">
     <label for="call-role">{{tl:page.call.role}}役割の文（任意）{{/tl}}</label>

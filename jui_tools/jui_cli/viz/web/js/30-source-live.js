@@ -150,13 +150,14 @@ const SOURCE = {
     } catch (err) { return { ok: false, error: tl('live.offline') }; }
   },
   /* The call bell (2.3.5, 50-panel.js): the line to paste, made by the server (callcmd.py) from the project's own folder,
-     under the checks of /api/prompt. Nothing is run. Resolves { ok, command, flag } or { ok: false, why }. */
-  async callCommand(project, name, role) {
+     under the checks of /api/prompt. Nothing is run. Resolves { ok, command, flag } or { ok: false, why }. cli: the
+     dialog's tab, 'claude' or 'codex' (callcmd.codex_command). */
+  async callCommand(project, name, role, cli = 'claude') {
     try {
       const res = await fetch('/api/call-command', {
         method: 'POST', cache: 'no-store', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token },
-        body: JSON.stringify({ projectId: project, name, role }),
+        body: JSON.stringify({ projectId: project, name, role, cli: cli === 'codex' ? 'codex' : 'claude' }),
       });
       const text = await res.text();
       let body = null;
@@ -972,6 +973,7 @@ function rebuildRobots(initial) {
       title: named, head: a.kind === 'sub' ? '' : sessionHead(a, sess),   // the session's name (none: '') and its id's head
       realId: String(a.id || label), sessionId: String(a.sessionId || ''), kind: a.kind === 'sub' ? 'sub' : 'main',
       role: ROLE_OF(a), agent: displayName(a, sess), furnished: true, mainLabel,
+      cli: a.cli === 'codex' || (sess && sess.cli === 'codex') ? 'codex' : 'claude',   // which CLI runs it (codex_app_server.py)
       room: sess && sess.projectId ? sess.projectId : (def.room || ''),
       // when it came into its room: desks are drawn in this order, so a reload draws them the same way
       inRoomAt: Math.max(Number(a.startedAt) || 0, Number(sess && sess.roomSince) || 0),
@@ -1020,6 +1022,7 @@ function rebuildSessions() {
       .sort((a, b) => (a.kind === 'main' ? -1 : 0) - (b.kind === 'main' ? -1 : 0) || a.id.localeCompare(b.id)).map((d) => d.id);
     if (!robots.length || robots[0] !== label) continue;   // a session is shown through its main robot
     next.push({ id: label, project: s.projectId, robots, room: PROJECT[s.projectId].name, status: s.status, title: s.title || '',
+      cli: s.cli === 'codex' ? 'codex' : 'claude',
       relay: s.relay === true, prompt: s.prompt === true,   // prompt: its channel takes a prompt from the page (jui-viz 1.2.0+)
       launch: typeof s.launch === 'string' ? s.launch : null,   // whether the CLI hands that text over (sources/launch.py)
       // 停止 (jui-viz 1.3.0): asked and waiting for its next tool boundary, when it last stopped so, whether its --stop hook was heard

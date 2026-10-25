@@ -113,3 +113,34 @@ def command(root: str, name: str, role: str, flag: str) -> str:
     if why:
         raise ValueError(why)
     return f"cd {sh_quote(root)} && claude " + " ".join(sh_quote(a) for a in argv_of(name, role, flag))
+
+
+#: The Codex tab of the dialog (requester 10-26: 「呼び出しのダイアログの中をtabでclaudeとcodex切り替えられるように」). Codex
+#: has no option for a session's name: the name goes in the prompt's preface as for Claude, and viz names the thread
+#: from it once it sees it (codex_app_server: thread/name/set, only a thread with no name yet). The daemon is started
+#: first (idempotent, its JSON line dropped) because viz sees only the sessions on the daemon.
+CODEX_DAEMON_START = "codex app-server daemon start >/dev/null"
+
+
+def codex_command(root: str, name: str, role: str) -> str:
+    """The Codex line to paste. root: the project's absolute folder."""
+    why = check(name, role)
+    if why:
+        raise ValueError(why)
+    return f"cd {sh_quote(root)} && {CODEX_DAEMON_START} && codex {sh_quote(prompt_of(name, role))}"
+
+
+def name_in_prompt(text: str) -> str | None:
+    """The name a call's prompt carries (prompt_of: the preface, then the session line), or None. Read in the server's
+    language, as prompt_of wrote it."""
+    if not isinstance(text, str):
+        return None
+    lines = text.split("\n")
+    if len(lines) < 2 or lines[0] != preface():
+        return None
+    head, _, tail = i18n.tl("srv.call.session", name="\0").partition("\0")
+    line = lines[1]
+    if not (line.startswith(head) and line.endswith(tail)) or len(line) <= len(head) + len(tail):
+        return None
+    name = line[len(head):len(line) - len(tail)] if tail else line[len(head):]
+    return name if check(name, "") is None else None

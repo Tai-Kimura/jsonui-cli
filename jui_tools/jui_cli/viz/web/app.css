@@ -6,6 +6,13 @@ body { margin: 0; }
   /* Layout: a control-room screen. Top bar; the 3D office (one room per project folder) on the left; a live side panel (sessions, spec progress, test run, tasks) on the right that can be closed; an event ticker along the bottom. Pressing a board zooms the camera in and opens it as a page: the spec board (every screen spec, one sheet per spec) and the task board (one column per task state). */
   --bg: #eef2f7;
   --scene: #e2e8f1;
+  /* Which CLI runs a robot (20-core.js cliOf; requester 10-26): the ring of its pill and 3D tag, its card's number. */
+  --cli-claude: #d97757;
+  --cli-claude-ink: #a8431c;   /* on the card's light name tag (--cloth), in both themes */
+  --cli-claude-text: #a8431c;  /* on the panel */
+  --cli-codex: #18181b;
+  --cli-codex-card: #18181b;
+  --cli-codex-ink: #fafafa;
   --panel: #fbfcfe;
   --ink: #13233a;
   --ink-soft: #4b5c76;
@@ -71,6 +78,8 @@ body { margin: 0; }
   :root:not([data-theme="light"]) {
     --bg: #0b1626;
     --scene: #0e1c2f;
+    --cli-claude-text: #f0a384;
+    --cli-codex: #e4e4e7;
     --panel: #111f34;
     --ink: #e4ecf8;
     --ink-soft: #9fb1cb;
@@ -131,6 +140,8 @@ body { margin: 0; }
 :root[data-theme="dark"] {
   --bg: #0b1626;
   --scene: #0e1c2f;
+  --cli-claude-text: #f0a384;
+  --cli-codex: #e4e4e7;
   --panel: #111f34;
   --ink: #e4ecf8;
   --ink-soft: #9fb1cb;
@@ -271,6 +282,9 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-body); 
 .wait-picked { outline: 3px solid var(--focus); outline-offset: 2px; }
 /* over the call bell, the rack or the server room's door (40-scene.js tagFixtureRects, 2.3.10): the press goes through to it */
 .tag.bot.over-fixture, .bill.over-fixture, .wait-bubble.over-fixture { pointer-events: none; opacity: 0.5; }
+/* its CLI's ring (40-scene.js, 20-core.js cliOf); the hover's ring below takes its place while pointed at */
+.tag.bot.cli-claude { box-shadow: 0 0 0 2px var(--cli-claude), 0 1px 4px var(--shadow); }
+.tag.bot.cli-codex { box-shadow: 0 0 0 2px var(--cli-codex), 0 1px 4px var(--shadow); }
 .tag.bot:hover { box-shadow: 0 0 0 2px var(--info), 0 1px 4px var(--shadow); }
 /* A room's name is a sign, not a robot's name tag (requester 10-18: the two blended in a crowded room): square corners,
    a frame and the info hue always on, an opaque ground, and in front of the tags (a later sibling would paint over it). */
@@ -279,6 +293,14 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-body); 
 .tag.room.on { border-color: var(--ink); background: var(--ink); color: var(--panel); }
 .tag.tray { padding: 2px 8px; border-radius: 4px; font: 700 11px/1.5 var(--font-body); }
 .pill { display: inline-block; min-width: 2.5em; padding: 0 7px; border-radius: 999px; background: var(--c, #8a9bb0); color: var(--t, #ffffff); font: 700 11px/1.75 var(--font-mono); text-align: center; }
+/* A robot's CLI (20-core.js pillCli): a ring around its pill. Inside its own 3D tag the tag carries the ring instead. */
+.pill.cli-claude { box-shadow: 0 0 0 2px var(--cli-claude); }
+.pill.cli-codex { box-shadow: 0 0 0 2px var(--cli-codex); }
+.tag.bot > .pill { box-shadow: none; }
+/* The session list's word for it, beside the session's name */
+.cli-tag { flex: none; align-self: center; padding: 0 5px; border: 1.5px solid; border-radius: 4px; font: 700 9.5px/1.5 var(--font-mono); letter-spacing: 0.04em; }
+.cli-tag.cli-claude { border-color: var(--cli-claude); color: var(--cli-claude-text); }
+.cli-tag.cli-codex { border-color: var(--cli-codex); color: var(--ink); }
 .scene-hint { position: absolute; right: 12px; bottom: 10px; max-width: calc(50% - 18px); margin: 0; padding: 1px 8px; border-radius: 4px; background: var(--tag-bg); color: var(--ink-soft); font: 500 11px/1.6 var(--font-mono); }
 .nogl { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; padding: 16px; color: var(--ink-soft); text-align: center; }
 
@@ -946,7 +968,13 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .pa.clk-cancel { border-color: var(--line); background: var(--panel); color: var(--ink); }
 .rb-step { width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: 700 18px/1 var(--font-body); cursor: pointer; }
 .rb-step:hover { background: var(--chip); }
-.rb-badge { display: grid; place-items: center; min-width: 54px; height: 54px; padding: 0 6px; border: 3px solid var(--cloth-ink); border-radius: 12px; background: var(--cloth); color: var(--cloth-ink); font: 400 21px/1 var(--font-display); transform: rotate(-3deg); }
+.rb-badge { display: grid; place-items: center; align-content: center; gap: 3px; min-width: 54px; height: 54px; padding: 0 6px; border: 3px solid var(--cloth-ink); border-radius: 12px; background: var(--cloth); color: var(--cloth-ink); font: 400 21px/1 var(--font-display); transform: rotate(-3deg); }
+/* the CLI's name under the number, drawn from data-cli-name (the badge's text stays the label alone) */
+.rb-badge[data-cli-name]::after { content: attr(data-cli-name); font: 700 8.5px/1 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+/* the card's number by its CLI (requester 10-26: 「ロボットのカードの26のところのデザインを変える」): Claude's name tag in its
+   orange; Codex's a dark terminal-like tag, set in the mono face and turned the other way */
+.rb-badge.cli-claude { border-color: var(--cli-claude); color: var(--cli-claude-ink); }
+.rb-badge.cli-codex { border-color: var(--cli-codex); border-radius: 6px; background: var(--cli-codex-card); color: var(--cli-codex-ink); font: 700 19px/1 var(--font-mono); transform: rotate(2deg); }
 .rb-name { margin: 0; font: 400 clamp(15px, 4vw, 17px)/1.3 var(--font-display); overflow-wrap: anywhere; }
 .rb-sub { margin: 2px 0 0; color: var(--ink-soft); font: 500 11.5px/1.5 var(--font-body); }
 .rb-body { display: grid; align-content: start; gap: 16px; min-height: 0; overflow-y: auto; padding: 12px 14px 20px; }
@@ -1322,6 +1350,14 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 .call-card #call-cmd { font: 12.5px/1.5 var(--font-mono); word-break: break-all; }
 .call-lead, .call-note { margin: 0; color: var(--ink-soft); font: 13px/1.5 var(--font-body); }
 .call-why { min-height: 1.4em; margin: 2px 0 0; font: 13px/1.4 var(--font-body); }
+/* the CLI's tabs (requester 10-26: 「呼び出しのダイアログの中をtabでclaudeとcodex切り替えられるように」): the chosen one is
+   underlined in its CLI's colour (--cli-claude / --cli-codex) */
+.call-tabs { display: flex; gap: 4px; margin-top: 6px; border-bottom: 1px solid var(--line); }
+.call-tab { padding: 6px 14px; border: 0; border-bottom: 3px solid transparent; background: none; color: var(--ink-soft); font: 700 13px/1.4 var(--font-body); cursor: pointer; }
+.call-tab:hover { color: var(--ink); }
+.call-tab[aria-selected="true"] { color: var(--ink); }
+.call-tab.cli-claude[aria-selected="true"] { border-bottom-color: var(--cli-claude); }
+.call-tab.cli-codex[aria-selected="true"] { border-bottom-color: var(--cli-codex); }
 .call-actions { display: flex; gap: 8px; margin-top: 4px; }
 .call-copy:not(:disabled) { border-color: var(--info); }
 .rs-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--ink); font: 700 13px/1 var(--font-mono); }

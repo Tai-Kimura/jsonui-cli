@@ -364,6 +364,7 @@
     "jui_tools/jui_cli/viz/TALK_CONTRACT.md": "トークの WebSocket の約束（viz のサーバーとページの間の形）の説明だけ。CLI の形を読むのは talk.py（台帳の talk_* の項目）",
     "jui_tools/jui_cli/viz/talk_contract.json": "トークの WebSocket の約束の正（viz のサーバーとページの間の形）。CLI の形は読まない",
     "jui_tools/jui_cli/viz/talk_contract.py": "talk_contract.json に照らして frame を検査するだけ。CLI の形は読まない",
-    "jui_tools/jui_cli/viz/web/js/31-talk-demo-data.js": "トークのデモの frame（talk_contract.json の形のデータだけ）。CLI の形は読まない"
+    "jui_tools/jui_cli/viz/web/js/31-talk-demo-data.js": "トークのデモの frame（talk_contract.json の形のデータだけ）。CLI の形は読まない",
+    "jui_tools/jui_cli/viz/sources/codex_app_server.py": "Codex の app-server daemon（~/.codex の Unix ソケット）を読むだけ。Claude Code の CLI・設定・フックには依らない。SessionStart などのフックの名前は、World.apply_hook が読む形に Codex の出来事を置き換えて作るだけで、Claude Code から届くものではない"
   }
 }

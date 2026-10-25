@@ -566,6 +566,9 @@ function composeTarget(id) {
   if (DEF[id].kind === 'sub') return { why: tl('hist.why.sub', { main: SESSION_OF[id] }) };
   if (location.hostname !== '127.0.0.1') return { why: tl('hist.why.local', { port: location.port }) };
   if (!sess || sess.status === 'ended') return { why: tl('hist.why.ended') };
+  // a Codex session (codex_app_server.py): the daemon could take a prompt (turn/start), but the prototype does not send
+  // one yet — its history comes from Codex's own rollout files, not read yet either
+  if (sess.cli === 'codex') return { why: tl('hist.why.codex') };
   if (!sess.relay) return { why: tl('hist.why.norelay') + RELAY_HOW_TEXT };
   if (!sess.prompt) return { why: tl('hist.why.old') };
   const L = LAUNCH_WHY[sess.launch] || LAUNCH_WHY.unreadable;

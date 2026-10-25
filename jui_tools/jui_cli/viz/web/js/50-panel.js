@@ -164,7 +164,7 @@ function renderSessions() {
     const folded = UI.collapsed.has(r.id), any = scoped.some((x) => x.project === r.id);
     const itemsHTML = list.map((x) => {
       const subsHTML = x.robots.filter((id) => id !== x.id).map((id) => `<li><button type="button" class="who-btn" data-robot-open="${esc(id)}" data-fk="ss-${esc(id)}">${pill(id, DEF[id].role)}<span>${esc(DEF[id].agent)}</span></button><span class="state" data-st="${esc(id)}"></span><p class="act" data-sact="${esc(id)}"></p></li>`).join('');
-      return `<li class="session"><div class="srow"><button type="button" class="who-btn" data-robot-open="${esc(x.id)}" data-fk="ss-${esc(x.id)}">${pill(x.id, 'main')}<span class="sname">${esc(DEF[x.id].agent)}</span></button><span class="state" data-sst="${esc(x.id)}"></span></div><p class="act" data-sact="${esc(x.id)}"></p>${subsHTML ? `<ul class="subs">${subsHTML}</ul>` : ''}</li>`;
+      return `<li class="session"><div class="srow"><button type="button" class="who-btn" data-robot-open="${esc(x.id)}" data-fk="ss-${esc(x.id)}">${pill(x.id, 'main')}<span class="sname">${esc(DEF[x.id].agent)}</span><span class="cli-tag cli-${esc(cliOf(x.id))}">${esc(CLI_NAME[cliOf(x.id)])}</span></button><span class="state" data-sst="${esc(x.id)}"></span></div><p class="act" data-sact="${esc(x.id)}"></p>${subsHTML ? `<ul class="subs">${subsHTML}</ul>` : ''}</li>`;
     }).join('');
     return `<section class="pgroup"><button type="button" class="pg-toggle" data-fold="${esc(r.id)}" data-fk="pg-${esc(r.id)}" aria-expanded="${!folded}"><span class="pg-caret" aria-hidden="true"></span><b title="${esc(r.name)}">${esc(r.name)}</b><small data-pgsum="${esc(r.id)}"></small></button>${folded ? '' : itemsHTML ? `<ul class="sessions">${itemsHTML}</ul>` : `<p class="empty-note">${any ? esc(tl('panel.sess.nomatch')) : esc(tl('panel.sess.none'))}</p>`}</section>`;
   }).join(''));
@@ -1915,7 +1915,7 @@ function renderRobot(model) {
       const [c, l] = x.perm ? ['st-waiting', tl('status.waiting')] : x.col === 'wait' ? [x.waitingFor === 'question' ? 'st-asking' : 'st-waiting', waitLabel(x)] : COL_STATE[x.col];
       return `<li><button type="button" class="task-open" data-open="${esc(x.key)}" data-fk="rt-${esc(x.key)}"><span class="state ${esc(c)}">${esc(l)}</span><span class="tid">${esc(x.list)} ${esc(taskRef(x))}</span><span class="subject">${x.harness ? `<span class="h-tag">${esc(x.harness)}</span>` : ''}${esc(x.subject)}</span>${!isMain || !x.owner ? '' : `<span class="rb-owner">${pill(x.owner, DEF[x.owner].role)}</span>`}</button></li>`;
     }).join('')}</ul>` : `<p class="rb-none">${esc(tl(isMain ? 'panel.rb.tasks.empty' : 'panel.rb.owned.none'))}</p>`;
-    return `<div class="rb-head" style="--c:${ROLES[d.role].color}"><span class="rb-badge" aria-hidden="true">${esc(id)}</span><div><h2 class="rb-name" id="rb-title">${esc(isMain ? d.title || tl('panel.rb.main', { id }) : d.agent)}</h2><p class="rb-sub">${esc(isMain ? `${d.title ? tl('panel.rb.main.head', { id, head: d.head }) : d.agent} · ${room}` : tl('panel.rb.sub', { role: ROLE_JA[d.role], sess, room }))}</p></div><div class="rb-side"><div class="rb-menu"><button type="button" class="wb-btn rb-talk" data-rb-talk data-fk="rb-talk" aria-pressed="false" aria-label="${esc(tl('talk.title'))}" title="${esc(tl('panel.rb.talk.title'))}">${TALK_ICON}<span>${esc(tl('talk.title'))}</span><span class="rb-talk-n" data-rb-talk-n hidden></span></button><button type="button" class="wb-btn rb-clock" data-rb-clock data-fk="rb-clock" aria-haspopup="dialog" aria-describedby="rb-clock-why">${esc(tl('panel.clk.button'))}</button></div><div class="rb-nav"><button type="button" class="rb-step" data-rb-step="-1" data-fk="rb-prev" aria-label="${esc(tl('panel.rb.prev'))}" title="${esc(tl('panel.rb.prev'))}">‹</button><button type="button" class="rb-step" data-rb-step="1" data-fk="rb-next" aria-label="${esc(tl('panel.rb.next'))}" title="${esc(tl('panel.rb.next'))}">›</button><span class="rbw-slot" data-rbw-slot></span><button type="button" class="wb-btn" id="rb-close" data-rb-close data-fk="rb-close">${esc(tl('panel.rb.back'))}</button></div></div><p class="rb-clock-why" id="rb-clock-why" data-rb-clock-why hidden></p>${rbMovedHTML()}</div>
+    return `<div class="rb-head" style="--c:${ROLES[d.role].color}"><span class="rb-badge cli-${esc(cliOf(id))}" aria-hidden="true" data-cli-name="${esc(CLI_NAME[cliOf(id)])}">${esc(id)}</span><div><h2 class="rb-name" id="rb-title">${esc(isMain ? d.title || tl('panel.rb.main', { id }) : d.agent)}</h2><p class="rb-sub">${esc(isMain ? `${d.title ? tl('panel.rb.main.head', { id, head: d.head }) : d.agent} · ${room}` : tl('panel.rb.sub', { role: ROLE_JA[d.role], sess, room }))}</p></div><div class="rb-side"><div class="rb-menu"><button type="button" class="wb-btn rb-talk" data-rb-talk data-fk="rb-talk" aria-pressed="false" aria-label="${esc(tl('talk.title'))}" title="${esc(tl('panel.rb.talk.title'))}">${TALK_ICON}<span>${esc(tl('talk.title'))}</span><span class="rb-talk-n" data-rb-talk-n hidden></span></button><button type="button" class="wb-btn rb-clock" data-rb-clock data-fk="rb-clock" aria-haspopup="dialog" aria-describedby="rb-clock-why">${esc(tl('panel.clk.button'))}</button></div><div class="rb-nav"><button type="button" class="rb-step" data-rb-step="-1" data-fk="rb-prev" aria-label="${esc(tl('panel.rb.prev'))}" title="${esc(tl('panel.rb.prev'))}">‹</button><button type="button" class="rb-step" data-rb-step="1" data-fk="rb-next" aria-label="${esc(tl('panel.rb.next'))}" title="${esc(tl('panel.rb.next'))}">›</button><span class="rbw-slot" data-rbw-slot></span><button type="button" class="wb-btn" id="rb-close" data-rb-close data-fk="rb-close">${esc(tl('panel.rb.back'))}</button></div></div><p class="rb-clock-why" id="rb-clock-why" data-rb-clock-why hidden></p>${rbMovedHTML()}</div>
 <div class="rb-tabs"><button type="button" class="wb-btn rb-wide-btn" data-rb-wide data-fk="rb-wide" aria-pressed="false" aria-controls="rb" hidden>${esc(tl('hist.wide.on'))}</button><div class="rb-tablist" role="tablist" aria-label="${esc(tl('panel.rb.tabs'))}"><button type="button" role="tab" data-rb-tab="now" data-fk="rb-tab-now" aria-selected="true">${esc(tl('panel.rb.tab.now'))}</button><button type="button" role="tab" data-rb-tab="history" data-fk="rb-tab-history" aria-selected="false">${esc(tl('panel.rb.tab.history'))}</button></div></div>
 <div class="rb-body rb-hist" data-rb-hist hidden aria-label="${esc(tl('panel.rb.tab.history'))}" tabindex="0"></div>
 <div class="rb-body" tabindex="0" aria-label="${esc(tl('panel.rb.tab.now'))}">
@@ -2151,7 +2151,7 @@ function closeAlwaysConfirm(back) {
    callcmd.py) and a copy button. Each edit asks again; only the latest answer is shown (CALL.seq), and the copy button
    is off whenever the shown line is not the one for what is typed now. Copy: the clipboard API (127.0.0.1 is a secure
    context); when that fails, the line is selected for a manual copy. viz runs nothing. */
-const CALL = { project: null, opener: null, seq: 0, command: '', timer: 0 };
+const CALL = { project: null, opener: null, seq: 0, command: '', timer: 0, cli: 'claude' };   // cli: the chosen tab, kept for the next opening
 const callEl = $('call');
 function openCall(project, opener) {
   if (!project || !PROJECT[project]) return;
@@ -2159,6 +2159,7 @@ function openCall(project, opener) {
   const p = PROJECT[project];
   setText($('call-lead'), tl('panel.call.lead', { name: p.name, path: p.path || '' }));
   $('call-cmd').value = ''; setText($('call-why'), tl('panel.call.name')); $('call-copy').disabled = true;
+  callTab(CALL.cli, false);
   callEl.hidden = false;
   $('call-name').focus();
   callAsk();
@@ -2176,11 +2177,11 @@ function callAsk() {
   CALL.command = ''; $('call-copy').disabled = true;
   if (!name.trim()) { $('call-cmd').value = ''; setText($('call-why'), tl('panel.call.name')); return; }
   CALL.timer = setTimeout(async () => {
-    const got = await SOURCE.callCommand(project, name, role);
+    const got = await SOURCE.callCommand(project, name, role, CALL.cli);
     if (seq !== CALL.seq || callEl.hidden) return;   // typed again (or closed) meanwhile: a newer answer comes
     if (!got.ok) { $('call-cmd').value = ''; setText($('call-why'), got.why || tl('panel.call.failed')); return; }
     CALL.command = got.command; $('call-cmd').value = got.command; $('call-copy').disabled = false;
-    setText($('call-why'), got.flag === '--channels' ? tl('panel.call.ready')
+    setText($('call-why'), got.flag === 'codex' ? tl('panel.call.ready.codex') : got.flag === '--channels' ? tl('panel.call.ready')
       : tl('panel.call.ready.dev'));
   }, 150);
 }
@@ -2197,6 +2198,23 @@ async function callCopy() {
     setText($('call-why'), tl('panel.call.nocopy'));
   }
 }
+/* The CLI's tabs: Claude Code's command (callcmd.command) or Codex's (callcmd.codex_command), asked again on a change.
+   Arrow keys move between the two (the tabs' own keys, as a tablist has them). */
+function callTab(cli, ask = true) {
+  CALL.cli = cli === 'codex' ? 'codex' : 'claude';
+  for (const b of callEl.querySelectorAll('[data-call-cli]')) {
+    const on = b.dataset.callCli === CALL.cli;
+    b.setAttribute('aria-selected', on ? 'true' : 'false'); b.tabIndex = on ? 0 : -1;
+  }
+  if (ask) callAsk();
+}
+callEl.querySelector('.call-tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-call-cli]'); if (b) callTab(b.dataset.callCli); });
+callEl.querySelector('.call-tabs').addEventListener('keydown', (e) => {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  e.preventDefault();
+  callTab(CALL.cli === 'codex' ? 'claude' : 'codex');
+  $(CALL.cli === 'codex' ? 'call-tab-codex' : 'call-tab-claude').focus();
+});
 $('call-name').addEventListener('input', callAsk);
 $('call-role').addEventListener('input', callAsk);
 $('call-copy').addEventListener('click', callCopy);
@@ -2210,7 +2228,7 @@ callEl.addEventListener('click', (e) => { if (e.target === callEl) closeCall(); 
 callEl.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeCall(); return; }
   if (e.key === 'Tab') {   // the focus stays in the dialog
-    const f = [...callEl.querySelectorAll('input, textarea, button')].filter((x) => !x.disabled);
+    const f = [...callEl.querySelectorAll('input, textarea, button')].filter((x) => !x.disabled && x.tabIndex >= 0);   // the tab not chosen is reached by the arrows
     const i = f.indexOf(document.activeElement);
     e.preventDefault();
     f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus();
