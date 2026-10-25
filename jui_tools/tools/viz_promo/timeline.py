@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 FPS = 30
-CHAPTER_IDS = ("hook", "2", "3", "4", "4m", "5", "Ta4", "6")   # 1a / 1b: term.py; Ta / Tb: t_chapter.py
+CHAPTER_IDS = ("hook", "2", "3", "Ta4", "4", "5", "4m", "4c", "6")   # 1a / 1b: term.py; Ta / Tb: t_chapter.py
 TERM_CHAPTER_IDS = ("1a", "1b")
 #: chapter T's halves (2.3.23, requester 10-25: the mock server and the test runner): t_chapter.py, on the stage's own
 #: web app and mock server; each id is the left half, "<id>-app" the right half beside it
@@ -37,7 +37,7 @@ T_CHAPTER_IDS = ("Ta", "Tb")
 ALL = TERM_CHAPTER_IDS + CHAPTER_IDS + T_CHAPTER_IDS
 #: window segments inside a viz chapter, captured by term.py into a folder of their own: id -> (chapter, start, end,
 #: the demo-shop file shown). The promo shows the segment over its seconds and the chapter's frames after it.
-SEGMENTS = {"5-json": ("5", 130.0, 133.0, "docs/infra/load/weekend-campaign.json")}
+SEGMENTS = {"5-json": ("5", 166.0, 169.0, "docs/infra/load/weekend-campaign.json")}
 #: a terminal chapter shown split: its terminal on the left half, the viz page beside it on the right half, captured
 #: by capture.py into a folder of its own: id -> the chapter it sits beside. The promo frames both halves at the same
 #: size (its SPLIT layout), so the terminal (term.py) and the board are both taken at SPLIT_VIEWPORT.
@@ -50,11 +50,13 @@ STANDALONE = {"mig": (0.0, 40.0)}
 #: what run.py captures: the promo's chapters and the segments (a chapter brings its segments and board with it)
 CAPTURE_IDS = ALL + tuple(SEGMENTS) + tuple(BOARDS) + tuple(STANDALONE)
 #: the bounds the events below were written for; tests hold them to the promo's timeline.json
-BOUNDS = {"hook": (0, 6), "1a": (6, 18), "1b": (18, 46), "2": (46, 58), "3": (58, 68), "4": (68, 96), "4m": (96, 130),
-          "5": (130, 144), "Ta": (144, 172), "Ta4": (172, 180), "Tb": (180, 206), "6": (206, 214)}
-#: the 2.3.21 cut's chapters, written on its clock, moved by this much on 2.3.23's (1b ends 6 s later with the spec's
-#: diff, 4 4 s later with the flow's 今関係 and 範囲で寄る, chapter T comes before 6)
-SHIFT = {"2": 6, "3": 6, "4": 6, "4m": 10, "5": 10, "6": 72}
+BOUNDS = {"hook": (0, 6), "1a": (6, 18), "1b": (18, 46), "2": (46, 58), "3": (58, 68), "Ta": (68, 96), "Ta4": (96, 104),
+          "Tb": (104, 130), "4": (130, 166), "5": (166, 180), "4m": (180, 214), "4c": (214, 224), "6": (224, 232)}
+#: the chapters written on an earlier cut's clock, moved by this much on 2.3.23's (requester 10-25: the tests before
+#: the infrastructure; the infrastructure's cost before its migration, then the migration's cost compared). 1b ends 6 s
+#: later with the spec's diff; 4 opens on the 1007-node system whole for 8 s and ends 4 s later with 今関係 and
+#: 範囲で寄る; chapter T (Ta, Ta4, Tb) comes after 3
+SHIFT = {"2": 6, "3": 6, "Ta4": -76, "4": 76, "5": 46, "4m": 94, "6": 90}
 
 ROOMS = ("demo-shop", "demo-admin", "demo-docs", "demo-api", "demo-mobile")
 
@@ -359,17 +361,26 @@ def chapters(lang: str) -> dict:
     # across the regions at 2x (自動: no stop at a fork); then 「2D」 in the header and the same room from straight above
     # (2.3.21, requester 10-23: 「デモのサーバーの章に2dと3d切り替えられるって内容も追加しといて」), the payment flow played
     # again there (requester: its light keeps moving in 2D), to the chapter's end.
-    sr_prelude = up_close("demo-shop") + [P("door"), P("dbg", call="srSelectGroup", group="shop-core"),
-                                          P("click", target={"css": "#sr-board [data-sr-act='focus']"}),
-                                          P("dbg", call="srZoom", factor=0.82), P("settle")]
+    # 2.3.23 (requester 10-25: 「もっと大きい1000ノードくらいあるやつを表示して」): the room opens on the whole system —
+    # demo-shop's services in 23 made-up markets, 1007 nodes (make_infra.py --markets) — framed to fill the page,
+    # pushed in on, then the camera goes to the shop's own group, where the flows run
+    sr_prelude = up_close("demo-shop") + [P("door"), P("click", target={"css": "#sr-fit"}), P("dbg", call="srZoom", factor=0.62),
+                                          P("settle")]
     # order: 1.8 s to its first branch, 3.6 s to its second, 5.4 s to its end (at 1x); payment: 4.5 s to its first
     choice = "(c) => !!document.querySelector(`#sr-choices:not([hidden]) [data-sr-choice=\"${c}\"]`)"
     out["4"] = Chapter("4", 62, 86, floor(w) + sr_prelude + [P("dbg", call="srFlowSpeed", speed=0.5)], [
+        # (on the clock below +76) the whole system, pushed in on, then the shop's group (its focus, a little nearer)
+        E(54.4, "dolly", factor=0.8, dur=3.4),
+        E(58.2, "dbg", call="srSelectGroup", group="shop-core"),
+        E(58.5, "click", target={"css": "#sr-board [data-sr-act='focus']"}),
+        E(60.2, "dolly", factor=0.82, dur=1.4),
         E(62.1, "dbg", call="srSelect", node="browser", expect="flowlist:order"),
         E(62.4, "click", target={"css": "#sr-board [data-sr-flow='order']"}, expect="flow:order"),
         E(66.0, "click", target={"css": "#sr-choices [data-sr-choice='hit']"}, ready=choice, arg="hit"),
         E(66.3, "dbg", call="srFlowSpeed", speed=1),
         E(69.9, "click", target={"css": "#sr-choices [data-sr-choice='in']"}, ready=choice, arg="in"),
+        # the pull back with every node drawn (全部): the flow's own nodes alone made the large system look small
+        E(70.3, "click", target={"css": "#sr-player [data-sr-fp-show='all']"}),
         E(70.5, "dolly", factor=6.8, dur=7.5),
         E(78.2, "dbg", call="srSelect", node="api", expect="flowlist:payment"),
         E(78.4, "dbg", call="srFlowSpeed", speed=2),
@@ -388,7 +399,7 @@ def chapters(lang: str) -> dict:
         # the box around the payment's way out: the entrance and Stripe, with the light on its way there
         E(88.7, "drag", p0=[0.22, 0.55], p1=[0.52, 0.96]),
     ], needs=("rooms", "server_room", "flows", "sr2d"))
-    out["4"].end = 90   # 2.3.21's 86 + the 4 s above (shifted with the chapter below)
+    out["4"].start, out["4"].end = 54, 90   # 8 s of the whole system before 2.3.21's 62, 4 s after its 86 (+76 below)
 
     # the migration plan played through (requester 10-22: many migrations, smoothly), as the promo's chapter 4m (86–120)
     # and as the standalone clip (0–40). Its 12 steps touch the AWS groups on the left (search, payments, analytics,
@@ -415,6 +426,13 @@ def chapters(lang: str) -> dict:
             E(cost, "click", target={"css": "#sr-mode-cost"}, expect="migtable"),
         ], needs=("rooms", "server_room", "migration"))
     out["4m"] = migration("4m", 86, 120, 88.0, 115.2)
+    # 4c (214–224, requester 10-25: 「そこあと移管のコスト比較」): the cost view with the plan open — the month before and
+    # after, then the difference node by node and cloud by cloud (59-sr-migration.js srMigCostHTML), nothing added
+    c4 = migration("4c", 214, 224, 0, 0)
+    c4.prelude += [P("click", target={"css": "#sr-mode-cost"}, expect="migtable"), P("settle")]
+    c4.events = [E(216.6, "dbg", call="scrollTo", css="[data-src-mig-nodes]"),
+                 E(220.4, "dbg", call="scrollTo", css="[data-src-mig-clouds]")]
+    out["4c"] = c4
     out["mig"] = migration("mig", 0, 40, 3.0, 31.4)
 
     # 5 (120–134): the cost simulator. 120–123 is the load definition in the editor (term.py, captures/<lang>/5-json:

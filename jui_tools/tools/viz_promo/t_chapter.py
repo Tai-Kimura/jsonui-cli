@@ -39,9 +39,9 @@ INTRO = 1.2                          # T-a: the test file in view before its run
 GAP = 0.8                            # between the two runs
 
 WORDS = {
-    "ja": {"runner": "jsonui-test-runner-web（web のテストランナー）· mock serve", "passed": "通過", "running": "実行中",
+    "ja": {"runner": "web のテストランナーが、仮のサーバー（mock serve）に向けて実行", "passed": "通過", "running": "実行中",
            "panel": "mock の管理画面", "term": "端末"},
-    "en": {"runner": "jsonui-test-runner-web (the web test runner) · mock serve", "passed": "passed", "running": "running",
+    "en": {"runner": "the web test runner, running against a stand-in server (mock serve)", "passed": "passed", "running": "running",
            "panel": "the mock's control panel", "term": "terminal"},
 }
 

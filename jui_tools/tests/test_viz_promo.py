@@ -338,11 +338,12 @@ def test_chapter_4_starts_close_on_the_order_flow_then_pulls_back_to_the_whole_s
         ch = T.chapters(lang)["4"]
         # the speed changes after the first choice: the second branch is 3.6 s at 1x after it
         first = T.flow_budget(ch, flows["order"])
-        assert [p for p, _ in first["choices"]][:1] == ["hit"] and abs(first["choices"][0][1] - (ch.start + 4.0)) <= 0.5, first
+        # 2.3.23: 8 s of the whole system first (the order flow is pressed then)
+        assert [p for p, _ in first["choices"]][:1] == ["hit"] and abs(first["choices"][0][1] - (ch.start + 12.0)) <= 0.5, first
         hit = first["choices"][0][1]
         second = next(ev.at for ev in ch.events if ev.args.get("arg") == "in")
         assert abs(hit + 3.6 - second) <= 0.5, (hit, second)
-        dolly = next(ev for ev in ch.events if ev.kind == "dolly")
+        dolly = next(ev for ev in ch.events if ev.kind == "dolly" and ev.args["factor"] > 1)   # the pull back
         assert dolly.at > second and dolly.at + dolly.args["dur"] <= ch.end and dolly.args["factor"] > 1
         pay = next(ev.at for ev in ch.events if ev.kind == "click" and "data-sr-flow='payment'" in ev.args["target"]["css"])
         assert pay >= dolly.at + dolly.args["dur"], "the payment flow plays in the wide view"
