@@ -37,7 +37,7 @@ T_CHAPTER_IDS = ("Ta", "Tb")
 ALL = TERM_CHAPTER_IDS + CHAPTER_IDS + T_CHAPTER_IDS
 #: window segments inside a viz chapter, captured by term.py into a folder of their own: id -> (chapter, start, end,
 #: the demo-shop file shown). The promo shows the segment over its seconds and the chapter's frames after it.
-SEGMENTS = {"5-json": ("5", 166.0, 169.0, "docs/infra/load/weekend-campaign.json")}
+SEGMENTS = {"5-json": ("5", 168.0, 171.0, "docs/infra/load/weekend-campaign.json")}
 #: a terminal chapter shown split: its terminal on the left half, the viz page beside it on the right half, captured
 #: by capture.py into a folder of its own: id -> the chapter it sits beside. The promo frames both halves at the same
 #: size (its SPLIT layout), so the terminal (term.py) and the board are both taken at SPLIT_VIEWPORT.
@@ -51,12 +51,12 @@ STANDALONE = {"mig": (0.0, 40.0)}
 CAPTURE_IDS = ALL + tuple(SEGMENTS) + tuple(BOARDS) + tuple(STANDALONE)
 #: the bounds the events below were written for; tests hold them to the promo's timeline.json
 BOUNDS = {"hook": (0, 6), "1a": (6, 18), "1b": (18, 46), "2": (46, 58), "3": (58, 68), "Ta": (68, 96), "Ta4": (96, 104),
-          "Tb": (104, 130), "4": (130, 166), "5": (166, 180), "4m": (180, 214), "4c": (214, 224), "6": (224, 232)}
+          "Tb": (104, 130), "4": (130, 168), "5": (168, 182), "4m": (182, 216), "4c": (216, 226), "6": (226, 234)}
 #: the chapters written on an earlier cut's clock, moved by this much on 2.3.23's (requester 10-25: the tests before
 #: the infrastructure; the infrastructure's cost before its migration, then the migration's cost compared). 1b ends 6 s
 #: later with the spec's diff; 4 opens on the 1007-node system whole for 8 s and ends 4 s later with 今関係 and
 #: 範囲で寄る; chapter T (Ta, Ta4, Tb) comes after 3
-SHIFT = {"2": 6, "3": 6, "Ta4": -76, "4": 76, "5": 46, "4m": 94, "6": 90}
+SHIFT = {"2": 6, "3": 6, "Ta4": -76, "5": 48, "4m": 96, "4c": 2, "6": 92}
 
 ROOMS = ("demo-shop", "demo-admin", "demo-docs", "demo-api", "demo-mobile")
 
@@ -361,45 +361,41 @@ def chapters(lang: str) -> dict:
     # across the regions at 2x (自動: no stop at a fork); then 「2D」 in the header and the same room from straight above
     # (2.3.21, requester 10-23: 「デモのサーバーの章に2dと3d切り替えられるって内容も追加しといて」), the payment flow played
     # again there (requester: its light keeps moving in 2D), to the chapter's end.
-    # 2.3.23 (requester 10-25: 「もっと大きい1000ノードくらいあるやつを表示して」): the room opens on the whole system —
-    # demo-shop's services in 23 made-up markets, 1007 nodes (make_infra.py --markets) — framed to fill the page,
-    # pushed in on, then the camera goes to the shop's own group, where the flows run
-    sr_prelude = up_close("demo-shop") + [P("door"), P("click", target={"css": "#sr-fit"}), P("dbg", call="srZoom", factor=0.62),
-                                          P("settle")]
+    # 4 (130–168), requester 10-25 12:5x: 「最初は拡大したところでリクエストの動き見せてその後1000ノードを見せて大きいシステムでも
+    # 大丈夫って見せ方にして / 2dの説明の前に範囲を選択で狭い範囲選択できる動きを見せた後で2dのシミュレーション流して」.
+    # Close on the shop's group (its focus, a little nearer), the order flow at 0.5x with its two choices (2.3.22's pace by
+    # distance, the rest at each node, the route in the side bar); then every node drawn (全部) and the camera pulls back
+    # to the whole system — demo-shop's services in 23 made-up markets, 1007 nodes (make_infra.py --markets) — framed
+    # to fill the page; 範囲で寄る and one drag box in on a small part; then 2D, the payment flow played there with 自動
+    # (no stop at a fork) and, near the end, 今関係 (only the nodes the light concerns now)
+    sr_prelude = up_close("demo-shop") + [P("door"), P("dbg", call="srSelectGroup", group="shop-core"),
+                                          P("click", target={"css": "#sr-board [data-sr-act='focus']"}),
+                                          P("dbg", call="srZoom", factor=0.82), P("settle")]
     # order: 1.8 s to its first branch, 3.6 s to its second, 5.4 s to its end (at 1x); payment: 4.5 s to its first
     choice = "(c) => !!document.querySelector(`#sr-choices:not([hidden]) [data-sr-choice=\"${c}\"]`)"
-    out["4"] = Chapter("4", 62, 86, floor(w) + sr_prelude + [P("dbg", call="srFlowSpeed", speed=0.5)], [
-        # (on the clock below +76) the whole system, pushed in on, then the shop's group (its focus, a little nearer)
-        E(54.4, "dolly", factor=0.8, dur=3.4),
-        E(58.2, "dbg", call="srSelectGroup", group="shop-core"),
-        E(58.5, "click", target={"css": "#sr-board [data-sr-act='focus']"}),
-        E(60.2, "dolly", factor=0.82, dur=1.4),
-        E(62.1, "dbg", call="srSelect", node="browser", expect="flowlist:order"),
-        E(62.4, "click", target={"css": "#sr-board [data-sr-flow='order']"}, expect="flow:order"),
-        E(66.0, "click", target={"css": "#sr-choices [data-sr-choice='hit']"}, ready=choice, arg="hit"),
-        E(66.3, "dbg", call="srFlowSpeed", speed=1),
-        E(69.9, "click", target={"css": "#sr-choices [data-sr-choice='in']"}, ready=choice, arg="in"),
+    out["4"] = Chapter("4", 130, 168, floor(w) + sr_prelude + [P("dbg", call="srFlowSpeed", speed=0.5)], [
+        E(130.1, "dbg", call="srSelect", node="browser", expect="flowlist:order"),
+        E(130.4, "click", target={"css": "#sr-board [data-sr-flow='order']"}, expect="flow:order"),
+        E(134.0, "click", target={"css": "#sr-choices [data-sr-choice='hit']"}, ready=choice, arg="hit"),
+        E(134.3, "dbg", call="srFlowSpeed", speed=1),
+        E(137.9, "click", target={"css": "#sr-choices [data-sr-choice='in']"}, ready=choice, arg="in"),
         # the pull back with every node drawn (全部): the flow's own nodes alone made the large system look small
-        E(70.3, "click", target={"css": "#sr-player [data-sr-fp-show='all']"}),
-        E(70.5, "dolly", factor=6.8, dur=7.5),
-        E(78.2, "dbg", call="srSelect", node="api", expect="flowlist:payment"),
-        E(78.4, "dbg", call="srFlowSpeed", speed=2),
-        E(78.7, "click", target={"css": "#sr-board [data-sr-flow='payment']"}, expect="flow:payment"),
-        # 自動 (the default way at each branch): the light never stops at a fork, here or in 2D
-        E(79.3, "click", target={"css": "#sr-player [data-sr-fp='auto']"}),
-        # the same room from straight above (2.3.21): 「2D」 in the header. The room drawn again stops the flow, so the
-        # payment flow is pressed again in 2D and its light runs over the flat tiles to the chapter's end
-        E(80.6, "click", target={"css": "#sr-mode-2d"}, expect="sr2d"),
-        E(81.3, "dbg", call="srSelect", node="api", expect="flowlist:payment"),
-        E(81.9, "click", target={"css": "#sr-board [data-sr-flow='payment']"}, expect="flow:payment"),
-        # 2.3.22 (requester 10-25: 「サーバールームのリクエスト再生の変更」): 今関係 shows only the nodes the light concerns
-        # now, then 範囲で寄る and one drag draws the box the camera moves in on (on 2.3.21's clock: +6 s below)
-        E(86.4, "click", target={"css": "#sr-player [data-sr-fp-show='now']"}),
-        E(88.0, "click", target={"css": "#sr-boxzoom"}),
-        # the box around the payment's way out: the entrance and Stripe, with the light on its way there
-        E(88.7, "drag", p0=[0.22, 0.55], p1=[0.52, 0.96]),
+        E(139.4, "click", target={"css": "#sr-player [data-sr-fp-show='all']"}),
+        E(139.6, "dolly", factor=9.0, dur=6.4),
+        E(146.3, "click", target={"css": "#sr-fit"}),   # the whole system framed to fill the page
+        # 範囲で寄る, then one drag: the box around one market's floors, the camera moves in on it
+        E(149.6, "click", target={"css": "#sr-boxzoom"}),
+        E(150.3, "drag", p0=[0.36, 0.34], p1=[0.56, 0.58]),
+        # the same room from straight above (2.3.21): 「2D」 in the header (the room drawn again: the flow is pressed there)
+        E(154.6, "click", target={"css": "#sr-mode-2d"}, expect="sr2d"),
+        E(155.3, "dbg", call="srSelect", node="api", expect="flowlist:payment"),
+        E(155.5, "dbg", call="srFlowSpeed", speed=2),
+        E(155.8, "click", target={"css": "#sr-board [data-sr-flow='payment']"}, expect="flow:payment"),
+        # 自動 (the default way at each branch): the light never stops at a fork
+        E(156.4, "click", target={"css": "#sr-player [data-sr-fp='auto']"}),
+        # 2.3.22: 今関係 shows only the nodes the light concerns now
+        E(162.6, "click", target={"css": "#sr-player [data-sr-fp-show='now']"}),
     ], needs=("rooms", "server_room", "flows", "sr2d"))
-    out["4"].start, out["4"].end = 54, 90   # 8 s of the whole system before 2.3.21's 62, 4 s after its 86 (+76 below)
 
     # the migration plan played through (requester 10-22: many migrations, smoothly), as the promo's chapter 4m (86–120)
     # and as the standalone clip (0–40). Its 12 steps touch the AWS groups on the left (search, payments, analytics,

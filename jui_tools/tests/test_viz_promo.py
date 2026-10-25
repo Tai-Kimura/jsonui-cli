@@ -57,8 +57,9 @@ def test_chapter_4s_2d_plays_the_payment_flow_again_with_auto_on():
         ev = T.chapters(lang)["4"].events
         at = lambda css: [e.at for e in ev if e.kind == "click" and css in e.args["target"].get("css", "")]  # noqa: E731
         pays, auto, flat = at("data-sr-flow='payment'"), at("data-sr-fp='auto'"), at("#sr-mode-2d")
-        assert len(pays) == 2 and len(auto) == 1 and len(flat) == 1, lang
-        assert pays[0] < auto[0] < flat[0] < pays[1] < T.chapters(lang)["4"].end, lang
+        # 10-25 12:5x: the payment flow is played in 2D only, 自動 ticked once it plays
+        assert len(pays) == 1 and len(auto) == 1 and len(flat) == 1, lang
+        assert flat[0] < pays[0] < auto[0] < T.chapters(lang)["4"].end, lang
 
 
 def test_every_chapter_that_shows_a_room_folds_its_robot_list_first():
@@ -338,15 +339,14 @@ def test_chapter_4_starts_close_on_the_order_flow_then_pulls_back_to_the_whole_s
         ch = T.chapters(lang)["4"]
         # the speed changes after the first choice: the second branch is 3.6 s at 1x after it
         first = T.flow_budget(ch, flows["order"])
-        # 2.3.23: 8 s of the whole system first (the order flow is pressed then)
-        assert [p for p, _ in first["choices"]][:1] == ["hit"] and abs(first["choices"][0][1] - (ch.start + 12.0)) <= 0.5, first
+        assert [p for p, _ in first["choices"]][:1] == ["hit"] and abs(first["choices"][0][1] - (ch.start + 4.0)) <= 0.5, first
         hit = first["choices"][0][1]
         second = next(ev.at for ev in ch.events if ev.args.get("arg") == "in")
         assert abs(hit + 3.6 - second) <= 0.5, (hit, second)
         dolly = next(ev for ev in ch.events if ev.kind == "dolly" and ev.args["factor"] > 1)   # the pull back
         assert dolly.at > second and dolly.at + dolly.args["dur"] <= ch.end and dolly.args["factor"] > 1
         pay = next(ev.at for ev in ch.events if ev.kind == "click" and "data-sr-flow='payment'" in ev.args["target"]["css"])
-        assert pay >= dolly.at + dolly.args["dur"], "the payment flow plays in the wide view"
+        assert pay >= dolly.at + dolly.args["dur"], "the payment flow plays after the pull back (in 2D, 10-25)"
 
 
 FAKE_LOCK = """import json, os
@@ -514,10 +514,14 @@ def test_2_3_23_adds_the_spec_diff_the_flow_views_and_chapter_t():
         assert len(diff) == 1 and diff[0].args["expect"] == "specdiff" and diff[0].at < board.end - 3
         four = cs["4"]
         assert (four.start, four.end) == T.BOUNDS["4"]
-        flat = max(e.at for e in four.events if e.kind == "click" and "data-sr-flow='payment'" in e.args["target"].get("css", ""))
-        now = [e.at for e in four.events if e.kind == "click" and "data-sr-fp-show='now'" in e.args["target"].get("css", "")]
+        # 10-25 12:5x: close first, the whole system, 範囲で寄る's box, then 2D (its payment flow, 今関係)
+        order = min(e.at for e in four.events if e.kind == "click" and "data-sr-flow='order'" in e.args["target"].get("css", ""))
+        fit = [e.at for e in four.events if e.kind == "click" and e.args["target"].get("css") == "#sr-fit"]
         drag = [e for e in four.events if e.kind == "drag"]
-        assert now and flat < now[0] and drag and now[0] < drag[0].at < four.end
+        flat = [e.at for e in four.events if e.kind == "click" and e.args["target"].get("css") == "#sr-mode-2d"]
+        pay = max(e.at for e in four.events if e.kind == "click" and "data-sr-flow='payment'" in e.args["target"].get("css", ""))
+        now = [e.at for e in four.events if e.kind == "click" and "data-sr-fp-show='now'" in e.args["target"].get("css", "")]
+        assert order < fit[0] < drag[0].at < flat[0] < pay < now[0] < four.end
         ta4 = cs["Ta4"]
         assert [e.args["name"] for e in ta4.events if e.kind == "tests_case"] == [n for _, _, n in T.T_CASES]
         for cid, c in cs.items():
