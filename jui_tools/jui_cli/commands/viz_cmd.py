@@ -817,6 +817,7 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     from ..viz import usage as usage_mod
 
     ctx.state.set_slice("usage", usage_mod.load())
+    ctx.state.set_slice("usageCodex", usage_mod.load(usage_mod.CODEX))   # Codex's plan (the daemon), beside it
     # the page's settings (2.3.6): how long a question waits for the page, its choices
     from ..viz.server import settings_slice
 
@@ -993,6 +994,11 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                     def resolved(self, rid) -> None:
                         world.codex_resolved(rid, now_ms())
                         world.publish()
+
+                    def rate_limits(self, rate_limits) -> None:
+                        value = usage_mod.accept_codex(rate_limits, now_ms())
+                        if value is not None:
+                            ctx.state.set_slice("usageCodex", value)
 
                 codex_link = codex_app_server.CodexLink(CodexSink(), lambda st, err: set_source("codex", st, err))
                 world.codex_stop = codex_link.interrupt

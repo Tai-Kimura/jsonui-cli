@@ -280,3 +280,28 @@ def test_the_stop_button_interrupts_a_codex_turn_at_once():
     assert world.request_stop(ROOT, 4)[0] == 409
     tr.event("turn/completed", {"threadId": ROOT, "turn": {"id": "t1"}})
     assert tr.turns == {}
+
+
+def test_codexs_plan_windows_are_read_by_their_length_and_kept_in_their_own_file(monkeypatch, tmp_path):
+    from jui_cli.viz import usage
+
+    monkeypatch.setenv("JUI_VIZ_HOME", str(tmp_path))
+    got = usage.parse_codex({"limitId": "codex", "primary": {"usedPercent": 1, "windowDurationMins": 300, "resetsAt": 1792981219},
+                             "secondary": {"usedPercent": 12.5, "windowDurationMins": 10080, "resetsAt": 1793400000}})
+    assert got == {"fiveHour": {"pct": 1.0, "resetsAt": 1792981219000}, "sevenDay": {"pct": 12.5, "resetsAt": 1793400000000}}
+    assert usage.parse_codex({"primary": None, "secondary": None}) is None   # what the daemon sends with no plan (an API key)
+    value = usage.accept_codex({"primary": {"usedPercent": 30, "resetsAt": 1792981219}}, 5)
+    assert value == {"windows": {"fiveHour": {"pct": 30.0, "resetsAt": 1792981219000}}, "receivedAt": 5}
+    assert usage.load(usage.CODEX) == value and usage.load() == {}   # Claude Code's file is untouched
+
+
+def test_the_link_hands_the_plans_limits_to_the_sink():
+    got = []
+
+    class S(Sink):
+        def rate_limits(self, value):
+            got.append(value)
+
+    link = CodexLink(S(), lambda *a: None)
+    link._dispatch({"method": "account/rateLimits/updated", "params": {"rateLimits": {"limitId": "codex"}}})
+    assert got == [{"limitId": "codex"}]

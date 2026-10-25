@@ -289,7 +289,8 @@ class CodexLink:
     """One connection to the daemon. ``sink`` is the World's side: an object with
       apply(payloads: list[dict], titles: dict[str, str | None]) — hook payloads to apply, names of the root threads;
       approval(info: dict, rid, reply: Callable[[Any], None]) — a card to make; reply(decision) answers it;
-      resolved(rid) — the request was answered elsewhere (the terminal), or withdrawn.
+      resolved(rid) — the request was answered elsewhere (the terminal), or withdrawn;
+      rate_limits(rate_limits) — the plan's windows (account/rateLimits/updated), optional.
     on_status(status, error) — the server slice's source row ("codex")."""
 
     def __init__(self, sink, on_status: Callable[[str, str | None], None], path: Path | None = None,
@@ -444,6 +445,11 @@ class CodexLink:
             return
         if method == "serverRequest/resolved":
             self.sink.resolved(params.get("requestId"))
+            return
+        if method == "account/rateLimits/updated":   # the plan's 5-hour and weekly windows (usage.parse_codex)
+            rate_limits = getattr(self.sink, "rate_limits", None)
+            if rate_limits is not None:
+                rate_limits(params.get("rateLimits"))
             return
         tid = params.get("threadId") if isinstance(params.get("threadId"), str) else ""
         name_changed = method == "thread/name/updated" and self.tr.root_of(tid) == tid

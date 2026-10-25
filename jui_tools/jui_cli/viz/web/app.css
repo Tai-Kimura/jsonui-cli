@@ -1407,6 +1407,10 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 .usage .uw .limit { color: var(--ink-soft); opacity: 0.75; font-weight: 700; }
 .usage .uw .stale { opacity: 0.8; }   /* not .note: the board's sticky-note card took it and swelled the header (10-19) */
 .usage .none { opacity: 0.7; }
+/* the plan the chips show (30-source-live.js renderUsage): Claude Code's or Codex's, in its CLI's colour */
+.usage-cli { padding: 2px 6px; border: 1.5px solid var(--cli-claude); border-radius: 999px; background: var(--chip); color: var(--ink); font: 700 12px/1.4 var(--font-mono); cursor: pointer; }
+.usage-cli[hidden] { display: none; }
+.usage-cli:has(option[value="codex"]:checked) { border-color: var(--cli-codex); }
 
 /* 「spec の進み具合」 explained in a dialog (2.3.4): a 「?」 next to the heading in the panel and on the overview board */
 .head-help { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }

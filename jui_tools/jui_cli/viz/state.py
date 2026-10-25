@@ -10,7 +10,7 @@ import time
 from collections import deque
 from typing import Any
 
-SLICE_NAMES = ("projects", "sessions", "agents", "tasks", "specs", "tests", "perms", "questions", "denials", "calls", "devices", "server", "weather", "usage", "settings", "bills", "prices", "cloudPrices", "machine")
+SLICE_NAMES = ("projects", "sessions", "agents", "tasks", "specs", "tests", "perms", "questions", "denials", "calls", "devices", "server", "weather", "usage", "usageCodex", "settings", "bills", "prices", "cloudPrices", "machine")
 
 
 def now_ms() -> int:
