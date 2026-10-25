@@ -96,6 +96,15 @@ POINT_JS = """(t) => {
     return centre(days.find((d) => d.querySelector('.src-over')) || days[Math.floor(days.length / 2)]); }
   const all = [...document.querySelectorAll(t.css)];
   const el = t.text ? all.find((e) => e.textContent.includes(t.text)) : all[0];
+  if (el && t.visible) {
+    // the first point on the element a press lands on (a name tag partly under another one: en's long tags, 2.3.23)
+    const r = el.getBoundingClientRect();
+    for (let fy = 0.5; fy > 0.1; fy -= 0.2) for (let fx = 0.1; fx < 0.95; fx += 0.08) {
+      const x = Math.round(r.left + r.width * fx), y = Math.round(r.top + r.height * fy), hit = document.elementFromPoint(x, y);
+      if (hit && (hit === el || el.contains(hit))) return [x, y];
+    }
+    return null;
+  }
   return centre(el);
 }"""
 
@@ -732,8 +741,8 @@ class Driver:
             t = {"css": f"#sessions [data-robot-open='{await self.label(t['session_row'])}']"}
         elif "talk_row" in t:
             t = {"css": "#rb .talk-row", "text": self.w["names"][t["talk_row"]]}
-        elif "robot_tag" in t:   # the robot's own name tag (a press on it selects the robot, as on its body)
-            t = {"css": f"#tags .tag[data-robot='{await self.label(t['robot_tag'])}']"}
+        elif "robot_tag" in t:   # the robot's own name tag (a press on it selects the robot, as on its body), where it shows
+            t = {"css": f"#tags .tag[data-robot='{await self.label(t['robot_tag'])}']", "visible": True}
         return t
 
     async def hittable(self, target: dict) -> bool:
