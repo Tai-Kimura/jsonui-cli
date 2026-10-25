@@ -5,7 +5,7 @@ and a pull.
 A room shows each of its apps' worktrees that a session not ended works in, as an app of its own
 ("<app>@<branch>", every row tagged with its branch and the worktree's folder), beside the room's own app (tagged
 with the room's branch then): a spec in both checkouts is two rows, never one dropped. A worktree no session works
-in is not shown, nor one inside the room (the room's own walk finds it), and a worktree gone or left takes its rows
+in is not shown; one inside the room is shown the same way (the room's walk does not enter it), and a worktree gone or left takes its rows
 with it. git is read, never written or run (the repository's files are the same after).
 """
 from __future__ import annotations
@@ -88,13 +88,40 @@ def test_a_worktree_a_session_works_in_is_shown_beside_the_rooms_own(tmp_path):
     assert _tree_hash(root / ".git") == before   # read, never written
 
 
-def test_a_worktree_no_session_works_in_or_inside_the_room_is_not_shown(tmp_path):
+def test_a_worktree_no_session_works_in_is_not_shown(tmp_path):
     root, wt = _room(tmp_path)
-    _git(root, "worktree", "add", "-q", "-b", "inside", str(root / "wt-inside"))
     project = JsonUIProject(root, "p")
     project.load_all(0)
-    assert project.set_worktrees([str(tmp_path / "elsewhere"), str(root / "wt-inside")], 10) is False
+    assert project.set_worktrees([str(tmp_path / "elsewhere")], 10) is False
     assert sorted(_rows(project)) == ["p:login.spec.json"]
+
+
+def test_a_worktree_inside_the_room_is_shown_by_its_branch_and_the_rooms_walk_does_not_enter_it(tmp_path):
+    """Ticket 2026-10-26-viz-worktree-inside-the-room-not-on-spec-board: Claude Code's worktrees are
+    <repo>/.claude/worktrees/<name>, inside the room. The room's walk (3 folders deep) found the worktree's top config
+    and not its apps (4 deep), and the worktrees were skipped as the walk's: neither showed them."""
+    root, _wt = _room(tmp_path, app="admin")
+    inside = root / ".claude" / "worktrees" / "pr254"
+    _git(root, "worktree", "add", "-q", "-b", "claude/pr254", str(inside))
+    (inside / "admin" / "docs" / "screens" / "json" / "orders.spec.json").write_text(json.dumps(_spec("Orders")), encoding="utf-8")
+    project = JsonUIProject(root, "p")
+    project.load_all(0)
+    assert sorted(_rows(project)) == ["p:admin/login.spec.json"]          # no source from inside the worktree
+    assert project.set_worktrees([str(inside)], 10) is True
+    rows = _rows(project)
+    assert sorted(rows) == ["p:admin/login.spec.json", "p:admin@claude/pr254/login.spec.json",
+                            "p:admin@claude/pr254/orders.spec.json"]
+    assert rows["p:admin@claude/pr254/orders.spec.json"]["checkout"]["worktree"].endswith(".claude/worktrees/pr254")
+    assert project.set_worktrees([], 20) is True and sorted(_rows(project)) == ["p:admin/login.spec.json"]
+
+
+def test_a_submodule_is_still_walked_into(tmp_path):
+    from jui_cli.viz.sources.jsonui_project import find_configs, is_worktree_root
+    sub = tmp_path / "room" / "client"
+    sub.mkdir(parents=True)
+    (sub / ".git").write_text("gitdir: ../.git/modules/client\n", encoding="utf-8")
+    (sub / "jui.config.json").write_text("{}", encoding="utf-8")
+    assert not is_worktree_root(sub) and find_configs(tmp_path / "room") == [sub / "jui.config.json"]
 
 
 def test_a_worktree_left_or_removed_takes_its_rows_with_it(tmp_path):
