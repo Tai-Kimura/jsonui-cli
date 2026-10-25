@@ -726,7 +726,8 @@ class Driver:
             arg = self.project(arg)
         elif name in ("picked", "card"):
             arg = await self.label(arg)
-        await self.until(js, arg or None, spec, advance)
+        # a migration's cost over the 1007-node system (2.3.23's stage) can take longer than a page's usual wait
+        await self.until(js, arg or None, spec, advance, **({"timeout": 90} if name in ("migcost", "migtable") else {}))
 
     async def resolved(self, target: dict):
         """A target as POINT_JS takes it, or a point already ([x, y]) for a robot."""

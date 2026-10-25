@@ -323,7 +323,7 @@ def chapters(lang: str) -> dict:
     out["2"] = Chapter("2", 40, 52, floor(w) + up_close("demo-shop") + [P("click", target={"css": "#room-back"}, expect="floor"), P("settle")], [
         E(40.8, "click", target={"room_tag": "demo-shop"}, expect="solo:demo-shop"),
         E(43.2, "tests_start", key="s02", run="r1", command="cd web && npx vitest run tests/unit/generated"),
-        E(43.6, "click", target={"robot": "s02"}, expect="card:s02"),
+        E(43.6, "click", target={"robot_tag": "s02"}, expect="card:s02"),   # its tag where it shows (en's lie over bodies)
         E(44.2, "tests_case", run="r1", case=0, status="passed"),
         E(44.7, "tests_case", run="r1", case=1, status="passed"),
         E(45.2, "tests_case", run="r1", case=2, status="passed"),
