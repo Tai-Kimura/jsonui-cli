@@ -14,6 +14,8 @@ from . import i18n, paths
 class VizConfig:
     port: int = 7788
     agentsPollSec: float = 3
+    # The Codex sessions (sources/codex_app_server.py): read from the Codex app-server daemon when it runs. False: never.
+    codexDaemon: bool = True
     eventsKeep: int = 2000
     pushIntervalMs: int = 200
     toolInputMaxChars: int = 2000

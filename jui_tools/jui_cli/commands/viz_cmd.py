@@ -817,6 +817,7 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     from ..viz import usage as usage_mod
 
     ctx.state.set_slice("usage", usage_mod.load())
+    ctx.state.set_slice("usageCodex", usage_mod.load(usage_mod.CODEX))   # Codex's plan (the daemon), beside it
     # the page's settings (2.3.6): how long a question waits for the page, its choices
     from ..viz.server import settings_slice
 
@@ -970,6 +971,40 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                     config.agentsPollSec, on_rows, lambda st, err: set_source("agents", st, err))))
             else:
                 set_source("agents", "stopped", None)
+
+            if config.codexDaemon:
+                from ..viz.sources import codex_app_server
+
+                class CodexSink:
+                    """codex_app_server.CodexLink's side of the World (on the loop)."""
+
+                    def apply(self, payloads: list, titles: dict) -> None:
+                        world.apply_codex(payloads, titles, now_ms())
+                        world.publish()
+
+                    def approval(self, info: dict, rid, reply) -> None:
+                        card = world.codex_approval(info, rid, now_ms())
+                        if card is not None and card["status"] == "pending":
+                            future = loop.create_future()
+                            world.hook_waiting(card, future)   # the page can answer it; the terminal still shows it
+                            future.add_done_callback(lambda f: None if f.cancelled() else reply(
+                                codex_app_server.Translator.decision(info["kind"], f.result())))
+                        world.publish()
+
+                    def resolved(self, rid) -> None:
+                        world.codex_resolved(rid, now_ms())
+                        world.publish()
+
+                    def rate_limits(self, rate_limits) -> None:
+                        value = usage_mod.accept_codex(rate_limits, now_ms())
+                        if value is not None:
+                            ctx.state.set_slice("usageCodex", value)
+
+                codex_link = codex_app_server.CodexLink(CodexSink(), lambda st, err: set_source("codex", st, err))
+                world.codex_stop = codex_link.interrupt
+                tasks.append(asyncio.create_task(codex_link.run()))
+            else:
+                set_source("codex", "stopped", None)
 
             from ..viz.sources import devices as devices_src
             from ..viz.sources import processes
@@ -1829,6 +1864,12 @@ def _doctor_checks() -> list[dict]:
             add("claude", out.returncode == 0, (out.stdout or out.stderr).strip().splitlines()[0] if (out.stdout or out.stderr).strip() else "its version cannot be read")
         except (OSError, subprocess.TimeoutExpired) as exc:
             add("claude", False, f"cannot be started ({type(exc).__name__})")
+
+    from ..viz.sources import codex_app_server
+
+    sock = codex_app_server.socket_path()   # optional: never NG (a Claude Code only machine has no daemon)
+    add("codex daemon", True, f"running ({sock}): its Codex sessions are shown" if sock.exists()
+        else "not running (optional: codex app-server daemon start shows the Codex sessions)")
 
     settings = paths.claude_settings()
     try:

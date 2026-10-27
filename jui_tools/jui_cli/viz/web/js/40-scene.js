@@ -482,6 +482,7 @@ function buildDemoOffice() {
     scene.add(robot.root);
     const tag = addTag('bot', `${pill(d.id, d.role)}<span class="nm"></span><span></span>`);
     tag.dataset.robot = d.id;   // a click on the tag selects the robot (tagPress in build3D)
+    tag.classList.add(`cli-${cliOf(d.id)}`);   // its CLI's ring (20-core.js cliOf)
     robots.push({ def: d, robot, tag, text: tag.lastElementChild, act: '' });
   }
 }
@@ -740,6 +741,7 @@ function liveAddRobot(d, i) {
   scene.add(robot.root);
   const tag = addTag('bot', `${pill(d.id, d.role)}<span class="nm"></span><span></span>`);
   tag.dataset.robot = d.id;   // a click on the tag selects the robot (tagPress in build3D)
+  tag.classList.add(`cli-${cliOf(d.id)}`);   // its CLI's ring (20-core.js cliOf)
   const R = { def: d, robot, tag, text: tag.lastElementChild, act: '', path: [], room: d.room, seatKey: '', exitAt: 0 };
   if (route.length) R.path = route.slice(1);
   d.enter = false;

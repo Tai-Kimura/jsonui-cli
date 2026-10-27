@@ -713,7 +713,8 @@ def make_app(ctx: ServerContext) -> web.Application:
         return web.json_response({"ok": gone})
 
     async def api_call_command(request: web.Request) -> web.Response:
-        """The call button's command (2.3.5, callcmd.py): {"projectId", "name", "role"} -> {"command", "flag", "root"}.
+        """The call button's command (2.3.5, callcmd.py): {"projectId", "name", "role", "cli"?} -> {"command", "flag", "root"}
+        ("cli": "codex" for the dialog's Codex tab: callcmd.codex_command, "flag" is then "codex").
         Nothing is run and nothing is written: the line is made here so its quoting is one piece of Python with its own
         arms (tests/test_viz_callcmd.py: zsh and bash, run and pasted). The checks of /api/prompt (prompt_checks: POST,
         the page's own Host and Origin, the token, JSON, a capped body); the folder is the server's own record of the
@@ -736,6 +737,9 @@ def make_app(ctx: ServerContext) -> web.Application:
         why = callcmd.check(name, role)
         if why:
             return web.json_response({"ok": False, "why": why}, status=400)
+        if body.get("cli") == "codex":   # the dialog's Codex tab
+            return web.json_response({"ok": True, "command": callcmd.codex_command(root, name, role), "flag": "codex", "root": root},
+                                     headers={"Cache-Control": "no-store"})
         flag = callcmd.channels_flag()
         return web.json_response({"ok": True, "command": callcmd.command(root, name, role, flag), "flag": flag, "root": root},
                                  headers={"Cache-Control": "no-store"})

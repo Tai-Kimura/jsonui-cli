@@ -232,6 +232,8 @@ class World:
         self.rooms = Rooms()
         self.sessions: dict[str, dict] = {}
         self.agents: dict[str, dict] = {}
+        self._codex_ids: set[str] = set()   # the session and robot ids that are Codex threads (apply_codex)
+        self.codex_stop = None   # session id -> bool: the Codex link's interrupt (viz_cmd sets it), the page's 停止
         # Robot bookkeeping the page does not need: open tool_use_ids, timers.
         self._open: dict[str, list[str]] = {}
         self._open_tool: dict[str, str] = {}  # tool_use_id -> tool_name
@@ -332,6 +334,15 @@ class World:
     def _label(self, ident: str) -> str:
         taken = {a["label"] for a in self.agents.values() if a["id"] != ident}
         taken |= {s["label"] for s in self.sessions.values() if s["id"] != ident}
+        if ident in self._codex_ids:
+            # a Codex thread id is a UUIDv7: its head is the time it was made (every one began 01a17… on 10-26), its
+            # tail is random — the label is taken from the tail
+            tail = ident.replace("-", "")
+            for n in range(2, len(tail) + 1):
+                label = tail[-n:]
+                if label not in taken:
+                    return label
+            return ident
         for n in range(2, len(ident) + 1):
             label = ident[:n]
             if label not in taken:
@@ -1446,6 +1457,16 @@ class World:
         session = self.sessions.get(sid)
         if session is None or session["status"] == "ended":
             return 404, "no such session"
+        if session.get("cli") == "codex":   # no --stop hook: the daemon interrupts the running turn at once
+            if cancel:
+                return 409, "a Codex session's stop is not waited for: nothing to cancel"
+            if session["status"] not in ("busy", "waiting"):
+                return 409, "this session is not working"
+            if self.codex_stop is None or not self.codex_stop(sid):
+                return 409, "no turn of this Codex session is running (or the Codex daemon is not connected)"
+            self.state.add_event({"at": at, "sessionId": sid, "agentId": sid, "kind": "StopAsked", "cat": "perm",
+                                  "text": i18n.tl("ev.stop.asked", label=session["label"])})
+            return None
         if cancel:
             if session.pop("stopAt", None) is None:
                 return 409, "no stop is waiting for this session"
@@ -1606,6 +1627,64 @@ class World:
             })
             self._dirty.add("perms")
         return error
+
+    # ---------------------------------------------------------------- Codex (sources/codex_app_server.py)
+
+    def apply_codex(self, payloads: list[dict], titles: dict, at: int) -> None:
+        """What the Codex daemon said, as hook payloads (codex_app_server.Translator) and the root threads' names. The
+        sessions and robots it makes carry ``cli: "codex"``; a Claude Code session's carry none (the page reads "claude")."""
+        for payload in payloads:
+            self._codex_ids.update(i for i in (payload.get("session_id"), payload.get("agent_id")) if isinstance(i, str))
+            self.apply_hook(payload, at)
+            sid = payload.get("session_id")
+            for ident in (sid, payload.get("agent_id")):
+                for book, dirty in ((self.sessions, "sessions"), (self.agents, "agents")):
+                    row = book.get(ident) if ident else None
+                    if row is not None and row.get("cli") != "codex":
+                        row["cli"] = "codex"
+                        self._dirty.add(dirty)
+        for sid, title in titles.items():
+            session = self.sessions.get(sid)
+            if session is None:
+                continue
+            title = _head(title, 120) if title else None
+            if session.get("title") != title:
+                if title:
+                    session["title"] = title
+                else:
+                    session.pop("title", None)
+                self._dirty.add("sessions")
+
+    def codex_approval(self, info: dict, rid, at: int) -> dict | None:
+        """An approval request from the daemon: the same card a PermissionRequest makes (its async forward and its
+        --decide wait, one card for the pair), the robot waiting. The caller hangs the answer's future on it
+        (hook_waiting). The daemon's request id is kept to settle the card when the terminal answers first."""
+        payload = {"hook_event_name": "PermissionRequest", "session_id": info["session_id"], "cwd": info.get("cwd"),
+                   "tool_name": info["tool"], "tool_input": info["tool_input"], "cli": "codex"}
+        if info.get("agent_id"):
+            payload["agent_id"], payload["agent_type"] = info["agent_id"], info.get("agent_type")
+        if info.get("suggestions"):
+            payload["permission_suggestions"] = info["suggestions"]
+        self.apply_hook(payload, at)
+        card = self.hook_decide(payload, at)
+        if card is not None:
+            card["_codexRequest"] = rid
+            card["cli"] = "codex"
+        return card
+
+    def codex_resolved(self, rid, at: int) -> None:
+        """The daemon says a request was answered (by the terminal, or by this page) or withdrawn: a card still
+        pending was answered elsewhere."""
+        for card in self.perms.perms.values():
+            if card.get("_codexRequest") == rid and card["status"] == "pending":
+                self.perms._resolve(card, "answered_in_terminal", at, by="terminal")
+                self._dirty.add("perms")
+                agent = self.agents.get(card["agentId"])
+                session = self.sessions.get(card["sessionId"])
+                if session is not None and session["status"] == "waiting":
+                    self._status(session, "busy", at)
+                if agent is not None and agent["state"] == "waiting":
+                    self._set(agent, at, "command", agent["act"].replace(perm_wait(), "", 1))
 
     # ---------------------------------------------------------------- devices and test progress (P7)
 

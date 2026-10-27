@@ -218,7 +218,7 @@ function talkPeerMark(peer, label = SOURCE.talkLabel(peer.agentId)) {
   const span = hNode('span', 'talk-mark');
   span.setAttribute('aria-hidden', 'true');
   if (label && DEF[label]) {   // the robot's mark, as pill() draws it (built as nodes here)
-    const role = DEF[label].role, mark = hNode('span', 'pill', label);
+    const role = DEF[label].role, mark = hNode('span', `pill cli-${cliOf(label)}`, label);
     mark.style.setProperty('--c', pillBg(role)); mark.style.setProperty('--t', pillInk(role));
     span.appendChild(mark);
   }

@@ -25,7 +25,13 @@ const pillInk = (role) => ROLE_INK[role] || '#ffffff';
 const NAME_MAX = 80;
 const sessionName = (t) => (typeof t === 'string' ? t.replace(/\s+/g, ' ').trim().slice(0, NAME_MAX) : '');
 const NAMES = { rev: 0 };   // bumped when a robot's name changes: the panels' keys carry it
-const pill = (label, role) => `<span class="pill" style="--c:${ROLES[role].pill || ROLES[role].color};--t:${ROLE_INK[role] || '#ffffff'}">${esc(label)}</span>`;   // = pillBg / pillInk (the escape gate reads the tables)
+/* Which CLI runs a robot (codex_app_server.py; requester 10-26: 「UIでclaudeかcodexかわかるようにしたい」): a robot's
+   pill is ringed in its CLI's colour (--cli-claude / --cli-codex, app.css), and so are its tag in the 3D, its card's
+   number and its talk mark. A label that is no robot's (a session id head, a test's) gets no ring. */
+const CLI_NAME = { claude: 'Claude', codex: 'Codex' };
+const cliOf = (label) => (DEF[label] && DEF[label].cli === 'codex' ? 'codex' : 'claude');
+const pillCli = (label) => (DEF[label] ? ` cli-${cliOf(label)}` : '');
+const pill = (label, role) => `<span class="pill${esc(pillCli(label))}" style="--c:${ROLES[role].pill || ROLES[role].color};--t:${ROLE_INK[role] || '#ffffff'}">${esc(label)}</span>`;   // = pillBg / pillInk (the escape gate reads the tables)
 /* The time the view shows (the sky, the 8-hour tiredness): the machine's clock, unless a test or the demo sets one. */
 const VIZ_CLOCK = { at: null };
 const vizNow = () => (VIZ_CLOCK.at !== null ? VIZ_CLOCK.at : Date.now());

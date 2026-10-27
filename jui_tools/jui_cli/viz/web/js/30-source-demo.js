@@ -17,13 +17,14 @@ const ROOMS = [
 const PROJECT = Object.fromEntries(ROOMS.map((r) => [r.id, r]));
 const SESSIONS = [
   { id: 'a0', project: 'shop', robots: ['a0', 'a3', 'a5', 'a2', 'a7'] },
-  { id: 'b4', project: 'shop', robots: ['b4', 'e6', 'f2'] },
+  { id: 'b4', cli: 'codex', project: 'shop', robots: ['b4', 'e6', 'f2'] },
   { id: 'd8', project: 'shop', robots: ['d8'] },
   { id: '4f', project: 'cli', robots: ['4f'] },
-  { id: '7c', project: 'cli', robots: ['7c'] },
+  { id: '7c', cli: 'codex', project: 'cli', robots: ['7c'] },
   { id: 'c9', project: 'doc', robots: ['c9'] },
   { id: 'e1', project: 'doc', robots: ['e1'] },
 ].map((s) => ({ ...s, room: PROJECT[s.project].name }));
+// cli: which CLI runs the session (the demo has two Codex sessions, b4 and 7c; the rest are Claude Code's)
 const ROBOT_DEFS = [
   { id: 'a0', role: 'main', agent: tl('demo.robot.session.a07c'), pos: [0.7, -2.5], ry: 0.3, furnished: true,
     plan: [[0, 'reading', 'Read docs/screens/json/cart.spec.json'], [12, 'typing', tl('demo.robot.taskcreate.7.8')], [20, 'idle', tl('demo.robot.waiting.subagent.reports')], [62, 'reading', tl('demo.robot.reviewing.a3.s.report')], [70, 'typing', tl('demo.robot.checking.what.s.left.tasklist')], [76, 'idle', tl('demo.robot.waiting.subagent.reports')]] },
@@ -34,17 +35,17 @@ const ROBOT_DEFS = [
   { id: 'a2', role: 'test', agent: 'jsonui-test', pos: [-7.3, 1.2], ry: 0.75,
     plan: [[0, 'idle', tl('demo.robot.idle')], [10, 'command', 'test_validate cart.test.json'], [18, 'phone', tl('demo.robot.xcodebuild.test.iphone.16')], [60, 'done', tl('demo.robot.cart.tests.8.8.passed')], [66, 'idle', tl('demo.robot.idle')]] },
   { id: 'a7', role: 'navigation', agent: 'jsonui-navigation-ios', walk: true },
-  { id: 'b4', role: 'main', agent: tl('demo.robot.session.b47e'), pos: [-0.4, 3.5], ry: 0.15, furnished: true,
+  { id: 'b4', cli: 'codex', role: 'main', agent: tl('demo.robot.session.b47e'), pos: [-0.4, 3.5], ry: 0.15, furnished: true,
     plan: [[0, 'typing', 'TaskCreate #5'], [6, 'idle', tl('demo.robot.waiting.subagent.reports')], [70, 'reading', tl('demo.robot.reviewing.e6.s.report')], [74, 'idle', tl('demo.robot.waiting.subagent.reports')]] },
-  { id: 'e6', role: 'define', agent: 'jsonui-define', pos: [-2.9, 3.4], ry: 0.25, furnished: true,
+  { id: 'e6', cli: 'codex', role: 'define', agent: 'jsonui-define', pos: [-2.9, 3.4], ry: 0.25, furnished: true,
     plan: [[0, 'reading', tl('demo.robot.read.login.spec.json.reference')], [8, 'typing', 'Write docs/screens/json/signup.spec.json'], [70, 'done', tl('demo.robot.finished.signup.spec')], [74, 'idle', tl('demo.robot.idle')]] },
-  { id: 'f2', role: 'implement', agent: 'jsonui-implement', pos: [-5.3, 3.3], ry: 0.4, furnished: true,
+  { id: 'f2', cli: 'codex', role: 'implement', agent: 'jsonui-implement', pos: [-5.3, 3.3], ry: 0.4, furnished: true,
     plan: [[0, 'typing', 'Edit docs/screens/layouts/product-detail.json'], [30, 'command', 'Bash jui build'], [36, 'typing', 'Edit ProductDetailViewModel.swift'], [74, 'command', 'jui_verify product-detail.spec.json'], [78, 'done', tl('demo.robot.finished.implementing.productdetail')], [82, 'idle', tl('demo.robot.idle')]] },
   { id: 'd8', role: 'main', agent: tl('demo.robot.session.d8a5'), pos: [-8.5, -3.5], ry: 0.6, furnished: true,
     plan: [[0, 'idle', tl('demo.robot.idle.waiting.next.prompt')], [34, 'thinking', tl('demo.robot.thinking')], [50, 'idle', tl('demo.robot.idle.waiting.next.prompt')]] },
   { id: '4f', role: 'main', agent: tl('demo.robot.session.4f2b'), pos: [6.0, -2.9], ry: 0.05, furnished: true,
     plan: [[0, 'command', 'Bash jui build --ios-only'], [22, 'done', tl('demo.robot.build.complete')], [26, 'idle', tl('demo.robot.idle')], [38, 'reading', 'Read jui_cli/commands/hotload_cmd.py'], [44, 'command', 'Bash pip install aiohttp watchdog'], [47, 'typing', 'Edit jui_cli/commands/viz_cmd.py'], [78, 'reading', tl('demo.robot.reviewing.diff')]] },
-  { id: '7c', role: 'main', agent: tl('demo.robot.session.7c3f'), pos: [8.9, -2.6], ry: -0.15, furnished: true,
+  { id: '7c', cli: 'codex', role: 'main', agent: tl('demo.robot.session.7c3f'), pos: [8.9, -2.6], ry: -0.15, furnished: true,
     plan: [[0, 'typing', 'Edit src/reporter/progress.ts'], [30, 'command', 'Bash npm test -- --progress'], [36, 'typing', 'Edit src/cli/run.ts'], [60, 'command', 'Bash npm test'], [66, 'reading', tl('demo.robot.checking.test.results')]] },
   { id: 'c9', role: 'main', agent: tl('demo.robot.session.c91e'), pos: [6.4, 2.0], ry: 0.1, furnished: true,
     plan: [[0, 'reading', 'Read docs/screens/json/spec-anatomy.spec.json'], [38, 'command', 'Bash jsonui-doc generate html'], [52, 'done', tl('demo.robot.generated.html')], [56, 'idle', tl('demo.robot.idle')]] },

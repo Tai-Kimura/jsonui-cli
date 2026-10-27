@@ -234,6 +234,24 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   スナップショットにも export にも入らない。ER 図とデータの流れの図は、同梱の Mermaid（`web/vendor/VENDOR.md`、
   securityLevel strict・htmlLabels なし、初めて描くときだけ読む）。データの流れの図の文字列は、spec ページと同じ規則
   （`sheet.dataflow_mermaid` → html_generator）。
+- **Codex のセッション**（`sources/codex_app_server.py`、`ingest.apply_codex` / `codex_approval` / `codex_resolved`、2026-10-26 試作）:
+  Codex の app-server daemon（`codex app-server daemon start`。ソケットは `$CODEX_HOME/app-server-control/app-server-control.sock`、
+  Unix ソケット上の WebSocket で JSON-RPC）に 1 本つなぐ。ターミナルの `codex` は daemon があれば自分でそこに載る
+  （macOS・Linux、Codex 0.164.0 で確認）。`thread/loaded/list` を 3 秒ごとに見て、新しいスレッドは `thread/resume`（`excludeTurns`）で購読する。
+  届いた通知は `Translator` が Claude Code のフックの形（SessionStart・UserPromptSubmit・PreToolUse / PostToolUse の Bash・Edit・Write・
+  mcp__…・Stop・SubagentStart / Stop・SessionEnd）に置き換え、`apply_hook` にそのまま渡す（テストの見分け・シュレッダー・ファイルの印が
+  そのまま効く）。親スレッド（`parentThreadId`）のある子はサブエージェント。セッションとロボットに `cli: "codex"`（Claude Code のには無い）。
+  ラベルは id の末尾から（UUIDv7 の先頭は作成時刻で、どれも `01a17…` になる）。
+  許可: `item/commandExecution/requestApproval`・`item/fileChange/requestApproval` は TUI のダイアログと viz の両方に届く（先に答えた方が勝ち、
+  もう一方に `serverRequest/resolved`）。カードは PermissionRequest と同じ（`hook_decide` の future）。答えは `accept`／`decline`、今後も許可は
+  `acceptWithExecpolicyAmendment`（`proposedExecpolicyAmendment`）か `acceptForSession`（ファイル）。`item/permissions/requestApproval` には答えない。
+  停止は `turn/interrupt`（その場で止まる。`--stop` フックは無い）。書き込むのは許可の答えと、呼び出しダイアログの Codex タブで起動した
+  スレッドの名前（`thread/name/set`、最初のプロンプトの「セッション名: …」から、名前の無いスレッドに 1 回）だけ。daemon が無いのは故障ではない
+  （帯は出さない。`jui viz doctor` の `codex daemon` 行が起動の仕方を言う）。daemon を使わずに起動した Codex と VS Code 拡張のセッションは
+  見えない（依頼者の判断 10-26）。まだ無いもの: 応答の履歴と送信（rollout の読み取りと `turn/start`）、コスト・上限（`thread/tokenUsage/updated`・
+  `account/rateLimits/updated`）、トークの Codex 間（`CollabAgentToolCall`）。
+  ページ: `20-core.js` の `cliOf` / `pillCli`。pill・3D の札・セッション一覧の札・カードの番号（`data-cli-name`）・トークの印が
+  `--cli-claude` / `--cli-codex` で縁取られる。呼び出しダイアログは Claude Code / Codex のタブ（`callcmd.codex_command`、`POST /api/call-command` の `cli`）。
 - **テスト**: `tests/test_viz_*.py`（pytest。サーバーは `aiohttp.test_utils` を `asyncio.run` の中で、
   CLI は一時の HOME とサブプロセスで）。ブラウザの e2e は pytest の外の `tools/viz_e2e/run.py`（Playwright）。
 

@@ -27,6 +27,7 @@
       <span class="chip" id="chip-robots">{{tl:page.chip.robots}}ロボット 10{{/tl}}</span>
       <span class="chip" data-hook-chip title="{{tl:page.chip.hook}}フックの受け口{{/tl}}">127.0.0.1:7788</span>
       <span class="chip" id="chip-clock">14:20:24</span>
+      <select class="usage-cli" id="usage-cli" hidden aria-label="{{tl:page.usage.cli}}どの CLI の上限を出すか{{/tl}}"><option value="claude">Claude</option><option value="codex">Codex</option></select>
       <span class="usage" id="usage" hidden></span>
       <button type="button" class="chip perm-chip" id="chip-perm" hidden aria-haspopup="dialog">{{tl:page.chip.perm}}許可待ち 0{{/tl}}</button>
       <button type="button" class="chip perm-chip" id="chip-ask" hidden aria-controls="questions-sec">{{tl:page.chip.ask}}質問 0{{/tl}}</button>
@@ -299,6 +300,10 @@
   <div class="call-card">
     <h2 id="call-title">{{tl:page.call.title}}ロボットを呼ぶ{{/tl}}</h2>
     <p class="call-lead" id="call-lead"></p>
+    <div class="call-tabs" role="tablist" aria-label="{{tl:page.call.tabs}}どの CLI でセッションを起動するか{{/tl}}">
+      <button type="button" role="tab" class="call-tab cli-claude" id="call-tab-claude" data-call-cli="claude" aria-selected="true">Claude Code</button>
+      <button type="button" role="tab" class="call-tab cli-codex" id="call-tab-codex" data-call-cli="codex" aria-selected="false" tabindex="-1">Codex</button>
+    </div>
     <label for="call-name">{{tl:page.call.name}}担当名（必須、1 行）{{/tl}}</label>
     <input type="text" id="call-name" maxlength="64" autocomplete="off" spellcheck="false">
     <label for="call-role">{{tl:page.call.role}}役割の文（任意）{{/tl}}</label>

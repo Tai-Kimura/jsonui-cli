@@ -150,13 +150,14 @@ const SOURCE = {
     } catch (err) { return { ok: false, error: tl('live.offline') }; }
   },
   /* The call bell (2.3.5, 50-panel.js): the line to paste, made by the server (callcmd.py) from the project's own folder,
-     under the checks of /api/prompt. Nothing is run. Resolves { ok, command, flag } or { ok: false, why }. */
-  async callCommand(project, name, role) {
+     under the checks of /api/prompt. Nothing is run. Resolves { ok, command, flag } or { ok: false, why }. cli: the
+     dialog's tab, 'claude' or 'codex' (callcmd.codex_command). */
+  async callCommand(project, name, role, cli = 'claude') {
     try {
       const res = await fetch('/api/call-command', {
         method: 'POST', cache: 'no-store', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token },
-        body: JSON.stringify({ projectId: project, name, role }),
+        body: JSON.stringify({ projectId: project, name, role, cli: cli === 'codex' ? 'codex' : 'claude' }),
       });
       const text = await res.text();
       let body = null;
@@ -972,6 +973,7 @@ function rebuildRobots(initial) {
       title: named, head: a.kind === 'sub' ? '' : sessionHead(a, sess),   // the session's name (none: '') and its id's head
       realId: String(a.id || label), sessionId: String(a.sessionId || ''), kind: a.kind === 'sub' ? 'sub' : 'main',
       role: ROLE_OF(a), agent: displayName(a, sess), furnished: true, mainLabel,
+      cli: a.cli === 'codex' || (sess && sess.cli === 'codex') ? 'codex' : 'claude',   // which CLI runs it (codex_app_server.py)
       room: sess && sess.projectId ? sess.projectId : (def.room || ''),
       // when it came into its room: desks are drawn in this order, so a reload draws them the same way
       inRoomAt: Math.max(Number(a.startedAt) || 0, Number(sess && sess.roomSince) || 0),
@@ -1020,6 +1022,7 @@ function rebuildSessions() {
       .sort((a, b) => (a.kind === 'main' ? -1 : 0) - (b.kind === 'main' ? -1 : 0) || a.id.localeCompare(b.id)).map((d) => d.id);
     if (!robots.length || robots[0] !== label) continue;   // a session is shown through its main robot
     next.push({ id: label, project: s.projectId, robots, room: PROJECT[s.projectId].name, status: s.status, title: s.title || '',
+      cli: s.cli === 'codex' ? 'codex' : 'claude',
       relay: s.relay === true, prompt: s.prompt === true,   // prompt: its channel takes a prompt from the page (jui-viz 1.2.0+)
       launch: typeof s.launch === 'string' ? s.launch : null,   // whether the CLI hands that text over (sources/launch.py)
       // 停止 (jui-viz 1.3.0): asked and waiting for its next tool boundary, when it last stopped so, whether its --stop hook was heard
@@ -1190,12 +1193,14 @@ function usageAgo(ms) {
   const m = Math.floor(ms / 60000);
   return m < 60 ? tl('live.usage.ago.min', { n: m }) : m < 1440 ? tl('live.usage.ago.hour', { n: Math.floor(m / 60) }) : tl('live.usage.ago.day', { n: Math.floor(m / 1440) });   // 「◯分前の値」 until 10-19 (the requester: shorter)
 }
-function renderUsage(now) {
-  const el = document.getElementById('usage');
-  if (!el) return;
-  const u = LIVE.slices.usage, windows = u && typeof u === 'object' && u.windows && typeof u.windows === 'object' ? u.windows : null;
-  el.hidden = SOURCE.mode !== 'live';
-  const stale = windows && Number(u.receivedAt) > 0 && now - u.receivedAt > USAGE_STALE_MS ? usageAgo(now - u.receivedAt) : '';
+/* Two plans (requester 10-26: 「セレクトでどっち表示するか選べるのと週と５時間の各使用量ホバーで両方の利用料出す」): Claude
+   Code's (the statusLine, the usage slice) and Codex's (the app-server daemon's account/rateLimits/updated, usageCodex).
+   The select picks the plan the chips show — kept in this browser (readPref / writePref) — and shows only once Codex
+   has sent a value; a chip's hover names both plans' share of its window. */
+const USAGE_CLI_PREF = 'usageCli';
+const USAGE = { cli: readPref(USAGE_CLI_PREF, 'claude') === 'codex' ? 'codex' : 'claude' };
+function usageWindows(slice) { return slice && typeof slice === 'object' && slice.windows && typeof slice.windows === 'object' ? slice.windows : null; }
+function usageRows(windows, now) {
   const rows = [];
   for (const key of ['fiveHour', 'sevenDay']) {
     const w = windows && windows[key];
@@ -1203,9 +1208,44 @@ function renderUsage(now) {
     const pct = Number(w.pct), over = Number(w.resetsAt) <= now;   // past its reset the share is not this window's any more
     rows.push({ key, pct, over, limit: !over && pct >= 100, left: over ? '' : usageLeft(Number(w.resetsAt) - now) });
   }
-  const sig = JSON.stringify([rows, stale, isDark()]);
+  return rows;
+}
+// one plan's word for one window, for the hover: 「Claude 5時間 23%（あと 1:20）」, or that it has no value
+function usageWord(cli, row) {
+  const name = CLI_NAME[cli];
+  if (!row) return tl('live.usage.hover.none', { cli: name });
+  const v = row.over ? tl('live.usage.reset') : row.limit ? tl('live.usage.limit') : `${Math.floor(row.pct)}%${tl('live.usage.left', { left: row.left })}`;
+  return `${name} ${USAGE_LABEL[row.key]} ${v}`;
+}
+function usagePickBuild() {
+  const pick = document.getElementById('usage-cli');
+  if (!pick || pick.dataset.ready) return pick;
+  pick.dataset.ready = '1';
+  pick.value = USAGE.cli;
+  pick.addEventListener('change', () => {
+    USAGE.cli = pick.value === 'codex' ? 'codex' : 'claude';
+    writePref(USAGE_CLI_PREF, USAGE.cli);
+    renderUsage(vizNow());
+  });
+  return pick;
+}
+function renderUsage(now) {
+  const el = document.getElementById('usage');
+  if (!el) return;
+  const slices = { claude: LIVE.slices.usage, codex: LIVE.slices.usageCodex };
+  const hasCodex = !!usageWindows(slices.codex);
+  const pick = usagePickBuild();
+  if (pick) { pick.hidden = SOURCE.mode !== 'live' || !hasCodex; if (pick.value !== USAGE.cli) pick.value = USAGE.cli; }
+  const cli = hasCodex ? USAGE.cli : 'claude';   // with no Codex value there is nothing to choose: Claude's, as before
+  const u = slices[cli], windows = usageWindows(u);
+  el.hidden = SOURCE.mode !== 'live';
+  const stale = windows && Number(u.receivedAt) > 0 && now - u.receivedAt > USAGE_STALE_MS ? usageAgo(now - u.receivedAt) : '';
+  const rows = usageRows(windows, now);
+  const both = { claude: usageRows(usageWindows(slices.claude), now), codex: usageRows(usageWindows(slices.codex), now) };
+  const sig = JSON.stringify([cli, rows, stale, isDark(), hasCodex ? both : null]);
   if (el.dataset.sig === sig) return;
   el.dataset.sig = sig;
+  el.dataset.cli = cli;
   const span = (cls, text, color) => { const s = document.createElement(cls === 'num' || cls === 'pc' ? 'b' : 'span'); s.className = cls; s.textContent = text; if (color) s.style.color = color; return s; };
   const out = rows.map((r) => {
     const box = span('uw', `${USAGE_LABEL[r.key]} `);
@@ -1215,13 +1255,17 @@ function renderUsage(now) {
     // floored: 99.5 is not 100, and 100 only ever means the limit
     else box.append(span('num', String(Math.floor(r.pct)), usageColor(r.pct)), span('pc', '%', usageColor(r.pct)));
     if (!r.over) box.append(tl('live.usage.left', { left: r.left }));
+    const hover = [];
     if (stale) { box.append(span('stale', ` · ${stale}`));   // not .note: that is the board's sticky-note card (10-19)
-      box.title = tl('live.usage.stale', { ago: stale }); }
+      hover.push(tl(cli === 'codex' ? 'live.usage.stale.codex' : 'live.usage.stale', { ago: stale })); }
+    // the hover: this window in both plans, once Codex has a value
+    if (hasCodex) hover.push(...['claude', 'codex'].map((c) => usageWord(c, both[c].find((x) => x.key === r.key))));
+    if (hover.length) box.title = hover.join('\n');
     return box;
   });
   if (!out.length) {
-    const none = span('uw none', tl('live.usage.none'));
-    none.title = tl('live.usage.none.title');
+    const none = span('uw none', tl(cli === 'codex' ? 'live.usage.none.codex' : 'live.usage.none'));
+    none.title = tl(cli === 'codex' ? 'live.usage.none.codex.title' : 'live.usage.none.title');
     out.push(none);
   }
   el.replaceChildren(...out);
