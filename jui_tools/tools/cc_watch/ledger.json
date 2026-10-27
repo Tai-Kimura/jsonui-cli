@@ -310,7 +310,7 @@
   ],
   "not_relying": {
     "jui_tools/jui_cli/viz/sources/codex_clients.py": "OS open-file owners and Codex terminal process identities; no Claude Code dependency.",
-    "jui_tools/jui_cli/viz/sources/codex_history.py": "Codex rollout response_item records only; no Claude Code dependency.",
+    "jui_tools/jui_cli/viz/sources/codex_history.py": "Codex rollout response_item history and bounded session_meta originator for TUI lifecycle; no Claude Code dependency.",
     "jui_tools/jui_cli/viz/attachments.py": "プロンプトの添付を viz の私用の場所に保存し、消すだけ。CLI の形は読まず、受け手の設定も許可の規則も書かない。受け手の Read が許可を求めること（10-20 の測り 1）は、許可の板にそのまま出るだけで、この file の動作はそれに依らない",
     "jui_tools/jui_cli/viz/bundle.py": "web/js を順に連結するだけ。CLI の形を読まない",
     "jui_tools/jui_cli/viz/i18n.py": "ページの文言の表（同梱の en・ja と利用者のファイル）を config.json の language（任意の言語コード）・strings で選んで重ねるだけ。CLI・フックの形は読まない",
