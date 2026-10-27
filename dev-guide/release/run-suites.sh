@@ -651,8 +651,7 @@ elif ! grep -q "pip install -e '.\[conformance\]'" "$CISHAPE/repo/.github/workfl
     bad "CI shape: ci.yml no longer installs [conformance] — this leg would run arms CI skips"
 elif [ "$CI_RSVG" != "present" ] || [ "$CI_CAIROSVG" != "importable" ]; then
     bad "CI shape: rsvg-convert / cairosvg missing here, and CI has both — the iOS image arms would skip in this leg only"
-elif ! grep -q "apt-get install -y -qq librsvg2-bin" "$CISHAPE/repo/.github/workflows/ci.yml" \
-     || ! grep -q "pip install cairosvg" "$CISHAPE/repo/.github/workflows/ci.yml"; then
+elif ! python3 "$CISHAPE/repo/dev-guide/release/check_ci_image_deps.py" "$CISHAPE/repo/.github/workflows/ci.yml"; then
     bad "CI shape: ci.yml no longer installs librsvg2-bin / cairosvg — the iOS image arms would skip in CI"
 else
     ( cd "$CISHAPE/repo/jui_tools" \
