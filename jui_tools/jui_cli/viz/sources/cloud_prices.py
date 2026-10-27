@@ -7,7 +7,8 @@ answer capped, written as infra-prices.v0 files under <viz home>/cloud-prices wi
 and when. This module is viz's side of it, in weather.py's shape:
   * the setting: ``config.json`` in viz_home, key ``cloudPrices`` = ``{"on": false}`` to turn it off; ``regions``
     (``{"aws": [...], "azure": [...]}``) and ``large`` (``["ec2", "rds"]``) to choose more. Absent: on, the defaults;
-  * once a day the server fetches (in a thread of its own: a slow answer never holds it, nor its stopping); the first
+  * once a day the server fetches (in a thread of its own: a slow answer never holds it, nor its stopping), and the
+    files that failed in it alone an hour later (fetch.retry_due: one stalled answer does not wait its day); the first
     run waits FIRST_DELAY_MS after the server starts, for the load and the hosts' sake (a server started for a moment,
     a quick look, does not download); the e2e build (JUI_VIZ_E2E=1) never fetches. Where viz may connect by default is
     a closed list, the price hosts only, and its gate holds with no delay at all (tests/test_viz_weather.py);
@@ -82,7 +83,7 @@ class CloudPricesBook:
         self.mod = mod or fetch_module()
         self.config_path, self.cache, self.status_path = config_path, cache or cache_dir(), status_path
         self.now = now or (lambda: int(time.time() * 1000))
-        self.runner = runner or (self.mod.run if self.mod else None)
+        self.runner = runner or (self.mod.run_due if self.mod else None)
         self.setting = load_setting(config_path, self.mod) if self.mod else {"on": False, "unavailable": True}
         self.index = self.mod.read_index(self.cache) if self.mod else {"files": {}}
         self.error: str | None = None
@@ -94,7 +95,8 @@ class CloudPricesBook:
         return bool(self.setting.get("on")) and self.mod is not None
 
     def due(self) -> bool:
-        return self.on and self.now() >= self.retry_at and self.mod.due(self.index, self.now())
+        now = self.now()
+        return self.on and now >= self.retry_at and (self.mod.due(self.index, now) or self.mod.retry_due(self.index, now))
 
     def ask(self) -> bool:
         """One run when it is due (call from an executor: it blocks while it fetches). True when it ran."""

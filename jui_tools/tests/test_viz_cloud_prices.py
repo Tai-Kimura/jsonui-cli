@@ -88,6 +88,21 @@ def test_a_run_that_cannot_start_is_the_sources_error_and_waits_an_hour(tmp_path
     assert b.due()
 
 
+
+def test_a_failing_file_makes_the_book_due_an_hour_later_and_the_runner_is_run_due(tmp_path, mod):
+    def partly(setting, cache, at):
+        return {"version": 1, "lastRunAt": at, "lastRunWriter": mod.WRITER,
+                "files": {"a.json": {"fetchedAt": 1, "lastError": "TimeoutError: x"}}}
+    now = {"t": 10 * DAY}
+    b, _ = book(tmp_path, mod, runner=partly, now=lambda: now["t"])
+    assert b.ask()
+    now["t"] += mod.RETRY_FAILED_MS - 1
+    assert not b.due()
+    now["t"] += 1
+    assert b.due()
+    assert C.CloudPricesBook(config_path=tmp_path / "config.json", cache=tmp_path / "c", status_path=tmp_path / "s.json",
+                             mod=mod).runner == mod.run_due
+
 @pytest.mark.viz_ja
 def test_failing_files_degrade_the_source(tmp_path, mod):
     def partly(setting, cache, at):

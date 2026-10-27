@@ -45,6 +45,7 @@ LARGE = ("ec2", "rds")
 SMALL_LEFT_OUT = ("AmazonRDS",)          # the regional spec's offers that are large: fetched only when chosen
 INDEX = "index.json"
 EVERY_MS = 24 * 3_600_000                # once a day
+RETRY_FAILED_MS = 3_600_000              # a file that failed is tried again an hour later, alone
 _REGION = re.compile(r"^[a-z][a-z0-9-]{1,31}$")
 
 
@@ -226,15 +227,28 @@ def merge(old: dict, rel: str, got: dict) -> dict:
 
 
 def run(setting: dict, cache: Path, at_ms: int, get=http_get, lines=http_lines,
-        provider: str | None = None, region: str | None = None) -> dict:
+        provider: str | None = None, region: str | None = None, only_failing: bool = False) -> dict:
     """Fetch every target (or those of one provider / region); write the files and the index. -> the index. at_ms is
-    the caller's (this module reads no clock: document_tools' clock gate, jsonui_doc_cli.reproducible)."""
+    the caller's (this module reads no clock: document_tools' clock gate, jsonui_doc_cli.reproducible). only_failing:
+    the files whose last try failed and nothing else, as a retry (lastRetryAt; the day's run keeps its time)."""
     index = read_index(cache)
+    bad = set(failing(index)) if only_failing else None
     for t in targets(setting, provider, region):
-        index["files"][t["path"]] = merge(index["files"], t["path"], fetch_one(t, cache, at_ms, get, lines))
-    index["lastRunAt"], index["lastRunWriter"] = at_ms, WRITER
+        if bad is None or t["path"] in bad:
+            index["files"][t["path"]] = merge(index["files"], t["path"], fetch_one(t, cache, at_ms, get, lines))
+    if only_failing:
+        index["lastRetryAt"] = at_ms
+    else:
+        index["lastRunAt"], index["lastRunWriter"] = at_ms, WRITER
     _write(cache / INDEX, (json.dumps(index, ensure_ascii=False, indent=1) + "\n").encode("utf-8"))
     return index
+
+
+def run_due(setting: dict, cache: Path, at_ms: int, get=http_get, lines=http_lines) -> dict:
+    """The run that is due: the day's (every file) when due, else the retry of the failing files. viz's runner."""
+    if due(read_index(cache), at_ms):
+        return run(setting, cache, at_ms, get, lines)
+    return run(setting, cache, at_ms, get, lines, only_failing=True)
 
 
 def last_ok(index: dict) -> int | None:
@@ -246,9 +260,22 @@ def last_ok(index: dict) -> int | None:
 def due(index: dict, now_ms: int) -> bool:
     """Once a day: a day after the last run (whatever it got), now when there was none, and now when the last run was
     another version's (an upgrade: its files are not read until fetched again, cache_rows). A run of this version that
-    failed waits its day as before: the bundled prices stand in meanwhile."""
+    failed waits its day as before: the bundled prices stand in meanwhile (its failing files alone: retry_due)."""
     last = index.get("lastRunAt")
     return not isinstance(last, int) or index.get("lastRunWriter") != WRITER or now_ms - last >= EVERY_MS
+
+
+def failing(index: dict) -> list[str]:
+    """The files whose last try failed."""
+    return sorted(k for k, v in index.get("files", {}).items() if isinstance(v, dict) and v.get("lastError"))
+
+
+def retry_due(index: dict, now_ms: int) -> bool:
+    """An hour after this version's last run or retry, when a file failed in it: those files alone (a stall on one
+    answer, 2026-10-26: one file of 73 timed out, and waited its day)."""
+    last = max(x for x in (index.get("lastRunAt"), index.get("lastRetryAt"), 0) if isinstance(x, int))
+    return (index.get("lastRunWriter") == WRITER and isinstance(index.get("lastRunAt"), int) and bool(failing(index))
+            and now_ms - last >= RETRY_FAILED_MS)
 
 
 def summary(index: dict) -> dict:

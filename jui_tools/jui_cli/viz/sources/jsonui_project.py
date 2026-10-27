@@ -213,8 +213,8 @@ def find_configs(root: Path, depth: int = SOURCE_DEPTH) -> list[Path]:
         except OSError:
             return
         for child in children:
-            if child.name in SKIP_DIRS:
-                continue
+            if child.name in SKIP_DIRS or is_worktree_root(child):
+                continue   # a linked worktree inside the room is an app of its own, by its branch (worktree_sources)
             if quiet_fs.is_file(child / CONFIG_NAME):
                 below.append(child / CONFIG_NAME)
             walk(child, level + 1)
@@ -328,7 +328,7 @@ class Source:
     test_file_keys: dict = field(default_factory=dict)   # "screens/login.test.json" -> spec keys
     test_file_paths: dict = field(default_factory=dict)  # the same key -> the file under the room ("tests/user/screens/login.test.json")
     android_app_id: str | None = None                    # test.artifacts.android.appId: ties a saved Android result
-    # A checkout other than the room's (a git worktree a session works in, outside the room): {"branch", "worktree"};
+    # A checkout other than the room's (a git worktree a session works in, outside the room or inside it): {"branch", "worktree"};
     # the room's own app, while one of its worktrees is shown beside it: {"branch"}. None otherwise.
     checkout: dict | None = None
     base: str | None = None   # a worktree's app: the key of the room's app it is a checkout of
@@ -458,6 +458,15 @@ def worktrees(repo: Path) -> list[tuple[Path, str]]:
     return out
 
 
+def is_worktree_root(folder: Path) -> bool:
+    """Whether a folder is a linked worktree's own folder: its .git is a file pointing into <git dir>/worktrees/<name>
+    (a submodule's .git file points into modules/, and is not one)."""
+    if not quiet_fs.is_file(folder / ".git"):
+        return False
+    gd = git_dir(folder)
+    return gd is not None and gd.parent.name == "worktrees"
+
+
 def is_linked(folder: Path) -> bool:
     """Whether a folder is in a linked worktree: its checkout's .git file points into <git dir>/worktrees/<name>."""
     for candidate in (folder, *folder.parents):
@@ -527,7 +536,7 @@ class JsonUIProject:
 
     def worktree_sources(self, cwds) -> list[Source]:
         """The apps of the worktrees a cwd in ``cwds`` is inside: each of the room's apps whose checkout has a linked
-        worktree outside the room holding one of them, as that worktree's own app (its config at the same place in
+        worktree (outside the room, or inside it as <repo>/.claude/worktrees/<name>) holding one of them, as that worktree's own app (its config at the same place in
         the worktree as the app's in the room's checkout)."""
         room = _real(self.root)
         cwds = [_real(Path(c)) for c in cwds]
@@ -540,7 +549,7 @@ class JsonUIProject:
             rel = os.path.relpath(base.root, repo)
             for folder, branch in worktrees(repo):
                 real = _real(folder)
-                if real.is_relative_to(room) or not any(c.is_relative_to(real) for c in cwds):
+                if room.is_relative_to(real) or not any(c.is_relative_to(real) for c in cwds):
                     continue
                 config = folder / rel / CONFIG_NAME if rel != "." else folder / CONFIG_NAME
                 if not quiet_fs.is_file(config):
