@@ -245,11 +245,16 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   許可: `item/commandExecution/requestApproval`・`item/fileChange/requestApproval` は TUI のダイアログと viz の両方に届く（先に答えた方が勝ち、
   もう一方に `serverRequest/resolved`）。カードは PermissionRequest と同じ（`hook_decide` の future）。答えは `accept`／`decline`、今後も許可は
   `acceptWithExecpolicyAmendment`（`proposedExecpolicyAmendment`）か `acceptForSession`（ファイル）。`item/permissions/requestApproval` には答えない。
-  停止は `turn/interrupt`（その場で止まる。`--stop` フックは無い）。書き込むのは許可の答えと、呼び出しダイアログの Codex タブで起動した
+  停止は `turn/interrupt`（その場で止まる。`--stop` フックは無い）。ページからの送信は `POST /api/prompt` から、待機中は `turn/start`、
+  作業中は `turn/steer`（`expectedTurnId` 付き）。daemon の受付を待って成功を返し、モデル・承認方針・sandbox は上書きしない。
+  ほかに書き込むのは許可の答えと、呼び出しダイアログの Codex タブで起動した
   スレッドの名前（`thread/name/set`、最初のプロンプトの「セッション名: …」から、名前の無いスレッドに 1 回）だけ。daemon が無いのは故障ではない
   （帯は出さない。`jui viz doctor` の `codex daemon` 行が起動の仕方を言う）。daemon を使わずに起動した Codex と VS Code 拡張のセッションは
-  見えない（依頼者の判断 10-26）。まだ無いもの: 応答の履歴と送信（rollout の読み取りと `turn/start`）、コスト・上限（`thread/tokenUsage/updated`・
-  `account/rateLimits/updated`）、トークの Codex 間（`CollabAgentToolCall`）。
+  見えない（依頼者の判断 10-26）。応答の履歴は `sources/codex_history.py` が、`thread/resume` の `path` をその daemon の
+  home の `sessions/` 内に限定して読む。`response_item` の user / assistant と tool call / output を既存の履歴の行に変換し、
+  重複する `event_msg` と instructions・reasoning の本文は表示しない。既存の件数・バイト上限と「もっと前を読む」を共用。
+  履歴は要求時だけ読み、slice・snapshot・export に入れない。ローカルモデルの home とサブエージェントの履歴も同じ。
+  まだ無いもの: コスト（`thread/tokenUsage/updated`）、トークの Codex 間（`CollabAgentToolCall`）。
   ページ: `20-core.js` の `cliOf` / `pillCli`。pill・3D の札・セッション一覧の札・カードの番号（`data-cli-name`）・トークの印が
   `--cli-claude` / `--cli-codex` で縁取られる。呼び出しダイアログは Claude Code / Codex のタブ（`callcmd.codex_command`、`POST /api/call-command` の `cli`）。
 - **ローカルのモデル**（`local_models.py`、`codex_homes.py`、`jui viz codex-local`、2026-10-27）: 呼び出しダイアログの Codex タブで、

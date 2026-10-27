@@ -604,7 +604,7 @@ def make_app(ctx: ServerContext) -> web.Application:
             return web.Response(status=exc.status, text=f"{exc}\n")
         except OSError:
             return web.Response(status=404, text="no such attachment\n")
-        refused_by = ctx.world.send_prompt(sid, text, now_ms(), attached)
+        refused_by = await ctx.world.submit_prompt(sid, text, now_ms(), attached)
         if refused_by is not None:
             return web.Response(status=refused_by[0], text=refused_by[1] + "\n")
         if ctx.publish:

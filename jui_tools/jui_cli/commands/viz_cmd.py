@@ -1019,6 +1019,23 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                     codex_links[key] = link
                     tasks.append(asyncio.create_task(link.run()))
 
+                def link_of(sid):
+                    return next((link for link in list(codex_links.values()) if link.can_prompt(sid)), None)
+
+                async def codex_prompt(sid, text):
+                    link = link_of(sid)
+                    return await link.send_prompt(sid, text) if link else (409, "this Codex session is not connected")
+
+                def codex_history(agent_id, end=None, stop=None):
+                    for link in list(codex_links.values()):
+                        got = link.history(agent_id, end=end, stop=stop)
+                        if got is not None:
+                            return got
+                    return None
+
+                world.codex_ready = lambda sid: link_of(sid) is not None
+                world.codex_prompt = codex_prompt
+                world.codex_history = codex_history
                 world.codex_stop = lambda sid: any(link.interrupt(sid) for link in list(codex_links.values()))
                 codex_link_for("", None)
 

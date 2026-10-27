@@ -24,8 +24,6 @@ if str(TOOLS) not in sys.path:
 
 from viz_promo import timeline as T  # noqa: E402
 
-PROMO = Path(os.environ.get("JUI_PROMO_DIR", Path.home() / "resource" / "jsonui-promo"))
-
 
 def all_chapters():
     return [(lang, c) for lang in T.WORDS for c in T.chapters(lang).values()]
@@ -203,9 +201,14 @@ def test_frame_counts():
     assert set(steps) <= {33, 34} and sum(steps) == 3000
 
 
-@pytest.mark.skipif(not (PROMO / "src" / "timeline.json").is_file(), reason="the jsonui-promo project is not on this machine")
-def test_the_promos_timeline_matches_the_script():
-    promo = T.promo_timeline(PROMO)
+def test_the_promos_timeline_matches_the_script(tmp_path):
+    # The capture script's supported timeline is a fixed fixture. A sibling work-in-progress must not change a
+    # unit suite's input. run.py still checks the requested project's actual bounds before capturing any frames.
+    data = json.loads((Path(__file__).parent / "fixtures" / "viz_promo_timeline.json").read_text())
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "timeline.json").write_text(json.dumps(data))
+    promo = T.promo_timeline(tmp_path)
     assert set(promo) == set(T.BOUNDS)
     assert T.check_bounds(promo) == []
     for cid, (s, e) in promo.items():

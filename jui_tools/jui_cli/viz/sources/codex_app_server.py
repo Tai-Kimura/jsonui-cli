@@ -7,9 +7,9 @@ first answer wins, and the other is told ``serverRequest/resolved``. A session s
 Code extension's (its own stdio server), are not seen: the requester left those out (10-26, as the Claude side's VS Code).
 
 The socket: ``$CODEX_HOME/app-server-control/app-server-control.sock`` (default ``~/.codex``), a WebSocket over a Unix
-socket carrying JSON-RPC 2.0 (``initialize`` then ``initialized``). Read only, with two exceptions the page asks for: an
-answer to an approval request this client was sent, and a name for a thread started from the call dialog (callcmd.
-name_in_prompt, once, only a thread with no name). Nothing else is written. viz never starts the daemon.
+socket carrying JSON-RPC 2.0 (``initialize`` then ``initialized``). The page may send or steer a prompt, interrupt a
+turn, answer an approval request this client was sent, and name a thread started from the call dialog
+(callcmd.name_in_prompt, once, only a thread with no name). No configuration is written. viz never starts the daemon.
 
 Two halves:
   * ``Translator`` (pure, tested on its own): app-server notifications -> the Claude Code hook payloads ``World.apply_hook``
@@ -312,6 +312,8 @@ class CodexLink:
         # threads being subscribed: what comes for them before the resume's answer waits here (the daemon sends a
         # thread's events from the moment it is subscribed, the answer can come after them)
         self._held: dict[str, list[tuple]] = {}
+        self.rollouts: dict[str, str] = {}   # daemon-provided paths, retained for ended robots
+        self._sending: set[str] = set()
         self._named: set[str] = set()   # threads this link named from their call prompt (once each)
 
     def _status(self, status: str, error: str | None) -> None:
@@ -343,7 +345,7 @@ class CodexLink:
                 self._ws = None
                 for fut in self._calls.values():
                     if not fut.done():
-                        fut.cancel()
+                        fut.set_exception(ConnectionError("Codex daemon disconnected"))
                 self._calls.clear()
                 self._drop_all()
             await asyncio.sleep(self.retry_sec)
@@ -382,10 +384,18 @@ class CodexLink:
             self._held[tid] = []
             try:
                 res = await self._call("thread/resume", {"threadId": tid, "excludeTurns": True})
+                thread = res.get("thread") if isinstance(res, dict) else None
+                if isinstance(thread, dict) and (thread.get("status") or {}).get("type") == "active":
+                    latest = await self._call("thread/turns/list", {"threadId": tid, "limit": 1, "itemsView": "notLoaded"})
+                    for turn in (latest.get("data") or []) if isinstance(latest, dict) else []:
+                        if isinstance(turn, dict) and turn.get("status") == "inProgress" and _s(turn.get("id")):
+                            self.tr.turns[tid] = turn["id"]
             finally:
                 held = self._held.pop(tid, [])
             thread = res.get("thread") if isinstance(res, dict) else None
             if isinstance(thread, dict):
+                if isinstance(thread.get("path"), str):
+                    self.rollouts[tid] = thread["path"]
                 out += self.tr.thread_seen(thread)
                 if self.tr.root_of(tid) == tid:
                     titles[tid] = self.tr.title_of(thread)
@@ -405,8 +415,8 @@ class CodexLink:
         rid = self._n
         fut = asyncio.get_running_loop().create_future()
         self._calls[rid] = fut
-        await self._ws.send_str(json.dumps({"jsonrpc": "2.0", "id": rid, "method": method, "params": params}))
         try:
+            await self._ws.send_str(json.dumps({"jsonrpc": "2.0", "id": rid, "method": method, "params": params}))
             msg = await asyncio.wait_for(fut, CALL_TIMEOUT_SEC)
         finally:
             self._calls.pop(rid, None)
@@ -466,6 +476,43 @@ class CodexLink:
                 self._maybe_name(p["session_id"], p.get("prompt"))
         if out or titles:
             self.sink.apply(out, titles)
+
+    def can_prompt(self, tid: str) -> bool:
+        return self._ws is not None and not self._ws.closed and self.tr.root_of(tid) == tid
+
+    async def send_prompt(self, tid: str, text: str) -> tuple[int, str] | None:
+        """Wait for the daemon's acceptance. An active turn is steered with its expected id; no settings overridden."""
+        if not self.can_prompt(tid):
+            return 409, "this Codex session is not connected"
+        if tid in self._sending:
+            return 429, "a prompt is already being submitted to this Codex session"
+        self._sending.add(tid)
+        try:
+            turn = self.tr.turns.get(tid)
+            params = {"threadId": tid, "input": [{"type": "text", "text": text, "text_elements": []}]}
+            if turn:
+                params["expectedTurnId"] = turn
+            result = await self._call("turn/steer" if turn else "turn/start", params)
+            if not isinstance(result, dict):
+                return 409, "the Codex daemon refused this prompt; refresh the history before sending again"
+            if not turn:
+                started = result.get("turn")
+                if not isinstance(started, dict) or not _s(started.get("id")):
+                    return 502, "the Codex daemon did not acknowledge a turn"
+            elif not _s(result.get("turnId")):
+                return 502, "the Codex daemon did not acknowledge the steering prompt"
+        except (asyncio.TimeoutError, ConnectionError, OSError, RuntimeError):
+            return 503, "Codex delivery could not be confirmed; check the history before sending again"
+        finally:
+            self._sending.discard(tid)
+        return None
+
+    def history(self, tid: str, end=None, stop=None) -> dict | None:
+        from .codex_history import read
+
+        path = self.rollouts.get(tid)
+        home = self.path.parent.parent if self.path is not None else codex_home()
+        return read(home, path, end=end, stop=stop) if path else None
 
     def interrupt(self, tid: str) -> bool:
         """The page's 停止 for a Codex session: turn/interrupt for the turn running now (Esc in the terminal does the same;

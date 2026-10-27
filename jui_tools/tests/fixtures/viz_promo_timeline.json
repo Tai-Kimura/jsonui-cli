@@ -1,0 +1,15 @@
+{
+  "fps": 30,
+  "chapters": [
+    {"id": "hook", "start": 0, "end": 6, "frame": "browser"},
+    {"id": "1a", "start": 6, "end": 18, "frame": "window"},
+    {"id": "1b", "start": 18, "end": 40, "frame": "window"},
+    {"id": "2", "start": 40, "end": 52, "frame": "browser"},
+    {"id": "3", "start": 52, "end": 62, "frame": "browser"},
+    {"id": "4", "start": 62, "end": 86, "frame": "browser"},
+    {"id": "4m", "start": 86, "end": 120, "frame": "browser"},
+    {"id": "5", "start": 120, "end": 134, "frame": "browser"},
+    {"id": "6", "start": 134, "end": 142, "frame": "browser"},
+    {"id": "features", "start": 142, "end": 148, "frame": "card"}
+  ]
+}

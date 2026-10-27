@@ -1002,7 +1002,7 @@
   "hist.why.sub": "Cannot send to a subagent. Send from the card of {main}'s main session",
   "hist.why.local": "Can send only when this page is opened at http://127.0.0.1:{port}/ (jui viz open)",
   "hist.why.ended": "This session has ended",
-  "hist.why.codex": "A Codex session cannot be sent a prompt from here yet (nor is its history shown yet): type it in the Codex terminal",
+  "hist.why.codex": "This Codex session is not connected to its daemon. Prompts cannot be sent.",
   "hist.why.norelay": "Cannot send: this session is not connected to the relay (the jui-viz channel). ",
   "hist.why.old": "Cannot send: this session's jui-viz plugin is too old (1.2.0 and later can). Update jui-viz with /plugin and restart the session",
   "hist.why.launch": "{why}. Prompts arrive only in a session started in the terminal with {dev} (it asks for a confirmation at each start), or with {channels} with jui-viz in allowedChannelPlugins of the managed settings (no warning). An organization account also needs channelsEnabled",
