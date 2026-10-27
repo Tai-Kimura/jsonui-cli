@@ -118,3 +118,19 @@ function histLowBtn() { return {}; }   // the box's handle (its own row on the b
     got = _node(parts, "(() => { histCardsPaint(); const before = shown; histOff('q:q1'); histOff('d:d2'); return [before, shown]; })()")
     assert got[0][4:6] == [["q1", "q2"], ["d1", "d2"]], "the control: both of each kind before"
     assert got[1][4:6] == [["q2"], ["d1"]], "one × takes off that card only; the other answered card of its kind stays"
+
+
+def test_permissions_start_one_line_and_sent_does_not_remove_the_fold():
+    parts = [_cut('55-history.js', n) for n in ('HIST_FOLD', 'histFoldKeys', 'histFoldState')]
+    got = _node(parts, """(() => {
+      const p = {id:'p1',status:'pending'};
+      const initial = histFoldState('robot',[p],[],[]);
+      p.status='sent'; const sent = histFoldState('robot',[p],[],[]);
+      HIST_FOLD.set('robot',{opened:true});
+      const opened = histFoldState('robot',[p],[],[]);
+      const rebuild = histFoldState('robot',[p],[],[]);
+      histFoldState('robot',[],[],[]);
+      const next = histFoldState('robot',[{id:'p2',status:'pending'}],[],[]);
+      return [initial.folded,sent.folded,sent.n,opened.folded,rebuild.folded,next.folded];
+    })()""")
+    assert got == [True, True, 1, False, False, True]

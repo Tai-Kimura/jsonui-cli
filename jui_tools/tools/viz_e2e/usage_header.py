@@ -126,17 +126,17 @@ async def run_usage(pw, out, failures):
     async def buttons_right(page, tag: str, wrap: bool = False, wide: bool = False) -> None:
         """通知 and パネルを閉じる stay at the header's right edge, on the first line or wrapped to the next, and nothing
         sticks out sideways (requester 10-20, ticket 2026-10-20-jui-viz-header-buttons-right-aligned). Wide is 2400 px,
-        where everything is on one line (checked: with the two usage chips the header already wraps at 1440). With wrap,
+        where the menu controls share their dedicated second row. With wrap,
         the widest width (from 2400 down, 20 px a step) at which the buttons stand on a line of their own below the chips
         (the requester's 09:08 screen) is found first."""
         js = """() => {
           const bar = document.querySelector('.topbar'), b = bar.getBoundingClientRect(), cs = getComputedStyle(bar);
-          const right = b.right - parseFloat(cs.paddingRight), brand = document.querySelector('.brand').getBoundingClientRect();
+          const right = b.right - parseFloat(cs.paddingRight), menu = document.querySelector('.topbar-menu').getBoundingClientRect();
           const box = (id) => { const e = document.getElementById(id); if (!e || e.offsetParent === null) return null;
             const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; };
           const side = box('btn-side'), bell = box('btn-notify');
           const chips = document.querySelector('.chips').getBoundingClientRect(), ctl = document.querySelector('.controls').getBoundingClientRect();
-          return { w: innerWidth, right, side, bell, oneLine: ctl.top < brand.bottom - 0.5, alone: ctl.top >= chips.bottom - 0.5,
+          return { w: innerWidth, right, side, bell, oneLine: ctl.top < menu.top + ctl.height - 0.5, alone: ctl.top >= chips.bottom - 0.5,
                    scrollW: document.documentElement.scrollWidth, innerW: innerWidth };
         }"""
         if wrap:
@@ -154,7 +154,7 @@ async def run_usage(pw, out, failures):
         if wrap:
             check(failures, g["alone"], f"{tag}: the buttons wrapped to a line of their own at {g['w']} px (else this arm proves nothing): {g}")
         elif wide:
-            check(failures, g["oneLine"], f"{tag}: at {g['w']} px the buttons are on the first line: {g}")
+            check(failures, g["oneLine"], f"{tag}: at {g['w']} px the buttons share the menu row: {g}")
         side, bell = g["side"], g["bell"]
         check(failures, side is not None and abs(side["right"] - g["right"]) <= 1,
               f"{tag}: パネルを閉じる ends at the header's right edge ({g['right']}): {side}")

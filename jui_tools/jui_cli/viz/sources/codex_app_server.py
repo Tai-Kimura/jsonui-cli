@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .. import callcmd, i18n, quiet_fs
+from . import codex_clients
 
 POLL_SEC = 3.0
 RETRY_SEC = 5.0
@@ -101,6 +102,8 @@ class Translator:
         role = _s(thread.get("agentRole")) or _s(thread.get("agentNickname"))
         if role:
             t["role"] = role
+        if isinstance(thread.get("source"), str):
+            t["source"] = thread["source"]
         if "name" in thread:
             t["name"] = _s(thread.get("name"))
 
@@ -298,13 +301,16 @@ class CodexLink:
     on_status(status, error) — the server slice's source row ("codex")."""
 
     def __init__(self, sink, on_status: Callable[[str, str | None], None], path: Path | None = None,
-                 poll_sec: float = POLL_SEC, retry_sec: float = RETRY_SEC) -> None:
+                 poll_sec: float = POLL_SEC, retry_sec: float = RETRY_SEC, terminal_state=codex_clients.alive) -> None:
         self.sink = sink
         self.on_status = on_status
         self.path = path
         self.poll_sec = poll_sec
         self.retry_sec = retry_sec
         self.tr = Translator()
+        self.terminal_state = terminal_state
+        self._terminal_alive: bool | None = None
+        self._retired: set[str] = set()
         self._ws = None
         self._n = 0
         self._calls: dict[int, asyncio.Future] = {}
@@ -357,6 +363,7 @@ class CodexLink:
             out += self.tr.thread_gone(tid)
         if out:
             self.sink.apply(out, {})
+        self._retired.clear()
 
     async def _session(self, ws) -> None:
         reader = asyncio.create_task(self._read(ws))
@@ -374,6 +381,8 @@ class CodexLink:
             reader.cancel()
 
     async def _poll(self) -> None:
+        home = self.path.parent.parent if self.path is not None else codex_home()
+        self._terminal_alive = await asyncio.to_thread(self.terminal_state, home)
         got = await self._call("thread/loaded/list", {})
         ids = [t for t in (got.get("data") or []) if isinstance(t, str)] if isinstance(got, dict) else []
         out: list[dict] = []
@@ -407,8 +416,28 @@ class CodexLink:
                     self._dispatch(message)
         for tid in sorted(self.tr.known() - set(ids), key=lambda t: self.tr.root_of(t) == t):
             out += self.tr.thread_gone(tid)
+            self._retired.discard(tid)
         if out or titles:
             self.sink.apply(out, titles)
+        self._retire_terminals()
+
+    def _retire_terminals(self) -> None:
+        if self._terminal_alive is not False:
+            return
+        out = []
+        for tid, thread in self.tr.threads.items():
+            if thread["root"] != tid or thread.get("source") != "cli" or tid in self._retired:
+                continue
+            # Work intentionally left running in the daemon finishes before its robot leaves.
+            if any(self.tr.root_of(t) == tid for t in self.tr.turns):
+                continue
+            self._retired.add(tid)
+            for child, row in self.tr.threads.items():
+                if row["root"] == tid and child != tid:
+                    out.append({**self.tr._base(child), "hook_event_name": "SubagentStop"})
+            out.append({**self.tr._base(tid), "hook_event_name": "SessionEnd", "reason": "Codex terminal exited"})
+        if out:
+            self.sink.apply(out, {})
 
     async def _call(self, method: str, params: dict) -> Any:
         self._n += 1
@@ -468,8 +497,20 @@ class CodexLink:
                 rate_limits(params.get("rateLimits"))
             return
         tid = params.get("threadId") if isinstance(params.get("threadId"), str) else ""
+        root = self.tr.root_of(tid)
+        resumed = []
+        if root in self._retired:
+            item = params.get("item") or {}
+            fresh = method == "turn/started" or (method == "item/started" and item.get("type") == "userMessage")
+            if fresh:
+                self._retired.discard(root)
+                resumed = [{**self.tr._base(root), "hook_event_name": "SessionStart", "source": "codex resumed"}]
+            elif method != "thread/closed":
+                return  # a late completion/name event cannot bring an exited terminal back
         name_changed = method == "thread/name/updated" and self.tr.root_of(tid) == tid
-        out = self.tr.event(method, params)
+        out = resumed + self.tr.event(method, params)
+        if method == "thread/closed":
+            self._retired.discard(tid)
         titles = {tid: self.tr.threads[tid]["name"]} if name_changed and tid in self.tr.threads else {}
         for p in out:
             if p["hook_event_name"] == "UserPromptSubmit" and "agent_id" not in p:
@@ -478,7 +519,7 @@ class CodexLink:
             self.sink.apply(out, titles)
 
     def can_prompt(self, tid: str) -> bool:
-        return self._ws is not None and not self._ws.closed and self.tr.root_of(tid) == tid
+        return self._ws is not None and not self._ws.closed and self.tr.root_of(tid) == tid and tid not in self._retired
 
     async def send_prompt(self, tid: str, text: str) -> tuple[int, str] | None:
         """Wait for the daemon's acceptance. An active turn is steered with its expected id; no settings overridden."""
@@ -551,7 +592,7 @@ class CodexLink:
 
     def _request(self, rid, method: str, params: dict) -> None:
         info = self.tr.approval(method, params)
-        if info is None:
+        if info is None or self.tr.root_of(params.get("threadId")) in self._retired:
             return   # not ours to answer: the terminal does
 
         def reply(decision) -> None:
