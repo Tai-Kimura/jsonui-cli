@@ -726,6 +726,7 @@ const SOURCE = {
   denial() { return Promise.resolve({ ok: false, status: 0, error: 'demo' }); },
   notifyPresence() { return Promise.resolve(); },
   callCommand() { return Promise.resolve({ ok: false, why: tl('demo.perm.not.available.demo.there.no') }); },
+  localModels() { return Promise.resolve({ ok: false }); },
   setWeather() { return Promise.resolve({ ok: false, error: 'demo' }); },   // the demo asks nobody about the weather
   // the server room (ticket 2026-10-20-jui-viz-server-room): shop-app/'s door reads a made-up, generic layout (no real
   // service's values, requester 10-20), after a moment so the keypad's * are seen

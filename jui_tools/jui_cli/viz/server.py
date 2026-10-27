@@ -22,6 +22,7 @@ Routes (design: dev-guide, 05 §3):
   POST /api/data-docs  a JsonUI room's API and DB specifications for its data server, named by the room (the same checks)
   POST /api/stop    停止: ask one session to stop at its next tool boundary, or take it back (prompt_checks)
   POST /api/session/end  退勤: SIGTERM to one terminal session's claude (prompt_checks, then clockout.py's checks)
+  POST /api/local-models  the call dialog's Codex tab: the models LM Studio and Ollama list here (local_models.py; prompt_checks)
 """
 from __future__ import annotations
 
@@ -40,7 +41,7 @@ from typing import Awaitable, Callable
 
 from aiohttp import WSMsgType, web
 
-from . import attachments, callcmd, clockout, i18n, infra_cost, infra_docs, paths, security, spirits
+from . import attachments, callcmd, clockout, codex_homes, i18n, infra_cost, infra_docs, local_models, paths, security, spirits
 from .config import ASK_UNTIL_ANSWERED_SEC, ASK_WAIT_CHOICES, VizConfig, ask_hook_wait_sec, save_setting
 from .state import VizState, now_ms
 
@@ -737,12 +738,27 @@ def make_app(ctx: ServerContext) -> web.Application:
         why = callcmd.check(name, role)
         if why:
             return web.json_response({"ok": False, "why": why}, status=400)
-        if body.get("cli") == "codex":   # the dialog's Codex tab
-            return web.json_response({"ok": True, "command": callcmd.codex_command(root, name, role), "flag": "codex", "root": root},
-                                     headers={"Cache-Control": "no-store"})
+        if body.get("cli") == "codex":   # the dialog's Codex tab, with its model (none: Codex's default)
+            local = body.get("local")
+            why = callcmd.check_local(local)
+            if why:
+                return web.json_response({"ok": False, "why": why}, status=400)
+            home = str(codex_homes.home_of(local["provider"])) if local else None
+            return web.json_response({"ok": True, "command": callcmd.codex_command(root, name, role, local, home), "flag": "codex",
+                                      "root": root}, headers={"Cache-Control": "no-store"})
         flag = callcmd.channels_flag()
         return web.json_response({"ok": True, "command": callcmd.command(root, name, role, flag), "flag": flag, "root": root},
                                  headers={"Cache-Control": "no-store"})
+
+    async def api_local_models(request: web.Request) -> web.Response:
+        """The call dialog's Codex tab: the models LM Studio and Ollama list on this machine (local_models.py), read
+        now, off the loop. The checks of /api/prompt (prompt_checks); the body is ignored ({})."""
+        refused = prompt_checks(request, ctx, CALL_MAX_BODY)
+        if refused is not None:
+            log(f"refused: /api/local-models ({refused.text.strip()})")
+            return refused
+        got = await asyncio.get_running_loop().run_in_executor(None, local_models.listing)
+        return web.json_response({"ok": True, "providers": got}, headers={"Cache-Control": "no-store"})
 
     async def api_notify_presence(request: web.Request) -> web.Response:
         """A page whose question notifications are on says so (2.3.6, the orchestrator's ruling 10-19): {"ask": true} — the page
@@ -1130,6 +1146,7 @@ def make_app(ctx: ServerContext) -> web.Application:
     app.router.add_route("*", "/api/session/end", api_session_end)
     app.router.add_route("*", "/api/stop", api_stop)
     app.router.add_route("*", "/api/call-command", api_call_command)
+    app.router.add_route("*", "/api/local-models", api_local_models)
     app.router.add_route("*", "/api/notify-presence", api_notify_presence)
     app.router.add_route("*", "/api/ask-wait", api_ask_wait)
     app.router.add_post("/channel/hello", channel_hello)

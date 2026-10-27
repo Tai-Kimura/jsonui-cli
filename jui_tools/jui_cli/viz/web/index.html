@@ -304,6 +304,11 @@
       <button type="button" role="tab" class="call-tab cli-claude" id="call-tab-claude" data-call-cli="claude" aria-selected="true">Claude Code</button>
       <button type="button" role="tab" class="call-tab cli-codex" id="call-tab-codex" data-call-cli="codex" aria-selected="false" tabindex="-1">Codex</button>
     </div>
+    <div class="call-model" id="call-model-row" hidden>
+      <label for="call-model">{{tl:page.call.model}}モデル{{/tl}}</label>
+      <select id="call-model"></select>
+      <p class="call-model-note" id="call-model-note"></p>
+    </div>
     <label for="call-name">{{tl:page.call.name}}担当名（必須、1 行）{{/tl}}</label>
     <input type="text" id="call-name" maxlength="64" autocomplete="off" spellcheck="false">
     <label for="call-role">{{tl:page.call.role}}役割の文（任意）{{/tl}}</label>

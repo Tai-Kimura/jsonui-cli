@@ -152,12 +152,12 @@ const SOURCE = {
   /* The call bell (2.3.5, 50-panel.js): the line to paste, made by the server (callcmd.py) from the project's own folder,
      under the checks of /api/prompt. Nothing is run. Resolves { ok, command, flag } or { ok: false, why }. cli: the
      dialog's tab, 'claude' or 'codex' (callcmd.codex_command). */
-  async callCommand(project, name, role, cli = 'claude') {
+  async callCommand(project, name, role, cli = 'claude', local = null) {
     try {
       const res = await fetch('/api/call-command', {
         method: 'POST', cache: 'no-store', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token },
-        body: JSON.stringify({ projectId: project, name, role, cli: cli === 'codex' ? 'codex' : 'claude' }),
+        body: JSON.stringify({ projectId: project, name, role, cli: cli === 'codex' ? 'codex' : 'claude', ...(cli === 'codex' && local ? { local } : {}) }),
       });
       const text = await res.text();
       let body = null;
@@ -165,6 +165,18 @@ const SOURCE = {
       if (res.ok && body && body.ok) return { ok: true, command: body.command, flag: body.flag };
       return { ok: false, why: (body && body.why) || tl('live.make.failed', { status: res.status, text: text.trim() }) };
     } catch (err) { return { ok: false, why: tl('live.offline') }; }
+  },
+  /* The call dialog's Codex tab: the models LM Studio and Ollama list here (POST /api/local-models, local_models.py).
+     Resolves { ok, providers: [{ id, name, port, ok, models }] } or { ok: false }. */
+  async localModels() {
+    try {
+      const res = await fetch('/api/local-models', {
+        method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token }, body: '{}',
+      });
+      const body = res.ok ? await res.json() : null;
+      return body && body.ok && Array.isArray(body.providers) ? { ok: true, providers: body.providers } : { ok: false };
+    } catch (err) { return { ok: false }; }
   },
   /* 2.3.6: question notifications are on (or not) on this page — POST /api/notify-presence, the checks of /api/prompt */
   async notifyPresence(ask) {
@@ -974,6 +986,9 @@ function rebuildRobots(initial) {
       realId: String(a.id || label), sessionId: String(a.sessionId || ''), kind: a.kind === 'sub' ? 'sub' : 'main',
       role: ROLE_OF(a), agent: displayName(a, sess), furnished: true, mainLabel,
       cli: a.cli === 'codex' || (sess && sess.cli === 'codex') ? 'codex' : 'claude',   // which CLI runs it (codex_app_server.py)
+      // the session's model (its SessionStart), and whether a local server runs it (LM Studio / Ollama: codex --oss)
+      llm: a.kind !== 'sub' && sess && typeof sess.model === 'string' && sess.model
+        ? { name: sess.model.slice(0, 80), local: ['lmstudio', 'ollama'].includes(sess.modelProvider) } : null,
       room: sess && sess.projectId ? sess.projectId : (def.room || ''),
       // when it came into its room: desks are drawn in this order, so a reload draws them the same way
       inRoomAt: Math.max(Number(a.startedAt) || 0, Number(sess && sess.roomSince) || 0),

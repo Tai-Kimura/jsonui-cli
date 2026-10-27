@@ -100,6 +100,11 @@ def register_viz_command(subparsers: argparse._SubParsersAction) -> None:
     cp.add_argument("--large", help="fetch: also these large offers this time (ec2,rds)")
     cp.add_argument("--json", action="store_true", help="Machine-readable index")
 
+    cl = sub.add_parser("codex-local", help="Make or list the Codex home of a local model server (LM Studio / Ollama)")
+    cl.add_argument("codex_local_action", nargs="?", choices=["ensure", "list"], default="list")
+    cl.add_argument("provider", nargs="?", choices=["lmstudio", "ollama"], help="ensure: the server's provider")
+    cl.add_argument("--json", action="store_true", help="Machine-readable output")
+
     relay = sub.add_parser("relay", help="Register the permission relay (an MCP channel) with Claude Code")
     relay.add_argument("relay_action", nargs="?", choices=["install", "uninstall", "status"])
     relay.add_argument("--dry-run", dest="dry_run", action="store_true", help="Show the command, run nothing")
@@ -121,10 +126,11 @@ def cmd_viz(args: argparse.Namespace) -> int:
         "strings": _cmd_strings,
         "prices": _cmd_prices,
         "cloud-prices": _cmd_cloud_prices,
+        "codex-local": _cmd_codex_local,
     }
     handler = handlers.get(getattr(args, "viz_cmd", None))
     if handler is None:
-        _err("usage: jui viz {serve,start,status,stop,open,doctor,hooks,statusline,relay,export-demo,strings,prices,cloud-prices}")
+        _err("usage: jui viz {serve,start,status,stop,open,doctor,hooks,statusline,relay,export-demo,strings,prices,cloud-prices,codex-local}")
         return 1
     try:
         # Every command that reads or writes the runtime folder moves the old one first; export-demo uses none.
@@ -1000,9 +1006,30 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                         if value is not None:
                             ctx.state.set_slice("usageCodex", value)
 
-                codex_link = codex_app_server.CodexLink(CodexSink(), lambda st, err: set_source("codex", st, err))
-                world.codex_stop = codex_link.interrupt
-                tasks.append(asyncio.create_task(codex_link.run()))
+                # ~/.codex's daemon, and the daemon of each local model server's home (codex_homes.py) — one link
+                # each; a home made while the server runs is taken up within CODEX_HOMES_EVERY_SEC
+                from ..viz import codex_homes
+
+                codex_links: dict[str, object] = {}
+
+                def codex_link_for(key: str, home) -> None:
+                    name = "codex" if key == "" else f"codex:{key}"
+                    link = codex_app_server.CodexLink(CodexSink(), lambda st, err, name=name: set_source(name, st, err),
+                                                      path=None if home is None else codex_app_server.socket_path(home))
+                    codex_links[key] = link
+                    tasks.append(asyncio.create_task(link.run()))
+
+                world.codex_stop = lambda sid: any(link.interrupt(sid) for link in list(codex_links.values()))
+                codex_link_for("", None)
+
+                async def codex_homes_loop() -> None:
+                    while True:
+                        for provider, home in codex_homes.homes():
+                            if provider not in codex_links:
+                                codex_link_for(provider, home)
+                        await asyncio.sleep(CODEX_HOMES_EVERY_SEC)
+
+                tasks.append(asyncio.create_task(codex_homes_loop()))
             else:
                 set_source("codex", "stopped", None)
 
@@ -1296,6 +1323,40 @@ def _cmd_export_demo(args: argparse.Namespace) -> int:
         return 1
     print(f"jui viz: demo written: {result['out']} ({result['files']} files, {result['bytes'] / 1_000_000:.1f} MB)")
     print("  open index.html from a static server or site (modules do not load from file://)")
+    return 0
+
+
+#: how often serve looks for a local model server's Codex home made since (jui viz codex-local ensure)
+CODEX_HOMES_EVERY_SEC = 5
+
+
+def _cmd_codex_local(args: argparse.Namespace) -> int:
+    """`jui viz codex-local ensure lmstudio`: the Codex home of a local model server (viz/codex_homes.py), made when it
+    is missing — the call dialog's line runs it before starting that home's daemon. `list`: the homes there are."""
+    from ..viz import codex_homes
+
+    if args.codex_local_action == "ensure":
+        if not args.provider:
+            _err("usage: jui viz codex-local ensure {lmstudio,ollama}")
+            return 1
+        try:
+            home, made = codex_homes.ensure(args.provider)
+        except OSError as exc:
+            _err(f"cannot make the Codex home: {exc}")
+            return 2
+        if args.json:
+            print(json.dumps({"provider": args.provider, "home": str(home), "made": made}))
+        else:
+            print(f"{'made' if made else 'already there'}: {home}  (CODEX_HOME={home} codex -m <model>)")
+        return 0
+    rows = [{"provider": p, "home": str(h)} for p, h in codex_homes.homes()]
+    if args.json:
+        print(json.dumps(rows))
+    else:
+        for r in rows:
+            print(f"  {r['provider']}: {r['home']}")
+        if not rows:
+            print("  none (jui viz codex-local ensure lmstudio makes LM Studio's)")
     return 0
 
 
@@ -1870,6 +1931,12 @@ def _doctor_checks() -> list[dict]:
     sock = codex_app_server.socket_path()   # optional: never NG (a Claude Code only machine has no daemon)
     add("codex daemon", True, f"running ({sock}): its Codex sessions are shown" if sock.exists()
         else "not running (optional: codex app-server daemon start shows the Codex sessions)")
+    from ..viz import codex_homes
+
+    for provider, home in codex_homes.homes():   # a local model server's own home (jui viz codex-local ensure)
+        sock = codex_app_server.socket_path(home)
+        add(f"codex daemon ({provider})", True, f"running ({home})" if sock.exists()
+            else f"not running (CODEX_HOME={home} codex app-server daemon start)")
 
     settings = paths.claude_settings()
     try:
