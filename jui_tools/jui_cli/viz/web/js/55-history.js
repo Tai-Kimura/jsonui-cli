@@ -566,9 +566,7 @@ function composeTarget(id) {
   if (DEF[id].kind === 'sub') return { why: tl('hist.why.sub', { main: SESSION_OF[id] }) };
   if (location.hostname !== '127.0.0.1') return { why: tl('hist.why.local', { port: location.port }) };
   if (!sess || sess.status === 'ended') return { why: tl('hist.why.ended') };
-  // a Codex session (codex_app_server.py): the daemon could take a prompt (turn/start), but the prototype does not send
-  // one yet — its history comes from Codex's own rollout files, not read yet either
-  if (sess.cli === 'codex') return { why: tl('hist.why.codex') };
+  if (sess.cli === 'codex') return sess.prompt ? { why: '', name, note: '' } : { why: tl('hist.why.codex') };
   if (!sess.relay) return { why: tl('hist.why.norelay') + RELAY_HOW_TEXT };
   if (!sess.prompt) return { why: tl('hist.why.old') };
   const L = LAUNCH_WHY[sess.launch] || LAUNCH_WHY.unreadable;
@@ -940,13 +938,14 @@ async function composeSend() {
 }
 /* The prompt sent shows in the receiver's transcript as a channel item of jui-viz (sources/history.py: the CLI's own
    record, origin.kind "channel", measured 10-19 on a real receiver started with --channels plugin:jui-viz@jsonui),
-   its text the text sent: 届いた. Our own POST proves only that it was sent; the same words typed by hand do not count. */
+   its text the text sent: 届いた. Codex records accepted page prompts as user messages; match their recent text. */
 function composeArrived(items) {
   const sent = HIST.sent;
   if (!sent || sent.error || sent.arrivedAt || sent.id !== HIST.id || !Array.isArray(items)) return;
   const want = composeNorm(sent.text).slice(0, 120) || 'attached:';   // only files: the server's first line
   const fresh = (x) => !(Number(x.at) < sent.at - 60000);   // an older item with the same words is not this one
-  const ours = (x) => x.kind === 'channel' && /(^|:)jui-viz$/.test(String(x.server || ''));
+  const codex = SESSIONS.some((s) => s.id === SESSION_OF[sent.id] && s.cli === 'codex');
+  const ours = (x) => (codex && x.kind === 'user') || x.kind === 'channel' && /(^|:)jui-viz$/.test(String(x.server || ''));
   if (items.some((x) => ours(x) && fresh(x) && composeNorm(x.text).startsWith(want))) { sent.arrivedAt = Date.now(); composePaint(); }
 }
 

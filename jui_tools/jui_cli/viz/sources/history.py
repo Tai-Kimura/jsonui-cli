@@ -607,7 +607,8 @@ def image_at(fd: int, off, n) -> tuple[int, str | bytes]:
 STOP_ITEMS_MAX = 2_000
 
 
-def read_tail(fd: int, items_max: int = ITEMS_MAX, bytes_max: int = BYTES_MAX, end: int | None = None, stop: int | None = None) -> dict:
+def read_tail(fd: int, items_max: int = ITEMS_MAX, bytes_max: int = BYTES_MAX, end: int | None = None, stop: int | None = None,
+              parse_items: Callable = items_of) -> dict:
     """The last items_max items of the transcript open on fd, oldest first, reading backwards from its end.
 
     Going further back (2.3.12, ticket 2026-10-21-jui-viz-hist-tab-cannot-scroll-back: the requester could not reach a
@@ -662,7 +663,7 @@ def read_tail(fd: int, items_max: int = ITEMS_MAX, bytes_max: int = BYTES_MAX, e
                 bad += 1
                 continue
             records += 1
-            got = items_of(rec, results, start)
+            got = parse_items(rec, results, start)
             # one delivered message is one row, however many records say it (talk_records.delivery_key): its waiting
             # form (a user record) and its working form (a queued_command) share the msg_id, and a copy written again
             # (Remote Control, a resume) keeps its uuid. The first record of it is the one kept, in its place: reading

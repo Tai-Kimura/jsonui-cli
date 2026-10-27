@@ -233,6 +233,9 @@ class World:
         self.sessions: dict[str, dict] = {}
         self.agents: dict[str, dict] = {}
         self._codex_ids: set[str] = set()   # the session and robot ids that are Codex threads (apply_codex)
+        self.codex_prompt = None   # async (sid, text) -> refusal or None
+        self.codex_ready = None   # sid -> connected root thread
+        self.codex_history = None   # (agent id, end, stop) -> history rows
         self.codex_stop = None   # session id -> bool: the Codex link's interrupt (viz_cmd sets it), the page's 停止
         # Robot bookkeeping the page does not need: open tool_use_ids, timers.
         self._open: dict[str, list[str]] = {}
@@ -1407,6 +1410,28 @@ class World:
         self._argv[proc] = argv
         return argv
 
+    async def submit_prompt(self, sid: str, text: str, at: int, attached: list[dict] | None = None) -> tuple[int, str] | None:
+        """The HTTP prompt path: Claude's channel queue or an acknowledged Codex daemon request."""
+        session = self.sessions.get(sid)
+        if not session or session.get("cli") != "codex":
+            return self.send_prompt(sid, text, at, attached)
+        refused = self.prompt_refusal(sid)
+        if refused is not None:
+            return refused
+        lines = [attachment_line(a) for a in attached or []]
+        full = "\n".join([text.rstrip(), *lines]).strip() if lines else text
+        refused = await self.codex_prompt(sid, full)
+        if refused is None:
+            self._prompt_event(sid, text, at, lines)
+        return refused
+
+    def _prompt_event(self, sid: str, text: str, at: int, lines: list) -> None:
+        head = " ".join(text.split()) or i18n.tl("ev.attachments", n=len(lines))
+        head = head if len(head) <= PROMPT_HEAD else head[: PROMPT_HEAD - 1] + "…"
+        extra = i18n.tl("ev.attachments.paren", n=len(lines)) if lines and text.strip() else ""
+        self.state.add_event({"at": at, "sessionId": sid, "agentId": sid, "kind": "PromptSent", "cat": "perm",
+                              "text": i18n.tl("ev.prompt.sent", label=self.sessions[sid]['label'], head=head, extra=extra)})
+
     def send_prompt(self, sid: str, text: str, at: int, attached: list[dict] | None = None) -> tuple[int, str] | None:
         """A prompt typed in the page for this session (POST /api/prompt, after its checks): queued for that session's
         channel only, and the event log gets when, to whom and the first PROMPT_HEAD characters — never the whole
@@ -1416,18 +1441,15 @@ class World:
         refused = self.prompt_refusal(sid)
         if refused is not None:
             return refused
-        session = self.sessions[sid]
+        if self.sessions[sid].get("cli") == "codex":
+            return 409, "Codex prompts must be submitted through the asynchronous prompt endpoint"
         channel = self.perms.prompt_channel(sid)
         if len(channel.inbox) >= PROMPTS_QUEUED_MAX:
             return 429, "earlier prompts have not been taken yet"
         lines = [attachment_line(a) for a in attached or []]
         full = "\n".join([text.rstrip(), *lines]).strip() if lines else text
         channel.inbox.append({"text": full, "at": at})
-        head = " ".join(text.split()) or i18n.tl("ev.attachments", n=len(lines))
-        head = head if len(head) <= PROMPT_HEAD else head[: PROMPT_HEAD - 1] + "…"
-        extra = i18n.tl("ev.attachments.paren", n=len(lines)) if lines and text.strip() else ""
-        self.state.add_event({"at": at, "sessionId": sid, "agentId": sid, "kind": "PromptSent", "cat": "perm",
-                              "text": i18n.tl("ev.prompt.sent", label=session['label'], head=head, extra=extra)})
+        self._prompt_event(sid, text, at, lines)
         return None
 
     def prompt_refusal(self, sid: str) -> tuple[int, str] | None:
@@ -1435,6 +1457,10 @@ class World:
         session = self.sessions.get(sid)
         if session is None or session["status"] == "ended":
             return 404, "no such session"
+        if session.get("cli") == "codex":
+            if self.codex_prompt is None or self.codex_ready is None or not self.codex_ready(sid):
+                return 409, "this Codex session is not connected"
+            return None
         if sid not in self.perms.relay_sessions():
             return 409, "this session has no relay (relay: false)"
         channel = self.perms.prompt_channel(sid)
@@ -2114,7 +2140,11 @@ class World:
         """The last turns of one robot's transcript, read now (never kept in a slice), or None. end / stop: further back
         (sources/history.read_tail)."""
         agent = self.agents.get(agent_id)
-        if agent is None or self.history_reader is None:
+        if agent is None:
+            return None
+        if agent.get("cli") == "codex":
+            return self.codex_history(agent_id, end=end, stop=stop) if self.codex_history is not None else None
+        if self.history_reader is None:
             return None
         sid = agent["sessionId"]
         cwd, given = self._paths.get(sid, (None, None))
@@ -2419,6 +2449,12 @@ class World:
             self.state.set_slice("projects", sorted(projects, key=lambda p: p["order"]))
         relay, prompt = self.perms.relay_sessions(), self.perms.prompt_sessions()
         for sid, session in self.sessions.items():
+            if session.get("cli") == "codex":
+                ready = self.codex_ready is not None and self.codex_ready(sid) and session["status"] != "ended"
+                if session.get("prompt") != ready:
+                    session["prompt"] = ready
+                    self._dirty.add("sessions")
+                continue
             how = self.launch_of(sid) if sid in prompt else None
             if session["relay"] != (sid in relay) or session.get("prompt") != (sid in prompt) or session.get("launch") != how:
                 session["relay"] = sid in relay

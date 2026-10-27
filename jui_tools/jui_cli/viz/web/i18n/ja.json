@@ -991,7 +991,7 @@
   "hist.why.sub": "サブエージェントには送れない。{main} のメインセッションのカードから送る",
   "hist.why.local": "このページは http://127.0.0.1:{port}/ で開いたときだけ送れる（jui viz open）",
   "hist.why.ended": "このセッションは終わっている",
-  "hist.why.codex": "Codex のセッションには、まだここから送れません（応答の履歴も Codex の分はまだ出ません）。ターミナルの Codex に打ってください",
+  "hist.why.codex": "Codex daemon に接続していないため、ここから送信できません。",
   "hist.why.norelay": "このセッションは中継（jui-viz の channel）につながっていないので送れない。",
   "hist.why.old": "このセッションの jui-viz プラグインが古いので送れない（1.2.0 から送れる）。/plugin で jui-viz を更新して、セッションを起動し直す",
   "hist.why.launch": "{why}。届くのは、ターミナルで {dev}（起動のたびに確認が出る）か、managed settings の allowedChannelPlugins に jui-viz を載せて {channels}（警告なし）と起動したセッションだけ。組織のアカウントは channelsEnabled も要る",
