@@ -916,7 +916,7 @@ class World:
                 session["title"] = _head(payload["session_title"], 120)
             self._status(session, "idle", at)
             self._clear_open(agent["id"])
-            self._set(agent, at, "idle", i18n.tl("status.idle"))
+            self._set(agent, at, "idle", i18n.tl("status.idle"), leftAt=None)
             text = i18n.tl("ev.clock_in", source=payload.get('source') or '').strip()
         elif kind == "SessionEnd":
             self._end(session, agent, at)

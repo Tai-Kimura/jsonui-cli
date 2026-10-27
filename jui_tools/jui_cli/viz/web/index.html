@@ -19,7 +19,12 @@
 <body>
 <div class="app">
   <header class="topbar">
-    <h1 class="brand"><span class="cloth">JsonUI</span>{{tl:page.brand}}エージェントビュー{{/tl}}</h1>
+    <div class="topbar-title">
+      <h1 class="brand"><span class="cloth">JsonUI</span>{{tl:page.brand}}エージェントビュー{{/tl}}</h1>
+      <select class="usage-cli" id="usage-cli" hidden aria-label="{{tl:page.usage.cli}}どの CLI の上限を出すか{{/tl}}"><option value="claude">Claude</option><option value="codex">Codex</option></select>
+      <span class="usage" id="usage" hidden></span>
+    </div>
+    <div class="topbar-menu">
     <button type="button" class="scope-btn scope-top" id="scope-top" data-scope-btn aria-haspopup="dialog" aria-expanded="false"></button>
     <div class="chips">
       <span class="chip demo">{{tl:page.chip.demo}}デモ（実データではない）{{/tl}}</span>
@@ -27,8 +32,6 @@
       <span class="chip" id="chip-robots">{{tl:page.chip.robots}}ロボット 10{{/tl}}</span>
       <span class="chip" data-hook-chip title="{{tl:page.chip.hook}}フックの受け口{{/tl}}">127.0.0.1:7788</span>
       <span class="chip" id="chip-clock">14:20:24</span>
-      <select class="usage-cli" id="usage-cli" hidden aria-label="{{tl:page.usage.cli}}どの CLI の上限を出すか{{/tl}}"><option value="claude">Claude</option><option value="codex">Codex</option></select>
-      <span class="usage" id="usage" hidden></span>
       <button type="button" class="chip perm-chip" id="chip-perm" hidden aria-haspopup="dialog">{{tl:page.chip.perm}}許可待ち 0{{/tl}}</button>
       <button type="button" class="chip perm-chip" id="chip-ask" hidden aria-controls="questions-sec">{{tl:page.chip.ask}}質問 0{{/tl}}</button>
       <button type="button" class="chip" id="chip-input" hidden title="{{tl:page.chip.input.title}}返事を待っているセッション（押すとそのセッションのトークを開く）{{/tl}}">{{tl:page.chip.input}}… 入力待ち 0{{/tl}}</button>
@@ -42,6 +45,7 @@
       <button type="button" class="dev-btn" id="btn-devices" hidden aria-haspopup="dialog" aria-expanded="false" aria-controls="dev-pane">{{tl:page.devices}}デバイス{{/tl}}</button>
       <button type="button" id="btn-notify" hidden aria-haspopup="dialog" aria-expanded="false" aria-controls="notify-pop">{{tl:page.notify}}通知{{/tl}}</button>
       <button type="button" id="btn-side" aria-controls="side" aria-expanded="true">{{tl:page.side.close}}パネルを閉じる{{/tl}}</button>
+    </div>
     </div>
   </header>
   <div class="main">

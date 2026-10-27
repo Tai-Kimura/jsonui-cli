@@ -242,6 +242,10 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   mcp__…・Stop・SubagentStart / Stop・SessionEnd）に置き換え、`apply_hook` にそのまま渡す（テストの見分け・シュレッダー・ファイルの印が
   そのまま効く）。親スレッド（`parentThreadId`）のある子はサブエージェント。セッションとロボットに `cli: "codex"`（Claude Code のには無い）。
   ラベルは id の末尾から（UUIDv7 の先頭は作成時刻で、どれも `01a17…` になる）。
+  ターミナル終了の検知は `sources/codex_clients.py`。その home の `logs_2.sqlite` を開いているプロセスを
+  `lsof` と `ps` で照合し、daemon や `codex exec` を除いた TUI がいなくなったと確認できたら、idle の CLI ロボットを退勤させる。
+  別の TUI が同じ home に残る場合は、どのスレッドの持ち主かは推定しない。取得失敗は不明として在席を保つ。
+  daemon の loaded/list に残っていても復帰させず、そのスレッドの新しい turn/userMessage が来た時だけ復帰させる。
   許可: `item/commandExecution/requestApproval`・`item/fileChange/requestApproval` は TUI のダイアログと viz の両方に届く（先に答えた方が勝ち、
   もう一方に `serverRequest/resolved`）。カードは PermissionRequest と同じ（`hook_decide` の future）。答えは `accept`／`decline`、今後も許可は
   `acceptWithExecpolicyAmendment`（`proposedExecpolicyAmendment`）か `acceptForSession`（ファイル）。`item/permissions/requestApproval` には答えない。
@@ -254,6 +258,7 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   home の `sessions/` 内に限定して読む。`response_item` の user / assistant と tool call / output を既存の履歴の行に変換し、
   重複する `event_msg` と instructions・reasoning の本文は表示しない。既存の件数・バイト上限と「もっと前を読む」を共用。
   履歴は要求時だけ読み、slice・snapshot・export に入れない。ローカルモデルの home とサブエージェントの履歴も同じ。
+  履歴タブの許可カードは初期状態で1行。pending→sent でも折り畳みを維持し、クリックして開いた選択はその待機が終わるまで保つ。
   まだ無いもの: コスト（`thread/tokenUsage/updated`）、トークの Codex 間（`CollabAgentToolCall`）。
   ページ: `20-core.js` の `cliOf` / `pillCli`。pill・3D の札・セッション一覧の札・カードの番号（`data-cli-name`）・トークの印が
   `--cli-claude` / `--cli-codex` で縁取られる。呼び出しダイアログは Claude Code / Codex のタブ（`callcmd.codex_command`、`POST /api/call-command` の `cli`）。
