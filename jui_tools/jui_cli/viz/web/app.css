@@ -978,6 +978,9 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .rb-badge.cli-codex { border-color: var(--cli-codex); border-radius: 6px; background: var(--cli-codex-card); color: var(--cli-codex-ink); font: 700 19px/1 var(--font-mono); transform: rotate(2deg); }
 .rb-name { margin: 0; font: 400 clamp(15px, 4vw, 17px)/1.3 var(--font-display); overflow-wrap: anywhere; }
 .rb-sub { margin: 2px 0 0; color: var(--ink-soft); font: 500 11.5px/1.5 var(--font-body); }
+/* the session's model (30-source-live.js llm), and the mark of a local one (LM Studio / Ollama, codex --oss) */
+.rb-model { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0 0; color: var(--ink-soft); font: 500 11px/1.5 var(--font-mono); overflow-wrap: anywhere; }
+.rb-local { padding: 0 5px; border: 1.5px solid var(--ok); border-radius: 4px; color: var(--ok); font: 700 9.5px/1.5 var(--font-mono); }
 .rb-body { display: grid; align-content: start; gap: 16px; min-height: 0; overflow-y: auto; padding: 12px 14px 20px; }
 .rb-body[hidden] { display: none; }
 .rb-tabs { display: flex; gap: 4px; padding: 6px 14px 0; border-bottom: 1px solid var(--line); }
@@ -1359,6 +1362,11 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 .call-tab[aria-selected="true"] { color: var(--ink); }
 .call-tab.cli-claude[aria-selected="true"] { border-bottom-color: var(--cli-claude); }
 .call-tab.cli-codex[aria-selected="true"] { border-bottom-color: var(--cli-codex); }
+/* the Codex tab's model (requester 10-27: 「モデル自由に選べるようにしたい」): Codex's default, or a local server's */
+.call-model { display: grid; gap: 4px; }
+.call-model[hidden] { display: none; }
+.call-card select { width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: 13px/1.45 var(--font-mono); }
+.call-model-note { margin: 0; color: var(--ink-soft); font: 12px/1.45 var(--font-body); }
 .call-actions { display: flex; gap: 8px; margin-top: 4px; }
 .call-copy:not(:disabled) { border-color: var(--info); }
 .rs-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--ink); font: 700 13px/1 var(--font-mono); }

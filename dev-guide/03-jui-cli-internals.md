@@ -252,6 +252,14 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   `account/rateLimits/updated`）、トークの Codex 間（`CollabAgentToolCall`）。
   ページ: `20-core.js` の `cliOf` / `pillCli`。pill・3D の札・セッション一覧の札・カードの番号（`data-cli-name`）・トークの印が
   `--cli-claude` / `--cli-codex` で縁取られる。呼び出しダイアログは Claude Code / Codex のタブ（`callcmd.codex_command`、`POST /api/call-command` の `cli`）。
+- **ローカルのモデル**（`local_models.py`、`codex_homes.py`、`jui viz codex-local`、2026-10-27）: 呼び出しダイアログの Codex タブで、
+  LM Studio（127.0.0.1:1234）と Ollama（127.0.0.1:11434）の `GET /v1/models` から選べる（ダイアログを開いたときだけ `POST /api/local-models`）。
+  `codex --oss` は使わない: ローカルの提供元を起動時に指定した codex（`--oss`、`-c model_provider=…`、プロファイル）は daemon に載らず、viz から見えない
+  （Codex 0.164.0 で確認）。既定の提供元がそれになっている CODEX_HOME なら載り、`-m <model>` だけならそのまま載る。そこで提供元ごとに
+  `~/.codex-local/<provider>/`（config.toml に `model_provider` と、`~/.codex/config.toml` の `[features]`・`[mcp_servers.*]` の写し。
+  無いときだけ作り、あるものは書き換えない）を作り、その daemon で起動する。serve は `~/.codex` に加えて各 home の daemon にもつなぐ
+  （source 名 `codex:<provider>`、5 秒ごとに新しい home を探す）。ソケットのパスが長いと Codex は `/tmp/codex-daemon-<uid>/<hash>` へのリンクに
+  するので、つなぐ先はリンクの先。セッションは `modelProvider`（lmstudio / ollama）を持ち、カードにモデル名と「ローカル」の札を出す。
 - **テスト**: `tests/test_viz_*.py`（pytest。サーバーは `aiohttp.test_utils` を `asyncio.run` の中で、
   CLI は一時の HOME とサブプロセスで）。ブラウザの e2e は pytest の外の `tools/viz_e2e/run.py`（Playwright）。
 

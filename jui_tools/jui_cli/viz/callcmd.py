@@ -27,7 +27,7 @@ import json
 import os
 import re
 
-from . import i18n
+from . import i18n, local_models
 
 PLUGIN = "jui-viz@jsonui"
 MANAGED_SETTINGS = "/Library/Application Support/ClaudeCode/managed-settings.json"
@@ -122,12 +122,32 @@ def command(root: str, name: str, role: str, flag: str) -> str:
 CODEX_DAEMON_START = "codex app-server daemon start >/dev/null"
 
 
-def codex_command(root: str, name: str, role: str) -> str:
-    """The Codex line to paste. root: the project's absolute folder."""
-    why = check(name, role)
+def check_local(local) -> str | None:
+    """Why the Codex tab's model choice cannot make a command (the page's language), or None. local: None (Codex's own
+    default model) or {"provider": "lmstudio" | "ollama", "model": "<id>"} (local_models.py)."""
+    if local is None:
+        return None
+    if (not isinstance(local, dict) or local.get("provider") not in local_models.PROVIDER_IDS
+            or not local_models.model_ok(local.get("model"))):
+        return i18n.tl("srv.call.model.bad")
+    return None
+
+
+def codex_command(root: str, name: str, role: str, local: dict | None = None, home: str | None = None) -> str:
+    """The Codex line to paste. root: the project's absolute folder. local: a model of a local server (check_local):
+    then the line makes that server's Codex home when missing (``jui viz codex-local ensure``), starts the home's
+    own daemon and runs codex there with ``--model=<id>`` (one word with "=": an id beginning with "-" stays the
+    option's value). Not ``--oss``: a codex started with a local provider does not attach to the daemon, and viz
+    would not see it (codex_homes.py). home: that home's folder (codex_homes.home_of)."""
+    why = check(name, role) or check_local(local)
     if why:
         raise ValueError(why)
-    return f"cd {sh_quote(root)} && {CODEX_DAEMON_START} && codex {sh_quote(prompt_of(name, role))}"
+    prompt = sh_quote(prompt_of(name, role))
+    if not local:
+        return f"cd {sh_quote(root)} && {CODEX_DAEMON_START} && codex {prompt}"
+    env = f"CODEX_HOME={sh_quote(home or '')}"
+    return (f"cd {sh_quote(root)} && jui viz codex-local ensure {sh_quote(local['provider'])} >/dev/null"
+            f" && {env} {CODEX_DAEMON_START} && {env} codex {sh_quote('--model=' + local['model'])} {prompt}")
 
 
 def name_in_prompt(text: str) -> str | None:

@@ -45,8 +45,10 @@ def codex_home() -> Path:
     return Path(home) if os.path.isabs(home) else Path.home() / ".codex"
 
 
-def socket_path() -> Path:
-    return codex_home() / "app-server-control" / "app-server-control.sock"
+def socket_path(home: Path | None = None) -> Path:
+    """A Codex home's daemon socket (default: $CODEX_HOME, else ~/.codex). When its full path is too long for a Unix
+    socket, Codex makes it a link to /tmp/codex-daemon-<uid>/<hash> (measured 10-27): connect() takes the link's target."""
+    return (home or codex_home()) / "app-server-control" / "app-server-control.sock"
 
 
 def _s(value: Any) -> str | None:
@@ -86,6 +88,8 @@ class Translator:
             out = {**self._base(tid), "hook_event_name": "SessionStart", "source": "codex"}
             if _s(thread.get("model")):
                 out["model"] = thread["model"]
+            if _s(thread.get("modelProvider")):   # lmstudio / ollama for a session started with --oss (local_models.py)
+                out["model_provider"] = thread["modelProvider"]
             return [out]
         return [{**self._base(tid), "hook_event_name": "SubagentStart"}]
 
@@ -327,7 +331,9 @@ class CodexLink:
                 await asyncio.sleep(self.retry_sec)
                 continue
             try:
-                async with aiohttp.ClientSession(connector=aiohttp.UnixConnector(path=str(path))) as http:
+                # the link's target: a Unix socket's name has a length limit the home's own path may pass
+                target = os.path.realpath(path)
+                async with aiohttp.ClientSession(connector=aiohttp.UnixConnector(path=target)) as http:
                     async with http.ws_connect("http://localhost/", max_msg_size=0, autoping=True) as ws:
                         self._ws = ws
                         await self._session(ws)

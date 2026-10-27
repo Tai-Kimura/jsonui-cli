@@ -1637,6 +1637,11 @@ class World:
             self._codex_ids.update(i for i in (payload.get("session_id"), payload.get("agent_id")) if isinstance(i, str))
             self.apply_hook(payload, at)
             sid = payload.get("session_id")
+            provider = _s(payload.get("model_provider"))
+            session = self.sessions.get(sid) if isinstance(sid, str) else None
+            if provider and session is not None and session.get("modelProvider") != provider:
+                session["modelProvider"] = _head(provider, 40)   # the page marks lmstudio / ollama as a local model
+                self._dirty.add("sessions")
             for ident in (sid, payload.get("agent_id")):
                 for book, dirty in ((self.sessions, "sessions"), (self.agents, "agents")):
                     row = book.get(ident) if ident else None
