@@ -254,3 +254,32 @@ def test_no_false_sent_event_when_daemon_rejects_and_no_duplicate_submit():
         release.set()
         assert await task is None
     asyncio.run(run())
+
+
+def test_codex_arrival_uses_a_recent_user_row_of_the_selected_session():
+    import shutil
+    import subprocess
+    from jui_cli.viz.server import web_root
+
+    node = shutil.which("node")
+    assert node, "node is needed to check the page's arrival predicate"
+    src = (web_root() / "js" / "55-history.js").read_text()
+    norm = src[src.index("const composeNorm"):src.index("\n", src.index("const composeNorm"))]
+    start = src.index("function composeArrived(")
+    arrived = src[start:src.index("\n}\n", start) + 3]
+    script = norm + "\n" + arrived + """
+const HIST = { id: 'robot', sent: null };
+const SESSION_OF = {robot: 'codex-thread'};
+const SESSIONS = [{id: 'codex-thread', cli: 'codex'}];
+let painted = 0; const composePaint = () => { painted++; };
+function run(row, id='robot') {
+  HIST.sent = {id, text: 'page prompt', at: 100000};
+  composeArrived([row]); return !!HIST.sent.arrivedAt;
+}
+const row = {kind: 'user', text: 'page prompt', at: 100500};
+process.stdout.write(JSON.stringify([run(row), run({...row, kind: 'assistant'}),
+  run({...row, at: 1000}), run(row, 'other-robot'), painted]));
+"""
+    out = subprocess.run([node, "-"], input=script, capture_output=True, text=True, timeout=30)
+    assert out.returncode == 0, out.stderr
+    assert json.loads(out.stdout) == [True, False, False, False, 1]

@@ -293,6 +293,7 @@ def test_a_prompt_of_files_only_is_marked_arrived_by_the_servers_line():
 let painted = 0; const composePaint = () => {{ painted += 1; }};
 const run = (items) => {{ HIST.sent = {{ id: 's1', text: '', at: 100000 }}; composeArrived(items); return !!HIST.sent.arrivedAt; }};
 const HIST = {{ id: 's1', sent: null }};
+const SESSIONS = []; const SESSION_OF = {{}};
 const mine = {{ kind: 'channel', server: 'plugin:jui-viz:jui-viz', text: {json.dumps(line)}, at: 100500 }};
 process.stdout.write(JSON.stringify([run([mine]), run([{{ ...mine, server: 'other' }}]), run([{{ ...mine, at: 1000 }}]), painted]));"""
     out = subprocess.run([node, "-"], input=script, capture_output=True, text=True, timeout=30)
