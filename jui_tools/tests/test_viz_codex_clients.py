@@ -103,9 +103,10 @@ def test_idle_and_stop_do_not_retire_a_live_tui_and_unknown_or_exec_sources_are_
             link._retire_terminals()
             assert world.sessions[ROOT]['status'] == 'idle'
         link._terminal_alive = False
-        link.tr.threads[ROOT]['source'] = 'exec'
-        link._retire_terminals()
-        assert world.sessions[ROOT]['status'] == 'idle'
+        for source in ['exec', 'vscode', None]:
+            link.tr.threads[ROOT]['source'] = source
+            link._retire_terminals()
+            assert world.sessions[ROOT]['status'] == 'idle'
         link.tr.threads[ROOT]['source'] = 'cli'
         link.tr.turns[ROOT] = 'running'
         link._retire_terminals()
@@ -140,3 +141,46 @@ def test_real_open_file_owner_disappears_when_its_process_exits(tmp_path):
             if child.poll() is None:
                 child.terminate()
                 child.wait(timeout=5)
+
+
+def test_daemon_vscode_source_with_verified_tui_originator_retires(tmp_path):
+    import json
+    async def run():
+        sessions = tmp_path / 'sessions'
+        sessions.mkdir()
+        rollout = sessions / 'rollout.jsonl'
+        rollout.write_text(json.dumps({'type': 'session_meta', 'payload': {
+            'id': ROOT, 'source': 'vscode', 'originator': 'codex-tui'}}) + '\n')
+        link, world = make_link([False])
+        link.path = tmp_path / 'app-server-control' / 'app-server-control.sock'
+        async def call(method, params):
+            if method == 'thread/loaded/list':
+                return {'data': [ROOT]}
+            return {'thread': {'id': ROOT, 'source': 'vscode', 'path': str(rollout)}}
+        link._call = call
+        await link._poll()
+        assert link.tr.threads[ROOT]['originator'] == 'codex-tui'
+        assert world.sessions[ROOT]['status'] == 'ended'
+        assert world.agents[ROOT]['leftAt']
+    asyncio.run(run())
+
+
+def test_originator_header_is_bounded_scoped_and_identity_checked(tmp_path):
+    import json
+    from jui_cli.viz.sources.codex_history import originator
+    sessions = tmp_path / 'sessions'
+    sessions.mkdir()
+    path = sessions / 'rollout.jsonl'
+    good = json.dumps({'type': 'session_meta', 'payload': {'id': ROOT, 'originator': 'codex-tui'}})
+    path.write_text(good + '\nprivate later data')
+    assert originator(tmp_path, str(path), ROOT) == 'codex-tui'
+    assert originator(tmp_path, str(path), CHILD) is None
+    outside = tmp_path / 'outside.jsonl'
+    outside.write_text(good)
+    assert originator(tmp_path, str(outside), ROOT) is None
+    path.write_text('x' * (1024 * 1024 + 1))
+    assert originator(tmp_path, str(path), ROOT) is None
+    path.write_text('invalid')
+    assert originator(tmp_path, str(path), ROOT) is None
+    path.unlink()
+    assert originator(tmp_path, str(path), ROOT) is None

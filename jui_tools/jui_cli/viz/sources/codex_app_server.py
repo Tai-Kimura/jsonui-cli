@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .. import callcmd, i18n, quiet_fs
-from . import codex_clients
+from . import codex_clients, codex_history
 
 POLL_SEC = 3.0
 RETRY_SEC = 5.0
@@ -104,6 +104,8 @@ class Translator:
             t["role"] = role
         if isinstance(thread.get("source"), str):
             t["source"] = thread["source"]
+        if isinstance(thread.get("originator"), str):
+            t["originator"] = thread["originator"]
         if "name" in thread:
             t["name"] = _s(thread.get("name"))
 
@@ -405,6 +407,7 @@ class CodexLink:
             if isinstance(thread, dict):
                 if isinstance(thread.get("path"), str):
                     self.rollouts[tid] = thread["path"]
+                    thread["originator"] = await asyncio.to_thread(codex_history.originator, home, thread["path"], tid)
                 out += self.tr.thread_seen(thread)
                 if self.tr.root_of(tid) == tid:
                     titles[tid] = self.tr.title_of(thread)
@@ -426,7 +429,8 @@ class CodexLink:
             return
         out = []
         for tid, thread in self.tr.threads.items():
-            if thread["root"] != tid or thread.get("source") != "cli" or tid in self._retired:
+            terminal = thread.get("source") == "cli" or thread.get("originator") == "codex-tui"
+            if thread["root"] != tid or not terminal or tid in self._retired:
                 continue
             # Work intentionally left running in the daemon finishes before its robot leaves.
             if any(self.tr.root_of(t) == tid for t in self.tr.turns):

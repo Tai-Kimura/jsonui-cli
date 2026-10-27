@@ -292,3 +292,5 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   無視していたので、`git add jui_tools` がこれを拾った（2026-10-18、push 前に枝を作り直した）。今は
   `/jui_tools/build/` も無視している。
 
+
+Codex 0.164.0 の daemon は TUI 由来でも `source=vscode` を返す場合がある。退勤判定は source=cli に加え、その home の sessions 配下の rollout 先頭 session_meta（最大1MiB、thread id一致）の `originator=codex-tui` も確認する。IDE由来・確認不能のセッションをターミナル終了だけで退勤させない。
