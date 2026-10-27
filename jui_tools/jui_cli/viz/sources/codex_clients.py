@@ -12,6 +12,8 @@ import re
 import subprocess
 from pathlib import Path
 
+from .. import quiet_fs
+
 
 def processes() -> dict[int, str] | None:
     try:
@@ -42,7 +44,7 @@ def owners(path: Path) -> set[int] | None:
 def alive(home: Path, snapshot=processes, opened=owners) -> bool | None:
     path = home / 'logs_2.sqlite'
     try:
-        if not path.is_file():
+        if not quiet_fs.is_file(path):
             return None
         pids = opened(path)
         procs = snapshot() if pids is not None else None
