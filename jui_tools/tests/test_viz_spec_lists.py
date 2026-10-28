@@ -257,6 +257,24 @@ def test_an_edit_to_a_shared_texts_file_another_spec_names_reads_that_spec_again
     assert sheet_for(project, sid)["metadata"]["description"] == {"markdown": "書き直した共通の説明"}
 
 
+def test_the_watcher_detects_a_spec_created_after_it_started(tmp_path):
+    import time
+    project = JsonUIProject(make_project(tmp_path), 'p')
+    seen = []
+    observer = jsonui_project.watch(project, seen.append)
+    assert observer is not None
+    path = tmp_path / 'docs/screens/json/new.spec.json'
+    try:
+        path.write_text('{}')
+        deadline = time.monotonic() + 5
+        while str(path) not in seen and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert str(path) in seen
+    finally:
+        observer.stop()
+        observer.join(timeout=2)
+
+
 def test_the_watcher_passes_a_texts_file_on(tmp_path, monkeypatch):
     project = JsonUIProject(make_project(tmp_path), "p")
     handlers = []
@@ -271,7 +289,9 @@ def test_the_watcher_passes_a_texts_file_on(tmp_path, monkeypatch):
             pass
 
     import watchdog.observers
+    import watchdog.observers.polling
     monkeypatch.setattr(watchdog.observers, "Observer", FakeObserver)
+    monkeypatch.setattr(watchdog.observers.polling, 'PollingObserver', FakeObserver)
     seen = []
     jsonui_project.watch(project, seen.append)
 

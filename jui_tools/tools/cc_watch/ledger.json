@@ -94,7 +94,8 @@
         "jui_tools/jui_cli/viz/web/js/50-panel.js",
         "jui_tools/jui_cli/viz/web/js/55-history.js",
         "jui_tools/jui_cli/viz/callcmd.py",
-        "jui_tools/tools/viz_promo/capture.py"
+        "jui_tools/tools/viz_promo/capture.py",
+        "jui_tools/jui_cli/viz/messaging.py"
       ]
     },
     {
@@ -231,7 +232,8 @@
         "jui_tools/tools/cc_watch/marks.py",
         "jui_tools/tools/cc_watch/probes.py",
         "jui_tools/tools/cc_watch/watch.py",
-        "jui_tools/tools/cc_watch/red_ticket_hook.sh"
+        "jui_tools/tools/cc_watch/red_ticket_hook.sh",
+        "jui_tools/jui_cli/viz/message_client.py"
       ]
     },
     {

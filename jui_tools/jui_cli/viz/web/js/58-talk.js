@@ -5,7 +5,7 @@
    The rulings (TALK_CONTRACT.md): read only — no box, no button and no request that sends; no browser notification (the
    badge and the order of the list are the news); a talk whose peer ended goes when the server removes it.
 
-   The wire is talk_contract.json (version 2): the page asks talk.open / talk.get / talk.seen / talk.close and hears
+   The wire is talk_contract.json (version 3): the page asks talk.open / talk.get / talk.seen / talk.close and hears
    talk.list / talk.messages / talk.update / talk.badges. Every request is built by talkFrame, which checks it against the
    contract's rules first and refuses (null, nothing sent) what would not conform; tests/test_viz_talk_ui_frames.py runs
    the block below under node and validates what it builds with talk_contract.validate, and pins these rules to the JSON.
@@ -329,7 +329,7 @@ function talkGo(label, opener) {
   TALK.on = false; TALK.conv = null; TALK.note = '';
   selectRobot(label, opener);
 }
-const TALK_STATE = { read: tl('talk.state.read'), delivered: tl('talk.state.delivered'), sent: tl('talk.state.sent'), undelivered: tl('talk.state.undelivered') };
+const TALK_STATE = { read: tl('talk.state.read'), delivered: tl('talk.state.delivered'), sent: tl('talk.state.sent'), undelivered: tl('talk.state.undelivered'), unknown: tl('talk.state.unknown') };
 function talkMsgSig(m) { return JSON.stringify([m.id, m.state, m.readAt, m.deliveredAt, m.text, m.cut, m.merged, m.dir]); }
 function talkMsgNode(m) {
   const n = hNode('div', `talk-msg talk-${m.dir === 'out' ? 'out' : 'in'}`);
@@ -346,7 +346,7 @@ function talkMsgNode(m) {
   if (m.merged) bubble.appendChild(hNode('p', 'talk-note', tl('talk.merged')));
   const meta = hNode('p', 'talk-meta');
   meta.appendChild(hNode('time', 'talk-at', talkTime(m.at)));
-  if (m.dir === 'out') {
+  if (m.dir === 'out' || m.state === 'unknown') {
     const st = hNode('span', `talk-state talk-state-${m.state}`, m.state === 'read' && Number.isFinite(m.readAt) ? tl('talk.state.read.at', { at: talkTime(m.readAt) }) : TALK_STATE[m.state] || '');
     st.dataset.tkState = m.state;
     if (m.state === 'undelivered') st.title = tl('talk.state.undelivered.why');

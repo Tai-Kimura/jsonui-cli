@@ -5,7 +5,7 @@
 const TALK_DEMO_BY_LANGUAGE = {
  "en": {
   "about": "The talk view's demo data (frames as talk_contract.json says), for the demo page only. Times are ms around base; the page moves them by its own clock (now - base). script: frames that arrive t seconds into the demo.",
-  "contractVersion": 2,
+  "contractVersion": 3,
   "base": 1792300000000,
   "badges": {
    "type": "talk.badges",
@@ -758,7 +758,7 @@ const TALK_DEMO_BY_LANGUAGE = {
  },
  "ja": {
   "about": "The talk view's demo data (frames as talk_contract.json says), for the demo page only. Times are ms around base; the page moves them by its own clock (now - base). script: frames that arrive t seconds into the demo.",
-  "contractVersion": 2,
+  "contractVersion": 3,
   "base": 1792300000000,
   "badges": {
    "type": "talk.badges",

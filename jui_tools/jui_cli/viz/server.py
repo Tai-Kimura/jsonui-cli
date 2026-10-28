@@ -242,6 +242,8 @@ async def _send_all(ctx: "ServerContext", message: dict) -> None:
 
 
 def make_app(ctx: ServerContext) -> web.Application:
+    from . import messaging
+    message_router = None
     page = _page_html(ctx) or ""
     hashes = _importmap_hashes(page)
     from .loop_watch import RequestNotes
@@ -580,6 +582,28 @@ def make_app(ctx: ServerContext) -> web.Application:
         if ctx.publish:
             ctx.publish()
         return web.json_response({"ok": True})
+
+    async def api_messages(request: web.Request) -> web.Response:
+        nonlocal message_router
+        refused = prompt_checks(request, ctx, messaging.BODY_MAX)
+        if refused is not None:
+            return refused
+        body = await _capped_json(request, messaging.BODY_MAX)
+        if isinstance(body, web.Response):
+            return body
+        if ctx.world is None or ctx.talk is None:
+            return web.Response(status=503, text='session messaging is unavailable\n')
+        if message_router is None:
+            message_router = messaging.Router(ctx.world, ctx.talk)
+        if request.path.endswith('/peers'):
+            return web.json_response({'sessions': message_router.peers()})
+        try:
+            result = await message_router.send(body)
+        except messaging.Refused as exc:
+            return web.Response(status=exc.status, text=str(exc) + '\n')
+        if ctx.publish:
+            ctx.publish()
+        return web.json_response(result)
 
     async def api_prompt(request: web.Request) -> web.Response:
         """A prompt typed in the page's 応答の履歴 tab, for one session (requester's ruling, 10-19: "別端末からは送れなくて
@@ -1129,6 +1153,8 @@ def make_app(ctx: ServerContext) -> web.Application:
 
     # Before the static catch-all: every method reaches the handler, which answers 405 to all but POST.
     app.router.add_route("*", "/api/prompt", api_prompt)
+    app.router.add_route('*', '/api/messages/send', api_messages)
+    app.router.add_route('*', '/api/messages/peers', api_messages)
     app.router.add_route("*", "/api/attach", api_attach)
     app.router.add_route("*", "/api/attach-remove", api_attach_remove)
     app.router.add_route("*", "/api/denial", api_denial)

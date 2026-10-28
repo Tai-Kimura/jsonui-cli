@@ -37,12 +37,23 @@ from ..viz import paths
 from pathlib import Path
 
 
+def _cmd_message(args) -> int:
+    from ..viz.message_client import command
+    return command(args)
+
+
 def register_viz_command(subparsers: argparse._SubParsersAction) -> None:
     parser = subparsers.add_parser(
         "viz",
         help="Show the Claude Code sessions on this machine in the browser",
     )
     sub = parser.add_subparsers(dest="viz_cmd")
+    sub.add_parser('peers', help='List live Claude and Codex sessions for local agent messaging (JSON)')
+    message = sub.add_parser('message', help='Send a message to a local Claude or Codex session')
+    message.add_argument('--to', dest='recipient', required=True, help='Exact session id or unique name')
+    message.add_argument('--from', dest='sender', help='Sender session id (default: current agent session)')
+    message.add_argument('--text', required=True, help='Message text')
+    message.add_argument('--id', dest='message_id', help='Stable id for a retry of this same message')
 
     serve = sub.add_parser("serve", help="Start the viz server in the foreground")
     serve.add_argument("--port", type=int, help="Port on 127.0.0.1 (default 7788)")
@@ -113,6 +124,8 @@ def register_viz_command(subparsers: argparse._SubParsersAction) -> None:
 
 def cmd_viz(args: argparse.Namespace) -> int:
     handlers = {
+        'peers': _cmd_message,
+        'message': _cmd_message,
         "serve": _cmd_serve,
         "start": _cmd_start,
         "status": _cmd_status,
@@ -958,14 +971,14 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
 
             tasks.append(asyncio.create_task(run_replay()))
         else:
-            for data in session_files.scan(paths.claude_sessions_dir()):
-                world.apply_session_file(data, now_ms())
-            world.publish()
-
             def on_session_file(data: dict) -> None:
                 loop.call_soon_threadsafe(lambda: (world.apply_session_file(data, now_ms()), world.publish()))
 
             observer = session_files.watch(paths.claude_sessions_dir(), on_session_file)
+            # Subscribe before scanning: a session created between scan and subscription must not be lost.
+            for data in session_files.scan(paths.claude_sessions_dir()):
+                world.apply_session_file(data, now_ms())
+            world.publish()
             set_source("sessionFiles", "running" if observer else "stopped",
                        None if observer else i18n.tl("srv.sessions.none"))
             if agents_poll:

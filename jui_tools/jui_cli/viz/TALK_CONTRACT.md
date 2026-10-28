@@ -6,7 +6,7 @@
 
 ## 決まっていること（依頼者の確定、10-20「質問3つは全部それでいいよ」）
 1. サブエージェントとの SendMessage も入れる（親 → 子の `to: <agentId>`、子 → 親の `to: "main"`）。Agent の起動の prompt と最後の返事は入れない（SendMessage ではない）。
-2. トークの画面から送らない。見るだけ。送る口（入力欄・送信ボタン・POST）は作らない。
+2. トークの画面は見るだけで、入力欄・送信ボタンは置かない。2026-10-28の依頼により、異なるプロバイダー間の送信は共通CLI `jui viz message` と専用の認証付きPOSTから行い、同じトークに表示する。
 3. ブラウザの通知は出さない。新着は一覧の未読のバッジと行の並び替えだけ。
 4. 相手（または自分）のセッションが死んだら、1 時間（`graceSecDefault` = 3600、config の `talkGraceSec`）待ってからそのトークを消す。待つ間に同じセッションが戻れば消さない。消した後に戻ったら transcript から作り直す。
 5. 詳細のヘッダーに相手の名前（と札）。押すと相手のロボットに切り替わる（`peer.agentId` が null でないときだけ押せる）。1 行に入らなければ末尾を「…」で省略し、全文はホバーの浮き札（57-fulltext.js）で見せる。
@@ -20,6 +20,7 @@
 ## 安定した id
 - `conversation.id`（`t-…`）、`message.id`、`peer.key`、`owner`/`agentId`。
 - `message.id` の作り方（この順で最初に取れたもの）:
+  - `m-jui-<request id>`: 共通CLIのプロバイダー間メッセージ。両側に同じ1件を出す。`sent` は受信先のチャネル/daemonが受け付けた状態で、モデルの既読を意味しない。
   - `m-<msg_id>`: CLI の msg_id（送り手の tool_result の `toolUseResult.msg_id` ＝ 受け手の `origin.msg_id`）。
   - `u-<tool_use id>`: msg_id の無い送り（届かなかった通、子との通）。
   - `r-<受け手の sid>:<記録の uuid>`: 受け手側でしか見えない通（送り手がこの機械にいない）。
@@ -31,7 +32,7 @@
 | `at` | 送った時刻（送り手の tool_use の timestamp、ms）。送り手が見えない通は受け手の最初の記録の時刻 |
 | `deliveredAt` | 届いた（受け手の enqueue の時刻。見えなければ、送りの結果が成功（msg_id あり）の時刻か、読んだ記録の時刻）。無ければ null |
 | `readAt` | 受け手が読んだ（受け手の isMeta / queued_command の記録）。LINE の「既読」はこれ。`dir: "out"` の通に出す |
-| `state` | `sent`（送った、結果待ち）・`delivered`・`read`・`undelivered`（「No agent named … is reachable」や失敗。印を付けて見せる。他の着信には付けない） |
+| `state` | `sent`（送った、結果待ち）・`delivered`・`read`・`unknown`（通信断などで到達を確認できない。到達/未到達を断定せず、同じIDで自動再送しない）・`undelivered`（「No agent named … is reachable」や失敗。印を付けて見せる。他の着信には付けない） |
 | `text` / `cut` | 本文（受け手の `origin.body`、無ければ送り手の `input.message`）。`textMax` 字で切り、切ったら `cut: true`。Markdown は履歴と同じく escape して描く。長い本文は折りたたみ、本文のクリックでも開閉 |
 | `summary` | 送り手の `input.summary`（無ければ null） |
 | `seen` | どちら側の記録から見えたか: `both` / `sender` / `receiver` |
