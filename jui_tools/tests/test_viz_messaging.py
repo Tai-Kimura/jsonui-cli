@@ -317,3 +317,21 @@ def test_browser_shows_cross_provider_messages_on_both_robot_cards(tmp_path):
             await client.close()
             hub.close()
     asyncio.run(run())
+
+
+def test_hub_keeps_codex_alive_without_resurrecting_an_absent_claude_session(tmp_path):
+    import time
+    async def run():
+        world, hub, router, delivered = setup(tmp_path)
+        try:
+            await router.send({'id': 'live-state-id', 'sender': A, 'recipient': B, 'text': 'hello'})
+            # World can retain a Claude robot after its session file disappeared. Its file remains authoritative.
+            hub.tick(int(time.time() * 1000) + 10)
+            await asyncio.wrap_future(hub._job)
+            a = await hub.run(lambda: hub._ensure().conversation(conv_id(A, B), A, int(time.time() * 1000)))
+            b = await hub.run(lambda: hub._ensure().conversation(conv_id(A, B), B, int(time.time() * 1000)))
+            assert a['peer']['alive'] is True
+            assert b['peer']['alive'] is False
+        finally:
+            hub.close()
+    asyncio.run(run())

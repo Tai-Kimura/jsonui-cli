@@ -918,7 +918,8 @@ class TalkHub:
                 queued = self._queue(got["ops"], got["badges"])
         if now - self._last >= self.STEP_EVERY_MS or not self.caught_up:
             self._session_rows = [{'sessionId': sid, 'name': s.get('title') or sid}
-                                  for sid, s in list(self.sessions().items()) if s.get('status') != 'ended']
+                                  for sid, s in list(self.sessions().items())
+                                  if s.get('cli') == 'codex' and s.get('status') != 'ended']
             self._last = now
             self._job = self.pool.submit(self._step, now)
         return queued

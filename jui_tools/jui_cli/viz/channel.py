@@ -13,8 +13,9 @@ Rules:
   * Permission verdicts only for request_ids it received and that are still
     open (forgotten after 10 minutes).
   * ``notifications/claude/channel`` (text into the session's context) only
-    for a prompt the viz server handed to THIS channel on its poll, with the
-    text exactly as typed. Until 1.2.0 this channel never sent it, for that
+    for text the viz server handed to THIS channel on its poll. The page's prompts stay exactly as typed;
+    provider-neutral peer messages (requester 10-28) carry an explicit agent-origin header and reply address.
+    Until 1.2.0 this channel never sent it, for that
     very reason: text in the context. The requester changed that rule (10-19:
     "プロンプトをロボットの会話の履歴から打てないと不便だから打てるようにしよう"),
     on the condition that only the page itself can send ("別端末からは送れなくて
