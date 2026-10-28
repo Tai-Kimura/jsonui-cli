@@ -259,7 +259,7 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   重複する `event_msg` と instructions・reasoning の本文は表示しない。既存の件数・バイト上限と「もっと前を読む」を共用。
   履歴は要求時だけ読み、slice・snapshot・export に入れない。ローカルモデルの home とサブエージェントの履歴も同じ。
   履歴タブの許可カードは初期状態で1行。pending→sent でも折り畳みを維持し、クリックして開いた選択はその待機が終わるまで保つ。
-  まだ無いもの: コスト（`thread/tokenUsage/updated`）、トークの Codex 間（`CollabAgentToolCall`）。
+  共通CLIによるセッション間メッセージは下記。まだ無いもの: コスト（`thread/tokenUsage/updated`）、Codexのネイティブな `CollabAgentToolCall` 記録の取り込み。
   ページ: `20-core.js` の `cliOf` / `pillCli`。pill・3D の札・セッション一覧の札・カードの番号（`data-cli-name`）・トークの印が
   `--cli-claude` / `--cli-codex` で縁取られる。呼び出しダイアログは Claude Code / Codex のタブ（`callcmd.codex_command`、`POST /api/call-command` の `cli`）。
 - **ローカルのモデル**（`local_models.py`、`codex_homes.py`、`jui viz codex-local`、2026-10-27）: 呼び出しダイアログの Codex タブで、
@@ -294,3 +294,17 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
 
 
 Codex 0.164.0 の daemon は TUI 由来でも `source=vscode` を返す場合がある。退勤判定は source=cli に加え、その home の sessions 配下の rollout 先頭 session_meta（最大1MiB、thread id一致）の `originator=codex-tui` も確認する。IDE由来・確認不能のセッションをターミナル終了だけで退勤させない。
+
+- **セッション間メッセージ**（2026-10-28、`messaging.py` / `message_client.py`）: `jui viz peers` で送信先一覧、
+  `jui viz message --to <id> --text <本文>` で Claude↔Codex・Codexの異なるhome/モデル間に送る。
+  `--from` を省略すると CODEX_THREAD_ID / CLAUDE_SESSION_ID、またはClaude親プロセスのsessionファイルから送信元を得る。
+  `/api/messages/peers` と `/api/messages/send` は loopback / Host / Origin / 起動ごとのtoken / JSON / 128KB上限を検査。
+  生きているセッションの正確なidか一意な名前だけを受け、本文は最大20,000文字。
+  受信先に `World.submit_prompt` で届け、Claudeのprompt channelか、そのCodex homeのdaemon（待機はturn/start、実行中はturn/steer）へ送る。
+  本文にはpeerからの連絡であること、送信者id・名前・CLI、返信コマンドを添える。ユーザー本人の指示とは区別する。
+  TalkIndexのrelays表はインデックスではなく本文と送信idの正本。外部送信前にidを永続予約し、同じid・同じ内容の再送は以前の結果を返す。
+  中断して受付を確定できなかったidは再送せず409。自動再試行しない。両側のトークに同じ `m-jui-<id>` を出し、失敗はundelivered。
+  sentは輸送経路での受付を意味し、モデルの既読とは言わない。期限切れ/件数上限で本文を消す際は正本側も消し、インデックス再構築で復活させない。
+  重複防止用のid・ハッシュ・結果は保持。CodexもWorldの生存一覧をTalkHubに渡し、Claudeのsessionファイルがないために誤って期限切れにしない。
+
+  macOSのsessionファイル監視はFSEventsが作成通知を落とす環境でも動くよう、watchdogのPollingObserverで1秒ごとに差分を検出する。ASCII数字名のjsonだけを開き、keyは引き続き開かない。監視を登録してから初期スキャンし、登録との隙間もなくす。

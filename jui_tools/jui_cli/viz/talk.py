@@ -30,7 +30,9 @@ The rules (the research at the end of the plan, measured 10-20 on 1,192 transcri
     conversation first indexed while catching up starts as all read, so the first start does not badge the past.
 
 Where it is kept: ``<viz state home>/talk.db`` (SQLite, 0600, its folder 0700): an index of the transcripts, never the
-source. Deleting it loses only the read marks. No path, body or name leaves this module for a log.
+source for native SendMessage. The relays table additionally owns provider-neutral messages and their retry ids;
+it survives transcript-index rebuilds. Deleting talk.db also deletes those messages. No path, body or name leaves
+this module for a log.
 The page's side of it (frames and requests) is talk_contract.json; ``TalkHub`` is the server's half.
 """
 from __future__ import annotations
@@ -161,6 +163,7 @@ CREATE TABLE IF NOT EXISTS files(path TEXT PRIMARY KEY, sid TEXT NOT NULL, agent
 CREATE TABLE IF NOT EXISTS names(kind TEXT NOT NULL, value TEXT NOT NULL, sid TEXT NOT NULL, PRIMARY KEY(kind, value));
 CREATE TABLE IF NOT EXISTS gone(sid TEXT PRIMARY KEY, at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS removed(sid TEXT PRIMARY KEY, at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS relays(id TEXT PRIMARY KEY, hash TEXT NOT NULL, result TEXT, sender TEXT, receiver TEXT, record TEXT);
 """
 
 
@@ -182,6 +185,8 @@ def open_db(path: Path) -> sqlite3.Connection:
         got = None
     if got is None or got[0] != str(SCHEMA):
         for (name,) in db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall():
+            if name == 'relays':
+                continue                         # relay messages have no external transcript to rebuild from
             db.execute(f'DROP TABLE IF EXISTS "{name}"')
         db.executescript(_DDL)
         db.execute("INSERT OR REPLACE INTO meta VALUES('schema', ?)", (str(SCHEMA),))
@@ -211,9 +216,16 @@ class TalkIndex:
         self._changed_convs: set[str] = set()
         self._removed: list[tuple[str, str, str, str]] = []   # (conv, a, b, dead sid)
         self._seen_alive: set[str] = set()           # sessions seen alive by this run (their end is "now")
+        for mid, encoded in self.db.execute('SELECT id,record FROM relays WHERE record IS NOT NULL').fetchall():
+            if not self._exists('m-jui-' + mid):
+                row = json.loads(encoded)
+                for member in (row['sender'], row['receiver']):
+                    self._session_part(member['id'], member['name'])
+                self._insert('m-jui-' + mid, row['sender']['id'], row['receiver']['id'], row['at'], row['text'], row['at'],
+                             state='sent' if row['result']['ok'] else 'undelivered', seen_s=1)
 
     # ------------------------------------------------------------------ one step
-    def step(self, now: int) -> dict:
+    def step(self, now: int, extra: list[dict] | None = None) -> dict:
         """Read the registry and what the transcripts added; apply it; mark and remove the dead. Returns
         {"ops": {owner: [op, ...]}, "badges": {owner: n}, "caughtUp": bool}."""
         self._changed_msgs, self._changed_convs, self._removed = set(), set(), []
@@ -221,7 +233,7 @@ class TalkIndex:
             rows = self.read_registry()
         except OSError:
             rows = []
-        self.reg = Registry(rows)
+        self.reg = Registry([*rows, *(extra or [])])
         self.reg.history = self._history
         self._names()
         self._deaths(now)
@@ -318,6 +330,7 @@ class TalkIndex:
         for table, col in (("held", "sid"), ("recv_seen", "sid"), ("sends", "sid"), ("arrivals", "sid")):
             self.db.execute(f"DELETE FROM {table} WHERE {col}=?", (sid,))
         self.db.execute("DELETE FROM parts WHERE sid=?", (sid,))
+        self.db.execute('UPDATE relays SET record=NULL WHERE sender=? OR receiver=?', (sid, sid))
         # externals nobody talks to any more
         self.db.execute("DELETE FROM parts WHERE kind='external' AND key NOT IN (SELECT a FROM convs UNION SELECT b FROM convs)")
         self.db.execute("DELETE FROM gone WHERE sid=?", (sid,))
@@ -501,6 +514,8 @@ class TalkIndex:
     def _prune(self, cid: str) -> None:
         n = self.db.execute("SELECT COUNT(*) FROM messages WHERE conv=?", (cid,)).fetchone()[0]
         if n > KEPT:
+            self.db.execute("UPDATE relays SET record=NULL WHERE 'm-jui-' || id IN "
+                            "(SELECT id FROM messages WHERE conv=? ORDER BY at,id LIMIT ?)", (cid, n - KEPT))
             self.db.execute("DELETE FROM messages WHERE id IN (SELECT id FROM messages WHERE conv=? ORDER BY at, id LIMIT ?)",
                             (cid, n - KEPT))
 
@@ -813,6 +828,37 @@ class TalkIndex:
     def close(self) -> None:
         self.db.close()
 
+    def reserve_relay(self, mid: str, digest: str) -> tuple[bool, dict | None]:
+        """Persist before transport. An interrupted send is never blindly repeated after restart."""
+        row = self.db.execute("SELECT hash,result FROM relays WHERE id=?", (mid,)).fetchone()
+        if row:
+            if row[0] != digest:
+                raise ValueError('message id already used for different content')
+            return False, json.loads(row[1]) if row[1] else None
+        self.db.execute("INSERT INTO relays(id,hash) VALUES(?,?)", (mid, digest))
+        return True, None
+
+    def record_relay(self, mid: str, sender: dict, receiver: dict, text: str, now: int, result: dict) -> dict:
+        self._changed_msgs, self._changed_convs, self._removed = set(), set(), []
+        was_live, self._live = self._live, True  # a send made now is new, even while transcript backfill runs
+        self.db.execute('BEGIN')
+        try:
+            for row in (sender, receiver):
+                self._session_part(row['id'], row['name'])
+                self.db.execute('DELETE FROM gone WHERE sid=?', (row['id'],))
+            record = {'sender': sender, 'receiver': receiver, 'text': text, 'at': now, 'result': result}
+            self.db.execute('UPDATE relays SET result=?,sender=?,receiver=?,record=? WHERE id=?',
+                            (json.dumps(result), sender['id'], receiver['id'], json.dumps(record), mid))
+            self._insert('m-jui-' + mid, sender['id'], receiver['id'], now, text, now,
+                         state='sent' if result['ok'] else 'undelivered', seen_s=1)
+            self.db.execute('COMMIT')
+        except Exception:
+            self.db.execute('ROLLBACK')
+            raise
+        finally:
+            self._live = was_live
+        return {'ops': self._ops(now), 'badges': self.badges()}
+
 
 # ====================================================================== the server's half: on the event loop
 class TalkHub:
@@ -837,6 +883,7 @@ class TalkHub:
         self.caught_up = False
         self.error: str | None = None
         self.closed = False
+        self._session_rows: list[dict] = []
 
     async def run(self, fn, *args):
         return await asyncio.get_running_loop().run_in_executor(self.pool, fn, *args)
@@ -847,7 +894,7 @@ class TalkHub:
         return self.index
 
     def _step(self, now: int) -> dict:
-        return self._ensure().step(now)
+        return self._ensure().step(now, self._session_rows)
 
     def tick(self, now: int) -> bool:
         """On the event loop, never blocking: take a finished step's result; start the next one when due (every
@@ -870,6 +917,8 @@ class TalkHub:
                 self.caught_up = got["caughtUp"]
                 queued = self._queue(got["ops"], got["badges"])
         if now - self._last >= self.STEP_EVERY_MS or not self.caught_up:
+            self._session_rows = [{'sessionId': sid, 'name': s.get('title') or sid}
+                                  for sid, s in list(self.sessions().items()) if s.get('status') != 'ended']
             self._last = now
             self._job = self.pool.submit(self._step, now)
         return queued

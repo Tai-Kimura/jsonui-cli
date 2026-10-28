@@ -41,6 +41,19 @@ Without plugins, `jui viz hooks install` writes the same hooks into
 To answer permission prompts from the page, start a session with
 `claude --dangerously-load-development-channels plugin:jui-viz@jsonui`.
 
+Local sessions can exchange messages across Claude Code, Codex and Codex local-model providers:
+
+```bash
+jui viz peers
+jui viz message --to <session-id> --text 'Please check the API change.'
+```
+
+The sender is detected from the current Codex thread or Claude parent process; use `--from <session-id>`
+when running outside an agent. Exact session IDs avoid ambiguous names. Both robots' **Talk** views show
+the exchange. A Claude recipient needs the channel above; a Codex recipient needs its daemon connection.
+`sent` means its transport accepted the message, without claiming the model has read it.
+For a retry, reuse the returned ID with `--id <id>`; an uncertain delivery is never automatically resent.
+
 ## The attribute SSoT — `shared/core/`
 
 `shared/core/attribute_definitions.json` is the canonical definition of the

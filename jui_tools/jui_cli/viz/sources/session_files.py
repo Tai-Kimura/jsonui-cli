@@ -11,6 +11,7 @@ import json
 import os
 import re
 import stat
+import sys
 from pathlib import Path
 from typing import Callable
 from .. import quiet_fs
@@ -64,7 +65,12 @@ def watch(folder: Path, on_data: Callable[[dict], None]):
     if not quiet_fs.is_dir(folder):
         return None
     from watchdog.events import FileSystemEventHandler
-    from watchdog.observers import Observer
+    if sys.platform == 'darwin':
+        # FSEvents can silently omit this folder's events (including a newly created session).
+        # Poll metadata once per second; only the existing ASCII-json allow-list opens contents.
+        from watchdog.observers.polling import PollingObserver as Observer
+    else:
+        from watchdog.observers import Observer
 
     class Handler(FileSystemEventHandler):
         def _handle(self, raw_path) -> None:
