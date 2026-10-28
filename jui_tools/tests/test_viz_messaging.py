@@ -233,6 +233,13 @@ def test_cli_finds_codex_or_claude_parent_and_reports_failures(monkeypatch, caps
     assert 'cli-retry-id' in capsys.readouterr().out
     monkeypatch.setattr(client, 'request', lambda *a: {'ok': False, 'error': 'disconnected'})
     assert client.command(args) == 1
+    def timeout(*args):
+        raise TimeoutError('response lost')
+    monkeypatch.setattr(client, 'request', timeout)
+    monkeypatch.setattr(client.uuid, 'uuid4', lambda: 'network-retry-id')
+    args.message_id = None
+    assert client.command(args) == 1
+    assert 'message id: network-retry-id' in capsys.readouterr().err
 
 
 def test_rebuilding_transcript_index_preserves_relay_history_but_not_expired_bodies(tmp_path):
@@ -287,6 +294,12 @@ def test_browser_shows_cross_provider_messages_on_both_robot_cards(tmp_path):
                 res = await client.post('/api/messages/send', headers=headers,
                     json={'id': f'browser-message-{i}', 'sender': sender, 'recipient': receiver, 'text': f'peer message {i} <script>literal</script>'})
                 assert res.status == 200 and (await res.json())['ok']
+            async def uncertain(*args):
+                return 503, 'response lost'
+            world.submit_prompt = uncertain
+            res = await client.post('/api/messages/send', headers=headers,
+                json={'id': 'browser-message-unknown', 'sender': A, 'recipient': B, 'text': 'uncertain attempt'})
+            assert (await res.json())['state'] == 'unknown'
             async with api.async_playwright() as pw:
                 try:
                     browser = await pw.chromium.launch(args=['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'])
@@ -305,7 +318,9 @@ def test_browser_shows_cross_provider_messages_on_both_robot_cards(tmp_path):
                         if await page.locator('#rb [data-rb-talk]').get_attribute('aria-pressed') != 'true':
                             await page.locator('#rb [data-rb-talk]').click()
                         await page.locator('#rb [data-tk-conv]').first.click()
-                        await api.expect(page.locator('#rb [data-tk-msg]')).to_have_count(2)
+                        await api.expect(page.locator('#rb [data-tk-msg]')).to_have_count(3)
+                        await api.expect(page.locator('#rb [data-tk-state="unknown"]')).to_have_count(1)
+                        assert (await page.locator('#rb [data-tk-state="unknown"]').inner_text()).strip()
                         assert 'peer message 0 <script>literal</script>' in await page.locator('#rb').inner_text()
                         assert 'peer message 1 <script>literal</script>' in await page.locator('#rb').inner_text()
                         assert not await page.locator('#rb script').count()
@@ -332,6 +347,31 @@ def test_hub_keeps_codex_alive_without_resurrecting_an_absent_claude_session(tmp
             b = await hub.run(lambda: hub._ensure().conversation(conv_id(A, B), B, int(time.time() * 1000)))
             assert a['peer']['alive'] is True
             assert b['peer']['alive'] is False
+        finally:
+            hub.close()
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('exception', [True, False])
+def test_timeout_and_uncertain_daemon_ack_stay_unknown_and_are_not_retried(tmp_path, exception):
+    async def run():
+        world, hub, router, delivered = setup(tmp_path)
+        async def uncertain(*args):
+            delivered.append(args)
+            if exception:
+                raise TimeoutError('response lost')
+            return 503, 'delivery could not be confirmed'
+        world.submit_prompt = uncertain
+        hub.watch[object()] = A
+        body = {'id': 'uncertain-id', 'sender': A, 'recipient': B, 'text': 'hello'}
+        try:
+            result = await router.send(body)
+            assert result['state'] == 'unknown' and not result['ok']
+            assert await router.send(body) == result and len(delivered) == 1
+            for _, frame in hub.frames:
+                assert not talk_contract.validate(frame)
+            rows = await hub.run(lambda: hub._ensure().messages(A, conv_id(A, B)))
+            assert rows[0][0]['state'] == 'unknown'
         finally:
             hub.close()
     asyncio.run(run())

@@ -32,7 +32,7 @@
 | `at` | 送った時刻（送り手の tool_use の timestamp、ms）。送り手が見えない通は受け手の最初の記録の時刻 |
 | `deliveredAt` | 届いた（受け手の enqueue の時刻。見えなければ、送りの結果が成功（msg_id あり）の時刻か、読んだ記録の時刻）。無ければ null |
 | `readAt` | 受け手が読んだ（受け手の isMeta / queued_command の記録）。LINE の「既読」はこれ。`dir: "out"` の通に出す |
-| `state` | `sent`（送った、結果待ち）・`delivered`・`read`・`undelivered`（「No agent named … is reachable」や失敗。印を付けて見せる。他の着信には付けない） |
+| `state` | `sent`（送った、結果待ち）・`delivered`・`read`・`unknown`（通信断などで到達を確認できない。到達/未到達を断定せず、同じIDで自動再送しない）・`undelivered`（「No agent named … is reachable」や失敗。印を付けて見せる。他の着信には付けない） |
 | `text` / `cut` | 本文（受け手の `origin.body`、無ければ送り手の `input.message`）。`textMax` 字で切り、切ったら `cut: true`。Markdown は履歴と同じく escape して描く。長い本文は折りたたみ、本文のクリックでも開閉 |
 | `summary` | 送り手の `input.summary`（無ければ null） |
 | `seen` | どちら側の記録から見えたか: `both` / `sender` / `receiver` |

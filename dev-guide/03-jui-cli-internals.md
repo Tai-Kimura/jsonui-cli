@@ -303,7 +303,7 @@ Codex 0.164.0 の daemon は TUI 由来でも `source=vscode` を返す場合が
   受信先に `World.submit_prompt` で届け、Claudeのprompt channelか、そのCodex homeのdaemon（待機はturn/start、実行中はturn/steer）へ送る。
   本文にはpeerからの連絡であること、送信者id・名前・CLI、返信コマンドを添える。ユーザー本人の指示とは区別する。
   TalkIndexのrelays表はインデックスではなく本文と送信idの正本。外部送信前にidを永続予約し、同じid・同じ内容の再送は以前の結果を返す。
-  中断して受付を確定できなかったidは再送せず409。自動再試行しない。両側のトークに同じ `m-jui-<id>` を出し、失敗はundelivered。
+  中断して受付を確定できなかったidは再送せず409。通信断やdaemonの受付が不明な通はunknown（到達未確認）として表示し、CLIも照合用のidをエラー時に残す。自動再試行しない。両側のトークに同じ `m-jui-<id>` を出し、失敗はundelivered。
   sentは輸送経路での受付を意味し、モデルの既読とは言わない。期限切れ/件数上限で本文を消す際は正本側も消し、インデックス再構築で復活させない。
   重複防止用のid・ハッシュ・結果は保持。CodexもWorldの生存一覧をTalkHubに渡し、Claudeのsessionファイルがないために誤って期限切れにしない。
 

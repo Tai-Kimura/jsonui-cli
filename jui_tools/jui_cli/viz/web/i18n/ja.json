@@ -40,6 +40,7 @@
   "talk.state.read.at": "既読 {at}",
   "talk.state.delivered": "届いた",
   "talk.state.sent": "送信済み",
+  "talk.state.unknown": "到達未確認",
   "talk.state.undelivered": "届かなかった",
   "talk.state.undelivered.why": "相手に届かなかった（この機械にいない、または名前が解けなかった）",
   "talk.more": "▼ 全文を表示",

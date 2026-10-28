@@ -40,6 +40,7 @@
   "talk.state.read.at": "Read {at}",
   "talk.state.delivered": "Delivered",
   "talk.state.sent": "Sent",
+  "talk.state.unknown": "Delivery unconfirmed",
   "talk.state.undelivered": "Not delivered",
   "talk.state.undelivered.why": "Did not reach the other side (not on this machine, or the name did not resolve)",
   "talk.more": "▼ Show the whole message",

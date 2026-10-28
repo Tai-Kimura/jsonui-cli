@@ -222,7 +222,7 @@ class TalkIndex:
                 for member in (row['sender'], row['receiver']):
                     self._session_part(member['id'], member['name'])
                 self._insert('m-jui-' + mid, row['sender']['id'], row['receiver']['id'], row['at'], row['text'], row['at'],
-                             state='sent' if row['result']['ok'] else 'undelivered', seen_s=1)
+                             state=row['result']['state'], seen_s=1)
 
     # ------------------------------------------------------------------ one step
     def step(self, now: int, extra: list[dict] | None = None) -> dict:
@@ -850,7 +850,7 @@ class TalkIndex:
             self.db.execute('UPDATE relays SET result=?,sender=?,receiver=?,record=? WHERE id=?',
                             (json.dumps(result), sender['id'], receiver['id'], json.dumps(record), mid))
             self._insert('m-jui-' + mid, sender['id'], receiver['id'], now, text, now,
-                         state='sent' if result['ok'] else 'undelivered', seen_s=1)
+                         state=result['state'], seen_s=1)
             self.db.execute('COMMIT')
         except Exception:
             self.db.execute('ROLLBACK')

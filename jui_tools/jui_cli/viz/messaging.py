@@ -80,7 +80,10 @@ class Router:
                     result.update(ok=True, state='sent')
                 else:
                     result['error'] = refusal[1]
+                    if refusal[0] >= 500:
+                        result['state'] = 'unknown'
             except (OSError, TimeoutError, ConnectionError):
+                result['state'] = 'unknown'
                 result['error'] = 'delivery outcome unknown; inspect the recipient before sending again'
             except asyncio.CancelledError:
                 # Reservation remains pending: neither restart nor retry can duplicate an uncertain dispatch.

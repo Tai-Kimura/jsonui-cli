@@ -52,7 +52,8 @@ The sender is detected from the current Codex thread or Claude parent process; u
 when running outside an agent. Exact session IDs avoid ambiguous names. Both robots' **Talk** views show
 the exchange. A Claude recipient needs the channel above; a Codex recipient needs its daemon connection.
 `sent` means its transport accepted the message, without claiming the model has read it.
-For a retry, reuse the returned ID with `--id <id>`; an uncertain delivery is never automatically resent.
+For a retry of the same request, reuse its ID with `--id <id>`; network errors also print this ID.
+An uncertain delivery is shown as unconfirmed and is never automatically resent.
 
 ## The attribute SSoT — `shared/core/`
 

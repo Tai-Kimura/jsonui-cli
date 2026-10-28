@@ -53,6 +53,7 @@ def request(path: str, body: dict) -> dict:
 
 def command(args) -> int:
     import sys
+    message_id = None
     try:
         if args.viz_cmd == 'peers':
             result = request('peers', {})
@@ -60,10 +61,13 @@ def command(args) -> int:
             sender = args.sender or own_session()
             if not sender:
                 raise ValueError('cannot identify this session; use --from <session-id>')
-            result = request('send', {'id': args.message_id or str(uuid.uuid4()), 'sender': sender,
+            message_id = args.message_id or str(uuid.uuid4())
+            result = request('send', {'id': message_id, 'sender': sender,
                                       'recipient': args.recipient, 'text': args.text})
         print(json.dumps(result, ensure_ascii=False))
         return 0 if result.get('ok', True) else 1
     except (OSError, ValueError, http.client.HTTPException) as exc:
         print('jui viz message: ' + str(exc), file=sys.stderr)
+        if message_id:
+            print('message id: ' + message_id + ' (reuse --id to check this same request)', file=sys.stderr)
         return 1
