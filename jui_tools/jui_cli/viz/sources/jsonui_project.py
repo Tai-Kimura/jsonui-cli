@@ -1067,7 +1067,11 @@ def watch(project: JsonUIProject, on_change):
     if not folders:
         return None
     from watchdog.events import FileSystemEventHandler
-    from watchdog.observers import Observer
+    if sys.platform == 'darwin':
+        # Match session_files: FSEvents may omit changes in a worktree/scratch folder.
+        from watchdog.observers.polling import PollingObserver as Observer
+    else:
+        from watchdog.observers import Observer
 
     class Handler(FileSystemEventHandler):
         def on_any_event(self, event):
