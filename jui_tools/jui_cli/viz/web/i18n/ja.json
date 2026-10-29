@@ -2386,6 +2386,8 @@
   "spec.when.by.layout": "レイアウトの書き込み",
   "spec.when.by.test": "テストの結果",
   "sd.button": "ベースとの差分",
+  "sd.who.more": "ほか {n}",
+  "sd.who.title": "このワークツリーで作業しているセッション（作業ディレクトリか、30 分以内にツールが触ったパス）",
   "sd.button.hide": "差分の印を消す",
   "sd.button.loading": "ベースと比べています…",
   "sd.close": "閉じる",

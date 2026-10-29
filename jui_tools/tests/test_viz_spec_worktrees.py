@@ -300,3 +300,21 @@ def test_a_session_keeps_its_latest_checkouts_and_drops_the_oldest(tmp_path):
         tops.append(str(top))
         _call(world, root, 1_000 + i, "Read", {"file_path": str(top / "a.txt")})
     assert list(world._touched["lane"]) == tops[1:]   # the newest kept, the first dropped
+
+
+def test_the_sessions_slice_says_which_checkouts_a_session_s_tools_named_until_its_time_runs_out(tmp_path):
+    """The page names, beside a worktree's 「ベースとの差分」, the sessions working there (ticket
+    2026-10-29-viz-spec-board-worktree-session-name): its cwd, or session.touched, which lasts as the worktree's rows do."""
+    root, wt, state, world, room_id = _world_with_parent_session(tmp_path)
+    lane = lambda: next(s for s in state.slices["sessions"] if s["id"] == "lane")   # noqa: E731
+    assert "touched" not in lane()
+    _call(world, root, 1_000, "Edit", {"file_path": str(wt / "docs" / "screens" / "json" / "login.spec.json")})
+    world.tick(1_010)
+    world.publish()
+    assert lane()["touched"] == [str(wt)]
+    world.tick(1_000 + WORKTREE_TOUCH_MS - 1)
+    world.publish()
+    assert lane()["touched"] == [str(wt)]
+    world.tick(1_000 + WORKTREE_TOUCH_MS)
+    world.publish()
+    assert "touched" not in lane()

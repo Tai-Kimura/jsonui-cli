@@ -1041,6 +1041,7 @@ function rebuildSessions() {
     if (!robots.length || robots[0] !== label) continue;   // a session is shown through its main robot
     next.push({ id: label, project: s.projectId, robots, room: PROJECT[s.projectId].name, status: s.status, title: s.title || '',
       cli: s.cli === 'codex' ? 'codex' : 'claude',
+      cwd: typeof s.cwd === 'string' ? s.cwd : '', touched: Array.isArray(s.touched) ? s.touched.filter((x) => typeof x === 'string') : [],   // where it works (sdWorkers)
       relay: s.relay === true, prompt: s.prompt === true,   // prompt: its channel takes a prompt from the page (jui-viz 1.2.0+)
       launch: typeof s.launch === 'string' ? s.launch : null,   // whether the CLI hands that text over (sources/launch.py)
       // 停止 (jui-viz 1.3.0): asked and waiting for its next tool boundary, when it last stopped so, whether its --stop hook was heard

@@ -681,6 +681,17 @@ class World:
         for touched in self._touched.values():
             for top in [top for top, t in touched.items() if at - t >= WORKTREE_TOUCH_MS]:
                 del touched[top]
+        # the page names, beside a worktree's 「ベースとの差分」, the sessions working there: its cwd, or these (ticket
+        # 2026-10-29-viz-spec-board-worktree-session-name; requester: 「これ差分ボタンの右に作成者のセッション名出せる？」)
+        for sid in live:
+            tops = sorted(tilde(top) for top in self._touched.get(sid, {}))
+            session = self.sessions[sid]
+            if session.get("touched", []) != tops:
+                if tops:
+                    session["touched"] = tops
+                else:
+                    session.pop("touched", None)
+                self._dirty.add("sessions")
         cwds = frozenset(str(Path(s["cwd"]).expanduser()) for sid, s in self.sessions.items()
                          if sid in live and s.get("cwd") not in (None, "?"))
         cwds |= {top for touched in self._touched.values() for top in touched}

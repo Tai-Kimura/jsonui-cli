@@ -14,8 +14,28 @@ const sdListKey = (project, app) => `${project}|${app}`;
 function sdOverviewApp(model) {
   if (wb.app === 'all' || wb.app.indexOf('@') < 0) return null;
   const s = model.specs.find((x) => (x.app || '') === wb.app && inScope(x.project) && sdIsWorktree(x));
-  return s ? { project: s.project, app: wb.app, branch: s.checkout.branch } : null;
+  return s ? { project: s.project, app: wb.app, branch: s.checkout.branch, worktree: s.checkout.worktree } : null;
 }
+/* The sessions working in a worktree now (ticket 2026-10-29-viz-spec-board-worktree-session-name; requester: 「これ差分ボタンの
+   右に作成者のセッション名出せる？」): who made it is recorded nowhere, but a worktree is on the board only while a session not
+   ended works there (ingest.py _worktrees_tick: its cwd, or a checkout its tools named within 30 minutes, session.touched) —
+   those, by name, beside the button. */
+function sdWorkers(worktree) {
+  if (!worktree) return [];
+  const w = String(worktree).replace(/\/+$/, '');
+  return SESSIONS.filter((x) => x.status !== 'ended' && (x.cwd === w || x.cwd.startsWith(w + '/') || x.touched.includes(w)));
+}
+function sdWhoRender(worktree) {
+  const el = $('wb-wt-who');
+  const who = SOURCE.mode === 'live' ? sdWorkers(worktree) : [];
+  const shown = who.slice(0, SD_WHO_MAX);
+  const html = shown.map((x) => `<span class="sd-who-one">${pill(x.id, DEF[x.id] ? DEF[x.id].role : 'main')}<span class="sd-who-nm">${esc(x.title || tl('panel.rb.main', { id: x.id }))}</span></span>`).join('')
+    + (who.length > shown.length ? `<span class="sd-who-more">${esc(tl('sd.who.more', { n: who.length - shown.length }))}</span>` : '');
+  el.hidden = !who.length;
+  el.title = who.length ? tl('sd.who.title') : '';
+  setHTML(el, html);
+}
+const SD_WHO_MAX = 2;
 /* The head's button: shown and named as the open sheet or the overview needs (renderSheet / renderOverview). */
 function sdHeadButton(model, s) {
   const b = $('wb-diff');
@@ -24,10 +44,12 @@ function sdHeadButton(model, s) {
     b.hidden = !(live && sdIsWorktree(s));
     setText(b, tl('sd.button'));
     b.dataset.sdFor = 'spec';
+    sdWhoRender(b.hidden ? null : s.checkout.worktree);
     return;
   }
   const ov = live ? sdOverviewApp(model) : null;
   b.hidden = !ov;
+  sdWhoRender(ov ? ov.worktree : null);
   if (!ov) return;
   const st = SD.lists[sdListKey(ov.project, ov.app)];
   setText(b, !st || st.state === 'off' ? tl('sd.button') : st.state === 'loading' ? tl('sd.button.loading') : tl('sd.button.hide'));

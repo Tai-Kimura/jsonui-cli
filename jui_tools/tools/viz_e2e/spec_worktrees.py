@@ -35,6 +35,14 @@ SID_MAIN = "e2e00000-0000-4000-8000-000000000a01"
 SID_WT = "e2e00000-0000-4000-8000-000000000a02"
 SID_LANE = "e2e00000-0000-4000-8000-000000000a03"
 
+# the names beside 「ベースとの差分」 (#wb-wt-who): shown, right of the button, each the element at its own centre
+WHO_JS = """() => { const el = document.getElementById('wb-wt-who'), b = document.getElementById('wb-diff');
+  if (!el || el.hidden || !el.getClientRects().length || !b || b.hidden) return null;
+  const names = [...el.querySelectorAll('.sd-who-nm')].map((n) => n.textContent);
+  const r = el.getBoundingClientRect(), br = b.getBoundingClientRect();
+  const top = [...el.querySelectorAll('.sd-who-one')].every((o) => { const q = o.getBoundingClientRect(); return el.contains(document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2)); });
+  return names.length ? { names, right: r.left >= br.right - 1 && r.top < br.bottom && r.bottom > br.top, top, rect: [r.left, r.top, r.right, r.bottom], button: [br.left, br.top, br.right, br.bottom] } : null; }"""
+
 # the room's list, grouped by room: [{room, rows: [{name, tag, wt}]}]
 LIST_JS = """() => { const out = []; let cur = null;
   for (const li of document.querySelectorAll('#spec-list > li')) {
@@ -151,7 +159,7 @@ async def run_spec_worktrees(pw, out, failures, jt=None, shots_only=False):
         await ready(page)
         await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         hook(SID_MAIN, room, hook_event_name="SessionStart", source="startup")
-        hook(SID_WT, wt, hook_event_name="SessionStart", source="startup")
+        hook(SID_WT, wt, hook_event_name="SessionStart", source="startup", session_title="ワークツリーの担当")
         await page.click("#spec-filter [data-f='all']")
         await wait(page, "() => document.querySelectorAll('#spec-list .spec-row').length >= 5", timeout=30000,
                    label="the room's three rows and the worktree room's two")
@@ -180,6 +188,14 @@ async def run_spec_worktrees(pw, out, failures, jt=None, shots_only=False):
         check(failures, sorted((i["name"], i["tag"]) for i in side["items"] if i["tag"]) == [("ログイン", "⎇ feat/x"), ("ログイン", "⎇ main"), ("注文", "⎇ feat/x")],
               f"the whiteboard's list carries the tags: {side['items']}")
         await page.screenshot(path=str(out / "after-sheet.png"))
+        # beside 「ベースとの差分」 the session working in the worktree, by name (ticket 2026-10-29-viz-spec-board-worktree-
+        # session-name; requester: 「これ差分ボタンの右に作成者のセッション名出せる？」): its cwd is the worktree; the room's own
+        # session (its cwd the room) is not named
+        await wait(page, WHO_JS, timeout=8000, label="the worktree's session beside the diff button")
+        who = res["whoCwd"] = await page.evaluate(WHO_JS)
+        check(failures, who["names"] == ["ワークツリーの担当"] and who["right"] and who["top"],
+              f"the worktree's sheet names the session working there, right of 「ベースとの差分」, nothing on it: {who}")
+        await page.locator("#wb .wb-head").screenshot(path=str(out / "after-sheet-who.png"))
 
         # a spec added to the room: the rows move, the sheet stays on 注文
         (specs / "aaa.spec.json").write_text(json.dumps(spec("Aaa", "あとから足した画面"), ensure_ascii=False))
@@ -189,6 +205,18 @@ async def run_spec_worktrees(pw, out, failures, jt=None, shots_only=False):
         side = await page.evaluate(SIDE_JS)
         check(failures, side["title"] == "注文" and side["file"].startswith("⎇ feat/x · "),
               f"a row added before it: the sheet stays on the worktree's 注文: {side['title']!r} {side['file']!r}")
+        # the board's overview of the worktree's app (the requester's picture: the list, no sheet open) names it as well
+        await page.click("#wb-side-list .ws-apps button:has-text('feat/x')")
+        await page.click("#wb-side-list .ws-all")
+        await wait(page, "() => document.getElementById('wb-title').textContent !== '注文'", timeout=8000, label="the worktree app's overview")
+        await wait(page, WHO_JS, timeout=8000, label="the worktree's session beside the overview's diff button")
+        who = res["whoOverview"] = await page.evaluate(WHO_JS)
+        check(failures, who["names"] == ["ワークツリーの担当"] and who["right"] and who["top"],
+              f"the worktree app's overview names the session working there, right of 「ベースとの差分」: {who}")
+        await page.locator("#wb .wb-head").screenshot(path=str(out / "after-overview-who.png"))
+        await page.screenshot(path=str(out / "after-overview.png"))
+        await page.click("#wb-side-list .ws-item:not(.ws-all):has-text('注文')")
+        await wait(page, "() => document.getElementById('wb-title').textContent === '注文'", timeout=8000, label="注文's sheet again")
 
         # the worktree's session ends: its rows leave the room, the sheet goes back to the overview
         hook(SID_WT, wt, hook_event_name="SessionEnd", reason="other")
@@ -205,7 +233,7 @@ async def run_spec_worktrees(pw, out, failures, jt=None, shots_only=False):
         # like a monorepo's (shop/, with orders-web/ a repository of its own inside), the session's cwd the parent, its
         # worktree of orders-web under a scratchpad; it edits a spec there by an absolute path. The worktree's rows
         # show, tagged by the branch only (no folder on the page), and leave when the session ends.
-        hook(SID_LANE, shop, hook_event_name="SessionStart", source="startup")
+        hook(SID_LANE, shop, hook_event_name="SessionStart", source="startup", session_title="親のレーン")
         await wait(page, "() => [...document.querySelectorAll('#spec-list > li.sl-group')].some((g) => g.textContent.startsWith('shop/'))",
                    timeout=20000, label="shop's room listed")
         hook(SID_LANE, shop, hook_event_name="PreToolUse", tool_name="Edit", tool_use_id="lane-edit",
@@ -224,6 +252,14 @@ async def run_spec_worktrees(pw, out, failures, jt=None, shots_only=False):
         check(failures, "feat/a1" in text and "ow-a1" not in text and "scratchpad" not in text,
               f"the rows name the branch, not the worktree's folder: {[l for l in text.splitlines() if 'ow-a1' in l][:3]}")
         await page.screenshot(path=str(out / "after-parent-lane.png"))
+        # the parent lane is named on its worktree's sheet too: by the path its tool named (session.touched), not its cwd
+        await page.click("#spec-list .sl-group:has-text('shop/') ~ li .spec-row:has-text('監査ログ')")
+        await wait(page, "() => document.getElementById('wb-title').textContent === '監査ログ'", timeout=20000, label="監査ログ's sheet shown")
+        await wait(page, WHO_JS, timeout=8000, label="the parent lane beside the diff button")
+        who = res["whoTouched"] = await page.evaluate(WHO_JS)
+        check(failures, who["names"] == ["親のレーン"] and who["right"] and who["top"],
+              f"the parent lane's worktree names it by the path its tool named: {who}")
+        await page.locator("#wb .wb-head").screenshot(path=str(out / "after-parent-lane-who.png"))
         hook(SID_LANE, shop, hook_event_name="SessionEnd", reason="other")
         await wait(page, "() => ![...document.querySelectorAll('#spec-list .spec-row .co-tag')].some((t) => t.textContent.includes('feat/a1'))",
                    timeout=20000, label="the parent lane's worktree rows gone")
