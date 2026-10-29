@@ -118,11 +118,48 @@ def test_it_reads_from_the_end_not_the_whole_file(tmp_path):
     assert len(got2["items"]) == H.ITEMS_MAX and got2["bytes"] <= 2 * H.CHUNK, got2["bytes"]
 
 
-def test_a_line_too_long_is_skipped_and_the_rest_still_reads(tmp_path):
+def test_a_line_over_line_max_is_read_whole_and_one_over_the_cap_says_so(tmp_path, monkeypatch):
+    """Ticket 2026-10-29-viz-history-misses-messages-shown-in-terminal (A, A'): a line over LINE_MAX was skipped, and a
+    prompt with pasted pictures (1.2-1.5 MB) went with the requester's words. Now its start is found and it is read
+    again whole up to BIG_LINE_MAX; a tool's result over that says so on its call; any other line over it is skipped."""
+    call = _asst([{"type": "tool_use", "id": "toolu_9", "name": "Bash", "input": {"command": "cat big"}}], mid="m9")
     huge = _result("toolu_9", "y" * (H.LINE_MAX + 10))
-    path = _write(_main_path(tmp_path), [_user("前"), huge, _user("後")])
+    words = _user([{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "iVBORw0KGgo" + "A" * (2 * H.LINE_MAX)}},
+                   {"type": "text", "text": "このボトル一本置いて"}], origin={"kind": "human"})
+    path = _write(_main_path(tmp_path), [_user("前"), call, huge, words, _user("後")])
     got = H.reader(_projects(tmp_path))(SID, CWD, str(path))
-    assert [i["text"] for i in got["items"]] == ["前", "後"]
+    assert [(i["kind"], i.get("text")) for i in got["items"]] == [("user", "前"), ("tool", None), ("image", None), ("user", "このボトル一本置いて"), ("user", "後")]
+    tool = got["items"][1]
+    assert tool["out"] == "y" * H.IO_MAX and tool["outCut"], "the result over LINE_MAX is read"
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        assert H.image_at(fd, got["items"][2]["img"]["off"], 0)[0] == 415, "the picture is named by its line (a fake PNG: refused by its bytes)"
+    finally:
+        os.close(fd)
+    monkeypatch.setattr(H, "BIG_LINE_MAX", H.LINE_MAX + 100)   # over the cap: the call says so, the prompt is skipped
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        got = H.read_tail(fd)
+    finally:
+        os.close(fd)
+    assert [(i["kind"], i.get("text")) for i in got["items"]] == [("user", "前"), ("tool", None), ("user", "後")]
+    from jui_cli.viz import i18n
+    assert got["items"][1]["out"] == i18n.tl("srv.history.too_large", n="1.0") and not got["items"][1].get("error")
+
+
+def test_a_long_line_across_many_chunks_is_found_from_its_start(tmp_path, monkeypatch):
+    """The line's end is kept when it first grows past LINE_MAX, however many chunks it spans after that."""
+    monkeypatch.setattr(H, "CHUNK", 64)
+    monkeypatch.setattr(H, "LINE_MAX", 200)
+    long_words = _user("長" + "x" * 1500, origin={"kind": "human"})
+    path = _write(_main_path(tmp_path), [_user("a"), long_words, _user("b"), _user("c" * 300), _user("d")])
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        got = H.read_tail(fd)
+    finally:
+        os.close(fd)
+    assert [i["text"][:2] for i in got["items"]] == ["a", "長x", "b", "cc", "d"] and got["bad"] == 0
+    assert got["from"] == 0
 
 
 def test_a_second_read_of_an_unchanged_file_is_not_read_again(tmp_path):

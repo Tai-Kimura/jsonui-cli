@@ -2090,6 +2090,7 @@
   "srv.harness.meta": "ハーネスの文",
   "srv.peer.unnamed": "別のセッション",
   "srv.history.image": "[画像]",
+  "srv.history.too_large": "[出力が大きすぎて読めない（{n} MB）]",
   "srv.denied.no_reason": "理由は書かれていない",
   "srv.denial.source": "[jui viz の「止められた操作」の札から、依頼者がボタンで送った文です]",
   "srv.denial.no_reason": "（記録に理由が無い）",

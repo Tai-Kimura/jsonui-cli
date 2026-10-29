@@ -69,7 +69,7 @@ def test_large_malformed_records_and_tool_output_are_bounded(tmp_path):
     with p.open('ab') as f:
         f.write(b'{broken}\n[]\n' + b'x' * (history.LINE_MAX + 1) + b'\n')
     got = codex_history.read(tmp_path, str(p))
-    assert got['bytes'] <= history.BYTES_MAX and got['bad'] == 1
+    assert got['bytes'] <= history.BYTES_MAX and got['bad'] == 2   # the line over LINE_MAX is read whole (ticket 10-29, A) and is not JSON
     assert len(got['items'][0]['text']) == history.TEXT_MAX and got['items'][0]['cut']
     assert len(got['items'][1]['out']) == history.IO_MAX and got['items'][1]['outCut']
 
@@ -283,3 +283,17 @@ process.stdout.write(JSON.stringify([run(row), run({...row, kind: 'assistant'}),
     out = subprocess.run([node, "-"], input=script, capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
     assert json.loads(out.stdout) == [True, False, False, False, 1]
+
+
+def test_a_subagents_message_to_its_parent_is_a_peers_row(tmp_path):
+    """Ticket 2026-10-29-viz-history-misses-messages-shown-in-terminal (H): measured 42 in 77 rollouts, never shown."""
+    def agent(text, enc=False):
+        content = [{'type': 'input_text', 'text': text}] + ([{'type': 'encrypted_content', 'encrypted_content': 'gAAAA-SECRET'}] if enc else [])
+        return {'type': 'response_item', 'timestamp': '2026-10-28T05:01:52Z',
+                'payload': {'type': 'agent_message', 'author': '/root/client_debug', 'recipient': '/root', 'content': content}}
+    p = rollout(tmp_path, [message('user', 'go'),
+                           agent('Message Type: FINAL_ANSWER\nTask name: /root\nSender: /root/client_debug\nPayload:\n実現可能です\n## 詳細'),
+                           agent('Message Type: MESSAGE\nTask name: /root\nSender: /root/client_debug\nPayload:\n', enc=True)])
+    got = codex_history.read(tmp_path, str(p))
+    assert [(i['kind'], i.get('from'), i['text']) for i in got['items']] == [('user', None, 'go'), ('peer', '/root/client_debug', '実現可能です\n## 詳細')]
+    assert 'SECRET' not in json.dumps(got)

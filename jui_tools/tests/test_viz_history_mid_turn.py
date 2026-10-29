@@ -145,3 +145,17 @@ def test_one_parse_of_origin_for_the_history_and_the_talk_view():
     [(_k, info)] = R.observations(rec)
     assert (info["msg_id"], info["body"], info["name"]) == (d["msg_id"], d["body"], d["name"])
     assert "_origin_info(origin" not in open(H.__file__, encoding="utf-8").read() and "origin.get(\"body\")" not in open(H.__file__, encoding="utf-8").read()
+
+
+def test_a_queued_command_with_no_origin_is_the_harness_text():
+    """Ticket 2026-10-29-viz-history-misses-messages-shown-in-terminal (E): measured 2 in 14 days, both a
+    <task-notification> with no ``origin``; delivery() gives None, so the row is made from its prompt."""
+    from jui_cli.viz.sources import history as H
+    rec = {"type": "attachment", "timestamp": "2026-10-20T01:00:00Z",
+           "attachment": {"type": "queued_command", "prompt": "<task-notification>\n<task-id>b3a5kgosx</task-id>\n<status>completed</status>\n</task-notification>"}}
+    got = H.items_of(rec, {})
+    assert [(i["kind"], i["text"].startswith("<task-notification>")) for i in got] == [("harness", True)] and got[0]["at"]
+    listed = dict(rec, attachment=dict(rec["attachment"], prompt=[{"type": "text", "text": "words"}]))
+    assert [(i["kind"], i["text"]) for i in H.items_of(listed, {})] == [("harness", "words")]
+    assert H.items_of(dict(rec, attachment={"type": "queued_command", "prompt": "  "}), {}) == []
+    assert H.items_of({"type": "attachment", "attachment": {"type": "hook_success", "content": "x"}}, {}) == []

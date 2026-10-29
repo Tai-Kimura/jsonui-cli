@@ -256,6 +256,9 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   （帯は出さない。`jui viz doctor` の `codex daemon` 行が起動の仕方を言う）。daemon を使わずに起動した Codex と VS Code 拡張のセッションは
   見えない（依頼者の判断 10-26）。応答の履歴は `sources/codex_history.py` が、`thread/resume` の `path` をその daemon の
   home の `sessions/` 内に限定して読む。`response_item` の user / assistant と tool call / output を既存の履歴の行に変換し、
+  サブエージェントから親への `agent_message` は平文の本文がある時だけピアの行にする（暗号化された本文は出さない）。
+  履歴の 1 行が `LINE_MAX`（1 MB）を超えても、行の頭を見つけて `BIG_LINE_MAX`（16 MB）まで読み直す（画像を貼った依頼者の発言が消えていた）。
+  それを超える tool_result は呼び出しに「大きすぎて読めない」と出す。origin の無い queued_command は本文からハーネスの行にする。
   重複する `event_msg` と instructions・reasoning の本文は表示しない。既存の件数・バイト上限と「もっと前を読む」を共用。
   履歴は要求時だけ読み、slice・snapshot・export に入れない。ローカルモデルの home とサブエージェントの履歴も同じ。
   履歴タブの許可カードは初期状態で開いている（10-29 に #64 の「初期は1行」を反転）。「閉じる」で1行にし、pending→sent でも折り畳みを維持し、開閉の選択はその待機が終わるまで保つ。

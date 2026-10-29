@@ -60,8 +60,17 @@ IO_MAX = 1_500
 CHUNK = 65_536
 #: Read at most this much of a transcript per request (from its end).
 BYTES_MAX = 4 * 1_048_576
-#: A longer line (one huge tool result) is skipped, not parsed.
+#: A line longer than this is not kept while the reading goes back through it: its start is found, then it is read
+#: again whole (os.pread) when it is at most BIG_LINE_MAX.
 LINE_MAX = 1_048_576
+#: The longest line parsed (ticket 2026-10-29-viz-history-misses-messages-shown-in-terminal, A: a prompt with pasted
+#: pictures is a line of 1.2-1.5 MB, a tool's output up to 4.3 MB, measured 10-29 on 14 days; until then every line over
+#: LINE_MAX was skipped and the requester's words went with it). image_at reads a picture's line up to the same cap.
+BIG_LINE_MAX = 16 * 1_048_576
+#: a tool result whose line is over BIG_LINE_MAX: its call says so, found by its id near the line's start (a user record
+#: whose head has a tool_result block; the block's keys come in either order)
+_BIG_USER = re.compile(rb'"type"\s*:\s*"user"')
+_BIG_RESULT_ID = re.compile(rb'"tool_use_id"\s*:\s*"([^"]{1,200})"')
 COUNTED = frozenset({"user", "peer", "harness", "channel", "assistant", "tool"})
 #: The pictures handed to the page: these media types only, each checked against the bytes' own signature.
 IMAGE_TYPES = {"image/png": (b"\x89PNG\r\n\x1a\n",), "image/jpeg": (b"\xff\xd8\xff",), "image/gif": (b"GIF87a", b"GIF89a"),
@@ -69,7 +78,7 @@ IMAGE_TYPES = {"image/png": (b"\x89PNG\r\n\x1a\n",), "image/jpeg": (b"\xff\xd8\x
 #: One picture, decoded: larger ones are refused (413).
 IMAGE_MAX = 10 * 1_048_576
 #: The line a picture is read from: its base64 (4/3 of IMAGE_MAX) and the record around it.
-IMAGE_LINE_MAX = 16 * 1_048_576
+IMAGE_LINE_MAX = BIG_LINE_MAX
 #: a file SendUserFile sent: its size cap (the tool's own) and the line of the call it is read from; files per call
 SENT_FILE_MAX = 15 * 1_048_576
 SENT_LINE_MAX = 4 * 1_048_576
@@ -269,12 +278,27 @@ def _queued_items(d: dict) -> list[dict]:
     return [_text_item(text, at, d["kind"] != "human")]
 
 
+def _unsourced_queued(rec: dict) -> list[dict]:
+    """A queued_command with no ``origin`` (ticket 2026-10-29-viz-history-misses-messages-shown-in-terminal, E: measured
+    2 in 14 days, both a <task-notification>): delivery() has nothing to read, so its prompt is the harness's text, at
+    the time it came."""
+    att = rec.get("attachment")
+    if not isinstance(att, dict) or att.get("type") != "queued_command":
+        return []
+    p = att.get("prompt")
+    text = p if isinstance(p, str) else "\n".join(b["text"] for b in p if isinstance(b, dict) and b.get("type") == "text"
+                                                  and isinstance(b.get("text"), str)) if isinstance(p, list) else ""
+    return [_text_item(text, _at(rec) or _at(att), True)] if text.strip() else []
+
+
 def items_of(rec, results: dict, off: int | None = None) -> list[dict]:
     """The items of one record, in order. tool_result blocks go into ``results`` (tool_use_id -> OUT). ``off`` is the
     byte offset of the record's line in its transcript: a picture is named by it (and its place in the record)."""
     if isinstance(rec, dict) and rec.get("type") == "attachment":
         d = delivery(rec)
-        return _queued_items(d) if d is not None and d["queued"] else []
+        if d is None:
+            return _unsourced_queued(rec)
+        return _queued_items(d) if d["queued"] else []
     if not isinstance(rec, dict) or rec.get("type") not in ("user", "assistant"):
         return []
     msg = rec.get("message")
@@ -626,6 +650,7 @@ def read_tail(fd: int, items_max: int = ITEMS_MAX, bytes_max: int = BYTES_MAX, e
     if start_at > size:
         return {"items": [], "bytes": 0, "size": size, "records": 0, "bad": 0, "more": False, "from": None, "results": {}}
     pos, buf, read, records, bad, skip_tail = start_at, b"", 0, 0, 0, False
+    long_end = None                                      # where the line too long to keep ends (its newline)
     newest_first: list[dict] = []
     results: dict = {}
     counted, more = 0, False
@@ -646,16 +671,24 @@ def read_tail(fd: int, items_max: int = ITEMS_MAX, bytes_max: int = BYTES_MAX, e
         if pos > 0:
             starts.pop(0)
         if skip_tail and lines:
-            lines.pop()                                  # the rest of a line too long to keep
-            starts.pop()
+            lines.pop()                                  # the rest of a line too long to keep: its start is found
+            start = starts.pop()
             skip_tail = False
+            whole = _long_line(fd, start, long_end)
+            if whole is not None:
+                lines.append(whole)
+                starts.append(start)
         if len(buf) > LINE_MAX:
+            if not skip_tail:
+                long_end = pos + len(buf)                # buf is the line from pos to its end
             buf, skip_tail = b"", True
         for line, start in zip(reversed(lines), reversed(starts)):
             if stop is not None and start < stop:
                 pos, counted = 0, items_max          # read down to stop: nothing older is given
                 break
-            if not line or len(line) > LINE_MAX:
+            if len(line) > BIG_LINE_MAX:
+                line = _too_large(line[:8192], len(line))
+            if not line:
                 continue
             try:
                 rec = json.loads(line)
@@ -714,6 +747,26 @@ def read_tail(fd: int, items_max: int = ITEMS_MAX, bytes_max: int = BYTES_MAX, e
     return {"items": items, "bytes": read, "size": size, "records": records, "bad": bad,
             "more": (oldest > 0) if oldest is not None else (pos > 0 and start_at > 0), "from": oldest,
             "results": {k: v for k, v in results.items() if k not in given}}
+
+
+def _long_line(fd: int, start: int, end) -> bytes | None:
+    """The line from start to end, read again whole when it is at most BIG_LINE_MAX; a longer one is not parsed, and
+    when it is a tool's result its call is said to be too large (A'). None when nothing is kept."""
+    if not isinstance(end, int) or end <= start:
+        return None
+    if end - start <= BIG_LINE_MAX:
+        return os.pread(fd, end - start, start)
+    return _too_large(os.pread(fd, 8192, start), end - start)
+
+
+def _too_large(head: bytes, size: int) -> bytes | None:
+    """In place of a line over BIG_LINE_MAX (head: its first bytes): a tool result that says its output is too large to
+    read, when the line is one; else None (the line is skipped)."""
+    m = _BIG_RESULT_ID.search(head) if _BIG_USER.search(head) and b'"tool_result"' in head else None
+    if not m:
+        return None
+    return json.dumps({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": m.group(1).decode("utf-8", "replace"),
+                                                                 "content": i18n.tl("srv.history.too_large", n=f"{size / 1_048_576:.1f}")}]}}).encode()
 
 
 def reader(projects: Path) -> Callable[..., dict | None]:
