@@ -4,6 +4,7 @@ require_relative '../core/responsive_resolver'
 require_relative 'tailwind_mapper'
 require_relative '../core/enum_spelling'
 require_relative '../core/type_synonyms'
+require_relative '../core/logger'
 
 module RjuiTools
   module React
@@ -127,7 +128,62 @@ module RjuiTools
         'textAlign' => ->(v, prefix, type) {
           raw = TailwindMapper.map_text_align(v, type)
           raw.empty? ? nil : "#{prefix}#{raw}"
+        },
+        # The size bounds, paddings, margins, stacking, clip, hidden, weight
+        # and opacity: classes the base converter writes with these same
+        # TailwindMapper calls (BaseConverter#build_class_name), each one
+        # scoped by the size class's prefix. Until jsonui-cli 2.3.29 a size
+        # class dropped them, silently (ticket
+        # rjui-responsive-unmapped-attributes-are-dropped-silently).
+        'minWidth' => ->(v, prefix) { prefixed(TailwindMapper.map_min_width(v), prefix) },
+        'maxWidth' => ->(v, prefix) { prefixed(TailwindMapper.map_max_width(v), prefix) },
+        'minHeight' => ->(v, prefix) { prefixed(TailwindMapper.map_min_height(v), prefix) },
+        'maxHeight' => ->(v, prefix) { prefixed(TailwindMapper.map_max_height(v), prefix) },
+        'paddings' => ->(v, prefix) { map_responsive_padding(v, prefix) },
+        'topPadding' => ->(v, prefix) { prefixed(TailwindMapper.map_individual_paddings(v, nil, nil, nil), prefix) },
+        'paddingTop' => ->(v, prefix) { prefixed(TailwindMapper.map_individual_paddings(v, nil, nil, nil), prefix) },
+        'rightPadding' => ->(v, prefix) { prefixed(TailwindMapper.map_individual_paddings(nil, v, nil, nil), prefix) },
+        'paddingRight' => ->(v, prefix) { prefixed(TailwindMapper.map_individual_paddings(nil, v, nil, nil), prefix) },
+        'bottomPadding' => ->(v, prefix) { prefixed(TailwindMapper.map_individual_paddings(nil, nil, v, nil), prefix) },
+        'paddingBottom' => ->(v, prefix) { prefixed(TailwindMapper.map_individual_paddings(nil, nil, v, nil), prefix) },
+        'leftPadding' => ->(v, prefix) { prefixed(TailwindMapper.map_individual_paddings(nil, nil, nil, v), prefix) },
+        'paddingLeft' => ->(v, prefix) { prefixed(TailwindMapper.map_individual_paddings(nil, nil, nil, v), prefix) },
+        'paddingStart' => ->(v, prefix) { prefixed(TailwindMapper.map_rtl_paddings(v, nil), prefix) },
+        'paddingEnd' => ->(v, prefix) { prefixed(TailwindMapper.map_rtl_paddings(nil, v), prefix) },
+        'margins' => ->(v, prefix) { prefixed(TailwindMapper.map_margin(v), prefix) },
+        'topMargin' => ->(v, prefix) { prefixed(TailwindMapper.map_individual_margins(v, nil, nil, nil), prefix) },
+        'rightMargin' => ->(v, prefix) { prefixed(TailwindMapper.map_individual_margins(nil, v, nil, nil), prefix) },
+        'bottomMargin' => ->(v, prefix) { prefixed(TailwindMapper.map_individual_margins(nil, nil, v, nil), prefix) },
+        'leftMargin' => ->(v, prefix) { prefixed(TailwindMapper.map_individual_margins(nil, nil, nil, v), prefix) },
+        'startMargin' => ->(v, prefix) { prefixed(TailwindMapper.map_rtl_margins(v, nil), prefix) },
+        'endMargin' => ->(v, prefix) { prefixed(TailwindMapper.map_rtl_margins(nil, v), prefix) },
+        'zIndex' => ->(v, prefix) { prefixed(TailwindMapper.map_z_index(v), prefix) },
+        # false too: a size class that shows (or stops clipping) what the base
+        # hides (or clips) has to say so, or the base class keeps applying.
+        'hidden' => ->(v, prefix) { prefixed(v ? 'invisible' : 'visible', prefix) },
+        'clipToBounds' => ->(v, prefix) { prefixed(v ? 'overflow-hidden' : 'overflow-visible', prefix) },
+        'fontWeight' => ->(v, prefix) { prefixed(TailwindMapper.map_font_weight(v), prefix) },
+        # The base writes nothing at 1 (fully opaque), so a size class at 1
+        # names opacity-100 to undo a base below it.
+        'opacity' => ->(v, prefix) {
+          next nil unless v.is_a?(Numeric)
+
+          prefixed(v >= 1 ? 'opacity-100' : TailwindMapper.map_opacity(v), prefix)
         }
+      }.freeze
+
+      # The keys of a size class's block that are not drawn by
+      # ATTRIBUTE_MAPPERS but elsewhere: gravity by responsive_gravity_classes,
+      # the structural keys by nobody.
+      HANDLED_ELSEWHERE = %w[gravity type child data responsive].freeze
+
+      # Why an attribute a size class names is not drawn on web, by the shape
+      # it has there. Every other key gets the generic reason.
+      UNDRAWN_REASONS = {
+        %w[offsetX offsetY] => 'the web draws an offset as an inline transform, which no class can replace',
+        %w[borderWidth borderColor borderStyle] => "the web draws a border by the type (an ::after, a border or an outline), so a class cannot switch it alone",
+        %w[alignTop alignBottom alignLeft alignRight centerInParent centerVertical centerHorizontal] =>
+          'a relative position is laid out by the parent, not by a class of the node'
       }.freeze
 
       class << self
@@ -147,6 +203,38 @@ module RjuiTools
         # the attribute keys that have responsive overrides (informational).
         # A mapper that judges a value by the node's type (textAlign) takes it
         # as a third argument.
+        # *raw*'s classes (TailwindMapper's space-separated string), each
+        # scoped by *prefix*; nil when there are none.
+        def prefixed(raw, prefix)
+          tokens = raw.to_s.split
+          tokens.empty? ? nil : tokens.map { |c| "#{prefix}#{c}" }.join(' ')
+        end
+
+        def bound?(value)
+          value.is_a?(String) && value.include?('@{')
+        end
+
+        # A size class's key that is not drawn on web is said at build time:
+        # the type, the id, the size class, the key and why (ticket rjui-responsive-unmapped-attributes-are-dropped-
+        # silently: until jsonui-cli 2.3.29 it was dropped with no word, and
+        # the author thought it held). iOS and Android draw a size class by
+        # redrawing the node with the block merged in, so on those faces it
+        # may well hold — the warning names the web.
+        def warn_undrawn(component, size_class, attr, value)
+          return if HANDLED_ELSEWHERE.include?(attr)
+
+          reason = if bound?(value)
+                     'a bound value exists at run time only, and a size class is switched by classes'
+                   else
+                     UNDRAWN_REASONS.find { |keys, _| keys.include?(attr) }&.last ||
+                       'the web switches a size class by classes, and this attribute is not one a class carries'
+                   end
+          id = component['id'] ? "'#{component['id']}'" : '(no id)'
+          RjuiTools::Core::Logger.warn(
+            "#{component['type']} #{id}: responsive '#{size_class}' sets '#{attr}', which is not drawn on web — #{reason}"
+          )
+        end
+
         def call_mapper(mapper, value, prefix, component)
           mapper.arity == 3 ? mapper.call(value, prefix, component['type']) : mapper.call(value, prefix)
         end
@@ -189,10 +277,12 @@ module RjuiTools
                 next if %w[type child data responsive].include?(attr)
 
                 mapper = ATTRIBUTE_MAPPERS[attr]
-                if mapper
+                if mapper && !bound?(value)
                   # For landscape compound size classes, use width prefix inside the hook conditional
                   cls = call_mapper(mapper, value, '', component)
                   result[:landscape_styles][landscape_key] << cls if cls
+                else
+                  warn_undrawn(component, sc, attr, value)
                 end
               end
 
@@ -208,9 +298,11 @@ module RjuiTools
                 next if %w[type child data responsive].include?(attr)
 
                 mapper = ATTRIBUTE_MAPPERS[attr]
-                if mapper
+                if mapper && !bound?(value)
                   cls = call_mapper(mapper, value, prefix, component)
                   result[:classes] << cls if cls
+                else
+                  warn_undrawn(component, sc, attr, value)
                 end
               end
 
