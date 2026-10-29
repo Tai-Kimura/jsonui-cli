@@ -51,7 +51,10 @@ def _project(root: Path) -> None:
 def _run(root: Path, **flags) -> list:
     args = argparse.Namespace(name=flags.get("name"), from_spec=flags.get("from_spec"),
                               all_specs=flags.get("all_specs", False),
-                              attributes=flags.get("attributes"), container=False,
+                              attributes=flags.get("attributes"),
+                              # argparse's default (neither flag); this said False —
+                              # --no-container — which --all refuses since 2.3.29
+                              container=flags.get("container"),
                               skip_existing=False, force=flags.get("force", False))
     calls = []
 

@@ -1046,6 +1046,11 @@ def _cmd_generate_converter(args: argparse.Namespace) -> int:
               "before generating converters.")
         return 1
 
+    refusal = _converter_flags_refusal(args)
+    if refusal:
+        print(f"ERROR: {refusal}")
+        return 1
+
     if args.all_specs:
         comp_dir = config_mgr.component_spec_directory
         specs_to_process = sorted(comp_dir.glob("*.component.json"))
@@ -1070,7 +1075,7 @@ def _cmd_generate_converter(args: argparse.Namespace) -> int:
             return 1
         return _run_converters_from_specs(
             [spec_path], platforms, config_mgr, skip_existing=skip_existing,
-            force=force,
+            force=force, container=args.container, name=args.name,
         )
     if args.name:
         # Direct mode — pass through to platform tools.
@@ -1080,6 +1085,38 @@ def _cmd_generate_converter(args: argparse.Namespace) -> int:
         )
     print("Usage: jui g converter <name> | --from <spec> | --all")
     return 1
+
+
+def _converter_flags_refusal(args) -> str | None:
+    """Why a flag given with ``--from`` / ``--all`` cannot be used, or None.
+
+    Those paths take the component's name and attributes from its spec, so a
+    flag that says otherwise is refused out loud rather than dropped. Until
+    jsonui-cli 2.3.29 every one of them was dropped with no word — measured:
+    ``--from`` ran the same converter with or without ``--container``,
+    ``--no-container``, ``--attributes`` or a different name, and ``--all``
+    with ``--from`` too (ticket jui-generate-converter-from-ignores-explicit-
+    no-container). ``--container`` / ``--no-container`` with ``--from`` are
+    used (_run_converters_from_specs); ``--force`` / ``--skip-existing``
+    always were.
+    """
+    if args.all_specs:
+        if args.from_spec:
+            return ("--all and --from name different sets of specs — give one "
+                    "(--all is every spec in component_spec_directory)")
+        if args.name:
+            return (f"--all takes every component's name from its spec; the name "
+                    f"'{args.name}' is not used — leave it out, or give --from <spec>")
+        if args.container is not None:
+            flag = "--container" if args.container else "--no-container"
+            return (f"{flag} says one component's shape, and --all generates every "
+                    f"spec's — give it with --from <spec> or a name "
+                    f"(jui g converter <Name> {flag})")
+    if (args.all_specs or args.from_spec) and args.attributes:
+        path = "--all" if args.all_specs else "--from"
+        return (f"{path} takes the attributes from the spec's props; --attributes "
+                f"is not used — write them in the spec, or give a name instead of {path}")
+    return None
 
 
 def _component_spec_texts(spec_data, spec_path: Path):
@@ -1111,8 +1148,15 @@ def _run_converters_from_specs(
     *,
     skip_existing: bool = False,
     force: bool = False,
+    container: bool | None = None,
+    name: str | None = None,
 ) -> int:
     """Iterate component spec files and invoke each platform's `g converter`.
+
+    *container*: ``--container`` (True) / ``--no-container`` (False) given
+    with ``--from``; it wins over what the spec's slots give
+    (_container_from_slots). *name*: the name given with ``--from``, which
+    has to be the spec's own.
 
     Called by `jui g converter --from / --all` only. (This said "also used by
     `jui build`" — the build stopped auto-generating converters long ago and
@@ -1136,6 +1180,11 @@ def _run_converters_from_specs(
         spec_data = _component_spec_texts(spec_data, Path(spec_path))
 
         comp_name = spec_data.get("metadata", {}).get("name", spec_path.stem)
+        if name and name != comp_name:
+            print(f"ERROR: {Path(spec_path).name} is the spec of '{comp_name}', not "
+                  f"'{name}' — --from takes the name from the spec; leave the name "
+                  f"out, or give the spec of '{name}'")
+            return 1
         if comp_name in seen_names:
             continue
         seen_names.add(comp_name)
@@ -1166,11 +1215,11 @@ def _run_converters_from_specs(
                 if isinstance(text, str) and text.strip():
                     descriptions[event_name] = text
         attrs = ",".join(f"{name}:{type_}" for name, type_ in attr_pairs)
-        container = _container_from_slots(spec_data.get("slots"))
+        shape = container if container is not None else _container_from_slots(spec_data.get("slots"))
 
         print(f"\nGenerating converter: {comp_name}")
         result = _run_converter_direct(
-            comp_name, attrs or None, container, platforms, config_mgr,
+            comp_name, attrs or None, shape, platforms, config_mgr,
             skip_existing=skip_existing, force=force,
             descriptions=descriptions or None,
         )
@@ -1196,7 +1245,9 @@ def _container_from_slots(slots) -> bool | None:
     created or re-created by ``--all`` did not compile — for components the
     face had not scaffolded yet, and for any whose wrapper is regenerated.
     Until that is settled a leaf is scaffolded by asking for one:
-    ``jui g converter <Name> --no-container``. ``--all`` keeps it one: None
+    ``jui g converter <Name> --no-container``, or ``--from <spec>
+    --no-container`` (an explicit flag wins over the slots since jsonui-cli
+    2.3.29). ``--all`` keeps it one: None
     passes neither flag, and a tool run with neither keeps what the
     component's definition already declares (until 1.9.0 it wrote the
     default back over the leaf, and the build stopped refusing its children).
