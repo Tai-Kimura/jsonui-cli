@@ -3,8 +3,8 @@
 
 The real `jui viz serve` in a throwaway HOME; the hooks are replayed through forward.py. Two sessions in one room: one
 whose turn ends with StopFailure error rate_limit (Claude Code's own field, claude 2.1.312), and one whose turn ends with
-StopFailure error server_error (the control: stopped, not dazed). Checked: the dazed robot's state, lamp and spiral
-face; five stars on the page around its head, moving; the session list's badge 上限で停止 and its own filter chip (not
+StopFailure error server_error (the control: stopped, not dazed). Checked: the dazed robot's state, lamp and × eyes
+(face 'dizzy'); five stars on the page around its head, moving; the session list's badge 上限で停止 and its own filter chip (not
 counted as 動いている); the card's state and words with the limit's own message; the control robot not dazed; the next
 prompt brings the robot back (no stars, not limited). Light and dark; a video of the whole for the requester."""
 from __future__ import annotations
@@ -104,7 +104,7 @@ async def run_limit_dazed(pw, out, failures):
         near = all(abs(x - hx) < 260 and -260 < y - hy < 120 for x, y in a["stars"])
         moved = sum(abs(p[0] - q[0]) + abs(p[1] - q[1]) for p, q in zip(a["stars"], b["stars"]))
         res["moved"] = moved
-        check(failures, a["state"] == "limited" and a["face"] == "dizzy" and a["lamp"] == "limited", f"the limited robot: state, spiral face, pink lamp: {a}")
+        check(failures, a["state"] == "limited" and a["face"] == "dizzy" and a["lamp"] == "limited", f"the limited robot: state, × eyes, pink lamp: {a}")
         check(failures, len(a["stars"]) == 5 and near, f"five stars on the page around its head: {a}")
         check(failures, moved > 20, f"the stars go round: moved {moved}px in 0.4 s")
         c = res["control"] = await page.evaluate("(id) => window.__dbg.dazed(id)", err)
@@ -132,6 +132,8 @@ async def run_limit_dazed(pw, out, failures):
         check(failures, card["state"] == T("status.limited") and T("act.limited") in card["text"] and "resets Oct 30" in card["text"],
               f"the card says 上限で停止, what it means and the limit's own words: {card['state']!r}")
         await page.screenshot(path=str(out / "card-dazed-light.png"))
+        hx, hy = (await page.evaluate("(id) => window.__dbg.dazed(id)", lim))["head"]   # close up: the × eyes and the stars
+        await page.screenshot(path=str(out / "face-close.png"), clip={"x": max(0, hx - 180), "y": max(0, hy - 230), "width": 360, "height": 360})
         await page.emulate_media(color_scheme="dark")
         await page.wait_for_timeout(1500)
         await page.screenshot(path=str(out / "card-dazed-dark.png"))

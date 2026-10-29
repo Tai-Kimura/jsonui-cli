@@ -54,7 +54,7 @@ const STATES = {
   carry: { name: tl('robot.state.carry'), lamp: 'busy', face: 'normal' },
   stroll: { name: tl('robot.state.stroll'), lamp: 'idle', face: 'normal' },   // to and from play (10-18): no papers; the lamp is the real state's
   done: { name: tl('status.done'), lamp: 'done', face: 'happy' },
-  limited: { name: tl('status.limited'), lamp: 'limited', face: 'dizzy' },   // dazed: stars circle its head (BUILDERS.limited)
+  limited: { name: tl('status.limited'), lamp: 'limited', face: 'dizzy' },   // dazed: × eyes, stars circle its head (BUILDERS.limited)
 };
 const LAMP_TEXT = { idle: tl('lamp.idle'), busy: tl('lamp.busy'), think: tl('lamp.think'), waiting: tl('lamp.waiting'), asking: tl('lamp.asking'), done: tl('lamp.done'), bg: tl('lamp.bg'), limited: tl('lamp.limited') };
 
@@ -265,9 +265,9 @@ function drawFace(ctx, mode, tint = null, eyes = null) {   // eyes: a skill spir
       ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(x - side * 22, ey - 24); ctx.lineTo(x + side * 20, ey - 12); ctx.stroke();
     } else if (mode === 'drained') {                      // drained: small eyes sunk low, looking down
       ctx.beginPath(); ctx.arc(x, ey + 12, 8, 0, Math.PI * 2); ctx.fill();
-    } else if (mode === 'dizzy') {                        // dazed at the usage limit: spiral eyes
-      ctx.lineWidth = 6; ctx.beginPath();
-      for (let k = 0; k <= 60; k++) { const a = k * 0.36 * side, rad = 2 + k * 0.34; ctx[k ? 'lineTo' : 'moveTo'](x + Math.cos(a) * rad, ey + Math.sin(a) * rad); }
+    } else if (mode === 'dizzy') {                        // dazed at the usage limit: × eyes (the requester, 10-29)
+      ctx.lineWidth = 10; ctx.beginPath();
+      ctx.moveTo(x - 16, ey - 16); ctx.lineTo(x + 16, ey + 16); ctx.moveTo(x + 16, ey - 16); ctx.lineTo(x - 16, ey + 16);
       ctx.stroke();
     } else if (mode === 'whistle') {                      // blowing the whistle: eyes squeezed shut with the effort
       ctx.lineWidth = 9; ctx.beginPath();                 // > <

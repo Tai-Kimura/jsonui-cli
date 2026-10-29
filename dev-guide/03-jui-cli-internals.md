@@ -308,7 +308,7 @@ Codex の退勤（2026-10-29、`codex_app_server.CodexLink._leave` / `end`）: d
 上限で停止（2026-10-29、`World._limited` / `_unlimit`、ロボットの状態 `limited`）: Claude Code の StopFailure の `error` が
 `rate_limit`（claude 2.1.312 の本体の項目。server_error などは今までどおり「停止（失敗）」）、Codex は失敗したターンの
 `codexErrorInfo` が `usageLimitExceeded` / `rateLimitExceeded`（Translator が StopFailure に写す。STOP_ERRORS）。
-次の UserPromptSubmit か SessionStart まで気絶（頭の上を星が回る BUILDERS.limited、渦の目、桃色のランプ、絞り込み「上限で停止」）。
+次の UserPromptSubmit か SessionStart まで気絶（頭の上を星が回る BUILDERS.limited、× の目、桃色のランプ、絞り込み「上限で停止」）。
 カードには上限の本文（`lastMessage`。リセットの時刻が書いてある）を出す。
 
 - **セッション間メッセージ**（2026-10-28、`messaging.py` / `message_client.py`）: `jui viz peers` で送信先一覧、
