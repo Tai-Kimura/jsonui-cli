@@ -37,6 +37,12 @@ module RjuiTools
 
         protected
 
+        # build_responsive_class_attr puts the landscape expression in the
+        # className (BaseConverter#apply_landscape_class).
+        def builds_landscape_class_itself?
+          true
+        end
+
         def build_style_attr_with_visibility
           apply_safe_area_insets
           build_style_attr

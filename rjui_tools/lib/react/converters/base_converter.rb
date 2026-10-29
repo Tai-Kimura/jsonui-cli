@@ -2747,6 +2747,7 @@ module RjuiTools
           @visibility_applied = true
           jsx = apply_interaction_class(jsx)
           jsx = apply_enabled_class(jsx)
+          jsx = apply_landscape_class(jsx)
           jsx = apply_hidden_binding(jsx)
           jsx = apply_interaction_inert(jsx)
 
@@ -2852,6 +2853,30 @@ module RjuiTools
           pad = jsx[/\A[ \t]*/]
           body = jsx.rstrip.lines.map { |line| line.strip.empty? ? line : "  #{line}" }.join
           "#{pad}<div className=\"contents\" #{spread}>\n#{body}\n#{pad}</div>"
+        end
+
+        # A responsive block with a landscape key is drawn at run time, by a
+        # class expression on `isLandscape` (ResponsiveHelper
+        # .build_landscape_class_expression): the root tag of every
+        # converter's subtree gets it here, as the bound `enabled` and
+        # `userInteractionEnabled` do. Only View built it into its own
+        # className (build_responsive_class_attr), so until jsonui-cli 2.3.28
+        # a Label's landscape textAlign or gravity drew nothing (measured in
+        # Chromium, a landscape window: the text stayed where the base put it).
+        def apply_landscape_class(jsx)
+          return jsx if builds_landscape_class_itself?
+          return jsx unless @responsive_result && @responsive_result[:needs_landscape_hook]
+
+          class_expr = ResponsiveHelper.build_landscape_class_expression(@responsive_result[:landscape_styles])
+          return jsx if class_expr.empty?
+
+          append_class_to_element(jsx, class_expr, 'landscape')
+        end
+
+        # True for a converter whose className already holds the landscape
+        # expression (ViewConverter, through build_responsive_class_attr).
+        def builds_landscape_class_itself?
+          false
         end
 
         # The generated helper apply_interaction_inert spreads (build_command
