@@ -102,6 +102,12 @@ module RjuiTools
           if attributes['scrollEnabled'] == false && !window_mode
             classes << 'overflow-hidden'
             classes.reject! { |c| c.start_with?('overflow-x-auto', 'overflow-y-auto') }
+          elsif !window_mode && (expr = bound_value_expr(attributes['scrollEnabled']))
+            # A bound false is the declared false, decided at run time: the
+            # inline overflow wins over the overflow-*-auto class. Any other
+            # value (true, not loaded yet) scrolls, as an undeclared one does.
+            # Until jsonui-cli 2.3.28 nothing came and a bound false scrolled.
+            dynamic_styles['overflow'] = "#{expr} === false ? 'hidden' : undefined"
           end
 
           # Bounces (overscroll behavior)

@@ -280,6 +280,7 @@ module RjuiTools
             if is_lazy && attributes['scrollEnabled'] != false
               classes << 'overflow-y-auto'
               dynamic_styles['overflowY'] = "#{lazy_expr} === 'none' ? 'visible' : 'auto'" if lazy_expr
+              bound_scroll_off('overflowY', 'visible')
             end
             if flow_per_section?
               row_gap = grid_row_gap
@@ -297,6 +298,7 @@ module RjuiTools
             if is_lazy && attributes['scrollEnabled'] != false
               classes << 'flex-nowrap'
               dynamic_styles['flexWrap'] = "#{lazy_expr} === 'none' ? 'wrap' : 'nowrap'" if lazy_expr
+              bound_scroll_off('flexWrap', 'wrap')
             end
             # Along the scroll axis — between cells, between section blocks,
             # between pages — lineSpacing, else itemSpacing (the horizontal
@@ -313,6 +315,7 @@ module RjuiTools
             if is_lazy && attributes['scrollEnabled'] != false
               classes << 'overflow-y-auto'
               dynamic_styles['overflowY'] = "#{lazy_expr} === 'none' ? 'visible' : 'auto'" if lazy_expr
+              bound_scroll_off('overflowY', 'visible')
             end
             # lineSpacing for vertical spacing between items
             spacing = attributes['lineSpacing'] || attributes['itemSpacing']
@@ -552,7 +555,20 @@ module RjuiTools
           return [] unless is_lazy && attributes['scrollEnabled'] != false
 
           dynamic_styles['overflowY'] = "#{lazy_expr} === 'none' ? 'visible' : 'auto'" if lazy_expr
+          bound_scroll_off('overflowY', 'visible')
           ['overflow-y-auto']
+        end
+
+        # A bound scrollEnabled: its false is the declared false, decided at
+        # run time — the *property* takes the value a declared false leaves
+        # (*off*: no scroll box, or cells that wrap), inline over the class;
+        # any other value keeps what the class (or a bound lazy) gives.
+        # Until jsonui-cli 2.3.28 a bound false still scrolled.
+        def bound_scroll_off(property, off)
+          expr = bound_value_expr(attributes['scrollEnabled'])
+          return unless expr
+
+          dynamic_styles[property] = "#{expr} === false ? '#{off}' : #{dynamic_styles[property] ? "(#{dynamic_styles[property]})" : 'undefined'}"
         end
 
         # A grid's or a flow's gaps (attribute_semantics.json ->
