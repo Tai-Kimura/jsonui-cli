@@ -219,6 +219,13 @@ module RjuiTools
 
         protected
 
+        # Its own box scrolls unless `lazy: none` — a bound lazy may scroll
+        # (BaseConverter#scrolls_its_content?: the border is an outline).
+        def scrolls_its_content?
+          lazy = attributes['lazy']
+          bound_value_expr(lazy) ? true : (lazy != 'none' || super)
+        end
+
         def build_class_name
           # The node's own padding goes outside the scroll, its insets inside
           # (user ruling 2026-09-28, as iOS and both Compose paths draw them):

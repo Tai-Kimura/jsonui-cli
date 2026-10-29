@@ -450,11 +450,16 @@ module RjuiTools
           # unless it is absolutely positioned already. An element with no
           # ::after (an <img>) falls back to an outline pulled in by its own
           # width (pseudo_border_supported?). A text input keeps a CSS border
-          # (border_draws_over_content?).
+          # (border_draws_over_content?). So does an element that scrolls its
+          # content (scrolls_its_content?): its ::after is laid over the
+          # content, so it scrolled with it and left the box's edges — scrolled
+          # to the end, measured in Chromium, none of the four edges kept a
+          # line. An outline is drawn around the box itself, whatever scrolls
+          # inside it.
           if attributes['borderWidth'] && attributes['borderColor']
             if !border_draws_over_content?
               classes << css_border_classes
-            elsif pseudo_border_supported?
+            elsif pseudo_border_supported? && !scrolls_its_content?
               classes << pseudo_border_classes
               classes << 'relative' unless json['_overlay'] == true
             else
@@ -1336,6 +1341,14 @@ module RjuiTools
         # not a replaced element such as <img>.
         def pseudo_border_supported?
           true
+        end
+
+        # Whether this element is a scroll container the user scrolls: a
+        # className that says overflow auto / scroll on either axis (the type's
+        # own scroll box answers in ScrollViewConverter and CollectionConverter).
+        # clipToBounds (overflow hidden) is not one — no wheel or drag moves it.
+        def scrolls_its_content?
+          attributes['className'].to_s.match?(/(?:\A|\s)overflow(?:-[xy])?-(?:auto|scroll)(?:\s|\z)/)
         end
 
         # Whether a declared border is drawn over the content (an outline

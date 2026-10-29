@@ -30,6 +30,12 @@ module RjuiTools
 
         protected
 
+        # Its own box scrolls, unless the window does (scrollMode window)
+        # (BaseConverter#scrolls_its_content?: the border is an outline).
+        def scrolls_its_content?
+          attributes['scrollMode'] != 'window' || super
+        end
+
         # `defaultScrollAnchor` says where the view STARTS, which no CSS
         # property expresses — the scroll offset has to be written once on
         # mount. The generator hoists the ref and the effect (the same
