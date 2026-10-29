@@ -338,9 +338,13 @@ module SjuiTools
               # distinguish them (collapsedPairs, run 5).
               distribution = @component['distribution']
               gap_distribution = %w[equalSpacing equalCentering].include?(distribution)
-              if !fill_layout && ((!gap_distribution && should_add_leading_spacer_for_hstack(@component['gravity'])) || distribution == 'equalCentering')
+              if !fill_layout && distribution == 'equalCentering'
                 indent do
                   add_line "Spacer(minLength: 0)"
+                end
+              elsif !fill_layout && !gap_distribution && should_add_leading_spacer_for_hstack(@component['gravity'])
+                indent do
+                  add_gravity_spacer(children_take_main_axis_space(children, 'horizontal'))
                 end
               end
             elsif orientation == 'vertical'
@@ -357,9 +361,13 @@ module SjuiTools
               # (same construction note as the HStack branch above).
               distribution = @component['distribution']
               gap_distribution = %w[equalSpacing equalCentering].include?(distribution)
-              if !fill_layout && ((!gap_distribution && should_add_leading_spacer_for_vstack(@component['gravity'])) || distribution == 'equalCentering')
+              if !fill_layout && distribution == 'equalCentering'
                 indent do
                   add_line "Spacer(minLength: 0)"
+                end
+              elsif !fill_layout && !gap_distribution && should_add_leading_spacer_for_vstack(@component['gravity'])
+                indent do
+                  add_gravity_spacer(children_take_main_axis_space(children, 'vertical'))
                 end
               end
             else
@@ -486,9 +494,9 @@ module SjuiTools
                     # a phantom end gap and equalCentering a doubled one).
                     gap_distribution = %w[equalSpacing equalCentering].include?(distribution)
                     if !gap_distribution && orientation == 'horizontal' && width_expands && should_add_trailing_spacer_for_hstack(@component['gravity'])
-                      add_line "Spacer(minLength: 0)"
+                      add_gravity_spacer(children_take_main_axis_space(children, orientation))
                     elsif !gap_distribution && orientation == 'vertical' && height_expands && should_add_trailing_spacer_for_vstack(@component['gravity'])
-                      add_line "Spacer(minLength: 0)"
+                      add_gravity_spacer(children_take_main_axis_space(children, orientation))
                     end
                   end
                   # equalCentering trailing END unit. Emitted for FIXED sizes

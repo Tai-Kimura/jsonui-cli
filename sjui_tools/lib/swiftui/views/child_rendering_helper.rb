@@ -85,6 +85,38 @@ module SjuiTools
         # The keys a stack draws for its child, as Spacers and an alignment wrapper (calculate_alignment_needs).
         STACK_ALIGN_KEYS = %w[alignTop alignBottom alignLeft alignRight centerVertical centerHorizontal centerInParent].freeze
 
+        # Whether a child of this stack takes the free space along the main axis with a Spacer of its own (alignRight,
+        # alignLeft or centerHorizontal in a row; alignBottom, alignTop or centerVertical in a column): 'true', 'false'
+        # or the size-class condition under which one does. The gravity's packing Spacer stands down then, as flexbox's
+        # justify-content does for an auto margin (the web's face of the same keys). Beside it the two split the free
+        # space: alignRight drew in the middle of a row, centerHorizontal a third of the way along (ticket
+        # sjui-hstack-alignright-centred-by-trailing-spacer).
+        def children_take_main_axis_space(children, orientation)
+          takes = ->(attrs) do
+            info = calculate_alignment_needs(attrs, orientation)
+            info[:needs_spacer_before] || info[:needs_spacer_after] ? 'true' : 'false'
+          end
+          conditions = children.map do |child|
+            # A child in a VisibilityWrapper is drawn without its alignment Spacers (apply_visibility_wrapper).
+            next 'false' if !child.is_a?(Hash) || ResponsiveHelper.visibility_declared?(child)
+            next takes.(child) unless ResponsiveHelper.overrides_any?(child, STACK_ALIGN_KEYS)
+
+            ResponsiveHelper.per_size_class(child) { |attrs| takes.(attrs) }
+          end.uniq - ['false']
+          return 'true' if conditions.include?('true')
+
+          conditions.empty? ? 'false' : conditions.join(' || ')
+        end
+
+        # The gravity's packing Spacer, unless a child takes the main axis's free space (children_take_main_axis_space).
+        def add_gravity_spacer(children_take)
+          case children_take
+          when 'false' then add_line 'Spacer(minLength: 0)'
+          when 'true' then nil
+          else add_line "if !(#{children_take}) { Spacer(minLength: 0) }"
+          end
+        end
+
         # A size class overrides one of STACK_ALIGN_KEYS: the stack draws the Spacers and the wrapper outside the
         # child's function, so each holds under the size classes whose merged attributes ask for it
         # (ResponsiveHelper.per_size_class) — `if <cond> { Spacer() }`, and a wrapper whose frame stretches only
