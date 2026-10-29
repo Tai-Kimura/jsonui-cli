@@ -152,11 +152,16 @@ def _gone(pid: int, start: str, procs) -> bool:
 
 
 def end_session(folder: Path, sid: str, own_pid: int, *, procs=proc_info, before_signal: Callable[[int], None] | None = None,
-                wait_sec: float = WAIT_SEC, poll_sec: float = POLL_SEC) -> Outcome:
+                wait_sec: float = WAIT_SEC, poll_sec: float = POLL_SEC, known: tuple | None = None) -> Outcome:
     """Find the session's pid, check it, check it again, send SIGTERM once, wait for it to go. Blocking (run it in an
-    executor). ``before_signal`` is for the race arm only: it runs between the two checks."""
+    executor). ``before_signal`` is for the race arm only: it runs between the two checks. ``known`` is the
+    (pid, procStart) the server last saw for the session: with no entry left and that process gone, the session
+    had already ended (killed without its SessionEnd) and nothing is sent."""
     pids = registry_pids(folder, sid)
     if not pids:
+        if known and isinstance(known[0], int) and isinstance(known[1], str) and known[1].strip() \
+                and _gone(known[0], known[1], procs) and not registry_pids(folder, sid):
+            return Outcome("ended", 200, "no ~/.claude/sessions entry and its process is gone (it had already ended)", known[0])
         return Outcome("refused", 409, "no ~/.claude/sessions entry names this session (not running?)")
     if len(pids) > 1:
         return Outcome("refused", 409, "more than one ~/.claude/sessions entry names this session", None)

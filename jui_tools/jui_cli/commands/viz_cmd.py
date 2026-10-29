@@ -982,9 +982,31 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
             set_source("sessionFiles", "running" if observer else "stopped",
                        None if observer else i18n.tl("srv.sessions.none"))
             if agents_poll:
+                vanish_check: list = []   # the one registry read in flight (never more than one)
+
+                async def end_vanished(listed: set) -> None:
+                    # the registry is read after the list (a session started in between is in it), off the loop
+                    folder = paths.claude_sessions_dir()
+                    try:
+                        if not folder.is_dir():
+                            return   # no registry to read: unknown, nothing ends
+                        entries = await loop.run_in_executor(None, session_files.scan, folder)
+                    except OSError:
+                        return       # an unread registry is unknown too
+                    registered = {e["sessionId"] for e in entries if isinstance(e.get("sessionId"), str)}
+                    gone = world.end_vanished(listed, registered, now_ms())
+                    if gone:
+                        log(f"ended {len(gone)} session(s) gone from claude agents and ~/.claude/sessions: "
+                            + ", ".join(s[:8] for s in gone))
+                        world.publish()
+
                 def on_rows(rows: list) -> None:
                     world.apply_agents_list(rows, now_ms())
                     world.publish()
+                    if vanish_check and not vanish_check[-1].done():
+                        return   # the last registry read is still out: the next list asks again
+                    listed = {r["sessionId"] for r in rows if isinstance(r.get("sessionId"), str)}
+                    vanish_check[:] = [asyncio.create_task(end_vanished(listed))]
 
                 tasks.append(asyncio.create_task(agents_cli.run(
                     config.agentsPollSec, on_rows, lambda st, err: set_source("agents", st, err))))

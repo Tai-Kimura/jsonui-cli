@@ -1364,6 +1364,20 @@ class World:
         """~/.claude/sessions/<pid>.json (never a .key file)."""
         self.apply_agents_list([data], at)
 
+    def end_vanished(self, listed: set, registered: set, at: int) -> list[str]:
+        """A claude session killed without its SessionEnd (ticket 2026-10-29-viz-claude-session-killed-without-sessionend-stays):
+        one whose process this server knew, gone from a ``claude agents --json`` list that was read AND from every
+        ~/.claude/sessions entry, ends as its SessionEnd would. Either one alone ends nothing; an unread list is never
+        passed here. Returns the sessions ended."""
+        gone = [sid for sid in self.session_proc
+                if sid not in listed and sid not in registered
+                and sid in self.sessions and self.sessions[sid]["status"] != "ended"]
+        for sid in gone:
+            self._end(self.sessions[sid], self._main(sid, at), at)
+            self.state.add_event({"at": at, "sessionId": sid, "agentId": sid, "kind": "SessionEnd", "cat": "session",
+                                  "text": i18n.tl("ev.clock_out", reason="(process gone)")})
+        return gone
+
     # ---------------------------------------------------------------- relay channel (08 §2)
 
     def channel_hello(self, ppid, cwd, session_id, at: int, accepts=None, via=None) -> str:

@@ -1141,8 +1141,12 @@ def make_app(ctx: ServerContext) -> web.Application:
         if agent.get("kind") != "main" or agent_id != sid:
             return _clock_log(ctx, record, web.Response(status=403, text="a subagent cannot be clocked out; only its session's main robot\n"), world, sid)
         loop = asyncio.get_running_loop()
-        outcome = await loop.run_in_executor(None, lambda: clockout.end_session(paths.claude_sessions_dir(), sid, os.getpid()))
+        known = world.session_proc.get(sid)
+        outcome = await loop.run_in_executor(None, lambda: clockout.end_session(
+            paths.claude_sessions_dir(), sid, os.getpid(), known=known[:2] if known else None))
         record.update(pid=outcome.pid, signalled=outcome.signalled)
+        if outcome.result == "ended" and not outcome.signalled:
+            record["detail"] = outcome.reason   # why nothing was sent (it had already ended)
         if outcome.result == "ended":
             world.clock_out(sid, now_ms())
             record["ledger"] = await loop.run_in_executor(None, lambda: clockout.mark_ledger(paths.claude_home() / "session-recovery", sid))
