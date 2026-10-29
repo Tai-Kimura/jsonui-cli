@@ -829,6 +829,7 @@ async def run_real_decide(pw, out, failures):
         p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=dict(os.environ, HOME=str(home)))
         p.stdin.write(_json.dumps(payload).encode()); p.stdin.close()
         if decide:
+            p.stdin = None   # closed already: 3.11's communicate() flushes a closed stdin and raises ValueError
             return p
         p.wait(timeout=10)
         return None

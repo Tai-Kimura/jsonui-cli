@@ -215,7 +215,7 @@ async def run_typed_kept(pw, out, failures, Server, jt=None):
         check(failures, abs(f3["histH"] - f0["histH"]) <= 80 and back and back["text"] == TYPED + " more again" and back["other"],
               f"opened: the history as before ({f0['histH']} -> {f3['histH']}), what was typed and picked there: {back}")
 
-        # 4b. nothing waits any more: the choice is forgotten; the next permission starts as one line
+        # 4b. nothing waits any more: the choice is forgotten; the next permission comes open
         await page.click("[data-h-cards] [data-h-fold='close']")
         await until(page, "() => window.__dbg.histFold().folded", "folded again", timeout=10000)
         hook("a", hook_event_name="PostToolUse", tool_name="AskUserQuestion", tool_use_id="toolu_tk1", tool_input=QUESTION, tool_response={"answers": {}})
@@ -226,8 +226,10 @@ async def run_typed_kept(pw, out, failures, Server, jt=None):
         hook("a", hook_event_name="PermissionRequest", tool_name="Bash", tool_input={"command": "make test"})
         f5 = res["fold5"] = await until(page, "() => { const f = window.__dbg.histFold(); return f.bar ? f : null; }", "a new wait on a", timeout=20000,
                                         why="() => window.__dbg.histFold()")
-        check(failures, f5["folded"] and not f5["fresh"] and f5["cardsH"] <= 55 and "make test" in f5["bar"],
-              f"after the old waits settle, a new permission starts as one line with its command: {f5}")
+        # requester 10-29: a permission comes open (#64's one-line start reversed); the fold chosen before is forgotten
+        box = await page.evaluate("() => { const c = document.querySelector('[data-h-cards]'); return c ? c.textContent : ''; }")
+        check(failures, not f5["folded"] and not f5["fresh"] and f5["cardsH"] > 55 and "make test" in box,
+              f"after the old waits settle, a new permission comes open with its command: {f5}")
 
         # 5. the prompt box: typed for a, another robot, back to a
         area = "#rb [data-h-text]"
