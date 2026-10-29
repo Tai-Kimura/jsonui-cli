@@ -396,6 +396,24 @@ async def run_room_roster(pw, out, failures, jt=None):
         # the other robots' waits beside the card (robots 3 and 5 wait on a permission): up, so the arm is about them
         await until(page, "() => window.__dbg.roster().waits", "the waits beside the card", timeout=8000, why=RO)
         await placed(page, "1920-card", card=True)
+        # the card and the list open, the room's 呼び出し and サーバールームに入る stay up and take the press (requester, 10-29:
+        # 「この状態でもサーバールームの入り口と呼び鈴は押せるようにして」; ticket 2026-10-29-viz-card-open-door-bell-perm-cards 1):
+        # each button is the element at its own centre (no card, list or wait block over it), and 呼び出し opens its dialog
+        UNDER = """() => { const at = (id) => { const b = document.getElementById(id); if (!b || b.hidden || !b.getClientRects().length) return null;
+            const r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, e = document.elementFromPoint(x, y);
+            return { id: e && e.closest('button') ? e.closest('button').id : (e ? e.id || e.className : null), rect: [r.left, r.top, r.right, r.bottom] }; };
+          return { box: !document.getElementById('room-solo').hidden, call: at('room-call'), sr: at('room-sr'),
+                   card: !document.getElementById('rb').hidden }; }"""
+        u = res["cardOpenBar"] = await page.evaluate(UNDER)
+        await page.screenshot(path=str(out / "1920-card-door-bell.png"))
+        check(failures, u["box"] and u["card"] and u["call"] and u["call"]["id"] == "room-call" and u["sr"] and u["sr"]["id"] == "room-sr",
+              f"a robot's card open: the room's 呼び出し and サーバールームに入る are up and nothing lies on them: {u}")
+        await page.click("#room-call")
+        await until(page, "() => window.__dbg.bell().open", "呼び出し from the bar with the card open", timeout=8000)
+        await page.screenshot(path=str(out / "1920-card-call-open.png"))
+        await page.keyboard.press("Escape")
+        await until(page, "() => !window.__dbg.bell().open", "呼び出し closed", timeout=8000)
+        await until(page, "() => window.__dbg.roster().card", "the card still open after 呼び出し", timeout=8000, why=RO)
         # the robot selected now is the list's highlighted row (requester 10-23: 「今選択されてるロボットがチェックの方でも
         # ハイライトされるようにしてほしい」): selected from the list, moved to another, a subagent, none
         cur = "(id) => { const s = window.__dbg.roster(); const c = s.rows.filter((r) => r.current); return c.length === 1 && c[0].id === id ? c[0] : null; }"

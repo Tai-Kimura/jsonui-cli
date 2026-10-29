@@ -1230,7 +1230,10 @@ function liveSoloSync() {
   rosterSync(solo);
   const box = document.getElementById('room-solo');
   if (!box) return;
-  box.hidden = !solo || !has3D || TOWER.on || zoom.zoomed || ds.open || pr.open;   // the data server's sheet covers it (2.3.5)
+  // a robot's card keeps it (requester, 10-29: 「この状態でもサーバールームの入り口と呼び鈴は押せるようにして」 — the card and the
+  // room's list open over the 3D); the spec and task boards still take the view
+  const cardOnly = zoom.zoomed && !!rbState.id && !wb.open && !tb.open;
+  box.hidden = !solo || !has3D || TOWER.on || (zoom.zoomed && !cardOnly) || ds.open || pr.open;   // the data server's sheet covers it (2.3.5)
   if (solo) setText(document.getElementById('room-solo-name'), PROJECT[solo].name);
   const call = document.getElementById('room-call');
   if (call) call.hidden = SOURCE.mode !== 'live';   // the call bell's keyboard way in (2.3.5); the demo has no folder

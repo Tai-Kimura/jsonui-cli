@@ -1862,6 +1862,30 @@ async def run_server_room(pw, out, failures, flat=False):
         await page.screenshot(path=str(out / "sr-from-button.png"))
         await page.keyboard.press("Escape")
         await until(page, "() => !window.__dbg.sr().open && window.__dbg.sr().phase === 'idle'", "back to the room from the button's server room")
+        # 6d. with a robot's card open (requester, 10-29: 「この状態でもサーバールームの入り口と呼び鈴は押せるようにして」; ticket
+        # 2026-10-29-viz-card-open-door-bell-perm-cards 1): the bar stays up beside the card, the button is the element at its
+        # centre, and a pointer's press on it opens the server room
+        rid = await page.evaluate("() => (window.__dbg.robots.find((R) => R.def.kind === 'main' && R.def.room === window.__dbg.solo()) || {def: {}}).def.id || null")
+        check(failures, rid is not None, "a robot in the room to open a card on (the arm below proves nothing without one)")
+        if rid:
+            await page.evaluate("(id) => window.__dbg.openRobot(id)", rid)
+            await until(page, "() => !document.getElementById('rb').hidden && window.__dbg.view().zoomed && !window.__dbg.view().tween",
+                        "the robot's card, the camera on it", timeout=8000)
+            cb = res["srButtonCardOpen"] = await page.evaluate("""() => { const b = document.getElementById('room-sr');
+              if (!b || b.hidden || !b.getClientRects().length) return { shown: false };
+              const r = b.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+              return { shown: !document.getElementById('room-solo').hidden, top: !!e && e.closest('button') === b, off: b.getAttribute('aria-disabled') }; }""")
+            await page.screenshot(path=str(out / "card-open-room-bar.png"))
+            check(failures, cb["shown"] and cb.get("top") and cb.get("off") == "false",
+                  f"a robot's card open: サーバールームに入る is up, nothing on it, pressable: {cb}")
+            await page.click("#room-sr")
+            await until(page, "() => window.__dbg.sr().open", "the server room from its button with the card open", timeout=15000)
+            await page.screenshot(path=str(out / "sr-from-card-open.png"))
+            await page.keyboard.press("Escape")
+            await until(page, "() => !window.__dbg.sr().open && window.__dbg.sr().phase === 'idle'", "back from the card's server room")
+            if not await page.evaluate("() => document.getElementById('rb').hidden"):
+                await page.keyboard.press("Escape")
+            await until(page, "() => document.getElementById('rb').hidden && !window.__dbg.view().zoomed", "the card closed, the camera back", timeout=8000)
 
         # 7. reduced motion: the * stand still, the bubble shows
         ctx2 = await browser.new_context(**DESKTOP, reduced_motion="reduce")
