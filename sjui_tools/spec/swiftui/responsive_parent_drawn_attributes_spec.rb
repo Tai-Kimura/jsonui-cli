@@ -68,6 +68,16 @@ RSpec.describe SjuiTools::SwiftUI::JsonToSwiftUIConverter, 'responsive attribute
         var body: some View { EmptyView() }
     }
     enum SizeClassStub { case compact, regular }
+    // WeightedStackView.swift (10.30.8), the signatures
+    struct WeightedHStack: View {
+        init(alignment: VerticalAlignment = .center, spacing: CGFloat = 0, children: [(view: AnyView, weight: CGFloat)],
+             hasMatchParentCrossAxis: Bool = false) {}
+        var body: some View { EmptyView() }
+    }
+    struct WeightedVStack: View {
+        init(alignment: HorizontalAlignment = .leading, spacing: CGFloat = 0, children: [(view: AnyView, weight: CGFloat)]) {}
+        var body: some View { EmptyView() }
+    }
   SWIFT
   end
 
@@ -170,6 +180,90 @@ RSpec.describe SjuiTools::SwiftUI::JsonToSwiftUIConverter, 'responsive attribute
       function = code[/private func responsive0.*/m]
       expect(function).not_to include('alignment: .bottom')
       expect(function).not_to include('maxHeight: .infinity')
+    end
+  end
+
+  describe 'a weight a size class declares (ticket sjui-responsive-weight-overrides-are-not-drawn)' do
+    def stack(orientation, children)
+      file = File.join(temp_dir, "w#{rand(1 << 30)}.json")
+      File.write(file, JSON.generate({ 'type' => 'View', 'orientation' => orientation, 'width' => 'matchParent', 'height' => 60, 'child' => children }))
+      code, _actions, _state, _children, funcs = converter.convert_json_to_view(file)
+      ([code] + funcs).join("\n")
+    end
+
+    let(:a) { { 'type' => 'Label', 'id' => 'a', 'text' => 'A', 'responsive' => { 'regular' => { 'weight' => 2 } } } }
+    let(:b) { { 'type' => 'Label', 'id' => 'b', 'text' => 'B', 'weight' => 1 } }
+
+    it 'is drawn as a run-time weight, the child filling only where it is weighted' do
+      code = stack('horizontal', [a, b])
+      expect(code).to include('WeightedHStack(')
+      expect(code).to include("weight: (#{regular} ? 2.0 : 0.0)")
+      expect(code).to include(".fixedSize(horizontal: (#{regular} ? false : true), vertical: false)")
+      function = code[/private func responsive0.*/m]
+      expect(function.scan('.frame(maxWidth: .infinity').size).to eq(1)   # the regular branch only
+    end
+
+    it 'fills the main axis in the weighted size class for a type that does not do it itself (a Button)' do
+      code = stack('horizontal', [{ 'type' => 'Button', 'id' => 'a', 'text' => 'A', 'responsive' => { 'regular' => { 'weight' => 2 } } }, b])
+      regular_branch = code[/private func responsive0.*/m][/if #{Regexp.escape(regular)} \{(.*?)\} else \{/m, 1]
+      expect(regular_branch).to include('.frame(maxWidth: .infinity)')
+    end
+
+    it 'makes the stack weighted when no base declares a weight' do
+      code = stack('vertical', [{ 'type' => 'Label', 'id' => 'a', 'text' => 'A', 'responsive' => { 'regular' => { 'heightWeight' => 3 } } },
+                                { 'type' => 'Label', 'id' => 'b', 'text' => 'B' }])
+      expect(code).to include('WeightedVStack(')
+      expect(code).to include("weight: (#{regular} ? 3.0 : 0.0)")
+    end
+
+    it 'gives a base weight up where a size class sets it to 0' do
+      code = stack('horizontal', [{ 'type' => 'Label', 'id' => 'a', 'text' => 'A', 'weight' => 1, 'responsive' => { 'regular' => { 'weight' => 0 } } }, b])
+      expect(code).to include("weight: (#{regular} ? 0.0 : 1.0)")
+      function = code[/private func responsive0.*/m]
+      regular_branch = function[/if #{Regexp.escape(regular)} \{(.*?)\} else \{/m, 1]
+      expect(regular_branch).not_to include('maxWidth: .infinity')
+    end
+
+    it 'type-checks' do
+      file = File.join(temp_dir, 'weights.json')
+      File.write(file, JSON.generate({ 'type' => 'View', 'orientation' => 'vertical', 'child' => [
+        { 'type' => 'View', 'orientation' => 'horizontal', 'width' => 'matchParent', 'height' => 40, 'child' => [a, b] },
+        { 'type' => 'View', 'orientation' => 'vertical', 'width' => 'matchParent', 'height' => 90,
+          'child' => [{ 'type' => 'Label', 'id' => 'c', 'text' => 'C', 'responsive' => { 'regular' => { 'heightWeight' => 3 } } }, b.merge('id' => 'd')] }
+      ] }))
+      code, _actions, _state, _children, funcs = converter.convert_json_to_view(file)
+      swift = <<~SWIFT
+        #{relative_stubs}
+        struct EmittedHost: View {
+            var horizontalSizeClass: SizeClassStub? = .regular
+            var verticalSizeClass: SizeClassStub? = .regular
+            var body: some View {
+        #{code}
+            }
+        #{funcs.join("\n")}
+        }
+      SWIFT
+      expect(swift).to include('WeightedHStack(').and include('WeightedVStack(')
+      expect(swift).to compile_as_swift.with_imports('SwiftUI')
+    end
+
+    it 'leaves a stack whose children declare no weight under responsive as it was' do
+      code = stack('horizontal', [{ 'type' => 'Label', 'id' => 'a', 'text' => 'A', 'responsive' => { 'regular' => { 'fontSize' => 20 } } },
+                                  { 'type' => 'Label', 'id' => 'b', 'text' => 'B' }])
+      expect(code).not_to include('Weighted')
+    end
+  end
+
+  describe 'a key no definition declares (ticket sjui-relative-toleftof-toendof-alignbaseline-not-drawn)' do
+    %w[toLeftOf toRightOf toStartOf toEndOf alignBaseline].each do |key|
+      it "#{key} does not turn the parent into a RelativePositionContainer" do
+        code = swift({ 'gravity' => 'center' }, key => (key == 'alignBaseline' ? true : 'x'))
+        expect(code).not_to include('RelativePositionContainer')
+      end
+    end
+
+    it 'leaves a declared relative key as it was' do
+      expect(swift({}, 'alignLeftOfView' => 'x')).to include('RelativePositionContainer')
     end
   end
 end

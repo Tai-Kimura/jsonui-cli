@@ -7,13 +7,18 @@ module SjuiTools
     module Views
       # Helper module for relative positioning logic
       module RelativePositioningHelper
-        # The keys that make the parent a RelativePositionContainer.
+        # The keys that make the parent a RelativePositionContainer: the declared relative ones (attribute_definitions).
+        # toLeftOf, toRightOf, toStartOf, toEndOf and alignBaseline were here too, but no definition declares them —
+        # the validator calls each an unknown attribute, Compose and web read none of them, and no constraint was ever
+        # written for them — so a key outside the language turned the parent into a RelativePositionContainer and drew
+        # nothing (ticket sjui-relative-toleftof-toendof-alignbaseline-not-drawn; the orchestrator's ruling 10-30: a key
+        # with no declaration is not in the language, and does not change the parent).
         RELATIVE_KEYS = %w[
-          toLeftOf toRightOf above below alignTop alignBottom alignLeft alignRight
+          above below alignTop alignBottom alignLeft alignRight
           alignTopView alignBottomView alignLeftView alignRightView
           alignTopOfView alignBottomOfView alignLeftOfView alignRightOfView
           alignCenterVerticalView alignCenterHorizontalView
-          alignBaseline centerHorizontal centerVertical centerInParent toStartOf toEndOf
+          centerHorizontal centerVertical centerInParent
         ].freeze
 
         # The margins RelativePositionContainer draws as the child's inset.

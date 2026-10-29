@@ -255,7 +255,11 @@ module SjuiTools
             # F's dynamic half is SwiftJsonUI 4801af7, `implicitWeight`.
             fills_equally = JsonUIShared::EnumSpelling.lowered(@component['distribution'], 'View', 'distribution') == 'fillequally'
             has_weights = fills_equally || children.any? { |child|
-              weight_expression(child['weight'] || child['widthWeight'] || child['heightWeight']).first
+              weight_expression(child['weight'] || child['widthWeight'] || child['heightWeight']).first ||
+                # a weight a size class declares makes the stack weighted too: the weights are run-time values
+                # (ticket sjui-responsive-weight-overrides-are-not-drawn)
+                (ResponsiveHelper.overrides_any?(child, WEIGHT_KEYS) &&
+                 JsonUIShared::ResponsiveResolver.build_branches(child).any? { |b| weight_expression(b[:attrs]['weight'] || b[:attrs]['widthWeight'] || b[:attrs]['heightWeight']).first })
             }
 
             # Get spacing value (default 0). A bound spacing lands in the
@@ -377,6 +381,11 @@ module SjuiTools
                 # WeightedStackの場合は特別な処理
                 indent do
                   children.each_with_index do |child, index|
+                    if ResponsiveHelper.overrides_any?(child, WEIGHT_KEYS)
+                      weight, fixed_size_modifier = responsive_weight_plan(child, orientation, fills_equally)
+                      emit_weighted_child(child, index, children.size, orientation, weight, fixed_size_modifier)
+                      next
+                    end
                     weighted, weight = weight_expression(child['weight'] || child['widthWeight'] || child['heightWeight'])
                     if fills_equally && !weighted
                       # Explicit child size wins over the size half of
@@ -397,14 +406,6 @@ module SjuiTools
                       end
                     end
 
-                    # 各子要素を(view: AnyView, weight: CGFloat)のタプルとして追加
-                    add_line "("
-                    add_line "  view: AnyView("
-
-                    # 子要素を生成
-                    # Pass parent orientation to child for proper frame handling
-                    child['parent_orientation'] = orientation
-
                     # weight > 0: set matchParent on main axis so .frame(maxWidth/maxHeight: .infinity)
                     # is applied inside the converter BEFORE .background()
                     if weighted
@@ -419,76 +420,11 @@ module SjuiTools
                       end
                     end
 
-                    # Capture full child code including VisibilityWrapper if needed
-                    before_count = @generated_code.size
-
-                    has_visibility = ResponsiveHelper.visibility_declared?(child)
-                    # If visibility wrapper is needed, child content goes 1 level deeper
-                    child_indent = has_visibility ? @indent_level + 3 : @indent_level + 2
-
-                    child_converter = @converter_factory.create_converter(child, child_indent, @action_manager, @converter_factory, @view_registry)
-                    next unless child_converter
-                    child_code = child_converter.convert
-
-                    if has_visibility
-                      # Wrap with VisibilityWrapper (canonical expression
-                      # parsing shared with view_binding_handler#parse_binding)
-                      visibility_param = ResponsiveHelper.visibility_param(child)
-                      wrapper_indent = "    " * (@indent_level + 2)
-                      @generated_code << "#{wrapper_indent}VisibilityWrapper(#{visibility_param}) {"
-                      child_code.split("\n").each { |line| @generated_code << line }
-                      @generated_code << "#{wrapper_indent}}"
-                    else
-                      child_code.split("\n").each { |line| @generated_code << line }
-                    end
-
-                    # Capture the full generated code for this child (including VisibilityWrapper)
-                    full_child_code = @generated_code[before_count..].join("\n")
-
                     # weight: 0 の子要素で、サイズ指定がない場合は cross-axis の
                     # .fixedSize() を付与する (wrapContent 契約)。これにより
                     # WeightedHStack/VStack が intrinsic size を正しく計測できる。
-                    # inline emit と section 抽出 (view_updater) の両経路で同一の
-                    # modifier を使えるよう、ここで文字列を決めて child info に保持する。
-                    # info に持たせないと section 抽出時に call-site modifier が消える
-                    # (drops-weighted-child-call-site-fixed-size bug)。
-                    fixed_size_modifier = nil
-                    unless weighted
-                      needs_fixed_size = if orientation == 'horizontal'
-                        # 横方向: width が wrapContent または未指定の場合
-                        child_width = child['width']
-                        child_width.nil? || child_width == 'wrapContent'
-                      else
-                        # 縦方向: height が wrapContent または未指定の場合
-                        child_height = child['height']
-                        child_height.nil? || child_height == 'wrapContent'
-                      end
-
-                      if needs_fixed_size
-                        fixed_size_modifier = if orientation == 'horizontal'
-                          ".fixedSize(horizontal: true, vertical: false)"
-                        else
-                          ".fixedSize(horizontal: false, vertical: true)"
-                        end
-                      end
-                    end
-
-                    # Save full child code + fixedSize contract for potential body splitting
-                    @weighted_children_info << { code: full_child_code, weight: weight, fixed_size: fixed_size_modifier }
-
-                    # State変数を継承
-                    if child_converter.respond_to?(:state_variables) && child_converter.state_variables
-                      @state_variables.concat(child_converter.state_variables)
-                    end
-
-                    # inline emit: AnyView(...) の内側に fixedSize を追加
-                    if fixed_size_modifier
-                      add_line "    #{fixed_size_modifier}"
-                    end
-
-                    add_line "  ),"
-                    add_line "  weight: #{weight}"
-                    add_line ")#{index < children.size - 1 ? ',' : ''}"
+                    fixed_size = -> { weighted ? nil : wrap_fixed_size(child, orientation) }
+                    emit_weighted_child(child, index, children.size, orientation, weight, fixed_size)
                   end
                 end
                 # Close the WeightedStack. `hasMatchParentCrossAxis` is
@@ -670,6 +606,118 @@ module SjuiTools
             true # matchParent, or a binding resolved at run time
           else true
           end
+        end
+
+        # The keys a weighted stack reads from its child.
+        WEIGHT_KEYS = %w[weight widthWeight heightWeight].freeze
+
+        # One child of a WeightedHStack / WeightedVStack: `(view: AnyView(...), weight: ...)`. *fixed_size* is the
+        # cross-axis `.fixedSize(...)` of an unweighted wrapContent child (or a lambda that decides it once the child is
+        # converted), kept in @weighted_children_info too: inline emit and section extraction (view_updater) must use the
+        # same modifier, or the call-site modifier is lost (drops-weighted-child-call-site-fixed-size bug).
+        def emit_weighted_child(child, index, count, orientation, weight, fixed_size)
+          # 各子要素を(view: AnyView, weight: CGFloat)のタプルとして追加
+          add_line "("
+          add_line "  view: AnyView("
+
+          # 子要素を生成
+          # Pass parent orientation to child for proper frame handling
+          child['parent_orientation'] = orientation
+
+          # Capture full child code including VisibilityWrapper if needed
+          before_count = @generated_code.size
+
+          has_visibility = ResponsiveHelper.visibility_declared?(child)
+          # If visibility wrapper is needed, child content goes 1 level deeper
+          child_indent = has_visibility ? @indent_level + 3 : @indent_level + 2
+
+          child_converter = @converter_factory.create_converter(child, child_indent, @action_manager, @converter_factory, @view_registry)
+          return unless child_converter
+          child_code = child_converter.convert
+
+          if has_visibility
+            # Wrap with VisibilityWrapper (canonical expression
+            # parsing shared with view_binding_handler#parse_binding)
+            visibility_param = ResponsiveHelper.visibility_param(child)
+            wrapper_indent = "    " * (@indent_level + 2)
+            @generated_code << "#{wrapper_indent}VisibilityWrapper(#{visibility_param}) {"
+            child_code.split("\n").each { |line| @generated_code << line }
+            @generated_code << "#{wrapper_indent}}"
+          else
+            child_code.split("\n").each { |line| @generated_code << line }
+          end
+
+          # Capture the full generated code for this child (including VisibilityWrapper)
+          full_child_code = @generated_code[before_count..].join("\n")
+          fixed_size_modifier = fixed_size.respond_to?(:call) ? fixed_size.call : fixed_size
+
+          # Save full child code + fixedSize contract for potential body splitting
+          @weighted_children_info << { code: full_child_code, weight: weight, fixed_size: fixed_size_modifier }
+
+          # State変数を継承
+          if child_converter.respond_to?(:state_variables) && child_converter.state_variables
+            @state_variables.concat(child_converter.state_variables)
+          end
+
+          # inline emit: AnyView(...) の内側に fixedSize を追加
+          if fixed_size_modifier
+            add_line "    #{fixed_size_modifier}"
+          end
+
+          add_line "  ),"
+          add_line "  weight: #{weight}"
+          add_line ")#{index < count - 1 ? ',' : ''}"
+        end
+
+        # The cross-axis fixedSize of an unweighted child whose main axis is wrapContent or undeclared, or nil.
+        def wrap_fixed_size(attrs, orientation)
+          axis = orientation == 'horizontal' ? 'width' : 'height'
+          return nil unless attrs[axis].nil? || attrs[axis] == 'wrapContent'
+
+          orientation == 'horizontal' ? '.fixedSize(horizontal: true, vertical: false)' : '.fixedSize(horizontal: false, vertical: true)'
+        end
+
+        # A child whose size class overrides its weight: the weight it is drawn with, per size class
+        # (ResponsiveHelper.per_size_class), and its fixedSize, also per size class. The main axis is matchParent
+        # where the child is weighted — in the base, and in each size class — and its own declaration elsewhere, so
+        # the child's function switches the frame with the weight. The stack read the base weight alone, so a weight
+        # written only under `responsive` drew nothing (ticket sjui-responsive-weight-overrides-are-not-drawn).
+        def responsive_weight_plan(child, orientation, fills_equally)
+          axis = orientation == 'horizontal' ? 'width' : 'height'
+          plan = lambda do |attrs|
+            weighted, weight = weight_expression(attrs['weight'] || attrs['widthWeight'] || attrs['heightWeight'])
+            # fillEqually: an undeclared weight is 1 unless the child declares its own main-axis size
+            # (canon childSizePrecedence, as for a child without overrides)
+            weighted, weight = true, 1 if fills_equally && !weighted && !(attrs[axis] && attrs[axis] != 'wrapContent')
+            [weighted, weight]
+          end
+          original = Marshal.load(Marshal.dump(child))
+          weight = ResponsiveHelper.per_size_class(original) { |attrs| plan.(attrs)[1].to_s }
+          fixed = ResponsiveHelper.per_size_class(original) { |attrs| !plan.(attrs)[0] && wrap_fixed_size(attrs, orientation) ? 'true' : 'false' }
+          fixed_size_modifier =
+            case fixed
+            when 'false' then nil
+            when 'true' then wrap_fixed_size({}, orientation)
+            else orientation == 'horizontal' ? ".fixedSize(horizontal: #{fixed}, vertical: false)" : ".fixedSize(horizontal: false, vertical: #{fixed})"
+            end
+
+          fills = ->(value) { value == 'matchParent' || value == -1 }
+          base = original.reject { |k, _| k == 'responsive' }
+          base_weighted = plan.(base)[0]
+          child[axis] = 'matchParent' if base_weighted && !fills.(child[axis])
+          child['responsive'] = original['responsive'].to_h do |size_class, overrides|
+            next [size_class, overrides] unless overrides.is_a?(Hash)
+
+            resolved = JsonUIShared::ResponsiveResolver.resolve(original, size_class)
+            overrides = overrides.dup
+            if plan.(resolved)[0]
+              overrides[axis] = 'matchParent' unless fills.(resolved[axis])
+            elsif base_weighted && !overrides.key?(axis) && !fills.(original[axis])
+              overrides[axis] = original[axis] || 'wrapContent'   # the base was made to fill; this size class does not
+            end
+            [size_class, overrides]
+          end
+          [weight, fixed_size_modifier]
         end
 
         def weighted?(value)

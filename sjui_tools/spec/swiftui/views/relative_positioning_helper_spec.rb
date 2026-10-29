@@ -12,16 +12,6 @@ RSpec.describe SjuiTools::SwiftUI::Views::RelativePositioningHelper do
 
   describe '#has_relative_constraint?' do
     context 'with relative positioning properties' do
-      it 'returns truthy for toLeftOf' do
-        child = { 'toLeftOf' => 'target' }
-        expect(helper.has_relative_constraint?(child)).to be_truthy
-      end
-
-      it 'returns truthy for toRightOf' do
-        child = { 'toRightOf' => 'target' }
-        expect(helper.has_relative_constraint?(child)).to be_truthy
-      end
-
       it 'returns truthy for above' do
         child = { 'above' => 'target' }
         expect(helper.has_relative_constraint?(child)).to be_truthy
@@ -76,15 +66,21 @@ RSpec.describe SjuiTools::SwiftUI::Views::RelativePositioningHelper do
         child = { 'alignTopOfView' => 'target' }
         expect(helper.has_relative_constraint?(child)).to be_truthy
       end
+    end
 
-      it 'returns truthy for toStartOf' do
-        child = { 'toStartOf' => 'target' }
-        expect(helper.has_relative_constraint?(child)).to be_truthy
+    context 'with a key no definition declares' do
+      # toLeftOf, toRightOf, toStartOf, toEndOf and alignBaseline are in no attribute definition (the validator calls
+      # each an unknown attribute) and no constraint is written for them: they no longer turn the parent into a
+      # RelativePositionContainer (ticket sjui-relative-toleftof-toendof-alignbaseline-not-drawn, the orchestrator's
+      # ruling 10-30). These arms were `returns truthy` for four of them until then.
+      %w[toLeftOf toRightOf toStartOf toEndOf].each do |key|
+        it "returns falsy for #{key}" do
+          expect(helper.has_relative_constraint?({ key => 'target' })).to be_falsy
+        end
       end
 
-      it 'returns truthy for toEndOf' do
-        child = { 'toEndOf' => 'target' }
-        expect(helper.has_relative_constraint?(child)).to be_truthy
+      it 'returns falsy for alignBaseline' do
+        expect(helper.has_relative_constraint?({ 'alignBaseline' => true })).to be_falsy
       end
     end
 
