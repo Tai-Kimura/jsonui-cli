@@ -2091,6 +2091,7 @@
   "ev.clockout.refused": "refused",
   "ev.clockout.pid": " (pid {pid})",
   "ev.clockout": "Clock-out signal → {label}{pid} {how}{why}",
+  "ev.clockout.codex": "Clock-out (stop following, no signal) → {label} {how}{why}",
   "ev.clock_in": "Clock in {source}",
   "ev.clock_out": "Clock out {reason}",
   "ev.prompt": "Prompt {prompt}",

@@ -267,4 +267,12 @@ def test_the_page_clocks_a_codex_session_out_through_its_link_and_never_the_clau
         assert [(r['status'], r['result']) for r in log] == [(403, 'refused'), (409, 'refused'), (200, 'ended'), (404, 'refused')]
         assert log[2]['cli'] == 'codex' and log[2]['note'].startswith('a Codex terminal runs')
         assert 'pid' not in log[2] and 'ledger' not in log[2]
+        # the event log says the thread was let go, not that a signal was sent (the requester, 10-29)
+        from jui_cli.viz import i18n
+        lines = [e['text'] for e in world.state.events if e['kind'] == 'ClockOut']
+        label = world.sessions[ROOT]['label']
+        assert lines[1] == i18n.tl('ev.clockout.codex', label=label, how=i18n.tl('ev.clockout.refused'),
+                                   why=': a turn is running in this Codex session: stop it first')
+        assert lines[2] == i18n.tl('ev.clockout.codex', label=label, how=i18n.tl('ev.clockout.ended'), why='')
+        assert all(i18n.tl('ev.clockout', label='', pid='', how='', why='').strip() not in t for t in lines[1:3])
     asyncio.run(run())

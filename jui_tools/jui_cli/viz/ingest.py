@@ -487,10 +487,13 @@ class World:
         label = session["label"] if session else sid[:8]
         how = {"ended": i18n.tl("ev.clockout.ended"), "not-ended": i18n.tl("ev.clockout.not_ended"),
                "refused": i18n.tl("ev.clockout.refused")}.get(record.get("result"), "?")
-        pid = i18n.tl("ev.clockout.pid", pid=record["pid"]) if record.get("pid") else ""
         why = "" if record.get("result") == "ended" else f": {record.get('reason', '')}"
-        self.state.add_event({"at": at, "sessionId": sid, "agentId": sid, "kind": "ClockOut", "cat": "session",
-                              "text": i18n.tl("ev.clockout", label=label, pid=pid, how=how, why=why)})
+        if record.get("cli") == "codex":   # no signal: its thread was unsubscribed from (CodexLink.end)
+            text = i18n.tl("ev.clockout.codex", label=label, how=how, why=why)
+        else:
+            pid = i18n.tl("ev.clockout.pid", pid=record["pid"]) if record.get("pid") else ""
+            text = i18n.tl("ev.clockout", label=label, pid=pid, how=how, why=why)
+        self.state.add_event({"at": at, "sessionId": sid, "agentId": sid, "kind": "ClockOut", "cat": "session", "text": text})
 
     def _status(self, session: dict, status: str, at: int, waiting_for: str | None = None) -> None:
         if session["status"] != status or session.get("waitingFor") != waiting_for:

@@ -2043,6 +2043,7 @@
   "ev.clockout.refused": "断った",
   "ev.clockout.pid": "（pid {pid}）",
   "ev.clockout": "退勤の合図 → {label}{pid} {how}{why}",
+  "ev.clockout.codex": "退勤（購読をやめる・合図なし）→ {label} {how}{why}",
   "ev.clock_in": "出勤 {source}",
   "ev.clock_out": "退勤 {reason}",
   "ev.prompt": "指示 {prompt}",

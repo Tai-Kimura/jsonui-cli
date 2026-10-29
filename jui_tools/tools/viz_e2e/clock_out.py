@@ -336,6 +336,10 @@ async def run_clock_out(pw, out, failures):
         res["attempts"] = [(r["result"], r["status"], r.get("cli")) for r in recs]
         check(res["attempts"] == [("ended", 200, None), ("ended", 200, "codex")], f"two attempts, both ended: {res['attempts']}")
         check(all(stand[s].poll() is None for s in (S_VSC, S_DESK)), "codex: the other stand-ins are untouched")
+        want = T("ev.clockout.codex", label=codex_label, how=T("ev.clockout.ended"), why="")
+        res["codexLog"] = await page.evaluate("(w) => [...document.querySelectorAll('body *')].map((n) => n.childElementCount ? '' : n.textContent).find((t) => t.includes(w)) || ''", want)
+        signal_head = T_head("ev.clockout", "label", pid="", how="", why="")
+        check(res["codexLog"] and signal_head not in res["codexLog"], f"codex: the event log says no signal was sent: {res['codexLog']!r}")
         # 390 px: the card with the button, no horizontal scroll
         phone = await new_page(browser, watch, "clock-out-phone", **PHONE)
         await phone.goto(url + "/")
