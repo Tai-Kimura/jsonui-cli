@@ -1,6 +1,7 @@
 {
   "status.waiting": "Waiting for permission",
   "status.asking": "Waiting for an answer",
+  "status.limited": "Stopped at the limit",
   "status.done": "Done",
   "status.idle": "Idle",
   "status.thinking": "Thinking",
@@ -175,6 +176,7 @@
   "lamp.think": "pale green, slow blink (thinking)",
   "lamp.waiting": "yellow (waiting for permission)",
   "lamp.asking": "violet (waiting for an answer)",
+  "lamp.limited": "pink (stopped at the usage limit)",
   "lamp.done": "green blink (done)",
   "lamp.bg": "light blue (working in the background)",
   "robot.paper.spec": "Spec",
@@ -2082,6 +2084,7 @@
   "act.task": "Task {subject}",
   "act.task.done": "Done {subject}",
   "act.background": "Working in the background",
+  "act.limited": "Stopped at the usage limit (back with the next prompt)",
   "act.move": "Moving to {path}",
   "act.compacting": "Compacting",
   "act.shred": "Shredding {label}",
@@ -2105,6 +2108,7 @@
   "ev.task.done": "Task done",
   "ev.stop": "Stopped",
   "ev.stop.failed": "Stopped (failed)",
+  "ev.stop.limited": "Stopped (usage limit)",
   "ev.compacted": "Compacted",
   "ev.attachments": {
     "one": "{n} attachment",

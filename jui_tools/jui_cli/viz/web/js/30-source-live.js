@@ -1007,6 +1007,8 @@ function rebuildRobots(initial) {
     const st = { state: STATES[a.state] ? a.state : 'idle', act: String(a.act || ''), asking: a.state === 'waiting' && a.waitingOn === 'question', since: Number(a.updatedAt) || 0,
       promptAt: Number(a.promptAt) || 0, whistle: a.whistle && Number(a.whistle.until) > 0 ? { at: Number(a.whistle.at) || 0, until: Number(a.whistle.until) } : null,   // a subagent called (10-20)
       readKind: a.state === 'reading' && a.readKind === 'web' ? 'web' : null,   // the dictionary (10-20)
+      // 上限で停止: the limit's own words (they say when it resets), shown on the card while it is dazed
+      limitWords: a.state === 'limited' && typeof a.lastMessage === 'string' ? a.lastMessage.slice(0, 300) : '',
       // a skill in use (the spirit, 45-spirits.js): its name and when it began (the key of one skill's spirit)
       skill: a.skill && typeof a.skill.name === 'string' && Number(a.skill.since) > 0 ? { name: a.skill.name, since: Number(a.skill.since), forked: a.skill.forked === true } : null,
       git: a.git && typeof a.git === 'object' && a.git.id ? a.git : null };   // the box (2.3.4): its last push / pull

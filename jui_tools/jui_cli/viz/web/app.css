@@ -384,6 +384,10 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .st-asking { background: var(--info-bg); color: var(--info); }
 .st-idle { background: var(--chip); color: var(--ink-soft); }
 .st-bg { background: rgba(76, 195, 217, 0.18); color: #137a8c; }
+.st-limited { background: rgba(255, 95, 162, 0.16); color: #b0246a; }   /* 上限で停止: the lamp's pink */
+.rb-limit { margin: 4px 0 0; padding-left: 8px; border-left: 3px solid #ff5fa2; font-size: 12px; color: var(--ink-soft); overflow-wrap: anywhere; }   /* the limit's own words */
+:root[data-theme="dark"] .st-limited { color: #ff9cc8; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .st-limited { color: #ff9cc8; } }
 :root[data-theme="dark"] .st-bg { color: #7fdcec; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .st-bg { color: #7fdcec; } }
 .st-done { background: var(--info-bg); color: var(--info); }

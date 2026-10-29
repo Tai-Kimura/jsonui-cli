@@ -49,13 +49,13 @@ const STATUS_CLASS = { idle: 'st-idle', write: 'st-write', written: 'st-idle', i
 const BADGES = {
   waiting: ['st-waiting', 'status.waiting'], asking: ['st-asking', 'status.asking'], done: ['st-done', 'status.done'],
   idle: ['st-idle', 'status.idle'], thinking: ['st-busy', 'status.thinking'], background: ['st-bg', 'status.background'],
-  busy: ['st-busy', 'status.busy'],
+  busy: ['st-busy', 'status.busy'], limited: ['st-limited', 'status.limited'],
 };
 function robotBadgeKind(id) {
   const s = robotState[id].state;
   // a question waits for the person too, but it is no permission: its own badge and filter (requester, 10-18)
   if (s === 'waiting') return robotState[id].asking ? 'asking' : 'waiting';
-  return ['done', 'idle', 'thinking', 'background'].includes(s) ? s : 'busy';
+  return ['done', 'idle', 'thinking', 'background', 'limited'].includes(s) ? s : 'busy';
 }
 const badgeOf = (kind) => [BADGES[kind][0], tl(BADGES[kind][1])];
 const robotBadge = (id) => badgeOf(robotBadgeKind(id));
@@ -77,7 +77,7 @@ const scopeLabel = () => (UI.project === 'all' ? tl('panel.scope.all') : PROJECT
 function sessionBadge(s) {
   const kinds = new Set(s.robots.map(robotBadgeKind));
   // A session whose busy robots only think says 考え中, as its robot row does (they disagreed — 10-18 review).
-  return badgeOf(['waiting', 'asking', 'busy', 'thinking', 'background'].find((k) => kinds.has(k)) || 'idle');
+  return badgeOf(['waiting', 'asking', 'limited', 'busy', 'thinking', 'background'].find((k) => kinds.has(k)) || 'idle');
 }
 /* A robot on the whiteboards (10-19): its mark, and its session's name when it has one. */
 const robotWho = (id) => `${pill(id, DEF[id].role)}${DEF[id].title ? `<span class="who-name">${esc(DEF[id].title)}</span>` : ''}`;
@@ -136,7 +136,7 @@ $('btn-taskboard').addEventListener('click', (e) => openTaskBoard(e.currentTarge
 
 const COL_STATE = { doing: ['st-busy', tl('status.busy')], wait: ['st-waiting', tl('panel.col.wait')], todo: ['st-idle', tl('panel.col.todo')], done: ['st-done', tl('status.done')] };
 const paintState = (node, [cls, label]) => { if (!node) return; const c = `state ${cls}`; if (node.className !== c) node.className = c; setText(node, label); };
-const SESS_FILTERS = [['all', tl('panel.scope.all')], ['active', tl('panel.sf.active')], ['waiting', tl('status.waiting')], ['asking', tl('panel.sf.asking')], ['background', tl('status.background')], ['idle', tl('status.idle')]];
+const SESS_FILTERS = [['all', tl('panel.scope.all')], ['active', tl('panel.sf.active')], ['waiting', tl('status.waiting')], ['asking', tl('panel.sf.asking')], ['limited', tl('status.limited')], ['background', tl('status.background')], ['idle', tl('status.idle')]];
 const sessFilterEl = $('sess-filter');
 sessFilterEl.innerHTML = SESS_FILTERS.map(([k, label]) => `<button type="button" data-sf="${esc(k)}" aria-pressed="${k === UI.sessFilter}">${esc(label)}<b></b></button>`).join('');
 sessFilterEl.addEventListener('click', (e) => {
@@ -146,7 +146,7 @@ sessFilterEl.addEventListener('click', (e) => {
   [...sessFilterEl.children].forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
   renderSessions();
 });
-const sessMatch = (s, f) => { const [c] = sessionBadge(s); return f === 'all' || (f === 'active' && c !== 'st-idle') || (f === 'waiting' && c === 'st-waiting') || (f === 'asking' && c === 'st-asking') || (f === 'background' && c === 'st-bg') || (f === 'idle' && c === 'st-idle'); };
+const sessMatch = (s, f) => { const [c] = sessionBadge(s); return f === 'all' || (f === 'active' && c !== 'st-idle' && c !== 'st-limited') || (f === 'limited' && c === 'st-limited') || (f === 'waiting' && c === 'st-waiting') || (f === 'asking' && c === 'st-asking') || (f === 'background' && c === 'st-bg') || (f === 'idle' && c === 'st-idle'); };
 $('sessions').addEventListener('click', (e) => {
   const b = e.target.closest('[data-fold]');
   if (!b) return;
@@ -154,7 +154,7 @@ $('sessions').addEventListener('click', (e) => {
   writePref('collapsed', JSON.stringify([...UI.collapsed]));
   renderSessions();
 });
-const SB_ORDER = { 'st-waiting': 0, 'st-asking': 1, 'st-busy': 2, 'st-bg': 3, 'st-idle': 4 };
+const SB_ORDER = { 'st-waiting': 0, 'st-asking': 1, 'st-limited': 2, 'st-busy': 3, 'st-bg': 4, 'st-idle': 5 };
 function renderSessions() {
   const el = $('sessions'), scoped = SESSIONS.filter((s) => inScope(s.project));
   [...sessFilterEl.children].forEach((b) => setText(b.lastElementChild, String(scoped.filter((s) => sessMatch(s, b.dataset.sf)).length)));
@@ -1920,7 +1920,7 @@ function renderRobot(model) {
 <div class="rb-tabs"><button type="button" class="wb-btn rb-wide-btn" data-rb-wide data-fk="rb-wide" aria-pressed="false" aria-controls="rb" hidden>${esc(tl('hist.wide.on'))}</button><div class="rb-tablist" role="tablist" aria-label="${esc(tl('panel.rb.tabs'))}"><button type="button" role="tab" data-rb-tab="now" data-fk="rb-tab-now" aria-selected="true">${esc(tl('panel.rb.tab.now'))}</button><button type="button" role="tab" data-rb-tab="history" data-fk="rb-tab-history" aria-selected="false">${esc(tl('panel.rb.tab.history'))}</button></div></div>
 <div class="rb-body rb-hist" data-rb-hist hidden aria-label="${esc(tl('panel.rb.tab.history'))}" tabindex="0"></div>
 <div class="rb-body" tabindex="0" aria-label="${esc(tl('panel.rb.tab.now'))}">
-<section class="rb-sec" aria-labelledby="rb-h-now"><h3 id="rb-h-now">${esc(tl('panel.rb.now'))}</h3><div class="rb-now"><p class="rb-state"><span class="rb-lamp" data-rb-lamp></span><b data-rb-state></b><span class="rb-since">${esc(tl('panel.rb.lamp'))}<span data-rb-lampname></span></span></p><p class="rb-act" data-rb-act></p><p class="rb-git" data-rb-git hidden title="${esc(tl('panel.rb.git.title'))}"></p><p class="rb-cond" data-rb-cond></p><p class="rb-looks" data-rb-looks hidden></p>${spec ? `<p class="rb-spec"><button type="button" class="link-btn" data-spec-open="${specIdx}" data-fk="rb-spec">${esc(tl('panel.rb.spec', { name: spec.name, screen: spec.screen }))}</button> <span data-rb-specnow></span></p><span class="rb-segs" style="--c:${ROLES[d.role].color}">${SEGS}</span>` : ''}${(SOURCE.mode === 'demo' && id === 'a2') ? '<p class="rb-test" data-rb-test></p><div class="prog" data-rb-prog role="img"><span class="p"></span><span class="r"></span></div>' : ''}</div></section>
+<section class="rb-sec" aria-labelledby="rb-h-now"><h3 id="rb-h-now">${esc(tl('panel.rb.now'))}</h3><div class="rb-now"><p class="rb-state"><span class="rb-lamp" data-rb-lamp></span><b data-rb-state></b><span class="rb-since">${esc(tl('panel.rb.lamp'))}<span data-rb-lampname></span></span></p><p class="rb-act" data-rb-act></p><p class="rb-limit" data-rb-limit hidden></p><p class="rb-git" data-rb-git hidden title="${esc(tl('panel.rb.git.title'))}"></p><p class="rb-cond" data-rb-cond></p><p class="rb-looks" data-rb-looks hidden></p>${spec ? `<p class="rb-spec"><button type="button" class="link-btn" data-spec-open="${specIdx}" data-fk="rb-spec">${esc(tl('panel.rb.spec', { name: spec.name, screen: spec.screen }))}</button> <span data-rb-specnow></span></p><span class="rb-segs" style="--c:${ROLES[d.role].color}">${SEGS}</span>` : ''}${(SOURCE.mode === 'demo' && id === 'a2') ? '<p class="rb-test" data-rb-test></p><div class="prog" data-rb-prog role="img"><span class="p"></span><span class="r"></span></div>' : ''}</div></section>
 ${pending ? `<section class="rb-sec" aria-label="${esc(tl('panel.rb.perm'))}">${permDetail(pending, 'rb')}</section>` : ''}
 ${SOURCE.mode === 'live' ? `<section class="rb-sec" aria-labelledby="rb-h-tests"><h3 id="rb-h-tests">${esc(tl('panel.rb.tests'))}</h3><div data-rb-tests></div></section>` : ''}
 <section class="rb-sec" aria-labelledby="rb-h-tasks"><h3 id="rb-h-tasks">${esc(tl(isMain ? 'panel.rb.tasks' : 'panel.rb.owned'))}<small>${esc(tl('panel.tb.count', { n: owned.length }))}</small></h3>${tasksHTML}</section>
@@ -1934,6 +1934,8 @@ ${subs.length ? `<section class="rb-sec" aria-labelledby="rb-h-subs"><h3 id="rb-
   setText(rbEl.querySelector('[data-rb-lampname]'), st.asking ? LAMP_TEXT.asking : LAMP_TEXT[S.lamp] || '');
   const lamp = rbEl.querySelector('[data-rb-lamp]'); if (lamp) lamp.style.background = st.asking ? LAMP.asking : LAMP[S.lamp];   // its swatch as its name
   setText(rbEl.querySelector('[data-rb-act]'), st.act);
+  const limitEl = rbEl.querySelector('[data-rb-limit]');
+  if (limitEl) { limitEl.hidden = !st.limitWords; setText(limitEl, st.limitWords || ''); }
   // the box (2.3.4): its last push / pull, from the server's agent.git
   const gitEl = rbEl.querySelector('[data-rb-git]');
   if (gitEl) { const g = st.git; gitEl.hidden = !g; if (g) setText(gitEl, tl('panel.rb.git', { label: g.label || '', time: new Date(g.at || 0).toTimeString().slice(0, 5) })); }

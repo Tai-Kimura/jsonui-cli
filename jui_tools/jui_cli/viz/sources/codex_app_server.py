@@ -39,6 +39,11 @@ TEXT_MAX = 4_000
 #: The approval requests a card is made for. Others (item/permissions/requestApproval, MCP elicitations) are left to
 #: the terminal: this client never answers them.
 APPROVALS = ("item/commandExecution/requestApproval", "item/fileChange/requestApproval")
+#: A failed turn's codexErrorInfo -> the error of Claude Code's StopFailure (its own words for the same causes). The
+#: plan's limits are rate_limit (World._limited: the robot is dazed); anything else is unknown.
+STOP_ERRORS = {"usageLimitExceeded": "rate_limit", "rateLimitExceeded": "rate_limit", "serverOverloaded": "overloaded",
+               "internalServerError": "server_error", "unauthorized": "authentication_failed",
+               "modelNotFound": "model_not_found", "badRequest": "invalid_request"}
 
 
 def codex_home() -> Path:
@@ -164,6 +169,15 @@ class Translator:
             message = self.last_message.pop(tid, None)
             kind = "Stop" if self.threads[tid]["root"] == tid else "SubagentStop"
             out = {**self._base(tid), "hook_event_name": kind}
+            turn = params.get("turn") if isinstance(params.get("turn"), dict) else {}
+            if kind == "Stop" and turn.get("status") == "failed":
+                # Claude Code's StopFailure: an error a turn ended on (measured 10-29: a used-up plan's turns are
+                # status "failed", error.codexErrorInfo "usageLimitExceeded", error.message the plan's own words)
+                error = turn.get("error") if isinstance(turn.get("error"), dict) else {}
+                out["hook_event_name"] = "StopFailure"
+                info = error.get("codexErrorInfo")   # a name, or an object (httpConnectionFailed: {...})
+                out["error"] = STOP_ERRORS.get(info, "unknown") if isinstance(info, str) else "unknown"
+                message = message or _s(error.get("message"))
             if message:
                 out["last_assistant_message"] = message[:TEXT_MAX]
             return [out]

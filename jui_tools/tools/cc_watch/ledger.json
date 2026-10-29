@@ -31,7 +31,7 @@
     {
       "id": "hooks",
       "name": "hooks の入力の形とイベント名",
-      "relies_on": "SessionStart / SessionEnd / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop / SubagentStop / Notification payloads (session_id, transcript_path, cwd, hook_event_name, tool_name, tool_input, tool_response, source, reason), the hooks section of settings.json, the plugin's hooks.json; the hook output fields the CLI reads back (hookSpecificOutput, permissionDecision, additionalContext, decision: block)",
+      "relies_on": "SessionStart / SessionEnd / UserPromptSubmit / PreToolUse / PostToolUse / PermissionRequest / Stop / StopFailure (its error — rate_limit is the plan's usage limit, the robot dazed — and last_assistant_message) / SubagentStop / Notification payloads (session_id, transcript_path, cwd, hook_event_name, tool_name, tool_input, tool_response, source, reason), the hooks section of settings.json, the plugin's hooks.json; the hook output fields the CLI reads back (hookSpecificOutput, permissionDecision, additionalContext, decision: block)",
       "probe": "hook_input_shape",
       "impact": "viz: ロボットが出ない・状態が動かない、許可と質問の中継が止まる。session-recovery と agents の hook が記録を取れない",
       "files": [

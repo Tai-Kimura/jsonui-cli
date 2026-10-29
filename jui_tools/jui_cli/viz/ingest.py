@@ -924,6 +924,8 @@ class World:
             threading.Thread(target=self.sent_copies.take, args=(use_id, history_sent_files(tool_input), payload.get("cwd")),
                              name="viz-sent-copy", daemon=True).start()
 
+        if kind in ("SessionStart", "UserPromptSubmit") and agent["kind"] == "main":
+            self._unlimit(session)   # a new start or prompt: no longer stopped on the limit (its state is set below)
         if kind == "SessionStart":
             if _s(payload.get("model")):
                 session["model"] = payload["model"]
@@ -1155,6 +1157,9 @@ class World:
             self._turn_over(session, agent, at, busy, _head(payload.get("last_assistant_message"), MESSAGE_MAX),
                             kind == "StopFailure")
             text = i18n.tl("ev.stop.failed") if kind == "StopFailure" else i18n.tl("ev.stop")
+            if kind == "StopFailure" and payload.get("error") == "rate_limit" and agent["kind"] == "main":
+                self._limited(session, agent, at)
+                text = i18n.tl("ev.stop.limited")
         elif kind == "CwdChanged" and cwd:
             self._move(session, cwd, at)
             self._set(agent, at, "carry", i18n.tl("act.move", path=tilde(cwd)))
@@ -1175,6 +1180,21 @@ class World:
         if tool_input:
             event["detail"] = clip_strings(tool_input, self.tool_input_max)
         return self.state.add_event(event)
+
+    def _limited(self, session: dict, agent: dict, at: int) -> None:
+        """上限で停止 (ticket 2026-10-29-viz-limit-stopped-robot-dazed): the turn ended on the plan's usage limit — Claude
+        Code's StopFailure with ``error: rate_limit`` (claude 2.1.312: the hook's own error field; server_error and the
+        others are not this), a Codex turn failed with usageLimitExceeded / rateLimitExceeded (codex_app_server). The
+        robot is dazed (state ``limited``) until the session's next prompt or start (_unlimit); its last message is the
+        limit's own words, which say when it resets."""
+        session["limited"] = at
+        self._dirty.add("sessions")
+        self._until.pop(agent["id"], None)
+        self._set(agent, at, "limited", i18n.tl("act.limited"), lastMessage=agent.get("lastMessage"))
+
+    def _unlimit(self, session: dict) -> None:
+        if session.pop("limited", None) is not None:
+            self._dirty.add("sessions")
 
     def _turn_over(self, session: dict, agent: dict, at: int, busy: bool, message: str | None, failed: bool) -> None:
         """The robot's turn has ended: by its Stop / StopFailure hook, or by the page's 停止 (no Stop hook comes then)."""

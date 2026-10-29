@@ -40,7 +40,8 @@ const COL = {
 const WEAR = { overall: '#ff8c1a', stripe: '#e8edf3', brim: '#c25e00', rim: '#ffffff', edge: '#1f2a44' };
 const SUB_SIZE = 0.8;
 // asking: a question waits (ticket 2026-10-20-jui-viz-3d-waiting-kinds-question-permission-input): a violet far from the permission's amber
-const LAMP = { idle: '#8fa3bf', busy: '#35d07f', think: '#8fe0b4', bg: '#4cc3d9', waiting: '#ffb020', asking: '#b48cff', done: '#35d07f', off: '#2a3a30' };
+// limited: stopped at the plan's usage limit (ticket 2026-10-29-viz-limit-stopped-robot-dazed), a pink apart from amber and violet
+const LAMP = { idle: '#8fa3bf', busy: '#35d07f', think: '#8fe0b4', bg: '#4cc3d9', waiting: '#ffb020', asking: '#b48cff', limited: '#ff5fa2', done: '#35d07f', off: '#2a3a30' };
 const STATES = {
   idle: { name: tl('status.idle'), lamp: 'idle', face: 'normal' },
   thinking: { name: tl('status.thinking'), lamp: 'think', face: 'normal' },
@@ -53,8 +54,9 @@ const STATES = {
   carry: { name: tl('robot.state.carry'), lamp: 'busy', face: 'normal' },
   stroll: { name: tl('robot.state.stroll'), lamp: 'idle', face: 'normal' },   // to and from play (10-18): no papers; the lamp is the real state's
   done: { name: tl('status.done'), lamp: 'done', face: 'happy' },
+  limited: { name: tl('status.limited'), lamp: 'limited', face: 'dizzy' },   // dazed: stars circle its head (BUILDERS.limited)
 };
-const LAMP_TEXT = { idle: tl('lamp.idle'), busy: tl('lamp.busy'), think: tl('lamp.think'), waiting: tl('lamp.waiting'), asking: tl('lamp.asking'), done: tl('lamp.done'), bg: tl('lamp.bg') };
+const LAMP_TEXT = { idle: tl('lamp.idle'), busy: tl('lamp.busy'), think: tl('lamp.think'), waiting: tl('lamp.waiting'), asking: tl('lamp.asking'), done: tl('lamp.done'), bg: tl('lamp.bg'), limited: tl('lamp.limited') };
 
 const HIPS_Y = 0.36;
 const HEAD = { w: 1.1, h: 0.9, d: 0.92, r: 0.17 };
@@ -221,6 +223,17 @@ function drawCover(c) {
   ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'; ctx.font = `700 18px ${FONT_MONO}`; ctx.fillText('Login', c.width / 2, 150);
 }
 
+/* A yellow five-pointed star with a dark edge (BUILDERS.limited's sprites). */
+function starCanvas() {
+  const c = makeCanvas(96, 96), ctx = c.getContext('2d');
+  ctx.beginPath();
+  for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + (k * Math.PI) / 5, rad = k % 2 ? 18 : 42; ctx[k ? 'lineTo' : 'moveTo'](48 + Math.cos(a) * rad, 50 + Math.sin(a) * rad); }
+  ctx.closePath();
+  ctx.fillStyle = '#ffd23f'; ctx.fill();
+  ctx.lineJoin = 'round'; ctx.lineWidth = 5; ctx.strokeStyle = '#7a5200'; ctx.stroke();
+  return c;
+}
+
 /* ---------- per-robot drawings ---------- */
 function drawFace(ctx, mode, tint = null, eyes = null) {   // eyes: a skill spirit's {shape, color} (mode 'spirit', 45-spirits.js)
   const W = ctx.canvas.width, H = ctx.canvas.height;
@@ -252,6 +265,10 @@ function drawFace(ctx, mode, tint = null, eyes = null) {   // eyes: a skill spir
       ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(x - side * 22, ey - 24); ctx.lineTo(x + side * 20, ey - 12); ctx.stroke();
     } else if (mode === 'drained') {                      // drained: small eyes sunk low, looking down
       ctx.beginPath(); ctx.arc(x, ey + 12, 8, 0, Math.PI * 2); ctx.fill();
+    } else if (mode === 'dizzy') {                        // dazed at the usage limit: spiral eyes
+      ctx.lineWidth = 6; ctx.beginPath();
+      for (let k = 0; k <= 60; k++) { const a = k * 0.36 * side, rad = 2 + k * 0.34; ctx[k ? 'lineTo' : 'moveTo'](x + Math.cos(a) * rad, ey + Math.sin(a) * rad); }
+      ctx.stroke();
     } else if (mode === 'whistle') {                      // blowing the whistle: eyes squeezed shut with the effort
       ctx.lineWidth = 9; ctx.beginPath();                 // > <
       ctx.moveTo(x + side * 17, ey - 12); ctx.lineTo(x - side * 5, ey); ctx.lineTo(x + side * 17, ey + 12); ctx.stroke();
@@ -260,6 +277,7 @@ function drawFace(ctx, mode, tint = null, eyes = null) {   // eyes: a skill spir
   ctx.lineWidth = 6; ctx.beginPath();
   if (mode === 'whistle') { /* the whistle covers the mouth */ }
   else if (mode === 'fired') { ctx.moveTo(cx - 14, 96); ctx.lineTo(cx + 14, 96); }   // a set jaw
+  else if (mode === 'dizzy') { ctx.moveTo(cx - 20, 98); for (let k = 1; k <= 4; k++) ctx.quadraticCurveTo(cx - 20 + k * 10 - 5, 98 + (k % 2 ? -7 : 7), cx - 20 + k * 10, 98); }   // a zigzag mouth
   else if (mode === 'drained') { ctx.moveTo(cx - 16, 98); ctx.quadraticCurveTo(cx - 8, 90, cx, 98); ctx.quadraticCurveTo(cx + 8, 106, cx + 16, 98); }   // a wobbly mouth
   else if (mode === 'happy') ctx.arc(cx, 86, 14, Math.PI * 0.1, Math.PI * 0.9);
   else if (mode === 'wide') ctx.arc(cx, 98, 7, 0, Math.PI * 2);
@@ -1160,6 +1178,22 @@ const BUILDERS = {
     return { group };
   },
   background(r) { return BUILDERS.typing(r); },   // the same laptop (and desk where the room has none) as typing
+  limited(r) {   // 上限で停止: five stars circling over the head (気絶), tilting as they go; reduced motion: still
+    const group = new THREE.Group(), ring = new THREE.Group(); ring.position.set(0, 2.02, 0.05); group.add(ring);
+    if (!S.mat.star) S.mat.star = new THREE.SpriteMaterial({ map: texFrom(starCanvas()), transparent: true, depthWrite: false });
+    const n = 5;
+    for (let i = 0; i < n; i++) { const star = new THREE.Sprite(S.mat.star); star.scale.set(0.24, 0.24, 1); ring.add(star); }
+    const place = (s) => {
+      const turn = reduceMotion ? 0 : s * 2.6;
+      ring.children.forEach((star, i) => {
+        const a = turn + (i / n) * Math.PI * 2;
+        star.position.set(Math.cos(a) * 0.58, Math.sin(a * 2 + i) * 0.05, Math.sin(a) * 0.46);
+      });
+      ring.rotation.z = reduceMotion ? 0.08 : Math.sin(s * 1.7) * 0.14;   // with the lolling head
+    };
+    place(0);
+    return { group, update: place };
+  },
   reading(r) {
     const g = S.geo, m = S.mat, group = new THREE.Group();
     const book = new THREE.Group(); book.position.set(0, 0.93, 0.47); book.rotation.x = -0.35; book.scale.setScalar(1.2); group.add(book);
@@ -1371,6 +1405,13 @@ function poseFor(state, s) {
       const w = s * 7;
       p.lLx = Math.sin(w) * 0.5; p.lRx = -Math.sin(w) * 0.5; p.hipsY = Math.abs(Math.cos(w)) * 0.03; p.torsoY = Math.sin(w) * 0.05;
       p.aLx = -0.95; p.aLz = -0.5; p.aRx = -0.95; p.aRz = 0.5; p.headX = 0.04;
+      break;
+    }
+    case 'limited': {   // dazed at the usage limit: slumped, arms hanging, the head lolling round
+      const roll = reduceMotion ? 0 : s * 1.7;
+      p.torsoX = 0.12; p.hipsY = -0.01;
+      p.headX = 0.16 + Math.cos(roll) * 0.08; p.headZ = Math.sin(roll) * 0.2; p.headY = Math.sin(roll * 0.5) * 0.1;
+      p.aLx = 0.12; p.aLz = 0.05; p.aRx = 0.12; p.aRz = -0.05;
       break;
     }
     case 'done': {

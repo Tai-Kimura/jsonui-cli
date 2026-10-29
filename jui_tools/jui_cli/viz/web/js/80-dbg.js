@@ -465,6 +465,17 @@ window.__dbg = {
       htmlLabels: window.mermaid ? window.mermaid.mermaidAPI.getConfig().htmlLabels : null };
   },
   robotState: () => robotState,   // the model behind the robots (live: what the last slice said)
+  // 上限で停止 (ticket 2026-10-29-viz-limit-stopped-robot-dazed): the robot's state, face and lamp, and where on the page
+  // its head and each circling star are (none while the stars are not shown)
+  dazed: (id) => {
+    const R = robots.find((x) => x.def.id === id);
+    if (!R) return null;
+    const r = canvas.getBoundingClientRect(), v = new THREE.Vector3();
+    const at = (o) => { o.getWorldPosition(v); v.project(camera); return [Math.round(r.left + (v.x + 1) / 2 * r.width), Math.round(r.top + (1 - v.y) / 2 * r.height)]; };
+    const pr = R.robot.props.limited, ring = pr && pr.group.visible ? pr.group.children[0] : null;
+    return { state: R.robot.state, face: String(R.robot.faceMode || '').split('|')[0], lamp: R.robot.lampKey, head: at(R.robot.head),
+      stars: ring ? ring.children.map(at) : [] };
+  },
   // typed text through a redraw (50-panel.js keepFields): every keyed box of the panel, the board and the card's history drawn
   // again now, as a new record, a new question or a new order would draw them
   redrawTyped: () => { for (const el of [$('questions'), $('q-strip'), $('tasks'), $('tb-detail'), HIST.cards].filter(Boolean)) { el._sig = null; el._html = null; } refreshNow(); histCardsPaint(); },

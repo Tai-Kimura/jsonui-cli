@@ -1,6 +1,7 @@
 {
   "status.waiting": "許可待ち",
   "status.asking": "質問に回答待ち",
+  "status.limited": "上限で停止",
   "status.done": "完了",
   "status.idle": "待機",
   "status.thinking": "考え中",
@@ -171,6 +172,7 @@
   "lamp.think": "淡い緑のゆっくり点滅（考え中）",
   "lamp.waiting": "黄（許可待ち）",
   "lamp.asking": "紫（質問に回答待ち）",
+  "lamp.limited": "桃色（使用量の上限で停止）",
   "lamp.done": "緑の点滅（完了）",
   "lamp.bg": "水色（裏で作業中）",
   "robot.paper.spec": "仕様書",
@@ -2034,6 +2036,7 @@
   "act.task": "タスク {subject}",
   "act.task.done": "完了 {subject}",
   "act.background": "バックグラウンド作業中",
+  "act.limited": "使用量の上限で止まった（次のプロンプトで戻る）",
   "act.move": "移動 {path}",
   "act.compacting": "整理中",
   "act.shred": "シュレッダー {label}",
@@ -2057,6 +2060,7 @@
   "ev.task.done": "タスク完了",
   "ev.stop": "停止",
   "ev.stop.failed": "停止（失敗）",
+  "ev.stop.limited": "停止（使用量の上限）",
   "ev.compacted": "整理完了",
   "ev.attachments": {
     "other": "添付 {n} 個"
