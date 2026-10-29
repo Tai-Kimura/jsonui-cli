@@ -14,6 +14,9 @@ module RjuiTools
 
         def convert(indent = 2)
           class_name = build_class_name
+          if (position = bound_content_mode_position_class)
+            class_name = "#{class_name} #{position}".strip
+          end
           style_attr = build_style_attr
           id_attr = build_id_attr
           testid_attr = build_testid_attr
@@ -85,6 +88,22 @@ module RjuiTools
           classes << 'cursor-pointer' if attributes['canTap'] || tap_handler?(attributes['onClick'], attributes['onclick'])
 
           finalize_classes(classes)
+        end
+
+        # A bound contentMode's position, the second half of what a declared
+        # one gives (content_mode_classes: `object-none object-top`). The
+        # component derives only the fit from its `contentMode` prop, and
+        # NetworkImageProps has no `style`, so the position rides the class:
+        # a run-time lookup of the declared spellings, its class names
+        # written whole so Tailwind finds them in the file. Until jsonui-cli
+        # 2.3.28 a bound top / bottom / left / right drew the image in the
+        # middle (measured in Chromium: object-position 50% 50%).
+        def bound_content_mode_position_class
+          expr = bound_value_expr(attributes['contentMode'])
+          return nil unless expr
+
+          classes = CONTENT_MODE_OBJECT_POSITION.transform_values { |position| "object-#{position}" }
+          "${(#{js_object_literal(declared_table(classes, 'contentMode'))})[String(#{expr})] ?? ''}"
         end
 
         def build_src_attr

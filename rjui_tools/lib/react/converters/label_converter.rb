@@ -319,6 +319,11 @@ module RjuiTools
         # preflight), which every Label inherits.
         DEFAULT_LINE_HEIGHT = 1.5
 
+        # A single-run label's horizontal, by textAlign (keyed lowercase):
+        # the `justify-*` TailwindMapper.map_label_gravity gives a declared
+        # value, as the CSS value a bound one needs at run time.
+        LABEL_ACROSS_JUSTIFY = { 'left' => 'flex-start', 'center' => 'center', 'right' => 'flex-end' }.freeze
+
         # L, the line of a Label of this font size that declares no line
         # height, as a CSS number (a multiple of the font size). A size on
         # Tailwind's scale brings its own line with its `text-*` class
@@ -490,6 +495,15 @@ module RjuiTools
             # gravity_classes below keeps that mapping off.
             classes << 'flex'
             classes.concat(TailwindMapper.map_label_gravity(attributes['gravity'], attributes['textAlign']))
+            # A bound textAlign reaches the style as `textAlign` (the base
+            # converter), which does not move the text of a flex row: its
+            # `justify-*` has to come from the binding too. Inline, it wins
+            # over gravity's justify-* class as a declared textAlign does.
+            # Until jsonui-cli 2.3.28 a bound right / center stayed at the
+            # start (measured in Chromium: 0 px left, 188 px right in a 240
+            # wide label) and a bound left beside gravity right went right.
+            bound_enum_style('justifyContent', attributes['textAlign'],
+                             map: declared_table(LABEL_ACROSS_JUSTIFY, 'textAlign'))
           end
 
           # An empty Label keeps one line of height (user ruling 2026-10-05,

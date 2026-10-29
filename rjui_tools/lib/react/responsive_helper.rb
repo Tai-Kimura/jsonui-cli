@@ -415,7 +415,12 @@ module RjuiTools
         def responsive_gravity_classes(component, overrides)
           has_gravity = overrides.key?('gravity')
           base_gravity = component['gravity']
-          return [] unless has_gravity || (overrides.key?('orientation') && base_gravity)
+          # A single-run Label's textAlign is its horizontal too (justify-*,
+          # map_label_gravity): a size class's textAlign has to move it as the
+          # base one does. Until jsonui-cli 2.3.28 only lg:text-* came, and
+          # the text stayed where the base put it (measured in Chromium).
+          label_align = label_row?(component) && overrides.key?('textAlign')
+          return [] unless has_gravity || (overrides.key?('orientation') && base_gravity) || label_align
 
           new_gravity = has_gravity ? overrides['gravity'] : base_gravity
           if label_row?(component)
@@ -444,8 +449,11 @@ module RjuiTools
           row = JsonUIShared::TypeSynonyms.drawn_type(component['type']) == 'View' &&
                 JsonUIShared::EnumSpelling.lowered(orientation, 'View', 'orientation') == 'horizontal'
           resets = { 'items' => row ? 'items-start' : 'items-stretch', 'justify' => 'justify-normal' }
-          # A Label's lines (label_gravity_text_align): back to the start.
-          resets['text'] = 'text-start' if label_row?(component)
+          # A Label's lines (label_gravity_text_align): back to the start —
+          # unless the size class declares its own textAlign, whose text-*
+          # (ATTRIBUTE_MAPPERS) places them; a reset beside it would be a
+          # second lg:text-* for the stylesheet's order to pick.
+          resets['text'] = 'text-start' if label_row?(component) && !overrides.key?('textAlign')
           resets.each do |axis, reset|
             base_has = base_classes.any? { |c| c.start_with?("#{axis}-") }
             new_has = new_classes.any? { |c| c.start_with?("#{axis}-") }

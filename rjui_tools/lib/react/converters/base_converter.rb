@@ -1126,7 +1126,7 @@ module RjuiTools
           return value unless expr
 
           dynamic_styles[css_property] =
-            css_assert(map ? "(#{js_object_literal(map)})[#{expr}]" : expr, css_property)
+            css_assert(map ? "(#{js_object_literal(map)})[String(#{expr})]" : expr, css_property)
           nil
         end
 
