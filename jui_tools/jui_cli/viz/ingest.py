@@ -241,6 +241,7 @@ class World:
         # Robot bookkeeping the page does not need: open tool_use_ids, timers.
         self._open: dict[str, list[str]] = {}
         self._open_tool: dict[str, str] = {}  # tool_use_id -> tool_name
+        self._open_input: dict[str, dict] = {}  # tool_use_id -> its input, while open: which call a PermissionRequest is for
         self._deleting: dict[str, dict] = {}  # tool_use_id -> what its Bash command deletes (robots.deletions)
         # session id -> the Skill calls not yet given a subagent: (when, the calling agent, the skill), oldest first
         self._skill_called: dict[str, list[tuple[int, str, dict]]] = {}
@@ -970,6 +971,7 @@ class World:
             if use_id:
                 self._open.setdefault(agent["id"], []).append(use_id)
                 self._open_tool[use_id] = tool
+                self._open_input[use_id] = tool_input
                 self._tool_started[use_id] = at
             target = {"file": robots._rel(str(tool_input["file_path"]), root)} if _s(tool_input.get("file_path")) else None
             # A question waits for the person as a permission does, but it is not one: the page says 質問に回答待ち,
@@ -1033,6 +1035,7 @@ class World:
             if use_id in opened:
                 opened.remove(use_id)
             self._open_tool.pop(use_id or "", None)
+            self._open_input.pop(use_id or "", None)
             if self.perms.tool_finished(sid, use_id, True, at):
                 self._dirty.add("perms")
             if session["status"] == "waiting":
@@ -1082,12 +1085,11 @@ class World:
             cat = "perm"
             text = i18n.tl("ev.question_permission")
         elif kind == "PermissionRequest":
-            # No tool_use_id here: take the newest open call of the same tool
-            # (parallel calls are real: Bash and ToolSearch overlapped in P0).
-            opened = self._open.get(agent["id"]) or []
-            same = [u for u in opened if self._open_tool.get(u) == tool]
-            if same:
-                self._asking[agent["id"]] = same[-1]
+            # No tool_use_id here: take the open call of the same tool and input (parallel calls are real: Bash and
+            # ToolSearch overlapped in P0, and a Bash waited 795 s while another Bash of the same message ran, 10-29).
+            asked = self._asked_call(agent["id"], tool, tool_input)
+            if asked:
+                self._asking[agent["id"]] = asked
             self.perms.from_hook(sid, agent["id"], tool or "?", tool_input, self._asking.get(agent["id"]),
                                  payload.get("permission_suggestions"), at)
             self._dirty.add("perms")
@@ -1267,7 +1269,15 @@ class World:
     def _clear_open(self, aid: str) -> None:
         for use_id in self._open.pop(aid, []):
             self._open_tool.pop(use_id, None)
+            self._open_input.pop(use_id, None)
         self._asking.pop(aid, None)
+
+    def _asked_call(self, aid: str, tool: str | None, tool_input: dict) -> str | None:
+        """The open call a PermissionRequest (which carries no tool_use_id) is for: the newest of the same tool and the
+        same input, else (an input a hook rewrote) the newest of the same tool."""
+        same = [u for u in self._open.get(aid) or [] if self._open_tool.get(u) == tool]
+        exact = [u for u in same if self._open_input.get(u) == tool_input]
+        return (exact or same or [None])[-1]
 
     # ---------------------------------------------------------------- a skill in use (the spirit, 2.3.16)
 
@@ -1312,6 +1322,7 @@ class World:
         opened = self._open.get(aid)
         if use_id and opened and use_id in opened:
             opened.remove(use_id)
+            self._open_input.pop(use_id, None)
 
     # ---------------------------------------------------------------- other sources
 
@@ -1628,9 +1639,7 @@ class World:
         agent = self._sub(sid, aid, _s(payload.get("agent_type")), at) if aid else self._main(sid, at)
         tool = _s(payload.get("tool_name")) or "?"
         tool_input = payload.get("tool_input") if isinstance(payload.get("tool_input"), dict) else {}
-        opened = self._open.get(agent["id"]) or []
-        same = [u for u in opened if self._open_tool.get(u) == tool]
-        card = self.perms.from_hook(sid, agent["id"], tool, tool_input, same[-1] if same else None,
+        card = self.perms.from_hook(sid, agent["id"], tool, tool_input, self._asked_call(agent["id"], tool, tool_input),
                                     payload.get("permission_suggestions"), at, source="decide")
         self._dirty.add("perms")
         return card
@@ -2316,6 +2325,7 @@ class World:
             if got.get("calls"):
                 self._call_records(sid, got["calls"], at)
             self._denied_records(sid, sid, got.get("denials"), at)
+            self._call_results(sid, sid, got.get("results"), at)
             if self.denials.reply(sid, got.get("replies"), at):   # the receiver's next response under a sent card
                 self._dirty.add("denials")
             self._bill(sid, sid, got.get("bills"), at)
@@ -2356,6 +2366,7 @@ class World:
             got = tail.read()
             self._bill(aid, agent["sessionId"], got.get("bills"), at)
             self._denied_records(agent["sessionId"], aid, got.get("denials"), at)
+            self._call_results(agent["sessionId"], aid, got.get("results"), at)
         for key in [k for k in self._tails if isinstance(k, str) and k.startswith("sub:") and k[4:] not in self.agents]:
             self._tails.pop(key, None)
             self._billed.pop(key[4:], None)
@@ -2366,6 +2377,14 @@ class World:
         for use_id, tool, tool_input, text, when in got or []:
             if self.denials.add(sid, agent_id, use_id, tool, tool_input, reason_of(text), when or at, "transcript"):
                 self._dirty.add("denials")
+
+    def _call_results(self, sid: str, agent_id: str, got, at: int) -> None:
+        """How each call ended, read from a transcript: a permission card no hook settled (the safety check's
+        unanswered prompt sends none) is settled by its call's tool_result (permissions.call_result)."""
+        from .permissions import outcome_of
+        for use_id, tool, tool_input, is_error, head, _when in got or []:
+            if self.perms.call_result(sid, agent_id, use_id, tool, tool_input, outcome_of(is_error, head), at) is not None:
+                self._dirty.add("perms")
 
     def approve_denial(self, card_id: str, at: int) -> tuple[int, str] | None:
         """「実行してよいと伝える」, confirmed on the page: denials.prompt_text(card) goes to that session as a prompt from the

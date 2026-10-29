@@ -170,6 +170,27 @@ def denial_of(rec) -> list[tuple[str, str]]:
     return out
 
 
+#: The start of a result's text kept for telling a refusal from a run (permissions.outcome_of)
+RESULT_HEAD = 300
+
+
+def results_of(rec) -> list[tuple[str, bool, str]]:
+    """(tool_use_id, is_error, the start of the result's text) of each tool_result of a user record: how each call
+    ended, whether or not a hook said so (a refusal by the built-in safety check sends none: ticket
+    2026-10-29-viz-perm-card-stays-after-safety-check-denial)."""
+    msg = rec.get("message") if isinstance(rec, dict) and rec.get("type") == "user" else None
+    content = msg.get("content") if isinstance(msg, dict) else None
+    out = []
+    for b in content if isinstance(content, list) else []:
+        if not isinstance(b, dict) or b.get("type") != "tool_result" or not isinstance(b.get("tool_use_id"), str):
+            continue
+        text = b.get("content")
+        if isinstance(text, list):
+            text = "".join(x.get("text", "") for x in text if isinstance(x, dict) and x.get("type") == "text")
+        out.append((b["tool_use_id"], b.get("is_error") is True, text[:RESULT_HEAD] if isinstance(text, str) else ""))
+    return out
+
+
 def reply_of(rec) -> str:
     """The text an assistant record says to the person (its text blocks), or ''."""
     msg = rec.get("message") if isinstance(rec, dict) and rec.get("type") == "assistant" else None
@@ -191,8 +212,9 @@ class UsageTail:
         """{'usage': [(id, tokens, at)], 'bills': [(id, model, usage, at)], 'calls': [(kind, sender name, at)],
         'denials': [(tool_use_id, tool, input, the result's text, at)] (auto mode denials: denial_of),
         'replies': [(at, text)] (what each assistant record says: reply_of),
+        'results': [(tool_use_id, tool, input, is_error, the text's start, at)] (how each call ended: results_of),
         'bytes': n, 'assistant': n, 'bad': n} for what was added. ``calls``: the receiver's records of a cross-session message (calls.record_event)."""
-        out = {"usage": [], "bills": [], "calls": [], "denials": [], "replies": [], "bytes": 0, "assistant": 0, "bad": 0}
+        out = {"usage": [], "bills": [], "calls": [], "denials": [], "replies": [], "results": [], "bytes": 0, "assistant": 0, "bad": 0}
         try:
             fd = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW)
         except OSError:
@@ -246,6 +268,9 @@ class UsageTail:
             said = reply_of(rec)
             if said:
                 out["replies"].append((_epoch_ms(rec.get("timestamp")), said))
+            for use_id, is_error, head in results_of(rec):
+                name, tool_input = self.uses.get(use_id, ("?", None))
+                out["results"].append((use_id, name, tool_input, is_error, head, _epoch_ms(rec.get("timestamp"))))
             for use_id, text in denial_of(rec):
                 name, tool_input = self.uses.get(use_id, ("?", None))
                 out["denials"].append((use_id, name, tool_input, text, _epoch_ms(rec.get("timestamp"))))

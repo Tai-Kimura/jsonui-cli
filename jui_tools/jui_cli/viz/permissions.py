@@ -10,6 +10,7 @@ Life of a card:
   pending --browser answer--> sent --PostToolUse--> allow (browser)
      |                             \\--PermissionDenied--> deny (browser)
      |--PostToolUse / PermissionDenied first--> answered_in_terminal
+     |--the transcript's tool_result of the call, when no hook said so (call_result)--> as the hook would, or expired
      \\--Stop, SessionEnd, 10 min--> expired
 """
 from __future__ import annotations
@@ -35,6 +36,23 @@ SUMMARY_MAX = 160
 #: up: an allow from the board answered nothing and read as "answered". No card, no relay: Claude Code asks as usual,
 #: and the question card (questions.py) says where to answer.
 NOT_PERMISSIONS = frozenset({"AskUserQuestion"})
+#: How a call that asked for permission ended, from the start of its tool_result's text (this machine's transcripts,
+#: 10-29: 128 refusals by the safety check, 186 by the auto mode classifier, 23 by the person). The safety check's
+#: prompt that nobody answered times out after about 120 s ("the permission prompt timed out, or none was shown") and
+#: sends no hook, and the turn goes on (123 of 128): nothing but this result settles its card.
+SAFETY_CHECK = "Permission for this command was denied by a built-in Claude Code safety check"
+REFUSED = ("The user doesn't want to proceed with this tool use", "The user doesn't want to take this action",
+           "Permission for this action was denied by the Claude Code auto mode classifier.")
+
+
+def outcome_of(is_error: bool, head: str) -> str:
+    """"timed_out" (the safety check's prompt went unanswered), "refused" (the person or the classifier said no) or
+    "ran" (it ran, failed or not: an error of its own is not a refusal)."""
+    if is_error and head.startswith(SAFETY_CHECK):
+        return "timed_out"
+    if is_error and head.startswith(REFUSED):
+        return "refused"
+    return "ran"
 
 
 def _clip(text, n: int) -> str:
@@ -242,16 +260,39 @@ class PermissionBook:
             return None
         for card in self.perms.values():
             if card["sessionId"] == sid and card.get("_useId") == use_id and card["status"] in ("pending", "sent"):
-                if card["status"] == "sent":
-                    sent = card.get("sentBehavior")
-                    self._resolve(card, "allow" if allowed else "deny", at, by="browser")
-                    if (sent == "allow") != allowed:
-                        card["decidedBy"] = "terminal"  # the terminal answered first, the other way
-                else:
-                    self._resolve(card, "answered_in_terminal", at, by="terminal")
-                    card["terminalBehavior"] = "allow" if allowed else "deny"
+                self._finish(card, allowed, at)
                 return card
         return None
+
+    def _finish(self, card: dict, allowed: bool, at: int) -> None:
+        if card["status"] == "sent":
+            sent = card.get("sentBehavior")
+            self._resolve(card, "allow" if allowed else "deny", at, by="browser")
+            if (sent == "allow") != allowed:
+                card["decidedBy"] = "terminal"  # the terminal answered first, the other way
+        else:
+            self._resolve(card, "answered_in_terminal", at, by="terminal")
+            card["terminalBehavior"] = "allow" if allowed else "deny"
+
+    def call_result(self, sid: str, aid: str, use_id: str, tool: str, tool_input, outcome: str, at: int) -> dict | None:
+        """The call's tool_result in the transcript (outcome_of): settle its card as the hook would have, or as expired
+        when the safety check's prompt timed out. The card is the one of that tool_use_id; one that never learnt its
+        id is taken only when it is the one waiting card of that agent with the same tool and the same input. By the
+        id, never by order: a parallel call that ends while this one waits does not close it (measured 10-29: 3 of 55
+        person-waits had another call of theirs end meanwhile, one a Bash waiting 795 s beside a Bash that ran)."""
+        open_cards = [c for c in self.perms.values() if c["sessionId"] == sid and c["status"] in ("pending", "sent")]
+        card = next((c for c in open_cards if c.get("_useId") == use_id), None)
+        if card is None:
+            same = [c for c in open_cards if "_useId" not in c and c["agentId"] == aid and c["toolName"] == tool
+                    and isinstance(tool_input, dict) and c.get("_input") == tool_input]
+            if len(same) != 1:
+                return None
+            card = same[0]
+        if outcome == "timed_out":
+            self._resolve(card, "expired", at)
+        else:
+            self._finish(card, outcome == "ran", at)
+        return card
 
     def session_stopped(self, sid: str, at: int) -> None:
         for card in self.perms.values():
