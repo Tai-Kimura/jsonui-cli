@@ -2,18 +2,18 @@
 るときはカードの左側の上の方に許可が来たのがわかるようにしてほしい」). Runs with `--only card-waits`.
 
 The real `jui viz serve` in a throwaway HOME and the real forward.py; five sessions in one room: host (whose card is
-open), perm (a Bash call waiting on its permission), ask (an AskUserQuestion), den (auto mode stopped a call) and own
-(a permission waiting on the host's own session is not in the block — its card says it; host itself waits too).
+open), perm (a Bash call waiting on its permission), ask (an AskUserQuestion), den (auto mode stopped a call); host
+itself waits on a permission too, and it is in the block (requester 10-29: 「サイドの一覧に現在のロボットの許可も出るようにして」).
 
 Checked, with host's card open at 1440 px:
   * nothing waits: no block;
   * a permission comes: the block shows beside the card — out of it, its right edge left of the card's left edge, its
     top at the card's top — with 許可 1 and perm's mark, and it moved once (rbw-arrive), not under reduced motion;
-  * a question and a stopped call come: 許可 1 · 質問 1 · 止められた操作 1, the robots perm, ask, den; the host's own
-    permission is not counted;
+  * a question, a stopped call and the host's own permission come: 許可 2 · 質問 1 · 止められた操作 1, the robots host,
+    perm, ask, den;
   * a press on perm's mark opens its waits in a pane under the block (out of the card), the robot's card stays;
   * a press on the sum opens the task board's waiting strip;
-  * at 390 px (the card a sheet the page's width): no block; the card's head row has 待ち 3, which opens the pane with
+  * at 390 px (the card a sheet the page's width): no block; the card's head row has 待ち 4, which opens the pane with
     the robots listed; its ボードで見る opens the board;
   * answered where listed (ticket 2026-10-24-viz-card-waits-answer-in-place; qa, qb and pa held by `forward.py --ask` /
     `--decide`): qa's row opens its question in the pane, beside the card and under the block; Red and 送る reach the
@@ -42,7 +42,7 @@ from waits import WaitTimeout, settled, until
 CWD = "/work/card-waits-app"
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
 SID = {k: f"e2e00000-0000-4000-8000-0000000007{i:02d}" for i, k in enumerate(("host", "perm", "ask", "den", "m1", "m2", "m3", "m4", "m5", "m6", "qa", "qb", "pa"), 1)}
-MORE = ("m1", "m2", "m3", "m4", "m5", "m6")   # with perm, ask and den: nine robots waiting, past the six listed
+MORE = ("m1", "m2", "m3", "m4", "m5", "m6")   # with host, perm and ask: nine robots waiting, past the six listed
 QUESTION = {"questions": [{"question": "Which colour?", "header": "Colour", "multiSelect": False,
                            "options": [{"label": "Red", "description": "a"}, {"label": "Blue", "description": "b"}]}]}
 BLOCK = """() => { const b = document.getElementById('rb-waits'), rb = document.getElementById('rb');
@@ -192,10 +192,10 @@ async def run_card_waits(pw, out, failures, jt=None, video: pathlib.Path | None 
         hook("host", hook_event_name="PreToolUse", tool_name="Bash", tool_use_id="toolu_cw4", tool_input={"command": "ls"})
         hook("host", hook_event_name="PermissionRequest", tool_name="Bash", tool_input={"command": "ls"})
         await until(page, "(id) => (window.__dbg.robotState()[id] || {}).state === 'waiting'", "host waits too", arg=rid["host"])
-        b = res["all"] = await block("the block with perm, ask, den", [rid["perm"], rid["ask"], rid["den"]])
-        want = await page.evaluate("() => [['rbw.sum.perm', 1], ['rbw.sum.ask', 1], ['rbw.sum.denied', 1]].map(([k, n]) => window.__dbg.tl(k, { n })).join(' · ')")
-        check(failures, b.get("shown") and b["sum"] == want and rid["host"] not in b["robots"],
-              f"three waits: {want!r}, the host's own left out: {b}")
+        b = res["all"] = await block("the block with host, perm, ask, den", [rid["host"], rid["perm"], rid["ask"], rid["den"]])
+        want = await page.evaluate("() => [['rbw.sum.perm', 2], ['rbw.sum.ask', 1], ['rbw.sum.denied', 1]].map(([k, n]) => window.__dbg.tl(k, { n })).join(' · ')")
+        check(failures, b.get("shown") and b["sum"] == want and rid["host"] in b["robots"],
+              f"four waits: {want!r}, the host's own permission listed: {b}")
         for scheme in ("light", "dark"):
             await page.emulate_media(color_scheme=scheme)
             await settled(page, f"{scheme}: settled")
@@ -222,7 +222,7 @@ async def run_card_waits(pw, out, failures, jt=None, video: pathlib.Path | None 
         await page.set_viewport_size({"width": 1920, "height": 1080})
         await close_board()
         await open_host()
-        b = res["1920"] = await block("1920: the block", [rid["perm"], rid["ask"], rid["den"]])
+        b = res["1920"] = await block("1920: the block", [rid["host"], rid["perm"], rid["ask"], rid["den"]])
         check(failures, b.get("shown") and b["right"] <= b["cardLeft"] - 4, f"1920: the block beside the card: {b}")
         for scheme in ("light", "dark"):
             await page.emulate_media(color_scheme=scheme)
@@ -236,16 +236,16 @@ async def run_card_waits(pw, out, failures, jt=None, video: pathlib.Path | None 
         await page.set_viewport_size({"width": 390, "height": 844})
         await until(page, "() => { const b = document.getElementById('rb-waits'); return b.hidden; }", "390: no block", timeout=10000)
         badge = res["badge"] = await until(page, BADGE, "390: the head's badge", timeout=10000, why=BADGE)
-        check(failures, badge == await page.evaluate("() => window.__dbg.tl('rbw.badge', { n: 3 })"), f"390: 待ち 3 in the card's head: {badge!r}")
+        check(failures, badge == await page.evaluate("() => window.__dbg.tl('rbw.badge', { n: 4 })"), f"390: 待ち 4 in the card's head: {badge!r}")
         for scheme in ("light", "dark"):
             await page.emulate_media(color_scheme=scheme)
             await settled(page, f"390 {scheme}")
             await page.screenshot(path=str(out / f"card-waits-390-{scheme}.png"))
         await page.click("#rb [data-rbw-slot] [data-rbw-pane]")
         p = res["390pane"] = await until(page, f"() => {{ const p = ({PANE})(); return p.shown && p.robots.length ? p : null; }}", "390: the badge opens the pane", timeout=10000, why=PANE)
-        check(failures, p.get("shown") and p["robots"] == sorted([rid["perm"], rid["ask"], rid["den"]]) and p["left"] >= 0 and p["right"] <= p["vw"]
+        check(failures, p.get("shown") and p["robots"] == sorted([rid["host"], rid["perm"], rid["ask"], rid["den"]]) and p["left"] >= 0 and p["right"] <= p["vw"]
               and p["hit"] and p["bottom"] <= p["vh"],
-              f"390: the badge's pane lists the three robots, on the page and in front (what is at its middle is the pane): {p}")
+              f"390: the badge's pane lists the four robots, on the page and in front (what is at its middle is the pane): {p}")
         check(failures, await page.evaluate(CARD_ON, rid["host"]), "390: the host's card stays")
         for scheme in ("light", "dark"):
             await page.emulate_media(color_scheme=scheme)
@@ -300,7 +300,10 @@ async def run_card_waits(pw, out, failures, jt=None, video: pathlib.Path | None 
         hook("pa", hook_event_name="PreToolUse", tool_name="Bash", tool_use_id="toolu_pa", tool_input={"command": "npm test"})
         hook("pa", **req)
         hold("pa", "--decide", **req)
-        await block("qa, qb and pa in the block", [rid[k] for k in ("perm", "ask", "den", "qa", "qb", "pa")], timeout=30000)
+        # seven robots wait (the host's own permission is listed too): the six first listed, qb (the last to come) as ほか 1 台
+        await block("qa and pa in the block, qb past the six", [rid[k] for k in ("host", "perm", "ask", "den", "qa", "pa")], timeout=30000)
+        more = res["more"] = await page.evaluate("() => (document.querySelector('#rb-waits .rbw-more') || {}).textContent || ''")
+        check(failures, more == await page.evaluate("() => window.__dbg.tl('rbw.more', { n: 1 })"), f"seven robots: the seventh as ほか 1 台: {more!r}")
         await until(page, "() => document.querySelectorAll('#questions .qcard.q-open [data-qsend]').length >= 2", "the two held questions open", timeout=20000)
         await pause(1200)
         # qa: its question in the pane; Red, 送る
@@ -333,7 +336,7 @@ async def run_card_waits(pw, out, failures, jt=None, video: pathlib.Path | None 
         check(failures, ans == {"Which colour?": "Red"}, f"qa: the answer from the pane reaches the waiting hook: {got}")
         hook("qa", hook_event_name="PostToolUse", tool_name="AskUserQuestion", tool_use_id="toolu_qa",
              tool_input={**QUESTION, "answers": ans or {}}, tool_response={"answers": ans or {}})
-        await block("qa answered: its row gone", [rid[k] for k in ("perm", "ask", "den", "qb", "pa")], timeout=20000)
+        await block("qa answered: its row gone", [rid[k] for k in ("host", "perm", "ask", "den", "qb", "pa")], timeout=20000)
         p = res["qaAfter"] = await until(page, f"() => {{ const p = ({PANE})(); return p.shown ? null : p; }}", "qa answered: the pane closed", timeout=10000, why=PANE)
         check(failures, not p.get("shown"), f"qa answered: the pane closed: {p}")
         foc = res["qaFocus"] = await page.evaluate(FOCUS)
@@ -349,7 +352,7 @@ async def run_card_waits(pw, out, failures, jt=None, video: pathlib.Path | None 
         got = res["paHook"] = heard("pa")
         decision = ((got or {}).get("hookSpecificOutput") or {}).get("decision")
         check(failures, isinstance(decision, dict) and decision.get("behavior") == "allow", f"pa: allowed in the pane, the hook got allow: {got}")
-        await block("pa allowed: its row gone", [rid[k] for k in ("perm", "ask", "den", "qb")], timeout=20000)
+        await block("pa allowed: its row gone", [rid[k] for k in ("host", "perm", "ask", "den", "qb")], timeout=20000)
         p = res["paAfter"] = await until(page, f"() => {{ const p = ({PANE})(); return p.shown ? null : p; }}", "pa allowed: the pane closed", timeout=10000, why=PANE)
         foc = res["paFocus"] = await page.evaluate(FOCUS)
         check(failures, foc["inBlock"], f"pa allowed in the pane: the keyboard on the block's rows, not on the board's button or lost: {foc}")
@@ -390,7 +393,7 @@ async def run_card_waits(pw, out, failures, jt=None, video: pathlib.Path | None 
           if (!c) return null; c.querySelector('[data-ddismiss]').click(); return c.dataset.dcard; }""", rid["den"])
         p = res["denAfter"] = await until(page, f"() => {{ const p = ({PANE})(); return p.shown ? null : p; }}", "den dismissed in the panel: gone from the pane", timeout=15000, why=PANE)
         check(failures, res["denElsewhere"] and not p.get("shown"), f"den's stopped call closed in the panel: gone from the open pane too: {res['denElsewhere']} {p}")
-        await block("den closed: its row gone", [rid[k] for k in ("perm", "ask")], timeout=15000)
+        await block("den closed: its row gone", [rid[k] for k in ("host", "perm", "ask")], timeout=15000)
         await pause(1500)
 
         # nine robots waiting: six listed, the rest said as ほか N
@@ -399,12 +402,12 @@ async def run_card_waits(pw, out, failures, jt=None, video: pathlib.Path | None 
             hook(k, hook_event_name="UserPromptSubmit", prompt="go")
             hook(k, hook_event_name="PreToolUse", tool_name="Bash", tool_use_id=f"toolu_{k}", tool_input={"command": "ls"})
             hook(k, hook_event_name="PermissionRequest", tool_name="Bash", tool_input={"command": "ls"})
-        want_more = await page.evaluate("() => window.__dbg.tl('rbw.more', { n: 2 })")   # perm, ask and the six: eight (den closed above)
+        want_more = await page.evaluate("() => window.__dbg.tl('rbw.more', { n: 3 })")   # host, perm, ask and the six: nine (den closed above)
         more = res["more"] = await until(page, "(w) => { const b = document.getElementById('rb-waits'), m = b.querySelector('.rbw-more');"
                                          " return m && m.textContent === w ? [b.querySelectorAll('[data-rbw-robot]').length, m.textContent] : null; }",
-                                         "eight waiting: six and ほか 2", arg=want_more, timeout=30000,
+                                         "nine waiting: six and ほか 3", arg=want_more, timeout=30000,
                                          why="() => { const b = document.getElementById('rb-waits'); return [b.querySelectorAll('[data-rbw-robot]').length, (b.querySelector('.rbw-more') || {}).textContent || null]; }")
-        check(failures, more[0] == 6, f"eight waiting: six robots listed and {want_more!r}: {more}")
+        check(failures, more[0] == 6, f"nine waiting: six robots listed and {want_more!r}: {more}")
         (out / "result.json").write_text(json.dumps(res, ensure_ascii=False, indent=1, default=str))
     finally:
         for proc in stand_ins:   # ours, by the pid recorded above

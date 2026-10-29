@@ -782,19 +782,16 @@ function histCardsBox() {
    opens it again. Folded, nothing is taken away: the cards stay (hidden), with what was typed and picked in them.
    Remembered per robot (HIST_FOLD: its id -> the waits it had when folded). A new wait while folded: the box stays
    folded (the person is reading), the bar says the new count, moves once and stays marked until opened (h-fold-new). When nothing waits any more
-   the robot's fold is forgotten: the next question comes open, a permission starts folded. */
+   the robot's fold is forgotten: the next question or permission comes open (requester 10-29: 「許可の応答の履歴での表示は
+   初期表示は開いた状態で閉じる押したら１行にして」 — #64's permission folded at first is reversed). A fold chosen stays
+   through pending → sent. */
 const HIST_FOLD = new Map();
 const histFoldKeys = (perms, qs, ds) => [...perms.filter((p) => p.status === 'pending' || p.status === 'sent').map((p) => `p:${p.id}`),
   ...qs.filter((q) => q.status === 'pending' || q.status === 'sent').map((q) => `q:${q.id}`), ...ds.filter((d) => d.status === 'pending').map((d) => `d:${d.id}`)];
 function histFoldState(id, perms, qs, ds) {
   const keys = histFoldKeys(perms, qs, ds);
-  let fold = HIST_FOLD.get(id);
+  const fold = HIST_FOLD.get(id);
   if (!keys.length) { HIST_FOLD.delete(id); return { folded: false, n: 0, fresh: false }; }
-  // Permissions begin as one line. An explicit open stays open until this group of waits is settled.
-  const waiting = (x) => x.status === 'pending' || x.status === 'sent';
-  if (!fold && perms.some(waiting) && !qs.some(waiting) && !ds.some(waiting)) {
-    fold = { seen: new Set(keys), fresh: false }; HIST_FOLD.set(id, fold);
-  }
   if (!fold || fold.opened) return { folded: false, n: keys.length, fresh: false };
   if (fold.init) fold.init = false;
   else if (keys.some((k) => !fold.seen.has(k))) fold.fresh = true;
@@ -805,8 +802,9 @@ function histFoldBar(fold, perms, qs, ds) {
   const pend = (xs) => xs.filter((x) => x.status === 'pending' || x.status === 'sent').length;
   const n = { q: pend(qs), p: pend(perms), d: pend(ds) };
   if (!n.q && !n.p && !n.d) return '';
-  if (!fold.folded) return `<button type="button" class="h-fold" data-h-fold="close" data-fk="h-fold" aria-expanded="true">${esc(tl('hist.fold.close'))}</button>`;
   const what = [['q', 'hist.fold.q'], ['p', 'hist.fold.p'], ['d', 'hist.fold.d']].filter(([k]) => n[k]).map(([k, key]) => tl(key, { n: n[k] })).join(tl('hist.fold.sep'));
+  // open: the bar closes, and says what it closes (a permission's bar no longer says この質問の欄)
+  if (!fold.folded) return `<button type="button" class="h-fold" data-h-fold="close" data-fk="h-fold" aria-expanded="true"><span class="h-fold-count">${esc(tl('hist.fold.close', { what }))}</span></button>`;
   const first = qs.find((q) => q.status === 'pending'), permission = perms.find((p) => p.status === 'pending' || p.status === 'sent');
   const text = first && first.questions[0] ? first.questions[0].question : permission ? permSummary(permission) : '';
   const textHTML = text ? `<span class="h-fold-text">${esc(text)}</span>` : '';

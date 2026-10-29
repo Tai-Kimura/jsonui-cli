@@ -163,20 +163,42 @@ async def run_hist_cards(pw, out, failures):
         pc = hook(req, "--decide")
         await page.evaluate("(id) => window.__dbg.openRobot(id)", main)
         await page.click('#rb [data-rb-tab="history"]')
-        await wait(page, "() => !!document.querySelector('#rb [data-h-fold=open]')", label="permission defaults to one line")
+        # requester 10-29: 「許可の応答の履歴での表示は初期表示は開いた状態で閉じる押したら１行にして」. Before #64 the card came
+        # large while its bar said 開く (or had no bar at all once sent) and it could not be folded: at every step the state,
+        # the bar's word and the box's height must agree
+        look = """() => {
+          const c=document.querySelector('#rb [data-h-cards]'), b=c.querySelector('[data-h-fold]');
+          return {folded:window.__dbg.histFold().folded, how:b&&b.dataset.hFold, expanded:b&&b.getAttribute('aria-expanded'),
+            word:b?b.textContent:'', height:c.clientHeight, bar:b?b.getBoundingClientRect().height:0,
+            cardVisible:c.querySelector('.tbd-perm').getClientRects().length>0, sw:document.documentElement.scrollWidth};
+        }"""
+        def agrees(st, folded, width):
+            if folded:
+                return (st['folded'] and st['how'] == 'open' and st['expanded'] == 'false' and st['word'].startswith('▲')
+                        and not st['cardVisible'] and st['height'] <= 55 and st['bar'] <= 30 and st['sw'] <= width)
+            return (not st['folded'] and st['how'] == 'close' and st['expanded'] == 'true' and st['word'].startswith('▼')
+                    and '許可 1 件' in st['word'] and '質問' not in st['word'] and st['cardVisible'] and st['height'] > st['bar'] + 60
+                    and st['sw'] <= width)
+        await wait(page, "() => !!document.querySelector('#rb [data-h-fold]')", label="the permission's bar")
         for width in (1440, 390):
             await page.set_viewport_size({"width": width, "height": 1000})
-            compact = await page.evaluate("""() => {
-              const c=document.querySelector('#rb [data-h-cards]'), b=c.querySelector('[data-h-fold]');
-              return {height:c.clientHeight,bar:b.getBoundingClientRect().height,
-                cardVisible:c.querySelector('.tbd-perm').getClientRects().length>0,sw:document.documentElement.scrollWidth};
-            }""")
-            check(failures, compact['height'] <= 55 and not compact['cardVisible'] and compact['bar'] <= 30 and compact['sw'] <= width,
-                  f"permission is one line at {width}px: {compact}")
+            st = await page.evaluate(look)
+            check(failures, agrees(st, False, width), f"a permission comes open, its bar says ▼ close, the box is the card's height at {width}px: {st}")
+            await page.screenshot(path=str(out / f"permission-open-{width}.png"))
+        await page.set_viewport_size({"width": 1440, "height": 1000})
+        await page.click('#rb [data-h-fold=close]')
+        await wait(page, "() => window.__dbg.histFold().folded", label="閉じる folds the permission")
+        for width in (1440, 390):
+            await page.set_viewport_size({"width": width, "height": 1000})
+            st = await page.evaluate(look)
+            check(failures, agrees(st, True, width), f"closed, the permission is one line whose bar says ▲ open at {width}px: {st}")
             await page.screenshot(path=str(out / f"permission-one-line-{width}.png"))
-        await page.set_viewport_size({"width": DESKTOP['viewport']['width'], "height": DESKTOP['viewport']['height']})
+        await page.set_viewport_size({"width": 1440, "height": 1000})
         await page.click('#rb [data-h-fold=open]')
         await wait(page, "() => !window.__dbg.histFold().folded", label="permission opens on request")
+        st = await page.evaluate(look)
+        check(failures, agrees(st, False, 1440), f"opened again, state, word and height agree: {st}")
+        await page.set_viewport_size({"width": DESKTOP['viewport']['width'], "height": DESKTOP['viewport']['height']})
         sub_in = {"command": "echo sub-perm", "description": "サブの許可"}
         hook(body(hook_event_name="PreToolUse", tool_name="Bash", tool_use_id="bash-sub-1", tool_input=sub_in, agent_id=SUB, agent_type="general-purpose"))
         sub_req = body(hook_event_name="PermissionRequest", tool_name="Bash", tool_input=sub_in, agent_id=SUB, agent_type="general-purpose")

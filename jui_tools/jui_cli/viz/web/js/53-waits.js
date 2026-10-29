@@ -127,8 +127,9 @@ $('chip-input').addEventListener('click', () => {
 /* ---------- the waits beside an open card (requester 10-23: 「質問や許可まちがカード開いてると見えないので、開いてるときは
    カードの左側の上の方に許可が来たのがわかるようにしてほしい」) ----------
    While a robot's card is open, the header's chips and the other robots' bubbles are behind it. Beside the card, out of
-   it at its top-left corner, a small block says what the other sessions wait on — permissions, questions, stopped calls
-   — how many, and whose (each robot's mark). The open card's own session is left out: its wait is in the card. A
+   it at its top-left corner, a small block says what the sessions wait on — permissions, questions, stopped calls
+   — how many, and whose (each robot's mark). The open robot's own permission is listed too (requester 10-29: 「サイドの一覧に
+   現在のロボットの許可も出るようにして」); its own question and stopped call stay left out (their card is open). A
    robot's button opens its wait's card (waitOpen, as its bubble does); the sum opens the task board's waiting strip (as
    the chips do). Where the card is the page's width (a phone's sheet, or the card widened to the whole stage) the block
    has no room beside it: the count goes in the card's head row as a badge that opens the same board. Something new moves
@@ -141,7 +142,7 @@ const rbwKinds = (ks) => ks.map((x) => tl(RBW_KIND[x])).join(tl('rbw.sep'));
 const CARD_WAIT_MAX = 6;   // robots listed; the rest said as ほか N
 function cardWaitItems() {
   const own = rbState.id, out = [];
-  for (const p of (latestModel && latestModel.pending) || []) if (p.who !== own && p.status === 'pending') out.push({ kind: 'perm', who: p.who, key: `p:${p.id}`, it: p });
+  for (const p of (latestModel && latestModel.pending) || []) if (p.status === 'pending') out.push({ kind: 'perm', who: p.who, key: `p:${p.id}`, it: p });
   for (const d of denialsWaiting()) if (d.who !== own) out.push({ kind: 'denied', who: d.who, key: `d:${d.id}`, it: d });
   for (const q of questionsWaiting()) if (q.who !== own) out.push({ kind: 'ask', who: q.who, key: `q:${q.id}`, it: q });
   return out.filter((x) => DEF[x.who]);

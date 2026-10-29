@@ -258,7 +258,7 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   home の `sessions/` 内に限定して読む。`response_item` の user / assistant と tool call / output を既存の履歴の行に変換し、
   重複する `event_msg` と instructions・reasoning の本文は表示しない。既存の件数・バイト上限と「もっと前を読む」を共用。
   履歴は要求時だけ読み、slice・snapshot・export に入れない。ローカルモデルの home とサブエージェントの履歴も同じ。
-  履歴タブの許可カードは初期状態で1行。pending→sent でも折り畳みを維持し、クリックして開いた選択はその待機が終わるまで保つ。
+  履歴タブの許可カードは初期状態で開いている（10-29 に #64 の「初期は1行」を反転）。「閉じる」で1行にし、pending→sent でも折り畳みを維持し、開閉の選択はその待機が終わるまで保つ。
   共通CLIによるセッション間メッセージは下記。まだ無いもの: コスト（`thread/tokenUsage/updated`）、Codexのネイティブな `CollabAgentToolCall` 記録の取り込み。
   ページ: `20-core.js` の `cliOf` / `pillCli`。pill・3D の札・セッション一覧の札・カードの番号（`data-cli-name`）・トークの印が
   `--cli-claude` / `--cli-codex` で縁取られる。呼び出しダイアログは Claude Code / Codex のタブ（`callcmd.codex_command`、`POST /api/call-command` の `cli`）。

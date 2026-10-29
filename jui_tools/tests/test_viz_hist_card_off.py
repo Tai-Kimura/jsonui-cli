@@ -120,17 +120,22 @@ function histLowBtn() { return {}; }   // the box's handle (its own row on the b
     assert got[1][4:6] == [["q2"], ["d1"]], "one × takes off that card only; the other answered card of its kind stays"
 
 
-def test_permissions_start_one_line_and_sent_does_not_remove_the_fold():
+def test_permissions_start_open_and_a_chosen_fold_survives_sent():
+    """Requester 10-29: 「許可の応答の履歴での表示は初期表示は開いた状態で閉じる押したら１行にして」 (#64's folded start, reversed):
+    a permission comes open; 閉じる folds it to one line, and that fold stays through pending → sent; opened again it
+    stays open; when nothing waits the fold is forgotten and the next permission comes open again."""
     parts = [_cut('55-history.js', n) for n in ('HIST_FOLD', 'histFoldKeys', 'histFoldState')]
     got = _node(parts, """(() => {
       const p = {id:'p1',status:'pending'};
       const initial = histFoldState('robot',[p],[],[]);
+      HIST_FOLD.set('robot',{seen:new Set(),fresh:false,init:true});
+      const closed = histFoldState('robot',[p],[],[]);
       p.status='sent'; const sent = histFoldState('robot',[p],[],[]);
       HIST_FOLD.set('robot',{opened:true});
       const opened = histFoldState('robot',[p],[],[]);
       const rebuild = histFoldState('robot',[p],[],[]);
       histFoldState('robot',[],[],[]);
       const next = histFoldState('robot',[{id:'p2',status:'pending'}],[],[]);
-      return [initial.folded,sent.folded,sent.n,opened.folded,rebuild.folded,next.folded];
+      return [initial.folded,initial.n,closed.folded,sent.folded,sent.n,opened.folded,rebuild.folded,next.folded];
     })()""")
-    assert got == [True, True, 1, False, False, True]
+    assert got == [False, 1, True, True, 1, False, False, False]
