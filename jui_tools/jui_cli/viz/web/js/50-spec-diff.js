@@ -29,11 +29,11 @@ function sdWhoRender(worktree) {
   const el = $('wb-wt-who');
   const who = SOURCE.mode === 'live' ? sdWorkers(worktree) : [];
   const shown = who.slice(0, SD_WHO_MAX);
-  const html = shown.map((x) => `<span class="sd-who-one">${pill(x.id, DEF[x.id] ? DEF[x.id].role : 'main')}<span class="sd-who-nm">${esc(x.title || tl('panel.rb.main', { id: x.id }))}</span></span>`).join('')
+  const whoHTML = shown.map((x) => `<span class="sd-who-one">${pill(x.id, DEF[x.id] ? DEF[x.id].role : 'main')}<span class="sd-who-nm">${esc(x.title || tl('panel.rb.main', { id: x.id }))}</span></span>`).join('')
     + (who.length > shown.length ? `<span class="sd-who-more">${esc(tl('sd.who.more', { n: who.length - shown.length }))}</span>` : '');
   el.hidden = !who.length;
   el.title = who.length ? tl('sd.who.title') : '';
-  setHTML(el, html);
+  setHTML(el, whoHTML);
 }
 const SD_WHO_MAX = 2;
 /* The head's button: shown and named as the open sheet or the overview needs (renderSheet / renderOverview). */
