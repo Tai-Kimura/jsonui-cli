@@ -86,7 +86,7 @@ RSpec.describe 'rjui Collection: scrollTo names a cell' do
 
   SCROLL_TO_CELL_CSS = {
     'h-[100px]' => 'height:100px', 'h-[40px]' => 'height:40px', 'shrink-0' => 'flex-shrink:0', 'flex' => 'display:flex',
-    'flex-col' => 'flex-direction:column', 'overflow-y-auto' => 'overflow-y:auto',
+    'flex-col' => 'flex-direction:column', 'overflow-y-auto' => 'overflow-y:auto', 'overflow-hidden' => 'overflow:hidden',
     'grid' => 'display:grid', 'grid-cols-2' => 'grid-template-columns:repeat(2,minmax(0,1fr))'
   }.freeze
 
@@ -286,15 +286,29 @@ RSpec.describe 'rjui Collection: scrollTo names a cell' do
     expect(top_after(one, [0, 2])).to eq('0' => 'A0', '2' => 'A2')
   end
 
-  it 'a grid is a scroll container unless lazy is none or scrolling is off; a bound lazy decides at run time' do
+  # scrollEnabled false stops the user's scrolling only; a scrollTo still
+  # moves the Collection (attribute_definitions Collection.scrollEnabled, the
+  # 4f ruling 2026-09-27). This arm said the opposite until jsonui-cli 2.3.28
+  # — "not a scroll container when scrolling is off" — and the false dropped
+  # the box: the cells drew past it and a scrollTo moved nothing. Reversed
+  # with the orchestrator's ruling B (2026-10-29): the box stays and clips.
+  it 'a grid is a scroll container unless lazy is none; scrolling off keeps it and clips; a bound lazy decides at run time' do
     grid = SCROLL_TO_CELL_NODE.merge('columns' => 2)
     one = grid.merge('sections' => [{ 'cell' => 'ACell' }])
     [grid, one, one.merge('columns' => '@{columns}')].each do |node|
       expect(converted(node)[/className="([^"]*)"/, 1].split).to include('overflow-y-auto')
     end
     expect(converted(one.merge('lazy' => 'none'))).not_to include('overflow-y-auto')
-    expect(converted(one.merge('scrollEnabled' => false))).not_to include('overflow-y-auto')
+    off = converted(one.merge('scrollEnabled' => false))[/className="([^"]*)"/, 1].split
+    expect(off).to include('overflow-hidden')
+    expect(off).not_to include('overflow-y-auto')
     expect(converted(one.merge('lazy' => '@{mode}'))).to include("overflowY: data.mode === 'none' ? 'visible' : 'auto'")
+  end
+
+  it 'renders: scrolling off, a scrollTo still moves the list and the grid' do
+    expect(top_after(SCROLL_TO_CELL_NODE.merge('scrollEnabled' => false), [3, 6])).to eq('3' => 'A3', '6' => 'B1')
+    grid = SCROLL_TO_CELL_NODE.merge('columns' => 2, 'height' => 40, 'scrollEnabled' => false)
+    expect(top_after(grid, [3, 7])).to eq('3' => 'A2', '7' => 'B2')
   end
 
   # The request is a CHANGE of the value (the SSoT's Collection.scrollTo,
