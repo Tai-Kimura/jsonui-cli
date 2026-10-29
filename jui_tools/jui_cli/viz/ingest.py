@@ -237,6 +237,7 @@ class World:
         self.codex_ready = None   # sid -> connected root thread
         self.codex_history = None   # (agent id, end, stop) -> history rows
         self.codex_stop = None   # session id -> bool: the Codex link's interrupt (viz_cmd sets it), the page's 停止
+        self.codex_end = None   # async session id -> (status, note or why): the Codex link's 退勤 (viz_cmd sets it)
         # Robot bookkeeping the page does not need: open tool_use_ids, timers.
         self._open: dict[str, list[str]] = {}
         self._open_tool: dict[str, str] = {}  # tool_use_id -> tool_name

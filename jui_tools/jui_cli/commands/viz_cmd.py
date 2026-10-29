@@ -1072,6 +1072,12 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                 world.codex_prompt = codex_prompt
                 world.codex_history = codex_history
                 world.codex_stop = lambda sid: any(link.interrupt(sid) for link in list(codex_links.values()))
+
+                async def codex_end(sid):
+                    link = next((link for link in list(codex_links.values()) if link.tr.root_of(sid) == sid), None)
+                    return await link.end(sid) if link else (409, "this Codex session is not connected")
+
+                world.codex_end = codex_end
                 codex_link_for("", None)
 
                 async def codex_homes_loop() -> None:

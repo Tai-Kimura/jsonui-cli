@@ -21,7 +21,8 @@ Routes (design: dev-guide, 05 §3):
   POST /api/reveal-file  show one file of the history in Finder (open -R): a SendUserFile file or an attachment, named as above (the same checks)
   POST /api/data-docs  a JsonUI room's API and DB specifications for its data server, named by the room (the same checks)
   POST /api/stop    停止: ask one session to stop at its next tool boundary, or take it back (prompt_checks)
-  POST /api/session/end  退勤: SIGTERM to one terminal session's claude (prompt_checks, then clockout.py's checks)
+  POST /api/session/end  退勤: SIGTERM to one terminal session's claude (prompt_checks, then clockout.py's checks);
+                         a Codex session's thread is unsubscribed instead (CodexLink.end)
   POST /api/local-models  the call dialog's Codex tab: the models LM Studio and Ollama list here (local_models.py; prompt_checks)
 """
 from __future__ import annotations
@@ -1140,6 +1141,8 @@ def make_app(ctx: ServerContext) -> web.Application:
             return _clock_log(ctx, record, web.Response(status=404, text="no such robot in this session\n"), world, sid)
         if agent.get("kind") != "main" or agent_id != sid:
             return _clock_log(ctx, record, web.Response(status=403, text="a subagent cannot be clocked out; only its session's main robot\n"), world, sid)
+        if session.get("cli") == "codex":
+            return await _codex_clock_out(ctx, record, world, sid)
         loop = asyncio.get_running_loop()
         known = world.session_proc.get(sid)
         outcome = await loop.run_in_executor(None, lambda: clockout.end_session(
@@ -1293,6 +1296,22 @@ def _clock_log(ctx: ServerContext, record: dict, response: web.Response, world=N
         if ctx.publish:
             ctx.publish()
     return response
+
+
+async def _codex_clock_out(ctx: ServerContext, record: dict, world, sid: str) -> web.Response:
+    """退勤 for a Codex session (ticket 2026-10-29-viz-codex-clock-out-button): its link unsubscribes from the thread
+    (codex_app_server.CodexLink.end). No process is signalled and session-recovery's ledger (Claude's) is not touched."""
+    record["cli"] = "codex"
+    status, text = await world.codex_end(sid) if world.codex_end is not None else (409, "no Codex link")
+    if status == 200:
+        if text:
+            record["note"] = text
+        world.clock_out(sid, now_ms())
+        if ctx.publish:
+            ctx.publish()
+        response = web.json_response({"ok": True, "ended": True, "note": text})
+        return _clock_log(ctx, record, response, world, sid, clockout.Outcome("ended", 200, text or "unsubscribed"))
+    return _clock_log(ctx, record, web.Response(status=status, text=text + "\n"), world, sid)
 
 
 async def _reveal(path: str) -> bool:

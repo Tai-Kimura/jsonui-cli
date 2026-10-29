@@ -1993,7 +1993,7 @@ const CLOCK_WHY = {
   other: tl('panel.clk.why.other'),
   unknown: tl('panel.clk.why.unknown'),
 };
-const CLIENT_JA = { terminal: tl('panel.client.terminal'), vscode: tl('panel.client.vscode'), desktop: tl('panel.client.desktop'), other: tl('panel.client.other'), unknown: tl('panel.client.unknown') };
+const CLIENT_JA = { terminal: tl('panel.client.terminal'), vscode: tl('panel.client.vscode'), desktop: tl('panel.client.desktop'), other: tl('panel.client.other'), unknown: tl('panel.client.unknown'), codex: tl('panel.client.codex') };
 const CLOCK = { busy: null, last: null };
 let clockDlg = null;
 function clockTarget(id) {
@@ -2002,8 +2002,9 @@ function clockTarget(id) {
   if (DEF[id].kind === 'sub') return { why: tl('panel.clk.why.sub', { id: SESSION_OF[id] }) };
   const sess = SESSIONS.find((x) => x.id === SESSION_OF[id]);
   if (!sess || sess.status === 'ended' || LIVE.leaving[id]) return { why: tl('panel.clk.why.ended') };
-  const client = sess.client || 'unknown';
-  if (client !== 'terminal') return { why: CLOCK_WHY[client] || CLOCK_WHY.unknown, client };
+  // a Codex session leaves its thread (the server unsubscribes; no process is signalled), whatever started it
+  const client = sess.cli === 'codex' ? 'codex' : sess.client || 'unknown';
+  if (client !== 'terminal' && client !== 'codex') return { why: CLOCK_WHY[client] || CLOCK_WHY.unknown, client };
   if (location.hostname !== '127.0.0.1') return { why: tl('panel.clk.why.host', { port: location.port }), client };
   return { why: '', sess, client };
 }
@@ -2028,7 +2029,7 @@ function openClockConfirm(id) {
   const title = t.sess.title || tl('talk.noname');
   el.innerHTML = `<div class="pcf-box"><h3 id="clk-title">${esc(tl('panel.clk.title', { id }))}</h3>
 <dl class="clk-facts"><dt>${esc(tl('panel.sb.robot'))}</dt><dd data-clk-robot>${pill(id, DEF[id].role)} ${esc(tl('panel.rb.main', { id }))}</dd><dt>${esc(tl('panel.sb.session'))}</dt><dd data-clk-title>${esc(title)}</dd><dt>${esc(tl('panel.clk.folder'))}</dt><dd data-clk-cwd><code>${esc(CWD[id] || '?')}</code></dd><dt>${esc(tl('panel.clk.client'))}</dt><dd data-clk-client>${esc(CLIENT_JA[t.client] || t.client)}</dd></dl>
-<p id="clk-note">${esc(tl('panel.clk.note'))}</p>
+<p id="clk-note">${esc(tl(t.client === 'codex' ? 'panel.clk.note.codex' : 'panel.clk.note'))}</p>
 <div class="pcf-acts"><button type="button" class="pa clk-go" data-clk-go>${esc(tl('panel.clk.go'))}</button><button type="button" class="pa clk-cancel" data-clk-cancel>${esc(tl('panel.cancel'))}</button></div></div>`;
   document.body.append(el);
   clockDlg = { el, id, opener, at: Date.now() };
@@ -2059,9 +2060,10 @@ async function clockGo(id) {
   if (clockTarget(id).why || CLOCK.busy) return;
   CLOCK.busy = id; CLOCK.last = null;
   if (rbState.id === id) clockPaint(id);
+  const codex = clockTarget(id).client === 'codex';
   const got = await SOURCE.clockOut(id);
   CLOCK.busy = null;
-  if (got.ok) showToast(tl('panel.clk.done', { id }));
+  if (got.ok) showToast(tl(!codex ? 'panel.clk.done' : got.note ? 'panel.clk.done.codex_held' : 'panel.clk.done.codex', { id }));
   else { CLOCK.last = { id, error: got.error || `HTTP ${got.status}` }; showToast(tl('panel.clk.failed.id', { id, error: CLOCK.last.error })); }
   if (rbState.id === id) clockPaint(id);
 }

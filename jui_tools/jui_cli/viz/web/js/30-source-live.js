@@ -123,7 +123,8 @@ const SOURCE = {
     } catch (err) { return { ok: false, status: 0, error: tl('live.offline') }; }
   },
   /* 退勤 (50-panel.js): POST /api/session/end with the same page-only checks as /api/prompt; the server checks the session,
-     the robot (a main one) and the process again, sends SIGTERM once and answers when it has gone. Resolves { ok, status, error }. */
+     the robot (a main one) and the process again, sends SIGTERM once and answers when it has gone (a Codex session: its thread
+     is unsubscribed, and note says when a terminal runs in its Codex home). Resolves { ok, status, note, error }. */
   async clockOut(label) {
     try {
       const res = await fetch('/api/session/end', {
@@ -131,7 +132,9 @@ const SOURCE = {
         headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token },
         body: JSON.stringify({ sessionId: SESSION_UUID[label] || '', agentId: (DEF[label] && DEF[label].realId) || '' }),
       });
-      return res.ok ? { ok: true, status: res.status } : { ok: false, status: res.status, error: (await res.text()).trim() };
+      if (!res.ok) return { ok: false, status: res.status, error: (await res.text()).trim() };
+      const got = await res.json().catch(() => ({}));
+      return { ok: true, status: res.status, note: typeof got.note === 'string' ? got.note : '' };
     } catch (err) { return { ok: false, status: 0, error: tl('live.offline') }; }
   },
   /* The 単価 sheet (2.3.6, 54-bills.js): set / remove / reset a model's line in the user's price table (POST /api/prices,

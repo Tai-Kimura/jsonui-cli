@@ -1,4 +1,5 @@
-"""Daemon membership survives terminal exit; only confirmed open-file ownership is terminal liveness."""
+"""Daemon membership survives terminal exit; only confirmed open-file ownership is terminal liveness. A thread that
+leaves (its terminal exited, or 退勤) is unsubscribed from, and comes back when a terminal works in it again."""
 import asyncio
 from types import SimpleNamespace
 
@@ -54,66 +55,144 @@ def make_link(terminal):
     return link, world
 
 
-def test_exit_retires_idle_roots_and_children_once_without_resurrecting_on_loaded_poll():
+class Daemon:
+    """The daemon's answers to the link's calls: loaded threads, their rows, thread/read's status; every call kept."""
+
+    def __init__(self, loaded, status='idle', **row):
+        self.loaded, self.status, self.row, self.calls, self.refuse = loaded, status, row, [], set()
+
+    async def __call__(self, method, params):
+        self.calls.append((method, params.get('threadId')))
+        if method in self.refuse:
+            return None   # a JSON-RPC error reads as None (CodexLink._call)
+        if method == 'thread/loaded/list':
+            return {'data': list(self.loaded)}
+        if method == 'thread/unsubscribe':
+            return {'status': 'unsubscribed'}
+        if method == 'thread/read':
+            return {'thread': {'id': params['threadId'], 'status': {'type': self.status}}}
+        return {'thread': {'id': params['threadId'], 'cwd': '/work/demo', **self.row,
+                           **({'parentThreadId': ROOT} if params['threadId'] == CHILD else {})}}
+
+    def called(self, method):
+        return [t for m, t in self.calls if m == method]
+
+
+def test_exit_unsubscribes_idle_roots_and_children_once_and_a_turn_held_elsewhere_brings_them_back():
     async def run():
         terminal = [True]
         link, world = make_link(terminal)
-        async def call(method, params):
-            if method == 'thread/loaded/list':
-                return {'data': [ROOT, CHILD]}
-            return {'thread': {'id': params['threadId'], 'source': 'cli', 'cwd': '/work/demo',
-                               **({'parentThreadId': ROOT} if params['threadId'] == CHILD else {})}}
-        link._call = call
+        daemon = Daemon([ROOT, CHILD], source='vscode')
+        link._call = daemon
         await link._poll()
         assert world.sessions[ROOT]['status'] == 'idle'
         assert link.can_prompt(ROOT)
+        assert daemon.called('thread/unsubscribe') == []
         terminal[0] = False
         await link._poll()
         assert world.sessions[ROOT]['status'] == 'ended'
         assert 'leftAt' in world.agents[ROOT] and 'leftAt' in world.agents[CHILD]
         assert not link.can_prompt(ROOT)
-        count = len(world.state.events)
+        assert daemon.called('thread/unsubscribe') == [CHILD, ROOT]   # subagents first, then the root
+        # still loaded (the daemon closes it after its unload delay): watched, never subscribed to again while idle
+        count, resumes = len(world.state.events), len(daemon.called('thread/resume'))
+        terminal[0] = True   # a new TUI in this home cannot bring every old loaded thread back
         await link._poll()
-        assert len(world.state.events) == count
-        link._dispatch({'method': 'turn/completed', 'params': {'threadId': ROOT, 'turn': {'id': 'old'}}})
-        assert world.sessions[ROOT]['status'] == 'ended'
+        assert len(world.state.events) == count and len(daemon.called('thread/resume')) == resumes
+        assert daemon.called('thread/read')[-1:] == [ROOT]
+        # a late approval or completion for a thread let go makes nothing
         link._dispatch({'id': 9, 'method': 'item/commandExecution/requestApproval',
                         'params': {'threadId': ROOT, 'itemId': 'old', 'command': 'echo late'}})
-        assert world.sessions[ROOT]['status'] == 'ended'
-        # A new TUI in this home cannot resurrect every old loaded thread.
-        terminal[0] = True
+        link._dispatch({'method': 'turn/completed', 'params': {'threadId': ROOT, 'turn': {'id': 'old'}}})
+        assert world.sessions[ROOT]['status'] == 'ended' and len(world.state.events) == count
+        # a turn in it (thread/read: active) means a terminal holds it again: subscribed again, the robot is back
+        daemon.status = 'active'
         await link._poll()
-        assert world.sessions[ROOT]['status'] == 'ended'
-        # Explicit activity on this thread proves its resume, even before the next process poll.
-        link._dispatch({'method': 'turn/started', 'params': {'threadId': ROOT, 'turn': {'id': 'new'}}})
+        assert daemon.called('thread/resume')[resumes:] == [ROOT, CHILD]
         assert world.sessions[ROOT]['status'] == 'idle'
         assert 'leftAt' not in world.agents[ROOT]
         assert link.can_prompt(ROOT)
     asyncio.run(run())
 
 
-def test_idle_and_stop_do_not_retire_a_live_tui_and_unknown_or_exec_sources_are_kept():
+def test_a_thread_the_daemon_closed_after_leaving_is_forgotten_without_a_second_clock_out():
     async def run():
-        terminal = [True]
-        link, world = make_link(terminal)
-        world.apply_codex(link.tr.thread_seen({'id': ROOT, 'source': 'cli'}), {}, 1)
-        for alive in [True, None]:
-            link._terminal_alive = alive
-            link._dispatch({'method': 'turn/completed', 'params': {'threadId': ROOT, 'turn': {'id': 't'}}})
-            link._retire_terminals()
-            assert world.sessions[ROOT]['status'] == 'idle'
-        link._terminal_alive = False
-        for source in ['exec', 'vscode', None]:
-            link.tr.threads[ROOT]['source'] = source
-            link._retire_terminals()
-            assert world.sessions[ROOT]['status'] == 'idle'
-        link.tr.threads[ROOT]['source'] = 'cli'
-        link.tr.turns[ROOT] = 'running'
-        link._retire_terminals()
-        assert world.sessions[ROOT]['status'] == 'idle'
-        link.tr.turns.clear()
-        link._retire_terminals()
+        link, world = make_link([False])
+        daemon = Daemon([ROOT], source='vscode')
+        link._call = daemon
+        await link._poll()
         assert world.sessions[ROOT]['status'] == 'ended'
+        count = len(world.state.events)
+        link._dispatch({'method': 'thread/closed', 'params': {'threadId': ROOT}})   # told to unsubscribed clients too
+        assert ROOT not in link._retired and len(world.state.events) == count
+        daemon.loaded = []
+        await link._poll()
+        daemon.loaded = [ROOT]   # `codex resume` loads it again later: a new arrival
+        daemon.status = 'idle'
+        link.terminal_state = lambda _: True
+        await link._poll()
+        assert world.sessions[ROOT]['status'] == 'idle'
+    asyncio.run(run())
+
+
+def test_idle_and_stop_do_not_retire_a_live_tui_and_any_source_or_originator_retires_without_one():
+    """Neither source nor originator names a daemon thread's own client (10-29, 0.165.0): a TUI's is vscode, and the
+    originator is whichever client first initialized the daemon — jui_viz when viz connected first (01a17fb0)."""
+    async def run():
+        for row in [{'source': 'cli'}, {'source': 'vscode', 'originator': 'jui_viz'}, {'source': 'exec'}, {}]:
+            link, world = make_link([True])
+            link._call = Daemon([ROOT], **row)
+            world.apply_codex(link.tr.thread_seen({'id': ROOT, **row}), {}, 1)
+            for alive in [True, None]:
+                link._terminal_alive = alive
+                link._dispatch({'method': 'turn/completed', 'params': {'threadId': ROOT, 'turn': {'id': 't'}}})
+                await link._retire_terminals()
+                assert world.sessions[ROOT]['status'] == 'idle'
+            link._terminal_alive = False
+            link.tr.turns[ROOT] = 'running'
+            await link._retire_terminals()
+            assert world.sessions[ROOT]['status'] == 'idle'
+            link.tr.turns.clear()
+            await link._retire_terminals()
+            assert world.sessions[ROOT]['status'] == 'ended', row
+    asyncio.run(run())
+
+
+def test_clock_out_leaves_the_thread_without_signalling_and_says_when_a_terminal_runs_in_the_home():
+    async def run():
+        for alive, note in [(False, ''), (True, 'a Codex terminal runs'), (None, 'whether a Codex terminal runs')]:
+            link, world = make_link([alive])
+            daemon = Daemon([ROOT, CHILD])
+            link._call = daemon
+            await link._poll()
+            assert world.sessions[ROOT]['status'] == ('ended' if alive is False else 'idle')
+            if alive is False:
+                continue   # nothing left to clock out: its terminal's exit took it out
+            status, text = await link.end(ROOT)
+            assert status == 200 and text.startswith(note)
+            assert daemon.called('thread/unsubscribe') == [CHILD, ROOT]
+            assert world.sessions[ROOT]['status'] == 'ended' and 'leftAt' in world.agents[CHILD]
+            assert world.state.events[-1]['text'].endswith('clocked out from the page') or 'clocked out from the page' in world.state.events[-1]['text']
+            assert (await link.end(ROOT))[0] == 409   # gone from the room: nothing to clock out
+    asyncio.run(run())
+
+
+def test_clock_out_is_refused_while_a_turn_runs_when_unconnected_and_when_the_daemon_refuses():
+    async def run():
+        link, world = make_link([True])
+        daemon = Daemon([ROOT, CHILD])
+        link._call = daemon
+        await link._poll()
+        assert (await link.end(CHILD))[0] == 409   # a subagent is not a session
+        link.tr.turns[CHILD] = 'sub-running'
+        assert (await link.end(ROOT)) == (409, 'a turn is running in this Codex session: stop it first')
+        link.tr.turns.clear()
+        daemon.refuse.add('thread/unsubscribe')
+        assert (await link.end(ROOT))[0] == 502
+        assert world.sessions[ROOT]['status'] == 'idle' and ROOT not in link._retired and link.can_prompt(ROOT)
+        link._ws = SimpleNamespace(closed=True)
+        assert (await link.end(ROOT))[0] == 409
+        assert world.sessions[ROOT]['status'] == 'idle'
     asyncio.run(run())
 
 
@@ -143,44 +222,49 @@ def test_real_open_file_owner_disappears_when_its_process_exits(tmp_path):
                 child.wait(timeout=5)
 
 
-def test_daemon_vscode_source_with_verified_tui_originator_retires(tmp_path):
+def test_the_page_clocks_a_codex_session_out_through_its_link_and_never_the_claude_path(tmp_path, monkeypatch):
     import json
+    import socket
+    from aiohttp.test_utils import TestClient, TestServer
+    from jui_cli.viz import clockout
+    from jui_cli.viz.config import VizConfig
+    from jui_cli.viz.server import ServerContext, make_app
+
+    monkeypatch.setenv('HOME', str(tmp_path))
+    def claude_path(*a, **kw):
+        raise AssertionError('a Codex session never reaches clockout.end_session')
+    monkeypatch.setattr(clockout, 'end_session', claude_path)
+    monkeypatch.setattr(clockout, '_kill', claude_path)
+
     async def run():
-        sessions = tmp_path / 'sessions'
-        sessions.mkdir()
-        rollout = sessions / 'rollout.jsonl'
-        rollout.write_text(json.dumps({'type': 'session_meta', 'payload': {
-            'id': ROOT, 'source': 'vscode', 'originator': 'codex-tui'}}) + '\n')
-        link, world = make_link([False])
-        link.path = tmp_path / 'app-server-control' / 'app-server-control.sock'
-        async def call(method, params):
-            if method == 'thread/loaded/list':
-                return {'data': [ROOT]}
-            return {'thread': {'id': ROOT, 'source': 'vscode', 'path': str(rollout)}}
-        link._call = call
+        link, world = make_link([True])
+        daemon = Daemon([ROOT, CHILD])
+        link._call = daemon
         await link._poll()
-        assert link.tr.threads[ROOT]['originator'] == 'codex-tui'
-        assert world.sessions[ROOT]['status'] == 'ended'
-        assert world.agents[ROOT]['leftAt']
+        world.codex_end = link.end
+        with socket.socket() as probe:
+            probe.bind(('127.0.0.1', 0))
+            port = probe.getsockname()[1]
+        ctx = ServerContext(config=VizConfig(), port=port, token='test-token', state=world.state, world=world, publish=world.publish)
+        async with TestClient(TestServer(make_app(ctx), host='127.0.0.1', port=port)) as page:
+            ctx.port = page.port
+            headers = {'Origin': f'http://127.0.0.1:{page.port}', 'X-Jui-Viz-Token': ctx.token}
+            sub = await page.post('/api/session/end', json={'sessionId': ROOT, 'agentId': CHILD}, headers=headers)
+            assert sub.status == 403
+            link.tr.turns[ROOT] = 'running'
+            busy = await page.post('/api/session/end', json={'sessionId': ROOT, 'agentId': ROOT}, headers=headers)
+            assert busy.status == 409 and 'stop it first' in await busy.text()
+            assert world.sessions[ROOT]['status'] != 'ended' and daemon.called('thread/unsubscribe') == []
+            link.tr.turns.clear()
+            ok = await page.post('/api/session/end', json={'sessionId': ROOT, 'agentId': ROOT}, headers=headers)
+            got = await ok.json()
+            assert ok.status == 200 and got['ok'] and got['note'].startswith('a Codex terminal runs')
+            assert world.sessions[ROOT]['status'] == 'ended' and world.sessions[ROOT]['clockedOut']
+            assert daemon.called('thread/unsubscribe') == [CHILD, ROOT]
+            again = await page.post('/api/session/end', json={'sessionId': ROOT, 'agentId': ROOT}, headers=headers)
+            assert again.status == 404
+        log = [json.loads(line) for line in (tmp_path / '.local/state/jui-viz/clock-out.log').read_text().splitlines()]
+        assert [(r['status'], r['result']) for r in log] == [(403, 'refused'), (409, 'refused'), (200, 'ended'), (404, 'refused')]
+        assert log[2]['cli'] == 'codex' and log[2]['note'].startswith('a Codex terminal runs')
+        assert 'pid' not in log[2] and 'ledger' not in log[2]
     asyncio.run(run())
-
-
-def test_originator_header_is_bounded_scoped_and_identity_checked(tmp_path):
-    import json
-    from jui_cli.viz.sources.codex_history import originator
-    sessions = tmp_path / 'sessions'
-    sessions.mkdir()
-    path = sessions / 'rollout.jsonl'
-    good = json.dumps({'type': 'session_meta', 'payload': {'id': ROOT, 'originator': 'codex-tui'}})
-    path.write_text(good + '\nprivate later data')
-    assert originator(tmp_path, str(path), ROOT) == 'codex-tui'
-    assert originator(tmp_path, str(path), CHILD) is None
-    outside = tmp_path / 'outside.jsonl'
-    outside.write_text(good)
-    assert originator(tmp_path, str(outside), ROOT) is None
-    path.write_text('x' * (1024 * 1024 + 1))
-    assert originator(tmp_path, str(path), ROOT) is None
-    path.write_text('invalid')
-    assert originator(tmp_path, str(path), ROOT) is None
-    path.unlink()
-    assert originator(tmp_path, str(path), ROOT) is None

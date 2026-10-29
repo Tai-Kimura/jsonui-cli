@@ -11,6 +11,11 @@ reason for VS Code, the desktop app and the subagent; the dialog names the robot
 the client, with やめる focused; やめる and Escape send nothing; 退勤させる ends the stand-in with SIGTERM, the session
 goes ended and the robot walks out past its room's front wall and is gone; the event log has the line; the
 session-recovery ledger of this HOME is marked. Light, dark and 390 px; no console error; nothing outside the server.
+
+A Codex session (ticket 2026-10-29-viz-codex-clock-out-button), from a stand-in Codex daemon this suite serves on a Unix
+socket at this HOME's ~/.codex (no codex runs): its button is enabled, the dialog says Codex and what leaving means, and
+退勤させる unsubscribes from the thread (no process signalled) — the session ends, the robot walks out, and while the
+daemon still lists the thread it is not subscribed to again.
 """
 
 from __future__ import annotations
@@ -29,6 +34,8 @@ S_TERM = "e2e00000-0000-4000-8000-0000000000e1"
 S_VSC = "e2e00000-0000-4000-8000-0000000000e2"
 S_DESK = "e2e00000-0000-4000-8000-0000000000e3"
 SUB = "e2e-sub-clock-0001"
+S_CODEX = "e2e00000-0000-4000-8000-0000000000e4"
+CODEX_TITLE = "退勤テスト（Codex）"
 ENTRY = {S_TERM: "cli", S_VSC: "claude-vscode", S_DESK: "claude-desktop"}
 CWDS = {S_TERM: "/work/clock-term", S_VSC: "/work/clock-vscode", S_DESK: "/work/clock-desktop"}
 TITLES = {S_TERM: "退勤テスト（ターミナル）", S_VSC: "退勤テスト（VS Code）", S_DESK: "退勤テスト（デスクトップ）"}
@@ -54,6 +61,51 @@ async def wait(page, js, timeout=20000, label="", arg=None):
         await page.wait_for_function(js, arg=arg, timeout=timeout, polling=200)
     except Exception as e:
         raise RuntimeError(f"waiting for {label or js[:90]}: {str(e).splitlines()[0]}") from None
+
+
+async def codex_daemon(home: pathlib.Path, calls: list):
+    """A stand-in for the Codex app-server daemon: JSON-RPC over a WebSocket on a Unix socket, one idle thread. The
+    socket lives in a short /tmp folder (a Unix socket's path has a length limit) and ~/.codex's control path links to
+    it, as Codex does for a long home. Every call is kept; the thread stays loaded after an unsubscribe (the daemon's
+    unload delay). Returns (runner, folder)."""
+    import tempfile
+    from aiohttp import web
+
+    async def rpc(request):
+        ws = web.WebSocketResponse()
+        await ws.prepare(request)
+        async for frame in ws:
+            msg = json.loads(frame.data)
+            if "id" not in msg:
+                continue
+            method, params = msg.get("method"), msg.get("params") or {}
+            calls.append((method, params.get("threadId")))
+            result: dict = {}
+            if method == "thread/loaded/list":
+                result = {"data": [S_CODEX]}
+            elif method == "thread/resume":
+                result = {"thread": {"id": S_CODEX, "cwd": "/work/clock-codex", "name": CODEX_TITLE, "source": "vscode",
+                                     "status": {"type": "idle"}, "model": "e2e-model"}}
+            elif method == "thread/unsubscribe":
+                result = {"status": "unsubscribed"}
+            elif method == "thread/read":
+                result = {"thread": {"id": S_CODEX, "status": {"type": "idle"}}}
+            await ws.send_str(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": result}))
+        return ws
+
+    app = web.Application()
+    app.router.add_get("/", rpc)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    folder = pathlib.Path(tempfile.mkdtemp(prefix="jvco", dir="/tmp"))
+    await web.UnixSite(runner, str(folder / "s.sock")).start()
+    control = home / ".codex" / "app-server-control"
+    control.mkdir(parents=True, exist_ok=True)
+    link = control / "app-server-control.sock"
+    if link.is_symlink():
+        link.unlink()
+    link.symlink_to(folder / "s.sock")
+    return runner, folder
 
 
 def _lstart(pid: int) -> str:
@@ -125,6 +177,8 @@ async def run_clock_out(pw, out, failures):
         await wait(page, "(l) => document.getElementById('rb-title') && document.querySelector('#rb [data-rb-clock]') && (document.querySelector('#rb .rb-badge') || {}).textContent === l",
                    arg=label, label=f"the card of {label}")
 
+    codex_calls: list = []
+    daemon, daemon_dir = await codex_daemon(home, codex_calls)
     browser = await pw.chromium.launch(args=LAUNCH_ARGS)
     t0 = time.monotonic()
     try:
@@ -140,7 +194,7 @@ async def run_clock_out(pw, out, failures):
         check(status == 204, f"the subagent's hook: {status}")
         labels = {sid: label_of(sid) for sid in ENTRY}
         _, snap = local("GET", "/api/snapshot")
-        res["clients"] = {s["id"]: s.get("client") for s in snap["slices"]["sessions"]}
+        res["clients"] = {s["id"]: s.get("client") for s in snap["slices"]["sessions"] if s["id"] in ENTRY}
         check(res["clients"] == {S_TERM: "terminal", S_VSC: "vscode", S_DESK: "desktop"}, f"the sessions' clients: {res['clients']}")
         sub_label = next(a["label"] for a in snap["slices"]["agents"] if a["id"] == SUB)
         watch = Watch(origin=url)
@@ -242,6 +296,46 @@ async def run_clock_out(pw, out, failures):
         res["attempts"] = [(r["result"], r["status"]) for r in recs]
         check(res["attempts"] == [("ended", 200)], f"one attempt, ended: {res['attempts']}")
         await page.screenshot(path=str(out / "after-gone.png"))
+
+        # a Codex session: enabled; the dialog says Codex; 退勤させる unsubscribes from its thread and signals nothing
+        for _ in range(100):   # the link connects to the stand-in daemon and polls it (POLL_SEC 3)
+            if any(x["id"] == S_CODEX for x in local("GET", "/api/snapshot")[1]["slices"]["sessions"]):
+                break
+            await page.wait_for_timeout(200)
+        codex_label = label_of(S_CODEX)
+        await wait(page, "(l) => !!document.querySelector(`#sessions [data-robot-open=\"${l}\"]`)", arg=codex_label, label="the Codex session's row")
+        await open_robot(page, codex_label)
+        await page.wait_for_timeout(600)
+        r = res["codex"] = await page.evaluate(CARD)
+        check(r and not r["disabled"] and r["why"] == "" and r["above"] and r["nearX"], f"codex: enabled, above 「← 3D に戻る」: {r}")
+        await page.screenshot(path=str(out / "codex-card-light.png"))
+        await page.click("#rb [data-rb-clock]")
+        r = res["codexDialog"] = await page.evaluate(DIALOG)
+        note = await page.evaluate("() => (document.getElementById('clk-note') || {}).textContent || ''")
+        check(r and r["focus"] and r["session"] == CODEX_TITLE and "clock-codex" in r["cwd"] and r["client"] == T("panel.client.codex")
+              and note == T("panel.clk.note.codex"), f"codex: the dialog says Codex and what leaving means: {r} {note!r}")
+        await page.screenshot(path=str(out / "codex-dialog-light.png"))
+        await page.emulate_media(color_scheme="dark")
+        await page.wait_for_timeout(400)
+        await page.screenshot(path=str(out / "codex-dialog-dark.png"))
+        await page.emulate_media(color_scheme="light")
+        resumes = [c for c in codex_calls if c[0] == "thread/resume"]
+        await page.click(".clock-confirm [data-clk-go]")
+        await wait(page, "(t) => (document.getElementById('toast') || {}).textContent === t", arg=T("panel.clk.done.codex_held", id=codex_label),
+                   label="the Codex clock-out toast")
+        await page.screenshot(path=str(out / "codex-toast.png"))
+        await wait(page, "(l) => !window.__dbg.robots.find((x) => x.def.id === l)", arg=codex_label, timeout=90000, label="the Codex robot walked out and is gone")
+        _, snap = local("GET", "/api/snapshot")
+        s = next(x for x in snap["slices"]["sessions"] if x["id"] == S_CODEX)
+        check(s["status"] == "ended" and s.get("clockedOut"), f"codex: the session is ended: {s.get('status')}")
+        await page.wait_for_timeout(7000)   # two of the link's polls: the daemon still lists the thread
+        res["codexCalls"] = {"unsubscribe": [c[1] for c in codex_calls if c[0] == "thread/unsubscribe"],
+                             "resumesAfter": len([c for c in codex_calls if c[0] == "thread/resume"]) - len(resumes)}
+        check(res["codexCalls"] == {"unsubscribe": [S_CODEX], "resumesAfter": 0}, f"codex: unsubscribed once, not subscribed to again: {res['codexCalls']}")
+        recs = [json.loads(x) for x in attempts()]
+        res["attempts"] = [(r["result"], r["status"], r.get("cli")) for r in recs]
+        check(res["attempts"] == [("ended", 200, None), ("ended", 200, "codex")], f"two attempts, both ended: {res['attempts']}")
+        check(all(stand[s].poll() is None for s in (S_VSC, S_DESK)), "codex: the other stand-ins are untouched")
         # 390 px: the card with the button, no horizontal scroll
         phone = await new_page(browser, watch, "clock-out-phone", **PHONE)
         await phone.goto(url + "/")
@@ -267,6 +361,9 @@ async def run_clock_out(pw, out, failures):
         except subprocess.TimeoutExpired:
             srv.kill()
         await browser.close()
+        await daemon.cleanup()
+        import shutil
+        shutil.rmtree(daemon_dir, ignore_errors=True)   # the folder this suite made for the stand-in daemon's socket
         for p in stand.values():   # our own stand-ins, reaped after the server stopped
             if p.poll() is None:
                 p.kill()

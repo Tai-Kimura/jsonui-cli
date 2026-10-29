@@ -293,7 +293,14 @@ db_schema/）。ユーザー向け仕様は `docs/jui_tools_README.md` の check
   `/jui_tools/build/` も無視している。
 
 
-Codex 0.164.0 の daemon は TUI 由来でも `source=vscode` を返す場合がある。退勤判定は source=cli に加え、その home の sessions 配下の rollout 先頭 session_meta（最大1MiB、thread id一致）の `originator=codex-tui` も確認する。IDE由来・確認不能のセッションをターミナル終了だけで退勤させない。
+Codex の退勤（2026-10-29、`codex_app_server.CodexLink._leave` / `end`）: daemon の TUI のスレッドは `source=vscode`
+（0.164.0・0.165.0）で、rollout の `originator` はスレッドの持ち主ではなく **daemon のプロセスに最初に initialize した
+クライアントの名前**（viz が先に繋いだ home では `jui_viz`）。どちらもスレッドの持ち主を表さないので、その home に TUI が
+1 本も無い時（`codex_clients.alive` が False）はターンの無いルートのスレッドを全部退勤させる。退勤は `thread/unsubscribe`
+（archive ではない: archive は rollout を archived_sessions へ移す）。購読者が居なくなったスレッドは daemon が
+`thread_unload_delay_secs` の後に閉じ、TUI が持つスレッドは載ったまま。外したスレッドが loaded のままターンを始めたら
+（`thread/read` が active）もう一度購読してロボットを戻す。ページの退勤ボタンも同じ `end` で、プロセスには何も送らない
+（TUI とスレッドの対応はファイルにもプロトコルにも無い）。
 
 - **セッション間メッセージ**（2026-10-28、`messaging.py` / `message_client.py`）: `jui viz peers` で送信先一覧、
   `jui viz message --to <id> --text <本文>` で Claude↔Codex・Codexの異なるhome/モデル間に送る。

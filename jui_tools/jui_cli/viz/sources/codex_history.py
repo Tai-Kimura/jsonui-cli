@@ -61,21 +61,3 @@ def read(home: Path, given: str, end=None, stop=None) -> dict | None:
     finally:
         os.close(fd)
 
-
-def originator(home: Path, given: str, tid: str) -> str | None:
-    """Read only the bounded session header. Daemon TUI threads can say source=vscode (0.164.0)."""
-    fd = history.safe_open(home / "sessions", Path(given))
-    if fd is None:
-        return None
-    try:
-        with os.fdopen(fd, "rb") as stream:
-            line = stream.readline(1024 * 1024 + 1)
-        if len(line) > 1024 * 1024:
-            return None
-        row = json.loads(line)
-        meta = row.get("payload") if isinstance(row, dict) and row.get("type") == "session_meta" else None
-        if isinstance(meta, dict) and meta.get("id") == tid and isinstance(meta.get("originator"), str):
-            return meta["originator"]
-    except (OSError, ValueError):
-        return None
-    return None
