@@ -1949,6 +1949,17 @@ body.sd-on { overflow: hidden; }
 .sd-sec h3 { margin: 0 0 6px; color: var(--wb-ink); font-size: 14px; }
 .sd-sec h3 small { margin-left: 8px; color: var(--wb-soft); font: 700 12px/1 var(--font-mono); }
 .sd-rows { display: grid; gap: 2px; }
+/* folded as GitHub folds a diff (ticket 2026-10-29-viz-spec-diff-fold-unchanged): a section's head opens and folds it, a
+   run of unchanged rows is one line with its buttons */
+.sd-sec-btn { display: inline-flex; align-items: center; gap: 6px; padding: 2px 6px 2px 2px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; cursor: pointer; }
+.sd-sec-btn:hover, .sd-sec-btn:focus-visible { background: var(--wb-chip); }
+.sd-chev { display: inline-block; width: 1em; color: var(--wb-soft); }
+.sd-sec-folded h3 { margin-bottom: 0; }
+.sd-sec h3 small.sd-sec-same { font-family: inherit; font-weight: 500; }
+.sd-gap { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 4px 10px; border: 1px dashed var(--wb-line); border-radius: 6px; background: var(--wb-chip); color: var(--wb-soft); font-size: 12.5px; }
+.sd-gap-n { margin-right: auto; }
+.sd-gap-btn { padding: 2px 8px; border: 1px solid var(--wb-line); border-radius: 6px; background: var(--wb-bg, transparent); color: var(--wb-ink); font-size: 12px; font-weight: 600; line-height: 1.4; cursor: pointer; }
+.sd-gap-btn:hover, .sd-gap-btn:focus-visible { border-color: var(--wb-ink); }
 .sd-cell { display: flex; gap: 6px; min-width: 0; padding: 3px 8px; border-radius: 4px; font: 500 12.5px/1.55 var(--font-mono); overflow-wrap: anywhere; }
 .sd-sign { flex: none; width: 1ch; font-weight: 700; }
 .sd-t { min-width: 0; white-space: pre-wrap; }

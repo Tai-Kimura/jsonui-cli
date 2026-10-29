@@ -86,6 +86,17 @@ def login_layout(worktree: bool) -> dict:
     return {"type": "View", "id": "root", "child": kids}
 
 
+def long_list(worktree: bool) -> dict:
+    """A spec of 60 variables, v30's type changed in the worktree, and four event handlers no one changed: the folding
+    (ticket 2026-10-29-viz-spec-diff-fold-unchanged) has a long run on each side of the change and a section to fold."""
+    variables = [{"name": f"v{i:02d}", "type": "String", "initialValue": '""'} for i in range(60)]
+    if worktree:
+        variables[30]["type"] = "Int"
+    events = [{"name": f"onTap{i}", "description": f"{i} を押した"} for i in range(4)]
+    return {"type": "screen_spec", "metadata": {"name": "LongList", "displayName": "長い一覧", "description": "d", "platforms": ["ios"]},
+            "stateManagement": {"uiVariables": variables, "eventHandlers": events}}
+
+
 def simple(name, display, description="d"):
     return {"type": "screen_spec", "metadata": {"name": name, "displayName": display, "description": description, "platforms": ["ios"]}}
 
@@ -98,6 +109,7 @@ def make_rooms(home: pathlib.Path) -> dict:
     write(layouts / "login.json", login_layout(False))
     write(specs / "profile.spec.json", simple("Profile", "プロフィール", "名前とアイコンを変える"))
     write(specs / "withdraw.spec.json", simple("Withdraw", "退会", "アカウントを消す"))
+    write(specs / "long_list.spec.json", long_list(False))
     git(room, "init", "-q", "-b", "main", home=home)
     git(room, "add", "-A", home=home)
     git(room, "commit", "-q", "-m", "init", home=home)
@@ -107,6 +119,7 @@ def make_rooms(home: pathlib.Path) -> dict:
     write(wspecs / "login.spec.json", login(True))
     write(wt / "docs" / "screens" / "layouts" / "login.json", login_layout(True))
     (wspecs / "withdraw.spec.json").unlink()
+    write(wspecs / "long_list.spec.json", long_list(True))
     git(wt, "add", "-A", home=home)
     git(wt, "commit", "-q", "-m", "login: remember me, forgot password; withdraw goes", home=home)
     write(wspecs / "orders.spec.json", simple("Orders", "注文", "カートの中身を注文する"))   # new, not committed
@@ -127,6 +140,17 @@ def make_rooms(home: pathlib.Path) -> dict:
     git(room2, "commit", "-q", "-m", "unrelated", home=home)
     return {"room": room, "wt": wt, "room2": room2, "wt2": wt2}
 
+
+# 長い一覧's diff as the page shows it: the variables shown, each gap's words and buttons, the event handlers' head
+FOLD_JS = """() => { const sec = (k) => document.querySelector(`#sd-body [data-sd-sec='${k}']`).closest('.sd-sec');
+  const v = sec('uiVariables'), e = sec('eventHandlers'), a = document.activeElement;
+  return { vars: [...v.querySelectorAll('.sd-row')].map((r) => r.children[1].querySelector('.sd-t').textContent.split(':')[0]),
+    chg: [...v.querySelectorAll('.sd-row.sd-chg')].map((r) => r.children[1].querySelector('.sd-t').textContent.split(':')[0]),
+    gaps: [...v.querySelectorAll('.sd-gap')].map((g) => [g.querySelector('.sd-gap-n').textContent, [...g.querySelectorAll('button')].map((b) => b.textContent)]),
+    varsHead: v.querySelector('[data-sd-sec]').getAttribute('aria-expanded'),
+    events: { expanded: e.querySelector('[data-sd-sec]').getAttribute('aria-expanded'), rows: e.querySelectorAll('.sd-row').length,
+              tag: (e.querySelector('h3 small') || {}).textContent || '' },
+    focus: a && a.dataset && a.dataset.fk ? a.dataset.fk : null }; }"""
 
 # a spec's index in the page's model: by its name and the app it is read from
 IDX_JS = """([name, app]) => window.__dbg.sdIdx(name, app)"""
@@ -199,12 +223,12 @@ async def run_spec_diff(pw, out, failures, jt=None):
                 await page.evaluate(OPEN_JS, idx)
                 await wait(page, "() => !document.getElementById('wb').hidden && document.getElementById('wb-title').textContent === 'プロフィール'", label="a sheet")
                 await page.evaluate("() => window.__dbg.sdOpen(-1, '@feat/x')")
-                await wait(page, "() => !document.getElementById('wb-diff').hidden && document.querySelectorAll('#wb-code .ov-card[data-idx]').length === 3",
+                await wait(page, "() => !document.getElementById('wb-diff').hidden && document.querySelectorAll('#wb-code .ov-card[data-idx]').length === 4",
                            label="the worktree's list with its button")
                 await page.wait_for_timeout(500)
                 await shot("list-before")
                 await page.click("#wb-diff")
-                await wait(page, "() => document.querySelectorAll('#wb-code .sd-gone').length === 1 && document.querySelectorAll('#wb-code .sd-mark').length >= 4",
+                await wait(page, "() => document.querySelectorAll('#wb-code .sd-gone').length === 1 && document.querySelectorAll('#wb-code .sd-mark').length >= 5",
                            label="the marks and the deleted card")
                 await page.wait_for_timeout(300)
                 r["list"] = await page.evaluate("""() => ({ marks: Object.fromEntries([...document.querySelectorAll('#wb-code .ov-card[data-idx]')].map((c) =>
@@ -232,6 +256,59 @@ async def run_spec_diff(pw, out, failures, jt=None):
                     await wait(page, "() => document.getElementById('sd').hidden", label="Esc closes")
                     return got
 
+                async def fold_arm(page, r, shot, tag):
+                    """Unchanged rows folded as GitHub folds (ticket 2026-10-29-viz-spec-diff-fold-unchanged): 長い一覧's variables
+                    show v27..v33 (3 on each side of v30), the 27 rows before and the 26 after are one line each; ↑ / ↓ open 20 at a
+                    time from the change's side, 全部 the rest; the event handlers, unchanged, are a folded head that opens."""
+                    i = await page.evaluate(IDX_JS, ["長い一覧", "@feat/x"])
+                    await page.evaluate(OPEN_JS, i)
+                    await wait(page, "() => document.getElementById('wb-title').textContent === '長い一覧' && !document.getElementById('wb-diff').hidden",
+                               label="長い一覧's sheet with the button")
+                    await page.click("#wb-diff")
+                    await wait(page, "() => !document.getElementById('sd').hidden && document.querySelector('#sd-body .sd-gap')", label="長い一覧's diff, folded")
+                    await page.wait_for_timeout(300)
+                    f = r["fold"] = await page.evaluate(FOLD_JS)
+                    await shot("fold-folded")
+                    check(failures, f["vars"] == [f"v{k}" for k in range(27, 34)] and f["gaps"] == [["⋯ 変わらない 27 行", ["↑ 上へ 20 行", "全部（27 行）"]], ["⋯ 変わらない 26 行", ["↓ 下へ 20 行", "全部（26 行）"]]],
+                          f"{tag}: folded: v27..v33 shown (3 rows each side of v30), 27 and 26 unchanged rows one line each: {f}")
+                    check(failures, f["events"] == {"expanded": "false", "rows": 0, "tag": "変更なし · 4 行"},
+                          f"{tag}: the event handlers, unchanged, are a folded head: {f['events']}")
+                    check(failures, f["chg"] == ["v30"], f"{tag}: the changed row is never folded: {f['chg']}")
+                    await page.click("#sd-body .sd-gap >> nth=0 >> text=↑ 上へ 20 行")
+                    f = r["fold-up"] = await page.evaluate(FOLD_JS)
+                    check(failures, f["vars"] == [f"v{k:02d}" for k in range(7, 34)] and f["gaps"][0][0] == "⋯ 変わらない 7 行" and f["gaps"][0][1] == ["7 行を表示"],
+                          f"{tag}: ↑ opens the 20 rows next to the change (v07..v26), 7 left with one button: {f['vars'][:3]} {f['gaps']}")
+                    check(failures, f["focus"] is not None and f["focus"].startswith("sd-gap"), f"{tag}: the focus stays on the gap: {f['focus']}")
+                    await page.click("#sd-body .sd-gap >> nth=1 >> text=↓ 下へ 20 行")
+                    f = r["fold-down"] = await page.evaluate(FOLD_JS)
+                    check(failures, f["vars"][-1] == "v53" and f["gaps"][-1][0] == "⋯ 変わらない 6 行",
+                          f"{tag}: ↓ opens the 20 rows after the change (to v53), 6 left: {f['vars'][-3:]} {f['gaps']}")
+                    await page.click("#sd-body .sd-gap >> nth=1 >> text=6 行を表示")
+                    await page.click("#sd-body .sd-gap >> nth=0 >> text=7 行を表示")
+                    f = r["fold-all"] = await page.evaluate(FOLD_JS)
+                    check(failures, f["vars"] == [f"v{k:02d}" for k in range(60)] and f["gaps"] == [],
+                          f"{tag}: every row shown once each gap is opened: {len(f['vars'])} {f['gaps']}")
+                    await page.click("#sd-body [data-sd-sec='eventHandlers']")
+                    f = r["fold-events"] = await page.evaluate(FOLD_JS)
+                    check(failures, f["events"]["expanded"] == "true" and f["events"]["rows"] == 4 and f["focus"] == "sd-sec-eventHandlers",
+                          f"{tag}: the unchanged section opens from its head, which keeps the focus: {f['events']} {f['focus']}")
+                    await page.evaluate("() => { const b = document.getElementById('sd-body'); b.scrollTop = b.scrollHeight; }")
+                    await page.wait_for_timeout(200)
+                    await shot("fold-open")
+                    await page.click("#sd-body [data-sd-sec='uiVariables']")
+                    f = r["fold-sec"] = await page.evaluate(FOLD_JS)
+                    check(failures, f["vars"] == [] and f["varsHead"] == "false", f"{tag}: a changed section folds from its head too: {f['varsHead']}")
+                    await page.keyboard.press("Escape")
+                    await wait(page, "() => document.getElementById('sd').hidden", label="Esc closes")
+                    # opened again: folded as at first
+                    await page.click("#wb-diff")
+                    await wait(page, "() => !document.getElementById('sd').hidden && document.querySelector('#sd-body .sd-gap')", label="長い一覧's diff again")
+                    f = r["fold-again"] = await page.evaluate(FOLD_JS)
+                    check(failures, f["vars"] == [f"v{k}" for k in range(27, 34)] and f["events"]["expanded"] == "false",
+                          f"{tag}: opened again, it is folded as at first: {f['vars']} {f['events']}")
+                    await page.keyboard.press("Escape")
+                    await wait(page, "() => document.getElementById('sd').hidden", label="Esc closes")
+
                 await page.evaluate("() => window.__dbg.sdOpen(-1, 'all')")
                 got = await diff("ログイン", "@feat/x", "diff-changed")
                 r["focus-back"] = await page.evaluate("() => document.activeElement && document.activeElement.id")
@@ -242,6 +319,7 @@ async def run_spec_diff(pw, out, failures, jt=None):
                 await diff("退会", "@feat/x", "diff-deleted", opener="#wb-code .sd-gone")
                 await page.evaluate("() => window.__dbg.sdOpen(-1, 'all')")
                 await diff("設定", "@feat/y", "diff-unavailable")
+                await fold_arm(page, r, shot, tag)
                 # the room's own spec has no button
                 i = await page.evaluate(IDX_JS, ["ログイン", ""])
                 await page.evaluate(OPEN_JS, i)

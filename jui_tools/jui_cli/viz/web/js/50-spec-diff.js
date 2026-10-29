@@ -6,7 +6,7 @@
    - on a worktree's list (the overview with the worktree's app chosen): marks each card +n −n ~n, and shows the specs
      the worktree deleted as faint cards, which open the same view (the left all removed). Pressed again, they go.
    git runs on the server only when one of these is pressed; a base it could not read is said, with why. */
-const SD = { open: false, opener: null, seq: 0, only: false, got: null, title: '', branch: '', lists: {} };
+const SD = { open: false, opener: null, seq: 0, only: false, got: null, title: '', branch: '', lists: {}, secs: {}, gaps: {} };
 const sdEl = $('sd'), sdBody = $('sd-body');
 const sdIsWorktree = (s) => !!(s && s.checkout && s.checkout.worktree);
 const sdListKey = (project, app) => `${project}|${app}`;
@@ -124,7 +124,7 @@ const sdReason = (r) => tl(Object.prototype.hasOwnProperty.call(SD_REASONS, r) ?
 
 /* ---- the full-screen view ---- */
 function sdOpen(req, name, branch, opener) {
-  Object.assign(SD, { open: true, opener: opener || null, got: null, title: name, branch });
+  Object.assign(SD, { open: true, opener: opener || null, got: null, title: name, branch, secs: {}, gaps: {} });
   const seq = ++SD.seq;
   sdEl.hidden = false;
   document.body.classList.add('sd-on');
@@ -178,13 +178,81 @@ function sdCellHTML(key, row, side) {
   const partsHTML = sdPieces(key, r).map(([t, c]) => (cols && c >= 0 && cols.has(c) ? `<mark class="sd-x">${esc(t)}</mark>` : esc(t))).join('');
   return `<div class="sd-cell${key === 'flowMermaid' ? ' sd-pre' : ''}"><span class="sd-sign" aria-hidden="true">${esc(SD_SIGNS[row.s] || '')}</span><span class="sd-t">${partsHTML}</span></div>`;
 }
+/* Unchanged rows folded as GitHub folds a diff (requester, 10-29: 「specの差分表示だけど、差分ないところは畳めるようにしてほしい、
+   githunのUIのイメージ」; ticket 2026-10-29-viz-spec-diff-fold-unchanged): SD_CONTEXT rows on each side of a change are shown, a
+   longer run of unchanged rows is one line, 「⋯ 変わらない n 行」, that opens SD_STEP rows at a time from the change above
+   (下へ) or below (上へ), or all of it. A section is a file's head: pressed it folds or opens; a section with no change
+   starts folded. What was opened is kept until the view is opened again (SD.secs / SD.gaps, by section and the gap's
+   first row). 差だけ見せる shows the changed rows only, nothing to fold. */
+const SD_CONTEXT = 3, SD_STEP = 20;
+function sdGapBtnHTML(g, act, label) {
+  return `<button type="button" class="sd-gap-btn" data-sd-gap="${esc(g)}" data-sd-act="${esc(act)}" data-fk="sd-gap-${esc(g)}-${esc(act)}">${esc(label)}</button>`;
+}
+function sdGapHTML(key, start, end, open, above, below) {
+  const g = `${key}:${start}`, n = end - start - open.head - open.tail;
+  const more = n > SD_STEP;
+  const btnsHTML = !more ? sdGapBtnHTML(g, 'all', tl('sd.gap.show', { n }))
+    : (above ? sdGapBtnHTML(g, 'down', tl('sd.gap.down', { n: SD_STEP })) : '') + (below ? sdGapBtnHTML(g, 'up', tl('sd.gap.up', { n: SD_STEP })) : '') + sdGapBtnHTML(g, 'all', tl('sd.gap.all', { n }));
+  return `<div class="sd-gap" role="group" aria-label="${esc(tl('sd.gap.hidden', { n }))}"><span class="sd-gap-n">${esc(tl('sd.gap.hidden', { n }))}</span>${btnsHTML}</div>`;
+}
+function sdRowHTML(key, r) {
+  return `<div class="sd-row sd-${esc(r.s)}" role="group" aria-label="${esc(tl(SD_STATES[r.s] || 'sd.state.same'))}">${sdCellHTML(key, r, 'l')}${sdCellHTML(key, r, 'r')}</div>`;
+}
 function sdSectionHTML(sec) {
-  const rows = (sec.rows || []).filter((r) => !SD.only || r.s !== 'same');
+  const all = sec.rows || [];
+  const rows = all.filter((r) => !SD.only || r.s !== 'same');
   if (!rows.length) return '';
   const n = sec.counts || {};
-  const tagHTML = n.add || n.del || n.chg ? `<small>${sdCountsHTML(n)}</small>` : '';
-  return `<section class="sd-sec"><h3>${esc(tl(SD_SECTIONS[sec.key] || 'sd.sec.other'))}${tagHTML}</h3><div class="sd-rows">${rows.map((r) => `<div class="sd-row sd-${esc(r.s)}" role="group" aria-label="${esc(tl(SD_STATES[r.s] || 'sd.state.same'))}">${sdCellHTML(sec.key, r, 'l')}${sdCellHTML(sec.key, r, 'r')}</div>`).join('')}</div></section>`;
+  const changed = !!(n.add || n.del || n.chg);
+  const open = SD.secs[sec.key] !== undefined ? SD.secs[sec.key] : changed;
+  const tagHTML = changed ? `<small>${sdCountsHTML(n)}</small>` : `<small class="sd-sec-same">${esc(tl('sd.sec.same', { n: all.length }))}</small>`;
+  const headHTML = `<h3><button type="button" class="sd-sec-btn" data-sd-sec="${esc(sec.key)}" data-fk="sd-sec-${esc(sec.key)}" aria-expanded="${open ? 'true' : 'false'}"><span class="sd-chev" aria-hidden="true">${open ? '▾' : '▸'}</span>${esc(tl(SD_SECTIONS[sec.key] || 'sd.sec.other'))}</button>${tagHTML}</h3>`;
+  if (!open) return `<section class="sd-sec sd-sec-folded">${headHTML}</section>`;
+  let bodyHTML = '';
+  if (SD.only || !changed) bodyHTML = rows.map((r) => sdRowHTML(sec.key, r)).join('');
+  else {
+    // shown: within SD_CONTEXT of a changed row; the runs between are gaps
+    const near = all.map(() => false);
+    all.forEach((r, i) => { if (r.s !== 'same') for (let k = Math.max(0, i - SD_CONTEXT); k <= Math.min(all.length - 1, i + SD_CONTEXT); k++) near[k] = true; });
+    let i = 0;
+    while (i < all.length) {
+      if (near[i]) { bodyHTML += sdRowHTML(sec.key, all[i]); i += 1; continue; }
+      let end = i;
+      while (end < all.length && !near[end]) end += 1;
+      const g = SD.gaps[`${sec.key}:${i}`] || { head: 0, tail: 0 };
+      const len = end - i;
+      if (len < 2 || g.head + g.tail >= len) { bodyHTML += all.slice(i, end).map((r) => sdRowHTML(sec.key, r)).join(''); i = end; continue; }   // one row folds into one row: shown
+      bodyHTML += all.slice(i, i + g.head).map((r) => sdRowHTML(sec.key, r)).join('');
+      bodyHTML += sdGapHTML(sec.key, i, end, g, i > 0, end < all.length);
+      bodyHTML += all.slice(end - g.tail, end).map((r) => sdRowHTML(sec.key, r)).join('');
+      i = end;
+    }
+  }
+  return `<section class="sd-sec">${headHTML}<div class="sd-rows">${bodyHTML}</div></section>`;
 }
+sdBody.addEventListener('click', (e) => {
+  const sec = e.target.closest('[data-sd-sec]');
+  if (sec) {
+    const sid = sec.dataset.sdSec;
+    SD.secs[sid] = sec.getAttribute('aria-expanded') !== 'true';
+    sdRender();
+    // the head is drawn anew: give it the focus back, or Esc no longer reaches the dialog
+    (sdBody.querySelector(`[data-sd-sec="${CSS.escape(sid)}"]`) || sdBody).focus({ preventScroll: true });
+    return;
+  }
+  const b = e.target.closest('[data-sd-gap]');
+  if (!b) return;
+  const key = b.dataset.sdGap, g = SD.gaps[key] || { head: 0, tail: 0 }, act = b.dataset.sdAct;
+  if (act === 'all') Object.assign(g, { head: 1e9 });
+  else if (act === 'down') g.head += SD_STEP;
+  else if (act === 'up') g.tail += SD_STEP;
+  SD.gaps[key] = g;
+  sdRender();
+  // the press's place keeps the focus: the same button while the gap is still there, else the section's head
+  const again = sdBody.querySelector(`[data-sd-gap="${CSS.escape(key)}"][data-sd-act="${CSS.escape(act)}"]`) || sdBody.querySelector(`[data-sd-gap="${CSS.escape(key)}"]`);
+  const sid = key.slice(0, key.lastIndexOf(':'));
+  (again || sdBody.querySelector(`[data-sd-sec="${CSS.escape(sid)}"]`) || sdBody).focus({ preventScroll: true });
+});
 function sdRender() {
   if (!SD.open) return;
   const d = SD.got;
