@@ -1,21 +1,34 @@
 #!/usr/bin/env ruby
 
+require_relative 'responsive_helper'
+
 module SjuiTools
   module SwiftUI
     module Views
       # Helper module for relative positioning logic
       module RelativePositioningHelper
+        # The keys that make the parent a RelativePositionContainer.
+        RELATIVE_KEYS = %w[
+          toLeftOf toRightOf above below alignTop alignBottom alignLeft alignRight
+          alignTopView alignBottomView alignLeftView alignRightView
+          alignTopOfView alignBottomOfView alignLeftOfView alignRightOfView
+          alignCenterVerticalView alignCenterHorizontalView
+          alignBaseline centerHorizontal centerVertical centerInParent toStartOf toEndOf
+        ].freeze
+
+        # The margins RelativePositionContainer draws as the child's inset.
+        RELATIVE_MARGIN_KEYS = %w[
+          margins topMargin bottomMargin leftMargin rightMargin startMargin endMargin
+          marginTop marginBottom marginLeft marginRight marginStart marginEnd
+          minStartMargin maxStartMargin minEndMargin maxEndMargin
+        ].freeze
+
+        # 相対配置のプロパティをチェック — in the base, or in a size class: one written only under `responsive` made
+        # the parent a plain ZStack and was drawn nowhere (ticket sjui-responsive-align-center-overrides-are-not-drawn).
         def has_relative_constraint?(child)
           return false unless child.is_a?(Hash)
-          
-          # 相対配置のプロパティをチェック
-          child['toLeftOf'] || child['toRightOf'] || child['above'] || child['below'] ||
-          child['alignTop'] || child['alignBottom'] || child['alignLeft'] || child['alignRight'] ||
-          child['alignTopView'] || child['alignBottomView'] || child['alignLeftView'] || child['alignRightView'] ||
-          child['alignTopOfView'] || child['alignBottomOfView'] || child['alignLeftOfView'] || child['alignRightOfView'] ||
-          child['alignCenterVerticalView'] || child['alignCenterHorizontalView'] ||
-          child['alignBaseline'] || child['centerHorizontal'] || child['centerVertical'] ||
-          child['centerInParent'] || child['toStartOf'] || child['toEndOf']
+
+          RELATIVE_KEYS.any? { |k| child[k] } || ResponsiveHelper.overrides_any?(child, RELATIVE_KEYS)
         end
         
         def has_relative_positioning?(children)
@@ -186,6 +199,11 @@ module SjuiTools
                     has_visibility = visibility_value.is_a?(String) && visibility_value.start_with?('@{') && visibility_value.end_with?('}')
                     # Canonical expression parsing shared with parse_binding
                     vis_param = has_visibility ? SwiftUI::Binding::BindingExpression.swift_visibility_param(visibility_value) : nil
+                    if ResponsiveHelper.overrides_any?(child, %w[visibility])
+                      # a size class overrides it: the wrapper takes it per size class, as outside this container
+                      has_visibility = true
+                      vis_param = ResponsiveHelper.visibility_param(child)
+                    end
 
                     add_line "view: AnyView("
                     if has_visibility
@@ -200,32 +218,13 @@ module SjuiTools
                         # Extract padding value and remove it from the child temporarily
                         padding_value = child['padding'] || child['paddings']
                         background_color = child['background']
-                        child_without_padding = child.dup
+                        child_without_padding = without_margins(child)
                         child_without_padding.delete('padding')
                         child_without_padding.delete('paddings')
                         child_without_padding.delete('background')
-                        
-                        # Remove margin properties (they're handled separately by RelativePositionContainer)
-                        child_without_padding.delete('leftMargin')
-                        child_without_padding.delete('rightMargin')
-                        child_without_padding.delete('topMargin')
-                        child_without_padding.delete('bottomMargin')
-                        child_without_padding.delete('marginLeft')
-                        child_without_padding.delete('marginRight')
-                        child_without_padding.delete('marginTop')
-                        child_without_padding.delete('marginBottom')
-                        child_without_padding.delete('margins')
-                        child_without_padding.delete('startMargin')
-                        child_without_padding.delete('endMargin')
-                        child_without_padding.delete('marginStart')
-                        child_without_padding.delete('marginEnd')
-                        # Bounded margins collapse to their floor here — see the
-                        # margins: EdgeInsets(...) fallback chain below.
-                        child_without_padding.delete('minStartMargin')
-                        child_without_padding.delete('maxStartMargin')
-                        child_without_padding.delete('minEndMargin')
-                        child_without_padding.delete('maxEndMargin')
-                        
+                        # Margins are handled separately by RelativePositionContainer; bounded ones collapse to
+                        # their floor there — see relative_margin_edges.
+
                         # Generate the view without padding and background
                         # Use current indent_level + 1 for proper nesting inside view: AnyView(...)
                         child_converter = @converter_factory.create_converter(child_without_padding, @indent_level + 1, @action_manager, @converter_factory, @view_registry)
@@ -262,24 +261,7 @@ module SjuiTools
                       else
                         # Normal conversion for views without padding or without background
                         # Remove margin properties before conversion (they're handled separately by RelativePositionContainer)
-                        child_without_margins = child.dup
-                        child_without_margins.delete('leftMargin')
-                        child_without_margins.delete('rightMargin')
-                        child_without_margins.delete('topMargin')
-                        child_without_margins.delete('bottomMargin')
-                        child_without_margins.delete('marginLeft')
-                        child_without_margins.delete('marginRight')
-                        child_without_margins.delete('marginTop')
-                        child_without_margins.delete('marginBottom')
-                        child_without_margins.delete('margins')
-                        child_without_margins.delete('startMargin')
-                        child_without_margins.delete('endMargin')
-                        child_without_margins.delete('marginStart')
-                        child_without_margins.delete('marginEnd')
-                        child_without_margins.delete('minStartMargin')
-                        child_without_margins.delete('maxStartMargin')
-                        child_without_margins.delete('minEndMargin')
-                        child_without_margins.delete('maxEndMargin')
+                        child_without_margins = without_margins(child)
 
                         # Use current indent_level + 1 for proper nesting inside view: AnyView(...)
                         child_converter = @converter_factory.create_converter(child_without_margins, @indent_level + 1, @action_manager, @converter_factory, @view_registry)
@@ -298,189 +280,15 @@ module SjuiTools
                     end
                     add_line "),"
 
-                    # Constraints
-                    add_line "constraints: ["
-                    constraints_open_index = @generated_code.length - 1
-                    @bound_constraint_emitted = false
-                    indent do
-                      # 相対配置の制約を追加
-                      constraint_added = false
-                      
-                      
-                      # above/below
-                      if child['above']
-                        add_line "RelativePositionConstraint(type: .above, targetId: \"#{child['above']}\"),"
-                        constraint_added = true
-                      elsif child['below']
-                        add_line "RelativePositionConstraint(type: .below, targetId: \"#{child['below']}\"),"
-                        constraint_added = true
-                      end
-                      
-                      # alignTopView, alignBottomView, alignLeftView, alignRightView (align edges to another view)
-                      if child['alignTopView']
-                        add_line "RelativePositionConstraint(type: .alignTop, targetId: \"#{child['alignTopView']}\"),"
-                        constraint_added = true
-                      end
-                      
-                      if child['alignBottomView']
-                        add_line "RelativePositionConstraint(type: .alignBottom, targetId: \"#{child['alignBottomView']}\"),"
-                        constraint_added = true
-                      end
-                      
-                      if child['alignLeftView']
-                        add_line "RelativePositionConstraint(type: .alignLeft, targetId: \"#{child['alignLeftView']}\"),"
-                        constraint_added = true
-                      end
-                      
-                      if child['alignRightView']
-                        add_line "RelativePositionConstraint(type: .alignRight, targetId: \"#{child['alignRightView']}\"),"
-                        constraint_added = true
-                      end
-                      
-                      # alignTopOfView, alignBottomOfView, alignLeftOfView, alignRightOfView (position relative to edge)
-                      if child['alignTopOfView']
-                        add_line "RelativePositionConstraint(type: .above, targetId: \"#{child['alignTopOfView']}\"),"
-                        constraint_added = true
-                      end
-                      
-                      if child['alignBottomOfView']
-                        add_line "RelativePositionConstraint(type: .below, targetId: \"#{child['alignBottomOfView']}\"),"
-                        constraint_added = true
-                      end
-                      
-                      if child['alignLeftOfView']
-                        add_line "RelativePositionConstraint(type: .leftOf, targetId: \"#{child['alignLeftOfView']}\"),"
-                        constraint_added = true
-                      end
-                      
-                      if child['alignRightOfView']
-                        add_line "RelativePositionConstraint(type: .rightOf, targetId: \"#{child['alignRightOfView']}\"),"
-                        constraint_added = true
-                      end
-                      
-                      # アライメント制約（水平方向を先に）
-                      if child['alignLeft']
-                        add_parent_constraint(child['alignLeft'], 'left', 'parentLeft')
-                        constraint_added = true
-                      end
-                      
-                      if child['alignRight']
-                        add_parent_constraint(child['alignRight'], 'right', 'parentRight')
-                        constraint_added = true
-                      end
-                      
-                      if child['alignTop']
-                        add_parent_constraint(child['alignTop'], 'top', 'parentTop')
-                        constraint_added = true
-                      end
-                      
-                      if child['alignBottom']
-                        add_parent_constraint(child['alignBottom'], 'bottom', 'parentBottom')
-                        constraint_added = true
-                      end
-                      
-                      if child['centerHorizontal']
-                        add_parent_constraint(child['centerHorizontal'], 'centerHorizontal', 'parentCenterHorizontal')
-                        constraint_added = true
-                      end
-                      
-                      if child['centerVertical']
-                        add_parent_constraint(child['centerVertical'], 'centerVertical', 'parentCenterVertical')
-                        constraint_added = true
-                      end
-                      
-                      # alignCenterVerticalView and alignCenterHorizontalView
-                      if child['alignCenterVerticalView']
-                        add_line "RelativePositionConstraint(type: .centerVertical, targetId: \"#{child['alignCenterVerticalView']}\"),"
-                        constraint_added = true
-                      end
-                      
-                      if child['alignCenterHorizontalView']
-                        add_line "RelativePositionConstraint(type: .centerHorizontal, targetId: \"#{child['alignCenterHorizontalView']}\"),"
-                        constraint_added = true
-                      end
-                      
-                      if child['centerInParent']
-                        add_parent_constraint(child['centerInParent'], nil, 'parentCenter')
-                        constraint_added = true
-                      end
-
-                      # Default to parentTop + parentLeft when no constraints specified
-                      # so that margins are properly applied
-                      unless constraint_added
-                        add_line "RelativePositionConstraint(type: .parentTop, targetId: \"\"),"
-                        add_line "RelativePositionConstraint(type: .parentLeft, targetId: \"\"),"
-                        constraint_added = true
-                      end
-
-                      # 最後のカンマを削除
-                      if constraint_added && @generated_code.last.end_with?(',')
-                        @generated_code[-1] = @generated_code.last.chomp(',')
-                      end
-                    end
-                    if @bound_constraint_emitted
-                      # At least one constraint is conditional at run time, so
-                      # the literal holds Optionals and is compacted. The cast
-                      # is what lets the mixed literal type-check.
-                      @generated_code[constraints_open_index] =
-                        @generated_code[constraints_open_index].sub('constraints: [', 'constraints: ([')
-                      add_line "] as [RelativePositionConstraint?]).compactMap { $0 },"
-                    else
-                      add_line "],"
-                    end
-
-                    # Margins
-                    # Check for margins array first
-                    if child['margins']
-                      margin_values = Array(child['margins'])
-                      case margin_values.length
-                      when 1
-                        # All edges same value
-                        value = margin_values[0]
-                        add_line "margins: EdgeInsets(top: #{value}, leading: #{value}, bottom: #{value}, trailing: #{value}),"
-                      when 2
-                        # [Vertical, Horizontal]
-                        v_value = margin_values[0]
-                        h_value = margin_values[1]
-                        add_line "margins: EdgeInsets(top: #{v_value}, leading: #{h_value}, bottom: #{v_value}, trailing: #{h_value}),"
-                      when 4
-                        # [Top, Left, Bottom, Right]
-                        add_line "margins: EdgeInsets(top: #{margin_values[0]}, leading: #{margin_values[1]}, bottom: #{margin_values[2]}, trailing: #{margin_values[3]}),"
-                      else
-                        add_line "margins: .init(),"
-                      end
-                    else
-                      # Individual margin properties
-                      top_val = convert_margin_binding(child['topMargin'] || child['marginTop'] || 0)
-                      # RelativePositionContainer places children at a fixed inset,
-                      # so a bounded margin has no slack to flex into: it
-                      # collapses to its lower bound, which is what the library's
-                      # min-only case resolves to as well.
-                      leading_val = convert_margin_binding(child['leftMargin'] || child['marginLeft'] || child['startMargin'] || child['marginStart'] || child['minStartMargin'] || 0)
-                      bottom_val = convert_margin_binding(child['bottomMargin'] || child['marginBottom'] || 0)
-                      trailing_val = convert_margin_binding(child['rightMargin'] || child['marginRight'] || child['endMargin'] || child['marginEnd'] || child['minEndMargin'] || 0)
-
-                      margins = []
-                      margins << "top: #{top_val}"
-                      margins << "leading: #{leading_val}"
-                      margins << "bottom: #{bottom_val}"
-                      margins << "trailing: #{trailing_val}"
-
-                      # デフォルト値でない場合のみマージンを設定（バインディングも含む）
-                      if [top_val, leading_val, bottom_val, trailing_val].any? { |v| v != '0' && v != 0 }
-                        add_line "margins: EdgeInsets(#{margins.join(', ')}),"
-                      else
-                        add_line "margins: .init(),"
-                      end
-                    end
-
-                    # Width mode
-                    width_mode = get_size_mode(child['width'])
-                    add_line "widthMode: #{width_mode},"
-
-                    # Height mode
-                    height_mode = get_size_mode(child['height'])
-                    add_line "heightMode: #{height_mode}"
+                    # Constraints, margins and size modes. The parent draws these from the child's attributes,
+                    # outside the child's own function (responsive0), so a size class that overrides one is drawn
+                    # here, per size class — as the ZStack's offset is (ticket
+                    # sjui-responsive-align-center-overrides-are-not-drawn: alignTop … centerInParent written only
+                    # under `responsive` drew nothing, and a margin override was added to the base one).
+                    emit_relative_constraints(child)
+                    add_line "margins: #{relative_margins(child)},"
+                    add_line "widthMode: #{relative_size_mode(child, 'width')},"
+                    add_line "heightMode: #{relative_size_mode(child, 'height')}"
                   end
                   add_line index < children.length - 1 ? ")," : ")"
                 end
@@ -524,18 +332,141 @@ module SjuiTools
         # A bound flag cannot be resolved at generation time, so the element
         # becomes conditional and the array is compacted (see the caller).
         # *target_type* is nil for a constraint with no view-relative form.
-        def add_parent_constraint(value, target_type, parent_type)
+        def parent_constraint_item(value, target_type, parent_type)
           if (condition = bound_bool(value))
-            @bound_constraint_emitted = true
-            add_line "#{condition} ? RelativePositionConstraint(type: .#{parent_type}, targetId: \"\") : nil,"
-            return
+            return ["RelativePositionConstraint(type: .#{parent_type}, targetId: \"\")", condition]
           end
 
           if target_type && value.is_a?(String)
-            add_line "RelativePositionConstraint(type: .#{target_type}, targetId: \"#{value}\"),"
+            ["RelativePositionConstraint(type: .#{target_type}, targetId: \"#{value}\")", nil]
           else
-            add_line "RelativePositionConstraint(type: .#{parent_type}, targetId: \"\"),"
+            ["RelativePositionConstraint(type: .#{parent_type}, targetId: \"\")", nil]
           end
+        end
+
+        # The constraints *attrs* declare, each as [the constraint, the Swift condition it holds under, or nil].
+        def relative_constraint_items(attrs)
+          items = []
+          view = ->(type, target) { items << ["RelativePositionConstraint(type: .#{type}, targetId: \"#{target}\")", nil] }
+          if attrs['above']
+            view.(:above, attrs['above'])
+          elsif attrs['below']
+            view.(:below, attrs['below'])
+          end
+          # alignTopView … alignRightView: align edges to another view
+          view.(:alignTop, attrs['alignTopView']) if attrs['alignTopView']
+          view.(:alignBottom, attrs['alignBottomView']) if attrs['alignBottomView']
+          view.(:alignLeft, attrs['alignLeftView']) if attrs['alignLeftView']
+          view.(:alignRight, attrs['alignRightView']) if attrs['alignRightView']
+          # alignTopOfView … alignRightOfView: position relative to another view's edge
+          view.(:above, attrs['alignTopOfView']) if attrs['alignTopOfView']
+          view.(:below, attrs['alignBottomOfView']) if attrs['alignBottomOfView']
+          view.(:leftOf, attrs['alignLeftOfView']) if attrs['alignLeftOfView']
+          view.(:rightOf, attrs['alignRightOfView']) if attrs['alignRightOfView']
+          # アライメント制約（水平方向を先に）
+          items << parent_constraint_item(attrs['alignLeft'], 'left', 'parentLeft') if attrs['alignLeft']
+          items << parent_constraint_item(attrs['alignRight'], 'right', 'parentRight') if attrs['alignRight']
+          items << parent_constraint_item(attrs['alignTop'], 'top', 'parentTop') if attrs['alignTop']
+          items << parent_constraint_item(attrs['alignBottom'], 'bottom', 'parentBottom') if attrs['alignBottom']
+          items << parent_constraint_item(attrs['centerHorizontal'], 'centerHorizontal', 'parentCenterHorizontal') if attrs['centerHorizontal']
+          items << parent_constraint_item(attrs['centerVertical'], 'centerVertical', 'parentCenterVertical') if attrs['centerVertical']
+          view.(:centerVertical, attrs['alignCenterVerticalView']) if attrs['alignCenterVerticalView']
+          view.(:centerHorizontal, attrs['alignCenterHorizontalView']) if attrs['alignCenterHorizontalView']
+          items << parent_constraint_item(attrs['centerInParent'], nil, 'parentCenter') if attrs['centerInParent']
+          # Default to parentTop + parentLeft when no constraints specified
+          # so that margins are properly applied
+          if items.empty?
+            view.(:parentTop, '')
+            view.(:parentLeft, '')
+          end
+          items
+        end
+
+        # `constraints: [...]`. With a size class overriding any of them, each constraint holds under the size classes
+        # whose merged attributes declare it (ResponsiveHelper.per_size_class), the base's order first.
+        #
+        # A bound flag cannot be resolved at generation time either, so a conditional element is `cond ? c : nil`
+        # and the array is compacted; the cast is what lets the mixed literal type-check.
+        def emit_relative_constraints(child)
+          items = relative_constraint_items(child)
+          if ResponsiveHelper.overrides_any?(child, RELATIVE_KEYS)
+            branches = JsonUIShared::ResponsiveResolver.build_branches(child).reverse
+            exprs = branches.flat_map { |b| relative_constraint_items(b[:attrs]).map(&:first) }.uniq
+            items = exprs.filter_map do |expr|
+              holds = ResponsiveHelper.per_size_class(child) do |attrs|
+                found = relative_constraint_items(attrs).find { |e, _| e == expr }
+                found ? (found[1] || 'true') : 'false'
+              end
+              [expr, holds == 'true' ? nil : holds] unless holds == 'false'
+            end
+          end
+          bound = items.any? { |_, condition| condition }
+          add_line bound ? 'constraints: ([' : 'constraints: ['
+          indent do
+            items.each_with_index do |(expr, condition), i|
+              line = condition ? "#{condition} ? #{expr} : nil" : expr
+              add_line i < items.size - 1 ? "#{line}," : line
+            end
+          end
+          add_line bound ? '] as [RelativePositionConstraint?]).compactMap { $0 },' : '],'
+        end
+
+        # [top, leading, bottom, trailing] of *attrs*' margins, and whether they came from `margins`.
+        def relative_margin_edges(attrs)
+          if attrs['margins']
+            m = Array(attrs['margins'])
+            edges = case m.length
+                    when 1 then [m[0]] * 4
+                    when 2 then [m[0], m[1], m[0], m[1]]      # [Vertical, Horizontal]
+                    when 4 then m                             # [Top, Left, Bottom, Right]
+                    else [0, 0, 0, 0]
+                    end
+            return [edges.map(&:to_s), [1, 2, 4].include?(m.length)]
+          end
+          # RelativePositionContainer places children at a fixed inset,
+          # so a bounded margin has no slack to flex into: it
+          # collapses to its lower bound, which is what the library's
+          # min-only case resolves to as well.
+          edges = [
+            attrs['topMargin'] || attrs['marginTop'] || 0,
+            attrs['leftMargin'] || attrs['marginLeft'] || attrs['startMargin'] || attrs['marginStart'] || attrs['minStartMargin'] || 0,
+            attrs['bottomMargin'] || attrs['marginBottom'] || 0,
+            attrs['rightMargin'] || attrs['marginRight'] || attrs['endMargin'] || attrs['marginEnd'] || attrs['minEndMargin'] || 0
+          ]
+          [edges.map { |v| convert_margin_binding(v).to_s }, false]
+        end
+
+        def relative_margins(child)
+          if ResponsiveHelper.overrides_any?(child, RELATIVE_MARGIN_KEYS)
+            top, leading, bottom, trailing = (0..3).map do |i|
+              ResponsiveHelper.per_size_class(child) { |attrs| relative_margin_edges(attrs)[0][i] }
+            end
+            return "EdgeInsets(top: #{top}, leading: #{leading}, bottom: #{bottom}, trailing: #{trailing})"
+          end
+          edges, declared = relative_margin_edges(child)
+          # デフォルト値でない場合のみマージンを設定（バインディングも含む）
+          return '.init()' unless declared || edges.any? { |v| v != '0' }
+
+          "EdgeInsets(top: #{edges[0]}, leading: #{edges[1]}, bottom: #{edges[2]}, trailing: #{edges[3]})"
+        end
+
+        def relative_size_mode(child, key)
+          return get_size_mode(child[key]) unless ResponsiveHelper.overrides_any?(child, [key])
+
+          ResponsiveHelper.per_size_class(child) { |attrs| "RelativeSizeMode#{get_size_mode(attrs[key])}" }
+        end
+
+        # A child's margins with the keys RelativePositionContainer draws taken out — from the base and from every
+        # size class, or an override would be drawn twice (the container's inset and the function's padding).
+        def without_margins(child)
+          out = child.dup
+          RELATIVE_MARGIN_KEYS.each { |k| out.delete(k) }
+          if out['responsive'].is_a?(Hash)
+            out['responsive'] = out['responsive'].transform_values do |o|
+              o.is_a?(Hash) ? o.reject { |k, _| RELATIVE_MARGIN_KEYS.include?(k) } : o
+            end
+          end
+          out
         end
 
         # バインディング式をSwiftUI形式に変換

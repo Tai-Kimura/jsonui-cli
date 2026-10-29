@@ -1,3 +1,5 @@
+require_relative 'responsive_helper'
+
 module SjuiTools
   module SwiftUI
     module Views
@@ -40,6 +42,8 @@ module SjuiTools
         
         # アライメント処理を含む子要素のレンダリング
         def render_child_with_alignment(child, orientation)
+          return render_child_with_responsive_alignment(child, orientation) if orientation && ResponsiveHelper.overrides_any?(child, STACK_ALIGN_KEYS)
+
           # Handle alignment properties for HStack and VStack
           alignment_info = calculate_alignment_needs(child, orientation)
           needs_wrapper = alignment_info[:needs_wrapper]
@@ -73,6 +77,50 @@ module SjuiTools
           end
           
           # Propagate state variables
+          if child_converter.respond_to?(:state_variables) && child_converter.state_variables
+            @state_variables.concat(child_converter.state_variables)
+          end
+        end
+
+        # The keys a stack draws for its child, as Spacers and an alignment wrapper (calculate_alignment_needs).
+        STACK_ALIGN_KEYS = %w[alignTop alignBottom alignLeft alignRight centerVertical centerHorizontal centerInParent].freeze
+
+        # A size class overrides one of STACK_ALIGN_KEYS: the stack draws the Spacers and the wrapper outside the
+        # child's function, so each holds under the size classes whose merged attributes ask for it
+        # (ResponsiveHelper.per_size_class) — `if <cond> { Spacer() }`, and a wrapper whose frame stretches only
+        # then (a frame of nil bounds passes its child's size through). Written only under `responsive`, they drew
+        # nothing (ticket sjui-responsive-align-center-overrides-are-not-drawn).
+        def render_child_with_responsive_alignment(child, orientation)
+          need = ->(key) { ResponsiveHelper.per_size_class(child) { |a| calculate_alignment_needs(a, orientation)[key] ? 'true' : 'false' } }
+          spacer = ->(holds) { holds == 'true' ? add_line('Spacer()') : holds != 'false' && add_line("if #{holds} { Spacer() }") }
+          wraps = ResponsiveHelper.per_size_class(child) do |a|
+            info = calculate_alignment_needs(a, orientation)
+            info[:needs_wrapper] && info[:wrapper_alignment] ? 'true' : 'false'
+          end
+          alignment = ResponsiveHelper.per_size_class(child) { |a| "Alignment#{calculate_alignment_needs(a, orientation)[:wrapper_alignment] || '.center'}" }
+
+          spacer.(need.(:needs_spacer_before))
+          child_copy = remove_alignment_properties(child, orientation, true)
+          if child_copy['responsive'].is_a?(Hash)
+            child_copy['responsive'] = child_copy['responsive'].transform_values do |o|
+              o.is_a?(Hash) ? o.reject { |k, _| STACK_ALIGN_KEYS.include?(k) } : o
+            end
+          end
+          child_copy['_skip_trailing_spacer'] = true unless wraps == 'false'
+
+          child_converter = @converter_factory.create_converter(child_copy, @indent_level + 1, @action_manager, @converter_factory, @view_registry)
+          child_lines = child_converter.convert.split("\n")
+          if wraps == 'false'
+            child_lines.each { |line| @generated_code << line }
+          else
+            axis = orientation == 'horizontal' ? 'Height' : 'Width'
+            stretch = wraps == 'true' ? '.infinity' : "(#{wraps} ? CGFloat.infinity : nil)"
+            add_line orientation == 'horizontal' ? 'VStack {' : 'HStack {'
+            indent { child_lines.each { |line| @generated_code << line unless line.strip.empty? } }
+            add_line "}.frame(max#{axis}: #{stretch}, alignment: #{alignment})"
+          end
+          spacer.(need.(:needs_spacer_after))
+
           if child_converter.respond_to?(:state_variables) && child_converter.state_variables
             @state_variables.concat(child_converter.state_variables)
           end
