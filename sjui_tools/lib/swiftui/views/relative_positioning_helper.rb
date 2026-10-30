@@ -234,6 +234,7 @@ module SjuiTools
                         # Use current indent_level + 1 for proper nesting inside view: AnyView(...)
                         child_converter = @converter_factory.create_converter(child_without_padding, @indent_level + 1, @action_manager, @converter_factory, @view_registry)
                         child_code = child_converter.convert
+                        adopt_state_variables(child_converter)
                         child_lines = child_code.split("\n")
                         child_lines.each do |line|
                           # Add child code directly to preserve its indentation
@@ -271,6 +272,7 @@ module SjuiTools
                         # Use current indent_level + 1 for proper nesting inside view: AnyView(...)
                         child_converter = @converter_factory.create_converter(child_without_margins, @indent_level + 1, @action_manager, @converter_factory, @view_registry)
                         child_code = child_converter.convert
+                        adopt_state_variables(child_converter)
                         child_lines = child_code.split("\n")
                         child_lines.each do |line|
                           # Add child code directly to preserve its indentation
@@ -337,6 +339,17 @@ module SjuiTools
         # A bound flag cannot be resolved at generation time, so the element
         # becomes conditional and the array is compacted (see the caller).
         # *target_type* is nil for a constraint with no view-relative form.
+        # The child's own declarations (@State, @FocusState: a field's focus, a pager's page heights …) go up to the
+        # struct, as every other parent passes them. This container dropped them: a child it placed lost every
+        # declaration while its body still used them, and the build failed (cannot find 'nameFieldIsFocused'). Few
+        # parents were relative until 2.3.29 made a responsive align or centre one (ticket
+        # sjui-relative-container-drops-state-and-focusstate-declarations).
+        def adopt_state_variables(child_converter)
+          return unless child_converter.respond_to?(:state_variables) && child_converter.state_variables
+
+          @state_variables.concat(child_converter.state_variables)
+        end
+
         def parent_constraint_item(value, target_type, parent_type)
           if (condition = bound_bool(value))
             return ["RelativePositionConstraint(type: .#{parent_type}, targetId: \"\")", condition]

@@ -266,4 +266,76 @@ RSpec.describe SjuiTools::SwiftUI::JsonToSwiftUIConverter, 'responsive attribute
       expect(swift({}, 'alignLeftOfView' => 'x')).to include('RelativePositionContainer')
     end
   end
+
+  describe "the declarations of a child the RelativePositionContainer places (ticket sjui-relative-container-drops-state-and-focusstate-declarations)" do
+    # 2.3.29 made a responsive align or centre turn the parent relative, and the container never passed its children's
+    # declarations up: a field's @FocusState, a toggle's @State … were dropped while the body used them, and a consumer's
+    # build failed with 54 errors. The conformance fixtures hold no stateful child under a relative parent, so nothing
+    # caught it (2,535 layouts: the same declarations before and after the fix).
+    def struct_of(layout)
+      file = File.join(temp_dir, "s#{rand(1 << 30)}.json")
+      File.write(file, JSON.generate(layout))
+      code, _actions, state, _children, funcs = converter.convert_json_to_view(file)
+      [code, state, funcs]
+    end
+
+    let(:fields) do
+      [{ 'type' => 'TextField', 'id' => 'name_field', 'text' => '@{name}', 'hint' => 'n' }, { 'type' => 'Switch', 'id' => 'notify' },
+       { 'type' => 'Slider', 'id' => 'vol' }, { 'type' => 'TextView', 'id' => 'memo', 'text' => 'static' }]
+    end
+    let(:wanted) { %w[nameFieldIsFocused notifyIsOn sliderValuevol memoText] }
+    let(:shapes) do
+      {
+        'a base align' => { 'type' => 'View', 'width' => 200, 'height' => 100, 'child' => fields.map { |f| f.merge('alignTop' => true) } },
+        'an align in a size class' => { 'type' => 'View', 'width' => 200, 'height' => 100,
+                                         'child' => fields.map { |f| f.merge('responsive' => { 'regular' => { 'alignRight' => true } }) } },
+        'a placed View holding them' => { 'type' => 'View', 'width' => 'matchParent', 'height' => 300, 'child' => [
+          { 'type' => 'View', 'id' => 'vertical_layout', 'orientation' => 'vertical', 'width' => 'matchParent', 'height' => 'wrapContent',
+            'responsive' => { 'regular' => { 'centerHorizontal' => true } }, 'child' => fields }
+        ] }
+      }
+    end
+
+    it 'reach the struct, whichever way the parent became relative' do
+      shapes.each do |shape, layout|
+        code, state, = struct_of(layout)
+        expect(code).to include('RelativePositionContainer('), shape
+        names = state.map { |line| line[/var\s+(\w+)/, 1] }
+        expect(names).to include(*wanted), "#{shape}: #{names}"
+        expect(names.tally.values.max).to eq(1), "#{shape}: declared twice: #{names}"
+      end
+    end
+
+    it "reach the struct for a pager's page heights too" do
+      pager = { 'type' => 'Collection', 'id' => 'candidate_carousel', 'items' => '@{cells}', 'cellClasses' => ['Cell'],
+                'layout' => 'horizontal', 'paging' => true, 'height' => 'wrapContent', 'alignTop' => true }
+      _code, state, = struct_of({ 'type' => 'View', 'width' => 200, 'height' => 100, 'child' => [pager] })
+      expect(state.join("\n")).to include('@State private var candidateCarouselPageHeights: [Int: CGFloat] = [:]')
+    end
+
+    it 'type-checks with them, as the consumer\'s screen did not' do
+      # the fields, the TextView aside (its library view's initializer is the library itself): the field's focus, the
+      # toggle's and the slider's @State
+      layout = shapes['a placed View holding them']
+      layout['child'][0]['child'] = fields.reject { |f| f['type'] == 'TextView' }
+      code, state, funcs = struct_of(layout)
+      swift = <<~SWIFT
+        #{relative_stubs}
+        #{EmittedSwift::LIBRARY_STUBS}
+        struct TestData { var name: String = ""; var nameFieldIsFocused: Bool = false }   // the Data sjui generates mirrors the focus
+        struct EmittedHost: View {
+            var horizontalSizeClass: SizeClassStub? = .regular
+            var verticalSizeClass: SizeClassStub? = .regular
+            @State private var data = TestData()
+        #{state.reject { |line| line.include?('SizeClass') }.map { |line| "    #{line}" }.join("\n")}
+            var body: some View {
+        #{code}
+            }
+        #{funcs.join("\n")}
+        }
+      SWIFT
+      expect(swift).to include('@FocusState private var nameFieldIsFocused')
+      expect(swift).to compile_as_swift.with_imports('SwiftUI')
+    end
+  end
 end
