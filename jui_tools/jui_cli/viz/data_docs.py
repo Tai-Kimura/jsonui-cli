@@ -24,6 +24,7 @@ import os
 import stat
 from pathlib import Path
 
+from ..core import shared_core
 from . import i18n
 from . import quiet_fs
 
@@ -287,15 +288,24 @@ _METHODS = ("get", "post", "put", "patch", "delete", "head", "options")
 def _endpoints(data: dict) -> list[dict]:
     out = []
     paths = data.get("paths") if isinstance(data.get("paths"), dict) else {}
+    canon = shared_core.load("openapi_canonical")
     for path, item in list(paths.items())[:500]:
         if not isinstance(item, dict):
             continue
-        shared = item.get("parameters") if isinstance(item.get("parameters"), list) else []
+        # the parameters an operation takes, as the canon reads them (the
+        # path item's with the operation's, the operation's winning a name
+        # and `in` both write, a local $ref followed); until jsonui-cli 2.3.36
+        # both lists end to end, a parameter written on both shown twice
+        if canon is not None:
+            ops = {str(v).lower(): (op, params) for v, op, params in canon.path_item_operations(data, item)}
+        else:
+            shared = item.get("parameters") if isinstance(item.get("parameters"), list) else []
+            ops = {m: (item[m], [x for x in shared + (item[m].get("parameters") if isinstance(item[m].get("parameters"), list) else [])
+                                 if isinstance(x, dict)]) for m in _METHODS if isinstance(item.get(m), dict)}
         for m in _METHODS:
-            op = item.get(m)
-            if not isinstance(op, dict):
+            if m not in ops:
                 continue
-            params = [x for x in shared + (op.get("parameters") if isinstance(op.get("parameters"), list) else []) if isinstance(x, dict)]
+            op, params = ops[m]
             out.append({"method": m.upper(), "path": _s(path, 500), "summary": _s(op.get("summary"), 500), "description": _s(op.get("description")),
                         "operationId": _s(op.get("operationId"), 200), "tags": [_s(t, 100) for t in op.get("tags") or [] if isinstance(t, str)][:20],
                         "parameters": params[:100], "requestBody": op.get("requestBody") if isinstance(op.get("requestBody"), dict) else None,

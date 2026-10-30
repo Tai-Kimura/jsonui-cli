@@ -111,7 +111,9 @@ class OpenApiDoc:
     def operations(self) -> list[Operation]:
         ops: list[Operation] = []
         for path, item in (self.spec.get("paths") or {}).items():
-            if not isinstance(item, dict):
+            # a path item may be a $ref (3.1 `components.pathItems`)
+            item = self.resolve_object(item)
+            if not item:
                 continue
             for method, op in item.items():
                 if method.lower() not in _HTTP_METHODS or not isinstance(op, dict):
@@ -123,8 +125,17 @@ class OpenApiDoc:
                 if not op_id:
                     op_id = _fallback_operation_id(method, path)
                     synthesized = True
-                parameters = list(item.get("parameters") or [])
-                parameters += list(op.get("parameters") or [])
+                # The path item's parameters, which every operation under it inherits, with the operation's: one of
+                # the same `name` and `in` written on the operation takes the inherited one's place, as OpenAPI says
+                # (shared/core/openapi_canonical.path_item_operations reads them the same way). Until jsonui-cli
+                # 2.3.36 both lists end to end, a parameter written on both checked twice — the inherited
+                # declaration too (ticket jui-openapi-canonical-ignores-path-item-parameters).
+                merged: dict = {}
+                for raw in list(item.get("parameters") or []) + list(op.get("parameters") or []):
+                    p = self.resolve_object(raw)
+                    if p.get("name"):
+                        merged[(str(p.get("in") or "query"), p["name"])] = p
+                parameters = list(merged.values())
                 ops.append(Operation(
                     method=method.upper(),
                     path=path,
@@ -137,7 +148,7 @@ class OpenApiDoc:
                     # status as declaring no body, and serve checked no request body (ticket
                     # 2026-10-24-jui-mock-generate-ignores-response-ref).
                     responses={code: self.resolve_object(resp) for code, resp in (op.get("responses") or {}).items()},
-                    parameters=[self.resolve_schema(p) for p in parameters],
+                    parameters=parameters,
                     request_body=self.resolve_object(op.get("requestBody")),
                 ))
         return ops

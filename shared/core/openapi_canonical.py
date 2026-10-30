@@ -160,6 +160,11 @@ class CanonicalOperation:
     #: whole body, so nothing inside it can be unconditionally required — but
     #: the reason sits two levels away from the symptom.
     muted_required: tuple = ()
+    #: Declarations no argument holds because one of the same name came
+    #: first ("query k"; a path and a query parameter both named `k`, a body
+    #: property named like a parameter) — a method takes one argument per
+    #: name. Said where the mark expands, not dropped without a word.
+    shadowed: tuple = ()
     #: Whether the operation declares a `requestBody` at all. False is what
     #: `request_body_absence` reads: a contract row cannot match a body the
     #: operation never sends.
@@ -256,7 +261,62 @@ def _deref(schema: dict, schemas: dict) -> dict:
     return schema or {}
 
 
-def _operation_params(op: dict, schemas: dict) -> list:
+def _local_ref(doc: dict, ref) -> dict | None:
+    """The object a local JSON pointer (`#/components/parameters/Id`) names,
+    or None — a reference into another file, or one that names nothing."""
+    if not isinstance(ref, str) or not ref.startswith("#/"):
+        return None
+    node = doc
+    for part in ref[2:].split("/"):
+        part = part.replace("~1", "/").replace("~0", "~")
+        if not isinstance(node, dict) or part not in node:
+            return None
+        node = node[part]
+    return node if isinstance(node, dict) else None
+
+
+def _declared_parameters(doc: dict, raw) -> dict:
+    """`{(in, name): parameter}` of one level's `parameters`, a local `$ref`
+    followed, in document order."""
+    out: dict = {}
+    for p in raw if isinstance(raw, list) else []:
+        if isinstance(p, dict) and "$ref" in p:
+            p = _local_ref(doc, p["$ref"])
+        if not isinstance(p, dict) or not p.get("name"):
+            continue
+        out.setdefault((str(p.get("in") or "query"), p["name"]), p)
+    return out
+
+
+def path_item_operations(doc: dict, path_item):
+    """`(verb, operation, parameters)` for each operation of a path item.
+
+    `parameters` is what OpenAPI says the operation takes: the path item's
+    own `parameters` — which every operation under it inherits — with the
+    operation's, a parameter of the same `name` and `in` written on the
+    operation taking the inherited one's place. A local `$ref`, on a
+    parameter or on the path item itself (3.1 `components.pathItems`), is
+    followed. Until jsonui-cli 2.3.36 the canon read the operation's own
+    `parameters` and nothing else: a `{id}` written once on the path item was
+    no argument of the generated method, and a `$ref` parameter was none
+    either, without a word (ticket jui-openapi-canonical-ignores-path-item-
+    parameters). `jsonui-doc` `openapi-diff` read them this way already.
+    """
+    if isinstance(path_item, dict) and "$ref" in path_item:
+        path_item = _local_ref(doc, path_item["$ref"])
+    if not isinstance(path_item, dict):
+        return
+    inherited = _declared_parameters(doc, path_item.get("parameters"))
+    for verb, op in path_item.items():
+        if str(verb).upper() not in HTTP_METHODS or not isinstance(op, dict):
+            continue
+        merged = dict(inherited)
+        # an inherited key keeps its place; the operation's value replaces it
+        merged.update(_declared_parameters(doc, op.get("parameters")))
+        yield verb, op, list(merged.values())
+
+
+def _operation_params(op: dict, schemas: dict, parameters=None, shadowed=None) -> list:
     """Every declared argument, in document order.
 
     `in` is filtered only for locations the transport layer fills
@@ -271,13 +331,15 @@ def _operation_params(op: dict, schemas: dict) -> list:
     """
     params: list = []
     seen: set = set()
-    for p in op.get("parameters") or []:
+    for p in (op.get("parameters") or []) if parameters is None else parameters:
         if not isinstance(p, dict) or not p.get("name"):
             continue
         if p.get("in") in TRANSPORT_PARAM_LOCATIONS:
             continue
         name = p["name"]
         if name in seen:
+            if shadowed is not None:
+                shadowed.append(f"{p.get('in') or 'query'} {name}")
             continue
         seen.add(name)
         required = bool(p.get("required"))
@@ -295,6 +357,8 @@ def _operation_params(op: dict, schemas: dict) -> list:
     required_props = set(body_schema.get("required") or [])
     for name, prop in (body_schema.get("properties") or {}).items():
         if name in seen:
+            if shadowed is not None:
+                shadowed.append(f"body {name}")
             continue
         seen.add(name)
         required = body_required and name in required_props
@@ -356,25 +420,23 @@ def index_documents(documents) -> dict:
         if "openapi" not in doc and "swagger" not in doc:
             continue
         schemas = ((doc.get("components") or {}).get("schemas") or {})
-        for path, ops in (doc.get("paths") or {}).items():
-            if not isinstance(ops, dict):
-                continue
-            for verb, op in ops.items():
-                if verb.upper() not in HTTP_METHODS or not isinstance(op, dict):
-                    continue
+        for path, item in (doc.get("paths") or {}).items():
+            for verb, op, parameters in path_item_operations(doc, item):
                 key = (normalize_path(path), verb.upper())
                 # First document wins: re-indexing an operation would let the
                 # order files happen to be read in decide the answer.
                 if key in index:
                     continue
+                shadowed: list = []
                 index[key] = CanonicalOperation(
                     path=path,
                     method=verb.upper(),
-                    params=tuple(_operation_params(op, schemas)),
+                    params=tuple(_operation_params(op, schemas, parameters, shadowed)),
                     wire_type=_response_wire_type(op),
                     source=source,
                     muted_required=tuple(_muted_required(op, schemas)),
                     has_request_body=bool(op.get("requestBody")),
+                    shadowed=tuple(shadowed),
                 )
     return index
 
@@ -1037,6 +1099,12 @@ def resolve_spec_marks(spec_data, index, convention=None):
                     "the body entirely, so these expand optional. Set "
                     "`requestBody.required: true` in the API document if they "
                     "are meant to be mandatory arguments.")))
+            if operation.shadowed:
+                warnings.append((f"{label}.params", (
+                    f"{', '.join(operation.shadowed)} is no argument: the "
+                    "operation declares another of the same name first, and a "
+                    "method takes one argument per name. Rename one in the API "
+                    "document, or write the params out.")))
             if not res.errors:
                 method["params"] = res.params
         if is_canonical_return(method.get("returnType")):
