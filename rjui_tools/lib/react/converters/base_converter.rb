@@ -464,6 +464,7 @@ module RjuiTools
               classes << 'relative' unless json['_overlay'] == true
             else
               classes << outline_border_classes
+              warn_border_under_focus_ring if scrolls_its_content?
             end
           end
 
@@ -692,8 +693,11 @@ module RjuiTools
           # The carried size-class classes (carry_size_class) go on the element
           # they were measured on — the one with the node's id; a converter
           # whose id is on an inner element places them there itself.
-          if @responsive_result && !@responsive_result[:carried].empty? && !carries_size_classes_inside?
+          if @responsive_result && !carries_size_classes_inside?
             classes.concat(@responsive_result[:carried])
+          elsif @responsive_result
+            # the still box's own carried classes (its border, its size)
+            classes.concat(@responsive_result[:carried_outer])
           end
 
           finalize_classes(classes)
@@ -819,15 +823,13 @@ module RjuiTools
         def carry_size_class(keys)
           base_node = json.reject { |k, _| k == 'responsive' }
           base = drawn_classes(base_node)
-          return { tokens: [], refused: keys.keys.to_h { |k| [k, nil] } } unless base
+          return { tokens: [], outer: [], refused: keys.keys.to_h { |k| [k, nil] } } unless base
 
-          attempt = lambda do |subset|
-            merged = drawn_classes(base_node.merge(subset))
-            next 'it could not be converted on its own here' unless merged
-            next 'the web draws it in an inline style or the markup here, which no class can switch' if merged[:styles] != base[:styles]
-
-            added = merged[:tokens] - base[:tokens]
-            dropped = (base[:tokens] - merged[:tokens]).reject { |t| replaced_by?(t, added) }
+          # One element's classes: the ones the merged node adds (or resets a
+          # border it takes away by), or why it cannot be carried.
+          per_element = lambda do |subset, before, after|
+            added = after - before
+            dropped = (before - after).reject { |t| replaced_by?(t, added) }
             # A border taken away (borderWidth 0): the classes that draw it
             # stay, and a reset for the way the base draws it zeroes it.
             if (resets = border_removal_resets(subset, dropped))
@@ -837,31 +839,47 @@ module RjuiTools
             unless dropped.empty?
               next "the base draws #{dropped.first(3).join(' ')}, which it drops, and a size class cannot take a class away"
             end
-
-            if added.empty?
-              next 'a border is drawn by borderWidth and borderColor together, and this node has not both' if (subset.keys & %w[borderWidth borderColor]).any?
-
-              next 'the web draws nothing for it here'
-            end
             next 'its classes are run-time expressions' if added.any? { |t| t.include?('${') || t.include?('}') }
 
             added
           end
 
+          attempt = lambda do |subset|
+            merged = drawn_classes(base_node.merge(subset))
+            next 'it could not be converted on its own here' unless merged
+            next 'the web draws it in an inline style or the markup here, which no class can switch' if merged[:styles] != base[:styles]
+
+            inner = per_element.call(subset, base[:tokens], merged[:tokens])
+            next inner if inner.is_a?(String)
+
+            outer = per_element.call(subset, base[:outer] || [], merged[:outer] || [])
+            next outer if outer.is_a?(String)
+
+            if inner.empty? && outer.empty?
+              next 'a border is drawn by borderWidth and borderColor together, and this node has not both' if (subset.keys & %w[borderWidth borderColor]).any?
+
+              next 'the web draws nothing for it here'
+            end
+
+            { tokens: inner, outer: outer }
+          end
+
           together = attempt.call(keys)
-          return { tokens: together, refused: {} } if together.is_a?(Array)
+          return together.merge(refused: {}) if together.is_a?(Hash)
 
           tokens = []
+          outer = []
           refused = {}
           keys.each do |key, value|
             alone = attempt.call(key => value)
-            if alone.is_a?(Array)
-              tokens.concat(alone)
+            if alone.is_a?(Hash)
+              tokens.concat(alone[:tokens])
+              outer.concat(alone[:outer])
             else
               refused[key] = alone
             end
           end
-          { tokens: tokens.uniq, refused: refused }
+          { tokens: tokens.uniq, outer: outer.uniq, refused: refused }
         end
 
         # Whether this converter puts the carried size-class classes on an
@@ -978,15 +996,22 @@ module RjuiTools
           old = $stdout
           $stdout = StringIO.new
           jsx = self.class.new(JSON.parse(JSON.generate(node)), @config).convert_node(0).to_s
-          # The element the size class's classes land on: the one with the
-          # node's id (a Collection with insets wraps its scroll box in a
-          # padding box), else the first.
+          class_of = ->(tag) { tag && tag.match(/className=(?:"([^"]*)"|\{`([^`]*)`\})/) }
+          # The element with the node's id (the scroll box of a Collection's
+          # or a ScrollView's still box), and the outermost element when it is
+          # another (that box): their classes are compared apart, as each lands
+          # on its own element.
           id = node['id'].to_s
           tag = (!id.empty? && jsx.match(/<[A-Za-z][^<>]*?\bid="#{Regexp.escape(id)}"[^<>]*?>/m)) || nil
-          root = (tag ? tag[0] : jsx).match(/className=(?:"([^"]*)"|\{`([^`]*)`\})/)
-          return nil unless root
+          first = jsx.match(/<[A-Za-z][^<>]*>/m)
+          inner = class_of.(tag ? tag[0] : jsx)
+          return nil unless inner
 
-          { tokens: (root[1] || root[2]).split(/\s+/).reject(&:empty?), styles: jsx.sub(root[0], '') }
+          outer = tag && first && first.begin(0) != tag.begin(0) ? class_of.(first[0]) : nil
+          rest = jsx.sub(inner[0], '')
+          rest = rest.sub(outer[0], '') if outer
+          split = ->(m) { (m[1] || m[2]).split(/\s+/).reject(&:empty?) }
+          { tokens: split.(inner), outer: outer && split.(outer), styles: rest }
         rescue StandardError
           nil
         ensure
@@ -1637,6 +1662,20 @@ module RjuiTools
         # not a replaced element such as <img>.
         def pseudo_border_supported?
           true
+        end
+
+        # A View whose className scrolls it keeps its border as an outline (a
+        # ScrollView and a Collection draw theirs on a still box around the
+        # scroll box since jsonui-cli 2.3.32): an app's :focus-visible outline
+        # replaces it while the View has focus. Said at build time, with how
+        # to keep it.
+        def warn_border_under_focus_ring
+          id = attributes['id'] ? "'#{attributes['id']}'" : '(no id)'
+          Core::Logger.warn(
+            "#{json['type']} #{id}: its border is an outline, because its className scrolls it, and a focus ring's " \
+            'outline (:focus-visible) replaces it while it has focus — write the scrolling as a ScrollView, or put ' \
+            'the border on a View around the one that scrolls, and the border stays'
+          )
         end
 
         # Whether this element is a scroll container the user scrolls: a

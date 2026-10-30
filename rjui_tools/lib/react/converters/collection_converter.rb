@@ -222,8 +222,16 @@ module RjuiTools
         # Its own box scrolls unless `lazy: none` — a bound lazy may scroll
         # (BaseConverter#scrolls_its_content?: the border is an outline).
         def scrolls_its_content?
+          # the padding box around the scroll box does not scroll: its border
+          # is the ::after a still box draws
+          return false if @padding_box_pass
+
+          scroll_box?
+        end
+
+        def scroll_box?
           lazy = attributes['lazy']
-          bound_value_expr(lazy) ? true : (lazy != 'none' || super)
+          bound_value_expr(lazy) ? true : lazy != 'none'
         end
 
         def build_class_name
@@ -245,7 +253,9 @@ module RjuiTools
             @padding_box_pass = false
             @padding_box = { classes: finalize_classes([box_classes, 'flex flex-col']), styles: @dynamic_styles }
             @dynamic_styles = {}
-            classes = ['flex-1 min-w-0 min-h-0', *children_layout_classes, *(@responsive_result && @responsive_result[:carried])]
+            # the scroll box clips its cells to the box's corners
+            classes = ['flex-1 min-w-0 min-h-0', ('rounded-[inherit]' if attributes['cornerRadius']), *children_layout_classes,
+                       *(@responsive_result && @responsive_result[:carried])]
           else
             classes = [super]
           end
@@ -432,7 +442,18 @@ module RjuiTools
         # 46), a bound inset's four inline edges replaced it on every edge,
         # and the padding scrolled with the cells.
         def padding_box?
-          NODE_PADDING_KEYS.any? { |key| padding_pads?(attributes[key]) }
+          NODE_PADDING_KEYS.any? { |key| padding_pads?(attributes[key]) } || border_box?
+        end
+
+        # A border on a Collection that scrolls its own box is drawn by a still
+        # box around it — the padding box — whose ::after stays on its edges
+        # whatever scrolls and whatever outline a focus ring draws on the
+        # scroll box. Until jsonui-cli 2.3.32 it was the scroll box's own
+        # outline (2.3.29), which an app's :focus-visible outline replaced
+        # (ticket rjui-scroll-border-outline-replaced-by-focus-ring; measured in
+        # Chromium: focused, the border's edges read none of its colour).
+        def border_box?
+          attributes['borderWidth'] && attributes['borderColor'] && scroll_box?
         end
 
         def padding_pads?(value)

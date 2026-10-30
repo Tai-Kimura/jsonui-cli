@@ -47,6 +47,16 @@ RSpec.describe 'a size class key no mapper draws is carried by the converter' do
       .merge(type == 'TextField' ? {} : { 'child' => [] }).merge(extra)
   end
 
+  # The outline way: a View whose className scrolls it (a ScrollView draws
+  # its border on a still box since jsonui-cli 2.3.32).
+  def scrolling_view(id, extra = {}) = frame('View', id, { 'className' => 'overflow-auto' }.merge(extra))
+
+  # The classes of the outermost element (a still box when there is one).
+  def outer_classes(jsx) = jsx[/className=(?:"([^"]*)"|\{`([^`]*)`\})/] && ($1 || $2).split
+
+  # What the build says, less the focus-ring note an outline border carries.
+  def said_but_focus(said) = said.reject { |l| l.include?('focus ring') }
+
   describe 'what is emitted' do
     it "a Collection's columns, lineSpacing and columnSpacing" do
       jsx, said = emit(collection('c', 'columns' => 3, 'columnSpacing' => 4, 'responsive' => { 'compact' => { 'columns' => 1 } }))
@@ -67,19 +77,23 @@ RSpec.describe 'a size class key no mapper draws is carried by the converter' do
       expect(jsx.lines.first).not_to include('min-[840px]')
     end
 
-    it 'a border is switched as the base draws it: ::after, outline or border' do
-      [['View', 'after:border'], ['ScrollView', 'outline'], ['TextField', 'border']].each do |type, drawn|
-        jsx, said = emit(frame(type, 'f', 'responsive' => { 'regular' => { 'borderWidth' => 3, 'borderColor' => '#FF0000' } }))
-        expect(said).to eq([]), type
-        expect(classes_of(jsx, 'f')).to include("lg:#{drawn}-[#FF0000]"), "#{type}: #{classes_of(jsx, 'f')}"
+    it 'a border is switched as the base draws it: ::after (a still box too), outline or border' do
+      block = { 'responsive' => { 'regular' => { 'borderWidth' => 3, 'borderColor' => '#FF0000' } } }
+      [[frame('View', 'f', block), 'after:border'], [frame('ScrollView', 'f', block), 'after:border'],
+       [scrolling_view('f', block), 'outline'], [frame('TextField', 'f', block), 'border']].each do |node, drawn|
+        jsx, said = emit(node)
+        expect(said_but_focus(said)).to eq([]), node.inspect
+        expect(outer_classes(jsx)).to include("lg:#{drawn}-[#FF0000]"), "#{node['type']}: #{outer_classes(jsx)}"
       end
     end
 
     it 'a border taken away (borderWidth 0) is a reset for the way the base draws it' do
-      { 'View' => 'max-md:after:border-0', 'ScrollView' => 'max-md:outline-0', 'TextField' => 'max-md:border-0' }.each do |type, reset|
-        jsx, said = emit(frame(type, 'f', 'responsive' => { 'compact' => { 'borderWidth' => 0 } }))
-        expect(said).to eq([]), type
-        expect(classes_of(jsx, 'f')).to include(reset), "#{type}: #{classes_of(jsx, 'f')}"
+      off = { 'responsive' => { 'compact' => { 'borderWidth' => 0 } } }
+      { frame('View', 'f', off) => 'max-md:after:border-0', frame('ScrollView', 'f', off) => 'max-md:after:border-0',
+        scrolling_view('f', off) => 'max-md:outline-0', frame('TextField', 'f', off) => 'max-md:border-0' }.each do |node, reset|
+        jsx, said = emit(node)
+        expect(said_but_focus(said)).to eq([]), node.inspect
+        expect(outer_classes(jsx)).to include(reset), "#{node['type']}: #{outer_classes(jsx)}"
       end
     end
 
@@ -170,9 +184,11 @@ RSpec.describe 'a size class key no mapper draws is carried by the converter' do
                   const el = document.getElementById(id);
                   if (kind === 'columns') r[id] = new Set([...el.children].map((c) => Math.round(c.getBoundingClientRect().left))).size;
                   else if (kind === 'border') {
-                    const a = getComputedStyle(el, '::after'), s = getComputedStyle(el);
-                    r[id] = Math.max(parseFloat(a.content !== 'none' ? a.borderTopWidth : '0') || 0,
-                                     s.outlineStyle !== 'none' ? parseFloat(s.outlineWidth) || 0 : 0, parseFloat(s.borderTopWidth) || 0);
+                    // the element's and its still box's (a ScrollView draws its border there)
+                    const width = (e) => { const a = getComputedStyle(e, '::after'), s = getComputedStyle(e);
+                      return Math.max(parseFloat(a.content !== 'none' ? a.borderTopWidth : '0') || 0,
+                                      s.outlineStyle !== 'none' ? parseFloat(s.outlineWidth) || 0 : 0, parseFloat(s.borderTopWidth) || 0); };
+                    r[id] = Math.max(width(el), width(el.parentElement));
                   } else r[id] = Math.round(el.getBoundingClientRect().left - el.parentElement.getBoundingClientRect().left);
                 }
                 return r;
@@ -205,17 +221,18 @@ RSpec.describe 'a size class key no mapper draws is carried by the converter' do
         collection('padded', 'paddings' => [8, 8, 8, 8], 'sections' => [{ 'cell' => 'RowCell' }],
                              'responsive' => { 'minWidth:840' => { 'columns' => 3, 'columnSpacing' => 12 } }),
         frame('View', 'after'), frame('View', 'afterOff', 'responsive' => { 'compact' => { 'borderWidth' => 0 } }),
-        frame('ScrollView', 'outlineOff', 'responsive' => { 'compact' => { 'borderWidth' => 0 } }),
+        scrolling_view('outlineOff', 'responsive' => { 'compact' => { 'borderWidth' => 0 } }),
+        frame('ScrollView', 'boxOff', 'responsive' => { 'compact' => { 'borderWidth' => 0 } }),
         frame('TextField', 'borderOff', 'responsive' => { 'compact' => { 'borderWidth' => 0 } }),
         frame('View', 'thick', 'responsive' => { 'regular' => { 'borderWidth' => 4 } }),
         { 'type' => 'View', 'id' => 'centre', 'width' => 60, 'height' => 20, 'responsive' => { 'regular' => { 'centerHorizontal' => true } } }
       ]
-      reads = { 'cols' => 'columns', 'kpis' => 'columns', 'padded' => 'columns', 'after' => 'border', 'afterOff' => 'border', 'outlineOff' => 'border',
+      reads = { 'cols' => 'columns', 'kpis' => 'columns', 'padded' => 'columns', 'after' => 'border', 'afterOff' => 'border', 'outlineOff' => 'border', 'boxOff' => 'border',
                 'borderOff' => 'border', 'thick' => 'border', 'centre' => 'left' }
       got = draw(nodes.map { |n| emit(n).first }, reads, 'compact' => { width: 390, height: 900 }, 'regular' => { width: 1200, height: 1400 })
-      expect(got['regular']).to eq('cols' => 3, 'kpis' => 3, 'padded' => 3, 'after' => 1, 'afterOff' => 1, 'outlineOff' => 1, 'borderOff' => 1,
+      expect(got['regular']).to eq('cols' => 3, 'kpis' => 3, 'padded' => 3, 'after' => 1, 'afterOff' => 1, 'outlineOff' => 1, 'boxOff' => 1, 'borderOff' => 1,
                                    'thick' => 4, 'centre' => 150), got.inspect
-      expect(got['compact']).to eq('cols' => 1, 'kpis' => 1, 'padded' => 1, 'after' => 1, 'afterOff' => 0, 'outlineOff' => 0, 'borderOff' => 0,
+      expect(got['compact']).to eq('cols' => 1, 'kpis' => 1, 'padded' => 1, 'after' => 1, 'afterOff' => 0, 'outlineOff' => 0, 'boxOff' => 0, 'borderOff' => 0,
                                    'thick' => 1, 'centre' => 0), got.inspect
     end
   end

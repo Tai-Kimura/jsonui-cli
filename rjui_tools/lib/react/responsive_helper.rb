@@ -249,6 +249,7 @@ module RjuiTools
           result = {
             classes: [],
             carried: [],
+            carried_outer: [],
             stripped_keys: Set.new
           }
 
@@ -310,8 +311,9 @@ module RjuiTools
             # redrawing the node with the block merged in. What it cannot
             # carry is said, with why.
             unless pending.empty?
-              carried = carry ? carry.call(pending) : { tokens: [], refused: pending.keys.to_h { |k| [k, nil] } }
+              carried = carry ? carry.call(pending) : { tokens: [], outer: [], refused: pending.keys.to_h { |k| [k, nil] } }
               result[:carried].concat(scoped.call(carried[:tokens].join(' ')))
+              result[:carried_outer].concat(scoped.call(carried[:outer].to_a.join(' ')))
               carried[:refused].each { |attr, why| warn_undrawn(component, sc, attr, pending[attr], why) }
             end
 

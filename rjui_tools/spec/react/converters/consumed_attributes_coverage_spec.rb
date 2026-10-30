@@ -33,6 +33,8 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     'circle_view_converter.rb' => %w[background borderColor borderStyle borderWidth onClick onclick shadow],
     'collection_converter.rb' => %w[
       autoChangeTrackingId
+      borderColor
+      borderWidth
       cellClasses
       cellHeight
       cellIdProperty
@@ -41,6 +43,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       columnSpacing
       columns
       contentInsetAdjustmentBehavior
+      cornerRadius
       currentPage
       defaultScrollAnchor
       footerClasses
@@ -177,9 +180,12 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       value
     ],
     'scroll_view_converter.rb' => %w[
+      borderColor
+      borderWidth
       bounces
       contentInset
       contentInsetAdjustmentBehavior
+      cornerRadius
       defaultScrollAnchor
       horizontalScroll
       maxZoom

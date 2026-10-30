@@ -9,17 +9,26 @@ module RjuiTools
         def convert(indent = 2)
           class_name = build_class_name
           style_attr = build_style_attr
-          children = convert_children(indent)
+          box = @still_box
+          inner = box ? indent + 2 : indent
+          children = convert_children(inner)
           id_attr = "#{build_id_attr}#{build_scroll_ref_attr}"
           testid_attr = build_testid_attr
           tag_attr = build_tag_attr
 
           jsx = if children.empty?
-            "#{indent_str(indent)}<div#{id_attr} className=\"#{class_name}\"#{style_attr}#{testid_attr}#{tag_attr} />"
+            "#{indent_str(inner)}<div#{id_attr} className=\"#{class_name}\"#{style_attr}#{testid_attr}#{tag_attr} />"
           else
             <<~JSX.chomp
-              #{indent_str(indent)}<div#{id_attr}#{class_name_attr(class_name)}#{style_attr}#{testid_attr}#{tag_attr}>
+              #{indent_str(inner)}<div#{id_attr}#{class_name_attr(class_name)}#{style_attr}#{testid_attr}#{tag_attr}>
               #{children}
+              #{indent_str(inner)}</div>
+            JSX
+          end
+          if box
+            jsx = <<~JSX.chomp
+              #{indent_str(indent)}<div className="#{box[:classes]}"#{style_attr_for(box[:styles])}>
+              #{jsx}
               #{indent_str(indent)}</div>
             JSX
           end
@@ -33,7 +42,25 @@ module RjuiTools
         # Its own box scrolls, unless the window does (scrollMode window)
         # (BaseConverter#scrolls_its_content?: the border is an outline).
         def scrolls_its_content?
+          return false if @box_pass
+
           attributes['scrollMode'] != 'window' || super
+        end
+
+        def border_box?
+          attributes['borderWidth'] && attributes['borderColor'] && attributes['scrollMode'] != 'window'
+        end
+
+        # On the still box's pass through BaseConverter the children's layout
+        # classes are left out: they go on the scroll box.
+        def lays_out_children?
+          !@box_pass
+        end
+
+        # With a still box the id — and the carried size-class classes,
+        # measured on the element with the id — are on the scroll box.
+        def carries_size_classes_inside?
+          !!@box_pass
         end
 
         # `defaultScrollAnchor` says where the view STARTS, which no CSS
@@ -60,7 +87,26 @@ module RjuiTools
         end
 
         def build_class_name
-          classes = [super]
+          # A border on a ScrollView that scrolls its own box is drawn by a
+          # still box around it, as a Collection's is (CollectionConverter
+          # #border_box?): the box takes BaseConverter's classes and styles —
+          # size, margins, background, corners, the border's ::after — and the
+          # scroll box inside it the scroll, the children's layout, the id and
+          # the ref. Until jsonui-cli 2.3.32 the border was the scroll box's
+          # own outline (2.3.29), which an app's :focus-visible outline
+          # replaced (ticket rjui-scroll-border-outline-replaced-by-focus-ring).
+          @still_box = nil
+          if border_box?
+            @box_pass = true
+            box_classes = super
+            @box_pass = false
+            @still_box = { classes: finalize_classes([box_classes, 'flex flex-col']), styles: @dynamic_styles }
+            @dynamic_styles = {}
+            classes = ['flex-1 min-w-0 min-h-0', ('rounded-[inherit]' if attributes['cornerRadius']), *children_layout_classes,
+                       *(@responsive_result && @responsive_result[:carried])]
+          else
+            classes = [super]
+          end
 
           # Scroll direction
           orientation = attributes['orientation']

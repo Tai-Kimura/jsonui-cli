@@ -51,11 +51,23 @@ RSpec.describe 'a border stays on the edges of a box that scrolls its content' d
   end
 
   describe 'what is emitted' do
-    it 'a box that scrolls draws an outline, not an ::after' do
+    # A ScrollView and a Collection draw it on a still box around the scroll
+    # box since jsonui-cli 2.3.32 (the outline gave way to an app's focus
+    # ring: bordered_scroll_box_keeps_its_border_under_focus_spec); a View
+    # whose className scrolls it keeps the outline, and is said.
+    it 'a box that scrolls draws its border where scrolling does not move it' do
       scrolling.each do |id, node|
-        cls = root_classes(node.merge('id' => id))
-        expect(cls).to include('outline-[length:2px]', 'outline-offset-[-2px]', 'outline-[#FF0000]', 'outline-solid'), "#{id}: #{cls.inspect}"
-        expect(cls.grep(/\Aafter:/)).to eq([]), id
+        jsx = emit(node.merge('id' => id))
+        outer = root_classes(node.merge('id' => id))
+        inner = jsx[/<[A-Za-z][^<>]*?\bid="#{id}"[^<>]*?className="([^"]*)"/m, 1].to_s.split
+        if node['type'] == 'View'
+          expect(outer).to include('outline-[length:2px]', 'outline-offset-[-2px]', 'outline-[#FF0000]', 'outline-solid'), "#{id}: #{outer.inspect}"
+          expect(outer.grep(/\Aafter:/)).to eq([]), id
+        else
+          expect(outer).to include('after:border-[length:2px]', 'after:border-[#FF0000]', 'relative'), "#{id}: #{outer.inspect}"
+          expect(inner.grep(/\A(after:|outline)/)).to eq([]), "#{id}: #{inner.inspect}"
+          expect(inner.grep(/overflow-[xy]-auto/)).not_to be_empty, "#{id}: #{inner.inspect}"
+        end
       end
     end
 
