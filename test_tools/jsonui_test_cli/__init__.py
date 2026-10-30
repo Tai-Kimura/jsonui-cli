@@ -8,7 +8,7 @@ from pathlib import Path
 # stale copy on PATH went on claiming a plausible number while serving code
 # from months earlier. Read the toolchain's VERSION instead; the literal
 # survives only for a tree installed without it.
-_FALLBACK_VERSION = "2.3.34"
+_FALLBACK_VERSION = "2.3.35"
 
 
 def _toolchain_version() -> str:
