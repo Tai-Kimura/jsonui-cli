@@ -112,6 +112,7 @@ module JsonUIShared
       @warnings = []
       @errors = []
       @data_properties = Set.new
+      @included_properties = Set.new
       @used_properties = Set.new
       @cell_local_properties = Set.new
       @data_types = {}
@@ -137,11 +138,16 @@ module JsonUIShared
     # @param json_data [Hash] The root component
     # @param file_name [String] The file name for error messages
     # @return [Array<String>] Advisory warnings followed by canonical-rule errors
-    def validate(json_data, file_name = nil)
+    # @param layouts_dir [String, nil] The layouts root the layout's includes resolve from. Given, the names its
+    #   includes bring into the screen's Data count as defined (collect_included_properties). Positional, not a
+    #   keyword: callers pass the layout as a hash without braces (`validate('type' => 'Label', …)`), which a keyword
+    #   parameter would take as keywords.
+    def validate(json_data, file_name = nil, layouts_dir = nil)
       @warnings = []
       @errors = []
       @current_file = file_name
       @data_properties = Set.new
+      @included_properties = Set.new
       @used_properties = Set.new
       @cell_local_properties = Set.new
       @data_types = {}
@@ -150,6 +156,7 @@ module JsonUIShared
 
       # First pass: collect all data property names and types
       collect_data_properties(json_data)
+      collect_included_properties(json_data, layouts_dir) if layouts_dir
 
       # Second pass: validate bindings and collect used properties
       validate_component(json_data)
@@ -459,6 +466,38 @@ module JsonUIShared
           end
         end
       end
+    end
+
+    # The names the layout's includes bring into the screen's Data: the data entries of the include-expanded tree
+    # (data_model_updater_core builds the Data from that tree, down `child`) that the layout does not declare itself.
+    # An include without an id brings its partial's names as they are, so a second include of the same partial may
+    # bind them through shared_data; the check read the layout as written and called them "not defined in data"
+    # (ticket jui-shared-data-binding-ignores-names-from-included-partial). Kept apart from @data_properties: they are
+    # the partial's, and an unused one is not this layout's to report. An include that cannot be expanded leaves the
+    # check reading the layout as written — the build reports the include itself.
+    def collect_included_properties(json_data, layouts_dir)
+      expanded = expand_includes_for_validation(JSON.parse(JSON.generate(json_data)), layouts_dir)
+      collect_expanded_names(expanded) if expanded
+    rescue StandardError
+      nil
+    end
+
+    def collect_expanded_names(node)
+      return unless node.is_a?(Hash)
+
+      Array(node['data']).each do |item|
+        next unless item.is_a?(Hash) && item['name'] && data_item_applies?(item)
+        next if item['class'].to_s.end_with?('ViewModel')
+
+        @included_properties << item['name'] unless @data_properties.include?(item['name'])
+      end
+      children = node['child'] || node['children']
+      (children.is_a?(Array) ? children : [children]).each { |child| collect_expanded_names(child) }
+    end
+
+    # The platform's IncludeExpander over *json_data* (a copy), or nil where the platform has none.
+    def expand_includes_for_validation(_json_data, _layouts_dir)
+      nil
     end
 
     # A data item's `platform` in a shape nothing reads — a list, a number, a
@@ -961,6 +1000,7 @@ module JsonUIShared
         @used_properties << name
         return
       end
+      return if @included_properties.include?(name)
       return unless report_undeclared_selectors?
 
       @warnings << "#{build_context_prefix}Handler '#{name}' in '#{component_type}.#{attribute_name}' is not defined in data. " \
@@ -982,7 +1022,7 @@ module JsonUIShared
       variables.each do |var|
         @used_properties << var if @data_properties.include?(var)
 
-        unless @data_properties.include?(var)
+        unless @data_properties.include?(var) || @included_properties.include?(var)
           @warnings << "#{build_context_prefix}Binding variable '#{var}' in '#{component_type}.#{attribute_name}' is not defined in data. Add: { \"class\": \"#{infer_type(var, attribute_name, component_type)}\", \"name\": \"#{var}\" }"
         end
       end

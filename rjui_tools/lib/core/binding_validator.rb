@@ -75,6 +75,12 @@ module RjuiTools
         'RJUI'
       end
 
+      # The include-expanded tree React codegen builds the screen's Data from (data_model_updater_core expand_includes).
+      def expand_includes_for_validation(json_data, layouts_dir)
+        require_relative '../react/include_expander'
+        RjuiTools::React::IncludeExpander.process_includes(json_data, layouts_dir, nil, layouts_dir)
+      end
+
       def business_logic_patterns
         BUSINESS_LOGIC_PATTERNS
       end

@@ -203,7 +203,7 @@ module KjuiTools
               rescue StandardError
                 next # the build loop reports a layout it cannot read
               end
-              warnings = binding_validator.validate(json, rel)
+              warnings = binding_validator.validate(json, rel, layouts_dir)
               @binding_errors.concat(binding_validator.errors)
               found += binding_validator.errors.length
               next if warnings.empty?
@@ -273,7 +273,7 @@ module KjuiTools
           end
 
           if binding_validator
-            binding_warnings = binding_validator.validate(json_data, relative_path)
+            binding_warnings = binding_validator.validate(json_data, relative_path, layouts_dir)
             @binding_errors.concat(binding_validator.errors) if @binding_errors
             if binding_warnings.any?
               @validation_warnings.concat(binding_warnings)

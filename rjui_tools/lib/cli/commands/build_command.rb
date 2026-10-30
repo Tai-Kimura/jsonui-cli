@@ -867,16 +867,16 @@ module RjuiTools
               next
             end
             before = @binding_errors.size
-            validate_bindings(json, file)
+            validate_bindings(json, file, layouts_dir)
             found = @binding_errors.size - before
             JsonUI::StageFailures.block_layout(file, "#{found} binding error(s)") if found.positive?
           end
         end
 
         # Validate binding expressions for business logic
-        def validate_bindings(json_content, file_path)
+        def validate_bindings(json_content, file_path, layouts_dir)
           file_name = File.basename(file_path)
-          @binding_validator.validate(json_content, file_name)
+          @binding_validator.validate(json_content, file_name, File.expand_path(layouts_dir))
           # The validator resets its channels per validate() call — collect
           # both here so errors survive across files
           @binding_warnings.concat(@binding_validator.warnings)

@@ -92,6 +92,12 @@ module SjuiTools
         'SJUI'
       end
 
+      # The include-expanded tree SwiftUI codegen builds the screen's Data from (data_model_updater_core expand_includes).
+      def expand_includes_for_validation(json_data, layouts_dir)
+        require_relative '../swiftui/include_expander'
+        SjuiTools::SwiftUI::IncludeExpander.process_includes(json_data, layouts_dir, nil, layouts_dir)
+      end
+
       def data_item_applies?(data_item)
         return false unless super # the platform, read as `jui build` reads it
         return false if data_item['mode'] && data_item['mode'] != 'swiftui'

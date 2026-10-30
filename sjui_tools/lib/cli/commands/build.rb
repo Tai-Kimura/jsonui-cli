@@ -212,7 +212,7 @@ module SjuiTools
               rescue StandardError
                 next # the conversion loop reports a layout it cannot read
               end
-              warnings = binding_validator.validate(json, rel)
+              warnings = binding_validator.validate(json, rel, layouts_dir)
               errors = binding_validator.errors
               @binding_errors.concat(errors)
               if warnings.any?
@@ -325,7 +325,7 @@ module SjuiTools
           end
 
           if binding_validator
-            binding_warnings = binding_validator.validate(json_data, relative_path)
+            binding_warnings = binding_validator.validate(json_data, relative_path, layouts_dir)
             @binding_errors.concat(binding_validator.errors)
             if binding_warnings.any?
               @validation_warnings.concat(binding_warnings)
