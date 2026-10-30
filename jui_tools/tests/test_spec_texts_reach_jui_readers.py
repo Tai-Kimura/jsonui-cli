@@ -88,8 +88,10 @@ class ConverterReadsThroughTheResolver(_Tmp):
             self.write("docs/components/json/meter.texts.yaml", yaml_text)
 
     def _descriptions(self):
+        # container: argparse's default (neither flag); this said False —
+        # --no-container — which --all refuses since jsonui-cli 2.3.29
         args = argparse.Namespace(name=None, from_spec=None, all_specs=True,
-                                  attributes=None, container=False,
+                                  attributes=None, container=None,
                                   skip_existing=False, force=False)
         calls = []
 
