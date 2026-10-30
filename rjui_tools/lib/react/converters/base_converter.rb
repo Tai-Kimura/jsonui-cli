@@ -1002,7 +1002,13 @@ module RjuiTools
           # another (that box): their classes are compared apart, as each lands
           # on its own element.
           id = node['id'].to_s
-          tag = (!id.empty? && jsx.match(/<[A-Za-z][^<>]*?\bid="#{Regexp.escape(id)}"[^<>]*?>/m)) || nil
+          # the id as written, or inside an include, the expression that
+          # prefixes it (`id={jsonuiIncludeId(idPrefix, "list")}`, as jui build
+          # has rjui write it): until jsonui-cli 2.3.33 only the first was
+          # found, and a node inside an include compared its padding box with
+          # the merged node's, which then read as other markup
+          quoted = Regexp.escape(id)
+          tag = (!id.empty? && jsx.match(/<[A-Za-z][^<>]*?\bid=(?:"#{quoted}"|\{[^{}]*"#{quoted}"[^{}]*\})[^<>]*?>/m)) || nil
           first = jsx.match(/<[A-Za-z][^<>]*>/m)
           inner = class_of.(tag ? tag[0] : jsx)
           return nil unless inner
