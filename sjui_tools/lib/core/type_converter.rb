@@ -117,7 +117,12 @@ module SjuiTools
         end
 
         def convert_type(raw_class, mode = nil)
-          to_swift_type(raw_class, mode)
+          converted = to_swift_type(raw_class, mode)
+          # A type Swift has no spelling for is said, not written silently.
+          if (why = unportable_reason(converted, 'swift'))
+            report_warning("type '#{raw_class}' comes out as '#{converted}', which is not a Swift type (#{why})")
+          end
+          converted
         end
 
         # Convert JSON type to Swift type
@@ -133,18 +138,13 @@ module SjuiTools
           is_optional = type_str.end_with?('?')
           base_type = is_optional ? type_str[0...-1] : type_str
 
-          # Check for Array(ElementType) syntax -> [ElementType]
-          if (match = base_type.match(/^Array\((.+)\)$/))
-            element_type = to_swift_type(match[1].strip, mode)
-            result = "[#{element_type}]"
-            return is_optional ? "#{result}?" : result
-          end
-
-          # Check for Dictionary(KeyType,ValueType) syntax -> [KeyType: ValueType]
-          if (match = base_type.match(/^Dictionary\((.+),\s*(.+)\)$/))
-            key_type = to_swift_type(match[1].strip, mode)
-            value_type = to_swift_type(match[2].strip, mode)
-            result = "[#{key_type}: #{value_type}]"
+          # A collection in the spec's own shapes (`[T]`, `[K: V]`,
+          # `Array(T)`, `List(T)`, `Dictionary(K, V)`, `Map(K, V)`, nested
+          # to any depth) -> [T] / [K: V]. `List(T)` and `Map(K, V)` were
+          # written as they came, which Swift does not read.
+          if (kind, members = collection_shape(base_type))
+            converted = members.map { |m| to_swift_type(m, mode) }
+            result = kind == :list ? "[#{converted[0]}]" : "[#{converted[0]}: #{converted[1]}]"
             return is_optional ? "#{result}?" : result
           end
 

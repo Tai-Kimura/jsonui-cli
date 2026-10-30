@@ -110,7 +110,12 @@ module KjuiTools
         end
 
         def convert_type(raw_class, mode = nil)
-          to_kotlin_type(raw_class, mode)
+          converted = to_kotlin_type(raw_class, mode)
+          # A type Kotlin has no spelling for is said, not written silently.
+          if (why = unportable_reason(converted, 'kotlin'))
+            report_warning("type '#{raw_class}' comes out as '#{converted}', which is not a Kotlin type (#{why})")
+          end
+          converted
         end
 
         # Clear the project type-map cache (useful for testing)
@@ -234,27 +239,14 @@ module KjuiTools
           is_optional = type_str.end_with?('?')
           base_type = is_optional ? type_str[0...-1] : type_str
 
-          # Check for Array(ElementType) syntax -> List<ElementType>
-          if (match = base_type.match(/^Array\((.+)\)$/))
-            element_type = to_kotlin_type(match[1].strip, mode)
-            result = "List<#{element_type}>"
-            return is_optional ? "#{result}?" : result
-          end
-
-          # Check for Swift bracket syntax [ElementType] -> List<ElementType>.
-          # Recurses on the inner type so `[ProductListing?]`, `[[Inner]]` etc.
-          # are also normalized.
-          if (match = base_type.match(/^\[(.+)\]$/))
-            element_type = to_kotlin_type(match[1].strip, mode)
-            result = "List<#{element_type}>"
-            return is_optional ? "#{result}?" : result
-          end
-
-          # Check for Dictionary(KeyType,ValueType) syntax -> Map<KeyType, ValueType>
-          if (match = base_type.match(/^Dictionary\((.+),\s*(.+)\)$/))
-            key_type = to_kotlin_type(match[1].strip, mode)
-            value_type = to_kotlin_type(match[2].strip, mode)
-            result = "Map<#{key_type}, #{value_type}>"
+          # A collection in the spec's own shapes (`[T]`, `[K: V]`,
+          # `Array(T)`, `List(T)`, `Dictionary(K, V)`, `Map(K, V)`, nested
+          # to any depth) -> List<T> / Map<K, V>. `[K: V]` went down the
+          # `[T]` rule and came out `List<K: V>` (ticket
+          # kjui-spec-swift-dictionary-type-emits-invalid-kotlin).
+          if (kind, members = collection_shape(base_type))
+            converted = members.map { |m| to_kotlin_type(m, mode) }
+            result = kind == :list ? "List<#{converted[0]}>" : "Map<#{converted[0]}, #{converted[1]}>"
             return is_optional ? "#{result}?" : result
           end
 

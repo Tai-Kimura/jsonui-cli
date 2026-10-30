@@ -44,6 +44,9 @@ _BUILTIN_TYPES = {
         "web": {"class": "string"},
     },
     "CollectionDataSource": {"class": "CollectionDataSource"},
+    # A member of a collection resolves on its own (`[String: Any]?`), and
+    # TypeScript spells it `any`.
+    "Any": {"class": "Any", "web": {"class": "any"}},
     "callback": {
         "class": "(() -> Void)?",
         "android": {"class": "(() -> Unit)?"},
@@ -177,6 +180,9 @@ class TypeMapper:
 
     def __init__(self, type_map_path: Path | None = None):
         self._types: dict[str, dict] = dict(_BUILTIN_TYPES)
+        #: (spec type, platform, class) for every resolution whose class is
+        #: not a type on that platform — see :meth:`take_unportable`.
+        self._unportable: list[tuple[str, str, str]] = []
         if type_map_path and type_map_path.exists():
             self._load(type_map_path)
 
@@ -239,12 +245,45 @@ class TypeMapper:
         1. Exact match against a key in the type map.
         2. Generic pattern match (keys containing ``$T`` style variables).
            Longer patterns are tried first, so more specific patterns win.
-        3. Pass-through — return the spec type as-is.
+        3. A collection spelled in the spec's own shapes — ``[T]``,
+           ``[K: V]``, ``Array(T)``, ``List(T)``, ``Dictionary(K, V)``,
+           ``Map(K, V)``, each optionally ``?`` and nested to any depth —
+           written in the platform's own (:func:`_collection`).
+        4. Pass-through — return the spec type as-is.
+
+        A class that is not a type on *platform* (:func:`_unportable_on`) is
+        recorded for :meth:`take_unportable`: ``[String: String]?`` came out
+        as ``List<String: String>?`` on Android and the build said nothing
+        (ticket kjui-spec-swift-dictionary-type-emits-invalid-kotlin).
 
         Result shape::
 
             {"class": str, "defaultValue": Any, "imports": list[str]}
         """
+        resolved = self._resolve(spec_type, platform)
+        problem = _unportable_on(resolved["class"], platform)
+        if problem and (spec_type, platform, resolved["class"]) not in self._unportable:
+            self._unportable.append((spec_type, platform, resolved["class"]))
+        return resolved
+
+    def take_unportable(self, platform: str | None = None) -> list[str]:
+        """The resolutions since the last call whose class is not a type on
+        *platform* (every platform when None), one line each, and forget
+        them. A generator that rendered them wrote code that cannot compile:
+        the caller refuses to write it."""
+        keep, out = [], []
+        for spec_type, plat, cls in self._unportable:
+            if platform is None or plat == platform:
+                out.append(f"type {spec_type!r} comes out on {plat} as {cls!r}, which is not a "
+                           f"{_LANGUAGE[plat]} type ({_unportable_on(cls, plat)}) — write it as "
+                           "[T], [K: V], Array(T), Dictionary(K, V) or Map(K, V), or map it in "
+                           ".jsonui-type-map.json")
+            else:
+                keep.append((spec_type, plat, cls))
+        self._unportable = keep
+        return out
+
+    def _resolve(self, spec_type: str, platform: str) -> dict[str, Any]:
         spec_type = _pick_union_segment(spec_type, platform)
         # 1. Exact match
         entry = self._types.get(spec_type)
@@ -273,7 +312,12 @@ class TypeMapper:
             resolved["imports"].extend(nested_imports)
             return resolved
 
-        # 3. Pass-through
+        # 3. A collection in the spec's own shapes
+        collection = _collection(spec_type)
+        if collection is not None:
+            return self._collection_class(collection, platform)
+
+        # 4. Pass-through
         return {"class": spec_type, "defaultValue": None, "imports": []}
 
     def resolve_class(self, spec_type: str, platform: str = "ios") -> str:
@@ -374,6 +418,31 @@ class TypeMapper:
 
     # --- Internal helpers --------------------------------------------------
 
+    def _collection_class(self, shape: tuple, platform: str) -> dict[str, Any]:
+        """A parsed collection (:func:`_collection`) in *platform*'s spelling,
+        its members resolved through the map as any other type."""
+        kind, args, optional = shape
+        # A closure member is walked as `_map_type` walks one (resolve_in_string).
+        members = [{"class": self.resolve_in_string(a, platform), "imports": []} if "->" in a
+                   else self.resolve(a, platform) for a in args]
+        names = [m["class"] for m in members]
+        if kind == "list":
+            cls = {"ios": f"[{names[0]}]", "android": f"List<{names[0]}>"}.get(
+                platform, f"{_ts_operand(names[0])}[]")
+        else:
+            cls = {"ios": f"[{names[0]}: {names[1]}]", "android": f"Map<{names[0]}, {names[1]}>"}.get(
+                platform, f"Record<{names[0]}, {names[1]}>")
+        if optional:
+            cls = f"{cls} | undefined" if platform == "web" else f"{cls}?"
+        imports: list[str] = []
+        for m in members:
+            for imp in m.get("imports") or []:
+                if imp not in imports:
+                    imports.append(imp)
+        # A required list has a zero value everywhere, as the `[$T]` entry says.
+        default = [] if kind == "list" and not optional else None
+        return {"class": cls, "defaultValue": default, "imports": imports}
+
     @staticmethod
     def _apply_platform(entry: dict, platform: str, fallback: str) -> dict[str, Any]:
         """Pick the platform-specific override or fall back to the base entry."""
@@ -415,10 +484,12 @@ class TypeMapper:
         escaped = re.escape(pattern)
         # re.escape turns $ into \$; variable names stay intact after it.
         var_count = len(re.findall(r"\\\$\w+", escaped))
+        # Never a colon: `[$T]` read `[String: String]` as a list of
+        # `String: String` (a project's own map carries `[$T]` too).
         if var_count <= 1:
-            capture = r"(?P<\1>[^<>\[\]?]+)"
+            capture = r"(?P<\1>[^:<>\[\]?]+)"
         else:
-            capture = r"(?P<\1>[^,<>\[\]?]+)"
+            capture = r"(?P<\1>[^:,<>\[\]?]+)"
         regex = re.sub(r"\\\$(\w+)", capture, escaped)
         m = re.fullmatch(regex, target.strip())
         if not m:
@@ -487,3 +558,83 @@ def _pick_union_segment(spec_type: str, platform: str) -> str:
         idx = len(segs) - 1
     result = segs[idx]
     return f"{result}?" if optional else result
+
+
+#: The language each platform's class is written in.
+_LANGUAGE = {"ios": "Swift", "android": "Kotlin", "web": "TypeScript"}
+
+_CALL = re.compile(r"[A-Za-z_]\w*\(")
+
+
+def _unportable_on(cls: str, platform: str) -> str | None:
+    """Why *cls* is not a type on *platform*, or None. Only shapes no type of
+    that language has: a Swift bracket in Kotlin or TypeScript, a spec
+    constructor (``Dictionary(...)``) anywhere, Kotlin's or TypeScript's
+    collections in Swift, a tuple outside Swift."""
+    if not cls:
+        return None
+    if _CALL.search(cls):
+        return "a spec constructor such as Dictionary(...) is spelled nowhere"
+    closure = "->" in cls or "=>" in cls
+    if platform in ("android", "web") and re.search(r"\[[^\]]", cls) and not closure:
+        return "a Swift [ ] collection"
+    if platform == "android" and ("[]" in cls or " | " in cls or re.search(r"\bRecord<", cls)):
+        return "a TypeScript spelling"
+    if platform == "ios" and (re.search(r"\b(?:Map|List|Record)<", cls) or "[]" in cls or " | " in cls):
+        return "a Kotlin or TypeScript collection"
+    if platform == "web" and re.search(r"\bList<", cls):
+        return "a Kotlin collection"
+    if platform in ("android", "web") and cls.startswith("(") and not closure:
+        close = _match_balanced(cls, 0, "(", ")")
+        if close != -1 and len(_split_top(cls[1:close], ",")) > 1:
+            return "a Swift tuple"
+    return None
+
+
+def _split_top(s: str, sep: str) -> list[str]:
+    """*s* split on *sep* outside brackets, parentheses and angle brackets.
+    The ``>`` of a closure's ``->`` / ``=>`` closes nothing."""
+    parts, depth, start = [], 0, 0
+    for i, ch in enumerate(s):
+        if ch in "[(<":
+            depth += 1
+        elif ch in "])" or (ch == ">" and s[i - 1:i] not in ("-", "=")):
+            depth -= 1
+        elif ch == sep and depth == 0:
+            parts.append(s[start:i])
+            start = i + 1
+    parts.append(s[start:])
+    return [p.strip() for p in parts]
+
+
+def _collection(spec_type: str) -> tuple[str, list[str], bool] | None:
+    """(``"list"`` or ``"map"``, member spec types, optional) for a collection
+    in the spec's own shapes, or None. Brackets are matched, so members nest:
+    ``[String: [Item]]``, ``[[String: Int]]``, ``Dictionary(String, [Item])``."""
+    s = spec_type.strip()
+    optional = s.endswith("?")
+    if optional:
+        s = s[:-1].rstrip()
+    if s.startswith("[") and _match_balanced(s, 0, "[", "]") == len(s) - 1:
+        inner = s[1:-1].strip()
+        halves = _split_top(inner, ":")
+        if len(halves) == 2 and all(halves):
+            return "map", halves, optional
+        if len(halves) == 1 and inner:
+            return "list", [inner], optional
+        return None
+    m = re.fullmatch(r"(Array|List|Dictionary|Map)\((.*)\)", s)
+    if not m or _match_balanced(s, s.index("("), "(", ")") != len(s) - 1:
+        return None
+    args = _split_top(m.group(2), ",")
+    if m.group(1) in ("Array", "List") and len(args) == 1 and args[0]:
+        return "list", args, optional
+    if m.group(1) in ("Dictionary", "Map") and len(args) == 2 and all(args):
+        return "map", args, optional
+    return None
+
+
+def _ts_operand(cls: str) -> str:
+    """*cls* as the operand of TypeScript's ``[]``: a union or a function
+    is parenthesised."""
+    return f"({cls})" if " | " in cls or "=>" in cls else cls

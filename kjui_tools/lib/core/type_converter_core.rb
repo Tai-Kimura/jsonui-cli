@@ -352,6 +352,85 @@ module JsonUIShared
         depth == 0 ? str : nil
       end
 
+      # ---- collections in the spec's own shapes --------------------------
+
+      # [kind, members] for a collection written `[T]`, `[K: V]`,
+      # `Array(T)`, `List(T)`, `Dictionary(K, V)` or `Map(K, V)` (no
+      # trailing `?`), kind :list or :map; nil for anything else. Brackets
+      # are matched, so members nest: `[String: [Item]]`, `[[String: Int]]`,
+      # `Dictionary(String, Map(String, Int))`. `[K: V]` read as a list of
+      # `K: V` drew `List<String: String>` in Kotlin (ticket
+      # kjui-spec-swift-dictionary-type-emits-invalid-kotlin); jui_tools'
+      # TypeMapper reads the same shapes for the protocols.
+      def collection_shape(type_str)
+        s = type_str.to_s.strip
+        if s.start_with?('[') && s.end_with?(']') && closing_index(s, 0, '[', ']') == s.length - 1
+          inner = s[1...-1].strip
+          halves = split_top_level(inner, ':')
+          return [:map, halves] if halves.length == 2 && halves.none?(&:empty?)
+          return [:list, [inner]] if halves.length == 1 && !inner.empty?
+          return nil
+        end
+        m = s.match(/\A(Array|List|Dictionary|Map)\((.*)\)\z/m)
+        return nil unless m && closing_index(s, s.index('('), '(', ')') == s.length - 1
+
+        args = split_top_level(m[2], ',')
+        return [:list, args] if %w[Array List].include?(m[1]) && args.length == 1 && !args[0].empty?
+        return [:map, args] if %w[Dictionary Map].include?(m[1]) && args.length == 2 && args.none?(&:empty?)
+
+        nil
+      end
+
+      # *str* split on *sep* outside brackets, parentheses and angle
+      # brackets. The `>` of a closure's `->` / `=>` closes nothing.
+      def split_top_level(str, sep)
+        parts = []
+        depth = 0
+        current = +''
+        prev = nil
+        str.each_char do |c|
+          depth += 1 if '[(<'.include?(c)
+          depth -= 1 if '])'.include?(c) || (c == '>' && prev != '-' && prev != '=')
+          prev = c
+          if c == sep && depth.zero?
+            parts << current.strip
+            current = +''
+          else
+            current << c
+          end
+        end
+        parts << current.strip
+      end
+
+      # The index of the bracket closing the one at *start*, or nil.
+      def closing_index(str, start, open_char, close_char)
+        depth = 0
+        (start...str.length).each do |i|
+          depth += 1 if str[i] == open_char
+          depth -= 1 if str[i] == close_char
+          return i if depth.zero?
+        end
+        nil
+      end
+
+      # Why *converted* is no type of *language* ('swift', 'kotlin',
+      # 'typescript'), or nil: a spec constructor left as written
+      # (`Dictionary(...)`), a Swift `[ ]` collection outside Swift, Kotlin's
+      # or TypeScript's collections in Swift. Read by each tool's
+      # convert_type, which warns: the generated code would not compile.
+      def unportable_reason(converted, language)
+        s = converted.to_s
+        return nil if s.empty?
+        return 'a spec constructor such as Dictionary(...) is spelled nowhere' if s.match?(/[A-Za-z_]\w*\(/)
+
+        closure = s.include?('->') || s.include?('=>')
+        return 'a Swift [ ] collection' if language != 'swift' && !closure && s.match?(/\[[^\]]/)
+        return 'a Kotlin or TypeScript collection' if language == 'swift' && (s.match?(/\b(?:Map|List|Record)</) || s.include?('[]'))
+        return 'a TypeScript spelling' if language == 'kotlin' && (s.include?('[]') || s.match?(/\bRecord</))
+
+        nil
+      end
+
       # ---- event-handler introspection (JSON-side types, platform-neutral) --
 
       # Event handler parameter type constants: used to determine how to

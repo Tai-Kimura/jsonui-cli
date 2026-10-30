@@ -2463,6 +2463,7 @@ def _sync_usecase_protocols(
 
     writes = impl_writes = 0
     unowned: list[str] = []
+    refused: list[str] = []
     for platform, pconfig in platforms.items():
         generator = _platform_generator(
             config_mgr.project_root, platform, pconfig, type_mapper)
@@ -2495,6 +2496,10 @@ def _sync_usecase_protocols(
                 # Measured 2026-09-07: one face declares 129 methods that way.
                 continue
             content = generator.generate_usecase_protocol(uc_name, filtered)
+            unportable = _unportable_types(type_mapper, platform, path)
+            if unportable:
+                refused.extend(unportable)
+                continue
             try:
                 current = path.read_text(encoding="utf-8")
             except OSError as e:
@@ -2514,6 +2519,9 @@ def _sync_usecase_protocols(
     for path in unowned:
         print(f"WARNING: {path} has no @generated banner — UseCase protocol "
               f"left untouched; the spec's declarations are NOT reaching it")
+    if refused:
+        _print_unportable(refused)
+        return False
     if writes or impl_writes:
         print(f"UseCase protocol sync: updated {writes} protocol(s), {impl_writes} impl file(s)")
     return True
@@ -2576,6 +2584,7 @@ def _sync_repository_protocols(
 
     writes = impl_writes = 0
     unowned: list[str] = []
+    refused: list[str] = []
     for platform, pconfig in platforms.items():
         generator = _platform_generator(
             config_mgr.project_root, platform, pconfig, type_mapper)
@@ -2608,6 +2617,10 @@ def _sync_repository_protocols(
                 # Measured 2026-09-07: one face declares 129 methods that way.
                 continue
             content = generator.generate_repository_protocol(repo_name, filtered)
+            unportable = _unportable_types(type_mapper, platform, path)
+            if unportable:
+                refused.extend(unportable)
+                continue
             try:
                 current = path.read_text(encoding="utf-8")
             except OSError as e:
@@ -2627,9 +2640,27 @@ def _sync_repository_protocols(
     for path in unowned:
         print(f"WARNING: {path} has no @generated banner — Repository protocol "
               f"left untouched; the spec's declarations are NOT reaching it")
+    if refused:
+        _print_unportable(refused)
+        return False
     if writes or impl_writes:
         print(f"Repository protocol sync: updated {writes} protocol(s), {impl_writes} impl file(s)")
     return True
+
+
+def _unportable_types(type_mapper, platform: str, path) -> list[str]:
+    """The spec types the protocol just rendered for *platform* that came out
+    as no type of its language (TypeMapper.take_unportable), one line each
+    naming *path*. The file is then not written: it would not compile, and
+    the build said nothing while Gradle failed on `List<String: String>?`
+    (ticket kjui-spec-swift-dictionary-type-emits-invalid-kotlin)."""
+    return [f"[{platform}] {path}: {line}" for line in type_mapper.take_unportable(platform)]
+
+
+def _print_unportable(lines: list[str]) -> None:
+    print("\nERROR [protocol-sync]:")
+    for line in lines:
+        print(f"  - {line}")
 
 
 def _narrowed_var_fix(platform: str, var) -> str:
@@ -2885,6 +2916,12 @@ def _sync_viewmodel_protocols(
                 impl_source=impl_source,
                 sync_result=sync_result,
             )
+            # A type the platform has no spelling for is not written: the
+            # file would not compile (_unportable_types).
+            unportable = _unportable_types(type_mapper, platform, proto_path)
+            if unportable:
+                errors.extend(unportable)
+                continue
             if atomic_write_text(proto_path, content):
                 protocol_writes += 1
 

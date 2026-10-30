@@ -96,7 +96,12 @@ module RjuiTools
         end
 
         def convert_type(raw_class, _mode = nil)
-          to_typescript_type(raw_class)
+          converted = to_typescript_type(raw_class)
+          # A type TypeScript has no spelling for is said, not written silently.
+          if (why = unportable_reason(converted, 'typescript'))
+            report_warning("type '#{raw_class}' comes out as '#{converted}', which is not a TypeScript type (#{why})")
+          end
+          converted
         end
 
         # The react consumer contract keeps the raw 'class' and adds the
@@ -117,34 +122,14 @@ module RjuiTools
           is_optional = type_str.end_with?('?')
           base_type = is_optional ? type_str[0...-1] : type_str
 
-          # Check for Array(ElementType) syntax -> ElementType[]
-          if (match = base_type.match(/^Array\((.+)\)$/))
-            result = array_of(to_typescript_type(match[1].strip))
-            return is_optional ? "#{result} | undefined" : result
-          end
-
-          # Check for Dictionary(KeyType,ValueType) syntax -> Record<KeyType, ValueType>
-          if (match = base_type.match(/^Dictionary\((.+),\s*(.+)\)$/))
-            key_type = to_typescript_type(match[1].strip)
-            value_type = to_typescript_type(match[2].strip)
-            result = "Record<#{key_type}, #{value_type}>"
-            return is_optional ? "#{result} | undefined" : result
-          end
-
-          # Check for Swift bracket syntax: [Element] -> Element[] and
-          # [Key: Value] -> Record<Key, Value>. Works for custom element
-          # types too — previously e.g. [SelectOption] leaked through
-          # verbatim and read as a TS one-element tuple.
-          if base_type.start_with?('[') && base_type.end_with?(']')
-            inner = base_type[1...-1].strip
-            colon = top_level_colon_index(inner)
-            result = if colon
-                       key_type = to_typescript_type(inner[0...colon].strip)
-                       value_type = to_typescript_type(inner[(colon + 1)..].strip)
-                       "Record<#{key_type}, #{value_type}>"
-                     else
-                       array_of(to_typescript_type(inner))
-                     end
+          # A collection in the spec's own shapes (`[T]`, `[K: V]`,
+          # `Array(T)`, `List(T)`, `Dictionary(K, V)`, `Map(K, V)`, nested
+          # to any depth) -> T[] / Record<K, V>. Works for custom element
+          # types too — [SelectOption] once leaked through verbatim and read
+          # as a TS one-element tuple; `List(T)` and `Map(K, V)` still did.
+          if (kind, members = collection_shape(base_type))
+            converted = members.map { |m| to_typescript_type(m) }
+            result = kind == :list ? array_of(converted[0]) : "Record<#{converted[0]}, #{converted[1]}>"
             return is_optional ? "#{result} | undefined" : result
           end
 
@@ -193,23 +178,6 @@ module RjuiTools
             prev = ch
           end
           false
-        end
-
-        # Index of the first colon at bracket/paren depth 0, or nil.
-        # Distinguishes [Key: Value] dictionaries from [Element] arrays
-        # whose element type may itself contain colons at depth > 0.
-        # Angle brackets are deliberately not counted — `->` in closure
-        # types would unbalance them.
-        def top_level_colon_index(str)
-          depth = 0
-          str.each_char.with_index do |ch, i|
-            case ch
-            when '(', '[' then depth += 1
-            when ')', ']' then depth -= 1
-            when ':' then return i if depth.zero?
-            end
-          end
-          nil
         end
 
         # Parse a function type string and convert to TypeScript.
