@@ -28,7 +28,7 @@ rjui_tools/lib/
     ├── converters/*.rb           25 converters + base_converter.rb（属性→Tailwind 中央エンジン）
     │   └── extensions/           組み込みカスタム部品（CodeBlock 等）
     ├── tailwind_mapper.rb        純関数群 map_width/map_padding/map_color/map_gravity/…
-    ├── responsive_helper.rb      size class → md:/lg: プレフィクス + landscape useMediaQuery
+    ├── responsive_helper.rb      size class → md:/lg: プレフィクス、landscape は landscape:/portrait: の variant（2.3.30 から。useMediaQuery は layout の variants の振り分けだけ）
     ├── data_model_generator.rb / viewmodel_generator.rb / hook_generator.rb
     ├── style_loader.rb / helpers/（string_manager, lucide_icon, font_spec）
     ├── generators/converter_generator.rb  カスタムコンバータ scaffold（rjui g converter）

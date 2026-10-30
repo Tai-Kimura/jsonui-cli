@@ -68,16 +68,15 @@ RSpec.describe 'a responsive override is drawn, or the build says it is not' do
       expect(got).to include('invisible', 'overflow-hidden', 'opacity-50', 'lg:visible', 'lg:overflow-visible', 'lg:opacity-100')
     end
 
-    it 'a landscape block draws them in its isLandscape expression' do
+    it 'a landscape block draws them under the landscape: variant' do
       jsx, = emit(label('responsive' => { 'landscape' => { 'minHeight' => 44, 'paddings' => 8 } }))
-      expect(jsx).to include('${isLandscape ? "min-h-[44px] p-[0.5rem]" : ""}')
+      expect(jsx).to include('landscape:min-h-[44px]', 'landscape:p-[0.5rem]')
     end
 
     it 'the emit compiles as TypeScript', :typescript_compile do
       elements = [label('responsive' => { 'regular' => { 'minHeight' => 44, 'margins' => [2, 4] } }),
                   label('responsive' => { 'landscape' => { 'paddings' => 8 } })].map { |n| emit(n, typescript: true).first }
-      ambient = TypeScriptCompiler::AMBIENT + "declare const isLandscape: boolean;\n"
-      expect(TypeScriptCompiler.component(*elements)).to compile_as_typescript.with_ambient(ambient)
+      expect(TypeScriptCompiler.component(*elements)).to compile_as_typescript
     end
   end
 

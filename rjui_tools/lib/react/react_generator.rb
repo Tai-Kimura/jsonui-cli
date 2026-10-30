@@ -307,7 +307,6 @@ module RjuiTools
         uses_string_manager = jsx_content.include?('StringManager.') ||
                               uses_string_manager?(json)
         uses_link = uses_link?(json)
-        needs_landscape = ResponsiveHelper.needs_landscape_hook?(json)
 
         # FontSpec routing: any converter that emits the
         # `Configuration.Font.resolve(...)` JS expression (currently produced
@@ -331,7 +330,7 @@ module RjuiTools
         needs_collection_scroll = !collection_scrolls.empty?
         needs_relative_position = !relative_containers.empty?
         needs_auto_shrink = !auto_shrink_targets.empty?
-        needs_client = needs_state || uses_value_change || uses_string_manager || uses_extensions || needs_landscape || needs_focus ||
+        needs_client = needs_state || uses_value_change || uses_string_manager || uses_extensions || needs_focus ||
                        needs_collection_scroll || needs_relative_position || needs_auto_shrink || variants.any?
         use_client = needs_client ? @framework.use_client_prefix : ''
 
@@ -344,8 +343,10 @@ module RjuiTools
         end
         react_import = react_hooks.empty? ? "import React from 'react';" : "import React, { #{react_hooks.join(', ')} } from 'react';"
 
-        # Generate useMediaQuery import for landscape responsive support
-        media_query_import = (needs_landscape || variants.any?) ? "\nimport { useMediaQuery } from '@/hooks/useMediaQuery';" : ''
+        # useMediaQuery for the variant files' dispatch. (A landscape key reads
+        # no hook since jsonui-cli 2.3.30: its classes are media variants,
+        # ResponsiveHelper.landscape_variants.)
+        media_query_import = variants.any? ? "\nimport { useMediaQuery } from '@/hooks/useMediaQuery';" : ''
 
         # Generate the framework's Link import if needed
         link_import = uses_link && !@framework.link_import_line.empty? ? "\n#{@framework.link_import_line}" : ''
@@ -552,14 +553,6 @@ module RjuiTools
         auto_shrink_declarations = auto_shrink_targets.map { |t| auto_shrink_effect(t) }.join("\n")
         auto_shrink_declarations = "\n#{auto_shrink_declarations}\n" unless auto_shrink_declarations.empty?
 
-        # Generate landscape hook declaration
-        landscape_declaration = if needs_landscape
-                                  bands = ResponsiveHelper.needs_landscape_width_bands?(json)
-                                  "\n  #{ResponsiveHelper.landscape_hook_declaration(width_bands: bands)}\n"
-                                else
-                                  ''
-                                end
-
         # Generate StringManager hook declaration. The helper emits
         # `StringManager.currentLanguage.xxx` while walking the spec; we
         # rewrite those to `$s.xxx` below so the JSX reads from the
@@ -649,7 +642,7 @@ module RjuiTools
           #{react_import}#{media_query_import}#{link_import}#{string_manager_import}#{cell_id_import}#{collection_scroll_import}#{relative_position_import}#{auto_shrink_import}#{date_format_import}#{screen_marker_import}#{interaction_stop_import}#{partial_text_import}#{include_id_import}#{configuration_import}#{color_manager_import}#{lucide_import}#{data_import}#{extension_imports}#{component_imports}#{variant_component_imports}
 
           #{props_interface if @config['typescript']}#{seeded_helper(@config['typescript']) if uses_seeded}#{value_change_helper(@config['typescript']) if uses_value_change}
-          export const #{name} = (#{props_sig}) => {#{data_merge_declaration}#{state_declarations}#{focus_declarations}#{collection_scroll_declarations}#{relative_position_declarations}#{auto_shrink_declarations}#{landscape_declaration}#{string_manager_declaration}#{variant_dispatch_declaration}
+          export const #{name} = (#{props_sig}) => {#{data_merge_declaration}#{state_declarations}#{focus_declarations}#{collection_scroll_declarations}#{relative_position_declarations}#{auto_shrink_declarations}#{string_manager_declaration}#{variant_dispatch_declaration}
             return (
           #{jsx_content}
             );

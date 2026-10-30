@@ -13,8 +13,6 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
         result = described_class.build_responsive(component)
 
         expect(result[:classes]).to be_empty
-        expect(result[:needs_landscape_hook]).to be false
-        expect(result[:landscape_styles]).to be_empty
         expect(result[:stripped_keys]).to be_empty
       end
     end
@@ -36,7 +34,6 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
 
         expect(result[:classes]).to include('lg:flex-row')
         expect(result[:classes]).not_to include('flex-col')
-        expect(result[:needs_landscape_hook]).to be false
       end
 
       it 'generates spacing responsive classes' do
@@ -330,46 +327,20 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
       end
     end
 
+    # A landscape key is written as media variants since jsonui-cli 2.3.30
+    # (landscape_variants), in the same list as the size classes': the
+    # run-time isLandscape fragment it replaced tied with the base classes.
     context 'with landscape breakpoint' do
-      it 'sets needs_landscape_hook to true' do
-        component = {
-          'type' => 'View',
-          'spacing' => 8,
-          'responsive' => {
-            'landscape' => { 'spacing' => 16 }
-          }
-        }
-        result = described_class.build_responsive(component)
-
-        expect(result[:needs_landscape_hook]).to be true
+      it 'scopes a landscape key by the landscape: variant' do
+        component = { 'type' => 'View', 'spacing' => 8, 'responsive' => { 'landscape' => { 'spacing' => 16 } } }
+        expect(described_class.build_responsive(component)[:classes]).to eq(['landscape:gap-[1rem]'])
       end
 
-      it 'stores landscape styles separately' do
-        component = {
-          'type' => 'View',
-          'orientation' => 'vertical',
-          'responsive' => {
-            'landscape' => { 'orientation' => 'horizontal' }
-          }
-        }
-        result = described_class.build_responsive(component)
-
-        expect(result[:landscape_styles]).to have_key('landscape')
-        expect(result[:landscape_styles]['landscape']).to include('flex-row')
-      end
-
-      it 'handles compound landscape size class' do
-        component = {
-          'type' => 'View',
-          'spacing' => 8,
-          'responsive' => {
-            'regular-landscape' => { 'spacing' => 32 }
-          }
-        }
-        result = described_class.build_responsive(component)
-
-        expect(result[:needs_landscape_hook]).to be true
-        expect(result[:landscape_styles]).to have_key('regular-landscape')
+      it 'scopes a combination by its orientation and its band' do
+        component = { 'type' => 'View', 'orientation' => 'vertical',
+                      'responsive' => { 'regular-landscape' => { 'spacing' => 32 }, 'landscape' => { 'orientation' => 'horizontal' } } }
+        expect(described_class.build_responsive(component)[:classes])
+          .to contain_exactly('landscape:lg:gap-[2rem]', 'landscape:max-lg:flex-row')
       end
     end
 
@@ -421,70 +392,9 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
     end
   end
 
-  describe '.landscape_hook_declaration' do
-    it 'returns the useMediaQuery hook call' do
-      declaration = described_class.landscape_hook_declaration
-      expect(declaration).to eq("const isLandscape = useMediaQuery('(orientation: landscape)');")
-    end
-  end
-
-  describe '.build_landscape_class_expression' do
-    it 'returns empty string for empty styles' do
-      expr = described_class.build_landscape_class_expression({})
-      expect(expr).to eq('')
-    end
-
-    it 'builds conditional expression for landscape styles' do
-      landscape_styles = {
-        'landscape' => ['flex-row', 'gap-4']
-      }
-      expr = described_class.build_landscape_class_expression(landscape_styles)
-      expect(expr).to include('isLandscape')
-      expect(expr).to include('flex-row gap-4')
-    end
-  end
-
-  describe '.needs_landscape_hook?' do
-    it 'returns false for non-responsive component' do
-      component = { 'type' => 'View' }
-      expect(described_class.needs_landscape_hook?(component)).to be false
-    end
-
-    it 'returns false for responsive without landscape' do
-      component = {
-        'type' => 'View',
-        'responsive' => { 'regular' => { 'orientation' => 'horizontal' } }
-      }
-      expect(described_class.needs_landscape_hook?(component)).to be false
-    end
-
-    it 'returns true for landscape responsive' do
-      component = {
-        'type' => 'View',
-        'responsive' => { 'landscape' => { 'orientation' => 'horizontal' } }
-      }
-      expect(described_class.needs_landscape_hook?(component)).to be true
-    end
-
-    it 'returns true when child has landscape responsive' do
-      component = {
-        'type' => 'View',
-        'child' => [
-          {
-            'type' => 'Label',
-            'responsive' => { 'landscape' => { 'fontSize' => 20 } }
-          }
-        ]
-      }
-      expect(described_class.needs_landscape_hook?(component)).to be true
-    end
-  end
-
-  # The two pieces written as code — the hook's declaration in the component
-  # and the landscape classes as a template-literal expression in a
-  # className — in the file a build writes for a screen that has them,
-  # imports cut, under --strict. `useMediaQuery` is declared as
-  # templates/use_media_query.ts exports it.
+  # A screen with landscape keys, imports cut, under --strict: its landscape
+  # classes are static media variants, and it reads no hook (jsonui-cli
+  # 2.3.30; until then a `${isLandscape …}` fragment under a useMediaQuery).
   it 'writes a screen that compiles with its landscape classes', :typescript_compile do
     layout = {
       'type' => 'View', 'id' => 'root', 'orientation' => 'vertical', 'spacing' => 8,
@@ -495,10 +405,9 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
     }
     screen = RjuiTools::React::ReactGenerator.new({ 'typescript' => true, 'use_tailwind' => true })
                                              .generate('Home', layout, screen_id: 'home')
-    expect(screen).to include(described_class.landscape_hook_declaration)
-    # Each key of a block with a landscape key is a run-time fragment, held
-    # where that key wins (exclusive_condition).
-    expect(screen).to include('${isLandscape && !isMinLg ? ', '${isLandscape && isMinLg ? ', '${!isLandscape && !isMinMd ? ')
+    # Each key of a block with a landscape key holds where that key wins.
+    expect(screen).to include('landscape:max-lg:flex-row', 'landscape:lg:gap-[2rem]', 'portrait:max-md:p-[0.25rem]', 'landscape:text-xl')
+    expect(screen).not_to include('isLandscape', 'useMediaQuery')
     template = File.read(File.expand_path('../../lib/react/templates/use_media_query.ts', __dir__))
     signature = template[/^export function useMediaQuery\(([^)]*)\): (\w+)/]
     expect(signature).to eq('export function useMediaQuery(query: string): boolean')

@@ -61,22 +61,15 @@ RSpec.describe RjuiTools::React::ResponsiveHelper, 'width conditions and landsca
   end
 
   describe 'a size class + landscape combination' do
+    # Media variants since jsonui-cli 2.3.30 (ResponsiveHelper.landscape_variants);
+    # the run-time isLandscape / isMinMd / isMinLg hooks they replaced read the
+    # same windows (measured in Chromium on 14 windows).
     it 'holds in its band and in landscape' do
-      expect(described_class.send(:landscape_condition, 'landscape')).to eq('isLandscape')
-      expect(described_class.send(:landscape_condition, 'compact-landscape')).to eq('isLandscape && !isMinMd')
-      expect(described_class.send(:landscape_condition, 'medium-landscape')).to eq('isLandscape && isMinMd && !isMinLg')
-      expect(described_class.send(:landscape_condition, 'regular-landscape')).to eq('isLandscape && isMinLg')
-    end
-
-    it 'declares the band widths only where a combination needs them' do
-      combo = { 'type' => 'View', 'child' => [{ 'type' => 'View', 'responsive' => { 'regular-landscape' => { 'spacing' => 4 } } }] }
-      plain = { 'type' => 'View', 'responsive' => { 'landscape' => { 'spacing' => 4 } } }
-      expect(described_class.needs_landscape_width_bands?(combo)).to be true
-      expect(described_class.needs_landscape_width_bands?(plain)).to be false
-      expect(described_class.landscape_hook_declaration).to eq("const isLandscape = useMediaQuery('(orientation: landscape)');")
-      expect(described_class.landscape_hook_declaration(width_bands: true)).to include(
-        "const isMinMd = useMediaQuery('(min-width: 768px)');", "const isMinLg = useMediaQuery('(min-width: 1024px)');"
-      )
+      variants = ->(key) { described_class.send(:landscape_variants, key, [key]) }
+      expect(variants.('landscape')).to eq(['landscape:'])
+      expect(variants.('compact-landscape')).to eq(['landscape:max-md:'])
+      expect(variants.('medium-landscape')).to eq(['landscape:md:max-lg:'])
+      expect(variants.('regular-landscape')).to eq(['landscape:lg:'])
     end
 
     it 'writes a screen that compiles with the bands and the width classes', :typescript_compile do
@@ -89,7 +82,8 @@ RSpec.describe RjuiTools::React::ResponsiveHelper, 'width conditions and landsca
       }
       screen = RjuiTools::React::ReactGenerator.new({ 'typescript' => true, 'use_tailwind' => true })
                                                .generate('Home', layout, screen_id: 'home')
-      expect(screen).to include('isLandscape && isMinLg ? ', 'isLandscape && !isMinMd ? ')
+      expect(screen).to include('landscape:lg:gap-', 'landscape:max-md:gap-')
+      expect(screen).not_to include('isLandscape', 'useMediaQuery')
       expect(screen).to include('max-[700px]:gap-', 'min-[700px]:gap-')
       template = File.read(File.expand_path('../../lib/react/templates/use_media_query.ts', __dir__))
       signature = template[/^export function useMediaQuery\(([^)]*)\): (\w+)/]

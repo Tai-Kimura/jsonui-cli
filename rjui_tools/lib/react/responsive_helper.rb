@@ -191,13 +191,12 @@ module RjuiTools
         #
         # Returns a Hash:
         #   {
-        #     classes: "lg:flex-row lg:gap-6",
-        #     needs_landscape_hook: true,
-        #     landscape_classes: { "isLandscape" => "flex-row gap-8" },
+        #     classes: "lg:flex-row lg:gap-6 landscape:flex-row",
         #     stripped_keys: Set["orientation", "spacing"]
         #   }
         #
-        # `classes` holds only the breakpoint-scoped override classes; the
+        # `classes` holds only the breakpoint-scoped override classes (a
+        # landscape key's under media variants too: landscape_variants); the
         # base (default) value of each attribute is emitted unprefixed by
         # the converters' normal attribute mapping. `stripped_keys` lists
         # the attribute keys that have responsive overrides (informational).
@@ -242,8 +241,6 @@ module RjuiTools
         def build_responsive(component)
           result = {
             classes: [],
-            needs_landscape_hook: false,
-            landscape_styles: {},
             stripped_keys: Set.new
           }
 
@@ -254,12 +251,13 @@ module RjuiTools
 
           size_classes = JsonUIShared::ResponsiveResolver.size_classes(component)
           width_prefixes = width_condition_prefixes(component)
-          # A block with a landscape key draws EVERY key at run time, each
-          # where it is the one that wins (exclusive_condition): a size
-          # class's breakpoint classes beside a landscape key's runtime
-          # classes both held on a regular landscape window
-          # (rjui-responsive-landscape-classes-stack-on-breakpoint-classes).
+          # A block with a landscape key draws EVERY key where it is the one
+          # that wins (landscape_variants): a size class's classes beside a
+          # landscape key's both held on a regular landscape window until
+          # each was scoped (rjui-responsive-landscape-classes-stack-on-
+          # breakpoint-classes).
           runtime = landscape_block?(component)
+          present = JsonUIShared::ResponsiveResolver.size_classes(component)
 
           # For each size class, generate prefixed Tailwind classes
           size_classes.each do |sc|
@@ -268,26 +266,31 @@ module RjuiTools
             next unless overrides.is_a?(Hash)
 
             if runtime
-              # Landscape requires useMediaQuery hook
-              result[:needs_landscape_hook] = true
-              landscape_key = sc
-              result[:landscape_styles][landscape_key] ||= []
+              # The windows it wins in, as media variants (landscape: /
+              # portrait: and the width bands). A variant's class comes after
+              # the base classes in the stylesheet, so it wins over them; the
+              # unprefixed classes under a run-time isLandscape this replaced
+              # (jsonui-cli 2.3.28) tied with the base classes and the
+              # stylesheet's order chose — measured in Chromium, a landscape
+              # height, padding, margin, textAlign or colour lost to the base.
+              prefixes = landscape_variants(sc, present)
+              scoped = lambda do |cls|
+                cls.to_s.split.flat_map { |token| prefixes.map { |prefix| "#{prefix}#{token}" } }
+              end
 
               overrides.each do |attr, value|
                 next if %w[type child data responsive].include?(attr)
 
                 mapper = ATTRIBUTE_MAPPERS[attr]
                 if mapper && !bound?(value)
-                  # For landscape compound size classes, use width prefix inside the hook conditional
-                  cls = call_mapper(mapper, value, '', component)
-                  result[:landscape_styles][landscape_key] << cls if cls
+                  result[:classes].concat(scoped.call(call_mapper(mapper, value, '', component)))
                 else
                   warn_undrawn(component, sc, attr, value)
                 end
               end
 
               responsive_gravity_classes(component, overrides).each do |cls|
-                result[:landscape_styles][landscape_key] << cls
+                result[:classes].concat(scoped.call(cls))
               end
             else
               # Pure width breakpoint -> Tailwind responsive prefix; a width
@@ -351,53 +354,6 @@ module RjuiTools
           prefixes
         end
 
-        # Generate the useMediaQuery hook call string for landscape detection.
-        # Returns the TypeScript/JSX code string.
-        # A tree with a size-class + landscape combination also reads the
-        # widths its bands need (landscape_condition).
-        def landscape_hook_declaration(width_bands: false)
-          declaration = "const isLandscape = useMediaQuery('(orientation: landscape)');"
-          return declaration unless width_bands
-
-          "#{declaration}\n  const isMinMd = useMediaQuery('(min-width: 768px)');" \
-            "\n  const isMinLg = useMediaQuery('(min-width: 1024px)');"
-        end
-
-        # Whether any run-time block in the tree has a condition on the width
-        # bands (a combination, or a size class beside a landscape key).
-        def needs_landscape_width_bands?(component)
-          return false unless component.is_a?(Hash)
-
-          if landscape_block?(component)
-            present = JsonUIShared::ResponsiveResolver.size_classes(component)
-            return true if present.any? { |key| exclusive_condition(key, present).include?('isMin') }
-          end
-
-          children = component['child']
-          children = [children] if children.is_a?(Hash)
-          Array(children).any? { |child| needs_landscape_width_bands?(child) }
-        end
-
-        # Build a conditional className expression for landscape overrides.
-        #
-        # Example output:
-        #   `${isLandscape ? "flex-row gap-8" : ""}`
-        def build_landscape_class_expression(landscape_styles)
-          return '' if landscape_styles.empty?
-
-          present = landscape_styles.keys
-          parts = landscape_styles.map do |key, classes|
-            classes_str = classes.compact.join(' ')
-            next if classes_str.empty?
-
-            condition = exclusive_condition(key, present)
-            next if condition == 'false'
-            "${#{condition} ? \"#{classes_str}\" : \"\"}"
-          end.compact
-
-          parts.join(' ')
-        end
-
         # Whether a responsive block is drawn at run time: it has a landscape
         # key (and is not a block of width conditions).
         def landscape_block?(component)
@@ -412,22 +368,21 @@ module RjuiTools
         BANDS = %w[compact medium regular].freeze
 
         # Where `key` is the one key of `present` that wins (the first of
-        # PRIORITY_ORDER present and holding), as a condition on isLandscape /
-        # isMinMd / isMinLg; 'false' where it never wins.
-        def exclusive_condition(key, present)
+        # PRIORITY_ORDER present and holding), as the media variants of those
+        # windows: [] where it never wins. The orientation is the one
+        # useMediaQuery('(orientation: landscape)') read, and the bands the
+        # breakpoint variants every other size class uses (measured in
+        # Chromium on 14 windows — square, one wider or taller by a pixel, each
+        # band's edge: landscape: / portrait: and max-md: / md: / lg: agreed
+        # with the hooks every time).
+        def landscape_variants(key, present)
           wins = ->(landscape, band) { winning_key(present, landscape, band) == key }
           in_landscape = BANDS.select { |band| wins.call(true, band) }
           in_portrait = BANDS.select { |band| wins.call(false, band) }
-          if in_landscape == in_portrait
-            band_condition(in_landscape)
-          elsif in_portrait.empty?
-            join_conditions('isLandscape', band_condition(in_landscape))
-          elsif in_landscape.empty?
-            join_conditions('!isLandscape', band_condition(in_portrait))
-          else
-            "(#{join_conditions('isLandscape', band_condition(in_landscape))}) || " \
-              "(#{join_conditions('!isLandscape', band_condition(in_portrait))})"
-          end
+          return BAND_VARIANTS.fetch(in_landscape) if in_landscape == in_portrait
+
+          BAND_VARIANTS.fetch(in_landscape).map { |band| "landscape:#{band}" } +
+            BAND_VARIANTS.fetch(in_portrait).map { |band| "portrait:#{band}" }
         end
 
         def winning_key(present, landscape, band)
@@ -439,51 +394,17 @@ module RjuiTools
           end
         end
 
-        BAND_CONDITIONS = {
-          %w[compact] => '!isMinMd',
-          %w[medium] => 'isMinMd && !isMinLg',
-          %w[regular] => 'isMinLg',
-          %w[compact medium] => '!isMinLg',
-          %w[medium regular] => 'isMinMd',
-          %w[compact regular] => '(!isMinMd || isMinLg)',
-          %w[compact medium regular] => 'true',
-          [] => 'false'
+        # A set of width bands as the breakpoint variants that cover it.
+        BAND_VARIANTS = {
+          %w[compact] => %w[max-md:],
+          %w[medium] => %w[md:max-lg:],
+          %w[regular] => %w[lg:],
+          %w[compact medium] => %w[max-lg:],
+          %w[medium regular] => %w[md:],
+          %w[compact regular] => %w[max-md: lg:],
+          %w[compact medium regular] => [''],
+          [] => []
         }.freeze
-
-        def band_condition(bands)
-          BAND_CONDITIONS.fetch(bands)
-        end
-
-        def join_conditions(orientation, band)
-          return 'false' if band == 'false'
-          return orientation if band == 'true'
-
-          "#{orientation} && #{band}"
-        end
-
-        # Check if a component (or any descendant) needs the landscape hook.
-        # Walks the entire subtree even when the current node has no
-        # `responsive` block of its own, because a parent view without
-        # responsive overrides may still contain a child that does.
-        def needs_landscape_hook?(component)
-          return false unless component.is_a?(Hash)
-
-          if JsonUIShared::ResponsiveResolver.responsive?(component)
-            size_classes = JsonUIShared::ResponsiveResolver.size_classes(component)
-            return true if size_classes.any? { |sc| sc.include?('landscape') }
-          end
-
-          children = component['child']
-          if children.is_a?(Array)
-            children.each do |child|
-              return true if child.is_a?(Hash) && needs_landscape_hook?(child)
-            end
-          elsif children.is_a?(Hash)
-            return true if needs_landscape_hook?(children)
-          end
-
-          false
-        end
 
         private
 
@@ -559,32 +480,6 @@ module RjuiTools
         # row and maps its gravity itself.
         def label_row?(component)
           %w[Label Text].include?(JsonUIShared::TypeSynonyms.drawn_type(component['type']))
-        end
-
-        def build_landscape_key(parsed)
-          if parsed[:width]
-            "#{parsed[:width]}-landscape"
-          else
-            'landscape'
-          end
-        end
-
-        # A combination's width is its size class's band — compact below
-        # 768px, medium 768..1023, regular from 1024, as the variant-file
-        # dispatch reads them — AND landscape. Until jsonui-cli 1.9.26 every
-        # combination returned `isLandscape` alone, so regular-landscape held
-        # on a narrow landscape window too
-        # (rjui-responsive-width-plus-landscape-drops-width-condition).
-        LANDSCAPE_WIDTH_CONDITIONS = {
-          'compact' => '!isMinMd',
-          'medium' => 'isMinMd && !isMinLg',
-          'regular' => 'isMinLg'
-        }.freeze
-
-        def landscape_condition(key)
-          width = JsonUIShared::ResponsiveResolver.parse_size_class(key)[:width]
-          band = LANDSCAPE_WIDTH_CONDITIONS[width]
-          band ? "isLandscape && #{band}" : 'isLandscape'
         end
 
         def map_responsive_padding(value, prefix)

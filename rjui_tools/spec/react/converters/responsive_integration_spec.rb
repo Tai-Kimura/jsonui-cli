@@ -134,7 +134,7 @@ RSpec.describe 'Responsive integration with converters' do
     end
 
     context 'with landscape responsive' do
-      it 'generates template literal className with isLandscape conditional' do
+      it 'scopes the landscape classes by the landscape: variant, no run-time hook' do
         converter = create_converter({
           'type' => 'View',
           'orientation' => 'vertical',
@@ -147,9 +147,8 @@ RSpec.describe 'Responsive integration with converters' do
         })
         output = converter.convert(2)
 
-        # Should use template literal for dynamic className
-        expect(output).to include('className={`')
-        expect(output).to include('isLandscape')
+        expect(output).to include('landscape:flex-row')
+        expect(output).not_to include('isLandscape')
       end
     end
 

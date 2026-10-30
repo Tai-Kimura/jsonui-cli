@@ -732,6 +732,7 @@ module RjuiTools
         # that has none — and the subclass pass upgrades it.
         def finalize_classes(classes)
           tokens = classes.compact.flat_map { |c| c.to_s.split(/\s+/) }.reject(&:empty?)
+          tokens.concat(move_bound_styles_under_size_classes)
 
           natural = tokens.reverse.find do |t|
                       !t.include?(':') && t != 'hidden' && DISPLAY_UTILITIES.include?(t)
@@ -750,6 +751,61 @@ module RjuiTools
             end
           end
           out.join(' ')
+        end
+
+        # The inline style keys a bound attribute writes (BaseConverter and
+        # LabelConverter), by the attribute a size class overrides.
+        SIZE_CLASS_STYLE_KEYS = {
+          'width' => %w[width], 'height' => %w[height],
+          'minWidth' => %w[minWidth], 'maxWidth' => %w[maxWidth], 'minHeight' => %w[minHeight], 'maxHeight' => %w[maxHeight],
+          'padding' => %w[padding], 'paddings' => %w[padding],
+          'topPadding' => %w[paddingTop], 'paddingTop' => %w[paddingTop],
+          'rightPadding' => %w[paddingRight], 'paddingRight' => %w[paddingRight],
+          'bottomPadding' => %w[paddingBottom], 'paddingBottom' => %w[paddingBottom],
+          'leftPadding' => %w[paddingLeft], 'paddingLeft' => %w[paddingLeft],
+          'paddingStart' => %w[paddingInlineStart], 'paddingEnd' => %w[paddingInlineEnd],
+          'topMargin' => %w[marginTop], 'rightMargin' => %w[marginRight],
+          'bottomMargin' => %w[marginBottom], 'leftMargin' => %w[marginLeft],
+          'startMargin' => %w[marginInlineStart], 'endMargin' => %w[marginInlineEnd],
+          'fontSize' => %w[fontSize], 'cornerRadius' => %w[borderRadius], 'opacity' => %w[opacity],
+          'weight' => %w[flexGrow flexBasis], 'textAlign' => %w[textAlign justifyContent],
+          'gravity' => %w[justifyContent], 'fontWeight' => %w[fontWeight], 'clipToBounds' => %w[overflow]
+        }.freeze
+
+        # A bound attribute's value is an inline style, and an inline style
+        # beats every class: a size class's class for the same property never
+        # showed (ticket rjui-bound-width-inline-style-beats-responsive-width;
+        # measured in Chromium at 390 and 1200 wide, and landscape: the bound
+        # width, height, bounds, paddings, margins, fontSize, cornerRadius,
+        # opacity, weight, textAlign, fontWeight and clip all held over it).
+        # When a size class overrides one, its value moves to a custom
+        # property of the element and a class reads it (`[width:var(--jui-sc-
+        # width)]`): class against class, the size class's variant comes later
+        # in the stylesheet and wins in its windows. A bound attribute no size
+        # class overrides keeps its inline style. The property is set on the
+        # element that reads it, so a child's own reads its own, never an
+        # inherited one; the `--jui-sc-` names are no other custom property's.
+        #
+        # Returns the classes that read the moved values (none when nothing
+        # moved). Run from finalize_classes, after a subclass added its own
+        # dynamic styles (LabelConverter's justifyContent).
+        def move_bound_styles_under_size_classes
+          return [] unless @dynamic_styles && !@dynamic_styles.empty?
+
+          overridden = JsonUIShared::ResponsiveResolver.overridden_keys(json)
+          return [] if overridden.empty?
+
+          keys = overridden.flat_map do |attr|
+            bound_somewhere = attr == 'gravity' ? has_binding?(attributes['textAlign']) : has_binding?(attributes[attr].to_s)
+            bound_somewhere ? SIZE_CLASS_STYLE_KEYS.fetch(attr, []) : []
+          end
+          keys.uniq.map do |key|
+            next unless @dynamic_styles.key?(key)
+
+            css = key.gsub(/([A-Z])/) { "-#{$1.downcase}" }
+            @dynamic_styles["--jui-sc-#{css}"] = @dynamic_styles.delete(key)
+            "[#{css}:var(--jui-sc-#{css})]"
+          end.compact
         end
 
         def has_binding?(value)
@@ -1535,19 +1591,12 @@ module RjuiTools
           " className=\"#{classes}\""
         end
 
-        # Build className attribute, handling landscape responsive with template literal.
-        # Returns the full className="..." or className={`...`} string.
+        # The className attribute with the run-time class expressions (a bound
+        # enabled / userInteractionEnabled) appended: a template literal when
+        # there are any. (A landscape key's classes are static media variants
+        # since jsonui-cli 2.3.30 — ResponsiveHelper.landscape_variants.)
         def build_responsive_class_attr(static_classes)
           expressions = []
-
-          if @responsive_result && @responsive_result[:needs_landscape_hook] &&
-             !@responsive_result[:landscape_styles].empty?
-            landscape_expr = ResponsiveHelper.build_landscape_class_expression(
-              @responsive_result[:landscape_styles]
-            )
-            expressions << landscape_expr unless landscape_expr.empty?
-          end
-
           expressions << enabled_class_expression
           expressions << interaction_class_expression
 
@@ -1764,11 +1813,6 @@ module RjuiTools
           return nil unless value.is_a?(String) && has_binding?(value)
 
           "${!#{extract_binding_property(value)} ? 'pointer-events-none' : ''}"
-        end
-
-        # Check if this component needs the useMediaQuery hook for landscape
-        def needs_landscape_hook?
-          @responsive_result&.dig(:needs_landscape_hook) == true
         end
 
         def convert_children(indent)
@@ -2760,7 +2804,6 @@ module RjuiTools
           @visibility_applied = true
           jsx = apply_interaction_class(jsx)
           jsx = apply_enabled_class(jsx)
-          jsx = apply_landscape_class(jsx)
           jsx = apply_hidden_binding(jsx)
           jsx = apply_interaction_inert(jsx)
 
@@ -2866,30 +2909,6 @@ module RjuiTools
           pad = jsx[/\A[ \t]*/]
           body = jsx.rstrip.lines.map { |line| line.strip.empty? ? line : "  #{line}" }.join
           "#{pad}<div className=\"contents\" #{spread}>\n#{body}\n#{pad}</div>"
-        end
-
-        # A responsive block with a landscape key is drawn at run time, by a
-        # class expression on `isLandscape` (ResponsiveHelper
-        # .build_landscape_class_expression): the root tag of every
-        # converter's subtree gets it here, as the bound `enabled` and
-        # `userInteractionEnabled` do. Only View built it into its own
-        # className (build_responsive_class_attr), so until jsonui-cli 2.3.28
-        # a Label's landscape textAlign or gravity drew nothing (measured in
-        # Chromium, a landscape window: the text stayed where the base put it).
-        def apply_landscape_class(jsx)
-          return jsx if builds_landscape_class_itself?
-          return jsx unless @responsive_result && @responsive_result[:needs_landscape_hook]
-
-          class_expr = ResponsiveHelper.build_landscape_class_expression(@responsive_result[:landscape_styles])
-          return jsx if class_expr.empty?
-
-          append_class_to_element(jsx, class_expr, 'landscape')
-        end
-
-        # True for a converter whose className already holds the landscape
-        # expression (ViewConverter, through build_responsive_class_attr).
-        def builds_landscape_class_itself?
-          false
         end
 
         # The generated helper apply_interaction_inert spreads (build_command

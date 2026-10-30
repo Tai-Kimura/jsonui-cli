@@ -20,9 +20,12 @@ require_relative '../../lib/react/react_generator'
 #   breakpoint-prefixed, so both held on a regular landscape window, and
 #   landscape beside regular-landscape stacked too.
 #
-# The arm reads what rjui wrote — the className of a node, prefixes and
-# `${cond ? "…" : ""}` fragments — evaluates it in a window, and asks whose
-# classes hold. Each key carries its own marker class (cornerRadius), so a
+# A landscape key is written as media variants since jsonui-cli 2.3.30
+# (landscape: / portrait: with the bands; ResponsiveHelper.landscape_variants)
+# — it was a `${isLandscape …}` fragment of unprefixed classes, which tied
+# with the base classes. The arm reads what rjui wrote — the className of a
+# node, its variant prefixes (and any `${cond ? "…" : ""}` fragment) —
+# evaluates it in a window, and asks whose classes hold. Each key carries its own marker class (cornerRadius), so a
 # key's classes are told apart by the marker alone.
 RSpec.describe RjuiTools::React::ResponsiveHelper, 'one key wins on the web' do
   KEYS = %w[regular-landscape medium-landscape compact-landscape landscape regular medium compact].freeze unless defined?(KEYS)
@@ -52,10 +55,12 @@ RSpec.describe RjuiTools::React::ResponsiveHelper, 'one key wins on the web' do
   end
 
   # Whether a Tailwind v4 viewport prefix chain (`md:max-lg:`, `max-md:`,
-  # `lg:`, `min-[700px]:`) holds at `width`.
-  def prefix_holds?(prefix, width)
+  # `lg:`, `min-[700px]:`, `landscape:` / `portrait:`) holds in the window.
+  def prefix_holds?(prefix, width, landscape)
     prefix.scan(/([a-z\-\[\]0-9px]+):/).flatten.all? do |variant|
       case variant
+      when 'landscape' then landscape
+      when 'portrait' then !landscape
       when 'md' then width >= 768
       when 'lg' then width >= 1024
       when 'max-md' then width < 768
@@ -90,7 +95,7 @@ RSpec.describe RjuiTools::React::ResponsiveHelper, 'one key wins on the web' do
     end
     rest.split.each do |cls|
       prefix = cls[/\A((?:[a-z\-]+(?:\[\d+px\])?:)*)/, 1]
-      classes << cls.delete_prefix(prefix) if prefix.empty? || prefix_holds?(prefix, width)
+      classes << cls.delete_prefix(prefix) if prefix.empty? || prefix_holds?(prefix, width, landscape)
     end
     classes
   end
@@ -149,7 +154,10 @@ RSpec.describe RjuiTools::React::ResponsiveHelper, 'one key wins on the web' do
     ] }
     screen = RjuiTools::React::ReactGenerator.new({ 'typescript' => true, 'use_tailwind' => true })
                                              .generate('Home', layout, screen_id: 'home')
-    expect(screen).to include('(!isMinMd || isMinLg)', 'md:max-lg:p-')
+    # compact wins in compact and regular portrait-or-landscape-less windows:
+    # the two bands' variants, no run-time hook
+    expect(screen).to include('portrait:max-md:rounded-[13px]', 'portrait:lg:p-', 'landscape:md:max-lg:gap-', 'md:max-lg:p-')
+    expect(screen).not_to include('isLandscape', 'useMediaQuery')
     template = File.read(File.expand_path('../../lib/react/templates/use_media_query.ts', __dir__))
     signature = template[/^export function useMediaQuery\(([^)]*)\): (\w+)/]
     expect(screen.lines.reject { |l| l.start_with?('import ') }.join).to compile_as_typescript.with_ambient(<<~TS)
