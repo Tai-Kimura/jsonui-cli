@@ -261,7 +261,12 @@ class TypeMapper:
             {"class": str, "defaultValue": Any, "imports": list[str]}
         """
         resolved = self._resolve(spec_type, platform)
-        problem = _unportable_on(resolved["class"], platform)
+        # A closure is not judged whole: a generator writes it through
+        # resolve_in_string, which hands each type inside it here on its own
+        # (and those are judged). Whole, `(Array(Item)) -> Void` read as a
+        # constructor left as written, though the protocol held
+        # `(([Item]) -> Void)?` — measured on a distribution lane's build.
+        problem = "->" not in spec_type and _unportable_on(resolved["class"], platform)
         if problem and (spec_type, platform, resolved["class"]) not in self._unportable:
             self._unportable.append((spec_type, platform, resolved["class"]))
         return resolved
