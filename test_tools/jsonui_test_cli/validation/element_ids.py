@@ -36,6 +36,11 @@ includes expanded:
     `locator('#' + id)`), each part checked as above;
     an id no layout id could be (a character outside `[A-Za-z0-9_]`: the
     OS's own UI, or an id a component builds from data);
+    an id of a partial the layouts include only under an include id, named
+    bare by a test none of whose layouts include that partial: code outside
+    the layouts draws it there (a hand-written component without an id
+    prefix), and draws it so. Where a layout the test names does include it,
+    or the test names no layout, it stays on no layout — web's old spelling;
     an id built from a case argument (`@{…}`), known only when the case runs
 
 Why every layout and not the one the step runs on: a screen test does not
@@ -44,7 +49,10 @@ one face, 56 of the ids "not on the step's layout" were on the next screen's.
 The runner looks an id up wherever it is. A partial included only under an
 include id is left out of the union: its own ids exist at runtime only
 prefixed, inside the layouts that include it, and web's old spelling of them
-is exactly what the release changes.
+is exactly what the release changes. Only so far as the layouts show: code
+outside them may draw the partial bare, which a test whose layouts do not
+include it is the one that can mean (ticket
+jsonui-test-validate-unprefixed-ids-of-partial-included-with-id-elsewhere).
 
 The project is the config THE RUN READ, pushed in by `cmd_validate` as
 `set_path_roots` is — not the nearest config above the test file: in a split
@@ -215,6 +223,9 @@ class ProjectIds:
             for ref, include_id in found:
                 (prefixed if include_id else plain).add(ref)
         self.only_prefixed = prefixed - plain
+        self.names = names
+        self._lf = lf
+        self._under_id: dict = {}
         self.ids, self.cell_ids, self.include_ids = set(), set(), set()
         self.include_web: dict = {}
         self.types: dict = {}
@@ -233,12 +244,62 @@ class ProjectIds:
             if here.unresolved:
                 self.unresolved[name] = here.unresolved
         known = self.ids | self.cell_ids
+        #: The ids of each partial left out above, as the partial draws them
+        #: when nothing prefixes it: id -> the partial.
+        self.partial_of: dict = {}
+        for name in sorted(self.only_prefixed):
+            if name not in names:
+                continue
+            alone = lf.layout_ids_every_platform(name, layouts_dir=layouts_dir, styles_dir=styles_dir)
+            for element in alone.ids - known:
+                self.partial_of.setdefault(element, name)
         self.include_ids -= known
         self.include_web = {k: v for k, v in self.include_web.items() if k not in known}
         self.builtin = _builtin_types()
         self.app_owned = list(app_owned)
         #: Declarations a step named, filled as the run classifies.
         self.app_owned_named: set = set()
+
+    def under_an_include_id(self, name: str) -> set:
+        """The layouts *name* includes, at any depth, under an include id
+        (on the include itself or on one around it): their ids are prefixed
+        there."""
+        if name in self._under_id:
+            return self._under_id[name]
+        self._under_id[name] = set()  # a cycle stops here
+        out: set = set()
+
+        def walk(layout: str, prefixed: bool, seen: frozenset) -> None:
+            if layout in seen or layout not in self.names:
+                return
+            found: list = []
+            self._lf._includes_and_ids(self._lf._load(self.layouts_dir / f"{layout}.json"), found)
+            for ref, include_id in found:
+                if prefixed or include_id:
+                    out.add(ref)
+                walk(ref, prefixed or bool(include_id), seen | {layout})
+
+        walk(name, False, frozenset())
+        self._under_id[name] = out
+        return out
+
+    def layouts_of(self, data: dict) -> set:
+        """The layouts a test names (`source.layout`, a flow's
+        `sources[].layout`), by the longest layout name the path ends in —
+        written from the project root or from the test file alike."""
+        sources = [data.get("source")]
+        if isinstance(data.get("sources"), list):
+            sources += data["sources"]
+        out = set()
+        for source in sources:
+            layout = source.get("layout") if isinstance(source, dict) else None
+            if not isinstance(layout, str) or not layout.strip():
+                continue
+            path = "/" + layout.strip().replace("\\", "/")
+            matches = [n for n in self.names if path.endswith(f"/{n}.json")]
+            if matches:
+                out.add(max(matches, key=len))
+        return out
 
     def app_owned_entry(self, element: str) -> str | None:
         """The `test.appOwnedIds` entry that covers *element*, or None."""
@@ -368,7 +429,17 @@ CANNOT = {
     "not_an_id": "no layout id is spelled so (a character outside [A-Za-z0-9_]: the OS's "
                  "own UI, or an id built from data)",
     "argument": "built from case arguments — known only when the case runs",
+    # Worded by `_partial_note` (it names the partials).
+    "partial_bare": None,
 }
+
+
+def _partial_note(found: list) -> str:
+    partials = sorted({p for _, ps in found for p in ps})
+    return (f"ids of {', '.join(partials)}, which the layouts include only under an include id "
+            "(prefixed there); the layouts this test names do not include "
+            f"{'it' if len(partials) == 1 else 'them'}, so code outside the layouts draws "
+            "them — spelled so when drawn without an id prefix")
 
 
 def check_element_ids(data: dict, path: str, result: ValidationResult,
@@ -401,6 +472,12 @@ def check_element_ids(data: dict, path: str, result: ValidationResult,
         if kind != "missing":
             cannot.setdefault(kind, []).append((element, candidates))
             continue
+        partial = project.partial_of.get(element) if not note else None
+        if partial is not None:
+            named = project.layouts_of(data)
+            if named and not any(partial in project.under_an_include_id(n) for n in named):
+                cannot.setdefault("partial_bare", []).append((element, [partial]))
+                continue
         counts["missing"] += 1
         text = (f"Element '{element}'" + (f": {note}" if note else "")
                 + " is on no layout of this project (includes expanded, every platform)")
@@ -419,7 +496,8 @@ def check_element_ids(data: dict, path: str, result: ValidationResult,
         counts["cannot_check"] += len(found)
         listed = ", ".join(sorted({e for e, _ in found}))
         why = (include_spelling_note(found, project.include_web, include_state)
-               if kind == "include_spelling" else CANNOT[kind])
+               if kind == "include_spelling"
+               else _partial_note(found) if kind == "partial_bare" else CANNOT[kind])
         where = "inside includes " if kind == "include_spelling" else ""
         result.infos.append(ValidationMessage(
             path=path, level="info",
