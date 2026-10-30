@@ -12,6 +12,7 @@ from typing import Any
 from .screen_spec_schema import SCREEN_SPEC_SCHEMA
 from .component_spec_schema import COMPONENT_SPEC_SCHEMA
 from .rules_config import CustomRules, load_rules_for_path
+from .collection_types import collection_shape
 
 
 def _match(pattern, value, flags=0):
@@ -161,8 +162,8 @@ def _initial_value_kind(type_name) -> str | None:
     # TypeMapper): `[K: V]` is a dictionary, not an array of `K: V`. Read by
     # its first character, `[String: Int]` took `[]` and refused `{}` (ticket
     # 2026-10-30-jsonui-doc-initial-value-reads-swift-dictionary-as-array).
-    from jui_cli.core.type_mapper import collection_shape
-
+    # The reading is jsonui-doc's own copy (collection_types): importing
+    # jui_cli's crashed jsonui-doc wherever jui_cli is not installed.
     shape = collection_shape(base)
     if shape is not None:
         return "object" if shape[0] == "map" else "array"
@@ -185,8 +186,10 @@ def _initial_value_unreadable(var: dict) -> str | None:
     null declares nothing; a string holding a JSON literal ("0", "false",
     "[]") is that literal — the platform tools read it so."""
     value = var["default"] if "default" in var else var.get("defaultValue")
+    if value is None:
+        return None
     kind = _initial_value_kind(var.get("type"))
-    if value is None or kind is None:
+    if kind is None:
         return None
     if isinstance(value, str):
         try:
