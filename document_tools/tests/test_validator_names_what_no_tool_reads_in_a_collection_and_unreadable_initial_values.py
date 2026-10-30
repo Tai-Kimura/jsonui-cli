@@ -82,8 +82,14 @@ def _var(value, type_="Array(String)", spelling="defaultValue"):
     _var("[a, b]（labels）"), _var("the last thirty years"), _var("x", "Int"), _var("yes", "Bool"),
     _var({"a": 1}, "[String]"), _var(1.5, "Int"), _var([1], "Dictionary<String, Any>"),
     _var("prose", spelling="default"),
+    # A Swift dictionary is not an array of `K: V` (ticket
+    # 2026-10-30-jsonui-doc-initial-value-reads-swift-dictionary-as-array):
+    # read as the protocols are written from it, `[]` is the wrong value.
+    _var("[]", "[String: Int]"), _var("[]", "[String: Int]?"), _var("[]", "Map(String, Int)"),
+    _var("{}", "[[String: Int]]"),
 ], ids=["prose in an Array", "prose", "a word for an Int", "a word for a Bool", "an object for an Array",
-        "a fraction for an Int", "an array for a Dictionary", "prose in default"])
+        "a fraction for an Int", "an array for a Dictionary", "prose in default",
+        "an array for [K: V]", "an array for [K: V]?", "an array for Map(K, V)", "an object for an array of [K: V]"])
 def test_an_initial_value_that_is_not_a_value_of_its_type_is_named(variable):
     result = SpecValidator().validate_data(_spec(variables=[variable]))
     named = [m for m in result.infos if "is not a value of" in m.message]
@@ -96,8 +102,11 @@ def test_an_initial_value_that_is_not_a_value_of_its_type_is_named(variable):
     _var("[]"), _var(["a"]), _var('["a", "b"]'), _var("0", "Int"), _var(0, "Int"), _var("false", "Bool"),
     _var(True, "Bool?"), _var("1.5", "Double"), _var("anything", "String"), _var("x", "ItemRow"),
     _var(None), _var("{}", "Dictionary<String, Any>"),
+    _var("{}", "[String: Int]"), _var({"a": 1}, "[String: Int]?"), _var("{}", "Dictionary(String, [Int])"),
+    _var("[]", "[[String: Int]]"),
 ], ids=["[] in a string", "a list", "a JSON list in a string", "0 in a string", "0", "false in a string",
-        "an optional Bool", "a number in a string", "a String", "a custom type", "null", "{} in a string"])
+        "an optional Bool", "a number in a string", "a String", "a custom type", "null", "{} in a string",
+        "{} for [K: V]", "an object for [K: V]?", "{} for Dictionary(K, [V])", "[] for an array of [K: V]"])
 def test_a_value_of_its_type_in_any_spelling_is_not(variable):
     result = SpecValidator().validate_data(_spec(variables=[variable]))
     assert not [m for m in result.infos + result.warnings if "is not a value of" in m.message]

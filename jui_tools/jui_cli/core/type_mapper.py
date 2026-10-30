@@ -639,6 +639,14 @@ def _collection(spec_type: str) -> tuple[str, list[str], bool] | None:
     return None
 
 
+def collection_shape(spec_type: str) -> tuple[str, list[str], bool] | None:
+    """(``"list"`` or ``"map"``, member spec types, optional) for a spec type
+    written as a collection — the reading :meth:`TypeMapper.resolve` writes
+    the protocols from — or None. For a reader that has to tell ``[K: V]``
+    from ``[T]`` the same way (jsonui-doc's initial-value check)."""
+    return _collection(spec_type)
+
+
 def _ts_operand(cls: str) -> str:
     """*cls* as the operand of TypeScript's ``[]``: a union or a function
     is parenthesised."""

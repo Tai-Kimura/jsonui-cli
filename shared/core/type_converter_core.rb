@@ -381,6 +381,26 @@ module JsonUIShared
         nil
       end
 
+      # :map or :list for a declared class that is a collection — the spec's
+      # shapes (collection_shape) or a generic written in a platform's own
+      # spelling (`Map<K, V>`, `[K: V]`, `List<T>`, `Dictionary<K, V>`,
+      # `Array<T>`), optional or not — else nil. A data default's empty
+      # literal is written by this, not by its own characters: `"[]"` for a
+      # `[String: Int]` drew `[]` in Swift and `emptyList()` in Kotlin, and
+      # `"{}"` drew `{}` in Swift — none of which compile (ticket
+      # 2026-10-30-jsonui-doc-initial-value-reads-swift-dictionary-as-array).
+      def collection_kind(class_str)
+        base = class_str.to_s.strip.chomp('?').strip
+        return nil if base.empty?
+
+        shape = collection_shape(base)
+        return shape.first if shape
+        return :map if base.match?(/\A(?:Map|MutableMap|HashMap|Dictionary|Record)</)
+        return :list if base.match?(/\A(?:List|MutableList|Array|ArrayList)</)
+
+        nil
+      end
+
       # *str* split on *sep* outside brackets, parentheses and angle
       # brackets. The `>` of a closure's `->` / `=>` closes nothing.
       def split_top_level(str, sep)

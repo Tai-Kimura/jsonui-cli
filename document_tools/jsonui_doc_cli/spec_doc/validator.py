@@ -157,6 +157,15 @@ def _initial_value_kind(type_name) -> str | None:
     bool, array or object — or None for String and every type this does
     not judge (a custom type, a callback)."""
     base = type_name.strip().rstrip("?").strip() if isinstance(type_name, str) else ""
+    # A collection is read as the protocols are written from it (jui_cli's
+    # TypeMapper): `[K: V]` is a dictionary, not an array of `K: V`. Read by
+    # its first character, `[String: Int]` took `[]` and refused `{}` (ticket
+    # 2026-10-30-jsonui-doc-initial-value-reads-swift-dictionary-as-array).
+    from jui_cli.core.type_mapper import collection_shape
+
+    shape = collection_shape(base)
+    if shape is not None:
+        return "object" if shape[0] == "map" else "array"
     if base in ("Int", "Int64", "Long"):
         return "int"
     if base in ("Double", "Float", "CGFloat"):

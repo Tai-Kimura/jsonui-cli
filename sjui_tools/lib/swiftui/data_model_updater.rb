@@ -434,6 +434,15 @@ module SjuiTools
       end
 
       def format_default_value(value, json_class)
+        # An empty container written as a string ("{}" / "[]") takes the
+        # declared collection's kind, not its own characters: a
+        # `[String: Int]` given "{}" drew `{}` (a closure) and given "[]" drew
+        # `[]`, neither of which a dictionary declaration accepts — Swift's
+        # empty dictionary is `[:]` (TypeConverterCore#collection_kind).
+        if ['[]', '{}'].include?(value) && (kind = Core::TypeConverter.collection_kind(json_class))
+          return kind == :map ? '[:]' : '[]'
+        end
+
         if json_class.to_s.chomp('?') == 'String'
           # The text the layout's spelling means ('' / "…" / '…' / bare,
           # StringLiterals.default_text), for a String and a String? alike.

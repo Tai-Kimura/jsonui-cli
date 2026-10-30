@@ -458,6 +458,14 @@ module KjuiTools
       end
 
       def format_default_value(value, json_class)
+        # An empty container written as a string ("[]" / "{}") takes the
+        # declared collection's kind, not its own characters: a
+        # `Map<String, Int>` given "[]" drew `emptyList()`, which does not
+        # compile (TypeConverterCore#collection_kind).
+        if ['[]', '{}'].include?(value) && (kind = Core::TypeConverter.collection_kind(json_class))
+          return kind == :map ? 'emptyMap()' : 'emptyList()'
+        end
+
         case json_class
         when 'String', 'String?'
           # The text the layout's spelling means ('' / "…" / '…' / bare,
