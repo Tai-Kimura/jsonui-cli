@@ -19,6 +19,7 @@ generated use case protocol with the pinned kotlinc.
 
 import io
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -227,37 +228,39 @@ class AClosureIsJudgedByWhatIsInsideIt(unittest.TestCase):
     the whole closure was judged as a constructor left as written. Measured
     on that lane's build (exit 1 on the fix's first cut, 0 on the base)."""
 
-    def test_a_closure_over_a_collection_is_written_and_type_checks(self):
-        import shutil
-        from tests.test_api_model_enum_case_names import _kotlin_compiler, _pinned, _pinned_jar
+    # Three arms where there was one: the one before skipped on Linux for
+    # want of `xcrun` (the iOS simulator SDK) and took the Kotlin check down
+    # with it, an undeclared skip that turned python-suite red from 2.3.32
+    # (run 41070786517). The Swift check now asks `swiftc` as the other Swift
+    # arms here do (test_api_model_enum_case_names), with the iOS-only imports
+    # stood in for, so it runs on the Linux runner too.
+
+    def _synced(self, root: Path) -> tuple[Path, Path]:
+        _viewmodel_project(root, "(Array(Item)) -> Void")
+        ok, out = _sync_viewmodels(root)
+        self.assertTrue(ok, out)
+        self.assertNotIn("ERROR", out)
+        return (next(root.rglob("PriceEditViewModelProtocol.swift")),
+                next(root.rglob("PriceEditViewModelProtocol.kt")))
+
+    def test_a_closure_over_a_collection_is_written_without_an_error(self):
         with tempfile.TemporaryDirectory() as d:
-            root = Path(d)
-            _viewmodel_project(root, "(Array(Item)) -> Void")
-            ok, out = _sync_viewmodels(root)
-            self.assertTrue(ok, out)
-            self.assertNotIn("ERROR", out)
-            swift = next(root.rglob("PriceEditViewModelProtocol.swift"))
-            kotlin = next(root.rglob("PriceEditViewModelProtocol.kt"))
+            swift, kotlin = self._synced(Path(d))
             self.assertIn("var onSaveSuccess: (([Item]) -> Void)?", swift.read_text(encoding="utf-8"))
             self.assertIn("val onSaveSuccess: StateFlow<((List<Item>) -> Unit)?>", kotlin.read_text(encoding="utf-8"))
 
-            # swiftc, against the iOS simulator SDK (the protocol imports UIKit)
-            xcrun = shutil.which("xcrun")
-            if xcrun is None:
-                self.skipTest("no xcrun")
-            (root / "Stubs.swift").write_text("struct PriceEditData {}\nstruct Item {}\n", encoding="utf-8")
-            r = subprocess.run([xcrun, "--sdk", "iphonesimulator", "swiftc", "-typecheck",
-                                "-target", "arm64-apple-ios17.0-simulator", str(swift), str(root / "Stubs.swift")],
-                               capture_output=True, text=True, timeout=600)
-            self.assertEqual(r.returncode, 0, r.stderr)
-
-            # kotlinc, with kotlinx-coroutines for StateFlow
-            found = _kotlin_compiler()
-            if found[0] is None:
-                self.skipTest(found[1])
-            java, compiler_cp, stdlib, _ = found
-            home = Path(os.environ.get("GRADLE_USER_HOME", Path.home() / ".gradle"))
-            coroutines = _pinned_jar(home, "org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm", _pinned())
+    def test_the_kotlin_protocol_type_checks(self):
+        # kotlinc, with kotlinx-coroutines for StateFlow
+        from tests.test_api_model_enum_case_names import _kotlin_compiler, _pinned, _pinned_jar
+        found = _kotlin_compiler()
+        if found[0] is None:
+            self.skipTest(found[1])
+        java, compiler_cp, stdlib, _ = found
+        home = Path(os.environ.get("GRADLE_USER_HOME", Path.home() / ".gradle"))
+        coroutines = _pinned_jar(home, "org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm", _pinned())
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            _, kotlin = self._synced(root)
             (root / "Data.kt").write_text("package com.example.app.data\n\nclass PriceEditData\n", encoding="utf-8")
             (root / "Item.kt").write_text("package com.example.app.viewmodel.protocol\n\nclass Item\n", encoding="utf-8")
             r = subprocess.run([java, "-cp", compiler_cp, "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
@@ -266,6 +269,25 @@ class AClosureIsJudgedByWhatIsInsideIt(unittest.TestCase):
                                capture_output=True, text=True, timeout=600)
             errors = [line for line in (r.stdout + r.stderr).splitlines() if "error:" in line]
             self.assertEqual((r.returncode, errors), (0, []), r.stdout + r.stderr)
+
+    @unittest.skipUnless(shutil.which("swiftc"), "swiftc not installed")
+    def test_the_swift_protocol_type_checks(self):
+        # The protocol imports UIKit, SwiftUI and Combine; the members under
+        # test need none of them, so those lines are replaced by Foundation and
+        # the one Combine name the protocol uses — and the check runs wherever
+        # swiftc does, the Linux runner included.
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            swift, _ = self._synced(root)
+            body = [line for line in swift.read_text(encoding="utf-8").splitlines()
+                    if not line.startswith("import ")]
+            self.assertTrue(any("onSaveSuccess" in line for line in body))
+            checked = root / "Protocol.swift"
+            checked.write_text("import Foundation\nprotocol ObservableObject: AnyObject {}\n"
+                               "struct PriceEditData {}\nstruct Item {}\n" + "\n".join(body) + "\n",
+                               encoding="utf-8")
+            r = subprocess.run(["swiftc", "-typecheck", str(checked)], capture_output=True, text=True, timeout=600)
+            self.assertEqual(r.returncode, 0, r.stderr + checked.read_text(encoding="utf-8"))
 
     def test_a_type_inside_a_closure_with_no_spelling_still_stops_the_sync(self):
         # The control: `List<Item>` inside the closure reaches Swift as is.
