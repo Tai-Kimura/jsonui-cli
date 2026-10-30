@@ -324,9 +324,14 @@ module RjuiTools
             # A matchParent width less its margins is one calc of the width
             # and the margins together: a size class that changes either
             # draws the width the merged node has.
+            # Only the classes no mapper has written already: a size class's
+            # own width (lg:w-fit) is the width mapper's too, and was written
+            # twice from jsonui-cli 2.3.32 (ticket rjui-size-class-width-
+            # class-emitted-twice: 238 of 1050 census pairs, every one the
+            # width mapper's and this).
             calc_keys = overrides.select { |k, v| WIDTH_CALC_KEYS.include?(k) && !bound?(v) }
             if width_for && !calc_keys.empty? && (width = width_for.call(calc_keys))
-              result[:classes].concat(scoped.call(width.join(' ')))
+              result[:classes].concat(scoped.call(width.join(' ')) - result[:classes])
             end
           end
 
