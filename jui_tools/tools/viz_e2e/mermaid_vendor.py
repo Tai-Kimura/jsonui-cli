@@ -160,6 +160,17 @@ async def run_mermaid(pw, out, failures):
         plain = res["plainAfter"] = await page.evaluate("(t) => window.__dbg.mermaid(t)", PLAIN)
         check(failures, plain["svg"] and plain["nodes"] == 2, f"a diagram without directives still draws: {plain}")
 
+        # a text Mermaid cannot read, each way it fails (ticket 2026-10-30-viz-mermaid-syntax-error-bombs-at-page-bottom):
+        # it throws, and nothing stays in <body> — before, each left Mermaid's measuring element with its bomb in it
+        failing = {"syntax": "flowchart TD\n    A -->|GET /v1/x/{uuid}| B", "maxEdges": "flowchart TD\n" + "\n".join(f"    N{i} --> N{i + 1}" for i in range(520)),
+                   "empty": "", "unclosed front matter": "---\nconfig:\n  theme: dark\nflowchart TD\n    A --> B"}
+        for name, text in failing.items():
+            u = res[f"fails-{name}"] = await page.evaluate("""async (t) => { const r = await window.__dbg.mermaid(t);
+              const left = [...document.body.querySelectorAll('[id^="dmmd-"], [id^="mmd-"]')].filter((e) => !e.closest('#e2e-mermaid, #e2e-mermaid-raw')).length;
+              const bombs = [...document.querySelectorAll('svg')].filter((x) => /Syntax error in text/.test(x.textContent)).length;
+              return { error: r.error, left, bombs }; }""", text)
+            check(failures, u["error"] and u["left"] == 0 and u["bombs"] == 0, f"{name}: it throws, and nothing stays in <body>: {u}")
+
         await page.emulate_media(color_scheme="dark")
         dark = res["dark"] = await page.evaluate("(t) => window.__dbg.mermaid(t)", PLAIN)
         check(failures, dark["svg"] and dark["theme"] == "dark", f"dark page: the dark theme: {dark}")

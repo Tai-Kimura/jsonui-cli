@@ -36,6 +36,18 @@ TWOFA = {
 }
 PLAIN = {"type": "screen_spec", "version": "1.0", "metadata": {"name": "About", "displayName": "このアプリについて", "description": "d"},
          "structure": {"components": [{"type": "Label", "id": "title"}], "layout": {}}}
+#: A hand-written diagram Mermaid cannot read: an edge label holding {uuid} (13 specs of one room had this shape, 10-30)
+BROKEN = {"type": "screen_spec", "version": "1.0", "metadata": {"name": "Broken", "displayName": "壊れた図", "description": "d"},
+          "structure": {"components": [{"type": "Label", "id": "title"}], "layout": {}},
+          "dataFlow": {"diagram": "flowchart TD\n    VIEW[Page] --> VM[ViewModel]\n    VM -->|PUT /v1/items/{uuid}| BE[Backend]",
+                       "viewModel": {"vars": [{"name": "x", "type": "String"}]}}}
+#: what Mermaid left in <body> outside every box (its measuring element #dmmd-N, the svg #mmd-N) and its bombs
+LEFT_JS = """() => { const boxed = (e) => !!e.closest('.flow-mmd');
+  const stray = [...document.body.querySelectorAll('[id^="dmmd-"], [id^="mmd-"]')].filter((e) => !boxed(e)).length;
+  const bombs = [...document.querySelectorAll('svg')].filter((x) => /Syntax error in text|mermaid version/.test(x.textContent) && !boxed(x)).length;
+  const box = document.querySelector('#wb-sec-3 [data-flow-mmd]');
+  return { stray, bombs, failed: !!box && box.classList.contains('mmd-failed'), svg: !!(box && box.querySelector('svg')),
+    said: box ? getComputedStyle(box, '::before').content : null, why: box ? (box.querySelector('.mmd-why') || {}).textContent || '' : '' }; }"""
 
 STATE_JS = """() => { const sec = document.getElementById('wb-sec-3'); if (!sec) return null;
   const box = sec.querySelector('[data-flow-mmd]'), svg = box && box.querySelector('svg'), wrap = sec.querySelector('.flow-mmd');
@@ -71,6 +83,7 @@ async def run_dataflow_mermaid(pw, out, failures, jt=None, shots_only=False):
     (proj / "jui.config.json").write_text(json.dumps({"spec_directory": "docs/screens/json", "layouts_directory": "docs/screens/layouts"}))
     (proj / "docs" / "screens" / "json" / "two_factor.spec.json").write_text(json.dumps(TWOFA, ensure_ascii=False))
     (proj / "docs" / "screens" / "json" / "about.spec.json").write_text(json.dumps(PLAIN, ensure_ascii=False))
+    (proj / "docs" / "screens" / "json" / "broken.spec.json").write_text(json.dumps(BROKEN, ensure_ascii=False))
     jt = pathlib.Path(jt) if jt else pathlib.Path(__file__).resolve().parents[2]
     forward = jt / "jui_cli" / "viz" / "forward.py"
     port = free_port()
@@ -154,6 +167,30 @@ async def run_dataflow_mermaid(pw, out, failures, jt=None, shots_only=False):
         await page.wait_for_timeout(1500)
         plain = res["plain"] = await page.evaluate(STATE_JS)
         check(failures, plain is None or not plain["diagram"], f"no data flow: no diagram: {plain}")
+
+        # a diagram Mermaid cannot read (ticket 2026-10-30-viz-mermaid-syntax-error-bombs-at-page-bottom): its box says so,
+        # with the reason in one line, and nothing is left in <body> — Mermaid drew its bomb there and left it, one more
+        # each time the sheet was drawn again (11, 26, 38 after 1, 2, 3 openings on 6ea5322e)
+        renders = []
+        for k in range(2):
+            await page.click("#wb-side-list [data-idx]:has-text('壊れた図')")
+            await wait(page, "() => { const b = document.querySelector('#wb-sec-3 [data-flow-mmd]'); return b && b.classList.contains('mmd-failed'); }",
+                       label=f"the broken diagram's box ({k + 1})")
+            await page.wait_for_timeout(800)
+            b = res[f"broken{k + 1}"] = await page.evaluate(LEFT_JS)
+            renders.append(await page.evaluate("() => window.__dbg.mermaidRenders()"))
+            check(failures, b["stray"] == 0 and b["bombs"] == 0, f"opened {k + 1}: nothing left in <body> (Mermaid's element, its bomb): {b}")
+            check(failures, b["failed"] and not b["svg"] and T("css.flow.mmd.failed") in (b["said"] or "")
+                  and b["why"].startswith("Parse error on line 3:") and "{uuid}" in b["why"] and "\n" not in b["why"],
+                  f"opened {k + 1}: the box says it cannot draw, and why in one line: {b}")
+            if k == 0:
+                await page.evaluate("() => document.getElementById('wb-sec-3').scrollIntoView({ block: 'start' })")
+                await page.wait_for_timeout(300)
+                await page.screenshot(path=str(out / "broken-diagram.png"))
+                await page.screenshot(path=str(out / "broken-diagram-page.png"), full_page=True)
+            await page.click("#wb-side-list [data-idx]:has-text('このアプリについて')")
+            await page.wait_for_timeout(800)
+        check(failures, renders[0] == renders[1], f"opened again, the text that failed is not handed to Mermaid again: renders {renders}")
 
         res["mermaidAsked"] = [u for u in asked if "mermaid" in u]
         check(failures, res["mermaidAsked"] == [f"{url}/vendor/mermaid-11.17.2/mermaid.min.js"], f"Mermaid read once, from the server: {res['mermaidAsked']}")

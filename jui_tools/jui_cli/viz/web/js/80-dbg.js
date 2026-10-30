@@ -454,6 +454,7 @@ window.__dbg = {
       open: ds.open, tab: ds.tab, loading: ds.loading, error: ds.error, api: ds.doc ? ds.doc.api.length : null, db: ds.doc ? ds.doc.db.length : null };
   },
   mermaidSafeText: (t) => mermaidSafeText(t),   // the text as it is handed to Mermaid (2.3.5)
+  mermaidRenders: () => MERMAID.n,   // how many times Mermaid was asked to render (a failed text is not asked again)
   mermaidSafeSvg: (svg) => mermaidSafeSvg(svg),  // the drawn SVG as it goes into the page
   // the `secure` lock alone: the text drawn WITHOUT mermaidSafeText (this test hook only; the page never does)
   mermaidRenderUnsanitized: async (text) => {

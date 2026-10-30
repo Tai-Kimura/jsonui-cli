@@ -50,7 +50,7 @@ const writePref = (key, value) => { try { localStorage.setItem(`agent-view:${key
    text is a spec's, so labels are sanitized and no click / script in a diagram runs. htmlLabels off: a label is SVG
    text, never HTML (with HTML labels, strict still lets an <img src> through and the page fetched it — measured
    10-19). The theme follows the page's. */
-const MERMAID = { src: 'vendor/mermaid-11.17.2/mermaid.min.js', loading: null, theme: '', n: 0, drawn: new Map() };
+const MERMAID = { src: 'vendor/mermaid-11.17.2/mermaid.min.js', loading: null, theme: '', n: 0, drawn: new Map(), failed: new Map() };
 function loadMermaid() {
   if (!MERMAID.loading) {
     MERMAID.loading = new Promise((resolve, reject) => {
@@ -96,26 +96,61 @@ async function mermaidDraw(el, text, cleanText) {
   if (MERMAID.theme !== theme) {
     // every key of Mermaid's own config is secure (no diagram changes any: class.htmlLabels got through a list of names)
     const secure = [...new Set([...MERMAID_SECURE, ...Object.keys(mm.mermaidAPI.getConfig())])];
+    // suppressErrorRendering: a text Mermaid cannot read throws, and nothing is drawn for it — Mermaid drew its bomb
+    // ("Syntax error in text") into the element it measures in, at the end of <body>, and left it there, one more each
+    // time the panel was drawn again (ticket 2026-10-30-viz-mermaid-syntax-error-bombs-at-page-bottom)
     mm.initialize({ startOnLoad: false, securityLevel: 'strict', theme, fontFamily: 'var(--font-body)', htmlLabels: false, flowchart: { htmlLabels: false },
-      class: { htmlLabels: false }, er: { useMaxWidth: false }, secure });
+      class: { htmlLabels: false }, er: { useMaxWidth: false }, suppressErrorRendering: true, secure });
     MERMAID.theme = theme;
   }
   MERMAID.n += 1;
-  const svg = mermaidSafeSvg((await mm.render(`mmd-${MERMAID.n}`, cleanText ? mermaidSafeText(text) : String(text))).svg);
+  const id = `mmd-${MERMAID.n}`;
+  let drawn;
+  try {
+    drawn = await mm.render(id, cleanText ? mermaidSafeText(text) : String(text));
+  } catch (err) {
+    // what render put in <body> to measure the diagram (#d<id>, holding #<id>) goes with it
+    for (const left of [document.getElementById(`d${id}`), document.getElementById(id)]) if (left && !el.contains(left)) left.remove();
+    throw err;
+  }
+  const svg = mermaidSafeSvg(drawn.svg);
   el.innerHTML = svg;   // Mermaid's own SVG, its labels sanitized (securityLevel 'strict')
   el.dataset.theme = theme;
   if (MERMAID.drawn.size >= 40) MERMAID.drawn.clear();
   MERMAID.drawn.set(`${theme}\n${text}`, svg);
   return el.querySelector('svg');
 }
-/* A diagram in a box the panels rebuild: the same text in the same theme is drawn once and put back as it was. */
+/* A diagram in a box the panels rebuild: the same text in the same theme is drawn once and put back as it was. A text
+   that could not be drawn is not tried again: the box says so, with Mermaid's reason in one line (the failure is kept as
+   the drawing is, per text and theme). */
 function drawMermaid(el, text) {
   const theme = isDark() ? 'dark' : 'default', key = `${theme}\n${text}`;
   if (el.dataset.drawn === key) return Promise.resolve(el.querySelector('svg'));
   el.dataset.drawn = key;
   const svg = MERMAID.drawn.get(key);
   if (svg) { el.innerHTML = svg; el.dataset.theme = theme; return Promise.resolve(el.querySelector('svg')); }   // drawn before (strict)
-  return renderMermaid(el, text).catch(() => { delete el.dataset.drawn; el.classList.add('mmd-failed'); return null; });
+  if (MERMAID.failed.has(key)) { mermaidFailed(el, MERMAID.failed.get(key)); return Promise.resolve(null); }
+  return renderMermaid(el, text).catch((err) => {
+    const why = mermaidWhy(err);
+    if (MERMAID.failed.size >= 40) MERMAID.failed.clear();
+    MERMAID.failed.set(key, why);
+    if (el.dataset.drawn === key) mermaidFailed(el, why);
+    return null;
+  });
+}
+/* Mermaid's message in one line: its first, and when that only says where ("Parse error on line 3:"), the text it
+   points at. */
+function mermaidWhy(err) {
+  const lines = String((err && err.message) || err || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  const why = lines[0] && lines[0].endsWith(':') && lines[1] ? `${lines[0]} ${lines[1]}` : lines[0] || '';
+  return why.length > 160 ? `${why.slice(0, 159)}…` : why;
+}
+function mermaidFailed(el, why) {
+  el.classList.add('mmd-failed');
+  const line = document.createElement('small');
+  line.className = 'mmd-why';
+  line.textContent = why;
+  el.replaceChildren(line);
 }
 const ROLE_JA = { main: tl('core.role.main'), define: tl('core.role.define'), ground: tl('core.role.ground'), implement: tl('core.role.implement'), navigation: tl('core.role.navigation'), test: tl('core.role.test'), debug: tl('core.role.debug'), other: tl('core.role.other') };
 const SECTIONS = [tl('core.sec.metadata'), tl('core.sec.structure'), tl('core.sec.state'), tl('core.sec.data'), tl('core.sec.actions'), tl('core.sec.transitions'), tl('core.sec.branches')];
