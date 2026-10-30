@@ -177,6 +177,9 @@ module RjuiTools
       # the structural keys by nobody.
       HANDLED_ELSEWHERE = %w[gravity type child data responsive].freeze
 
+      # The keys a matchParent width's calc reads (BaseConverter#horizontal_margins).
+      WIDTH_CALC_KEYS = %w[width leftMargin rightMargin startMargin endMargin margins].freeze
+
       # Why an attribute a size class names is not drawn on web, by the shape
       # it has there. Every other key gets the generic reason.
       UNDRAWN_REASONS = {
@@ -239,7 +242,10 @@ module RjuiTools
         # *carry*: a callable (BaseConverter#carry_size_class) given the keys
         # of one size class that no mapper draws, answering { tokens:, refused:
         # { key => why } }; without it those keys are said, as before.
-        def build_responsive(component, carry = nil)
+        # *width_for*: a callable (BaseConverter#size_class_width) given the
+        # width and horizontal-margin keys of one size class, answering the
+        # node's width classes with them merged in, or nil when unchanged.
+        def build_responsive(component, carry = nil, width_for = nil)
           result = {
             classes: [],
             carried: [],
@@ -311,6 +317,14 @@ module RjuiTools
 
             responsive_gravity_classes(component, overrides).each do |cls|
               result[:classes].concat(scoped.call(cls))
+            end
+
+            # A matchParent width less its margins is one calc of the width
+            # and the margins together: a size class that changes either
+            # draws the width the merged node has.
+            calc_keys = overrides.select { |k, v| WIDTH_CALC_KEYS.include?(k) && !bound?(v) }
+            if width_for && !calc_keys.empty? && (width = width_for.call(calc_keys))
+              result[:classes].concat(scoped.call(width.join(' ')))
             end
           end
 

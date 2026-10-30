@@ -128,7 +128,7 @@ module RjuiTools
           @dynamic_styles = {}
 
           # Compute responsive info up front so we know which keys are overridden
-          @responsive_result = ResponsiveHelper.build_responsive(json, method(:carry_size_class))
+          @responsive_result = ResponsiveHelper.build_responsive(json, method(:carry_size_class), method(:size_class_width))
 
           # Overlay child. A stacked overlay (ViewConverter#stacked_overlay?)
           # puts every child in the one grid cell; any other overlay positions
@@ -143,19 +143,17 @@ module RjuiTools
           end
 
           # Width/Height - handle matchParent with horizontal margin
-          left_margin = attributes['leftMargin'] || attributes['startMargin'] || 0
-          right_margin = attributes['rightMargin'] || attributes['endMargin'] || 0
-          has_horizontal_margin = left_margin.is_a?(Numeric) && left_margin > 0 ||
-                                  right_margin.is_a?(Numeric) && right_margin > 0
+          left_margin, right_margin = horizontal_margins
+          has_horizontal_margin = left_margin > 0 || right_margin > 0
 
           if apply_bound_dimension('width')
             # The bound value owns the width; no Tailwind class can carry it.
           elsif attributes['width'] == 'matchParent' && has_horizontal_margin
-            # Use calc to account for margins
-            total_margin = (left_margin.is_a?(Numeric) ? left_margin : 0) +
-                          (right_margin.is_a?(Numeric) ? right_margin : 0)
-            # In rem, as the margins themselves are (TailwindMapper.rem).
-            @dynamic_styles['width'] = "'calc(100% - #{TailwindMapper.rem(total_margin)})'"
+            # The parent's width less the margins, in rem as the margins
+            # themselves are (TailwindMapper.rem) — a class, not an inline
+            # style, so a size class's width can replace it (until jsonui-cli
+            # 2.3.32 it was inline and beat every size class's width).
+            classes << "w-[calc(100%_-_#{TailwindMapper.rem(left_margin + right_margin)})]"
           else
             classes << TailwindMapper.map_width(attributes['width'])
           end
@@ -759,6 +757,47 @@ module RjuiTools
             end
           end
           out.join(' ')
+        end
+
+        # The static horizontal margins a matchParent width leaves room for,
+        # [left, right] in px: leftMargin, else startMargin, else the left of
+        # `margins`; the same on the right. A bound one counts as 0 — its
+        # margin is an inline style, and so is not the calc's to know. Until
+        # jsonui-cli 2.3.32 `margins` was left out, and a matchParent width
+        # with `margins` was 100% plus them, past its parent.
+        def horizontal_margins
+          from_margins = lambda do |side|
+            m = attributes['margins']
+            m = [m] if m.is_a?(Numeric)
+            next nil unless m.is_a?(Array) && m.all? { |v| v.is_a?(Numeric) }
+
+            case m.length
+            when 1 then m[0]
+            when 2 then m[1]
+            when 4 then side == :left ? m[3] : m[1]
+            end
+          end
+          pick = ->(*values) { values.find { |v| v.is_a?(Numeric) } || 0 }
+          [pick.(attributes['leftMargin'], attributes['startMargin'], from_margins.(:left)),
+           pick.(attributes['rightMargin'], attributes['endMargin'], from_margins.(:right))]
+        end
+
+        # A size class that changes the width or a horizontal margin: this
+        # converter's width class for the node with those keys merged in,
+        # when it differs from the base's — the calc of the new margins, a
+        # full width, a fixed one (ResponsiveHelper scopes it). Until jsonui-
+        # cli 2.3.32 the calc stayed the base's in every window (ticket
+        # rjui-matchparent-margin-calc-width-ignores-responsive-margin): a
+        # leftMargin 44 set to 0 below 768px left a 44px gap on the right.
+        # nil when nothing changes.
+        def size_class_width(keys)
+          base_node = json.reject { |k, _| k == 'responsive' }
+          width = ->(drawn) { drawn && drawn[:tokens].select { |t| t.match?(/\Aw-/) } }
+          base = width.(drawn_classes(base_node))
+          merged = width.(drawn_classes(base_node.merge(keys)))
+          return nil if base.nil? || merged.nil? || base.sort == merged.sort
+
+          merged
         end
 
         # A size class's keys no ResponsiveHelper mapper carries, carried the
