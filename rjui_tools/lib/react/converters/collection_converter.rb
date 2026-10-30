@@ -245,7 +245,7 @@ module RjuiTools
             @padding_box_pass = false
             @padding_box = { classes: finalize_classes([box_classes, 'flex flex-col']), styles: @dynamic_styles }
             @dynamic_styles = {}
-            classes = ['flex-1 min-w-0 min-h-0', *children_layout_classes]
+            classes = ['flex-1 min-w-0 min-h-0', *children_layout_classes, *(@responsive_result && @responsive_result[:carried])]
           else
             classes = [super]
           end
@@ -405,6 +405,12 @@ module RjuiTools
         # (content_inset_classes), not with BaseConverter's padding classes.
         def owns_insets?
           true
+        end
+
+        # With a padding box the id — and the carried size-class classes,
+        # measured on the element with the id — are on the scroll container.
+        def carries_size_classes_inside?
+          !!@padding_box_pass
         end
 
         # On the padding box's pass through BaseConverter the cells' layout

@@ -81,16 +81,18 @@ RSpec.describe 'a responsive override is drawn, or the build says it is not' do
   end
 
   describe 'what the build says' do
+    # (alignRight is drawn since jsonui-cli 2.3.31 — the converter's own
+    # classes for the merged node, BaseConverter#carry_size_class — and a
+    # border key's reason says what it lacks.)
     it 'names the type, the id, the size class, the key and why, once each' do
       _jsx, said = emit(label('responsive' => { 'regular' => { 'offsetX' => 4, 'secure' => true, 'minHeight' => '@{h}',
                                                                'borderWidth' => 2, 'alignRight' => true } }))
       lines = said.lines.map { |l| l.sub(/\e\[\d+m\[WARN\]\e\[0m /, '').strip }
       expect(lines).to contain_exactly(
         "Label 'l': responsive 'regular' sets 'offsetX', which is not drawn on web — the web draws an offset as an inline transform, which no class can replace",
-        "Label 'l': responsive 'regular' sets 'secure', which is not drawn on web — the web switches a size class by classes, and this attribute is not one a class carries",
+        "Label 'l': responsive 'regular' sets 'secure', which is not drawn on web — the web draws nothing for it here",
         "Label 'l': responsive 'regular' sets 'minHeight', which is not drawn on web — a bound value exists at run time only, and a size class is switched by classes",
-        "Label 'l': responsive 'regular' sets 'borderWidth', which is not drawn on web — the web draws a border by the type (an ::after, a border or an outline), so a class cannot switch it alone",
-        "Label 'l': responsive 'regular' sets 'alignRight', which is not drawn on web — a relative position is laid out by the parent, not by a class of the node"
+        "Label 'l': responsive 'regular' sets 'borderWidth', which is not drawn on web — a border is drawn by borderWidth and borderColor together, and this node has not both"
       )
     end
 

@@ -203,7 +203,7 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
         }
         result = described_class.build_responsive(component)
 
-        expect(result[:classes]).to include('max-md:flex-[2.5] max-md:min-w-0 max-md:min-h-0')
+        expect(result[:classes]).to include('max-md:flex-[2.5]', 'max-md:min-w-0', 'max-md:min-h-0')
       end
 
       it 'emits md:flex-1 for medium weight 1 override' do
@@ -216,7 +216,7 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
         }
         result = described_class.build_responsive(component)
 
-        expect(result[:classes]).to include('md:max-lg:flex-1 md:max-lg:min-w-0 md:max-lg:min-h-0')
+        expect(result[:classes]).to include('md:max-lg:flex-1', 'md:max-lg:min-w-0', 'md:max-lg:min-h-0')
       end
 
       # Regression: rjui-responsive-gravity-override-not-emitted — gravity was
@@ -369,7 +369,7 @@ RSpec.describe RjuiTools::React::ResponsiveHelper do
         }
         result = described_class.build_responsive(component)
 
-        expect(result[:classes]).to include('lg:py-[1rem] lg:px-[2rem]')
+        expect(result[:classes]).to include('lg:py-[1rem]', 'lg:px-[2rem]')
         expect(result[:classes]).not_to include('py-[0.5rem] px-[1rem]')
       end
     end

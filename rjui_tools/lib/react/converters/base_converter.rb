@@ -17,6 +17,8 @@ require_relative '../nested_taps'
 require_relative '../../core/string_literals'
 require_relative '../../core/bind_fold'
 require_relative '../tailwind_mapper'
+require 'json'
+require 'stringio'
 require_relative '../responsive_helper'
 require_relative '../helpers/string_manager_helper'
 require_relative '../helpers/font_spec_helper'
@@ -126,7 +128,7 @@ module RjuiTools
           @dynamic_styles = {}
 
           # Compute responsive info up front so we know which keys are overridden
-          @responsive_result = ResponsiveHelper.build_responsive(json)
+          @responsive_result = ResponsiveHelper.build_responsive(json, method(:carry_size_class))
 
           # Overlay child. A stacked overlay (ViewConverter#stacked_overlay?)
           # puts every child in the one grid cell; any other overlay positions
@@ -689,6 +691,12 @@ module RjuiTools
           if @responsive_result && !@responsive_result[:classes].empty?
             classes.concat(@responsive_result[:classes])
           end
+          # The carried size-class classes (carry_size_class) go on the element
+          # they were measured on — the one with the node's id; a converter
+          # whose id is on an inner element places them there itself.
+          if @responsive_result && !@responsive_result[:carried].empty? && !carries_size_classes_inside?
+            classes.concat(@responsive_result[:carried])
+          end
 
           finalize_classes(classes)
         end
@@ -751,6 +759,199 @@ module RjuiTools
             end
           end
           out.join(' ')
+        end
+
+        # A size class's keys no ResponsiveHelper mapper carries, carried the
+        # way iOS and Android draw a size class — the node redrawn with the
+        # keys merged in: this converter's own classes for that node, less its
+        # classes without them, scoped by the size class's variants. Until
+        # jsonui-cli 2.3.31 every such key was said and not drawn (a
+        # Collection's columns and lineSpacing, a border's colour and width,
+        # ticket rjui-responsive-columns-linespacing-border-not-drawn).
+        #
+        # A key is carried only when the merged node differs by classes it
+        # ADDS: a class the base draws that the merged node drops cannot be
+        # taken away under a variant, and an inline style or a markup change
+        # is no class at all. Those are refused, with why. The keys are tried
+        # together first (a border is drawn by its width and colour as a
+        # pair), then one by one.
+        #
+        # Returns { tokens: [class, …], refused: { key => why } }.
+        def carry_size_class(keys)
+          base_node = json.reject { |k, _| k == 'responsive' }
+          base = drawn_classes(base_node)
+          return { tokens: [], refused: keys.keys.to_h { |k| [k, nil] } } unless base
+
+          attempt = lambda do |subset|
+            merged = drawn_classes(base_node.merge(subset))
+            next 'it could not be converted on its own here' unless merged
+            next 'the web draws it in an inline style or the markup here, which no class can switch' if merged[:styles] != base[:styles]
+
+            added = merged[:tokens] - base[:tokens]
+            dropped = (base[:tokens] - merged[:tokens]).reject { |t| replaced_by?(t, added) }
+            # A border taken away (borderWidth 0): the classes that draw it
+            # stay, and a reset for the way the base draws it zeroes it.
+            if (resets = border_removal_resets(subset, dropped))
+              added += resets
+              dropped = []
+            end
+            unless dropped.empty?
+              next "the base draws #{dropped.first(3).join(' ')}, which it drops, and a size class cannot take a class away"
+            end
+
+            if added.empty?
+              next 'a border is drawn by borderWidth and borderColor together, and this node has not both' if (subset.keys & %w[borderWidth borderColor]).any?
+
+              next 'the web draws nothing for it here'
+            end
+            next 'its classes are run-time expressions' if added.any? { |t| t.include?('${') || t.include?('}') }
+
+            added
+          end
+
+          together = attempt.call(keys)
+          return { tokens: together, refused: {} } if together.is_a?(Array)
+
+          tokens = []
+          refused = {}
+          keys.each do |key, value|
+            alone = attempt.call(key => value)
+            if alone.is_a?(Array)
+              tokens.concat(alone)
+            else
+              refused[key] = alone
+            end
+          end
+          { tokens: tokens.uniq, refused: refused }
+        end
+
+        # Whether this converter puts the carried size-class classes on an
+        # inner element itself (CollectionConverter's scroll box inside its
+        # padding box).
+        def carries_size_classes_inside?
+          false
+        end
+
+        # The classes a declared border is drawn by: an ::after (pseudo_border_
+        # classes, with the `relative` it needs), an outline, or a CSS border.
+        BORDER_DRAWING = /\A(?:after:(?:absolute|inset-0|rounded-\[inherit\]|pointer-events-none|border\S*)|relative|outline\S*|border\S*)\z/.freeze
+
+        # The resets that take away a border a size class sets to no width —
+        # `after:border-0`, `outline-0` or `border-0`, as the base draws it —
+        # when every class the merged node drops is one that draws the
+        # border; nil otherwise.
+        def border_removal_resets(subset, dropped)
+          width = subset['borderWidth']
+          return nil unless width.is_a?(Numeric) && width <= 0 && !dropped.empty?
+          return nil unless dropped.all? { |t| t.match?(BORDER_DRAWING) }
+
+          resets = []
+          resets << 'after:border-0' if dropped.any? { |t| t.start_with?('after:border') }
+          resets << 'outline-0' if dropped.any? { |t| t.start_with?('outline') }
+          resets << 'border-0' if dropped.any? { |t| t.start_with?('border') }
+          resets.empty? ? nil : resets
+        end
+
+        DISPLAY_FAMILY = %w[flex inline-flex grid inline-grid block inline-block inline contents hidden].freeze
+
+        # Whether a base class the merged node no longer draws is overridden
+        # by one it adds: a class of the same utility with another value
+        # (grid-cols-3 by grid-cols-1, after:border-[#000] by
+        # after:border-[#f00]), whose scoped variant comes later and wins; or a
+        # grid's column / row template once the display is no grid's.
+        def replaced_by?(token, added)
+          families = added.map { |t| utility_family(t) }
+          return true if families.include?(utility_family(token))
+
+          # a gap by the gap of each axis (a list's gap, a grid's gap-x and
+          # gap-y), and one axis's gap by the gap of both
+          *variants, util = split_variants(token)
+          if (m = util.match(/\Agap-(.*)\z/)) && !util.start_with?('gap-x', 'gap-y')
+            axis = ->(a) { utility_family((variants + ["gap-#{a}-#{m[1]}"]).join(':')) }
+            return true if families.include?(axis.call('x')) && families.include?(axis.call('y'))
+          end
+          if (m = util.match(/\Agap-[xy]-(.*)\z/))
+            return true if families.include?(utility_family((variants + ["gap-#{m[1]}"]).join(':')))
+          end
+
+          # A layout utility of the display the size class replaces: a grid's
+          # templates once it is no grid, a flex row's direction and wrap
+          # once it is no flex.
+          util = split_variants(token).last
+          new_display = added.map { |t| split_variants(t).last }.find { |u| DISPLAY_FAMILY.include?(u) }
+          return false unless new_display
+
+          new_utils = added.map { |t| split_variants(t).last }
+          (util.match?(/\Agrid-(cols|rows|flow)-/) && !new_display.include?('grid')) ||
+            (util.match?(/\Aflex-(row|col|row-reverse|col-reverse|wrap|nowrap|wrap-reverse)\z/) && !new_display.include?('flex')) ||
+            # the gap between columns, once the cells are one column of a flex column
+            (util.start_with?('gap-x-') && new_display == 'flex' && new_utils.include?('flex-col'))
+        end
+
+        # A class split at the colons outside brackets: [variant, …, utility]
+        # (`after:border-[length:1px]` → ["after", "border-[length:1px]"]).
+        def split_variants(token)
+          parts = ['']
+          depth = 0
+          token.each_char do |ch|
+            depth += 1 if ch == '['
+            depth -= 1 if ch == ']'
+            if ch == ':' && depth.zero?
+              parts << ''
+            else
+              parts[-1] += ch
+            end
+          end
+          parts
+        end
+
+        # A class's utility, without its value: its variants, then its name
+        # less the value (`lg:grid-cols-3` → `lg:grid-cols`, `gap-y-[0.5rem]`
+        # → `gap-y-[length]`, `after:border-[#f00]` → `after:border-[color]`,
+        # a display utility → `display`).
+        def utility_family(token)
+          *variants, util = split_variants(token)
+          util = util.to_s.sub(/\A-/, '')
+          family =
+            if (m = util.match(/\A(.*?)-\[(.*)\]\z/))
+              value = m[2]
+              kind = if value.start_with?('length:') || value.match?(/\A-?[\d.]/) then 'length'
+                     elsif value.start_with?('#', 'color:', 'rgb', 'hsl', 'var(--jui-') then 'color'
+                     else value
+                     end
+              "#{m[1]}-[#{kind}]"
+            elsif DISPLAY_FAMILY.include?(util) then 'display'
+            elsif util.match?(/\A(border|outline)(-\d+)?\z/) then "#{util[/\A[a-z]+/]}-[length]"
+            elsif (m = util.match(/\A(border|outline)-(solid|dashed|dotted|double|none|hidden)\z/)) then "#{m[1]}-style"
+            elsif (m = util.match(%r{\A(.*)-(\d+(?:\.\d+)?|\d+/\d+|px|full|auto|none|xs|sm|md|lg|xl|\dxl)\z}))
+              m[1]
+            else util
+            end
+          (variants + [family]).join(':')
+        end
+
+        # A fresh converter of this class for *node* (no responsive block, so
+        # no recursion), drawn whole: its root className's tokens, and the rest
+        # of its markup (every other attribute and element, inline styles
+        # included — a converter may write one outside build_class_name, as
+        # TextView writes its border), or nil when it cannot be drawn here.
+        def drawn_classes(node)
+          old = $stdout
+          $stdout = StringIO.new
+          jsx = self.class.new(JSON.parse(JSON.generate(node)), @config).convert_node(0).to_s
+          # The element the size class's classes land on: the one with the
+          # node's id (a Collection with insets wraps its scroll box in a
+          # padding box), else the first.
+          id = node['id'].to_s
+          tag = (!id.empty? && jsx.match(/<[A-Za-z][^<>]*?\bid="#{Regexp.escape(id)}"[^<>]*?>/m)) || nil
+          root = (tag ? tag[0] : jsx).match(/className=(?:"([^"]*)"|\{`([^`]*)`\})/)
+          return nil unless root
+
+          { tokens: (root[1] || root[2]).split(/\s+/).reject(&:empty?), styles: jsx.sub(root[0], '') }
+        rescue StandardError
+          nil
+        ensure
+          $stdout = old
         end
 
         # The inline style keys a bound attribute writes (BaseConverter and
