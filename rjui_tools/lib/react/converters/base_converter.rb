@@ -658,8 +658,11 @@ module RjuiTools
             classes << reversed_class unless reversed_class.empty?
           end
 
-          # Additional className from JSON
-          classes << attributes['className'] if attributes['className']
+          # Additional className from JSON — on a still box, without the
+          # classes that scroll (still_box_pass?)
+          if attributes['className']
+            classes << (still_box_pass? ? split_scroll_class_name[:outside].join(' ') : attributes['className'])
+          end
 
           # Offset (position adjustment) - handled as dynamic style
           if attributes['offsetX'] || attributes['offsetY']
@@ -887,6 +890,63 @@ module RjuiTools
         # padding box).
         def carries_size_classes_inside?
           false
+        end
+
+        # Whether this pass draws the still box around a scroll box (a
+        # ScrollView's or a Collection's border or padding box): the
+        # className's classes that say how the box scrolls go on the scroll
+        # box inside it (split_scroll_class_name).
+        def still_box_pass?
+          false
+        end
+
+        #: A className's classes that say how a box scrolls or clips its
+        #: content, whatever the variants written before them.
+        SCROLL_UTILITY = /\A(?:overflow-(?:x-|y-)?(?:auto|scroll|hidden|clip|visible)|overscroll-\S+|scroll-\S+|snap-\S+|scrollbar-\S+)\z/.freeze
+        #: Of those, the ones that stop a box scrolling: on both axes, or on
+        #: the one the box scrolls along (scroll_axis_letter); an overflow-x-
+        #: hidden on a box that scrolls down clips it across, as written.
+        STOPS_SCROLLING = /\Aoverflow-((?:x-|y-)?)(?:hidden|clip|visible)\z/.freeze
+
+        # The className of a box drawn as a still box around a scroll box,
+        # split: what goes on the scroll box (:inside) — overflow-*,
+        # overscroll-*, scroll-*, snap-*, scrollbar-* — and what stays on the
+        # still box (:outside), with the overflow hidden / clip / visible
+        # classes that would stop the scroll box (:stops), which stay there
+        # and are said at build (warn_class_name_stops_scrolling). Until
+        # jsonui-cli 2.3.34 the whole className was on the still box, which
+        # does not scroll: measured in Chromium, its scrollHeight was its
+        # clientHeight in every shape tried, so the border never moved, and
+        # the classes that steer a scroll did nothing there (ticket
+        # rjui-scrollview-classname-overflow-makes-outer-box-scroll). A bound
+        # className is left whole on the still box.
+        def split_scroll_class_name
+          @split_scroll_class_name ||= begin
+            class_name = attributes['className'].to_s
+            tokens = has_binding?(class_name) ? [class_name] : class_name.split
+            utility = ->(t) { t.sub(/\A.*:/, '').delete_prefix('!').delete_suffix('!') }
+            scroll = tokens.select { |t| !has_binding?(t) && utility.(t).match?(SCROLL_UTILITY) }
+            stops = scroll.select do |t|
+              (axis = utility.(t)[STOPS_SCROLLING, 1]) && (axis.empty? || axis.start_with?(scroll_axis_letter))
+            end
+            { inside: scroll - stops, outside: tokens - (scroll - stops), stops: stops }
+          end
+        end
+
+        # The axis a still box's scroll box scrolls along, 'x' or 'y'.
+        def scroll_axis_letter
+          'y'
+        end
+
+        def warn_class_name_stops_scrolling
+          stops = split_scroll_class_name[:stops]
+          return if stops.empty?
+
+          id = attributes['id'] ? "'#{attributes['id']}'" : '(no id)'
+          Core::Logger.warn(
+            "#{json['type']} #{id}: className '#{stops.join(' ')}' is not written on the box that scrolls (it would stop it " \
+            'scrolling) — write scrollEnabled: false to stop the scrolling, or remove it'
+          )
         end
 
         # The classes a declared border is drawn by: an ::after (pseudo_border_

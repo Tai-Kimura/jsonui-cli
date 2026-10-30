@@ -63,6 +63,10 @@ module RjuiTools
           !!@box_pass
         end
 
+        def still_box_pass?
+          !!@box_pass
+        end
+
         # `defaultScrollAnchor` says where the view STARTS, which no CSS
         # property expresses — the scroll offset has to be written once on
         # mount. The generator hoists the ref and the effect (the same
@@ -75,6 +79,10 @@ module RjuiTools
         # content unbounded on that axis.
         def scroll_axis
           attributes['horizontalScroll'] || attributes['orientation'] == 'horizontal' ? 'width' : 'height'
+        end
+
+        def scroll_axis_letter
+          scroll_axis == 'width' ? 'x' : 'y'
         end
 
         def build_scroll_ref_attr
@@ -102,8 +110,14 @@ module RjuiTools
             @box_pass = false
             @still_box = { classes: finalize_classes([box_classes, 'flex flex-col']), styles: @dynamic_styles }
             @dynamic_styles = {}
-            classes = ['flex-1 min-w-0 min-h-0', ('rounded-[inherit]' if attributes['cornerRadius']), *children_layout_classes,
+            # isolate: the children's z-index stays inside the scroll box, so
+            # the still box's ::after border is drawn over a sticky header
+            # (z-10) or a cell with a z-index, which covered it until
+            # jsonui-cli 2.3.34 (ticket rjui-sticky-child-covers-still-box-
+            # border; an overlay a portal draws is not inside it).
+            classes = ['flex-1 min-w-0 min-h-0', 'isolate', ('rounded-[inherit]' if attributes['cornerRadius']), *children_layout_classes,
                        *(@responsive_result && @responsive_result[:carried])]
+            warn_class_name_stops_scrolling
           else
             classes = [super]
           end
@@ -172,6 +186,7 @@ module RjuiTools
             classes << 'scroll-p-0'
           end
 
+          classes.concat(split_scroll_class_name[:inside]) if @still_box
           finalize_classes(classes)
         end
 

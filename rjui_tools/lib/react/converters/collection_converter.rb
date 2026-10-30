@@ -254,8 +254,14 @@ module RjuiTools
             @padding_box = { classes: finalize_classes([box_classes, 'flex flex-col']), styles: @dynamic_styles }
             @dynamic_styles = {}
             # the scroll box clips its cells to the box's corners
-            classes = ['flex-1 min-w-0 min-h-0', ('rounded-[inherit]' if attributes['cornerRadius']), *children_layout_classes,
+            # isolate: the children's z-index stays inside the scroll box, so
+            # the still box's ::after border is drawn over a sticky header
+            # (z-10) or a cell with a z-index, which covered it until
+            # jsonui-cli 2.3.34 (ticket rjui-sticky-child-covers-still-box-
+            # border; an overlay a portal draws is not inside it).
+            classes = ['flex-1 min-w-0 min-h-0', ('isolate' if border_box?), ('rounded-[inherit]' if attributes['cornerRadius']), *children_layout_classes,
                        *(@responsive_result && @responsive_result[:carried])]
+            warn_class_name_stops_scrolling if scroll_box?
           else
             classes = [super]
           end
@@ -407,7 +413,7 @@ module RjuiTools
             classes << 'scroll-p-0'
           end
 
-
+          classes.concat(split_scroll_class_name[:inside]) if @padding_box && scroll_box?
           finalize_classes(classes)
         end
 
@@ -421,6 +427,16 @@ module RjuiTools
         # measured on the element with the id — are on the scroll container.
         def carries_size_classes_inside?
           !!@padding_box_pass
+        end
+
+        # A padding box around a scroll box that scrolls (a Collection whose
+        # lazy is none scrolls in its parent, and keeps its className whole)
+        def scroll_axis_letter
+          horizontal_collection? && !flow_collection? ? 'x' : 'y'
+        end
+
+        def still_box_pass?
+          !!@padding_box_pass && scroll_box?
         end
 
         # On the padding box's pass through BaseConverter the cells' layout
