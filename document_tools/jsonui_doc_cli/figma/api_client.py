@@ -51,8 +51,17 @@ _URL_PATTERN = re.compile(
 _NODE_ID_PATTERN = re.compile(r"node-id=([^&]+)")
 
 
+# The spinner's thread name: the arms count the threads left alive by it.
+SPINNER_THREAD_NAME = "figma-spinner"
+
+
 class _Spinner:
-    """Simple CLI spinner for long-running requests."""
+    """Simple CLI spinner for long-running requests.
+
+    Every caller stops it in a ``finally``: whatever ``_open`` or ``read`` raises (a refused redirect, a read
+    timeout, Ctrl-C), the thread is joined before the call returns. A thread left spinning writes to stderr while
+    the interpreter shuts down, and Python aborts there (exit 134) — ticket
+    2026-10-31-ci-python-suite-figma-spinner-thread-aborts-at-shutdown."""
 
     _CHARS = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
@@ -62,7 +71,7 @@ class _Spinner:
         self._thread: threading.Thread | None = None
 
     def start(self) -> "_Spinner":
-        self._thread = threading.Thread(target=self._spin, daemon=True)
+        self._thread = threading.Thread(target=self._spin, name=SPINNER_THREAD_NAME, daemon=True)
         self._thread.start()
         return self
 
@@ -76,9 +85,11 @@ class _Spinner:
             self._stop.wait(0.1)
 
     def stop(self, final: str = "done") -> None:
+        """Stops and joins the thread; a second call does nothing (each call's ``finally`` stops it again)."""
+        if self._thread is None or self._stop.is_set():
+            return
         self._stop.set()
-        if self._thread:
-            self._thread.join()
+        self._thread.join()
         sys.stderr.write(f"\r  {self._message}... {final}\n")
         sys.stderr.flush()
 
@@ -293,6 +304,9 @@ def fetch_file(file_key: str, token: str, depth: Optional[int] = None, timeout: 
     except json.JSONDecodeError:
         raise FigmaAPIError("Failed to parse Figma API response (file) as JSON.")
 
+    finally:
+        spinner.stop("error")
+
 
 def fetch_nodes(
     file_key: str,
@@ -363,6 +377,9 @@ def fetch_nodes(
     except json.JSONDecodeError:
         raise FigmaAPIError("Failed to parse Figma API response (nodes) as JSON.")
 
+    finally:
+        spinner.stop("error")
+
 
 def fetch_file_images(
     file_key: str,
@@ -418,6 +435,9 @@ def fetch_file_images(
     except json.JSONDecodeError:
         raise FigmaAPIError("Failed to parse image fill response as JSON.")
 
+    finally:
+        spinner.stop("error")
+
 
 def fetch_image_renders(
     file_key: str,
@@ -469,52 +489,55 @@ def fetch_image_renders(
         label = f"Rendering nodes (batch {batch_idx + 1}/{total_batches})"
         spinner = _Spinner(label).start()
 
-        for retry in range(MAX_RETRIES):
-            try:
-                last_request_time = time.monotonic()
-                with _open(req, timeout) as response:
-                    raw = response.read()
-                    spinner.stop("done")
-                    data = json.loads(raw)
-                    images = data.get("images", {})
-                    all_images.update(images)
-                    break
-
-            except urllib.error.HTTPError as e:
-                body = ""
+        try:
+            for retry in range(MAX_RETRIES):
                 try:
-                    body = e.read().decode("utf-8", errors="replace")
-                except Exception:
-                    pass
+                    last_request_time = time.monotonic()
+                    with _open(req, timeout) as response:
+                        raw = response.read()
+                        spinner.stop("done")
+                        data = json.loads(raw)
+                        images = data.get("images", {})
+                        all_images.update(images)
+                        break
 
-                if e.code == 429 and retry < MAX_RETRIES - 1:
-                    retry_after = _parse_retry_after(e)
-                    raw_wait = retry_after or DEFAULT_RETRY_WAIT
-                    wait = min(raw_wait, MAX_RETRY_WAIT)
-                    ready_at = (datetime.now() + timedelta(seconds=wait)).strftime("%H:%M:%S")
-                    cap_note = f" (Retry-After: {raw_wait}s, capped at {MAX_RETRY_WAIT}s)" if raw_wait > MAX_RETRY_WAIT else f" (Retry-After: {raw_wait}s)"
-                    spinner.stop(f"rate limited, waiting {wait}s{cap_note} (retry at {ready_at})")
-                    time.sleep(wait)
-                    spinner = _Spinner(f"{label} (retry {retry + 2})").start()
-                    continue
+                except urllib.error.HTTPError as e:
+                    body = ""
+                    try:
+                        body = e.read().decode("utf-8", errors="replace")
+                    except Exception:
+                        pass
 
-                spinner.stop("error")
-                retry_after = _parse_retry_after(e) if e.code == 429 else None
-                raise FigmaAPIError(
-                    _format_rate_limit_message(retry_after) if e.code == 429
-                    else f"Figma API returned HTTP {e.code}: {e.reason}",
-                    status_code=e.code,
-                    body=body,
-                    retry_after=retry_after,
-                )
+                    if e.code == 429 and retry < MAX_RETRIES - 1:
+                        retry_after = _parse_retry_after(e)
+                        raw_wait = retry_after or DEFAULT_RETRY_WAIT
+                        wait = min(raw_wait, MAX_RETRY_WAIT)
+                        ready_at = (datetime.now() + timedelta(seconds=wait)).strftime("%H:%M:%S")
+                        cap_note = f" (Retry-After: {raw_wait}s, capped at {MAX_RETRY_WAIT}s)" if raw_wait > MAX_RETRY_WAIT else f" (Retry-After: {raw_wait}s)"
+                        spinner.stop(f"rate limited, waiting {wait}s{cap_note} (retry at {ready_at})")
+                        time.sleep(wait)
+                        spinner = _Spinner(f"{label} (retry {retry + 2})").start()
+                        continue
 
-            except urllib.error.URLError as e:
-                spinner.stop("error")
-                raise FigmaAPIError(f"Network error: {e.reason}")
+                    spinner.stop("error")
+                    retry_after = _parse_retry_after(e) if e.code == 429 else None
+                    raise FigmaAPIError(
+                        _format_rate_limit_message(retry_after) if e.code == 429
+                        else f"Figma API returned HTTP {e.code}: {e.reason}",
+                        status_code=e.code,
+                        body=body,
+                        retry_after=retry_after,
+                    )
 
-            except json.JSONDecodeError:
-                spinner.stop("error")
-                raise FigmaAPIError("Failed to parse render response as JSON.")
+                except urllib.error.URLError as e:
+                    spinner.stop("error")
+                    raise FigmaAPIError(f"Network error: {e.reason}")
+
+                except json.JSONDecodeError:
+                    spinner.stop("error")
+                    raise FigmaAPIError("Failed to parse render response as JSON.")
+        finally:
+            spinner.stop("error")
 
     return all_images
 
