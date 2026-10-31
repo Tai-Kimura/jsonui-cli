@@ -3,6 +3,32 @@
   "_comment": "Accepted cross-platform frame disagreements: one entry per (fixture, id) that a platform draws in a different place, with the platforms that are the outliers and the reason (a platform idiom, never a known bug). `jui conformance gate --frame-parity` fails on a disagreement with no entry, and on an entry the measurement no longer supports (the id now agrees, or other platforms are the outliers). The tolerance is frame_parity.TOLERANCE; frames come from the drivers (frames.schema.json). Reason 'unreviewed-initial-measurement' marks a row recorded but not yet ruled on. HAND-MAINTAINED, NOT GENERATED.",
   "entries": [
     {
+      "fixture": "Button/accessibilityLabel__alias_contentDescription",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Button control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (Material minimum height) — triage K"
+    },
+    {
+      "fixture": "Button/accessibilityLabel__static",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Button control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (Material minimum height) — triage K"
+    },
+    {
       "fixture": "Button/disabledFontColor__binding",
       "id": "target",
       "outliers": [
@@ -274,6 +300,28 @@
         "height"
       ],
       "reason": "Button control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (Material minimum height) — triage K"
+    },
+    {
+      "fixture": "CheckBox/accessibilityLabel__alias_contentDescription",
+      "id": "target",
+      "outliers": [
+        "android"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "CheckBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (touch-target height) — triage K"
+    },
+    {
+      "fixture": "CheckBox/accessibilityLabel__static",
+      "id": "target",
+      "outliers": [
+        "android"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "CheckBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (touch-target height) — triage K"
     },
     {
       "fixture": "CheckBox/checkedColor__alias_checkColor",
@@ -771,6 +819,39 @@
         "width"
       ],
       "reason": "the platform's own spinner, as __control/Indicator: android 40, web 24; strokeWidth is declared for kotlin and react, so ios draws no fixture"
+    },
+    {
+      "fixture": "Label/accessibilityLiveRegion__assertive",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "Label/accessibilityLiveRegion__off",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "Label/accessibilityLiveRegion__polite",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
     },
     {
       "fixture": "Label/autoShrink__false",
@@ -1548,6 +1629,32 @@
       "reason": "height only: control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face. The width is NOT idiom (triage K: web ignores the declared width 200) and keeps such a row out"
     },
     {
+      "fixture": "Radio/accessibilityLabel__alias_contentDescription",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Radio control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (touch-target height; a group sums the per-row gap) — triage K, support lane 1 (__control/Radio__no-text)"
+    },
+    {
+      "fixture": "Radio/accessibilityLabel__static",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Radio control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (touch-target height; a group sums the per-row gap) — triage K, support lane 1 (__control/Radio__no-text)"
+    },
+    {
       "fixture": "Radio/checkedColor__static",
       "id": "target",
       "outliers": [
@@ -1903,6 +2010,32 @@
       "reason": "Radio control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (touch-target height; a group sums the per-row gap) — triage K, support lane 1 (__control/Radio__no-text)"
     },
     {
+      "fixture": "Segment/accessibilityLabel__alias_contentDescription",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "height only: control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face. The width is NOT idiom (triage K: web ignores the declared width 200) and keeps such a row out"
+    },
+    {
+      "fixture": "Segment/accessibilityLabel__static",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "height only: control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face. The width is NOT idiom (triage K: web ignores the declared width 200) and keeps such a row out"
+    },
+    {
       "fixture": "Segment/fontColor__alias_normalColor",
       "id": "target",
       "outliers": [
@@ -2031,6 +2164,32 @@
         "height"
       ],
       "reason": "height only: control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face. The width is NOT idiom (triage K: web ignores the declared width 200) and keeps such a row out"
+    },
+    {
+      "fixture": "SelectBox/accessibilityLabel__alias_contentDescription",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+    },
+    {
+      "fixture": "SelectBox/accessibilityLabel__static",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
     },
     {
       "fixture": "SelectBox/caretAttributes__static",
@@ -2655,6 +2814,32 @@
       "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
     },
     {
+      "fixture": "Slider/accessibilityLabel__alias_contentDescription",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "height only: control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face. The width is NOT idiom (triage K: web ignores the declared width 200) and keeps such a row out"
+    },
+    {
+      "fixture": "Slider/accessibilityLabel__static",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "height only: control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face. The width is NOT idiom (triage K: web ignores the declared width 200) and keeps such a row out"
+    },
+    {
       "fixture": "Slider/maximum__alias_maxValue",
       "id": "target",
       "outliers": [
@@ -2822,6 +3007,34 @@
         "height"
       ],
       "reason": "height only: control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face. The width is NOT idiom (triage K: web ignores the declared width 200) and keeps such a row out"
+    },
+    {
+      "fixture": "Switch/accessibilityLabel__alias_contentDescription",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height",
+        "width"
+      ],
+      "reason": "Switch control chrome: an unlabelled wrapContent Switch is the platform's own control — measured ios 61 x 28, android 52 x 48 (the switch centred in a 48 touch row), web 51 x 31; with a declared width the width is drawn on every face, and the expected sizes refuse anything else"
+    },
+    {
+      "fixture": "Switch/accessibilityLabel__static",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height",
+        "width"
+      ],
+      "reason": "Switch control chrome: an unlabelled wrapContent Switch is the platform's own control — measured ios 61 x 28, android 52 x 48 (the switch centred in a 48 touch row), web 51 x 31; with a declared width the width is drawn on every face, and the expected sizes refuse anything else"
     },
     {
       "fixture": "Switch/checked__binding",
@@ -3144,6 +3357,32 @@
         "width"
       ],
       "reason": "Switch control chrome: an unlabelled wrapContent Switch is the platform's own control — measured ios 61 x 28, android 52 x 48 (the switch centred in a 48 touch row), web 51 x 31; with a declared width the width is drawn on every face, and the expected sizes refuse anything else"
+    },
+    {
+      "fixture": "TextField/accessibilityLabel__alias_contentDescription",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "TextField control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (skinIdioms; TextField.borderStyle is a member) — triage K"
+    },
+    {
+      "fixture": "TextField/accessibilityLabel__static",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "TextField control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (skinIdioms; TextField.borderStyle is a member) — triage K"
     },
     {
       "fixture": "TextField/autoFocus__false",
