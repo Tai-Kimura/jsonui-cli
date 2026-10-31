@@ -194,13 +194,26 @@ module RjuiTools
           "((#{converted_params}) => #{converted_return}) | undefined"
         end
 
-        # Convert a single type without making it optional
+        # Convert a single type without making it optional: a parameter or
+        # the return of a function type. A collection here is converted as
+        # one outside a function is — `(([File]) -> Void)?` once wrote
+        # `(arg0: [File]) => void`, a one-element tuple — and a function
+        # here is written in TypeScript, optional only when declared so.
         def convert_single_type(type_str)
           return type_str if type_str.nil? || type_str.to_s.empty?
 
           str = type_str.to_s.strip
           is_optional = str.end_with?('?')
           base = is_optional ? str[0...-1] : str
+
+          return to_typescript_type(str) if collection_shape(base)
+
+          if (sig = parse_function_signature(str))
+            params_inner, return_part = sig
+            result = "(#{parse_parameter_list(params_inner)}) => #{convert_single_type(return_part)}"
+            # The `?` is the function's when the signature parser took it off a wrapper, not off the return.
+            return str.end_with?(return_part) ? result : "(#{result}) | undefined"
+          end
 
           result = TYPE_MAPPING[base] || base
           is_optional ? "#{result} | undefined" : result
@@ -212,8 +225,9 @@ module RjuiTools
 
           params = split_parameters(params_str)
           params.each_with_index.map do |p, i|
-            converted = convert_single_type(p.strip)
-            "arg#{i}: #{converted}"
+            # A Swift label names the parameter (`_ id: Int` -> `id: number`); it was written into the type.
+            _label, name, type = labeled_parameter(p)
+            "#{name || "arg#{i}"}: #{convert_single_type((type || p).strip)}"
           end.join(', ')
         end
 

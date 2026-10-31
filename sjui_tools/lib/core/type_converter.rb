@@ -185,6 +185,17 @@ module SjuiTools
           is_optional = str.end_with?('?')
           base = is_optional ? str[0...-1] : str
 
+          # A collection here is converted as one outside a function is (`Array(Int)` and, in Kotlin, `[File]`
+          # were written as declared), and a function here in Swift, optional only when declared so.
+          return to_swift_type(str, mode) if collection_shape(base)
+
+          if (sig = parse_function_signature(str))
+            params_inner, return_part = sig
+            result = "(#{parse_parameter_list_no_optional(params_inner, mode)}) -> #{convert_single_type(return_part, mode)}"
+            # The `?` is the function's when the signature parser took it off a wrapper, not off the return.
+            return str.end_with?(return_part) ? result : "(#{result})?"
+          end
+
           # Check mode-specific mapping first
           if mode && MODE_TYPE_MAPPING.key?(base)
             result = MODE_TYPE_MAPPING[base][mode] || MODE_TYPE_MAPPING[base]['swiftui']
@@ -200,7 +211,13 @@ module SjuiTools
           return '' if params_str.nil? || params_str.empty?
 
           params = split_parameters(params_str)
-          params.map { |p| convert_single_type(p.strip, mode) }.join(', ')
+          params.map do |p|
+            # A function type takes no argument label but `_`: `id: Int` and `outer id: Int` are written
+            # `_ id: Int` (swiftc refused them as written), and the type after it is converted like any other.
+            _label, name, type = labeled_parameter(p)
+            converted = convert_single_type((type || p).strip, mode)
+            name ? "_ #{name}: #{converted}" : converted
+          end.join(', ')
         end
 
         # Parse a comma-separated parameter list, handling nested types

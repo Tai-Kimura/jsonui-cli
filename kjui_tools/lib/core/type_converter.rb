@@ -287,6 +287,17 @@ module KjuiTools
           is_optional = str.end_with?('?')
           base = is_optional ? str[0...-1] : str
 
+          # A collection here is converted as one outside a function is (`Array(Int)` and, in Kotlin, `[File]`
+          # were written as declared), and a function here in Kotlin, optional only when declared so.
+          return to_kotlin_type(str, mode) if collection_shape(base)
+
+          if (sig = parse_function_signature(str))
+            params_inner, return_part = sig
+            result = "(#{parse_parameter_list_no_optional(params_inner, mode)}) -> #{convert_single_type(return_part, mode)}"
+            # The `?` is the function's when the signature parser took it off a wrapper, not off the return.
+            return str.end_with?(return_part) ? result : "(#{result})?"
+          end
+
           # Check mode-specific mapping first
           if mode && MODE_TYPE_MAPPING.key?(base)
             result = MODE_TYPE_MAPPING[base][mode] || MODE_TYPE_MAPPING[base]['compose']
@@ -302,7 +313,12 @@ module KjuiTools
           return '' if params_str.nil? || params_str.empty?
 
           params = split_parameters(params_str)
-          params.map { |p| convert_single_type(p.strip, mode) }.join(', ')
+          params.map do |p|
+            # A Swift label is Kotlin's parameter name (`_ id: Int` -> `id: Int`); it was written as it stood.
+            _label, name, type = labeled_parameter(p)
+            converted = convert_single_type((type || p).strip, mode)
+            name ? "#{name}: #{converted}" : converted
+          end.join(', ')
         end
 
         # A build warning from the shared core (a data default with no

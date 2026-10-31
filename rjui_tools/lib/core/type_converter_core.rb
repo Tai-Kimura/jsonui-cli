@@ -314,6 +314,17 @@ module JsonUIShared
         nil
       end
 
+      # A function type's parameter written with a Swift label — `_ name: T`,
+      # `name: T`, `outer inner: T` — as [the label as written, the name the
+      # body uses (nil for `_`), T]; nil when it has none. `[K: V]` is no
+      # label: it starts with `[`.
+      def labeled_parameter(param)
+        m = param.to_s.strip.match(/\A((?:[A-Za-z_]\w*\s+)?([A-Za-z_]\w*))\s*:\s*(\S.*)\z/m)
+        return nil unless m
+
+        [m[1], m[2] == '_' ? nil : m[2], m[3].strip]
+      end
+
       # Split parameters by comma, respecting nested parentheses and generics
       def split_parameters(str)
         return [] if str.nil? || str.empty?
