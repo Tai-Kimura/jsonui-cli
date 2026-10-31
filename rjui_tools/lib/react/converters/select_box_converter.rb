@@ -17,7 +17,7 @@ module RjuiTools
           class_name = build_class_name
           style_attr = build_style_attr
           id_attr = build_id_attr
-          testid_attr = build_testid_attr
+          testid_attr = build_testid_attr + build_aria_label_attr
           tag_attr = build_tag_attr
           items = attributes['items'] || []
 
@@ -713,7 +713,7 @@ module RjuiTools
           class_name = build_class_name
           style_attr = build_style_attr
           id_attr = build_id_attr
-          testid_attr = build_testid_attr
+          testid_attr = build_testid_attr + build_aria_label_attr
           tag_attr = build_tag_attr
           disabled_attr = build_disabled_attr
 

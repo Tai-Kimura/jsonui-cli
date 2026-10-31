@@ -13,7 +13,7 @@ module RjuiTools
           id_attr = build_id_attr
           on_click = build_on_click
           disabled_attr = build_disabled_attr
-          testid_attr = build_testid_attr
+          testid_attr = build_testid_attr + build_aria_label_attr
           tag_attr = build_tag_attr
 
           # Check if we need partialAttributes rendering (styled text spans)

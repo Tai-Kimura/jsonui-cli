@@ -267,6 +267,13 @@ module KjuiTools
                                   "import androidx.compose.ui.input.pointer.pointerInput"],
             test_tag: "import androidx.compose.ui.platform.testTag",
             test_tags_as_resource_id: "import androidx.compose.ui.semantics.testTagsAsResourceId",
+            # A control's screen-reader name, and a node read out when it
+            # changes (shared/core/control_accessibility.rb).
+            semantics_content_description: ["import androidx.compose.ui.semantics.semantics",
+                                            "import androidx.compose.ui.semantics.contentDescription"],
+            semantics_live_region: ["import androidx.compose.ui.semantics.semantics",
+                                    "import androidx.compose.ui.semantics.liveRegion",
+                                    "import androidx.compose.ui.semantics.LiveRegionMode"],
             image: "import androidx.compose.foundation.Image",
             color_filter: "import androidx.compose.ui.graphics.ColorFilter",
             local_content_color: "import androidx.compose.material3.LocalContentColor",

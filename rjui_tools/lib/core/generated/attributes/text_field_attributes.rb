@@ -15,6 +15,8 @@ module JsonUI
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
+        # What screen readers say for this control in place of what it shows (web aria-label, iOS accessibilityLabel, Android contentDescription): a strings.json key or text, localized like `text`, or a binding. Use it where the visible text does not say enough, as with a row's "Open" that should be read "Open the second image". Unset, the control is read as before (its text, label or value). The image's own name is `alt`, which takes these two spellings too.
+        { name: 'accessibilityLabel', kind: :string, bindable: true, aliases: ['contentDescription'].freeze }.freeze,
         # Input accessory toolbar background - hex string or color name from colors.json. UIKit only: read by SJUITextField's accessory toolbar; SwiftUI has no input-accessory surface.
         { name: 'accessoryBackground', kind: :string }.freeze,
         # Accessory corner radius

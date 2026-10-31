@@ -29,14 +29,20 @@ RSpec.describe 'swiftui/views/modifier_order.json' do
     expect(doc['bag']).to eq(SjuiTools::SwiftUI::Views::ModifierBag::MODIFIER_ORDER.map(&:to_s))
   end
 
-  it 'lists what is written after the bag: the identifier, then .disabled outside it' do
-    expect(doc['after_bag']).to eq(%w[accessibility_identifier disabled])
+  it 'lists what is written after the bag: the identifier, then .disabled outside it, then the screen-reader name' do
+    expect(doc['after_bag']).to eq(%w[accessibility_identifier disabled control_accessibility])
     code = emitted({ 'type' => 'Image', 'id' => 'probe', 'srcName' => 'star', 'width' => 40, 'height' => 40,
                      'indexAbove' => 'x', 'enabled' => false })
     # :z_index and :disabled are the bag's last two registered keys here;
     # the two after them are not the bag's.
     expect(modifiers(code).last(4).map { |l| l[/\A\.[A-Za-z]+/] }).to eq(%w[.zIndex .disabled .accessibilityIdentifier .disabled])
     expect(compilable_view(code)).to compile_as_swift
+  end
+
+  it 'writes the screen-reader name after .disabled outside the element' do
+    code = emitted({ 'type' => 'Switch', 'id' => 'probe', 'isOn' => '@{on}', 'enabled' => false,
+                     'accessibilityLabel' => 'Name' })
+    expect(modifiers(code).last(3).map { |l| l[/\A\.[A-Za-z]+/] }).to eq(%w[.accessibilityIdentifier .disabled .accessibilityLabel])
   end
 
   it 'says :padding carries padding, then insets — and the generated code agrees' do

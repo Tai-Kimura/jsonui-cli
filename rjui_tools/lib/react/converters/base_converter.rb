@@ -12,6 +12,7 @@ require_relative '../../core/attribute_validator'
 require_relative '../../core/binding_validator_core'
 require_relative '../../core/type_converter'
 require_relative '../../core/tap_accessibility'
+require_relative '../../core/control_accessibility'
 require_relative '../nested_taps'
 # The one escaper for an author's text in the generated TS/TSX.
 require_relative '../../core/string_literals'
@@ -2644,6 +2645,36 @@ module RjuiTools
           else
             jsx_attr_text('alt', raw)
           end
+        end
+
+        # The control's screen-reader name (shared/core/control_accessibility
+        # .rb): ` aria-label=…` on the element that takes focus, its key
+        # localized like `text`, or "" when it declares none. Each converter
+        # puts it on that element — the <button>, the <input>, the <select> —
+        # and not on a wrapper the screen reader does not stop at.
+        def build_aria_label_attr
+          raw = JsonUIShared::ControlAccessibility.label(@json)
+          return '' unless raw
+          return " aria-label=#{convert_text_binding(raw)}" if bound_value_expr(raw)
+
+          if (resolved = resolve_display_text(raw))
+            " aria-label=#{resolved}"
+          else
+            jsx_attr_text('aria-label', raw)
+          end
+        end
+
+        # ` role="status" aria-live="polite"` (or alert / assertive) for a
+        # node whose changes are read out (ControlAccessibility.live), else "".
+        # A View that is a button keeps its role (keyboard_tap_attrs): an
+        # element has one role, so it is read out by aria-live alone.
+        def build_aria_live_attr
+          live = JsonUIShared::ControlAccessibility.live(@json)
+          return '' unless live
+
+          role = live == 'assertive' ? 'alert' : 'status'
+          role_attr = KEYBOARD_TAP_SHAPES.include?(json[JsonUIShared::TapAccessibility::SHAPE_KEY]) ? '' : %( role="#{role}")
+          %(#{role_attr} aria-live="#{live}")
         end
 
         # Characters a JSX attribute string cannot hold as they are: its

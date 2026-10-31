@@ -116,7 +116,7 @@ module RjuiTools
           # Create iOS-style toggle with hidden checkbox and styled span
           <<~HTML.gsub("\n", '').gsub(/\s+/, ' ').strip
             <span className="relative inline-block w-[51px] h-[31px]">
-              <input type="checkbox" className="sr-only peer"#{checked_attr}#{on_change}#{disabled_attr} />
+              <input type="checkbox"#{build_aria_label_attr} className="sr-only peer"#{checked_attr}#{on_change}#{disabled_attr} />
               <span className="#{track_classes}"#{style_attr_for(track_style)} />
               <span className="#{knob_classes}"#{style_attr_for(knob_style)} />
             </span>

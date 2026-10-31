@@ -15,6 +15,8 @@ module JsonUI
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
+        # What screen readers say for this control in place of what it shows (web aria-label, iOS accessibilityLabel, Android contentDescription): a strings.json key or text, localized like `text`, or a binding. Use it where the visible text does not say enough, as with a row's "Open" that should be read "Open the second image". Unset, the control is read as before (its text, label or value). The image's own name is `alt`, which takes these two spellings too.
+        { name: 'accessibilityLabel', kind: :string, bindable: true, aliases: ['contentDescription'].freeze }.freeze,
         # Maximum value (binding supported). `maxValue` / `maximumValue` are accepted alias spellings. Defaults to 1: with no bounds declared the range is 0 .. 1, this SSoT's convention for a unitless value on a track (compare Progress.progress and opacity, both declared min 0 / max 1). Full ruling in attribute_semantics.json -> sliderRange. [default: 1]
         { name: 'maximum', kind: :number, bindable: true, aliases: ['maximumValue', 'maxValue'].freeze }.freeze,
         # Image at maximum end

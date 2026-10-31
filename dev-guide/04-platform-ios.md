@@ -104,6 +104,13 @@ sjui_tools/
 - codegen .rb と Dynamic .swift の**乖離は conformance が検出**する — 片方だけの修正は必ず落ちる。
 - エイリアス例: `EditText`/`Input`→`TextField`, `Toggle`→`Switch`, `Check`→`CheckBox`,
   `alpha`→`opacity`。emitter に分岐を書かず SSoT の aliases + normalizer に任せる。
+- 読み上げ（`shared/core/control_accessibility.rb`）: 押せる部品の `accessibilityLabel`
+  （別名 `contentDescription`）は chain の最後の `.accessibilityLabel(Text(…))`。
+  `accessibilityLiveRegion` は **iOS では Label にだけ効く**（bound な text が変わった時に
+  `AccessibilityNotification.Announcement` を出す）。iOS には live region が無いので、
+  **View の `accessibilityLiveRegion` は iOS では効かない — Label に付ける**。View の行は
+  SSoT で kotlin・react だけに宣言し、sjui は既定の build で何も言わない（3 つの基盤に
+  同じ JSON を書くので、毎回の雑音にしない）。
 - Collection: SwiftUI モードで `items` binding があり `sections` がないと警告。
   `include` に `id` がないと data プロパティ名衝突の警告。
 - hotload サーバーは jui に移管済み（`jui hotload listen`）。`sjui watch` はレガシー。

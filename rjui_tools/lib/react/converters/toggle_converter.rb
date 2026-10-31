@@ -15,6 +15,8 @@ module RjuiTools
           id_attr = build_id_attr
           testid_attr = build_testid_attr
           tag_attr = build_tag_attr
+          # On the <input>, which takes focus: the <label> around it is no stop.
+          aria_label = build_aria_label_attr
           # 'label' is the CheckBox-specific spelling and wins over the
           # generic text (kjui reads the same order — 33 cross-effect
           # adjudication: label overrides text on every platform).
@@ -30,7 +32,7 @@ module RjuiTools
           jsx = if text.empty?
             # Checkbox only (no label)
             <<~JSX.chomp
-              #{indent_str(indent)}<input#{id_attr} type="checkbox"#{class_name_attr(class_name)}#{value_attr}#{checked_attr}#{on_change}#{disabled_attr}#{checkbox_style}#{style_attr}#{testid_attr}#{tag_attr} />
+              #{indent_str(indent)}<input#{id_attr} type="checkbox"#{aria_label}#{class_name_attr(class_name)}#{value_attr}#{checked_attr}#{on_change}#{disabled_attr}#{checkbox_style}#{style_attr}#{testid_attr}#{tag_attr} />
             JSX
           else
             # Checkbox with label. The layout `id` lands on the <label>
@@ -44,7 +46,7 @@ module RjuiTools
             if icon_off || icon_on
               off_src = icon_off || icon_on
               control_jsx =
-                "<input type=\"checkbox\"#{value_attr}#{checked_attr}#{on_change}#{disabled_attr} className=\"peer sr-only\" />"                 "<img#{jsx_attr_text('src', off_src)} alt=\"\" className=\"w-6 h-6 peer-checked:hidden\" />"                 "<img#{jsx_attr_text('src', icon_on)} alt=\"\" className=\"w-6 h-6 hidden peer-checked:block\" />"
+                "<input type=\"checkbox\"#{aria_label}#{value_attr}#{checked_attr}#{on_change}#{disabled_attr} className=\"peer sr-only\" />"                 "<img#{jsx_attr_text('src', off_src)} alt=\"\" className=\"w-6 h-6 peer-checked:hidden\" />"                 "<img#{jsx_attr_text('src', icon_on)} alt=\"\" className=\"w-6 h-6 hidden peer-checked:block\" />"
               <<~JSX.chomp
                 #{indent_str(indent)}<label#{id_attr}#{class_name_attr(class_name)}#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
                 #{indent_str(indent + 2)}#{control_jsx}
@@ -54,7 +56,7 @@ module RjuiTools
             else
               <<~JSX.chomp
                 #{indent_str(indent)}<label#{id_attr}#{class_name_attr(class_name)}#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
-                #{indent_str(indent + 2)}<input type="checkbox"#{value_attr}#{checked_attr}#{on_change}#{disabled_attr}#{checkbox_style} />
+                #{indent_str(indent + 2)}<input type="checkbox"#{aria_label}#{value_attr}#{checked_attr}#{on_change}#{disabled_attr}#{checkbox_style} />
                 #{indent_str(indent + 2)}<span>#{convert_text_binding(text)}</span>
                 #{indent_str(indent)}</label>
               JSX

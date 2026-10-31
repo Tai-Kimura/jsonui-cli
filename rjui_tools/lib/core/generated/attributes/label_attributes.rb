@@ -14,6 +14,8 @@ module JsonUI
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
+        # Read out what this shows whenever it changes, where focus does not move (a progress or saved / failed line): `polite` waits for the screen reader to finish, `assertive` interrupts it, `off` (or none) reads nothing. Web aria-live with role status (polite) or alert (assertive), Android liveRegion, iOS an announcement of the Label's text when a bound text changes (a static text never changes, so it announces nothing).
+        { name: 'accessibilityLiveRegion', kind: :enum, values: ['polite', 'assertive', 'off'].freeze }.freeze,
         # Enable auto-shrink. Active only on a bounded axis (explicit size, matchParent, or a max bound) — a no-op under wrapContent, which grows to the content and leaves nothing to shrink into. Full ruling in attribute_semantics.json -> autoShrink.
         { name: 'autoShrink', kind: :boolean }.freeze,
         # Font color when disabled - hex string or color name from colors.json (binding supported). Declared from the implementation, which already read it: sjui label_converter.rb:179-180 (plan 51-E).

@@ -13,7 +13,7 @@ module RjuiTools
           style_attr = build_style_attr_with_visibility
           children = convert_children(indent)
           id_attr = build_id_attr
-          testid_attr = build_testid_attr
+          testid_attr = build_testid_attr + build_aria_label_attr + build_aria_live_attr
           event_attrs = build_event_attrs
           rel_ref_attr = build_relative_position_ref_attr
           # A dimmed, click-through node is still `enabled` in the a11y tree, and

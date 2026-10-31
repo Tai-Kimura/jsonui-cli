@@ -1247,6 +1247,15 @@
     }
   },
   "Label": {
+    "accessibilityLiveRegion": {
+      "type": "string",
+      "enum": [
+        "polite",
+        "assertive",
+        "off"
+      ],
+      "description": "Read out what this shows whenever it changes, where focus does not move (a progress or saved / failed line): `polite` waits for the screen reader to finish, `assertive` interrupts it, `off` (or none) reads nothing. Web aria-live with role status (polite) or alert (assertive), Android liveRegion, iOS an announcement of the Label's text when a bound text changes (a static text never changes, so it announces nothing)."
+    },
     "text": {
       "type": [
         "string",
@@ -1620,6 +1629,16 @@
     }
   },
   "TextField": {
+    "accessibilityLabel": {
+      "type": [
+        "string",
+        "binding"
+      ],
+      "description": "What screen readers say for this control in place of what it shows (web aria-label, iOS accessibilityLabel, Android contentDescription): a strings.json key or text, localized like `text`, or a binding. Use it where the visible text does not say enough, as with a row's \"Open\" that should be read \"Open the second image\". Unset, the control is read as before (its text, label or value). The image's own name is `alt`, which takes these two spellings too.",
+      "aliases": [
+        "contentDescription"
+      ]
+    },
     "text": {
       "type": [
         "string",
@@ -2432,6 +2451,16 @@
     "_comment": "Component alias of TextField (web naming). Resolved by the L1 normalizer type rewrite and by every validator/codegen consumer - do not add attribute copies here."
   },
   "Button": {
+    "accessibilityLabel": {
+      "type": [
+        "string",
+        "binding"
+      ],
+      "description": "What screen readers say for this control in place of what it shows (web aria-label, iOS accessibilityLabel, Android contentDescription): a strings.json key or text, localized like `text`, or a binding. Use it where the visible text does not say enough, as with a row's \"Open\" that should be read \"Open the second image\". Unset, the control is read as before (its text, label or value). The image's own name is `alt`, which takes these two spellings too.",
+      "aliases": [
+        "contentDescription"
+      ]
+    },
     "text": {
       "type": [
         "string",
@@ -2894,6 +2923,16 @@
     }
   },
   "SelectBox": {
+    "accessibilityLabel": {
+      "type": [
+        "string",
+        "binding"
+      ],
+      "description": "What screen readers say for this control in place of what it shows (web aria-label, iOS accessibilityLabel, Android contentDescription): a strings.json key or text, localized like `text`, or a binding. Use it where the visible text does not say enough, as with a row's \"Open\" that should be read \"Open the second image\". Unset, the control is read as before (its text, label or value). The image's own name is `alt`, which takes these two spellings too.",
+      "aliases": [
+        "contentDescription"
+      ]
+    },
     "prompt": {
       "type": "string",
       "description": "Prompt text (primary)"
@@ -3226,6 +3265,16 @@
     }
   },
   "Switch": {
+    "accessibilityLabel": {
+      "type": [
+        "string",
+        "binding"
+      ],
+      "description": "What screen readers say for this control in place of what it shows (web aria-label, iOS accessibilityLabel, Android contentDescription): a strings.json key or text, localized like `text`, or a binding. Use it where the visible text does not say enough, as with a row's \"Open\" that should be read \"Open the second image\". Unset, the control is read as before (its text, label or value). The image's own name is `alt`, which takes these two spellings too.",
+      "aliases": [
+        "contentDescription"
+      ]
+    },
     "_alias": "Toggle",
     "_comment": "Switch is the primary component name. Toggle is supported as an alias for backward compatibility.",
     "isOn": {
@@ -3377,6 +3426,16 @@
     "_comment": "Component alias of Switch. Resolved by the L1 normalizer type rewrite and by every validator/codegen consumer - do not add attribute copies here."
   },
   "Segment": {
+    "accessibilityLabel": {
+      "type": [
+        "string",
+        "binding"
+      ],
+      "description": "What screen readers say for this control in place of what it shows (web aria-label, iOS accessibilityLabel, Android contentDescription): a strings.json key or text, localized like `text`, or a binding. Use it where the visible text does not say enough, as with a row's \"Open\" that should be read \"Open the second image\". Unset, the control is read as before (its text, label or value). The image's own name is `alt`, which takes these two spellings too.",
+      "aliases": [
+        "contentDescription"
+      ]
+    },
     "items": {
       "type": "array",
       "required": true,
@@ -3442,6 +3501,16 @@
     }
   },
   "Slider": {
+    "accessibilityLabel": {
+      "type": [
+        "string",
+        "binding"
+      ],
+      "description": "What screen readers say for this control in place of what it shows (web aria-label, iOS accessibilityLabel, Android contentDescription): a strings.json key or text, localized like `text`, or a binding. Use it where the visible text does not say enough, as with a row's \"Open\" that should be read \"Open the second image\". Unset, the control is read as before (its text, label or value). The image's own name is `alt`, which takes these two spellings too.",
+      "aliases": [
+        "contentDescription"
+      ]
+    },
     "value": {
       "type": [
         "number",
@@ -3603,6 +3672,32 @@
     }
   },
   "View": {
+    "accessibilityLabel": {
+      "type": [
+        "string",
+        "binding"
+      ],
+      "description": "What screen readers say for this control in place of what it shows (web aria-label, iOS accessibilityLabel, Android contentDescription): a strings.json key or text, localized like `text`, or a binding. Use it where the visible text does not say enough, as with a row's \"Open\" that should be read \"Open the second image\". Unset, the control is read as before (its text, label or value). The image's own name is `alt`, which takes these two spellings too. On a View it names the View when the View operates a tap of its own (a button, or one button made of its content); a View that taps nothing, or holds a control of its own, is not one element to a screen reader, and the attribute does nothing there.",
+      "aliases": [
+        "contentDescription"
+      ]
+    },
+    "accessibilityLiveRegion": {
+      "type": "string",
+      "enum": [
+        "polite",
+        "assertive",
+        "off"
+      ],
+      "description": "Read out what this View holds whenever it changes, where focus does not move: `polite` waits for the screen reader to finish, `assertive` interrupts it, `off` (or none) reads nothing. Web aria-live with role status (polite) or alert (assertive), Android liveRegion. iOS has no live region, so on iOS a View's accessibilityLiveRegion has no effect: put it on the Label whose text changes.",
+      "platform": [
+        "kotlin",
+        "react"
+      ],
+      "platform_reasons": {
+        "swift": "iOS has no live region: VoiceOver is told of a change by an announcement of a text, and a View holds no one text to announce (which of its texts, and when, would be a guess no other platform makes). Put accessibilityLiveRegion on the Label whose text changes; the build does not name it here, because one layout is written for all three platforms."
+      }
+    },
     "_comment": {
       "type": "string",
       "description": "Developer comment (ignored at runtime)"
@@ -4267,6 +4362,16 @@
     }
   },
   "Radio": {
+    "accessibilityLabel": {
+      "type": [
+        "string",
+        "binding"
+      ],
+      "description": "What screen readers say for this control in place of what it shows (web aria-label, iOS accessibilityLabel, Android contentDescription): a strings.json key or text, localized like `text`, or a binding. Use it where the visible text does not say enough, as with a row's \"Open\" that should be read \"Open the second image\". Unset, the control is read as before (its text, label or value). The image's own name is `alt`, which takes these two spellings too.",
+      "aliases": [
+        "contentDescription"
+      ]
+    },
     "label": {
       "type": [
         "string",
@@ -4399,6 +4504,16 @@
     }
   },
   "CheckBox": {
+    "accessibilityLabel": {
+      "type": [
+        "string",
+        "binding"
+      ],
+      "description": "What screen readers say for this control in place of what it shows (web aria-label, iOS accessibilityLabel, Android contentDescription): a strings.json key or text, localized like `text`, or a binding. Use it where the visible text does not say enough, as with a row's \"Open\" that should be read \"Open the second image\". Unset, the control is read as before (its text, label or value). The image's own name is `alt`, which takes these two spellings too.",
+      "aliases": [
+        "contentDescription"
+      ]
+    },
     "_alias": "Check",
     "_comment": "CheckBox is the primary component name. Check is supported as an alias for backward compatibility.",
     "label": {

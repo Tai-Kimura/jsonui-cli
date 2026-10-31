@@ -15,6 +15,10 @@ module JsonUI
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
+        # What screen readers say for this control in place of what it shows (web aria-label, iOS accessibilityLabel, Android contentDescription): a strings.json key or text, localized like `text`, or a binding. Use it where the visible text does not say enough, as with a row's "Open" that should be read "Open the second image". Unset, the control is read as before (its text, label or value). The image's own name is `alt`, which takes these two spellings too. On a View it names the View when the View operates a tap of its own (a button, or one button made of its content); a View that taps nothing, or holds a control of its own, is not one element to a screen reader, and the attribute does nothing there.
+        { name: 'accessibilityLabel', kind: :string, bindable: true, aliases: ['contentDescription'].freeze }.freeze,
+        # Read out what this View holds whenever it changes, where focus does not move: `polite` waits for the screen reader to finish, `assertive` interrupts it, `off` (or none) reads nothing. Web aria-live with role status (polite) or alert (assertive), Android liveRegion. iOS has no live region, so on iOS a View's accessibilityLiveRegion has no effect: put it on the Label whose text changes.
+        { name: 'accessibilityLiveRegion', kind: :enum, values: ['polite', 'assertive', 'off'].freeze }.freeze,
         # Child component(s). A single component node (object) is accepted as a one-element array.
         { name: 'child', kind: :array }.freeze,
         # Child components (alias for child). A single component node (object) is accepted as a one-element array.

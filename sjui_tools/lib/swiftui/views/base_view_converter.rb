@@ -9,6 +9,7 @@ require_relative 'frame_helper'
 require_relative 'color_helper'
 require_relative 'spacing_helper'
 require_relative 'value_expression_helper'
+require_relative 'control_accessibility_modifiers'
 require_relative 'modifier_helper'
 require_relative 'modifier_bag'
 require_relative '../binding/binding_handler_registry'
@@ -32,6 +33,7 @@ module SjuiTools
         include ColorHelper
         include SpacingHelper
         include ValueExpressionHelper
+        include ControlAccessibilityModifiers
         include ModifierHelper
 
         # Class-level validator instance (shared across all converters)
@@ -361,6 +363,8 @@ module SjuiTools
           elsif collection_cell_root_without_id?
             apply_collection_cell_root_container
           end
+          # Last, on the element the chain formed (ControlAccessibilityModifiers).
+          apply_control_accessibility
           @generated_code.join("\n")
         end
 

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Label/accessibilityLiveRegion__polite.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Label.accessibilityLiveRegion (polite)",
+    "description": "Conformance fixture for 'accessibilityLiveRegion' on Label (section: Label, class: visual). Value under test: \"polite\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Label"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "accessibilityLiveRegion__polite",
+      "description": "Conformance fixture for 'accessibilityLiveRegion' on Label (section: Label, class: visual). Value under test: \"polite\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Label_accessibilityLiveRegion__polite"
+        }
+      ]
+    }
+  ]
+}

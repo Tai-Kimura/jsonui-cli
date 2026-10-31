@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Button/accessibilityLabel__alias_contentDescription.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Button.accessibilityLabel (alias_contentDescription)",
+    "description": "Conformance fixture for 'accessibilityLabel' on Button (section: Button, class: visual). Value under test: \"sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Button"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "accessibilityLabel__alias_contentDescription",
+      "description": "Conformance fixture for 'accessibilityLabel' on Button (section: Button, class: visual). Value under test: \"sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Button_accessibilityLabel__alias_contentDescription"
+        }
+      ]
+    }
+  ]
+}

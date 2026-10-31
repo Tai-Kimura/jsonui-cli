@@ -14,7 +14,7 @@ module RjuiTools
           # they all place `id_attr` on the element that holds the text.
           id_attr = "#{build_id_attr}#{build_auto_shrink_ref_attr}"
           onclick_attr = build_onclick_attr
-          testid_attr = build_testid_attr
+          testid_attr = build_testid_attr + build_aria_live_attr
           # A disabledFontColor shows while `enabled` is false, fixed or bound: the
           # state rides aria-disabled, read by the `aria-disabled:` class below
           tag_attr = build_tag_attr + (disabled_font_color? ? build_aria_disabled_attr : '')

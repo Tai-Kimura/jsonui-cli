@@ -15,6 +15,8 @@ module JsonUI
       # contract together with `rows` / `declared?` / `alias_map`
       # (see the directory README).
       ATTRS = [
+        # What screen readers say for this control in place of what it shows (web aria-label, iOS accessibilityLabel, Android contentDescription): a strings.json key or text, localized like `text`, or a binding. Use it where the visible text does not say enough, as with a row's "Open" that should be read "Open the second image". Unset, the control is read as before (its text, label or value). The image's own name is `alt`, which takes these two spellings too.
+        { name: 'accessibilityLabel', kind: :string, bindable: true, aliases: ['contentDescription'].freeze }.freeze,
         # Checked state alias (binding for two-way) [binding: two-way]
         { name: 'checked', kind: :boolean, bindable: true }.freeze,
         # Color when checked. Legacy accent spellings fold here (sjui checkbox_converter.rb:98 and kjui checkbox_component.rb:211 both read the same four spellings for this one colour). `tintColor` is deliberately NOT in the alias list: it is already declared on `common`, and an alias that is also a declared row is a silent no-op (test_no_alias_is_cancelled_by_a_declaration_of_its_own_name). On a CheckBox the common tint IS the checked colour - that is what both converters implement - so it needs no alias row. Declaring the other two also settles a live divergence: ios reads `checkedColor` first, android reads `checkColor` first, so a layout setting both drew two different colours until the normalizer began folding them (plan 51-E).

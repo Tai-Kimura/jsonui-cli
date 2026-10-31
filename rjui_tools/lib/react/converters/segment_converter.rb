@@ -59,8 +59,12 @@ module RjuiTools
 
           # `disabled` is not a valid attribute on <div>; reflect the state via
           # aria-disabled (each inner <button> carries the real disabled attr).
+          # The segment's name is the group's (` role="group" aria-label=…`),
+          # each button keeping its own text.
+          group_label = build_aria_label_attr
+          group_attrs = group_label.empty? ? '' : %( role="group"#{group_label})
           jsx = <<~JSX.chomp
-            #{indent_str(indent)}<div#{id_attr}#{class_name_attr(class_name)}#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}>
+            #{indent_str(indent)}<div#{id_attr}#{class_name_attr(class_name)}#{style_attr}#{testid_attr}#{tag_attr}#{build_aria_disabled_attr}#{group_attrs}>
             #{items_jsx}
             #{indent_str(indent)}</div>
           JSX

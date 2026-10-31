@@ -8,6 +8,7 @@ require_relative 'safe_area_edges'
 require_relative '../../core/layout_path'
 require_relative '../../core/normalization'
 require_relative '../../core/tap_accessibility'
+require_relative '../../core/control_accessibility'
 require_relative '../../core/string_literals'
 require_relative '../../core/enum_spelling'
 require_relative '../../core/attribute_validator'
@@ -878,6 +879,31 @@ module KjuiTools
             modifiers << ".semantics { testTagsAsResourceId = true }"
           end
 
+          modifiers + build_control_accessibility(json_data, required_imports)
+        end
+
+        # What TalkBack is told about a control beyond what it shows
+        # (shared/core/control_accessibility.rb), on the chain every
+        # component's modifiers take (build_test_tag):
+        #   accessibilityLabel      — `contentDescription`, the key localized
+        #                             like `text`, or the binding. It is
+        #                             evaluated outside the semantics block:
+        #                             stringResource is composable, and the
+        #                             block is not.
+        #   accessibilityLiveRegion — `liveRegion = LiveRegionMode.Polite` /
+        #                             `Assertive`
+        def self.build_control_accessibility(json_data, required_imports = nil)
+          rule = JsonUIShared::ControlAccessibility
+          modifiers = []
+          if (raw = rule.label(json_data))
+            required_imports&.add(:semantics_content_description)
+            text = ResourceResolver.process_text(raw, required_imports)
+            modifiers << ".then((#{text}).let { label -> Modifier.semantics { contentDescription = label } })"
+          end
+          if (live = rule.live(json_data))
+            required_imports&.add(:semantics_live_region)
+            modifiers << ".semantics { liveRegion = LiveRegionMode.#{live.capitalize} }"
+          end
           modifiers
         end
 

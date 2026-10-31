@@ -220,14 +220,18 @@ module SjuiTools
           # selectable element; the group reads as its title. The dynamic
           # face forms the group the same way (RadioConverter.swift; ticket
           # sjui-a-composite-leaf-gives-its-id-to-every-element-inside).
+          # A declared accessibilityLabel names it in place of its text
+          # (shared/core/control_accessibility.rb), localized like `text`.
           a11y_text = @component['label'] || @component['text']
-          titled = a11y_text.is_a?(String) && !a11y_text.empty?
+          named = control_accessibility_label_expr
+          titled = named || (a11y_text.is_a?(String) && !a11y_text.empty?)
+          label = named || (titled && label_expression(a11y_text))
           if bound_items || items.any?
             add_modifier_line ".accessibilityElement(children: .contain)"
-            add_modifier_line ".accessibilityLabel(#{label_expression(a11y_text)})" if titled
+            add_modifier_line ".accessibilityLabel(#{label})" if titled
           elsif titled
             add_modifier_line ".accessibilityElement(children: .ignore)"
-            add_modifier_line ".accessibilityLabel(#{label_expression(a11y_text)})"
+            add_modifier_line ".accessibilityLabel(#{label})"
           end
 
           # 共通のモディファイアを適用
