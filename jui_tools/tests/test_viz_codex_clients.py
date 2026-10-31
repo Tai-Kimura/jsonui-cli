@@ -205,9 +205,9 @@ def test_real_open_file_owner_disappears_when_its_process_exits(tmp_path):
     if not shutil.which('lsof'):
         pytest.skip('lsof is unavailable: its failure path is covered separately')
     binary = tmp_path / 'codex'
-    binary.symlink_to(shutil.which('sleep'))
+    binary.symlink_to('/bin/bash')   # not sleep: a multi-call coreutils (Ubuntu 26.04) refuses to run as codex
     with (tmp_path / 'logs_2.sqlite').open('w') as opened:
-        child = subprocess.Popen([str(binary), '60'], pass_fds=(opened.fileno(),))
+        child = subprocess.Popen([str(binary), '-c', 'read -t 60'], stdin=subprocess.PIPE, pass_fds=(opened.fileno(),))
         try:
             deadline = time.monotonic() + 6
             while codex_clients.alive(tmp_path) is not True:
@@ -220,6 +220,7 @@ def test_real_open_file_owner_disappears_when_its_process_exits(tmp_path):
             if child.poll() is None:
                 child.terminate()
                 child.wait(timeout=5)
+            child.stdin.close()
 
 
 def test_the_page_clocks_a_codex_session_out_through_its_link_and_never_the_claude_path(tmp_path, monkeypatch):

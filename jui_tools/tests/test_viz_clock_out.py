@@ -1,7 +1,7 @@
 """退勤: end one terminal session from its robot card (ticket 2026-10-19-jui-viz-clock-out-button).
 
 Every process that could ever be signalled here is one this file started: stand-ins named like a claude CLI (a
-symlink called ``claude`` to /bin/sleep or /bin/bash) or not (``notclaude``), each written into a TEMPORARY HOME's
+symlink called ``claude`` to /bin/bash) or not (``notclaude``), each written into a TEMPORARY HOME's
 ~/.claude/sessions as a session. The server is a real ``jui viz start`` in that HOME on a free port, with PATH cut
 to /usr/bin:/bin (no ``claude agents`` poll), so the only pids it can read are these. The stand-ins are reaped only
 after the server has stopped, so none of their pids can be reused by another process while a server could still
@@ -32,6 +32,8 @@ from jui_cli.viz import clockout
 
 REPO = Path(__file__).resolve().parents[2]
 JUI = REPO / "jui_tools" / "bin" / "jui"
+#: The idle stand-in's script: no child process, no utility of its own.
+IDLE = "read -t 600"
 DROP = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR", "PYTHONPATH", "CLAUDE_CONFIG_DIR")
 #: Read only (copied), from the user's real home: pytest may itself run with HOME set to a temporary folder.
 REAL_COMMON = Path(pwd.getpwuid(os.getuid()).pw_dir) / ".claude" / "session-recovery" / "common.sh"
@@ -63,21 +65,23 @@ class StandIns:
     def __init__(self, root: Path):
         self.root = root
         self.procs: dict[int, subprocess.Popen] = {}
-        for name, target in (("sleep/claude", "/bin/sleep"), ("bash/claude", "/bin/bash"), ("other/notclaude", "/bin/sleep")):
+        # Never a renamed /bin/sleep: a multi-call coreutils (uutils, /bin/sleep on Ubuntu 26.04) reads the utility
+        # from argv[0], so a sleep called claude exits 1 at once ("Requested utility `claude` does not match").
+        for name in ("bash/claude", "other/notclaude"):
             link = root / name
             link.parent.mkdir(parents=True, exist_ok=True)
-            os.symlink(target, link)
+            os.symlink("/bin/bash", link)
 
     def start(self, kind: str = "sleep", script: str | None = None) -> subprocess.Popen:
-        if kind == "sleep":
-            argv = [str(self.root / "sleep" / "claude"), "600"]
-        elif kind == "notclaude":
-            argv = [str(self.root / "other" / "notclaude"), "600"]
+        stdin = subprocess.DEVNULL
+        if kind in ("sleep", "notclaude"):   # waits in bash's own read on a pipe this test holds; one SIGTERM ends it
+            name = "bash/claude" if kind == "sleep" else "other/notclaude"
+            argv, stdin = [str(self.root / name), "-c", IDLE], subprocess.PIPE
         else:   # a bash called claude running a script (traps)
             path = self.root / f"script-{len(self.procs)}.sh"
             path.write_text(script or "")
             argv = [str(self.root / "bash" / "claude"), str(path)]
-        p = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        p = subprocess.Popen(argv, stdin=stdin, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.procs[p.pid] = p
         return p
 
@@ -98,6 +102,8 @@ class StandIns:
             if p.poll() is None:
                 p.kill()   # our own stand-in
             p.wait(timeout=10)
+            if p.stdin:
+                p.stdin.close()
 
 
 def write_registry(folder: Path, pid: int, sid: str, entrypoint="cli", kind="interactive", proc_start: str | None = None,

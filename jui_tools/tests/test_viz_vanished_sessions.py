@@ -10,7 +10,7 @@ viz restarted, and 退勤 on one was refused 409 ("no ~/.claude/sessions entry n
 
 The live arms run a real ``jui viz start`` in a TEMPORARY HOME with PATH holding only a stand-in ``claude`` written by
 this file (it prints this test's list, or exits 1 while the test says the list is unreadable). The sessions are
-stand-ins of test_viz_clock_out (a symlink called claude to /bin/sleep); each kill -9 goes to one of them only.
+stand-ins of test_viz_clock_out (a symlink called claude to /bin/bash); each kill -9 goes to one of them only.
 """
 from __future__ import annotations
 
