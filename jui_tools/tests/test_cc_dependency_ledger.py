@@ -56,6 +56,14 @@ def test_a_new_marked_file_that_is_not_listed_is_red(tmp_path):
     assert any("tool/new_feature.py" in p for p in problems), problems
 
 
+def test_the_denial_entry_names_every_transient_form_the_probe_knows():
+    """The ledger says which forms are not a denial; the probe knows the same ones (10-31: the Artifact lookup form)."""
+    [entry] = [e for e in L.load()["entries"] if e["probe"] == "auto_mode_denial"]
+    for form in ("The server-side auto mode classifier gave no verdict", "This is not a judgement against "):
+        assert form in entry["relies_on"]
+        assert form in P.TRANSIENT
+
+
 def test_a_probe_name_that_does_not_exist_is_red():
     led = copy.deepcopy(L.load())
     led["entries"][0]["probe"] = "no_such_probe"
@@ -230,14 +238,14 @@ def test_session_probes_read_a_recorded_session(tmp_path):
     (cfg / "projects" / "p" / "s.jsonl").write_text(json.dumps(rec) + "\n")
     s = P.Session(config_dir=cfg, hook_inputs=[{"hook_event_name": "SessionEnd", "session_id": "s", "reason": "other",
                                                 "transcript_path": "x", "cwd": "/", "permission_mode": "default"}],
-                  hook_env={"CLAUDE_PROJECT_DIR": "/"}, statusline={"session_id": "s"}, sigterm_exit=143,
-                  sigterm_session_end=True)
+                  hook_env={"CLAUDE_PROJECT_DIR": "/"}, statusline={"session_id": "s"},
+                  sigterm_runs=[{"exit": 143, "session_end": True}] * 3)
     ctx = P.Context(run=fake_cli(), session=s)
     assert P.config_paths(ctx) == {p: True for p in P.CONFIG_PATHS}
     assert P.transcript_shape(ctx)["keys"]["assistant"] == {k: True for k in P.TRANSCRIPT_KEYS["assistant"]}
     assert P.hook_input_shape(ctx)["SessionEnd"] == {"reason": True}
     assert P.env_vars(ctx)["CLAUDE_PROJECT_DIR"] is True
-    assert P.sigterm_session_end(ctx) == {"exited": True, "session_end": True}
+    assert P.sigterm_session_end(ctx) == {"exited": "all", "session_end": "all"}
     assert P.transcript_shape(P.Context(run=fake_cli()))["skipped"]
 
 
@@ -352,7 +360,10 @@ if mode == "nologin":
                       "total_cost_usd": 0, "usage": {"input_tokens": 0, "output_tokens": 0}}))
     sys.exit(1)
 if "Count" in " ".join(args):
-    signal.signal(signal.SIGTERM, lambda *a: (fire("SessionEnd", {"reason": "other"}), sys.exit(143)))
+    # "flaky": the second SIGTERM run ends without its SessionEnd (as 10-31's one sample did)
+    counts = [f for f in os.listdir(os.environ["FAKE_LOG"]) if "Count" in open(os.path.join(os.environ["FAKE_LOG"], f)).read()]
+    missed = mode == "flaky" and len(counts) == 2
+    signal.signal(signal.SIGTERM, lambda *a: (None if missed else fire("SessionEnd", {"reason": "other"}), sys.exit(143)))
     time.sleep(30)
     sys.exit(0)
 fire("UserPromptSubmit", {"prompt": "p", "permission_mode": "default"})
@@ -388,11 +399,11 @@ def launched(log):
     return [json.loads(p.read_text()) for p in sorted(log.iterdir())]
 
 
-def test_the_live_session_runs_twice_isolated_and_sigterms_its_own_child(fake_claude):
+def test_the_live_session_runs_isolated_and_sigterms_its_own_child_three_times(fake_claude):
     cli, log, work = fake_claude
     s = W.live_session(str(cli), work, token=lambda: "SECRET-TOKEN-123", watched=lambda: [work.parent / "real-state"])
     runs = launched(log)
-    assert len(runs) == 2
+    assert len(runs) == 1 + W.SIGTERM_RUNS == 4
     for r in runs:
         assert r["config"] == str(work / "config") and r["cwd"] == str(work / "cwd") and r["leaked"] == []
         # the token reaches the CLI through the child's environment only, never its argv
@@ -402,7 +413,7 @@ def test_the_live_session_runs_twice_isolated_and_sigterms_its_own_child(fake_cl
     on_disk = [f for f in work.rglob("*") if f.is_file() and b"SECRET-TOKEN" in f.read_bytes()]
     assert on_disk == []
     assert s.result["ok"] and s.result["cost_usd"] == 0.01 and s.result["usage"]["input_tokens"] == 5
-    assert s.sigterm_exit == 143 and s.sigterm_session_end is True
+    assert s.sigterm_runs == [{"exit": 143, "session_end": True}] * 3
     events = {h["hook_event_name"] for h in s.hook_inputs}
     assert events == {"SessionStart", "UserPromptSubmit", "SessionEnd"}
     assert "CLAUDE_PROJECT_DIR" in s.hook_env
@@ -416,16 +427,47 @@ def test_a_lost_login_is_one_red_shape_and_no_second_run(fake_claude, monkeypatc
     monkeypatch.setenv("FAKE_MODE", "nologin")
     s = W.live_session(str(cli), work, token=lambda: None, watched=lambda: [work.parent / "real-state"])
     assert len(launched(log)) == 1 and launched(log)[0]["token"] is None
-    assert s.sigterm_exit is None
+    assert s.sigterm_runs == []
     assert P.session_ran(P.Context(run=fake_cli(), session=s)) == {
         "ok": False, "result": "Not logged in · Please run /login", "terminal_reason": "api_error"}
+
+
+def test_one_sigterm_run_without_its_session_end_is_some_and_files_nothing(fake_claude, monkeypatch, world):
+    """10-31: one SIGTERM run that missed its SessionEnd filed a ticket (2.1.311 misses it as often as 2.1.314). Three
+    runs, one of them without: some, and some is no change; only none of the three is."""
+    cli, log, work = fake_claude
+    monkeypatch.setenv("FAKE_MODE", "flaky")
+    s = W.live_session(str(cli), work, token=lambda: None, watched=lambda: [work.parent / "real-state"])
+    assert [r["session_end"] for r in s.sigterm_runs] == [True, False, True]
+    shape = P.sigterm_session_end(P.Context(run=fake_cli(), session=s))
+    assert shape == {"exited": "all", "session_end": "some"}
+    repo, state, _temp, notified = world
+    state.mkdir()
+    (state / "shapes.json").write_text(json.dumps({"sigterm_session_end": {"exited": True, "session_end": True}}))  # 10-27's
+    got = {"v": shape}
+    monkeypatch.setitem(P.PROBES, "sigterm_session_end", lambda ctx: got["v"])
+    r = go(world, fake_cli(), fake_fetch("2.1.303"))
+    assert "sigterm_session_end" not in r["changed"] and tickets(repo) == []
+    got["v"] = {"exited": "all", "session_end": "none"}
+    r = go(world, fake_cli(), fake_fetch("2.1.303"))
+    assert "sigterm_session_end" in r["changed"] and len(tickets(repo)) == 1
+
+
+@pytest.mark.parametrize("old,new,is_worse", [
+    ("all", "some", False), ("some", "all", False), (True, "all", False), (True, "some", False),
+    ("some", "none", True), ("all", "none", True), (True, "none", True), ("unseen", "none", False),
+    ({"session_end": True}, {"session_end": "some"}, False), ({"session_end": True}, {}, True),
+])
+def test_a_sampled_probe_is_worse_only_at_none(old, new, is_worse):
+    assert W.worse(old, new, sampled=True) is is_worse
+    assert P.SAMPLED == {"sigterm_session_end"}
 
 
 def test_a_foreign_change_to_the_watched_state_passes_the_guard(fake_claude):
     cli, log, work = fake_claude      # FAKE_MODE ok: the fake rewrites active.json with another lane's id
     s = W.live_session(str(cli), work, token=lambda: None, watched=lambda: [work.parent / "real-state"])
     assert (work.parent / "real-state" / "active.json").read_text().startswith("another lane")
-    assert s.result["leaks"] == [] and len(launched(log)) == 2
+    assert s.result["leaks"] == [] and len(launched(log)) == 1 + W.SIGTERM_RUNS
 
 
 def test_our_own_session_id_in_the_watched_state_stops_the_second_run(fake_claude, monkeypatch):
@@ -433,7 +475,7 @@ def test_our_own_session_id_in_the_watched_state_stops_the_second_run(fake_claud
     monkeypatch.setenv("FAKE_MODE", "own")
     s = W.live_session(str(cli), work, token=lambda: None, watched=lambda: [work.parent / "real-state"])
     assert s.result["leaks"] == [str(work.parent / "real-state" / "active.json")]
-    assert len(launched(log)) == 1 and s.sigterm_exit is None
+    assert len(launched(log)) == 1 and s.sigterm_runs == []
     assert P.session_ran(P.Context(run=fake_cli(), session=s))["leaks"]
 
 

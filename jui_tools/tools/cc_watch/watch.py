@@ -46,6 +46,8 @@ from cc_watch import probes as P  # noqa: E402
 from cc_watch.ledger import load  # noqa: E402
 
 LABEL = "dev.jsonui.cc-dependency-watch"
+#: SIGTERM runs per live session (probes.SAMPLED: red only when none of them saw its SessionEnd)
+SIGTERM_RUNS = 3
 REGISTRY = "https://registry.npmjs.org/@anthropic-ai/claude-code/latest"
 CHANGELOG = "https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md"
 #: CHANGELOG words that touch the ledger (hooks, channels, transcripts, statusLine, plugins, the options we pass …).
@@ -199,12 +201,12 @@ def own_traces(before: dict, after: dict, marks: list[str]) -> list[str]:
 def live_session(cli: str, work: Path, timeout: int = 180, token: Callable[[], str | None] = token_from_keychain,
                  watched: Callable[[], list[Path]] = default_watched) -> P.Session:
     """One short session in a temporary config folder and an empty working folder, its own hooks recording their input,
-    then one run stopped with SIGTERM (only the process started here). Uses a little of the account's quota.
+    then SIGTERM_RUNS runs stopped with SIGTERM (only the processes started here). Uses a little of the account's quota.
     Measured 10-19 22:00 (run 1): CLAUDE_CONFIG_DIR=<tmp> + --setting-sources "" + --settings <own> fired only the
     hooks of <own> (SessionStart, UserPromptSubmit, SessionEnd captured); no robot in viz, nothing for the session in
     session-recovery, ~/.claude/projects or ~/.claude/sessions.
     The guard: the watched folders are read before and after the first run; if a path added or changed there carries
-    this session's id or temporary path, the SIGTERM run is not fired and the session reports the leak (red).
+    this session's id or temporary path, the SIGTERM runs are not fired and the session reports the leak (red).
     The token reaches the CLI only through the child's environment, never its argv."""
     config, cap, cwd = work / "config", work / "captured", work / "cwd"
     for d in (config, cap, cwd):
@@ -242,25 +244,26 @@ def live_session(cli: str, work: Path, timeout: int = 180, token: Callable[[], s
                                 "cache_creation_input_tokens", "cache_read_input_tokens")}}
     marks = [str(work), re.sub(r"[^A-Za-z0-9-]", "-", str(work))] + ([out["session_id"]] if out.get("session_id") else [])
     session.result["leaks"] = own_traces(before, watched_state(roots), marks)
-    if session.result["ok"] and not session.result["leaks"]:
-        # SIGTERM: a second run, stopped once its SessionStart hook ran (only this process, which we started)
+    after: set = set()
+    for _ in range(SIGTERM_RUNS if session.result["ok"] and not session.result["leaks"] else 0):
+        # SIGTERM: one more run, stopped once its SessionStart hook ran (only this process, which we started)
         before = {f.name for f in cap.iterdir()}
         proc = subprocess.Popen([*base, "-p", "Count from 1 to 200, one number per line."], cwd=cwd, env=env,
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+        code = None
         try:
             deadline = time.monotonic() + 60
             while time.monotonic() < deadline and not any(n.startswith("SessionStart") for n in {f.name for f in cap.iterdir()} - before):
                 time.sleep(0.5)
             proc.send_signal(signal.SIGTERM)
-            session.sigterm_exit = proc.wait(timeout=30)
+            code = proc.wait(timeout=30)
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.wait()
         time.sleep(2)   # a SessionEnd hook may still be writing
-        after = {f.name for f in cap.iterdir()} - before
-        session.sigterm_session_end = any(n.startswith("SessionEnd") for n in after)
-    else:
-        after = set()
+        new = {f.name for f in cap.iterdir()} - before
+        session.sigterm_runs.append({"exit": code, "session_end": any(n.startswith("SessionEnd") for n in new)})
+        after |= new
     for f in sorted(cap.iterdir()):
         if f.name in after:
             continue
@@ -352,16 +355,20 @@ _RANK = {"none": 0, "some": 1, "all": 2}
 _NO_EVIDENCE = "unseen"
 
 
-def worse(old, new) -> bool:
+def worse(old, new, sampled: bool = False) -> bool:
     """Whether a probe's shape moved toward broken: all -> some -> none, true -> false, a key or a value gone, any
     other value changed. Not worse: from / to "unseen" (no record of the kind in the window), toward all or true, a
-    probe or key seen for the first time (old None). An error shape is filed whatever it was before."""
+    probe or key seen for the first time (old None). An error shape is filed whatever it was before.
+    ``sampled`` (probes.SAMPLED, a probe of several runs): only a move to "none" or false is worse — all <-> some, and
+    a former true read as all or some, are not."""
     if old == new or old is None:
         return False
     if new is None:
         return True
     if isinstance(old, dict) and isinstance(new, dict):
-        return any(worse(old.get(k), new.get(k)) for k in old.keys() | new.keys())
+        return any(worse(old.get(k), new.get(k), sampled) for k in old.keys() | new.keys())
+    if sampled and not isinstance(old, dict) and not isinstance(new, dict):
+        return new in ("none", False) and old not in ("none", False, _NO_EVIDENCE)
     if _NO_EVIDENCE in (old, new):
         return False
     if old in _RANK and new in _RANK:
@@ -415,7 +422,7 @@ def run(repo: Path, state: Path, live: bool, cli: str = "claude", runner=None, f
     # Only a move toward worse is a change to file. The transcript probes count what this machine happened to do in
     # the window — no denial, no Skill call, no message read on both sides is "unseen" or false, not broken — and
     # their shapes went back and forth on 10-22 and 10-23 with nothing broken (ticket 2026-10-23-cc-dependency-watch-red).
-    changed = {k: ov for k, ov in moved.items() if worse(*ov)}
+    changed = {k: ov for k, ov in moved.items() if worse(*ov, sampled=k in P.SAMPLED)}
     errors = {k: v for k, v in shapes.items() if isinstance(v, dict) and "error" in v}
     for k, v in errors.items():
         changed.setdefault(k, (saved.get(k) if saved else None, v))

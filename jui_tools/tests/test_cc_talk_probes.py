@@ -174,6 +174,16 @@ def test_a_denial_in_a_large_files_head_is_seen(tmp_path, monkeypatch):
     assert P.auto_mode_denial(_ctx(projects)) == {"known": "all", "reason": "all", "no_verdict": "unseen"}
 
 
+def test_the_artifact_lookup_retry_is_a_known_transient_form(tmp_path):
+    """10-31's red: an Artifact call whose owner lookup failed (2.1.312, 10-30) — not a denial, the call may be made
+    again, like the no-verdict form."""
+    retry = ("This is not a judgement against Artifact. Repeat the identical Artifact call once now; it will be reviewed "
+             "afresh. (The server-side auto mode classifier reviewed this call, but Claude Code could not look up whose "
+             "artifact this is or who can see it — the lookup got HTTP 404)")
+    projects = _files(tmp_path, [[_denial(DENIED), _denial(retry)]])
+    assert P.auto_mode_denial(_ctx(projects)) == {"known": "all", "reason": "all", "no_verdict": "unseen"}
+
+
 def test_a_commands_own_output_quoting_auto_mode_is_not_a_denial(tmp_path):
     quoted = "Exit code 2\nREFUSE: not an additive conflict:\n  POST /api/denial    a card of a call stopped by auto mode"
     projects = _files(tmp_path, [[_denial(DENIED), _denial(quoted)]])

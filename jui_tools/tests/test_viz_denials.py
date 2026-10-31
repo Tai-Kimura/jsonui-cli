@@ -312,6 +312,10 @@ def test_a_reason_in_a_sentence_is_kept_and_the_no_verdict_form_is_no_card():
     no_verdict = ("The server-side auto mode classifier gave no verdict (error), so auto mode cannot determine the safety of "
                   "Bash. This is a transient failure of the check, not a judgment about the action")
     assert denial_of(_result(text=no_verdict)) == []
+    retry = ("This is not a judgement against Artifact. Repeat the identical Artifact call once now; it will be reviewed "
+             "afresh. (The server-side auto mode classifier reviewed this call, but Claude Code could not look up whose "
+             "artifact this is or who can see it)")
+    assert denial_of(_result(text=retry)) == []      # 10-30, 2.1.312: not a denial either, no card
 
 
 def test_the_probe_sees_the_known_forms_and_flags_a_new_one(tmp_path):

@@ -134,9 +134,9 @@
     {
       "id": "sigterm",
       "name": "SIGTERM で終わり、SessionEnd が出ること",
-      "relies_on": "a session that gets SIGTERM ends and its SessionEnd hook runs",
+      "relies_on": "a session that gets SIGTERM ends and its SessionEnd hook runs; one SIGTERM right after SessionStart misses its SessionEnd now and then (10-31: 3 in 14 with 2.1.311, 3 in 20 with 2.1.314), so the probe takes three runs and only none of them is a change",
       "probe": "sigterm_session_end",
-      "impact": "viz: 退勤ボタンでセッションが終わらない、ロボットが残る",
+      "impact": "viz: 退勤ボタンで SIGTERM を送ってもセッションが終わらない。SessionEnd だけが来ないなら、ボタンはプロセスが消えたのを見て終わらせ、ボタン以外の終わりは end_vanished が拾う（session-recovery の台帳の行は残る）",
       "files": [
         "jui_tools/jui_cli/viz/clockout.py"
       ]
@@ -289,7 +289,7 @@
     {
       "id": "auto-mode-denial",
       "name": "自動モードの拒否（PermissionDenied のフックと、拒否の tool_result の文）",
-      "relies_on": "the PermissionDenied hook fires only when auto mode denies a call, with tool_name, tool_input, tool_use_id and reason (hooks reference; measured 10-20 13:12 on a real auto mode denial: viz's event log got the hook 0.04 s after the transcript's record, with the same tool_name and tool_input; whether tool_use_id and reason come was not seen, so denials.py matches the two sources without them too); the tool_result of the denied call is is_error and its text starts with \"Permission for this action was denied by the Claude Code auto mode classifier.\" followed by \"Reason: \" and a rule in square brackets or a sentence (11 records in this machine's transcripts, 10-19 and 10-20; not documented); the only other is_error form that names the classifier is the transient \"The server-side auto mode classifier gave no verdict\", which is not a denial",
+      "relies_on": "the PermissionDenied hook fires only when auto mode denies a call, with tool_name, tool_input, tool_use_id and reason (hooks reference; measured 10-20 13:12 on a real auto mode denial: viz's event log got the hook 0.04 s after the transcript's record, with the same tool_name and tool_input; whether tool_use_id and reason come was not seen, so denials.py matches the two sources without them too); the tool_result of the denied call is is_error and its text starts with \"Permission for this action was denied by the Claude Code auto mode classifier.\" followed by \"Reason: \" and a rule in square brackets or a sentence (11 records in this machine's transcripts, 10-19 and 10-20; not documented); the only other is_error forms that name the classifier are transient, not a denial (the call may be made again): \"The server-side auto mode classifier gave no verdict\", and \"This is not a judgement against <tool>. Repeat the identical <tool> call once now\" (an Artifact call whose owner lookup failed, seen 10-30 with 2.1.312)",
       "probe": "auto_mode_denial",
       "impact": "viz: 自動モードが止めた操作の札が出ない（ボタンから続けさせられない）。ほかは変わらない",
       "files": [

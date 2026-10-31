@@ -24,7 +24,9 @@ from . import i18n
 #: denied by the Claude Code auto mode classifier. Reason: <reason>. If you have other tasks ...". The reason was a
 #: rule in square brackets ("[Merge Without Review]") or a sentence ("The server-side auto mode classifier judged this
 #: action dangerous (it gave no explanation)"). Another form seen, "The server-side auto mode classifier gave no
-#: verdict (error), ...", is a transient failure that says the action may be tried again: not a denial, no card.
+#: verdict (error), ...", is a transient failure that says the action may be tried again: not a denial, no card. So
+#: is "This is not a judgement against <tool>. Repeat the identical <tool> call once now; ..." (an Artifact call whose
+#: owner lookup failed, 10-30 with 2.1.312): not a denial, no card.
 DENIED_PREFIX = "Permission for this action was denied by the Claude Code auto mode classifier."
 _RULE = re.compile(r"Reason: (\[[^\]\n]{1,120}\])")
 _SENTENCE = re.compile(r"Reason: (.{1,200}?)(?:\. If you have other tasks|\.?\n|\.?$)", re.S)

@@ -52,8 +52,9 @@ class Session:
     hook_inputs: list[dict] = field(default_factory=list)
     hook_env: dict[str, str] = field(default_factory=dict)
     statusline: dict | None = None
-    sigterm_exit: int | None = None
-    sigterm_session_end: bool | None = None
+    #: one {"exit": <code or None>, "session_end": <bool>} per SIGTERM run (watch.SIGTERM_RUNS of them; none when the
+    #: first run failed or leaked)
+    sigterm_runs: list[dict] = field(default_factory=list)
     result: dict | None = None          # the -p run's outcome: ok, result text, terminal_reason, cost, usage
     init: dict | None = None            # the stream's system/init record: tools, mcp_servers, …
 
@@ -161,10 +162,19 @@ def statusline_input(ctx: Context):
     return None if data is None else {k: k in data for k in STATUSLINE_KEYS}
 
 
+#: Probes that take several samples: only a move to "none" (or false, or a key gone) is worse, all <-> some is not.
+#: sigterm_session_end: one SIGTERM right after SessionStart missed its SessionEnd 3 times in 14 with 2.1.311 and
+#: 3 in 20 with 2.1.314 (measured 10-31, isolated, not logged in), and one such miss filed a ticket (2026-10-31).
+SAMPLED = frozenset({"sigterm_session_end"})
+
+
 def sigterm_session_end(ctx: Context):
+    """Over the SIGTERM runs: whether they ended, and whether their SessionEnd ran — all / some / none."""
     if (s := _skipped(ctx)) is not None:
         return s
-    return {"exited": ctx.session.sigterm_exit is not None, "session_end": bool(ctx.session.sigterm_session_end)}
+    runs = ctx.session.sigterm_runs
+    return {"exited": _all_any(runs, lambda r: r["exit"] is not None),
+            "session_end": _all_any(runs, lambda r: bool(r["session_end"]))}
 
 
 def config_paths(ctx: Context):
@@ -464,12 +474,17 @@ def price_table_models(ctx: Context, table: dict | None = None):
 
 
 NO_VERDICT = "The server-side auto mode classifier gave no verdict"
+#: The transient forms that name the classifier and are not a denial (the call may be made again): NO_VERDICT, and
+#: the one of an Artifact call whose owner lookup failed, seen 10-30 with 2.1.312 ("This is not a judgement against
+#: Artifact. Repeat the identical Artifact call once now; it will be reviewed afresh. (The server-side auto mode
+#: classifier reviewed this call, but Claude Code could not look up whose artifact this is …)").
+TRANSIENT = (NO_VERDICT, "This is not a judgement against ")
 
 
 def auto_mode_denial(ctx: Context):
     """The is_error tool_results that start by naming the auto mode classifier, as viz/denials.py reads them: a denial
-    starts with DENIED_PREFIX and then "Reason: "; the transient no-verdict form (NO_VERDICT, not a denial) is the only
-    other form known. A record of another form makes "known" some / none: the wording changed. What it cannot see: a
+    starts with DENIED_PREFIX and then "Reason: "; the transient forms (TRANSIENT, not a denial) are the only other
+    forms known. A record of another form makes "known" some / none: the wording changed. What it cannot see: a
     wording without "auto mode" in its first 150 characters (then no card either, and nothing here turns red)."""
     if (s := _talk_skipped(ctx)) is not None:
         return s
@@ -477,7 +492,7 @@ def auto_mode_denial(ctx: Context):
     prefix = re.search(r'DENIED_PREFIX = "([^"]+)"', from_viz.read_text(encoding="utf-8")).group(1)
     got = ctx._talk["denied"]
     denied = [t for t in got if t.startswith(prefix)]
-    return {"known": _all_any(got, lambda t: t.startswith(prefix) or t.startswith(NO_VERDICT)),
+    return {"known": _all_any(got, lambda t: t.startswith(prefix) or t.startswith(TRANSIENT)),
             "reason": _all_any(denied, lambda t: t[len(prefix):].lstrip().startswith("Reason: ")),
             "no_verdict": "seen" if any(t.startswith(NO_VERDICT) for t in got) else "unseen"}
 
