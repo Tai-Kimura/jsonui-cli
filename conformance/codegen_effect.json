@@ -1,5 +1,76 @@
 {
   "schemaVersion": 1,
   "_comment": "Accepted codegen-differential defects, per (component, attribute, platform, check). An entry means the converter demonstrably fails that judgement and the failure is accepted FOR A STATED REASON — not that it is fine. Unrecorded defects fail `jui conformance gate --codegen-effect`; entries the measurement no longer supports are stale and fail too, so fixing a defect forces its row out (the one-directional version lets a fixed row sit here forever, which is how the previous freeze ledgers rotted). Advisory classes (value-is-default, numeric-string-divergence) are re-derived every run and are deliberately absent. Reason 'unreviewed-initial-measurement' marks the initial-measurement backlog — consume it.",
-  "entries": []
+  "entries": [
+    {
+      "component": "View",
+      "attribute": "accessibilityLabel",
+      "platform": "android",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "control accessibility (shared/core/control_accessibility.rb)",
+      "reason": "A View is named only when it is one button to a screen reader (the tap rule's button / combine shape); the probe's View taps nothing, so no platform names it, by the rule the three codegens and both runtimes share (an iOS View that is no element hands a name to every child inside it). The tests that do name a tappable View are control_accessibility_spec in each tool.",
+      "note": "jsonui-cli 2.3.38"
+    },
+    {
+      "component": "View",
+      "attribute": "accessibilityLabel",
+      "platform": "android",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "control accessibility (shared/core/control_accessibility.rb)",
+      "reason": "A View is named only when it is one button to a screen reader (the tap rule's button / combine shape); the probe's View taps nothing, so no platform names it, by the rule the three codegens and both runtimes share (an iOS View that is no element hands a name to every child inside it). The tests that do name a tappable View are control_accessibility_spec in each tool.",
+      "note": "jsonui-cli 2.3.38"
+    },
+    {
+      "component": "Label",
+      "attribute": "accessibilityLiveRegion",
+      "platform": "ios",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "control accessibility (shared/core/control_accessibility.rb)",
+      "reason": "A Label's live region is announced on iOS when its BOUND text changes (iOS has no live region); the probe's Label text is static, so it never changes and there is nothing to announce, for either value. sjui_tools/spec/swiftui/views/control_accessibility_spec.rb pins the announcement on a bound text.",
+      "note": "jsonui-cli 2.3.38"
+    },
+    {
+      "component": "View",
+      "attribute": "accessibilityLabel",
+      "platform": "ios",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "control accessibility (shared/core/control_accessibility.rb)",
+      "reason": "A View is named only when it is one button to a screen reader (the tap rule's button / combine shape); the probe's View taps nothing, so no platform names it, by the rule the three codegens and both runtimes share (an iOS View that is no element hands a name to every child inside it). The tests that do name a tappable View are control_accessibility_spec in each tool.",
+      "note": "jsonui-cli 2.3.38"
+    },
+    {
+      "component": "View",
+      "attribute": "accessibilityLabel",
+      "platform": "ios",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "control accessibility (shared/core/control_accessibility.rb)",
+      "reason": "A View is named only when it is one button to a screen reader (the tap rule's button / combine shape); the probe's View taps nothing, so no platform names it, by the rule the three codegens and both runtimes share (an iOS View that is no element hands a name to every child inside it). The tests that do name a tappable View are control_accessibility_spec in each tool.",
+      "note": "jsonui-cli 2.3.38"
+    },
+    {
+      "component": "View",
+      "attribute": "accessibilityLabel",
+      "platform": "web",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "control accessibility (shared/core/control_accessibility.rb)",
+      "reason": "A View is named only when it is one button to a screen reader (the tap rule's button / combine shape); the probe's View taps nothing, so no platform names it, by the rule the three codegens and both runtimes share (an iOS View that is no element hands a name to every child inside it). The tests that do name a tappable View are control_accessibility_spec in each tool.",
+      "note": "jsonui-cli 2.3.38"
+    },
+    {
+      "component": "View",
+      "attribute": "accessibilityLabel",
+      "platform": "web",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "control accessibility (shared/core/control_accessibility.rb)",
+      "reason": "A View is named only when it is one button to a screen reader (the tap rule's button / combine shape); the probe's View taps nothing, so no platform names it, by the rule the three codegens and both runtimes share (an iOS View that is no element hands a name to every child inside it). The tests that do name a tappable View are control_accessibility_spec in each tool.",
+      "note": "jsonui-cli 2.3.38"
+    }
+  ]
 }
