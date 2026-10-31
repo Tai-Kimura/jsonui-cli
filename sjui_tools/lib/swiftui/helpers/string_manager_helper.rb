@@ -268,7 +268,7 @@ module SjuiTools
           # `map` + `compact`, not `filter_map`: the latter is Ruby 2.7+ and
           # until jsonui-cli 1.9.0 (floor 3.2 since) this tool could reach a
           # consumer's system Ruby, which is 2.6 on
-          # macOS. `sjui_tools/.ruby-version` pins 3.2.2 and `jui sync_tool`
+          # macOS. `sjui_tools/.ruby-version` pins 3.2.11 and `jui sync_tool`
           # propagates that pin to the platform root, so the pin normally
           # binds — but it binds only where rbenv is installed, and the cost
           # of not depending on it is one method call. kjui found this the

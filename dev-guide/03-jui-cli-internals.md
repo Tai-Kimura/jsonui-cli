@@ -86,7 +86,7 @@ MCP の `mcp__jui-tools__jui_*` ツール群はこれらの薄いラッパ（07�
   プロジェクト独自コンバータ（`rjui g converter` 等の出力）保護のため。
 - `.ruby-version` をプラットフォームルートへ伝播（rbenv は CWD から上方探索するため、
   これがないと standalone `rjui build` が落ちる）。ただし書くのは**ルートに pin が無く、
-  かつそのパッチ版（例 3.2.2）が rbenv に入っているときだけ**。既存の pin は書き換えない
+  かつそのパッチ版（例 3.2.11）が rbenv に入っているときだけ**。既存の pin は書き換えない
   （3.2 以上は黙って保持、3.2 未満は名指しで警告のみ）。未インストールの pin を書くと
   rbenv がツール起動前に止まり、ツール側の Ruby floor ERROR の案内が届かなくなるため
   （`tool_resolver` の RBENV_VERSION 方針と同じ）。

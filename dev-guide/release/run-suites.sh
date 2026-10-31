@@ -28,7 +28,7 @@ C=$(cd "${1:-$(dirname "$0")/../..}" && pwd) || { printf '%s\n' "!! no such chec
 # cron) makes it US-ASCII: the suites' Japanese fixtures read as "???" and
 # sjui / kjui / rjui went red 80 / 27 / 47 on a tree that is green (2026-09-25).
 export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
-export RBENV_VERSION=${RBENV_VERSION:-3.2.2}
+export RBENV_VERSION=${RBENV_VERSION:-3.2.11}
 export JAVA_HOME=${JAVA_HOME:-/opt/homebrew/opt/openjdk@17}
 export ANDROID_HOME=${ANDROID_HOME:-$HOME/Library/Android/sdk}
 fail=0
@@ -272,7 +272,7 @@ rb_suite kjui_tools "bundle exec rspec"
 rb_suite rjui_tools "bundle exec rspec"
 
 # --- Ruby floor ------------------------------------------------------------
-# The three suites above run on RBENV_VERSION (3.2.2 unless the caller set
+# The three suites above run on RBENV_VERSION (3.2.11 unless the caller set
 # one): the floor from jsonui-cli 1.9.0 is Ruby 3.2, and the suites are
 # measured on it — here, and on 3.2 in CI's ruby-suites legs. Refuse a run
 # that is not on it: a suite on a newer ruby reports green for an API the

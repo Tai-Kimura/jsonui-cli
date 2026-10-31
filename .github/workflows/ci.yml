@@ -962,7 +962,8 @@ jobs:
   # host on both the floor and 3.3 and compares the bytes. Until 1.9.0 the floor was
   # the macOS system Ruby, 2.6, and this job compared 2.6 with 3.3; the 2.6
   # support ended by ruling (2026-09-26), and the floor moved to 3.2 — the
-  # ruby the release gate measures on (3.2.2).
+  # ruby the release gate measures on (3.2.11; 3.2.2 until 2.3.37, a patch
+  # ubuntu-26.04's setup-ruby has no build of — it builds only the newest 3.2).
   #
   # It covers what a unit test does not: the SAME source behaving
   # differently between interpreters — Hash ordering, String and keyword

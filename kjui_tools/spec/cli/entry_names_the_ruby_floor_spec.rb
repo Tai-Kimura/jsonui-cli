@@ -93,7 +93,7 @@ RSpec.describe 'bin/kjui and the Ruby floor (3.2)' do
   {
     'system' => ' (rbenv chose system)',
     '2.6.10' => ' (rbenv chose 2.6.10)',
-    '3.2.2' => ' (RBENV_VERSION=3.2.2, but rbenv did not start this ruby)'
+    '3.2.11' => ' (RBENV_VERSION=3.2.11, but rbenv did not start this ruby)'
   }.each do |rbenv_version, note|
     it "says what RBENV_VERSION=#{rbenv_version} means for the ruby that ran" do
       stdout, stderr, status, dir = run_entry(RbConfig.ruby, fake_version: '2.6.10',

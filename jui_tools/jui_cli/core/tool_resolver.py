@@ -27,10 +27,16 @@ def _rbenv_version_installed(version: str) -> bool:
     consults — so a cheap ``is_dir()`` check avoids shelling out to rbenv
     (which may not even be on $PATH at this point).
     """
-    rbenv_root = os.environ.get("RBENV_ROOT") or os.path.join(
-        os.path.expanduser("~"), ".rbenv"
-    )
-    return (Path(rbenv_root) / "versions" / version).is_dir()
+    return (_rbenv_root() / "versions" / version).is_dir()
+
+
+def _rbenv_root() -> Path:
+    return Path(os.environ.get("RBENV_ROOT") or os.path.join(os.path.expanduser("~"), ".rbenv"))
+
+
+def _rbenv_present() -> bool:
+    """Whether this machine has rbenv's Rubies at all (its versions/ folder): with none there, no shim reads a pin."""
+    return (_rbenv_root() / "versions").is_dir()
 
 
 def resolve_tool(tool_name: str, cwd: Path) -> str:
@@ -92,9 +98,9 @@ def build_tool_env(
             pinned = ruby_version_file.read_text().strip()
             # Only force RBENV_VERSION when that exact Ruby is installed.
             # The bundled `.ruby-version` pins the maintainer's dev Ruby
-            # (e.g. 3.2.2); forcing it unconditionally hard-fails `jui build`
+            # (e.g. 3.2.11); forcing it unconditionally hard-fails `jui build`
             # for every consumer who lacks that exact patch
-            # ("rbenv: version `3.2.2' is not installed (set by
+            # ("rbenv: version `3.2.11' is not installed (set by
             # RBENV_VERSION environment variable)"). When it's absent we omit
             # the override and let rbenv resolve the consumer's own
             # .ruby-version / global Ruby, which runs the tool fine.

@@ -70,10 +70,10 @@ class BuildToolEnvTest(unittest.TestCase):
             bin_dir.mkdir(parents=True)
             (bin_dir / "kjui").write_text("#!/bin/sh\n")
             (bin_dir / "kjui").chmod(0o755)
-            (Path(tmp) / "kjui_tools" / ".ruby-version").write_text("3.2.2\n")
+            (Path(tmp) / "kjui_tools" / ".ruby-version").write_text("3.2.11\n")
             with patch.dict(os.environ, {"PATH": str(bin_dir)}, clear=True):
                 env = build_tool_env("kjui", "kjui")
-            self.assertEqual(env.get("RBENV_VERSION"), "3.2.2")
+            self.assertEqual(env.get("RBENV_VERSION"), "3.2.11")
 
     @patch("jui_cli.core.tool_resolver._rbenv_version_installed", return_value=False)
     def test_a_bare_name_whose_pin_rbenv_lacks_gets_nothing(self, _installed):
@@ -82,7 +82,7 @@ class BuildToolEnvTest(unittest.TestCase):
             bin_dir.mkdir(parents=True)
             (bin_dir / "kjui").write_text("#!/bin/sh\n")
             (bin_dir / "kjui").chmod(0o755)
-            (Path(tmp) / "kjui_tools" / ".ruby-version").write_text("3.2.2\n")
+            (Path(tmp) / "kjui_tools" / ".ruby-version").write_text("3.2.11\n")
             with patch.dict(os.environ, {"PATH": str(bin_dir)}, clear=True):
                 self.assertIsNone(build_tool_env("kjui", "kjui"))
 
@@ -117,7 +117,7 @@ class BuildToolEnvTest(unittest.TestCase):
             bin_dir.mkdir(parents=True)
             bin_path = bin_dir / "rjui"
             bin_path.write_text("#!/bin/sh\n")
-            (tool_dir / ".ruby-version").write_text("3.2.2\n")
+            (tool_dir / ".ruby-version").write_text("3.2.11\n")
 
             # No extras and no RBENV_VERSION → env is None (inherit parent).
             self.assertIsNone(build_tool_env(str(bin_path), "rjui"))
@@ -131,7 +131,7 @@ class BuildToolEnvTest(unittest.TestCase):
             bin_dir.mkdir(parents=True)
             bin_path = bin_dir / "rjui"
             bin_path.write_text("#!/bin/sh\n")
-            (tool_dir / ".ruby-version").write_text("3.2.2\n")
+            (tool_dir / ".ruby-version").write_text("3.2.11\n")
 
             # Cleared, because the assertion below is about what the
             # resolver PUT there and `build_tool_env` returns
@@ -165,7 +165,7 @@ class BuildToolEnvTest(unittest.TestCase):
             bin_dir.mkdir(parents=True)
             bin_path = bin_dir / "rjui"
             bin_path.write_text("#!/bin/sh\n")
-            (root / "rjui_tools" / ".ruby-version").write_text("3.2.2\n")
+            (root / "rjui_tools" / ".ruby-version").write_text("3.2.11\n")
 
             with patch.dict(os.environ, {"RBENV_VERSION": "3.2.9"}, clear=True):
                 env = build_tool_env(
@@ -200,10 +200,10 @@ class BuildToolEnvTest(unittest.TestCase):
             bin_path.parent.mkdir(parents=True)
             bin_path.write_text("#!/bin/sh\n")
             with patch("jui_cli.core.tool_resolver._rbenv_version_installed", return_value=True):
-                (root / "rjui_tools" / ".ruby-version").write_text("3.2.2\n")
+                (root / "rjui_tools" / ".ruby-version").write_text("3.2.11\n")
                 argv, env = tool_command(["rjui", "build", "--clean"], root, extra={"X": "1"})
             self.assertEqual(argv, [str(bin_path), "build", "--clean"])
-            self.assertEqual((env["RBENV_VERSION"], env["X"]), ("3.2.2", "1"))
+            self.assertEqual((env["RBENV_VERSION"], env["X"]), ("3.2.11", "1"))
 
     def test_returns_env_with_extras_even_when_bare_name(self):
         # No local install but caller passes extras — env must still be
@@ -218,9 +218,9 @@ class RbenvVersionInstalledTest(unittest.TestCase):
         from jui_cli.core.tool_resolver import _rbenv_version_installed
 
         with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / "versions" / "3.2.2").mkdir(parents=True)
+            (Path(tmp) / "versions" / "3.2.11").mkdir(parents=True)
             with patch.dict(os.environ, {"RBENV_ROOT": tmp}):
-                self.assertTrue(_rbenv_version_installed("3.2.2"))
+                self.assertTrue(_rbenv_version_installed("3.2.11"))
                 self.assertFalse(_rbenv_version_installed("3.3.0"))
 
 

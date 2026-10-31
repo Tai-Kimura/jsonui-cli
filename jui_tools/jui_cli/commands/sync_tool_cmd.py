@@ -47,7 +47,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 from ..core.config_manager import ConfigManager
-from ..core.tool_resolver import _rbenv_version_installed
+from ..core.tool_resolver import _rbenv_present, _rbenv_version_installed
 from ..version import source_sha, toolchain_version
 
 
@@ -363,7 +363,7 @@ def _sync_one_tool(
     standalone ``rjui build`` / ``sjui build`` invocations (not routed through
     ``jui build`` with its RBENV_VERSION injection) pick up a Ruby at or above
     the tools' floor (3.2) when rbenv walks up from the user's CWD. The pin is
-    the maintainer's patch level (e.g. 3.2.2), so it is written only when the
+    the maintainer's patch level (e.g. 3.2.11), so it is written only when the
     root has no pin AND that exact Ruby is installed — the same policy as
     ``tool_resolver`` (an uninstalled pin makes rbenv stop before the tool's
     own Ruby-floor ERROR can guide the user). An existing root pin is never
@@ -419,7 +419,7 @@ def _sync_one_tool(
     # the user's CWD; standalone `rjui build` from <platform_root>/ otherwise
     # falls through to the global Ruby — the system Ruby (2.6 on macOS) where
     # none was set, which the tools refuse at their entry from jsonui-cli
-    # 1.9.0 (floor 3.2). The source pin is a patch level (3.2.2): writing it
+    # 1.9.0 (floor 3.2). The source pin is a patch level (3.2.11): writing it
     # where it is not installed makes rbenv stop before the tool runs, and
     # rewriting a user's pin would undo what the tool's floor ERROR told them
     # to do. So: never rewrite an existing pin; write only an installed one.
@@ -444,6 +444,12 @@ def _sync_one_tool(
             print(f"  ruby pin:     ../.ruby-version {verb} — Ruby {want} is not installed "
                   f"under rbenv; the tool names what to pin if its Ruby is below "
                   f"{RUBY_FLOOR_TEXT}")
+        # The tool's own pin binds whatever the root's says: its bin/ starts on `env ruby`, and rbenv's shim reads
+        # the .ruby-version beside the script first (measured 10-31 with rbenv 1.3.2: root 3.2.2, tool 3.2.11 not
+        # installed -> "rbenv: version `3.2.11' is not installed" on every start). Named here, whatever the root.
+        if want and _rbenv_present() and not _rbenv_version_installed(want):
+            print(f"  ruby pin:     the tool's Ruby {want} (its .ruby-version) is not installed under rbenv, "
+                  f"and rbenv stops the tool before it starts — run: rbenv install {want}")
 
     # Distribute CLI-root shared/core payloads into <tool>/shared/core/ so the
     # tool font helpers resolve their first candidate path in project-local

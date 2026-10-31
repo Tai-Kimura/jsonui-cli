@@ -113,7 +113,7 @@
 | publication-hygiene | 公開物に消費側の名前・パス・型が漏れていないか | 5m |
 | python-suite | jui_tools unittest + protocol-sync 冪等性 e2e（apt の package と Chromium は、runner の image の版を key にした cache から入れる。miss の時だけ apt-get update と download をする。`.github/scripts/apt_install_cached.sh`） | 35m |
 | stub-identifier-tables | 生成スタブの識別子表が SSoT と一致・分岐ランタイムの腕（3 面）・新しい画面の雛形（`jui g project` → `jui build` の VM / UseCase / Repository）が swiftc（Swift 5・6）と kotlinc で通る（MainActor の分離は swiftc 6.2+ なので release/run-suites.sh） | 20m |
-| ruby-suites | rspec matrix（sjui は macos-15）Ruby 3.2（下限。3.3 にしか無い API はここで落ちる）。release/run-suites.sh も 3.2.2 で走らせる。kjui は Kotlin コンパイラ（JDK 17 + 固定 jar）で compile arm を実行 | 40m |
+| ruby-suites | rspec matrix（sjui は macos-15）Ruby 3.2（下限。3.3 にしか無い API はここで落ちる）。release/run-suites.sh も 3.2.11 で走らせる。kjui は Kotlin コンパイラ（JDK 17 + 固定 jar）で compile arm を実行 | 40m |
 | ruby-generation-parity | kjui が Ruby 3.2（下限）と 3.3 で同じバイト列を出す（jsonui-cli 1.9.0 まで 2.6 と 3.3 だった） | 25m |
 | **ssot-guards** | ①`jui conformance generate` → git diff ゼロ ②attr-bindings 決定論 ③rjui vendored テーブル diff | 10m |
 | web-conformance | Node 24 + Playwright → web.results.json、gate `--env ci`（**視覚判定あり** — `baselines/ci/web` と比較。fixture 変更時は本レーンのアーティファクトから ci/web を焼き直して同 PR に載せる） | 30m |

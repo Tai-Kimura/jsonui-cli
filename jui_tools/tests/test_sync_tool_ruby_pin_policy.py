@@ -1,6 +1,6 @@
 """`jui sync_tool` does not force the tools' patch-level Ruby pin on a root.
 
-The tools ship `.ruby-version` = 3.2.2 (the maintainer's patch level).
+The tools ship `.ruby-version` = 3.2.11 (the maintainer's patch level).
 sync_tool used to copy it into every platform root and rewrite it on every
 sync whenever the root's pin differed. Under rbenv an uninstalled pin makes
 rbenv stop (`version ... is not installed`) before the tool's own Ruby-floor
@@ -30,7 +30,7 @@ class RubyPinPolicyTests(unittest.TestCase):
         root = Path(self._tmp.name)
         self.source = root / "src" / "sjui_tools"
         self.source.mkdir(parents=True)
-        (self.source / ".ruby-version").write_text("3.2.2\n")
+        (self.source / ".ruby-version").write_text("3.2.11\n")
         (self.source / "VERSION").write_text("1.9.0\n")
         self.platform_root = root / "project"
         self.target = self.platform_root / "sjui_tools"
@@ -59,7 +59,7 @@ class RubyPinPolicyTests(unittest.TestCase):
         return counters, out.getvalue()
 
     def test_a_pin_above_the_floor_is_kept(self):
-        self._install("3.2.2")
+        self._install("3.2.11")
         self.pin.write_text("3.3.1\n")
         counters, out = self._sync()
         self.assertEqual(self.pin.read_text(), "3.3.1\n")
@@ -71,7 +71,7 @@ class RubyPinPolicyTests(unittest.TestCase):
         self.assertFalse(self.pin.exists())
         self.assertEqual(counters["ruby_pin"], 0)
         self.assertIn("not written", out)
-        self.assertIn("3.2.2", out)
+        self.assertIn("3.2.11", out)
 
     def test_an_uninstalled_pin_is_not_written_in_dry_run_either(self):
         counters, out = self._sync(dry_run=True)
@@ -80,7 +80,7 @@ class RubyPinPolicyTests(unittest.TestCase):
         self.assertIn("would not write", out)
 
     def test_a_pin_below_the_floor_is_named_not_rewritten(self):
-        self._install("3.2.2")
+        self._install("3.2.11")
         self.pin.write_text("2.6\n")
         counters, out = self._sync()
         self.assertEqual(self.pin.read_text(), "2.6\n")
@@ -89,20 +89,47 @@ class RubyPinPolicyTests(unittest.TestCase):
         self.assertIn("not rewritten", out)
 
     def test_an_installed_pin_is_written_where_none_exists(self):
-        self._install("3.2.2")
+        self._install("3.2.11")
         counters, _ = self._sync()
-        self.assertEqual(self.pin.read_text(), "3.2.2\n")
+        self.assertEqual(self.pin.read_text(), "3.2.11\n")
         self.assertEqual(counters["ruby_pin"], 1)
         # and a second sync leaves it alone
         counters, _ = self._sync()
         self.assertEqual(counters["ruby_pin"], 0)
 
     def test_an_installed_pin_is_only_announced_in_dry_run(self):
-        self._install("3.2.2")
+        self._install("3.2.11")
         counters, out = self._sync(dry_run=True)
         self.assertFalse(self.pin.exists())
         self.assertEqual(counters["ruby_pin"], 1)
-        self.assertIn("would write:  ../.ruby-version  (3.2.2)", out)
+        self.assertIn("would write:  ../.ruby-version  (3.2.11)", out)
+
+    # The tool's own pin binds under rbenv whatever the root's says (its bin/ starts on `env ruby` and the shim reads
+    # the .ruby-version beside the script first): 2.3.37 moved it 3.2.2 -> 3.2.11, and a machine with only 3.2.2
+    # stops on "rbenv: version `3.2.11' is not installed". sync_tool says what to install.
+    HINT = "rbenv install 3.2.11"
+
+    def test_a_machine_with_only_the_old_pin_is_told_to_install_the_new_one(self):
+        self._install("3.2.2")
+        self.pin.write_text("3.2.2\n")              # the root pin an earlier sync wrote
+        counters, out = self._sync()
+        self.assertIn(self.HINT, out)
+        self.assertEqual(self.pin.read_text(), "3.2.2\n")   # still never rewritten
+        self.assertEqual(counters["ruby_pin"], 0)
+
+    def test_a_machine_with_the_pin_installed_is_told_nothing(self):
+        self._install("3.2.2")
+        self._install("3.2.11")
+        self.pin.write_text("3.2.2\n")
+        _counters, out = self._sync()
+        self.assertNotIn("rbenv install", out)
+        self.assertNotIn(".ruby-version", out)
+
+    def test_a_machine_without_rbenv_is_told_nothing(self):
+        os.environ["RBENV_ROOT"] = str(Path(self._tmp.name) / "no-rbenv")   # no versions/: no shim reads a pin
+        self.pin.write_text("3.2.2\n")
+        _counters, out = self._sync()
+        self.assertNotIn("rbenv install", out)
 
     def test_floor_parse(self):
         for pin in ("3.2", "3.2.0", "3.3.1", "ruby-3.4.0", "3.10.0", "4.0.0-preview1"):

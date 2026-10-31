@@ -158,7 +158,7 @@ def _floor_line(log: str, tool: str) -> list[str]:
 
 
 def test_with_only_a_path_ruby_every_tool_names_it_and_a_pin_is_said_to_have_selected_nothing(tmp_path):
-    project = _project(tmp_path, pins={"sjui": "3.2.2", "rjui": "3.2.2"}, root_pins={}, installed=["3.2.2"])
+    project = _project(tmp_path, pins={"sjui": "3.2.11", "rjui": "3.2.11"}, root_pins={}, installed=["3.2.11"])
     rc, log, host = _jui_build(tmp_path, project, PLAIN_RUBY)
     assert rc == 1, log
     assert "ERROR: Build failed for: ios, android, web" in log, log
@@ -169,18 +169,18 @@ def test_with_only_a_path_ruby_every_tool_names_it_and_a_pin_is_said_to_have_sel
         root = (project / platform).resolve()
         assert f"and this is Ruby 2.6.10 at {host}" in lines[0], lines[0]
         assert f"Put a .ruby-version naming Ruby 3.2 or later in {root} " in lines[0], lines[0]
-        # jui passed the tool's pin (3.2.2 is "installed"); with no rbenv it chose nothing.
+        # jui passed the tool's pin (3.2.11 is "installed"); with no rbenv it chose nothing.
         pinned = tool in ("sjui", "rjui")
-        note = " (RBENV_VERSION=3.2.2, but rbenv did not start this ruby)"
+        note = " (RBENV_VERSION=3.2.11, but rbenv did not start this ruby)"
         assert (f"at {host}{note}." in lines[0]) is pinned, lines[0]
         assert (f"at {host}." in lines[0]) is not pinned, lines[0]
 
 
 def test_under_rbenv_a_tool_directory_without_a_pin_falls_to_system_and_is_named(tmp_path):
     # A tool directory without a .ruby-version (kjui_tools' until jsonui-cli
-    # 1.9.0; all three pin 3.2.2 since, test_the_three_tool_directories_pin_
+    # 1.9.0; all three pin one version since — 3.2.11 from 2.3.37 —, test_the_three_tool_directories_pin_
     # the_floor_the_suites_run_on).
-    project = _project(tmp_path, pins={"sjui": "3.2.2", "rjui": "3.2.2"}, root_pins={}, installed=["3.2.2"])
+    project = _project(tmp_path, pins={"sjui": "3.2.11", "rjui": "3.2.11"}, root_pins={}, installed=["3.2.11"])
     rc, log, host = _jui_build(tmp_path, project, RBENV_RUBY)
     assert rc == 1, log
     assert "ERROR: Build failed for: android" in log, log
@@ -192,8 +192,8 @@ def test_under_rbenv_a_tool_directory_without_a_pin_falls_to_system_and_is_named
 
 
 def test_under_rbenv_a_pin_that_is_not_installed_falls_to_system_too(tmp_path):
-    # build_tool_env passes a pin only when rbenv has it: 3.2.2 is not installed here.
-    project = _project(tmp_path, pins={"sjui": "3.2.2", "rjui": "3.2.2"}, root_pins={}, installed=[])
+    # build_tool_env passes a pin only when rbenv has it: 3.2.11 is not installed here.
+    project = _project(tmp_path, pins={"sjui": "3.2.11", "rjui": "3.2.11"}, root_pins={}, installed=[])
     rc, log, host = _jui_build(tmp_path, project, RBENV_RUBY)
     assert rc == 1 and "ERROR: Build failed for: ios, android, web" in log, log
     for tool in TOOLS.values():
@@ -203,8 +203,8 @@ def test_under_rbenv_a_pin_that_is_not_installed_falls_to_system_too(tmp_path):
 
 def test_under_rbenv_a_ruby_version_in_the_platform_root_is_what_a_face_writes_to_pass(tmp_path):
     # The remedy the line names: a .ruby-version where the tool is started.
-    project = _project(tmp_path, pins={"sjui": "3.2.2", "rjui": "3.2.2"}, root_pins={"android": "3.3.1"},
-                       installed=["3.2.2", "3.3.1"])
+    project = _project(tmp_path, pins={"sjui": "3.2.11", "rjui": "3.2.11"}, root_pins={"android": "3.3.1"},
+                       installed=["3.2.11", "3.3.1"])
     rc, log, _host = _jui_build(tmp_path, project, RBENV_RUBY)
     assert rc == 0, log
     assert all(f"REACHED {tool}" in log for tool in TOOLS.values()), log
@@ -231,10 +231,10 @@ def _home_install(tmp: Path, pin: str | None) -> list[Path]:
 def test_jui_init_starts_the_tools_on_their_pin_as_jui_build_does(tmp_path):
     # jui init runs the tools BEFORE it copies them into the project, so what
     # runs is the home install's bare name on PATH. Through tool_command its
-    # .ruby-version reaches the tool (rbenv has 3.2.2 here); until jsonui-cli
+    # .ruby-version reaches the tool (rbenv has 3.2.11 here); until jsonui-cli
     # 1.9.0 init passed nothing, and a fresh project fell to rbenv's global.
-    path_dirs = _home_install(tmp_path, "3.2.2")
-    (tmp_path / "rbenv" / "versions" / "3.2.2").mkdir(parents=True)
+    path_dirs = _home_install(tmp_path, "3.2.11")
+    (tmp_path / "rbenv" / "versions" / "3.2.11").mkdir(parents=True)
     project = tmp_path / "fresh"
     project.mkdir()
     rc, log, _host = _jui(tmp_path, project, RBENV_RUBY,
