@@ -121,7 +121,30 @@ function sfFlowHTML(s) {
     + (by.length ? `<ul class="sf-bins">${binsHTML}</ul>` : '')
     + (recent.length ? `<ol class="sf-msgs">${rowsHTML}</ol>` : `<p class="sf-none">${esc(tl('sf.flow.none'))}</p>`);
 }
-function sfRenderFlow(s) { keyed($('sf-flow-body'), JSON.stringify([s.arrivals, s.note, s.toldAt, s.told]), () => sfFlowHTML(s)); }
+function sfRenderFlow(s) {
+  keyed($('sf-flow-body'), JSON.stringify([s.arrivals, s.note, s.toldAt, s.told]), () => sfFlowHTML(s));
+  sfRenderIntake();
+}
+/* Stage 1's own state (the slice slack, slack/intake.py): the last and the next fetch, one running, why it cannot run;
+   今すぐ取る asks it for a fetch now (POST /api/slack/fetch). */
+function sfIntake() { return typeof LIVE !== 'undefined' && LIVE.slices.slack && typeof LIVE.slices.slack === 'object' ? LIVE.slices.slack : null; }
+function sfRenderIntake() {
+  const k = sfIntake(), btn = $('sf-fetch');
+  btn.hidden = !k;
+  if (!k) { setText($('sf-intake'), ''); return; }
+  btn.disabled = !k.configured || !!k.running;
+  const failed = Array.isArray(k.failed) ? k.failed.length : 0;
+  const parts = !k.configured ? [k.error ? tl('sf.intake.error', { error: String(k.error) }) : tl('sf.intake.none')]
+    : [k.running ? tl('sf.intake.running') : tl('sf.intake.last', { at: k.lastRun && k.lastRun.at ? sfClock(k.lastRun.at) : tl('sf.intake.never') }),
+      k.nextRun ? tl('sf.intake.next', { at: sfClock(k.nextRun) }) : tl('sf.intake.manual')]
+      .concat(failed ? [tl('sf.intake.failed', { n: failed })] : []);
+  setText($('sf-intake'), parts.join(tl('sf.intake.sep')));
+}
+async function sfFetch() {
+  $('sf-fetch').disabled = true;
+  const got = await sfPost('/api/slack/fetch', {});
+  if (!got.ok) setText($('sf-intake'), tl('sf.failed', { error: got.error || String(got.status) }));
+}
 
 /* ---------- the whiteboard ---------- */
 function sfCopyHTML(line, label) {
@@ -531,6 +554,7 @@ $('sf-back').addEventListener('click', () => sfClose());
 $('sf-full').addEventListener('click', () => sfFull(!SF.full));
 window.addEventListener('resize', () => { if (SF.full) sfFit(); });
 $('sf-send').addEventListener('click', sfSend);
+$('sf-fetch').addEventListener('click', sfFetch);
 $('sf-say').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sfSend(); } });
 $('sf-prompts-btn').addEventListener('click', () => ($('sf-prompts').hidden ? sfPromptsOpen() : sfPromptsClose()));
 $('sf-p-close').addEventListener('click', () => sfPromptsClose());

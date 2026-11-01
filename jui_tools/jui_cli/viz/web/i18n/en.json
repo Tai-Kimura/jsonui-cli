@@ -2590,5 +2590,15 @@
   "sf.note.id.title": "Copy the id (paste it into a message to the robot to say which note)",
   "page.sf.full": "Whole board",
   "sf.full": "Whole board",
-  "sf.full.back": "← Back to the room (Esc)"
+  "sf.full.back": "← Back to the room (Esc)",
+  "page.sf.fetch": "Fetch now",
+  "sf.intake.none": "No slack.json yet (nothing is fetched)",
+  "sf.intake.error": "The fetch settings cannot be used: {error}",
+  "sf.intake.running": "Fetching…",
+  "sf.intake.last": "Last fetch {at}",
+  "sf.intake.never": "never",
+  "sf.intake.next": "next {at}",
+  "sf.intake.manual": "no automatic fetch (by hand only)",
+  "sf.intake.failed": "{n} message(s) not processed",
+  "sf.intake.sep": " · "
 }

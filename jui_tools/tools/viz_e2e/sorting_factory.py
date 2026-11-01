@@ -108,8 +108,9 @@ async def run_sorting_factory(pw, out, failures):
     (orch / "_unsorted" / "1793500100-tanosys-C9.json").write_text("{}")
     cwds = {BOT: str(orch), DEV: "/work/shop-app", PLAIN: "/work/booking-site"}
     (state / "slack.json").write_text(json.dumps({
-        "orchestrationDir": "~/slack-orchestration", "schedule": {"everyHours": 24, "at": "09:00"},
-        "source": {"mode": "api", "workspaces": [{"name": "tanosys", "token": "x" + "oxp-e2e", "channels": ["C1"]}]},
+        # manual only and no workspace: stage 1's fetch (今すぐ取る) runs and reaches nothing outside
+        "orchestrationDir": "~/slack-orchestration", "schedule": {"everyHours": 0, "at": "09:00"},
+        "source": {"mode": "api", "workspaces": [], "_e2eKept": "x" + "oxp-e2e"},
         "router": {"adapter": "haiku", "confidenceMin": 0.6,
                    "prompt": {"instructions": "メッセージをプロジェクトに振り分ける", "projects": {"shop": "ショップのアプリ", "booking": "予約サイト"}, "chitchat": "あいさつや雑談"}},
         "taskPrompt": ""}, ensure_ascii=False))
@@ -294,6 +295,12 @@ async def run_sorting_factory(pw, out, failures):
         await wait(page, "() => window.__dbg.sfState().lanes.draft.includes('T-0009')", label="T-0009 raised to a draft")
         check(read_task(orch, "T-0009")["status"] == "draft", "the file says draft")
 
+        # stage 1's state and 今すぐ取る (POST /api/slack/fetch)
+        await wait(page, f"() => document.getElementById('sf-intake').textContent.includes({json.dumps(T('sf.intake.manual'))})", label="the intake's line")
+        await page.click("#sf-fetch")
+        await wait(page, f"() => document.getElementById('sf-intake').textContent.startsWith({json.dumps(T('sf.intake.last', at='').strip())}) && !document.getElementById('sf-intake').textContent.includes({json.dumps(T('sf.intake.never'))})",
+                   timeout=15000, label="the last fetch's time after 今すぐ取る")
+        res["intake"] = await page.evaluate("() => document.getElementById('sf-intake').textContent")
         # a message comes: the robot is told of it, a parcel rides the belt
         hook(BOT, hook_event_name="UserPromptSubmit", prompt="x")
         hook(BOT, hook_event_name="Stop")
@@ -386,7 +393,7 @@ async def run_sorting_factory(pw, out, failures):
         await wait(page, f"() => document.getElementById('sf-p-said').textContent === {json.dumps(T('sf.prompts.saved'))}", label="saved")
         cfg = json.loads((state / "slack.json").read_text())
         check(cfg["taskPrompt"] == "1 依頼 1 タスクで作る" and cfg["router"]["prompt"]["projects"]["docs"] == "ドキュメントサイト"
-              and cfg["source"]["workspaces"][0]["token"] == "x" + "oxp-e2e" and cfg["router"]["confidenceMin"] == 0.6
+              and cfg["source"]["_e2eKept"] == "x" + "oxp-e2e" and cfg["schedule"]["everyHours"] == 0 and cfg["router"]["confidenceMin"] == 0.6
               and stat.S_IMODE((state / "slack.json").stat().st_mode) == 0o600, f"slack.json: {cfg.get('taskPrompt')}, {cfg['router']}")
         await page.keyboard.press("Escape")
         check(await page.evaluate("() => document.getElementById('sf-prompts').hidden && window.__dbg.sfState().open"), "Esc closes the dialog first")

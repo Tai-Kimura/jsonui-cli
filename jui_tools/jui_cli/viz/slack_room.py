@@ -36,19 +36,19 @@ import re
 import tempfile
 from pathlib import Path
 
-from . import i18n, paths
+from . import i18n
 from .rooms import tilde
+from .slack import config as slack_config
 from .sources import launch
 
-CONFIG_NAME = "slack.json"
-DEFAULT_DIR = "~/slack-orchestration"
+DEFAULT_DIR = slack_config.DEFAULT["orchestrationDir"]
+RESERVED_IDS = ("chitchat", "_unsorted", "inbox", "tasks")   # stage 1's (slack/config.validate)
 STATUSES = ("talking", "draft", "ready", "working", "ended", "done")
 EDITABLE = ("talking", "draft", "ready")
 OPEN_SHOWN = 60                # open tasks listed in a notice to the robot (it adds to one or makes a new one)
 HEADS_MAX = 400                # source messages whose heads the page gets
 TASK_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
 SHORT_ID = re.compile(r"^T-(\d{1,9})$")   # the ids the robot gives (T-0042: a person copies it into a message to the robot)
-PROJECT_ID = re.compile(r"^[^/\\\0]{1,120}$")
 FILE_MAX = 256 * 1024          # a message or task file bigger than this is counted, not read
 TASKS_MAX = 300                # newest first
 RECENT_MAX = 40                # the arrivals the room shows
@@ -63,12 +63,21 @@ GONE_GRACE_MS = 60_000
 
 
 def config_path() -> Path:
-    return paths.viz_home() / CONFIG_NAME
+    return slack_config.path()
 
 
-def read_config(path: Path | None = None) -> tuple[dict, str | None]:
-    """(the config, None) — or ({}, why) when it is not there or not a JSON object."""
-    path = path or config_path()
+def load_config(path: Path | None = None) -> tuple[dict, str | None]:
+    """slack.json as stage 1 reads it (slack/config.load: 0600 and a regular file, merged over its defaults,
+    checked): (the config, None), ({}, "missing"), or ({}, why it cannot be used)."""
+    try:
+        cfg = slack_config.load(path)
+    except slack_config.ConfigError as exc:
+        return {}, str(exc)
+    return (cfg, None) if cfg is not None else ({}, "missing")
+
+
+def read_config(path: Path) -> tuple[dict, str | None]:
+    """A JSON object file of this room's own (a task, the board's state): (it, None), or ({}, why)."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -79,8 +88,7 @@ def read_config(path: Path | None = None) -> tuple[dict, str | None]:
 
 
 def factory_dir(cfg: dict) -> Path:
-    raw = cfg.get("orchestrationDir")
-    return Path(os.path.expanduser(raw if isinstance(raw, str) and raw.strip() else DEFAULT_DIR))
+    return slack_config.orchestration_dir(cfg)
 
 
 def inside(cwd: str | None, root: Path) -> bool:
@@ -128,7 +136,7 @@ def clean_prompts(body: dict) -> dict:
            "taskPrompt": _text(body.get("taskPrompt")), "projects": {}}
     for key, value in projects.items():
         key = str(key).strip()
-        if not key or not PROJECT_ID.match(key) or key == "chitchat":
+        if not slack_config.safe_name(key) or key in RESERVED_IDS:
             raise Refused(400, f"not a project id: {key[:40]!r}")
         out["projects"][key] = _text(value, 4000)
     return out
@@ -154,17 +162,22 @@ def write_json(path: Path, data: dict, mode: int | None = None) -> None:
 
 
 def save_prompts(prompts: dict, path: Path | None = None) -> dict:
-    """router.prompt and taskPrompt into slack.json; every other key as it was. The file is made 0600 when it is new."""
+    """router.prompt and taskPrompt into slack.json; every other key as written (not stage 1's defaults merged in).
+    Read only when stage 1 would read it (0600, a regular file, valid), written by its save (0600, a temporary file)."""
     path = path or config_path()
-    cfg, why = read_config(path)
+    _, why = load_config(path)
     if why not in (None, "missing"):
-        raise Refused(409, f"slack.json is {why}: not overwritten")
+        raise Refused(409, f"slack.json cannot be used: not overwritten ({why})")
+    cfg = json.loads(path.read_text(encoding="utf-8")) if why is None else {}
     router = cfg.get("router") if isinstance(cfg.get("router"), dict) else {}
     old = router.get("prompt") if isinstance(router.get("prompt"), dict) else {}
     router["prompt"] = {**old, "instructions": prompts["instructions"], "projects": prompts["projects"], "chitchat": prompts["chitchat"]}
     cfg["router"] = router
     cfg["taskPrompt"] = prompts["taskPrompt"]
-    write_json(path, cfg, 0o600)
+    try:
+        slack_config.save(cfg, path)
+    except slack_config.ConfigError as exc:
+        raise Refused(400, str(exc)) from None
     return cfg
 
 
@@ -276,7 +289,7 @@ class SlackRoom:
     # -- reading
     def load(self) -> None:
         """slack.json and the folder (run off the loop: files only)."""
-        self.cfg, self.cfg_why = read_config(self.config_file)
+        self.cfg, self.cfg_why = load_config(self.config_file)
         self.root = factory_dir(self.cfg)
         if self._board_read_for != str(self.root):
             self._board_read_for = str(self.root)

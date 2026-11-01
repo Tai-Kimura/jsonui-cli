@@ -10,6 +10,7 @@ import stat
 import pytest
 
 from jui_cli.viz import paths, slack_room
+from jui_cli.viz.slack import config as slack_config
 from jui_cli.viz.ingest import World
 from jui_cli.viz.rooms import Rooms, tilde
 from jui_cli.viz.state import VizState
@@ -56,8 +57,8 @@ def factory(home):
     root = home / "orch"
     (root / "projects" / "shop").mkdir(parents=True)
     (root / "tasks").mkdir()
-    slack_room.write_json(slack_room.config_path(), {"orchestrationDir": "~/orch", "source": {"workspaces": [{"token": "x"}]},
-                                                     "router": {"adapter": "haiku", "prompt": {"instructions": "old"}}})
+    slack_config.save({"orchestrationDir": "~/orch", "source": {"workspaces": [{"name": "w", "token": "x"}]},
+                       "router": {"adapter": "haiku", "prompt": {"instructions": "old", "projects": {}}}})
     return root
 
 
@@ -156,8 +157,8 @@ def test_no_robot_or_no_channel_tells_nobody_and_says_why(home, factory):
 
 
 def test_the_task_prompt_from_the_config_goes_with_the_notice(home, factory):
-    cfg, _ = slack_room.read_config()
-    slack_room.write_json(slack_room.config_path(), {**cfg, "taskPrompt": "MY TASK RULES"})
+    cfg = json.loads(slack_room.config_path().read_text())
+    slack_config.save({**cfg, "taskPrompt": "MY TASK RULES"})
     world = FakeWorld()
     world.add("bot", "~/orch")
     message(factory, "shop", "1-w-C1.json")
@@ -283,9 +284,9 @@ def test_saving_the_prompts_keeps_every_other_key_and_0600(home, factory):
     prompts = slack_room.clean_prompts({"instructions": "sort well", "chitchat": "lunch talk", "taskPrompt": "make tasks",
                                         "projects": {"shop": "the shop app", "site": "the booking site"}})
     slack_room.save_prompts(prompts)
-    cfg, why = slack_room.read_config()
-    assert why is None
-    assert cfg["source"] == {"workspaces": [{"token": "x"}]} and cfg["router"]["adapter"] == "haiku"
+    cfg = json.loads(slack_room.config_path().read_text())
+    assert cfg["source"] == {"workspaces": [{"name": "w", "token": "x"}]} and cfg["router"]["adapter"] == "haiku"
+    assert "schedule" not in cfg                                  # stage 1's defaults are not written in
     assert cfg["router"]["prompt"] == {"instructions": "sort well", "projects": {"shop": "the shop app", "site": "the booking site"}, "chitchat": "lunch talk"}
     assert cfg["taskPrompt"] == "make tasks"
     assert stat.S_IMODE(slack_room.config_path().stat().st_mode) == 0o600
@@ -303,6 +304,9 @@ def test_a_broken_config_is_not_overwritten(home):
     {"instructions": "", "chitchat": "", "taskPrompt": "", "projects": []},
     {"instructions": "", "chitchat": "", "taskPrompt": "", "projects": {"a/b": "x"}},
     {"instructions": "", "chitchat": "", "taskPrompt": "", "projects": {"chitchat": "x"}},
+    {"instructions": "", "chitchat": "", "taskPrompt": "", "projects": {"tasks": "x"}},
+    {"instructions": "", "chitchat": "", "taskPrompt": "", "projects": {"_unsorted": "x"}},
+    {"instructions": "", "chitchat": "", "taskPrompt": "", "projects": {"has space": "x"}},
     {"instructions": "x" * (slack_room.PROMPT_MAX + 1), "chitchat": "", "taskPrompt": "", "projects": {}},
 ])
 def test_a_prompts_body_that_is_not_right_is_refused(body):
@@ -324,7 +328,8 @@ def served(tmp_path, monkeypatch):
     (orch / "projects" / "shop").mkdir(parents=True)
     state = home / ".local" / "state" / "jui-viz"
     state.mkdir(parents=True)
-    (state / "slack.json").write_text(json.dumps({"orchestrationDir": "~/orch", "source": {"mode": "api"}}))
+    (state / "slack.json").write_text(json.dumps({"orchestrationDir": "~/orch", "source": {"mode": "api"}, "schedule": {"everyHours": 0, "at": "09:00"}}))
+    (state / "slack.json").chmod(0o600)                              # stage 1 reads it only so
     task(orch, "t1")
     message(orch, "shop", "1-w-C1.json")
     v = Viz(home)
@@ -365,7 +370,7 @@ def test_the_board_routes_take_the_pages_checks_and_write(served):
     status, text = _post(served, "/api/slack-room/prompts", {"instructions": "i", "chitchat": "c", "taskPrompt": "t", "projects": {"shop": "s"}})
     assert status == 200, text
     cfg = json.loads((served.state / "slack.json").read_text())
-    assert cfg["source"] == {"mode": "api"} and cfg["taskPrompt"] == "t" and cfg["router"]["prompt"]["projects"] == {"shop": "s"}
+    assert cfg["source"] == {"mode": "api"} and cfg["schedule"]["everyHours"] == 0 and cfg["taskPrompt"] == "t" and cfg["router"]["prompt"]["projects"] == {"shop": "s"}
     served.wait(lambda: served.snapshot()["slices"]["slackRoom"]["prompts"]["taskPrompt"] == "t", "the prompts in the slice")
 
 
@@ -429,3 +434,23 @@ def test_the_default_task_prompt_says_how_to_group_talk_split_and_merge(home):
         for must in ("threadTs", "relatedTaskId", "talking", "promptEditedByUser", "sources", "threads"):
             assert must in words, (lang, must)
         assert "{next}" in i18n.bundled(lang)["srv.slack.notify"] and "{tasks}" in i18n.bundled(lang)["srv.slack.notify"]
+
+
+@pytest.mark.parametrize("how", ["0644", "symlink"])
+def test_a_config_stage_1_would_refuse_is_neither_read_nor_written(home, factory, how):
+    """Stage 1 refuses slack.json readable by others or a symlink (slack/config.load): so does the room."""
+    path = slack_room.config_path()
+    if how == "0644":
+        path.chmod(0o644)
+    else:
+        real = home / "real-slack.json"
+        real.write_text(path.read_text())
+        real.chmod(0o600)
+        path.unlink()
+        path.symlink_to(real)
+    before = path.read_text()
+    room = room_for(FakeWorld())
+    assert room.slice()["config"]["state"] not in ("ok", "missing")
+    with pytest.raises(slack_room.Refused):
+        slack_room.save_prompts(slack_room.clean_prompts({"instructions": "", "chitchat": "", "taskPrompt": "x", "projects": {}}))
+    assert path.read_text() == before
