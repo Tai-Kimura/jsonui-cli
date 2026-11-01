@@ -103,7 +103,7 @@
     {
       "id": "cli-args",
       "name": "起動の引数（-n / --name、-p、--resume、--settings、--plugin-dir ほか）",
-      "relies_on": "the main command's options our launchers pass and our pages tell the user to type; the call bell's command line (viz/callcmd.py): `claude --channels plugin:jui-viz@jsonui --name=<name> <prompt>`, the --name=<value> form unmeasured on a real launch; the Slack intake's connector (viz/slack/fetch.py, source.mode connector): `claude -p <prompt> --output-format json --allowedTools mcp__claude_ai_Slack`, run without a screen in <orchestrationDir>/.state, its stdout one JSON object whose \"result\" is the model's text (a JSON array cut out of it), the Slack connector's MCP server named claude_ai_Slack — the flags probed, the result's shape and the server's name unmeasured on a real launch",
+      "relies_on": "the main command's options our launchers pass and our pages tell the user to type; the call bell's command line (viz/callcmd.py): `claude --channels plugin:jui-viz@jsonui --name=<name> <prompt>`, the --name=<value> form unmeasured on a real launch; the Slack intake's connector (viz/slack/fetch.py, source.mode connector): `claude -p <prompt> --output-format json --allowedTools mcp__claude_ai_Slack [--model <source.connectorModel>]`, run without a screen in <orchestrationDir>/.state, its stdout one JSON object whose \"result\" is the model's text (a JSON array cut out of it), the Slack connector's MCP server named claude_ai_Slack — the flags probed, the result's shape and the server's name unmeasured on a real launch",
       "probe": "cli_flags",
       "impact": "viz の呼び出し・名札（-n）、session-recovery の起こし直し（--resume）が動かない、Slack の取り込みを connector で取ると何も取れない（状態にエラー。api の取り込みは変わらない）",
       "files": [

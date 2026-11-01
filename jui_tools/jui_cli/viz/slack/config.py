@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import re
 import stat
 import tempfile
 from pathlib import Path
@@ -23,6 +24,10 @@ def mode_note() -> str:
     from .. import i18n
     return i18n.tl("srv.slack.modeNote")
 
+#: The connector's model (``claude -p --model``): only fetching, so the light one, the same as routers.HAIKU_MODEL.
+#: "" leaves --model off (claude's own default).
+CONNECTOR_MODEL = "claude-haiku-5-5"
+
 DEFAULT: dict = {
     "orchestrationDir": "~/slack-orchestration",
     "schedule": {"everyHours": 24, "at": "09:00"},
@@ -31,6 +36,7 @@ DEFAULT: dict = {
         "_modeNote": MODE_NOTE,
         "workspaces": [],
         "threadWatchDays": 14,
+        "connectorModel": CONNECTOR_MODEL,
     },
     "filter": {"adapter": "builtin", "extraPatterns": []},
     "router": {
@@ -104,6 +110,9 @@ def validate(cfg: dict) -> None:
     days = src.get("threadWatchDays")
     if not isinstance(days, (int, float)) or isinstance(days, bool) or days < 0:
         raise ConfigError("source.threadWatchDays must be a number >= 0")
+    model = src.get("connectorModel")
+    if not isinstance(model, str) or (model and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:@\[\]/-]*", model)):
+        raise ConfigError("source.connectorModel must be a model name, or \"\" for claude's own default")
     sched = cfg.get("schedule") or {}
     every = sched.get("everyHours")
     if not isinstance(every, (int, float)) or isinstance(every, bool) or every < 0:

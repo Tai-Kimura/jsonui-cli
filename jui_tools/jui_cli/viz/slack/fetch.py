@@ -6,7 +6,8 @@ mode "api"        the Slack Web API with each workspace's token (auth.test once 
 mode "connector"  ``claude -p`` without a screen, reading Slack through the person's Slack connector, asked to print
                   the messages as JSON. The messages then pass through Claude (Anthropic) BEFORE the filter: the
                   config's source._modeNote and the status say so. The command is source.claudeCommand or ``claude``
-                  on PATH, run in <orchestrationDir>/.state with only the Slack connector's tools allowed.
+                  on PATH, run in <orchestrationDir>/.state with only the Slack connector's tools allowed, with
+                  ``--model source.connectorModel`` (default the light model; "" leaves --model off).
 
 A channel never fetched starts from the last schedule.everyHours (24 when the schedule is manual only).
 The cursor moves only after a channel's messages are written; a failure leaves it where it was.
@@ -244,9 +245,13 @@ def fetch_connector(cfg: dict, root: Path, run=subprocess.run, now: float | None
     wanted = {(ws["name"], ch) for ws in (cfg.get("source") or {}).get("workspaces") or [] for ch in ws.get("channels") or []}
     if not wanted:
         return {"fetched": 0, "errors": []}
+    argv = [command, "-p", connector_prompt(cfg, root, now), "--output-format", "json",
+            "--allowedTools", CONNECTOR_TOOLS]
+    model = (cfg.get("source") or {}).get("connectorModel")
+    if model:
+        argv += ["--model", model]
     try:
-        proc = run([command, "-p", connector_prompt(cfg, root, now), "--output-format", "json",
-                    "--allowedTools", CONNECTOR_TOOLS], capture_output=True, text=True,
+        proc = run(argv, capture_output=True, text=True,
                    timeout=CONNECTOR_TIMEOUT_SEC, cwd=str(root / store.STATE), stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired:
         return {"fetched": 0, "errors": [f"connector: no answer in {CONNECTOR_TIMEOUT_SEC:g} s"]}
