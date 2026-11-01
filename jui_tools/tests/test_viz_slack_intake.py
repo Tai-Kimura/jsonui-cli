@@ -417,7 +417,8 @@ def test_the_connector_runs_claude_with_the_slack_tools_only_and_writes_what_it_
     root = C.orchestration_dir(cfg)
     assert FE.fetch(cfg, root, now=1730000100.0) == {"fetched": 1, "errors": []}
     seen = json.loads((tmp_path / "claude-argv.json").read_text())
-    assert seen["argv"][0] == "-p" and seen["argv"][2:] == ["--output-format", "json", "--allowedTools", "mcp__claude_ai_Slack"]
+    assert seen["argv"][0] == "-p" and seen["argv"][2:] == ["--output-format", "json", "--allowedTools", "mcp__claude_ai_Slack",
+                                                         "--model", "claude-haiku-5-5"]
     assert 'workspace "acme", channel C0123' in seen["argv"][1]
     assert Path(seen["cwd"]).resolve() == (root / S.STATE).resolve()
     assert seen["home"] == str(tmp_path / "home")        # the test's HOME, never the real one
@@ -429,6 +430,34 @@ def test_the_connector_runs_claude_with_the_slack_tools_only_and_writes_what_it_
     assert got["projects"] == 1
     placed = json.loads((root / "projects/shop/1730000001.000100-acme-C0123.json").read_text())
     assert placed["removedFiles"] == 1 and AWS not in placed["text"]
+
+
+@pytest.mark.parametrize("given,want", [
+    (None, ["--model", "claude-haiku-5-5"]),        # not written: the light model, the router's haiku
+    ("claude-sonnet-5-5", ["--model", "claude-sonnet-5-5"]),
+    ("", []),                                       # empty: no --model, claude's own default
+])
+def test_the_connector_passes_its_model_unless_it_is_empty(tmp_path, given, want):
+    source = {"mode": "connector", "claudeCommand": str(fake_claude(tmp_path, "[]"))}
+    if given is not None:
+        source["connectorModel"] = given
+    cfg = cfg_of(tmp_path, source=source)
+    C.validate(cfg)
+    assert FE.fetch(cfg, C.orchestration_dir(cfg), now=1730000100.0) == {"fetched": 0, "errors": []}
+    argv = json.loads((tmp_path / "claude-argv.json").read_text())["argv"]
+    assert argv[2:] == ["--output-format", "json", "--allowedTools", "mcp__claude_ai_Slack"] + want
+    assert argv.count("--model") == len(want) // 2
+
+
+def test_the_connector_model_default_is_the_routers_haiku():
+    assert C.DEFAULT["source"]["connectorModel"] == R.HAIKU_MODEL == "claude-haiku-5-5"
+
+
+@pytest.mark.parametrize("bad", [None, 3, "has space", "-p", "--dangerously-skip-permissions"])
+def test_a_connector_model_that_is_not_a_name_is_refused(tmp_path, bad):
+    cfg = cfg_of(tmp_path, source={"connectorModel": bad})
+    with pytest.raises(C.ConfigError, match="connectorModel"):
+        C.validate(cfg)
 
 
 @pytest.mark.parametrize("out,rc,said", [("not json at all", 0, "no JSON array"), ("[]", 1, "exited 1")])

@@ -24,7 +24,7 @@ from typing import Callable
 #: Options of the main command our code passes or tells the user to pass (sources/launch.py, viz_cmd.py, the page).
 CLI_FLAGS = ["-n", "--name", "-p", "--print", "-r", "--resume", "--settings", "--setting-sources", "--plugin-dir",
              "--mcp-config", "--session-id", "--channels", "--dangerously-load-development-channels",
-             "--output-format", "--allowedTools"]   # the last two: the Slack intake's connector (viz/slack/fetch.py)
+             "--output-format", "--allowedTools", "--model"]   # the last three: the Slack intake's connector (viz/slack/fetch.py)
 PLUGIN_SUBCOMMANDS = ["marketplace", "install", "update", "list", "enable", "disable"]
 MCP_SUBCOMMANDS = ["add", "get", "list", "remove"]
 #: Transcript record fields read by viz (sources/transcripts.py, sources/history.py, ingest usage).
