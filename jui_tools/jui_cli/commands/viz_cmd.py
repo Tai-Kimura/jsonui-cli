@@ -1150,6 +1150,16 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
 
             tasks.append(asyncio.create_task(devices_src.run(on_devices, lambda st, err: set_source("devices", st, err))))
 
+            from ..viz.slack import intake as slack_intake
+
+            def on_slack(snap: dict) -> None:
+                # the `slack` slice (design 2026-11-02 stage 1): state only, no key, no message text
+                ctx.state.set_slice("slack", snap)
+                world.publish()
+
+            ctx.slack = slack_intake.Service(on_slack)
+            tasks.append(asyncio.create_task(ctx.slack.run()))
+
             from ..viz.sources import machine as machine_src
 
             def on_machine(reading: dict) -> None:

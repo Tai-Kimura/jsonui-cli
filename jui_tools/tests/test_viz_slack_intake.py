@@ -1,0 +1,470 @@
+"""The Slack intake, stage 1 (design 2026-11-02 §1-4, §7): fetch -> inbox -> filter adapter -> router adapter ->
+projects/<id>/ | _unsorted/ | gone (chitchat). Nothing here reaches Slack, Anthropic, TypeSafe or claude: the
+HTTP calls are replaced, and the connector's claude is a script of this test (run with a temporary HOME)."""
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import stat
+import sys
+import textwrap
+import time
+from pathlib import Path
+
+import pytest
+
+from jui_cli.viz.slack import config as C
+from jui_cli.viz.slack import fetch as FE
+from jui_cli.viz.slack import filters as FI
+from jui_cli.viz.slack import intake as I
+from jui_cli.viz.slack import routers as R
+from jui_cli.viz.slack import store as S
+
+J = "".join
+AWS = J(["AK", "IA", "IOSFODNN7EXAMPLE"])
+
+
+@pytest.fixture(autouse=True)
+def _home(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("JUI_VIZ_HOME", raising=False)
+    monkeypatch.delenv("XDG_STATE_HOME", raising=False)
+
+
+def cfg_of(tmp_path, **over) -> dict:
+    cfg = C._merge(C.DEFAULT, {
+        "orchestrationDir": str(tmp_path / "orch"),
+        "source": {"workspaces": [{"name": "acme", "token": "slk-tok-QQ7", "channels": ["C0123"]}]},
+        "router": {"anthropicApiKey": "ant-key-QQ8", "typesafeApiKey": "tsf-key-QQ9",
+                   "prompt": {"projects": {"shop": "在庫アプリ", "booking": "予約サイト"}}},
+    })
+    return C._merge(cfg, over)
+
+
+def inbox(root: Path, ts: str, text: str, **message) -> Path:
+    S.ensure(root)
+    path = root / S.INBOX / S.file_name(ts, "acme", "C0123")
+    S.write_json(path, {"workspace": "acme", "channel": "C0123", "ts": ts, "permalink": f"https://t/p{ts}",
+                        "via": "api", "message": {"ts": ts, "user": "U1", "text": text, **message}})
+    return path
+
+
+def files_under(root: Path) -> list[str]:
+    return sorted(str(p.relative_to(root)) for p in root.rglob("*.json") if ".state" not in p.parts)
+
+
+class FakeRoute:
+    def __init__(self, answers):
+        self.answers, self.seen = list(answers), []
+
+    def __call__(self, message, router_cfg):
+        self.seen.append(message)
+        got = self.answers.pop(0)
+        if isinstance(got, Exception):
+            raise got
+        return {"adapter": "haiku", **got}
+
+
+# ---------------------------------------------------------------- routing: where each message ends up
+
+def test_a_project_a_low_confidence_an_unknown_choice_and_chitchat(tmp_path):
+    cfg = cfg_of(tmp_path)
+    root = C.orchestration_dir(cfg)
+    inbox(root, "1730000001.000100", "在庫の画面が落ちる " + AWS, files=[{"name": "log.txt"}])
+    inbox(root, "1730000002.000100", "どっちの話かな")
+    inbox(root, "1730000003.000100", "ほかの話")
+    inbox(root, "1730000004.000100", "おつかれさまです！")
+    route = FakeRoute([{"choice": "shop", "confidence": 0.9}, {"choice": "booking", "confidence": 0.3},
+                       {"choice": "nope", "confidence": 0.99}, {"choice": "chitchat", "confidence": 0.95}])
+    got = I.process_inbox(cfg, root, route=route)
+    assert got == {"projects": 1, "unsorted": 2, "chitchat": 1, "failed": 0, "waiting": 0}
+    assert files_under(root) == ["_unsorted/1730000002.000100-acme-C0123.json",
+                                 "_unsorted/1730000003.000100-acme-C0123.json",
+                                 "projects/shop/1730000001.000100-acme-C0123.json"]
+    placed = json.loads((root / "projects/shop/1730000001.000100-acme-C0123.json").read_text())
+    assert placed == {"workspace": "acme", "channel": "C0123", "user": "U1", "ts": "1730000001.000100",
+                      "text": "在庫の画面が落ちる [REDACTED:aws-access-key]", "permalink": "https://t/p1730000001.000100",
+                      "removedFiles": 1, "redactions": 1,
+                      "router": {"adapter": "haiku", "choice": "shop", "confidence": 0.9}}
+    # the router saw the filtered text only
+    assert all(AWS not in m["text"] for m in route.seen) and "[REDACTED:aws-access-key]" in route.seen[0]["text"]
+    # chitchat: no file anywhere, and nothing of it in the state
+    state = "".join(p.read_text() for p in (root / S.STATE).glob("*.json"))
+    assert "おつかれさま" not in state and "1730000004" not in state
+    assert stat.S_IMODE(placed and (root / "projects/shop/1730000001.000100-acme-C0123.json").stat().st_mode) == 0o600
+
+
+def test_a_router_failure_keeps_the_message_in_the_inbox_and_tries_again_later(tmp_path):
+    cfg = cfg_of(tmp_path)
+    root = C.orchestration_dir(cfg)
+    kept = inbox(root, "1730000001.000100", "在庫")
+    route = FakeRoute([R.RouterError("HTTP 529")])
+    assert I.process_inbox(cfg, root, route=route, now=1000.0)["failed"] == 1
+    assert kept.exists() and files_under(root) == ["inbox/1730000001.000100-acme-C0123.json"]
+    assert I.process_inbox(cfg, root, route=route, now=1000.0 + 60)["waiting"] == 1     # not before RETRY_SEC
+    route.answers = [{"choice": "shop", "confidence": 0.8}]
+    assert I.process_inbox(cfg, root, route=route, now=1000.0 + I.RETRY_SEC + 1)["projects"] == 1
+    assert not kept.exists()
+    assert I.Status(root).data["failed"] == {}
+
+
+# ---------------------------------------------------------------- filter adapters: a file of one's own, and one that fails
+
+def adapter_file(tmp_path, body: str) -> Path:
+    path = tmp_path / "adapters" / "my_filter.py"
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(textwrap.dedent(body))
+    return path
+
+
+def test_a_filter_adapter_of_ones_own_is_used_in_place_of_the_builtin(tmp_path):
+    path = adapter_file(tmp_path, """
+        def filter_message(record):
+            text = record["message"]["text"].replace("社外秘", "■■■")
+            return {"text": text, "user": "someone", "permalink": ""}, {"removedFiles": 0, "redactions": 1}
+    """)
+    cfg = cfg_of(tmp_path, filter={"adapter": str(path)})
+    root = C.orchestration_dir(cfg)
+    inbox(root, "1730000001.000100", "社外秘の件 " + AWS)
+    route = FakeRoute([{"choice": "booking", "confidence": 0.7}])
+    assert I.process_inbox(cfg, root, route=route)["projects"] == 1
+    placed = json.loads((root / "projects/booking/1730000001.000100-acme-C0123.json").read_text())
+    # its own rule ran (■■■), the builtin did not (the AWS shape is left: the adapter replaces the builtin)
+    assert placed["text"] == "■■■の件 " + AWS and placed["user"] == "someone" and placed["redactions"] == 1
+    assert route.seen[0]["text"] == "■■■の件 " + AWS
+
+
+@pytest.mark.parametrize("body,said", [
+    ("def filter_message(record):\n    raise RuntimeError('boom')\n", "boom"),
+    ("import sys\ndef filter_message(record):\n    sys.exit(3)\n", "failed"),
+    ("import time\ndef filter_message(record):\n    time.sleep(30)\n", "did not answer"),
+    ("def filter_message(record):\n    return {'text': 1}, {}\n", "no text string"),
+    ("def filter_message(record):\n    return {'text': 'x'}, {'removedFiles': -1, 'redactions': 0}\n", "removedFiles"),
+    ("def nothing():\n    pass\n", "failed"),
+], ids=["raises", "exits", "hangs", "no-text", "bad-stats", "no-function"])
+def test_a_failing_filter_adapter_keeps_the_message_home_and_routes_nothing(tmp_path, monkeypatch, body, said):
+    monkeypatch.setattr(FI.adapters, "TIMEOUT_SEC", 2.0)
+    monkeypatch.setattr(FI.apply, "__defaults__", (2.0,))
+    path = adapter_file(tmp_path, body)
+    cfg = cfg_of(tmp_path, filter={"adapter": str(path)})
+    root = C.orchestration_dir(cfg)
+    kept = inbox(root, "1730000001.000100", "社外秘 " + AWS)
+    route = FakeRoute([])
+    got = I.process_inbox(cfg, root, route=route)
+    assert got["failed"] == 1 and route.seen == []                       # nothing reached the router
+    assert kept.exists() and files_under(root) == ["inbox/1730000001.000100-acme-C0123.json"]  # not in _unsorted/ either
+    failed = I.Status(root).data["failed"]["1730000001.000100-acme-C0123.json"]
+    assert failed["stage"] == "filter" and said in failed["error"]
+    snap = I.snapshot(cfg, None, False)
+    assert snap["failed"][0]["stage"] == "filter" and said in snap["failed"][0]["error"]
+    assert any(said in e["error"] for e in snap["errors"])
+    # the same adapter is not run again on every pass...
+    assert I.process_inbox(cfg, root, route=route)["waiting"] == 1
+    # ...and a mended one is
+    path.write_text("def filter_message(record):\n    return {'text': 'ok'}, {'removedFiles': 0, 'redactions': 0}\n")
+    os.utime(path, (time.time() + 5, time.time() + 5))
+    route.answers = [{"choice": "shop", "confidence": 0.9}]
+    assert I.process_inbox(cfg, root, route=route)["projects"] == 1 and not kept.exists()
+
+
+def test_a_broken_extra_pattern_keeps_the_message_home(tmp_path):
+    cfg = cfg_of(tmp_path, filter={"adapter": "builtin", "extraPatterns": ["(unclosed"]})
+    root = C.orchestration_dir(cfg)
+    kept = inbox(root, "1730000001.000100", "x")
+    route = FakeRoute([])
+    assert I.process_inbox(cfg, root, route=route)["failed"] == 1 and route.seen == [] and kept.exists()
+
+
+def test_a_relative_adapter_path_is_refused(tmp_path):
+    with pytest.raises(FI.FilterError, match="absolute"):
+        FI.apply({"message": {"text": "x"}}, {"adapter": "my_filter.py"})
+
+
+# ---------------------------------------------------------------- router adapters: what each one sends
+
+def test_haiku_sends_the_prompt_as_system_and_the_choices_as_an_enum(tmp_path, monkeypatch):
+    sent = []
+
+    def post(url, headers, body, timeout=0):
+        sent.append((url, headers, body))
+        return {"content": [{"type": "tool_use", "name": "route", "input": {"choice": "booking", "confidence": 0.8}}]}
+
+    monkeypatch.setattr(R, "post", post)
+    cfg = cfg_of(tmp_path, router={"prompt": {"instructions": "どのプロジェクトか決める", "chitchat": "あいさつ"}})
+    got = R.route({"workspace": "acme", "channel": "C0123", "user": "U1", "ts": "1.1", "text": "予約が取れない",
+                   "permalink": "https://t/x", "removedFiles": 0, "redactions": 0}, cfg["router"])
+    assert got == {"adapter": "haiku", "choice": "booking", "confidence": 0.8}
+    url, headers, body = sent[0]
+    assert url == "https://api.anthropic.com/v1/messages" and headers["x-api-key"] == "ant-key-QQ8"
+    assert body["model"] == R.HAIKU_MODEL and body["tool_choice"] == {"type": "tool", "name": "route"}
+    assert body["tools"][0]["input_schema"]["properties"]["choice"]["enum"] == ["shop", "booking", "chitchat"]
+    assert "どのプロジェクトか決める" in body["system"] and "- shop: 在庫アプリ" in body["system"] and "- chitchat: あいさつ" in body["system"]
+    assert "予約が取れない" in body["messages"][0]["content"] and "https://t/x" not in json.dumps(body)
+
+
+def test_jev_asks_one_choice_question_with_the_projects_and_chitchat_as_criteria(tmp_path, monkeypatch):
+    sent = []
+
+    def post(url, headers, body, timeout=0):
+        sent.append((url, headers, body))
+        return {"model": "jev-1.13.0", "answers": {"route": {"type": "choice", "choice": "chitchat", "confidence": 0.97,
+                                                              "probabilities": {"shop": 0.01, "booking": 0.02, "chitchat": 0.97}}}}
+
+    monkeypatch.setattr(R, "post", post)
+    cfg = cfg_of(tmp_path, router={"adapter": "jev", "prompt": {"instructions": "振り分ける", "chitchat": "雑談"}})
+    got = R.route({"workspace": "acme", "channel": "C0123", "user": "U1", "ts": "1.1", "text": "おつかれ"}, cfg["router"])
+    assert got == {"adapter": "jev", "choice": "chitchat", "confidence": 0.97}
+    url, headers, body = sent[0]
+    assert url == "https://api.typesafe.ai/v1/systemone" and headers["Authorization"] == "Bearer tsf-key-QQ9"
+    assert body["model"] == "jev-latest" and "おつかれ" in body["state"]
+    assert body["questions"] == {"route": {"type": "choice", "instructions": "振り分ける",
+                                           "criteria": {"shop": "在庫アプリ", "booking": "予約サイト", "chitchat": "雑談"}}}
+
+
+def test_a_router_adapter_of_ones_own_and_the_answers_that_are_refused(tmp_path, monkeypatch):
+    path = tmp_path / "my_router.py"
+    path.write_text("def route(message, prompt):\n    return {'choice': sorted(prompt['projects'])[0], 'confidence': 2}\n")
+    cfg = cfg_of(tmp_path, router={"adapter": str(path)})
+    assert R.route({"text": "x"}, cfg["router"]) == {"adapter": "path", "choice": "booking", "confidence": 1.0}
+    monkeypatch.setattr(R, "post", lambda *a, **k: {"content": [{"type": "text", "text": "booking"}]})
+    with pytest.raises(R.RouterError):
+        R.route({"text": "x"}, cfg_of(tmp_path)["router"])
+    with pytest.raises(R.RouterError, match="anthropicApiKey"):
+        R.route({"text": "x"}, cfg_of(tmp_path, router={"anthropicApiKey": ""})["router"])
+    with pytest.raises(R.RouterError, match="255"):
+        R.choices({"projects": {f"p{i}": "" for i in range(255)}})
+
+
+# ---------------------------------------------------------------- fetch: api
+
+class FakeSlack:
+    def __init__(self, history, replies=None, fail=None):
+        self.history, self.replies, self.fail, self.calls = history, replies or {}, fail, []
+
+    def __call__(self, method, token, params):
+        self.calls.append((method, token, dict(params)))
+        if self.fail and self.fail(method, params):
+            raise FE.FetchError(f"{method}: ratelimited")
+        if method == "auth.test":
+            return {"ok": True, "url": "https://acme.slack.com/"}
+        if method == "conversations.history":
+            pages = self.history
+            i = int(params.get("cursor") or 0)
+            return {"ok": True, "messages": pages[i], "has_more": i + 1 < len(pages),
+                    "response_metadata": {"next_cursor": str(i + 1) if i + 1 < len(pages) else ""}}
+        if method == "conversations.replies":
+            return {"ok": True, "messages": self.replies.get(params["ts"], [])}
+        raise AssertionError(method)
+
+
+def test_the_api_fetch_pages_reads_threads_skips_notices_and_moves_the_cursor(tmp_path):
+    cfg = cfg_of(tmp_path)
+    root = C.orchestration_dir(cfg)
+    slack = FakeSlack(
+        history=[[{"ts": "1730000003.000100", "user": "U1", "text": "three", "files": [{"name": "a.png"}]},
+                  {"ts": "1730000002.000100", "subtype": "channel_join", "user": "U9", "text": "joined"}],
+                 [{"ts": "1730000001.000100", "user": "U2", "text": "one", "thread_ts": "1730000001.000100", "reply_count": 1}]],
+        replies={"1730000001.000100": [{"ts": "1730000001.000100", "text": "one"},
+                                        {"ts": "1730000005.000100", "user": "U3", "text": "reply", "thread_ts": "1730000001.000100"}]})
+    got = FE.fetch(cfg, root, get=slack, now=1730000100.0)
+    assert got == {"fetched": 3, "errors": []}
+    assert sorted(p.name for p in S.inbox_files(root)) == [
+        "1730000001.000100-acme-C0123.json", "1730000003.000100-acme-C0123.json", "1730000005.000100-acme-C0123.json"]
+    raw = json.loads((root / S.INBOX / "1730000003.000100-acme-C0123.json").read_text())
+    assert raw["message"]["files"] == [{"name": "a.png"}] and raw["via"] == "api"     # raw as fetched; the filter drops it
+    assert raw["permalink"] == "https://acme.slack.com/archives/C0123/p1730000003000100"
+    reply = json.loads((root / S.INBOX / "1730000005.000100-acme-C0123.json").read_text())
+    assert reply["permalink"].endswith("?thread_ts=1730000001.000100&cid=C0123")
+    first = [c for c in slack.calls if c[0] == "conversations.history"][0][2]
+    assert first["oldest"] == f"{1730000100.0 - 24 * 3600:.6f}" and first["channel"] == "C0123"
+    assert S.Cursor(root).get("acme", "C0123") == "1730000003.000100"
+    assert stat.S_IMODE((root / S.INBOX).stat().st_mode) == 0o700
+    # the next fetch starts from the cursor, and a message already in the inbox is not written twice
+    slack.calls.clear()
+    assert FE.fetch(cfg, root, get=slack, now=1730000200.0)["fetched"] == 0
+    assert [c for c in slack.calls if c[0] == "conversations.history"][0][2]["oldest"] == "1730000003.000100"
+
+
+def test_a_failing_channel_leaves_its_cursor_and_the_others_go_on(tmp_path):
+    cfg = cfg_of(tmp_path, source={"workspaces": [{"name": "acme", "token": "t-1", "channels": ["C0123", "C0456"]},
+                                                  {"name": "other", "token": "", "channels": ["C1"]}]})
+    root = C.orchestration_dir(cfg)
+    slack = FakeSlack(history=[[{"ts": "1730000003.000100", "user": "U1", "text": "x"}]],
+                      fail=lambda m, p: m == "conversations.history" and p["channel"] == "C0123")
+    got = FE.fetch(cfg, root, get=slack, now=1730000100.0)
+    assert got["fetched"] == 1 and got["errors"] == ["acme/C0123: conversations.history: ratelimited", "other: no token"]
+    assert S.Cursor(root).get("acme", "C0123") is None and S.Cursor(root).get("acme", "C0456") == "1730000003.000100"
+
+
+# ---------------------------------------------------------------- fetch: connector (a claude of this test)
+
+def fake_claude(tmp_path, out: str, rc: int = 0) -> Path:
+    path = tmp_path / "bin" / "claude"
+    path.parent.mkdir(exist_ok=True)
+    log = tmp_path / "claude-argv.json"
+    path.write_text(f"#!{sys.executable} -I\nimport json, os, sys\n"
+                    f"json.dump({{'argv': sys.argv[1:], 'cwd': os.getcwd(), 'home': os.environ.get('HOME')}}, open({str(log)!r}, 'w'))\n"
+                    f"sys.stdout.write({out!r})\nsys.exit({rc})\n")
+    path.chmod(0o755)
+    return path
+
+
+def test_the_connector_runs_claude_with_the_slack_tools_only_and_writes_what_it_printed(tmp_path):
+    answer = json.dumps({"type": "result", "result": "```json\n" + json.dumps([
+        {"workspace": "acme", "channel": "C0123", "ts": "1730000001.000100", "user": "U1", "text": "在庫 " + AWS,
+         "permalink": "https://t/p1", "files": [{"name": "a.pdf"}]},
+        {"workspace": "acme", "channel": "C9999", "ts": "1730000002.000100", "text": "not asked for"}]) + "\n```"})
+    claude = fake_claude(tmp_path, answer)
+    cfg = cfg_of(tmp_path, source={"mode": "connector", "claudeCommand": str(claude)})
+    root = C.orchestration_dir(cfg)
+    assert FE.fetch(cfg, root, now=1730000100.0) == {"fetched": 1, "errors": []}
+    seen = json.loads((tmp_path / "claude-argv.json").read_text())
+    assert seen["argv"][0] == "-p" and seen["argv"][2:] == ["--output-format", "json", "--allowedTools", "mcp__claude_ai_Slack"]
+    assert 'workspace "acme", channel C0123' in seen["argv"][1]
+    assert Path(seen["cwd"]).resolve() == (root / S.STATE).resolve()
+    assert seen["home"] == str(tmp_path / "home")        # the test's HOME, never the real one
+    raw = json.loads((root / S.INBOX / "1730000001.000100-acme-C0123.json").read_text())
+    assert raw["via"] == "connector" and raw["message"]["files"] == [{"name": "a.pdf"}]
+    assert S.Cursor(root).get("acme", "C0123") == "1730000001.000100"
+    # through the filter like any other
+    got = I.process_inbox(cfg, root, route=FakeRoute([{"choice": "shop", "confidence": 0.9}]))
+    assert got["projects"] == 1
+    placed = json.loads((root / "projects/shop/1730000001.000100-acme-C0123.json").read_text())
+    assert placed["removedFiles"] == 1 and AWS not in placed["text"]
+
+
+@pytest.mark.parametrize("out,rc,said", [("not json at all", 0, "no JSON array"), ("[]", 1, "exited 1")])
+def test_a_connector_that_fails_writes_nothing_and_says_why(tmp_path, out, rc, said):
+    cfg = cfg_of(tmp_path, source={"mode": "connector", "claudeCommand": str(fake_claude(tmp_path, out, rc))})
+    root = C.orchestration_dir(cfg)
+    got = FE.fetch(cfg, root)
+    assert got["fetched"] == 0 and said in got["errors"][0] and S.inbox_files(root) == []
+
+
+def test_the_connector_mode_shows_its_warning_and_api_does_not(tmp_path):
+    api = I.snapshot(cfg_of(tmp_path), None, False)
+    con = I.snapshot(cfg_of(tmp_path, source={"mode": "connector"}), None, False)
+    assert api["modeNote"] is None and "Claude（Anthropic）" in con["modeNote"] and "before the filter" in con["modeNote"]
+    assert "Claude（Anthropic）" in C.DEFAULT["source"]["_modeNote"]
+
+
+# ---------------------------------------------------------------- the config file
+
+def write_cfg(cfg: dict, mode: int = 0o600) -> Path:
+    path = C.path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(cfg))
+    path.chmod(mode)
+    return path
+
+
+def test_the_config_is_read_from_viz_home_and_refused_when_others_can_read_it(tmp_path):
+    assert C.path() == tmp_path / "home" / ".local" / "state" / "jui-viz" / "slack.json"
+    assert C.load() is None
+    write_cfg({"orchestrationDir": str(tmp_path / "o"), "schedule": {"everyHours": 6}})
+    got = C.load()
+    assert got["schedule"] == {"everyHours": 6, "at": "09:00"} and got["router"]["adapter"] == "haiku"
+    C.path().chmod(0o644)
+    with pytest.raises(C.ConfigError, match="chmod 600"):
+        C.load()
+    C.path().unlink()
+    os.symlink(tmp_path / "elsewhere.json", C.path())
+    with pytest.raises(C.ConfigError, match="regular"):
+        C.load()
+
+
+@pytest.mark.parametrize("over,said", [
+    ({"source": {"mode": "rss"}}, "source.mode"),
+    ({"source": {"workspaces": [{"name": "../x"}]}}, "workspace name"),
+    ({"source": {"workspaces": [{"name": "ok", "channels": ["C1/.."]}]}}, "channel"),
+    ({"schedule": {"at": "9時"}}, "HH:MM"),
+    ({"router": {"confidenceMin": 2}}, "confidenceMin"),
+    ({"router": {"prompt": {"projects": {"chitchat": "x"}}}}, "reserved"),
+    ({"router": {"prompt": {"projects": {"../etc": "x"}}}}, "project id"),
+])
+def test_a_config_that_would_write_outside_its_folders_is_refused(tmp_path, over, said):
+    write_cfg(over)
+    with pytest.raises(C.ConfigError, match=said):
+        C.load()
+
+
+def test_the_status_has_no_key_and_no_message_text(tmp_path):
+    cfg = cfg_of(tmp_path)
+    root = C.orchestration_dir(cfg)
+    inbox(root, "1730000001.000100", "秘密の本文 " + AWS)
+    I.process_inbox(cfg, root, route=FakeRoute([R.RouterError("down")]))
+    flat = json.dumps(I.snapshot(cfg, None, False), ensure_ascii=False)
+    flat += "".join(p.read_text() for p in (root / S.STATE).glob("*.json"))      # and the state files on disk
+    for secret in ("slk-tok-QQ7", "ant-key-QQ8", "tsf-key-QQ9", "秘密の本文", AWS):
+        assert secret not in flat
+    assert C.public_view(cfg)["router"]["anthropicApiKey"] is True and C.public_view(cfg)["source"]["workspaces"][0]["token"] is True
+
+
+# ---------------------------------------------------------------- the schedule
+
+def at(h, m, day=2):
+    import datetime as dt
+    return dt.datetime(2026, 11, day, h, m).timestamp()
+
+
+def test_the_schedule_is_slots_from_at_every_n_hours_and_a_missed_slot_is_due():
+    daily = {"everyHours": 24, "at": "09:00"}
+    assert I.next_run(None, at(8, 0), daily) == at(9, 0)
+    assert I.next_run(None, at(10, 0), daily) == at(9, 0, 3)
+    assert I.next_run(int(at(9, 0) * 1000), at(10, 0), daily) == at(9, 0, 3)
+    assert I.next_run(int(at(9, 0, 1) * 1000), at(10, 0), daily) == at(9, 0)       # missed while down: due now
+    six = {"everyHours": 6, "at": "09:00"}
+    assert I.next_run(int(at(9, 30) * 1000), at(10, 0), six) == at(15, 0)
+    assert I.next_run(int(at(4, 0) * 1000), at(5, 0), six) == at(9, 0)              # slots before `at` count too (03:00)
+    assert I.next_run(int(at(2, 0) * 1000), at(5, 0), six) == at(3, 0)
+    assert I.next_run(None, at(10, 0), {"everyHours": 0, "at": "09:00"}) is None
+
+
+def test_the_service_fetches_when_a_slot_is_due_and_by_hand_once_at_a_time(tmp_path):
+    cfg = cfg_of(tmp_path, schedule={"everyHours": 24, "at": "09:00"})
+    root = C.orchestration_dir(cfg)
+    recent = f"{int(time.time()) - 60}.000100"      # inside the first fetch's window (the last 24 h)
+    slack = FakeSlack(history=[[{"ts": recent, "user": "U1", "text": "x"}]])
+    route = FakeRoute([{"choice": "shop", "confidence": 0.9}])
+    snaps = []
+    svc = I.Service(snaps.append, watch_sec=0.05, loader=lambda: cfg,
+                    work_kw={"get": slack, "route": route})
+
+    async def go():
+        task = asyncio.create_task(svc.run())
+        await asyncio.sleep(0.3)
+        assert I.Status(root).data.get("since") and "lastRun" not in I.Status(root).data   # counting starts, nothing fetched
+        st = I.Status(root)
+        st.data["since"] = int((time.time() - 2 * 86400) * 1000)    # a slot passed since
+        st.save()
+        for _ in range(100):
+            await asyncio.sleep(0.05)
+            if "lastRun" in I.Status(root).data:
+                break
+        assert I.Status(root).data["lastRun"]["trigger"] == "schedule"
+        assert svc.start_fetch()[0] == 202
+        assert svc.start_fetch() == (409, {"error": "a fetch is running"})
+        await svc._task
+        task.cancel()
+
+    asyncio.run(go())
+    assert files_under(root) == [f"projects/shop/{recent}-acme-C0123.json"]    # once: the manual fetch took nothing again
+    last = snaps[-1]
+    assert last["lastRun"]["trigger"] == "manual" and last["counts"] == {"inbox": 0, "projects": {"shop": 1}, "unsorted": 0}
+    assert last["nextRun"] > time.time() * 1000 and last["running"] is False
+
+
+def test_the_service_without_a_config_says_so_and_fetches_nothing(tmp_path):
+    svc = I.Service(loader=lambda: None)
+    assert svc.status()["configured"] is False
+    assert asyncio.run(_start(svc))[0] == 409
+
+    def bad():
+        raise C.ConfigError("readable by others")
+    assert I.Service(loader=bad).status() == {"configured": False, "error": "readable by others", "running": False,
+                                             "configPath": str(C.path())}
+
+
+async def _start(svc):
+    return svc.start_fetch()

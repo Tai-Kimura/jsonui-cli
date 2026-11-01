@@ -167,6 +167,8 @@ class ServerContext:
     notify_until: int = 0
     # The talk view (talk.TalkHub): talk.* requests, its increments and the chat icon's badges.
     talk: object | None = None
+    # The Slack intake (slack/intake.Service): /api/slack/status and /api/slack/fetch.
+    slack: object | None = None
 
     def browser_present(self) -> bool:
         return self.present_until > now_ms()
@@ -1114,6 +1116,21 @@ def make_app(ctx: ServerContext) -> web.Application:
         book.recheck()
         return web.json_response({"ok": True, "message": msg}, headers={"Cache-Control": "no-store"})
 
+    async def api_slack(request: web.Request) -> web.Response:
+        """The Slack intake (design 2026-11-02, stage 1): /api/slack/status gives the `slack` slice (no key, no message
+        text); /api/slack/fetch starts a fetch now (202) or says why not (409). The checks of /api/prompt; no-store."""
+        route = request.path
+        refused, _body = await _checked_json(request, route)
+        if refused is not None:
+            return refused
+        if ctx.slack is None:
+            return web.Response(status=503, text="no slack intake\n")
+        if route == "/api/slack/fetch":
+            status, body = ctx.slack.start_fetch()
+            log(f"slack: fetch asked from the page ({status})")
+            return web.json_response(body, status=status, headers={"Cache-Control": "no-store"})
+        return web.json_response(ctx.slack.status(), headers={"Cache-Control": "no-store"})
+
     async def api_session_end(request: web.Request) -> web.Response:
         """退勤 from a robot card (ticket 2026-10-19-jui-viz-clock-out-button): the checks of /api/prompt
         (prompt_checks, with this route's cap), then the session in this server's list and not ended, the robot asked
@@ -1177,6 +1194,8 @@ def make_app(ctx: ServerContext) -> web.Application:
     app.router.add_route("*", "/api/infra-cost", api_infra_cost)
     app.router.add_route("*", "/api/prices", api_prices)
     app.router.add_route("*", "/api/session/end", api_session_end)
+    app.router.add_route("*", "/api/slack/status", api_slack)
+    app.router.add_route("*", "/api/slack/fetch", api_slack)
     app.router.add_route("*", "/api/stop", api_stop)
     app.router.add_route("*", "/api/call-command", api_call_command)
     app.router.add_route("*", "/api/local-models", api_local_models)

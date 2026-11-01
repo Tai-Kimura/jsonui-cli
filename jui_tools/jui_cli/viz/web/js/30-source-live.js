@@ -1077,7 +1077,7 @@ function rebuildQuestions() {
    every second): a push that carries only these is stored and nothing is rebuilt. The machine's load changes every
    5 s, and a full rebuild that often reset the robots' timed looks — the whistle, the sweat — and held a break's
    waiting trip (the e2e suites hist-wide and gitbox, red with the デバイス pane in 2.3.11's gate). */
-const PAGE_ONLY_SLICES = new Set(['machine', 'cloudPrices']);
+const PAGE_ONLY_SLICES = new Set(['machine', 'cloudPrices', 'slack']);   // slack: the intake's state (design 2026-11-02 stage 1), read by the Slack room
 function liveApply(changed, replace) {
   if (replace) LIVE.slices = {};
   for (const [k, v] of Object.entries(changed || {})) LIVE.slices[k] = v;
