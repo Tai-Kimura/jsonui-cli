@@ -993,7 +993,10 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
                     try:
                         await slack_refresh()
                         at = now_ms()
-                        if room.follow(at) | await room.tell_robot(at):
+                        gone = room.purge(at)
+                        if gone:
+                            log(f"slack room: removed {len(gone)} done task(s) and their messages: {', '.join(gone)}")
+                        if room.follow(at) | await room.tell_robot(at) | bool(gone):
                             await slack_refresh()
                         world.publish()
                     except Exception as exc:   # the factory never stops the server

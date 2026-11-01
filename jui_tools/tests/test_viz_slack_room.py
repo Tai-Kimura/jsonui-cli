@@ -205,6 +205,7 @@ def test_a_started_task_whose_session_is_gone_is_ended(home, factory):
     world = FakeWorld()
     task(factory, "t1", status="working", target={"sessionName": "x", "sessionId": "gone"}, startedAt=1)
     room = room_for(world)
+    room.board["started"]["t1"] = 1                                # sent with 開始
     assert room.follow(5) is False                                 # not heard of yet: a server just started
     assert room.follow(5 + slack_room.GONE_GRACE_MS - 1) is False
     assert room.follow(5 + slack_room.GONE_GRACE_MS) is True
@@ -216,6 +217,7 @@ def test_a_started_task_whose_session_ended_is_ended_at_once(home, factory):
     world.add("dev", "~/shop", status="ended")
     task(factory, "t1", status="working", target={"sessionName": "x", "sessionId": "dev"}, startedAt=1)
     room = room_for(world)
+    room.board["started"]["t1"] = 1
     assert room.follow(5) is True
     assert json.loads((factory / "tasks" / "t1.json").read_text())["status"] == "ended"
 
@@ -454,3 +456,93 @@ def test_a_config_stage_1_would_refuse_is_neither_read_nor_written(home, factory
     with pytest.raises(slack_room.Refused):
         slack_room.save_prompts(slack_room.clean_prompts({"instructions": "", "chitchat": "", "taskPrompt": "x", "projects": {}}))
     assert path.read_text() == before
+
+
+# ---- the trial's fixes (11-02): a task's messages whole, the start command for a viz in another folder ----------------
+
+def test_a_tasks_messages_come_whole_in_thread_order_and_only_from_projects(home, factory):
+    reply = message(factory, "shop", "3-w-C1.json", text="the reply\nline two", ts="20.5", threadTs="10.0",
+                    permalink="https://acme.slack.com/archives/C1/p205")
+    parent = message(factory, "shop", "1-w-C1.json", text="x" * 30_000, ts="10.0", permalink="javascript:alert(1)")
+    other = message(factory, "shop", "2-w-C1.json", text="another thread", ts="15.0")
+    (home / "secret.json").write_text(json.dumps({"text": "outside"}))
+    task(factory, "T-0001", sources=[reply, other, parent, "../secret.json", "projects/shop/gone.json"])
+    got = room_for(FakeWorld()).messages("T-0001")
+    assert [m["path"] for m in got["messages"]] == [parent, reply, other]       # thread 10.0 (parent, reply), then 15.0
+    assert got["messages"][1]["text"] == "the reply\nline two" and got["messages"][1]["permalink"].startswith("https://")
+    assert got["messages"][0]["permalink"] == "" and len(got["messages"][0]["text"]) == slack_room.MESSAGE_MAX
+    assert got["missing"] == ["../secret.json", "projects/shop/gone.json"]
+    with pytest.raises(slack_room.Refused):
+        room_for(FakeWorld()).messages("../x")
+
+
+def test_the_start_command_names_this_vizs_folder_when_it_is_not_the_default(home, monkeypatch):
+    assert slack_room.home_prefix() == "" and slack_room.with_home("claude --channels x") == "claude --channels x"
+    monkeypatch.setenv("JUI_VIZ_HOME", str(home / "other viz"))
+    want = f"JUI_VIZ_HOME='{home}/other viz' "
+    assert slack_room.home_prefix() == want
+    assert slack_room.with_home("claude --channels x") == want + "claude --channels x"
+    assert slack_room.with_home("cd ~/work/docs && claude --channels x") == f"cd ~/work/docs && {want}claude --channels x"
+    assert slack_room.with_home(f"cd a && {want}claude x") == f"cd a && {want}claude x"            # once
+    room = room_for(FakeWorld())
+    s = room.slice()
+    assert s["robotLaunch"] == f"cd {slack_room._sh(str(room.root).replace(str(home), '~', 1))} && {want}{slack_room.LAUNCH_COMMAND}"
+    assert s["launch"] == want + slack_room.LAUNCH_COMMAND
+
+
+
+# ---- the status select, and done tasks removed (11-02) --------------------------------------------------------------
+
+def test_a_status_chosen_by_hand_sends_nothing_and_is_not_followed(home, factory):
+    world = FakeWorld()
+    world.add("dev", "~/shop")
+    task(factory, "T-0001", status="draft", target={"sessionName": "dev", "sessionId": "dev"})
+    room = room_for(world)
+    run(room.act({"id": "T-0001", "op": "status", "status": "working"}, 5))
+    t = json.loads((factory / "tasks" / "T-0001.json").read_text())
+    assert t["status"] == "working" and t["startedAt"] == 5 and world.sent == []
+    world.sessions["dev"]["status"] = "busy"
+    room.load()
+    room.follow(6)
+    world.sessions["dev"]["status"] = "idle"
+    room.load()
+    assert room.follow(7) is False and json.loads((factory / "tasks" / "T-0001.json").read_text())["status"] == "working"
+    for want in ("talking", "ready", "ended", "done", "draft"):
+        run(room.act({"id": "T-0001", "op": "status", "status": want}, 8))
+        assert json.loads((factory / "tasks" / "T-0001.json").read_text())["status"] == want
+    assert "doneAt" not in json.loads((factory / "tasks" / "T-0001.json").read_text())   # out of done: no time to go by
+    with pytest.raises(slack_room.Refused):
+        run(room.act({"id": "T-0001", "op": "status", "status": "gone"}, 9))
+
+
+def test_a_done_task_goes_with_its_messages_after_the_retention_but_a_shared_one_stays(home, factory):
+    cfg = json.loads(slack_room.config_path().read_text())
+    slack_config.save({**cfg, "doneRetentionMinutes": 10})
+    own = message(factory, "shop", "1-w-C1.json")
+    shared = message(factory, "shop", "2-w-C1.json")
+    task(factory, "T-0001", status="draft", sources=[own, shared])
+    task(factory, "T-0002", status="draft", sources=[shared], relatedTaskId="T-0001")
+    world = FakeWorld()
+    room = room_for(world)
+    run(room.act({"id": "T-0001", "op": "status", "status": "done"}, 1_000))
+    room.load()
+    assert room.slice()["tasks"][0]["purgeAt"] == 1_000 + 10 * 60_000
+    assert room.purge(1_000 + 10 * 60_000 - 1) == []
+    assert room.purge(1_000 + 10 * 60_000) == ["T-0001"]
+    assert not (factory / "tasks" / "T-0001.json").exists() and not (factory / own).exists()
+    assert (factory / shared).exists()                                       # T-0002 still names it
+    assert json.loads((factory / "tasks" / "T-0002.json").read_text())["relatedTaskId"] is None
+
+
+def test_a_task_moved_out_of_done_in_time_is_kept_and_done_again_starts_its_time_again(home, factory):
+    own = message(factory, "shop", "1-w-C1.json")
+    task(factory, "T-0001", status="draft", sources=[own])
+    room = room_for(FakeWorld())
+    hour = slack_room.DONE_RETENTION_MIN * 60_000
+    run(room.act({"id": "T-0001", "op": "status", "status": "done"}, 0))
+    run(room.act({"id": "T-0001", "op": "status", "status": "ended"}, hour - 5))
+    room.load()
+    assert room.purge(hour + 1) == [] and (factory / "tasks" / "T-0001.json").exists()
+    run(room.act({"id": "T-0001", "op": "status", "status": "done"}, hour + 2))
+    room.load()
+    assert room.purge(2 * hour) == [] and room.purge(2 * hour + 2) == ["T-0001"] and not (factory / own).exists()

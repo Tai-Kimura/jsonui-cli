@@ -197,7 +197,7 @@ BUILDERS = {
     "51-denials.js": {"denialHTML"},   # a call stopped by auto mode (ticket 2026-10-20-jui-viz-auto-mode-denial-approve-from-page)
     "53-devices.js": {"devWhoHTML", "devRowHTML", "devLoadHTML", "devBarHTML"},
     # the sorting factory: its robot, what was sorted, the notes on the whiteboard, a command to copy, a project's row
-    "57-slack-room.js": {"sfRobotHTML", "sfFlowHTML", "sfCopyHTML", "sfTargetHTML", "sfNoteHTML", "sfProjectRowHTML", "sfSourcesHTML", "sfRelatedHTML"},
+    "57-slack-room.js": {"sfRobotHTML", "sfFlowHTML", "sfCopyHTML", "sfTargetHTML", "sfNoteHTML", "sfProjectRowHTML", "sfSourcesHTML", "sfRelatedHTML", "sfChatRowHTML"},
     # a robot's waits answered where they are listed: the panel's own cards (questionHTML, permBox, denialHTML) drawn here
     "53-waits.js": {"paneHTML", "paneRobotsHTML", "paneItemHTML", "questionHTML", "permBox", "denialHTML"},
     "53-roster.js": {"rosterRowHTML"},   # the room's robot list (ticket 2026-10-23-viz-room-robot-list-show-hide)   # the デバイス pane (ticket 2026-10-20-jui-viz-device-panel-machine-load-and-emulators)

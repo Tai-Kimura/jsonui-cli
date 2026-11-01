@@ -1195,7 +1195,9 @@ def make_app(ctx: ServerContext) -> web.Application:
         if room is None:
             return web.Response(status=503, text="the sorting factory is unavailable\n")
         try:
-            if request.path.endswith("/prompts"):
+            if request.path.endswith("/messages"):
+                result = await asyncio.get_running_loop().run_in_executor(None, room.messages, body.get("id"))
+            elif request.path.endswith("/prompts"):
                 await asyncio.get_running_loop().run_in_executor(None, slack_room.save_prompts, slack_room.clean_prompts(body), room.config_file)
                 result = {"ok": True}
             else:
@@ -1204,6 +1206,8 @@ def make_app(ctx: ServerContext) -> web.Application:
             return web.Response(status=exc.status, text=str(exc) + "\n")
         except OSError as exc:
             return web.Response(status=500, text=f"not written: {type(exc).__name__}\n")
+        if request.path.endswith("/messages"):
+            return web.json_response(result, headers={"Cache-Control": "no-store"})   # read only: nothing to refresh
         if ctx.slack_refresh is not None:
             await ctx.slack_refresh()
         if ctx.publish:
@@ -1213,6 +1217,7 @@ def make_app(ctx: ServerContext) -> web.Application:
     app.router.add_route("*", "/api/prompt", api_prompt)
     app.router.add_route("*", "/api/slack-room/task", api_slack_room)
     app.router.add_route("*", "/api/slack-room/prompts", api_slack_room)
+    app.router.add_route("*", "/api/slack-room/messages", api_slack_room)
     app.router.add_route('*', '/api/messages/send', api_messages)
     app.router.add_route('*', '/api/messages/peers', api_messages)
     app.router.add_route("*", "/api/attach", api_attach)

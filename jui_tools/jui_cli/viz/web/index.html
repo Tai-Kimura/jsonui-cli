@@ -229,6 +229,18 @@
             <div class="sf-wb" id="sf-wb"></div>
           </section>
         </div>
+        <aside class="sf-chat" id="sf-chat" hidden role="dialog" aria-labelledby="sf-chat-title">
+          <header class="sf-chat-head"><h3 id="sf-chat-title"></h3><button type="button" class="wb-btn" id="sf-chat-close" aria-label="{{tl:page.sf.chat.close}}閉じる（Esc）{{/tl}}">×</button></header>
+          <ol class="sf-chat-list" id="sf-chat-list" aria-live="polite"></ol>
+        </aside>
+        <div class="sf-modal" id="sf-revise" hidden>
+          <div class="sf-modal-box" role="dialog" aria-modal="true" aria-labelledby="sf-revise-h">
+            <header class="sf-chat-head"><h3 id="sf-revise-h"></h3><button type="button" class="wb-btn" id="sf-revise-close" aria-label="{{tl:page.sf.chat.close}}閉じる（Esc）{{/tl}}">×</button></header>
+            <label class="sf-field" for="sf-revise-text">{{tl:page.sf.revise.label}}ロボットにどう直してほしいか（⌘Enter で送る）{{/tl}}</label>
+            <textarea id="sf-revise-text" rows="8"></textarea>
+            <div class="sf-acts"><button type="button" class="wb-btn sf-go" id="sf-revise-send">{{tl:page.sf.revise.send}}頼む{{/tl}}</button><span class="dev-note" id="sf-revise-said" role="status"></span></div>
+          </div>
+        </div>
         <div class="sf-dialog" id="sf-prompts" hidden role="dialog" aria-labelledby="sf-prompts-h">
           <h3 id="sf-prompts-h">{{tl:page.sf.prompts}}プロンプトの設定{{/tl}}</h3>
           <label class="sf-field">{{tl:page.sf.p.instructions}}振り分けの指示（振り分け LLM に渡す）{{/tl}}<textarea id="sf-p-instructions" rows="4"></textarea></label>

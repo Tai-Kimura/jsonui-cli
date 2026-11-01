@@ -38,6 +38,7 @@ from pathlib import Path
 
 from . import i18n
 from .rooms import tilde
+from . import paths
 from .slack import config as slack_config
 from .sources import launch
 
@@ -53,6 +54,8 @@ FILE_MAX = 256 * 1024          # a message or task file bigger than this is coun
 TASKS_MAX = 300                # newest first
 RECENT_MAX = 40                # the arrivals the room shows
 HEAD = 160                     # characters of a message the room shows
+DONE_RETENTION_MIN = 60        # a done task and its messages are removed this long after doneAt (slack.json doneRetentionMinutes)
+MESSAGE_MAX = 20_000           # characters of one message the side panel gets
 NOTIFY_FILES_MAX = 40          # files named in one prompt to the robot
 NOTIFY_GAP_MS = 20_000         # the robot is told again no sooner than this after a prompt to it
 PROMPT_MAX = 20_000            # characters of one prompt kept from the board
@@ -60,6 +63,25 @@ LAUNCH_COMMAND = launch.START_CHANNELS
 #: A started task's session not known at all is taken as gone only this long after the room first looked (a server just
 #: started has not heard from every session yet); one known to have ended ends its task at once.
 GONE_GRACE_MS = 60_000
+
+
+def home_prefix() -> str:
+    """`JUI_VIZ_HOME=<folder> ` when this viz keeps its files somewhere other than the default (a test viz on another
+    port, JUI_VIZ_HOME or XDG_STATE_HOME set): a session started without it would reach the default viz, not this one —
+    its hooks and its channel find the server by that folder (paths.py), and it shows relay: false here (the trial,
+    11-02). Empty for the default folder."""
+    here = paths.viz_home()
+    default = Path.home() / ".local" / "state" / "jui-viz"
+    return "" if here == default else f"JUI_VIZ_HOME={_sh(str(here))} "
+
+
+def with_home(command: str) -> str:
+    """A start command with home_prefix() right before its claude word (after a `cd … &&`), once."""
+    prefix = home_prefix()
+    if not prefix or not isinstance(command, str) or "JUI_VIZ_HOME=" in command:
+        return command
+    m = re.search(r"(^|&&\s*|;\s*)claude\b", command)
+    return command[:m.end(1)] + prefix + command[m.end(1):] if m else prefix + command
 
 
 def config_path() -> Path:
@@ -279,7 +301,7 @@ class SlackRoom:
         self.cfg_why: str | None = "missing"
         self.root: Path = factory_dir({})
         self.scanned: dict = {"exists": False, "arrivals": [], "tasks": [], "unsorted": 0, "broken": 0}
-        self.board: dict = {"notified": [], "sawBusy": {}}
+        self.board: dict = {"notified": [], "sawBusy": {}, "started": {}}   # started: tasks 開始 sent (only these are followed)
         self._board_read_for: str | None = None
         self.last_told_at = 0
         self.last_told: list[str] = []
@@ -295,7 +317,8 @@ class SlackRoom:
             self._board_read_for = str(self.root)
             got, _ = read_config(self.root / ".state" / "board.json")
             self.board = {"notified": [p for p in got.get("notified", []) if isinstance(p, str)],
-                          "sawBusy": {k: v for k, v in (got.get("sawBusy") or {}).items() if isinstance(v, int)}}
+                          "sawBusy": {k: v for k, v in (got.get("sawBusy") or {}).items() if isinstance(v, int)},
+                          "started": {k: v for k, v in (got.get("started") or {}).items() if isinstance(v, int)}}
         self.scanned = self.scanner.scan(self.root)
 
     def _save_board(self) -> None:
@@ -361,7 +384,7 @@ class SlackRoom:
                           f" threads={','.join(str(x) for x in t.get('threads') or [])}"
                           f"{' promptEditedByUser' if t.get('promptEditedByUser') else ''}" for t in open_rows) or i18n.tl("srv.slack.no_sessions")
         return i18n.tl("srv.slack.notify", prompt=task_prompt, dir=tilde(str(self.root)), files=listed, sessions=sessions,
-                       launch=LAUNCH_COMMAND, tasks=tasks, next=self.next_id())
+                       launch=with_home(LAUNCH_COMMAND), tasks=tasks, next=self.next_id())
 
     def next_id(self) -> str:
         """The next short id: one past the highest T-<n> in tasks/ (T-0001 for the first)."""
@@ -403,8 +426,8 @@ class SlackRoom:
         if self.first_follow_at is None:
             self.first_follow_at = at
         for task in self.scanned["tasks"]:
-            if task.get("status") != "working":
-                continue
+            if task.get("status") != "working" or task["id"] not in self.board["started"]:
+                continue   # a task made working by hand (the status select) is not followed: nothing was sent
             sid = (task.get("target") or {}).get("sessionId") if isinstance(task.get("target"), dict) else None
             session = self.world.sessions.get(sid) if isinstance(sid, str) else None
             gone = (session is None and at - self.first_follow_at >= GONE_GRACE_MS) or (session is not None and session.get("status") == "ended")
@@ -425,9 +448,59 @@ class SlackRoom:
                 fresh.update(status="ended", endedAt=at)
                 self._write_task(path, fresh)
                 self.board["sawBusy"].pop(task["id"], None)
+                self.board["started"].pop(task["id"], None)
                 self._save_board()
                 changed = True
         return changed
+
+    # -- done tasks go (requester 11-02: 「いつまでもメッセージ保管したくない」)
+    def retention_ms(self) -> int:
+        got = self.cfg.get("doneRetentionMinutes", DONE_RETENTION_MIN)
+        return int(got * 60_000) if isinstance(got, (int, float)) and not isinstance(got, bool) and got >= 0 else DONE_RETENTION_MIN * 60_000
+
+    def purge(self, at: int) -> list[str]:
+        """Each task done for doneRetentionMinutes (slack.json, default 60) from its doneAt: its tasks/<id>.json and the
+        projects/ files its sources name, but not one another task still names; a task tied to it (relatedTaskId) no
+        longer points at it. Run by the server whether the room is open or not. Returns the ids removed."""
+        keep = self.retention_ms()
+        tasks = [t for t in self.scanned["tasks"] if not t.get("broken")]
+        due = [t for t in tasks if t.get("status") == "done" and isinstance(t.get("doneAt"), (int, float)) and at - t["doneAt"] >= keep]
+        if not due:
+            return []
+        gone_ids = {t["id"] for t in due}
+        still = {p for t in tasks if t["id"] not in gone_ids for p in t.get("sources") or [] if isinstance(p, str)}
+        top = (self.root / "projects").resolve()
+        removed = []
+        for t in due:
+            try:
+                path, fresh = self._task(t["id"])
+            except Refused:
+                continue
+            if fresh.get("status") != "done" or not isinstance(fresh.get("doneAt"), (int, float)) or at - fresh["doneAt"] < keep:
+                continue   # moved out of done (or done again) since the scan
+            for rel in fresh.get("sources") or []:
+                if not isinstance(rel, str) or rel in still:
+                    continue
+                full = (self.root / rel).resolve()
+                if full.is_relative_to(top) and full.is_file():
+                    full.unlink(missing_ok=True)
+            path.unlink(missing_ok=True)
+            self.scanner._cache.pop(str(path), None)
+            removed.append(t["id"])
+        for t in tasks:
+            if t["id"] not in gone_ids and t.get("relatedTaskId") in removed:
+                try:
+                    path, fresh = self._task(t["id"])
+                except Refused:
+                    continue
+                fresh["relatedTaskId"] = None
+                self._write_task(path, fresh)
+        for tid in removed:
+            for k in ("sawBusy", "started"):
+                self.board[k].pop(tid, None)
+        if removed:
+            self._save_board()
+        return removed
 
     # -- the board's buttons
     async def act(self, body: dict, at: int) -> dict:
@@ -446,6 +519,23 @@ class SlackRoom:
                                 sourcesAtEdit=[p for p in task.get("sources") or [] if isinstance(p, str)])
             if "target" in body:
                 task["target"] = self._target(body["target"])
+        elif op == "status":
+            # the note's status select (requester 11-02): any state, written at once; nothing is sent (only 開始 sends),
+            # and a task moved by hand is no longer followed to ended. Done again starts its hour again; out of done, kept.
+            want = body.get("status")
+            if want not in STATUSES:
+                raise Refused(400, "not a status")
+            task["status"] = want
+            for state, key in (("working", "startedAt"), ("ended", "endedAt")):
+                if want == state and not task.get(key):
+                    task[key] = at
+            if want == "done":
+                task["doneAt"] = at
+            else:
+                task.pop("doneAt", None)
+            self.board["sawBusy"].pop(task["id"], None)
+            self.board["started"].pop(task["id"], None)
+            self._save_board()
         elif op == "draft":
             if status != "talking":
                 raise Refused(409, "only a talking task is raised to a draft")
@@ -472,11 +562,13 @@ class SlackRoom:
                 raise Refused(refused[0], refused[1])
             task.update(status="working", startedAt=at, target=target)
             self.board["sawBusy"].pop(task["id"], None)
+            self.board["started"][task["id"]] = at
             self._save_board()
         elif op == "done":
             if status not in ("working", "ended"):
                 raise Refused(409, "only a started task is done")
             task.update(status="done", doneAt=at)
+            self.board["started"].pop(task["id"], None)
             if task.get("endedAt") is None:
                 task["endedAt"] = at
         elif op == "revise":
@@ -494,6 +586,36 @@ class SlackRoom:
             raise Refused(400, "unknown op")
         self._write_task(path, task)
         return {"ok": True, "status": task.get("status")}
+
+    def messages(self, task_id) -> dict:
+        """A task's source messages whole, for the page's side panel (POST /api/slack-room/messages): who, when, the
+        text, the thread, the permalink, in thread order (each thread from its first message, then by ts). Only files
+        under projects/ are read (a source path that leaves it, or is not there, is listed as missing)."""
+        _, task = self._task(task_id)
+        top = (self.root / "projects").resolve()
+        rows, missing = [], []
+        for rel in [p for p in task.get("sources") or [] if isinstance(p, str)][:200]:
+            try:
+                full = (self.root / rel).resolve()
+                st = full.stat() if full.is_relative_to(top) else None
+            except (OSError, ValueError):
+                st = None
+            data = _read_small(full, st) if st is not None and full.is_file() else None
+            if data is None:
+                missing.append(rel)
+                continue
+            ts = str(data.get("ts") or "")
+            link = data.get("permalink") if isinstance(data.get("permalink"), str) and data["permalink"].startswith("https://") else ""
+            rows.append({"path": rel, "user": str(data.get("user") or ""), "channel": str(data.get("channel") or ""),
+                         "workspace": str(data.get("workspace") or ""), "ts": ts, "threadTs": str(data.get("threadTs") or ts),
+                         "text": data["text"][:MESSAGE_MAX] if isinstance(data.get("text"), str) else "", "permalink": link})
+        def num(x):
+            try:
+                return float(x)
+            except ValueError:
+                return 0.0
+        rows.sort(key=lambda r: (num(r["threadTs"]), num(r["ts"])))
+        return {"id": task["id"], "title": task.get("title") or task["id"], "messages": rows, "missing": missing}
 
     def _target(self, value) -> dict:
         if not isinstance(value, dict):
@@ -526,6 +648,10 @@ class SlackRoom:
             row = {k: t.get(k) for k in ("id", "title", "projectId", "sources", "threads", "prompt", "target", "launchCommand", "status",
                                          "relatedTaskId", "promptEditedByUser", "sourcesAtEdit", "createdAt", "startedAt", "endedAt", "doneAt", "broken")}
             row["status"] = row["status"] if row["status"] in STATUSES else "draft"
+            if row["status"] == "done" and isinstance(row.get("doneAt"), (int, float)):
+                row["purgeAt"] = int(row["doneAt"] + self.retention_ms())
+            if isinstance(row.get("launchCommand"), str):
+                row["launchCommand"] = with_home(row["launchCommand"])   # the file keeps the robot's words
             tasks.append(row)
         # each task's source messages, as the room shows them (the newest tasks first, up to HEADS_MAX)
         by_path = {a["path"]: a for a in arrivals}
@@ -538,7 +664,8 @@ class SlackRoom:
         return {
             "config": {"path": tilde(str(self.config_file or config_path())), "state": self.cfg_why or "ok"},
             "dir": tilde(str(self.root)), "dirExists": self.scanned["exists"],
-            "robot": robot, "robotLaunch": f"cd {_sh(tilde(str(self.root)))} && {LAUNCH_COMMAND}", "launch": LAUNCH_COMMAND,
+            "robot": robot, "robotLaunch": with_home(f"cd {_sh(tilde(str(self.root)))} && {LAUNCH_COMMAND}"), "launch": with_home(LAUNCH_COMMAND),
+            "dirFull": str(self.root),
             "arrivals": {"total": len(arrivals), "byProject": by_project, "unsorted": self.scanned["unsorted"],
                          "broken": self.scanned["broken"], "pending": len(self.pending()), "recent": arrivals[-RECENT_MAX:][::-1]},
             "toldAt": self.last_told_at, "told": len(self.last_told), "note": self.note,

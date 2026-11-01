@@ -78,11 +78,12 @@ async def wait(page, js, timeout=20000, label="", arg=None):
         raise RuntimeError(f"waiting for {label or js[:90]}: {str(e).splitlines()[0]}") from None
 
 
-def message(orch, project, name, text, user="U1", channel="C1"):
+def message(orch, project, name, text, user="U1", channel="C1", thread=None):
     path = orch / "projects" / project / name
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"workspace": "tanosys", "channel": channel, "user": user, "ts": name.split("-")[0], "text": text,
-                                "permalink": "", "removedFiles": 0, "redactions": 0,
+    ts = name.split("-")[0]
+    path.write_text(json.dumps({"workspace": "tanosys", "channel": channel, "user": user, "ts": ts, "threadTs": thread or ts, "text": text,
+                                "permalink": f"https://acme.slack.com/archives/{channel}/p{ts}", "removedFiles": 0, "redactions": 0,
                                 "router": {"adapter": "haiku", "choice": project, "confidence": 0.92}}, ensure_ascii=False))
     return f"projects/{project}/{name}"
 
@@ -102,16 +103,17 @@ async def run_sorting_factory(pw, out, failures):
     out = pathlib.Path(out) / "slack-room"
     out.mkdir(parents=True, exist_ok=True)
     home = out / "home"
-    state = home / ".local" / "state" / "jui-viz"
+    # this viz keeps its files in a folder of its own (JUI_VIZ_HOME): the start commands must name it (the trial, 11-02)
+    state = home / "viz-other"
     state.mkdir(parents=True, exist_ok=True)
-    orch = home / "slack-orchestration"
+    orch = home / "a-long-folder-for-the-orchestration-of-the-slack-intake" / "slack-orchestration"
     (orch / "tasks").mkdir(parents=True, exist_ok=True)
     (orch / "_unsorted").mkdir(exist_ok=True)
     (orch / "_unsorted" / "1793500100-tanosys-C9.json").write_text("{}")
     cwds = {BOT: str(orch), DEV: "/work/shop-app", PLAIN: "/work/booking-site"}
     (state / "slack.json").write_text(json.dumps({
         # manual only and no workspace: stage 1's fetch (今すぐ取る) runs and reaches nothing outside
-        "orchestrationDir": "~/slack-orchestration", "schedule": {"everyHours": 0, "at": "09:00"},
+        "orchestrationDir": str(orch), "schedule": {"everyHours": 0, "at": "09:00"},
         "source": {"mode": "api", "workspaces": [], "_e2eKept": "x" + "oxp-e2e"},
         "router": {"adapter": "haiku", "confidenceMin": 0.6,
                    "prompt": {"instructions": "メッセージをプロジェクトに振り分ける", "projects": {"shop": "ショップのアプリ", "booking": "予約サイト"}, "chitchat": "あいさつや雑談"}},
@@ -127,18 +129,18 @@ async def run_sorting_factory(pw, out, failures):
     task(orch, "T-0004", "working", "商品一覧の並び順", "商品一覧の並び順を新しい順にしてください。", target={"sessionName": "shop", "sessionId": DEV},
          startedAt=T0 + 200_000)
     t1 = message(orch, "booking", "1793500005-tanosys-C2.json", "決済画面の文言、どちらがいいか相談させてください")
-    t2 = message(orch, "booking", "1793500006-tanosys-C2.json", "A 案の方が良さそうですが、もう少し考えます", user="U3")
+    t2 = message(orch, "booking", "1793500006-tanosys-C2.json", "A 案の方が良さそうですが、もう少し考えます。\n理由は 2 つあります:\n- 短い\n- ボタンの文言と揃う", user="U3", thread="1793500005")
     task(orch, "T-0009", "talking", "決済画面の文言の相談", "", project="booking", sources=[t1, t2], threads=["1793500005"])
     task(orch, "T-0010", "draft", "ログイン画面の文言（追加）", "ログイン画面の英語の文言も直してください。", relatedTaskId="T-0005")
     task(orch, "T-0005", "ended", "ログイン画面の文言", "ログイン画面の文言を直してください。", startedAt=T0 + 300_000, endedAt=T0 + 400_000,
          target={"sessionName": "shop", "sessionId": None})
-    task(orch, "T-0006", "done", "フッターのリンク", "フッターのリンク切れを直してください。", startedAt=1, endedAt=2, doneAt=3,
+    task(orch, "T-0006", "done", "フッターのリンク", "フッターのリンク切れを直してください。", startedAt=1, endedAt=2, doneAt=int(time.time() * 1000) - 600_000,
          target={"sessionName": "shop", "sessionId": None})
     jt = pathlib.Path(__file__).resolve().parents[2]
     forward = jt / "jui_cli" / "viz" / "forward.py"
     port = free_port()
     base_env = {k: v for k, v in os.environ.items() if k not in ISOLATE}
-    env = dict(base_env, HOME=str(home), JUI_VIZ_E2E="1")
+    env = dict(base_env, HOME=str(home), JUI_VIZ_E2E="1", JUI_VIZ_HOME=str(state))
     sessions_dir = home / ".claude" / "sessions"
     sessions_dir.mkdir(parents=True, exist_ok=True)
     stand_ins: list = []
@@ -159,7 +161,7 @@ async def run_sorting_factory(pw, out, failures):
             failures.append(f"slack-room: {text}")
 
     def hook(sid, **payload):
-        subprocess.run([sys.executable, "-I", "-S", str(forward)], timeout=10, capture_output=True, env=dict(base_env, HOME=str(home)),
+        subprocess.run([sys.executable, "-I", "-S", str(forward)], timeout=10, capture_output=True, env=dict(base_env, HOME=str(home), JUI_VIZ_HOME=str(state)),
                        input=json.dumps({"session_id": sid, "cwd": cwds[sid], "transcript_path": "/work/none.jsonl", "permission_mode": "default", **payload}).encode())
 
     def local(method, path, body=None, timeout=5):
@@ -182,7 +184,10 @@ async def run_sorting_factory(pw, out, failures):
         got: list = []
         end = time.time() + within
         while len(got) < want and time.time() < end:
-            _, polled = local("GET", f"/channel/poll?channelId={channel}", timeout=within + 5)
+            try:
+                _, polled = local("GET", f"/channel/poll?channelId={channel}", timeout=within + 5)
+            except TimeoutError:   # the server holds a poll longer than a short wait: nothing came
+                polled = None
             got += [p["text"] for p in (polled or {}).get("prompts", [])]
         return got
 
@@ -250,9 +255,22 @@ async def run_sorting_factory(pw, out, failures):
         check(lanes_in["scroll"] <= lanes_in["client"], f"the six lanes fit the board at 1440: {lanes_in}")
         check(all(texts["seen"]), f"the 3D, the board and the box are on the page, not under something: {texts['seen']}")
         marks = res["marks"] = await page.evaluate("""() => { const t = (id, q) => [...document.querySelectorAll(`#sf-wb [data-sf-task="${id}"] ${q}`)].map((e) => e.textContent);
-          return { talk: t('T-0009', '.sf-src li'), talkOpen: document.querySelector('#sf-wb [data-sf-task="T-0009"] .sf-src').open,
+          return { talk: t('T-0009', '[data-sf-chat]'),
             more: t('T-0005', '.sf-mark-more'), follows: t('T-0010', '.sf-mark'), id: t('T-0001', '.sf-id') }; }""")
-        check(len(marks["talk"]) == 2 and "A 案の方が良さそう" in marks["talk"][1] and marks["talkOpen"], f"the talking note shows the exchange: {marks}")
+        check(marks["talk"] == [T("sf.note.sources", n=2)], f"the talking note's messages, to open beside the board: {marks}")
+        # the note's parts in their order, a label over each field, the title cut at 3 lines, one row of actions with 開始 at its right
+        lay = res["layout"] = await page.evaluate("""() => { const n = document.querySelector('#sf-wb [data-sf-task="T-0003"]'), r = (q) => n.querySelector(q).getBoundingClientRect();
+          const acts = [...n.querySelectorAll('.sf-note-acts button')].map((b) => b.getBoundingClientRect());
+          const labelGap = Math.round(r('[data-sf-target]').top - n.querySelector('[data-sf-target]').closest('label').querySelector('.sf-label').getBoundingClientRect().bottom);
+          const title = n.querySelector('.sf-note-title'), lh = parseFloat(getComputedStyle(title).lineHeight);
+          const st = n.querySelector('[data-sf-status]'), stFits = st.scrollWidth <= st.clientWidth + 1 && st.getBoundingClientRect().width >= 90;
+          const inside = [...n.querySelectorAll('button, select, textarea, code')].every((e) => { const a = e.getBoundingClientRect(), b = n.getBoundingClientRect(); return a.left >= b.left - 1 && a.right <= b.right + 1; });
+          return { labels: [...n.querySelectorAll('.sf-label')].map((e) => e.textContent), labelGap, stFits, inside, oneRow: acts.every((b) => Math.abs(b.top - acts[0].top) < 2),
+            startRight: n.querySelector('[data-sf-op="start"]').getBoundingClientRect().right >= Math.max(...acts.map((b) => b.right)) - 1,
+            titleLines: Math.round(title.getBoundingClientRect().height / lh), state: n.querySelector('[data-sf-status]').value,
+            scheme: getComputedStyle(n.querySelector('textarea')).colorScheme }; }""")
+        check(lay["labels"] == [T("sf.note.state.label"), T("sf.note.prompt"), T("sf.note.target")] and lay["stFits"] and lay["inside"] and 4 <= lay["labelGap"] <= 8 and lay["oneRow"] and lay["startRight"]
+              and lay["state"] == "ready" and lay["titleLines"] <= 3 and lay["scheme"] == "light", f"the note's layout: {lay}")
         check(marks["more"] == [T("sf.note.more", id="T-0010", title="ログイン画面の文言（追加）")] and marks["follows"] == [T("sf.note.follows", id="T-0005", title="ログイン画面の文言")],
               f"the tie both ways: {marks}")
         # every lane and note inside the whiteboard's frame: the board scrolls in itself, the column around it does not
@@ -275,6 +293,33 @@ async def run_sorting_factory(pw, out, failures):
         await contrast("light")
         await page.wait_for_timeout(800)
         await shot(page, "slack-room-light", out, failures)
+        # the header's folder: cut in the middle, the whole on hover; the robot's start command names this viz's folder
+        head = res["head"] = await page.evaluate("() => ({ text: document.getElementById('sf-dir').textContent, title: document.getElementById('sf-dir').title })")
+        check(head["title"] == str(orch) and "…" in head["text"] and len(head["text"]) <= 60 and head["text"].endswith("slack-orchestration"),
+              f"the folder cut in the middle, whole on hover: {head}")
+        # what can be pressed shows the pointing hand (the id's copy cursor read as "+")
+        cur = res["cursor"] = await page.evaluate("""() => { const q = [...document.querySelectorAll('#sf button:not(:disabled), #sf summary, #sf a[href]')].filter((e) => e.getClientRects().length);
+          return { id: getComputedStyle(document.querySelector('#sf-wb .sf-id')).cursor, n: q.length, not: q.filter((e) => getComputedStyle(e).cursor !== 'pointer').map((e) => e.id || e.className) }; }""")
+        check(cur["id"] == "pointer" and cur["n"] > 20 and not cur["not"], f"the pointing hand on the id and everything pressable: {cur}")
+        # a task's messages as a chat beside the board: thread order, the reply set in, the whole text, its Slack link
+        await page.click('#sf-wb [data-sf-task="T-0009"] [data-sf-chat]')
+        await wait(page, "() => document.querySelectorAll('#sf-chat .sf-bubble').length === 2", label="the chat's two messages")
+        chat = res["chat"] = await page.evaluate("""() => { const p = document.getElementById('sf-chat'), r = p.getBoundingClientRect();
+          return { title: document.getElementById('sf-chat-title').textContent, focus: document.activeElement.id,
+            rows: [...p.querySelectorAll('.sf-bubble')].map((b) => ({ reply: b.classList.contains('sf-reply'), who: b.querySelector('b').textContent, text: b.querySelector('.sf-bubble-text').textContent,
+              link: (b.querySelector('a') || {}).href || '', target: (b.querySelector('a') || {}).target || '' })), right: Math.round(innerWidth - r.right), w: Math.round(r.width) }; }""")
+        check(chat["title"] == "T-0009 決済画面の文言の相談" and chat["focus"] == "sf-chat-close" and [r["who"] for r in chat["rows"]] == ["U1", "U3"]
+              and not chat["rows"][0]["reply"] and chat["rows"][1]["reply"] and "ボタンの文言と揃う" in chat["rows"][1]["text"]
+              and chat["rows"][0]["link"] == "https://acme.slack.com/archives/C1/p1793500005" and chat["rows"][0]["target"] == "_blank" and chat["right"] == 0,
+              f"the chat: thread order, the reply set in, the whole text, the Slack link, at the side: {chat}")
+        await shot(page, "slack-room-chat", out, failures)
+        await page.keyboard.press("Escape")
+        back_chat = await page.evaluate("() => ({ hidden: document.getElementById('sf-chat').hidden, open: window.__dbg.sfState().open, focus: !!document.activeElement.closest('[data-sf-task=\"T-0009\"]') })")
+        check(back_chat == {"hidden": True, "open": True, "focus": True}, f"Esc closes the chat, the room stays, the focus back: {back_chat}")
+        await page.click('#sf-wb [data-sf-task="T-0009"] [data-sf-chat]')
+        await wait(page, "() => !document.getElementById('sf-chat').hidden", label="the chat again")
+        await page.click("#sf-chat-close")
+        check(await page.evaluate("() => document.getElementById('sf-chat').hidden"), "x closes the chat")
         # the whole board at once: every note in view, Esc back to the room (not out of it)
         await page.click("#sf-full")
         await page.wait_for_timeout(400)
@@ -296,7 +341,7 @@ async def run_sorting_factory(pw, out, failures):
         mark = res["id-mark"] = await page.evaluate("""() => { const b = document.querySelector('#sf-wb [data-sf-task="T-0002"] .sf-id');
           return { after: getComputedStyle(b, '::after').content, label: b.getAttribute('aria-label'), title: !!b.title }; }""")
         check(mark["after"] == '"⧉"' and mark["label"] == T("sf.note.id.aria", id="T-0002") and mark["title"], f"the id says it copies: {mark}")
-        await page.click('#sf-wb [data-sf-task="T-0009"] [data-sf-op="draft"]')
+        await page.select_option('#sf-wb [data-sf-task="T-0009"] [data-sf-status]', "draft")
         await wait(page, "() => window.__dbg.sfState().lanes.draft.includes('T-0009')", label="T-0009 raised to a draft")
         check(read_task(orch, "T-0009")["status"] == "draft", "the file says draft")
 
@@ -334,9 +379,9 @@ async def run_sorting_factory(pw, out, failures):
         await wait(page, f"() => document.querySelector('{note}').textContent.includes({json.dumps(T('sf.note.edited'))})", label="the hand-edited mark")
         t["sources"].append(m4)                                 # the robot adds a message to it, leaving the prompt
         (orch / "tasks" / "T-0001.json").write_text(json.dumps(t, ensure_ascii=False))
-        await wait(page, f"() => (document.querySelector('{note} .sf-mark-late') || {{}}).textContent === {json.dumps(T('sf.note.late', n=1))} && document.querySelector('{note} .sf-late').textContent.includes('商品詳細の画像')",
+        await wait(page, f"() => (document.querySelector('{note} .sf-mark-late') || {{}}).textContent === {json.dumps(T('sf.note.late', n=1))}",
                    label="what came after the hand's prompt shown")
-        await page.click(f"{note} [data-sf-op='ready']")
+        await page.select_option(f"{note} [data-sf-status]", "ready")
         await wait(page, "() => window.__dbg.sfState().lanes.ready.includes('T-0001')", label="T-0001 ready")
 
         # start the ready one on DEV
@@ -355,20 +400,42 @@ async def run_sorting_factory(pw, out, failures):
         await page.wait_for_timeout(2600)
         check(read_task(orch, "T-0003")["status"] == "working", "still working while DEV works")
         hook(DEV, hook_event_name="Stop")
-        await wait(page, "() => ['T-0003', 'T-0004'].every((id) => window.__dbg.sfState().lanes.ended.includes(id))", timeout=15000,
-                   label="T-0003 and T-0004 (both on DEV) ended by themselves")
-        await page.click("#sf-wb [data-sf-task='T-0003'] [data-sf-op='done']")
+        await wait(page, "() => window.__dbg.sfState().lanes.ended.includes('T-0003')", timeout=15000, label="T-0003 (sent with 開始) ended by itself")
+        check(read_task(orch, "T-0004")["status"] == "working", "T-0004 (working, never sent with 開始) is not followed")
+        await page.select_option("#sf-wb [data-sf-task='T-0003'] [data-sf-status]", "done")
         await wait(page, "() => window.__dbg.sfState().lanes.done.includes('T-0003')", label="T-0003 done")
+        purge = await page.evaluate("() => (document.querySelector('#sf-wb [data-sf-task=\"T-0003\"] .sf-mark-purge') || {}).textContent || null")
+        check(purge in (T("sf.note.purge", n=60), T("sf.note.purge", n=59)), f"a done note says when it goes: {purge}")
+        # a state chosen by hand sends nothing and is not followed: T-0010 made working, DEV busy then idle, it stays working
+        await page.select_option("#sf-wb [data-sf-task='T-0010'] [data-sf-status]", "working")
+        await wait(page, "() => window.__dbg.sfState().lanes.working.includes('T-0010')", label="T-0010 working by hand")
+        check(poll(channels[DEV], within=3) == [], "nothing sent to DEV by a state chosen by hand")
+        hook(DEV, hook_event_name="UserPromptSubmit", prompt="something else")
+        hook(DEV, hook_event_name="Stop")
+        await page.wait_for_timeout(4500)
+        check(read_task(orch, "T-0010")["status"] == "working", f"a task made working by hand is not ended by the session: {read_task(orch, 'T-0010')['status']}")
         t = read_task(orch, "T-0003")
         check(t["status"] == "done" and t["doneAt"] >= t["endedAt"] >= t["startedAt"], f"the times in order: {t}")
 
         # ask the robot to change a note; tell the robot something
         note = '#sf-wb [data-sf-task="T-0001"]'
-        await page.click(f"{note} .sf-revise summary")
-        await page.fill(f"{note} [data-sf-revise]", "テストの観点も書いて")
-        await page.click(f"{note} [data-sf-op='revise']")
+        await page.click(f"{note} [data-sf-revise-open]")
+        await wait(page, "() => !document.getElementById('sf-revise').hidden", label="the revise popup")
+        rv = res["revise"] = await page.evaluate("""() => { const b = document.querySelector('#sf-revise .sf-modal-box').getBoundingClientRect(), t = document.getElementById('sf-revise-text').getBoundingClientRect();
+          return { focus: document.activeElement.id, head: document.getElementById('sf-revise-h').textContent, w: Math.round(t.width), h: Math.round(t.height), inView: b.left >= 0 && b.right <= innerWidth && b.top >= 0 && b.bottom <= innerHeight }; }""")
+        check(rv["focus"] == "sf-revise-text" and rv["head"].startswith(T("sf.revise.head", id="T-0001", title="")[:7]) and "T-0001" in rv["head"] and rv["w"] >= 500 and rv["h"] >= 150 and rv["inView"],
+              f"the popup: a wide box with the focus, which note at its head, in view: {rv}")
+        await page.fill("#sf-revise-text", "テストの観点も書いて\n2 行目")
+        await shot(page, "slack-room-revise", out, failures)
+        await page.keyboard.press("Control+Enter")
         got = poll(channels[BOT])
-        check(len(got) == 1 and "tasks/T-0001.json" in got[0] and "テストの観点も書いて" in got[0], f"the robot asked: {got}")
+        check(len(got) == 1 and "tasks/T-0001.json" in got[0] and "テストの観点も書いて\n2 行目" in got[0], f"the robot asked (Ctrl+Enter): {got}")
+        await wait(page, f"() => document.getElementById('sf-revise').hidden && document.querySelector('{note} .sf-note-said').textContent === {json.dumps(T('sf.said.revise'))}",
+                   label="the popup closed, the note says asked")
+        check(await page.evaluate("() => document.activeElement && document.activeElement.matches('[data-sf-revise-open]')"), "the focus back on the note's button")
+        await page.click(f"{note} [data-sf-revise-open]")
+        await page.keyboard.press("Escape")
+        check(await page.evaluate("() => document.getElementById('sf-revise').hidden && window.__dbg.sfState().open"), "Esc closes the popup, not the room")
         await page.fill("#sf-say", "今日は shop を優先して")
         await page.click("#sf-send")
         got = poll(channels[BOT])
@@ -377,7 +444,8 @@ async def run_sorting_factory(pw, out, failures):
         # the start command: on T-0002 (the robot found no fitting session and wrote one), none on T-0001 (DEV is there)
         COPY = """(id) => { const c = document.querySelector(`#sf-wb [data-sf-task="${id}"] .sf-copy [data-sf-copy]`); return c ? c.dataset.sfCopy : null; }"""
         lines = res["copy"] = [await page.evaluate(COPY, "T-0002"), await page.evaluate(COPY, "T-0001")]
-        check(lines == ["cd ~/work/docs && claude --channels plugin:jui-viz@jsonui", None], f"the start command only where no session fits: {lines}")
+        pre = f"JUI_VIZ_HOME={state} "
+        check(lines == [f"cd ~/work/docs && {pre}claude --channels plugin:jui-viz@jsonui", None], f"the start command only where no session fits: {lines}")
         await page.click('#sf-wb [data-sf-task="T-0002"] .sf-copy [data-sf-copy]')
         await wait(page, f"""() => document.querySelector('#sf-wb [data-sf-task="T-0002"] .sf-copy [data-sf-copy]').textContent === {json.dumps(T('sf.copied'))}""",
                    label="copied")
@@ -388,7 +456,7 @@ async def run_sorting_factory(pw, out, failures):
         shown = await page.evaluate("""() => ({ i: document.getElementById('sf-p-instructions').value, c: document.getElementById('sf-p-chitchat').value,
           p: [...document.querySelectorAll('#sf-p-projects .sf-proj')].map((li) => [li.querySelector('input').value, li.querySelector('textarea').value]) })""")
         check(shown == {"i": "メッセージをプロジェクトに振り分ける", "c": "あいさつや雑談", "p": [["shop", "ショップのアプリ"], ["booking", "予約サイト"]]}, f"the config's words: {shown}")
-        await page.evaluate("() => document.querySelector('.sf-board').scrollTo(0, 0)")
+        await page.evaluate("() => { document.querySelector('.sf-board').scrollTo(0, 0); document.getElementById('sf-wb').scrollTo(0, 0); }")
         await shot(page, "slack-room-prompts", out, failures)
         await page.fill("#sf-p-task", "1 依頼 1 タスクで作る")
         await page.click("#sf-p-add")
@@ -411,7 +479,7 @@ async def run_sorting_factory(pw, out, failures):
         check(light_bg and dark_st["bg"] and dark_st["bg"] != light_bg and dark_st["robot"] == bot and len(dark_st["bins"]) == 2,
               f"the 3D built again in the dark colours, its robot and bins kept: {light_bg} -> {dark_st}")
         await contrast("dark")
-        await page.evaluate("() => document.querySelector('.sf-board').scrollTo(0, 0)")
+        await page.evaluate("() => { document.querySelector('.sf-board').scrollTo(0, 0); document.getElementById('sf-wb').scrollTo(0, 0); }")
         await shot(page, "slack-room-dark", out, failures)
         await page.keyboard.press("Escape")
         st = await page.evaluate(STATE)
@@ -436,6 +504,14 @@ async def run_sorting_factory(pw, out, failures):
         pb = res["phone-board"] = await phone.evaluate("() => { const r = document.getElementById('sf-wb').getBoundingClientRect(), h = document.getElementById('sf-board-h').getBoundingClientRect(); return { headTop: Math.round(h.top), top: Math.round(r.top), height: Math.round(r.height), vh: window.innerHeight }; }")
         check(pb["headTop"] < 260 and pb["height"] >= 0.6 * pb["vh"] and pb["top"] + pb["height"] <= pb["vh"] + 1, f"the board reached and whole on a phone: {pb}")
         await shot(phone, "slack-room-phone-board", out, failures)
+        # the revise popup fits a phone: the box in view, the box to type in wide
+        await phone.evaluate("() => document.querySelector('#sf-wb [data-sf-task=\"T-0002\"] [data-sf-revise-open]').click()")
+        await wait(phone, "() => !document.getElementById('sf-revise').hidden", label="the popup on a phone")
+        prv = res["phone-revise"] = await phone.evaluate("""() => { const b = document.querySelector('#sf-revise .sf-modal-box').getBoundingClientRect(), t = document.getElementById('sf-revise-text').getBoundingClientRect();
+          return { left: Math.round(b.left), right: Math.round(b.right), top: Math.round(b.top), bottom: Math.round(b.bottom), w: innerWidth, h: innerHeight, text: Math.round(t.width), focus: document.activeElement.id }; }""")
+        check(prv["left"] >= 0 and prv["right"] <= prv["w"] and prv["top"] >= 0 and prv["bottom"] <= prv["h"] and prv["text"] >= prv["w"] - 80 and prv["focus"] == "sf-revise-text",
+              f"the popup fits a phone: {prv}")
+        await shot(phone, "slack-room-phone-revise", out, failures)
 
         demo = await new_page(browser, watch, "slack-room-demo", **DESKTOP)
         await demo.goto(url + "/?demo=1")
