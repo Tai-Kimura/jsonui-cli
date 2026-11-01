@@ -265,11 +265,15 @@ async def run_sorting_factory(pw, out, failures):
           const title = n.querySelector('.sf-note-title'), lh = parseFloat(getComputedStyle(title).lineHeight);
           const st = n.querySelector('[data-sf-status]'), stFits = st.scrollWidth <= st.clientWidth + 1 && st.getBoundingClientRect().width >= 90;
           const inside = [...n.querySelectorAll('button, select, textarea, code')].every((e) => { const a = e.getBoundingClientRect(), b = n.getBoundingClientRect(); return a.left >= b.left - 1 && a.right <= b.right + 1; });
-          return { labels: [...n.querySelectorAll('.sf-label')].map((e) => e.textContent), labelGap, stFits, inside, oneRow: acts.every((b) => Math.abs(b.top - acts[0].top) < 2),
+          const rev = n.querySelector('[data-sf-revise-open]'), rs = getComputedStyle(rev), revLines = Math.round((rev.getBoundingClientRect().height - ['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth'].reduce((a, k) => a + parseFloat(rs[k]), 0)) / parseFloat(rs.lineHeight));
+          const tg = n.querySelector('[data-sf-target]'), ctx = document.createElement('canvas').getContext('2d'), ts = getComputedStyle(tg);
+          ctx.font = `${ts.fontWeight} ${ts.fontSize} ${ts.fontFamily}`;   // a select's scrollWidth ignores its cut text: the chosen words measured
+          const tgFits = ctx.measureText(tg.options[tg.selectedIndex].text).width <= tg.clientWidth - parseFloat(ts.paddingLeft) - parseFloat(ts.paddingRight) - 20;
+          return { labels: [...n.querySelectorAll('.sf-label')].map((e) => e.textContent), labelGap, stFits, inside, revLines, tgFits, oneRow: acts.every((b) => Math.abs(b.top - acts[0].top) < 2),
             startRight: n.querySelector('[data-sf-op="start"]').getBoundingClientRect().right >= Math.max(...acts.map((b) => b.right)) - 1,
             titleLines: Math.round(title.getBoundingClientRect().height / lh), state: n.querySelector('[data-sf-status]').value,
             scheme: getComputedStyle(n.querySelector('textarea')).colorScheme }; }""")
-        check(lay["labels"] == [T("sf.note.state.label"), T("sf.note.prompt"), T("sf.note.target")] and lay["stFits"] and lay["inside"] and 4 <= lay["labelGap"] <= 8 and lay["oneRow"] and lay["startRight"]
+        check(lay["labels"] == [T("sf.note.state.label"), T("sf.note.prompt"), T("sf.note.target")] and lay["stFits"] and lay["inside"] and lay["revLines"] <= 1 and lay["tgFits"] and 4 <= lay["labelGap"] <= 8 and lay["oneRow"] and lay["startRight"]
               and lay["state"] == "ready" and lay["titleLines"] <= 3 and lay["scheme"] == "light", f"the note's layout: {lay}")
         check(marks["more"] == [T("sf.note.more", id="T-0010", title="ログイン画面の文言（追加）")] and marks["follows"] == [T("sf.note.follows", id="T-0005", title="ログイン画面の文言")],
               f"the tie both ways: {marks}")
