@@ -78,13 +78,13 @@ def test_a_project_a_low_confidence_an_unknown_choice_and_chitchat(tmp_path):
     route = FakeRoute([{"choice": "shop", "confidence": 0.9}, {"choice": "booking", "confidence": 0.3},
                        {"choice": "nope", "confidence": 0.99}, {"choice": "chitchat", "confidence": 0.95}])
     got = I.process_inbox(cfg, root, route=route)
-    assert got == {"projects": 1, "unsorted": 2, "chitchat": 1, "failed": 0, "waiting": 0}
+    assert got == {"projects": 1, "unsorted": 2, "chitchat": 1, "failed": 0, "waiting": 0, "followed": 0}
     assert files_under(root) == ["_unsorted/1730000002.000100-acme-C0123.json",
                                  "_unsorted/1730000003.000100-acme-C0123.json",
                                  "projects/shop/1730000001.000100-acme-C0123.json"]
     placed = json.loads((root / "projects/shop/1730000001.000100-acme-C0123.json").read_text())
     assert placed == {"workspace": "acme", "channel": "C0123", "user": "U1", "ts": "1730000001.000100",
-                      "text": "在庫の画面が落ちる [REDACTED:aws-access-key]", "permalink": "https://t/p1730000001.000100",
+                      "threadTs": "1730000001.000100", "replyCount": 0, "text": "在庫の画面が落ちる [REDACTED:aws-access-key]", "permalink": "https://t/p1730000001.000100",
                       "removedFiles": 1, "redactions": 1,
                       "router": {"adapter": "haiku", "choice": "shop", "confidence": 0.9}}
     # the router saw the filtered text only
@@ -277,13 +277,13 @@ def test_the_api_fetch_pages_reads_threads_skips_notices_and_moves_the_cursor(tm
     reply = json.loads((root / S.INBOX / "1730000005.000100-acme-C0123.json").read_text())
     assert reply["permalink"].endswith("?thread_ts=1730000001.000100&cid=C0123")
     first = [c for c in slack.calls if c[0] == "conversations.history"][0][2]
-    assert first["oldest"] == f"{1730000100.0 - 24 * 3600:.6f}" and first["channel"] == "C0123"
+    assert first["oldest"] == f"{1730000100.0 - 14 * 86400:.6f}" and first["channel"] == "C0123"   # the thread watch
     assert S.Cursor(root).get("acme", "C0123") == "1730000003.000100"
     assert stat.S_IMODE((root / S.INBOX).stat().st_mode) == 0o700
     # the next fetch starts from the cursor, and a message already in the inbox is not written twice
     slack.calls.clear()
     assert FE.fetch(cfg, root, get=slack, now=1730000200.0)["fetched"] == 0
-    assert [c for c in slack.calls if c[0] == "conversations.history"][0][2]["oldest"] == "1730000003.000100"
+    assert [c for c in slack.calls if c[0] == "conversations.history"][0][2]["oldest"] == f"{1730000200.0 - 14 * 86400:.6f}"
 
 
 def test_a_failing_channel_leaves_its_cursor_and_the_others_go_on(tmp_path):
@@ -295,6 +295,103 @@ def test_a_failing_channel_leaves_its_cursor_and_the_others_go_on(tmp_path):
     got = FE.fetch(cfg, root, get=slack, now=1730000100.0)
     assert got["fetched"] == 1 and got["errors"] == ["acme/C0123: conversations.history: ratelimited", "other: no token"]
     assert S.Cursor(root).get("acme", "C0123") is None and S.Cursor(root).get("acme", "C0456") == "1730000003.000100"
+
+
+# ---------------------------------------------------------------- threads (design 追記: 1 メッセージ 1 タスクにしない)
+
+P, R1, R2 = "1730000001.000100", "1730050000.000100", "1730090000.000100"
+
+
+def test_a_new_reply_to_a_thread_started_before_the_last_fetch_is_taken_and_follows_its_thread(tmp_path):
+    cfg = cfg_of(tmp_path)
+    root = C.orchestration_dir(cfg)
+    # day 1: the first message, no reply yet; it is routed to shop
+    slack = FakeSlack(history=[[{"ts": P, "user": "U1", "text": "在庫の画面が落ちる"}]])
+    assert FE.fetch(cfg, root, get=slack, now=1730000100.0)["fetched"] == 1
+    route = FakeRoute([{"choice": "shop", "confidence": 0.9}])
+    assert I.process_inbox(cfg, root, route=route, now=1730060000.0)["projects"] == 1
+    assert S.Cursor(root).get("acme", "C0123") == P
+    # day 2: nothing new in the channel, but the thread got a reply (history from the watch shows latest_reply)
+    slack.history = [[{"ts": P, "user": "U1", "text": "在庫の画面が落ちる", "thread_ts": P, "reply_count": 1, "latest_reply": R1}]]
+    slack.replies = {P: [{"ts": P, "text": "在庫の画面が落ちる"}, {"ts": R1, "user": "U2", "text": "直りました " + AWS, "thread_ts": P}]}
+    slack.calls.clear()
+    assert FE.fetch(cfg, root, get=slack, now=1730060000.0) == {"fetched": 1, "errors": []}
+    hist = [c[2] for c in slack.calls if c[0] == "conversations.history"][0]
+    assert hist["oldest"] == f"{1730060000.0 - 14 * 86400:.6f}"                  # read from the watch, not the cursor
+    assert [c[2]["oldest"] for c in slack.calls if c[0] == "conversations.replies"] == [P]
+    assert [p.name for p in S.inbox_files(root)] == [f"{R1}-acme-C0123.json"]
+    got = I.process_inbox(cfg, root, route=route, now=1730060000.0)
+    assert got["projects"] == 1 and got["followed"] == 1 and len(route.seen) == 1   # the router was not asked again
+    reply = json.loads((root / f"projects/shop/{R1}-acme-C0123.json").read_text())
+    assert reply["threadTs"] == P and reply["router"] == {"adapter": "thread", "choice": "shop", "confidence": 0.9}
+    assert reply["text"] == "直りました [REDACTED:aws-access-key]"                # filtered like any other
+    parent = json.loads((root / f"projects/shop/{P}-acme-C0123.json").read_text())
+    assert parent["threadTs"] == P
+    routes = (root / S.STATE / "routes.json").read_text()
+    assert "在庫" not in routes and "直りました" not in routes
+    # day 3: the same latest_reply: no replies call, nothing taken twice
+    slack.calls.clear()
+    assert FE.fetch(cfg, root, get=slack, now=1730070000.0)["fetched"] == 0
+    assert [c for c in slack.calls if c[0] == "conversations.replies"] == []
+    # past threadWatchDays the thread is no longer watched or followed
+    assert FE.fetch(cfg, root, get=FakeSlack(history=[[]]), now=float(P) + 15 * 86400)["fetched"] == 0
+    assert json.loads((root / S.STATE / "threads.json").read_text()) == {}
+
+
+def test_an_old_thread_never_watched_gives_only_its_replies_after_the_cursor(tmp_path):
+    cfg = cfg_of(tmp_path)
+    root = C.orchestration_dir(cfg)
+    S.ensure(root)
+    S.Cursor(root).set("acme", "C0123", "1730040000.000100")
+    slack = FakeSlack(history=[[{"ts": P, "text": "old", "thread_ts": P, "reply_count": 2, "latest_reply": R1}]],
+                      replies={P: [{"ts": P}, {"ts": "1730030000.000100", "text": "before the cursor"}, {"ts": R1, "text": "after"}]})
+    assert FE.fetch(cfg, root, get=slack, now=1730060000.0)["fetched"] == 1
+    assert [p.name for p in S.inbox_files(root)] == [f"{R1}-acme-C0123.json"]
+
+
+def test_a_reply_to_a_chitchat_thread_is_routed_again_and_the_next_reply_follows_that(tmp_path):
+    cfg = cfg_of(tmp_path)
+    root = C.orchestration_dir(cfg)
+    inbox(root, P, "おつかれさまです")
+    route = FakeRoute([{"choice": "chitchat", "confidence": 0.95}])
+    assert I.process_inbox(cfg, root, route=route, now=1730060000.0)["chitchat"] == 1
+    routes = root / S.STATE / "routes.json"
+    assert files_under(root) == [] and (not routes.exists() or P not in routes.read_text())   # no trace of the chitchat
+    inbox(root, R1, "ところで予約の画面が出ません", thread_ts=P)
+    route.answers = [{"choice": "booking", "confidence": 0.8}]
+    got = I.process_inbox(cfg, root, route=route, now=1730060000.0)
+    assert got["projects"] == 1 and got["followed"] == 0 and route.seen[-1]["text"] == "ところで予約の画面が出ません"
+    placed = json.loads((root / f"projects/booking/{R1}-acme-C0123.json").read_text())
+    assert placed["router"]["adapter"] == "haiku" and placed["threadTs"] == P
+    inbox(root, R2, "再起動したら出ました", thread_ts=P)
+    got = I.process_inbox(cfg, root, route=route, now=1730060000.0)
+    assert got["followed"] == 1 and len(route.seen) == 2
+    assert files_under(root) == [f"projects/booking/{R1}-acme-C0123.json", f"projects/booking/{R2}-acme-C0123.json"]
+
+
+def test_a_reply_waits_while_its_threads_first_message_is_held_in_the_inbox(tmp_path, monkeypatch):
+    path = tmp_path / "f.py"
+    path.write_text("def filter_message(record):\n    raise RuntimeError('down')\n")
+    cfg = cfg_of(tmp_path, filter={"adapter": str(path)})
+    root = C.orchestration_dir(cfg)
+    inbox(root, P, "親")
+    inbox(root, R1, "返信", thread_ts=P)
+    route = FakeRoute([])
+    got = I.process_inbox(cfg, root, route=route)
+    assert got["failed"] == 1 and got["waiting"] == 1 and route.seen == []
+    assert sorted(p.name for p in S.inbox_files(root)) == [f"{P}-acme-C0123.json", f"{R1}-acme-C0123.json"]
+
+
+def test_thread_watch_days_is_read_and_checked(tmp_path):
+    assert C.DEFAULT["source"]["threadWatchDays"] == 14
+    write_cfg({"source": {"threadWatchDays": -1}})
+    with pytest.raises(C.ConfigError, match="threadWatchDays"):
+        C.load()
+    cfg = cfg_of(tmp_path, source={"threadWatchDays": 0})
+    root = C.orchestration_dir(cfg)
+    slack = FakeSlack(history=[[]])
+    FE.fetch(cfg, root, get=slack, now=1730060000.0)
+    assert slack.calls[1][2]["oldest"] == f"{1730060000.0 - 24 * 3600:.6f}"     # 0: no watch, from the cursor only
 
 
 # ---------------------------------------------------------------- fetch: connector (a claude of this test)

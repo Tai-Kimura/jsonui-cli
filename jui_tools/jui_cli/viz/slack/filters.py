@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import re
 
-from . import adapters
+from . import adapters, store
 
 REDACTED = "[REDACTED:{kind}]"
 
@@ -108,9 +108,13 @@ def apply(record: dict, filter_cfg: dict, timeout: float = adapters.TIMEOUT_SEC)
         value = stats.get(key)
         if not isinstance(value, int) or isinstance(value, bool) or value < 0:
             raise FilterError(f"{adapter}: {key} must be an int >= 0")
+    raw = record.get("message") if isinstance(record.get("message"), dict) else {}
+    thread_ts = raw.get("thread_ts") if store.valid_ts(raw.get("thread_ts")) else record.get("ts")
+    reply_count = raw.get("reply_count")
     return {
         "workspace": record.get("workspace"), "channel": record.get("channel"),
         "user": str(msg.get("user") or ""), "ts": record.get("ts"),
+        "threadTs": thread_ts, "replyCount": reply_count if isinstance(reply_count, int) and reply_count >= 0 else 0,
         "text": msg["text"], "permalink": str(msg.get("permalink") or ""),
         "removedFiles": stats["removedFiles"], "redactions": stats["redactions"],
     }

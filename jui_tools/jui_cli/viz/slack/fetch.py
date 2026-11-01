@@ -82,10 +82,22 @@ def _write(root: Path, workspace: str, channel: str, message: dict, link: str, v
     return True
 
 
+def watch_from(cfg: dict, now: float) -> float | None:
+    days = float((cfg.get("source") or {}).get("threadWatchDays", 14) or 0)
+    return now - days * 86400 if days > 0 else None
+
+
 def fetch_api(cfg: dict, root: Path, get=api_get, now: float | None = None) -> dict:
-    """{"fetched": n, "errors": [str]}: one workspace's or channel's failure does not stop the others."""
+    """{"fetched": n, "errors": [str]}: one workspace's or channel's failure does not stop the others.
+
+    Per channel, one conversations.history from the older of the cursor and the thread watch (source.threadWatchDays,
+    14 days): a message after the cursor is new; a thread whose latest_reply is past what threads.json last saw (or
+    past the cursor, for a thread never watched) gets one conversations.replies, and its replies after that are new
+    — a reply to a thread started before the last fetch is taken too."""
     now = time.time() if now is None else now
     cursor = store.Cursor(root)
+    threads = store.KeyedState(root, "threads.json")
+    watch = watch_from(cfg, now)
     fetched, errors = 0, []
     for ws in (cfg.get("source") or {}).get("workspaces") or []:
         name, token = ws["name"], ws.get("token") or ""
@@ -99,28 +111,58 @@ def fetch_api(cfg: dict, root: Path, get=api_get, now: float | None = None) -> d
             continue
         for channel in ws.get("channels") or []:
             oldest = cursor.get(name, channel) or first_oldest(cfg, now)
+            scan = oldest if watch is None or float(oldest) <= watch else f"{watch:.6f}"
             try:
-                messages = _history(get, token, channel, oldest)
+                messages = _history(get, token, channel, scan)
                 newest = oldest
                 for msg in messages:
                     ts = msg.get("ts")
-                    if not store.valid_ts(ts) or float(ts) <= float(oldest):
-                        continue     # oldest is exclusive: a message already taken (and maybe placed) is not taken again
-                    if _write(root, name, channel, msg, permalink(team_url, channel, ts, msg.get("thread_ts")), "api"):
-                        fetched += 1
-                    if store.valid_ts(ts) and float(ts) > float(newest):
-                        newest = ts
+                    if not store.valid_ts(ts):
+                        continue
+                    if float(ts) > float(oldest):   # oldest is exclusive: a message already taken is not taken again
+                        if _write(root, name, channel, msg, permalink(team_url, channel, ts, msg.get("thread_ts")), "api"):
+                            fetched += 1
+                        if float(ts) > float(newest):
+                            newest = ts
                     if msg.get("reply_count") and msg.get("thread_ts") == ts:
-                        for reply in _replies(get, token, channel, ts, oldest):
-                            if reply.get("ts") == ts:
-                                continue
-                            if _write(root, name, channel, reply, permalink(team_url, channel, reply.get("ts", ""), ts), "api"):
-                                fetched += 1
+                        fetched += _thread(get, token, root, threads, name, channel, msg, oldest, team_url)
                 if newest != oldest:
                     cursor.set(name, channel, newest)
             except FetchError as exc:
                 errors.append(f"{name}/{channel}: {exc}")
+            finally:
+                threads.save()
+    if watch is not None:
+        threads.prune(watch)
+        threads.save()
     return {"fetched": fetched, "errors": errors}
+
+
+def _thread(get, token: str, root: Path, threads: "store.KeyedState", workspace: str, channel: str, parent: dict,
+            oldest: str, team_url: str) -> int:
+    """The new replies of one thread. ``seen``: the last reply taken before; a thread never watched counts from the
+    cursor when it started before it (its older replies were the earlier fetches' business), else from its start."""
+    ts = parent["ts"]
+    key = store.KeyedState.key(workspace, channel, ts)
+    seen = threads.get(key)
+    if not store.valid_ts(seen):
+        seen = oldest if float(ts) <= float(oldest) else ts
+    latest = parent.get("latest_reply")
+    if store.valid_ts(latest) and float(latest) <= float(seen):
+        threads.set(key, seen)
+        return 0
+    n, last = 0, seen
+    for reply in _replies(get, token, channel, ts, seen):
+        rts = reply.get("ts")
+        if not store.valid_ts(rts) or rts == ts or float(rts) <= float(seen):
+            continue
+        reply.setdefault("thread_ts", ts)
+        if _write(root, workspace, channel, reply, permalink(team_url, channel, rts, ts), "api"):
+            n += 1
+        if float(rts) > float(last):
+            last = rts
+    threads.set(key, last)
+    return n
 
 
 def _paged(get, method: str, token: str, params: dict) -> list[dict]:
@@ -162,8 +204,11 @@ def connector_prompt(cfg: dict, root: Path, now: float) -> str:
                          f'{cursor.get(ws["name"], channel) or first_oldest(cfg, now)}')
     return ("Read these Slack channels with the Slack connector (read only; do not post, react or change anything):\n"
             + "\n".join(lines) +
-            "\n\nInclude thread replies. Print ONLY one JSON array, no prose, one object per message: "
-            '{"workspace": "<as given>", "channel": "<channel id>", "ts": "<message ts>", "thread_ts": "<or null>", '
+            f"\n\nAlso take the replies newer than those ts in threads started in the last "
+            f"{(cfg.get('source') or {}).get('threadWatchDays', 14)} days, even when the thread started earlier. "
+            "Print ONLY one JSON array, no prose, one object per message: "
+            '{"workspace": "<as given>", "channel": "<channel id>", "ts": "<message ts>", "thread_ts": "<the parent ts or null>", '
+            '"reply_count": <n or 0>, '
             '"user": "<user id or name>", "text": "<the text as written>", "permalink": "<or empty>", '
             '"files": [{"name": "<attached file name>"}]}. Print [] when there is nothing new.')
 
@@ -221,7 +266,7 @@ def fetch_connector(cfg: dict, root: Path, run=subprocess.run, now: float | None
         before = cursor.get(*key)
         if before is not None and float(item["ts"]) <= float(before):
             continue     # already taken: the model may repeat what the cursor has passed
-        message = {k: item.get(k) for k in ("ts", "thread_ts", "user", "text") if item.get(k) is not None}
+        message = {k: item.get(k) for k in ("ts", "thread_ts", "reply_count", "user", "text") if item.get(k) is not None}
         if isinstance(item.get("files"), list):
             message["files"] = [f for f in item["files"] if isinstance(f, dict)]
         if _write(root, key[0], key[1], message, str(item.get("permalink") or ""), "connector"):

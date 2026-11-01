@@ -30,6 +30,7 @@ DEFAULT: dict = {
         "mode": "api",
         "_modeNote": MODE_NOTE,
         "workspaces": [],
+        "threadWatchDays": 14,
     },
     "filter": {"adapter": "builtin", "extraPatterns": []},
     "router": {
@@ -100,6 +101,9 @@ def validate(cfg: dict) -> None:
         for ch in ws.get("channels") or []:
             if not isinstance(ch, str) or not safe_name(ch):
                 raise ConfigError(f"channel {ch!r}: letters, digits, '.', '_' and '-' only")
+    days = src.get("threadWatchDays")
+    if not isinstance(days, (int, float)) or isinstance(days, bool) or days < 0:
+        raise ConfigError("source.threadWatchDays must be a number >= 0")
     sched = cfg.get("schedule") or {}
     every = sched.get("everyHours")
     if not isinstance(every, (int, float)) or isinstance(every, bool) or every < 0:

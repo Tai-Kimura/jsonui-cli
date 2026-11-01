@@ -5,6 +5,9 @@
     _unsorted/<ts>-<workspace>-<channel>.json        confidence under router.confidenceMin, or a choice not in the list
     tasks/                                           stage 2/3
     .state/cursor.json                               {"<workspace>/<channel>": "<last ts>"}
+    .state/threads.json                              threads watched for new replies: {"<ws>/<ch>/<threadTs>": "<last reply ts>"}
+    .state/routes.json                               where a thread went: {"<ws>/<ch>/<threadTs>": {to, choice, confidence}}
+                                                     (no text; a thread routed as chitchat is never written here)
     .state/status.json                               last run, failures (written by the intake only)
 
 Every write is a temporary dot-file renamed into place (the watcher skips dot-files), files 0600, folders 0700.
@@ -96,3 +99,38 @@ class Cursor:
         if old is None or float(ts) > float(old):
             self.data[f"{workspace}/{channel}"] = ts
             write_json(self.path, self.data)
+
+
+class KeyedState:
+    """A small {key: value} file under .state/ whose keys end in a thread's ts (threads.json, routes.json)."""
+
+    def __init__(self, root: Path, name: str):
+        self.path = root / STATE / name
+        got = read_json(self.path, {})
+        self.data: dict = got if isinstance(got, dict) else {}
+        self.dirty = False
+
+    @staticmethod
+    def key(workspace: str, channel: str, thread_ts: str) -> str:
+        return f"{workspace}/{channel}/{thread_ts}"
+
+    def get(self, key: str):
+        return self.data.get(key)
+
+    def set(self, key: str, value) -> None:
+        if self.data.get(key) != value:
+            self.data[key] = value
+            self.dirty = True
+
+    def prune(self, before: float) -> None:
+        """Drop the threads started before ``before`` (epoch seconds)."""
+        for key in list(self.data):
+            ts = key.rsplit("/", 1)[-1]
+            if not valid_ts(ts) or float(ts) < before:
+                del self.data[key]
+                self.dirty = True
+
+    def save(self) -> None:
+        if self.dirty:
+            write_json(self.path, self.data)
+            self.dirty = False

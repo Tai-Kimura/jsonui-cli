@@ -67,7 +67,8 @@ class Status:
 
 def process_inbox(cfg: dict, root: Path, *, force: bool = False, now: float | None = None,
                   route=routers.route, apply_filter=filters.apply) -> dict:
-    """{"projects": n, "unsorted": n, "chitchat": n, "failed": n, "waiting": n} for this pass."""
+    """{"projects", "unsorted", "chitchat", "failed", "waiting", "followed"}: counts of this pass (followed: replies
+    sent where their thread went, also counted in projects or unsorted)."""
     now = time.time() if now is None else now
     store.ensure(root)
     status = Status(root)
@@ -76,7 +77,11 @@ def process_inbox(cfg: dict, root: Path, *, force: bool = False, now: float | No
     router_cfg = cfg.get("router") or {}
     fp = _filter_fingerprint(filter_cfg)
     known = set(router_cfg.get("prompt", {}).get("projects") or {})
-    out = {"projects": 0, "unsorted": 0, "chitchat": 0, "failed": 0, "waiting": 0}
+    out = {"projects": 0, "unsorted": 0, "chitchat": 0, "failed": 0, "waiting": 0, "followed": 0}
+    routes = store.KeyedState(root, "routes.json")
+    watch = F.watch_from(cfg, now)
+    if watch is not None:
+        routes.prune(watch)
     seen = set()
     for path in store.inbox_files(root):
         name = path.name
@@ -90,6 +95,9 @@ def process_inbox(cfg: dict, root: Path, *, force: bool = False, now: float | No
                 out["waiting"] += 1
                 continue
         record = store.read_json(path)
+        if isinstance(record, dict) and _waits_for_parent(record, root):
+            out["waiting"] += 1      # its thread's first message is still in the inbox (failed or not yet read)
+            continue
         if not isinstance(record, dict):
             failed[name] = {"stage": "read", "error": "not a JSON object", "at": now_ms(), "fingerprint": fp}
             out["failed"] += 1
@@ -101,31 +109,61 @@ def process_inbox(cfg: dict, root: Path, *, force: bool = False, now: float | No
             status.error(f"filter: {name}: {exc}")
             out["failed"] += 1
             continue
-        try:
-            verdict = route(message, router_cfg)
-        except routers.RouterError as exc:
-            failed[name] = {"stage": "router", "error": str(exc), "at": now_ms(), "retryAt": int((now + RETRY_SEC) * 1000)}
-            status.error(f"router: {name}: {exc}")
-            out["failed"] += 1
-            continue
-        message["router"] = verdict
-        choice = verdict["choice"]
-        if choice == routers.CHITCHAT and verdict["confidence"] >= router_cfg.get("confidenceMin", 0.6):
-            out["chitchat"] += 1     # nothing written, nothing logged
-        elif choice in known and C.safe_name(choice) and verdict["confidence"] >= router_cfg.get("confidenceMin", 0.6):
-            store.write_json(root / store.PROJECTS / choice / name, message)
-            out["projects"] += 1
+        conf_min = router_cfg.get("confidenceMin", 0.6)
+        thread_key = store.KeyedState.key(str(message["workspace"]), str(message["channel"]), str(message["threadTs"]))
+        is_reply = message["threadTs"] != message["ts"]
+        followed = routes.get(thread_key) if is_reply else None
+        if isinstance(followed, dict) and (followed.get("to") == store.UNSORTED or followed.get("to") in known):
+            # a reply goes where its thread went, without the router
+            verdict = {"adapter": "thread", "choice": followed.get("choice"), "confidence": followed.get("confidence")}
+            to = followed["to"]
+            out["followed"] += 1
         else:
+            # a thread's first message, or a reply whose thread was chitchat (never recorded) or is not known
+            try:
+                verdict = route(message, router_cfg)
+            except routers.RouterError as exc:
+                failed[name] = {"stage": "router", "error": str(exc), "at": now_ms(), "retryAt": int((now + RETRY_SEC) * 1000)}
+                status.error(f"router: {name}: {exc}")
+                out["failed"] += 1
+                continue
+            choice = verdict["choice"]
+            if choice == routers.CHITCHAT and verdict["confidence"] >= conf_min:
+                to = None
+            elif choice in known and C.safe_name(choice) and verdict["confidence"] >= conf_min:
+                to = choice
+            else:
+                to = store.UNSORTED
+            if to is not None:
+                routes.set(thread_key, {"to": to, "choice": choice, "confidence": verdict["confidence"]})
+        message["router"] = verdict
+        if to is None:
+            out["chitchat"] += 1     # nothing written, nothing logged
+        elif to == store.UNSORTED:
             store.write_json(root / store.UNSORTED / name, message)
             out["unsorted"] += 1
+        else:
+            store.write_json(root / store.PROJECTS / to / name, message)
+            out["projects"] += 1
+        routes.save()
         path.unlink(missing_ok=True)
         failed.pop(name, None)
     for name in list(failed):
         if name not in seen:
             failed.pop(name)
+    routes.save()
     status.data["lastProcessed"] = {"at": now_ms(), **out}
     status.save()
     return out
+
+
+def _waits_for_parent(record: dict, root: Path) -> bool:
+    message = record.get("message") if isinstance(record.get("message"), dict) else {}
+    parent = message.get("thread_ts")
+    if not store.valid_ts(parent) or parent == record.get("ts"):
+        return False
+    name = store.file_name(parent, str(record.get("workspace")), str(record.get("channel")))
+    return (root / store.INBOX / name).exists()
 
 
 def next_run(last_ms: int | None, now: float, schedule: dict) -> float | None:

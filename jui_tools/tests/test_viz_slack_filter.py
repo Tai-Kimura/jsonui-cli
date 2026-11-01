@@ -99,7 +99,9 @@ def test_the_builtin_adapter_drops_the_files_and_gives_the_contract_fields_only(
                                         "attachments": [{"text": "unfurled body"}],
                                         "blocks": [{"type": "rich_text"}]}}
     got = F.apply(record, {"adapter": "builtin", "extraPatterns": []})
-    assert set(got) == {"workspace", "channel", "user", "ts", "text", "permalink", "removedFiles", "redactions"}
+    assert set(got) == {"workspace", "channel", "user", "ts", "threadTs", "replyCount", "text", "permalink",
+                        "removedFiles", "redactions"}
+    assert got["threadTs"] == "1730000000.000100" and got["replyCount"] == 0
     assert got["removedFiles"] == 2 and got["redactions"] == 1
     assert got["text"] == "見積もりです [REDACTED:aws-access-key]"
     flat = repr(got)
