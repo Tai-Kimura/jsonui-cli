@@ -101,9 +101,9 @@
     {
       "id": "cli-args",
       "name": "起動の引数（-n / --name、-p、--resume、--settings、--plugin-dir ほか）",
-      "relies_on": "the main command's options our launchers pass and our pages tell the user to type; the call bell's command line (viz/callcmd.py): `claude --channels plugin:jui-viz@jsonui --name=<name> <prompt>`, the --name=<value> form unmeasured on a real launch",
+      "relies_on": "the main command's options our launchers pass and our pages tell the user to type; the call bell's command line (viz/callcmd.py): `claude --channels plugin:jui-viz@jsonui --name=<name> <prompt>`, the --name=<value> form unmeasured on a real launch; the Slack intake's connector (viz/slack/fetch.py, source.mode connector): `claude -p <prompt> --output-format json --allowedTools mcp__claude_ai_Slack`, run without a screen in <orchestrationDir>/.state, its stdout one JSON object whose \"result\" is the model's text (a JSON array cut out of it), the Slack connector's MCP server named claude_ai_Slack — the flags probed, the result's shape and the server's name unmeasured on a real launch",
       "probe": "cli_flags",
-      "impact": "viz の呼び出し・名札（-n）、session-recovery の起こし直し（--resume）が動かない",
+      "impact": "viz の呼び出し・名札（-n）、session-recovery の起こし直し（--resume）が動かない、Slack の取り込みを connector で取ると何も取れない（状態にエラー。api の取り込みは変わらない）",
       "files": [
         "jui_tools/jui_cli/viz/sources/launch.py",
         "jui_tools/jui_cli/commands/viz_cmd.py",
@@ -116,7 +116,8 @@
         "plugins/jui-viz/scripts/channel.py",
         "~/.claude/session-recovery/",
         "jui_tools/jui_cli/viz/callcmd.py",
-        "jui_tools/tools/viz_promo/capture.py"
+        "jui_tools/tools/viz_promo/capture.py",
+        "jui_tools/jui_cli/viz/slack/fetch.py"
       ]
     },
     {
@@ -371,6 +372,13 @@
     "jui_tools/jui_cli/viz/web/js/31-talk-demo-data.js": "トークのデモの frame（talk_contract.json の形のデータだけ）。CLI の形は読まない",
     "jui_tools/jui_cli/viz/sources/codex_app_server.py": "Codex の app-server daemon（~/.codex の Unix ソケット）を読むだけ。Claude Code の CLI・設定・フックには依らない。SessionStart などのフックの名前は、World.apply_hook が読む形に Codex の出来事を置き換えて作るだけで、Claude Code から届くものではない",
     "jui_tools/jui_cli/viz/local_models.py": "LM Studio と Ollama の OpenAI 互換の GET /v1/models を 127.0.0.1 で読むだけ（呼び出しダイアログの Codex タブのモデル）。Claude Code の CLI・設定・フックには依らない",
-    "jui_tools/jui_cli/viz/codex_homes.py": "ローカルのモデルのサーバーごとの Codex の設定フォルダ（~/.codex-local/<provider>）を、無いときだけ作る。~/.codex/config.toml の features と mcp_servers を写すだけで、Claude Code の CLI・設定・フックには依らない"
+    "jui_tools/jui_cli/viz/codex_homes.py": "ローカルのモデルのサーバーごとの Codex の設定フォルダ（~/.codex-local/<provider>）を、無いときだけ作る。~/.codex/config.toml の features と mcp_servers を写すだけで、Claude Code の CLI・設定・フックには依らない",
+    "jui_tools/jui_cli/viz/slack/__init__.py": "Slack の取り込みの説明だけ。CLI に触らない",
+    "jui_tools/jui_cli/viz/slack/adapters.py": "利用者のアダプタの .py を python -I の子で撃つだけ。CLI に触らない",
+    "jui_tools/jui_cli/viz/slack/config.py": "viz の home の slack.json を読むだけ。Claude Code の設定には触らない",
+    "jui_tools/jui_cli/viz/slack/filters.py": "伏せ字の正規表現だけ。CLI に触らない",
+    "jui_tools/jui_cli/viz/slack/intake.py": "inbox の見張りと定時。CLI は fetch.py を通してだけ使う",
+    "jui_tools/jui_cli/viz/slack/routers.py": "Anthropic の Messages API と TypeSafe の API を HTTP で呼ぶだけ。Claude Code の CLI には触らない",
+    "jui_tools/jui_cli/viz/slack/store.py": "orchestrationDir のファイルの読み書きだけ"
   }
 }

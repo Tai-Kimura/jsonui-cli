@@ -2142,6 +2142,7 @@
   "srv.weather.unavailable": "天気はこのサーバーでは使えません",
   "srv.device.name": "{name}（{version}）",
   "srv.device.none": "xcrun も adb も見つかりません（端末の取得を止めました）",
+  "srv.slack.modeNote": "connector にすると、中身はフィルタより前に Claude（Anthropic）を通ります",
   "srv.device.missing": "{tools} が無いため、その分は取りません",
   "srv.and": " と ",
   "srv.weather.not_numbers": "緯度と経度が数ではありません",

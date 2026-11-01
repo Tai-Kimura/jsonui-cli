@@ -188,7 +188,7 @@ def snapshot(cfg: dict | None, cfg_error: str | None, running: bool, now: float 
     return {
         "configured": True, "running": running, "configPath": str(C.path()),
         "orchestrationDir": str(root), "mode": mode,
-        "modeNote": C.MODE_NOTE if mode == "connector" else None,
+        "modeNote": C.mode_note() if mode == "connector" else None,
         "filterAdapter": (cfg.get("filter") or {}).get("adapter") or "builtin",
         "routerAdapter": (cfg.get("router") or {}).get("adapter") or "haiku",
         "schedule": cfg.get("schedule"),

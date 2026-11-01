@@ -29,14 +29,15 @@ PATTERNS: list[tuple[str, str]] = [
     ("slack-app-token", r"\bxapp-\d-[A-Za-z0-9-]{10,}"),
     ("slack-webhook", r"https://hooks\.slack\.com/(?:services|workflows|triggers)/[A-Za-z0-9/_-]+"),
     ("aws-access-key", r"\b(?:AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16}\b"),
-    ("aws-secret-key", r"(?i)(?<=aws)[\w .-]{0,20}?(?:secret|private)[\w .-]{0,20}?[\s:=\"'：]{1,4}[A-Za-z0-9/+]{40}\b"),
+    ("aws-secret-key", r"(?i)(?<=aws)[\w .-]{0,20}?(?:secret|private)[\w .-]{0,20}?[\s:=\"'\uff1a]{1,4}[A-Za-z0-9/+]{40}\b"),
     ("github-token", r"\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,})"),
     ("anthropic-key", r"\bsk-ant-[A-Za-z0-9_-]{20,}"),
     ("openai-key", r"\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{20,}"),
     ("google-api-key", r"\bAIza[0-9A-Za-z_-]{35}\b"),
     ("jwt", r"\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"),
-    ("password", r"(?i)(?<![A-Za-z])(?:password|passwd|pass|pwd|passcode|secret|api[_ -]?key|access[_ -]?token|token|パスワード|暗証番号|パスコード)"
-                 r"\s*(?:は|:|：|=|＝)\s*(?!\[REDACTED:)[!-~]{4,}"),   # an ASCII value of 4 or more: "パスワードは忘れずに" is no secret
+    ("password", r"(?i)(?<![A-Za-z])(?:password|passwd|pass|pwd|passcode|secret|api[_ -]?key|access[_ -]?token|token"
+                 r"|\u30d1\u30b9\u30ef\u30fc\u30c9|\u6697\u8a3c\u756a\u53f7|\u30d1\u30b9\u30b3\u30fc\u30c9)"   # the three Japanese words for a password
+                 r"\s*(?:\u306f|:|\uff1a|=|\uff1d)\s*(?!\[REDACTED:)[!-~]{4,}"),   # (wa, full-width : and =); an ASCII value of 4 or more
     ("email", r"(?<![\w.+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),
     ("phone", r"(?<![\d.])(?:\+\d{1,3}[- ]?\(?\d{1,4}\)?[- ]?\d{1,4}[- ]?\d{3,4}|0\d{1,4}-\d{1,4}-\d{3,4}|0[5789]0\d{8}|\(0\d{1,4}\)\s?\d{1,4}-\d{3,4})(?![\d.])"),
 ]

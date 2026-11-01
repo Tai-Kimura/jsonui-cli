@@ -15,8 +15,13 @@ from pathlib import Path
 from .. import paths
 
 FILE_NAME = "slack.json"
-MODE_NOTE = ("connector にすると、中身はフィルタより前に Claude（Anthropic）を通る / "
-             "with mode connector, the messages pass through Claude (Anthropic) before the filter")
+#: The connector's warning as written into a new slack.json (the page shows srv.slack.modeNote, in its language).
+MODE_NOTE = "With mode connector, the messages pass through Claude (Anthropic) before the filter"
+
+
+def mode_note() -> str:
+    from .. import i18n
+    return i18n.tl("srv.slack.modeNote")
 
 DEFAULT: dict = {
     "orchestrationDir": "~/slack-orchestration",

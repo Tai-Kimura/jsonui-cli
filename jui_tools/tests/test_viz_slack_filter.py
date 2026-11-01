@@ -31,6 +31,8 @@ POSITIVE = [
     ("password", "password: hunter22"),
     ("password", "パスワードは Abc12345"),
     ("password", "token=abcd1234efgh"),
+    ("password", "暗証番号：1234"),
+    ("password", "パスコード＝abcd"),
     ("email", "taro.yamada@example.co.jp"),
     ("email", "<mailto:a.b@example.com|a.b@example.com>"),
     ("phone", "03-1234-5678"),

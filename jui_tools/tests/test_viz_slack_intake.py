@@ -345,8 +345,8 @@ def test_a_connector_that_fails_writes_nothing_and_says_why(tmp_path, out, rc, s
 def test_the_connector_mode_shows_its_warning_and_api_does_not(tmp_path):
     api = I.snapshot(cfg_of(tmp_path), None, False)
     con = I.snapshot(cfg_of(tmp_path, source={"mode": "connector"}), None, False)
-    assert api["modeNote"] is None and "Claude（Anthropic）" in con["modeNote"] and "before the filter" in con["modeNote"]
-    assert "Claude（Anthropic）" in C.DEFAULT["source"]["_modeNote"]
+    assert api["modeNote"] is None and con["modeNote"] == "With mode connector, the messages pass through Claude (Anthropic) before the filter"
+    assert C.DEFAULT["source"]["_modeNote"] == con["modeNote"]
 
 
 # ---------------------------------------------------------------- the config file

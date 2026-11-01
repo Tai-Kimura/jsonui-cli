@@ -73,6 +73,9 @@ NOT_A_TOOL = {
     ("jui_tools/jui_cli/viz/statusline.py", "wrapped", "command"):
         "the user's own statusLine command, read verbatim from the --wrap argument `jui viz statusline install` wrote "
         "from their settings.json — run as Claude Code would run it (a shell command line)",
+    ("jui_tools/jui_cli/viz/slack/adapters.py", "run_file", "[sys.executable, '-I', '-c', _HOST, str(path), func]"):
+        "the Slack intake's filter / router adapter: this Python (sys.executable -I) running the person's own .py file, "
+        "named by an absolute path in slack.json",
     ("jui_tools/jui_cli/viz/sources/agents_cli.py", "poll_once", "claude"):
         "the Claude Code CLI, located by shutil.which('claude') — `claude agents --json` for the session list",
 }
