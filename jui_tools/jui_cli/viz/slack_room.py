@@ -98,7 +98,7 @@ def load_config(path: Path | None = None) -> tuple[dict, str | None]:
     return (cfg, None) if cfg is not None else ({}, "missing")
 
 
-def read_config(path: Path) -> tuple[dict, str | None]:
+def read_json_file(path: Path) -> tuple[dict, str | None]:
     """A JSON object file of this room's own (a task, the board's state): (it, None), or ({}, why)."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -315,7 +315,7 @@ class SlackRoom:
         self.root = factory_dir(self.cfg)
         if self._board_read_for != str(self.root):
             self._board_read_for = str(self.root)
-            got, _ = read_config(self.root / ".state" / "board.json")
+            got, _ = read_json_file(self.root / ".state" / "board.json")
             self.board = {"notified": [p for p in got.get("notified", []) if isinstance(p, str)],
                           "sawBusy": {k: v for k, v in (got.get("sawBusy") or {}).items() if isinstance(v, int)},
                           "started": {k: v for k, v in (got.get("started") or {}).items() if isinstance(v, int)}}
@@ -334,7 +334,7 @@ class SlackRoom:
 
     def _task(self, task_id) -> tuple[Path, dict]:
         path = self.task_path(task_id)
-        got, why = read_config(path)
+        got, why = read_json_file(path)
         if why == "missing":
             raise Refused(404, "no such task")
         if why:
