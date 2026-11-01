@@ -194,7 +194,7 @@ function sfNoteHTML(t, s) {
   const times = [['sf.note.created', t.createdAt], ['sf.note.started', t.startedAt], ['sf.note.ended', t.endedAt], ['sf.note.done', t.doneAt]]
     .filter(([, at]) => Number(at) > 0);
   const timesHTML = times.map(([k, at]) => `<span>${esc(tl(k, { at: sfClock(at) }))}</span>`).join('');
-  const idHTML = `<button type="button" class="sf-id" data-sf-copy="${esc(t.id)}" data-sf-label="${esc(t.id)}" title="${esc(tl('sf.note.id.title'))}">${esc(t.id)}</button>`;
+  const idHTML = `<button type="button" class="sf-id" data-sf-copy="${esc(t.id)}" data-sf-label="${esc(t.id)}" title="${esc(tl('sf.note.id.title'))}" aria-label="${esc(tl('sf.note.id.aria', { id: t.id }))}">${esc(t.id)}</button>`;
   if (t.broken) return `${idHTML}<p class="sf-why">${esc(tl('sf.note.broken', { id: t.id }))}</p>`;
   const nextHTML = t.status === 'talking' ? `<button type="button" class="wb-btn" data-sf-op="draft">${esc(tl('sf.op.draft'))}</button>`
     : t.status === 'draft' ? `<button type="button" class="wb-btn" data-sf-op="ready">${esc(tl('sf.op.ready'))}</button>`
@@ -294,7 +294,6 @@ async function sfNoteOp(note, op) {
 function sfFull(on) {
   SF.full = !!on;
   sfEl.dataset.board = SF.full ? 'full' : '';
-  $('sf-full').setAttribute('aria-pressed', String(SF.full));
   setText($('sf-full'), SF.full ? tl('sf.full.back') : tl('sf.full'));
   sfFit();
 }

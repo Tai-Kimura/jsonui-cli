@@ -95,7 +95,9 @@
         "jui_tools/jui_cli/viz/web/js/55-history.js",
         "jui_tools/jui_cli/viz/callcmd.py",
         "jui_tools/tools/viz_promo/capture.py",
-        "jui_tools/jui_cli/viz/messaging.py"
+        "jui_tools/jui_cli/viz/messaging.py",
+        "jui_tools/jui_cli/viz/slack_room.py",
+        "jui_tools/jui_cli/viz/web/js/57-slack-room.js"
       ]
     },
     {
@@ -117,7 +119,8 @@
         "~/.claude/session-recovery/",
         "jui_tools/jui_cli/viz/callcmd.py",
         "jui_tools/tools/viz_promo/capture.py",
-        "jui_tools/jui_cli/viz/slack/fetch.py"
+        "jui_tools/jui_cli/viz/slack/fetch.py",
+        "jui_tools/jui_cli/viz/slack_room.py"
       ]
     },
     {

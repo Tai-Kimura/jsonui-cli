@@ -42,6 +42,8 @@ DEV = "e2e00000-0000-4000-8000-0000000000f2"
 PLAIN = "e2e00000-0000-4000-8000-0000000000f3"
 CHANNELS = ["--channels", "plugin:jui-viz@jsonui"]
 STATE = "() => window.__dbg.sfState()"
+#: the tasks' times: a few hours before the run (tests/test_viz_e2e_fixture_times.py: no fixed date in a fixture)
+T0 = int(time.time() * 1000) - 5 * 3_600_000
 CONTRAST = """() => {
   // WCAG contrast of every piece of text on every note: the text's colour (its alpha and the opacities above it) over the
   // first background under it, made opaque over the note's own colour
@@ -87,7 +89,7 @@ def message(orch, project, name, text, user="U1", channel="C1"):
 
 def task(orch, tid, status, title, prompt, project="shop", sources=(), **extra):
     data = {"id": tid, "title": title, "projectId": project, "sources": list(sources), "prompt": prompt,
-            "target": {"sessionName": "", "sessionId": None}, "launchCommand": None, "status": status, "createdAt": 1793500000000, **extra}
+            "target": {"sessionName": "", "sessionId": None}, "launchCommand": None, "status": status, "createdAt": T0, **extra}
     (orch / "tasks" / f"{tid}.json").write_text(json.dumps(data, ensure_ascii=False))
 
 
@@ -123,12 +125,12 @@ async def run_sorting_factory(pw, out, failures):
     task(orch, "T-0002", "draft", "ドキュメントの誤字", "ドキュメントサイトの誤字を直してください。", project="docs",
          target={"sessionName": "docs", "sessionId": None}, launchCommand="cd ~/work/docs && claude --channels plugin:jui-viz@jsonui")
     task(orch, "T-0004", "working", "商品一覧の並び順", "商品一覧の並び順を新しい順にしてください。", target={"sessionName": "shop", "sessionId": DEV},
-         startedAt=1793500200000)
+         startedAt=T0 + 200_000)
     t1 = message(orch, "booking", "1793500005-tanosys-C2.json", "決済画面の文言、どちらがいいか相談させてください")
     t2 = message(orch, "booking", "1793500006-tanosys-C2.json", "A 案の方が良さそうですが、もう少し考えます", user="U3")
     task(orch, "T-0009", "talking", "決済画面の文言の相談", "", project="booking", sources=[t1, t2], threads=["1793500005"])
     task(orch, "T-0010", "draft", "ログイン画面の文言（追加）", "ログイン画面の英語の文言も直してください。", relatedTaskId="T-0005")
-    task(orch, "T-0005", "ended", "ログイン画面の文言", "ログイン画面の文言を直してください。", startedAt=1793500300000, endedAt=1793500400000,
+    task(orch, "T-0005", "ended", "ログイン画面の文言", "ログイン画面の文言を直してください。", startedAt=T0 + 300_000, endedAt=T0 + 400_000,
          target={"sessionName": "shop", "sessionId": None})
     task(orch, "T-0006", "done", "フッターのリンク", "フッターのリンク切れを直してください。", startedAt=1, endedAt=2, doneAt=3,
          target={"sessionName": "shop", "sessionId": None})
@@ -278,7 +280,7 @@ async def run_sorting_factory(pw, out, failures):
         await page.wait_for_timeout(400)
         full = res["full"] = await page.evaluate(INSIDE)
         left = await page.evaluate("() => getComputedStyle(document.querySelector('.sf-left')).display")
-        check(not full["sideways"] and not full["below"] and left == "none" and await page.evaluate("() => document.getElementById('sf-full').getAttribute('aria-pressed') === 'true'"),
+        check(not full["sideways"] and not full["below"] and left == "none" and await page.evaluate(f"() => document.getElementById('sf-full').textContent === {json.dumps(T('sf.full.back'))}"),
               f"the whole board: every note in view, the left side away: {full} {left}")
         await shot(page, "slack-room-full", out, failures)
         await page.keyboard.press("Escape")
@@ -291,6 +293,9 @@ async def run_sorting_factory(pw, out, failures):
         await page.click('#sf-wb [data-sf-task="T-0001"] .sf-id')
         copied = await page.evaluate("() => navigator.clipboard.readText()")
         check(copied == "T-0001", f"the id copied: {copied!r}")
+        mark = res["id-mark"] = await page.evaluate("""() => { const b = document.querySelector('#sf-wb [data-sf-task="T-0002"] .sf-id');
+          return { after: getComputedStyle(b, '::after').content, label: b.getAttribute('aria-label'), title: !!b.title }; }""")
+        check(mark["after"] == '"⧉"' and mark["label"] == T("sf.note.id.aria", id="T-0002") and mark["title"], f"the id says it copies: {mark}")
         await page.click('#sf-wb [data-sf-task="T-0009"] [data-sf-op="draft"]')
         await wait(page, "() => window.__dbg.sfState().lanes.draft.includes('T-0009')", label="T-0009 raised to a draft")
         check(read_task(orch, "T-0009")["status"] == "draft", "the file says draft")

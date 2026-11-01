@@ -2121,3 +2121,7 @@ body.sd-on { overflow: hidden; }
   .sfm[data-board="full"] .sf-board { height: 100%; display: flex; }
   .sfm[data-board="full"] .sf-wb { height: auto; flex: 1 1 auto; }
 }
+/* a note's id is its copy button: a copy mark after it says so in the picture too (the orchestrator, 11-02) */
+.sf-id { display: inline-flex; align-items: center; gap: 3px; }
+.sf-id::after { content: "⧉"; font-size: 12px; line-height: 1; opacity: 0.8; }
+.sf-id:hover, .sf-id:focus-visible { background: #fff; border-color: rgba(0, 0, 0, 0.6); }

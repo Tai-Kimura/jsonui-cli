@@ -2541,11 +2541,12 @@
   "page.sf.fetch": "今すぐ取る",
   "sf.intake.none": "slack.json がまだありません（取得は止まっています）",
   "sf.intake.error": "取得の設定が使えません: {error}",
-  "sf.intake.running": "取得中…",
+  "sf.intake.running": "Slack から取得中…",
   "sf.intake.last": "前回の取得 {at}",
   "sf.intake.never": "まだ",
   "sf.intake.next": "次回 {at}",
   "sf.intake.manual": "自動の取得なし（手でだけ）",
   "sf.intake.failed": "処理できなかったメッセージ {n} 件",
-  "sf.intake.sep": " · "
+  "sf.intake.sep": " · ",
+  "sf.note.id.aria": "{id} をコピー"
 }
