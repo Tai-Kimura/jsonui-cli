@@ -971,6 +971,37 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
 
             tasks.append(asyncio.create_task(run_replay()))
         else:
+            # The sorting factory (Slack intake, slack_room.py): its folder is known before the first session is seen,
+            # so the robot's session goes to the factory's room from the start, never a project's first.
+            from ..viz import slack_room as slack_room_mod
+
+            room = slack_room_mod.SlackRoom(world)
+            room.load()
+            world.set_factory_dir(str(room.root), now_ms())
+            ctx.slack_room = room
+
+            async def slack_refresh() -> None:
+                await loop.run_in_executor(None, room.load)
+                world.set_factory_dir(str(room.root), now_ms())
+                ctx.state.set_slice("slackRoom", room.slice())
+
+            ctx.slack_refresh = slack_refresh
+
+            async def slack_loop() -> None:
+                """Every 2 s: read the folder (a worker), follow the started tasks, tell the robot of new files."""
+                while True:
+                    try:
+                        await slack_refresh()
+                        at = now_ms()
+                        if room.follow(at) | await room.tell_robot(at):
+                            await slack_refresh()
+                        world.publish()
+                    except Exception as exc:   # the factory never stops the server
+                        log(f"slack room: {type(exc).__name__}: {exc}")
+                    await asyncio.sleep(2)
+
+            tasks.append(asyncio.create_task(slack_loop()))
+
             def on_session_file(data: dict) -> None:
                 loop.call_soon_threadsafe(lambda: (world.apply_session_file(data, now_ms()), world.publish()))
 

@@ -724,6 +724,12 @@ window.__dbg = {
   // button's colour per level, a project switch as the picker does it, the robot a project remembers
   devState: () => ({ robot: rbState.id, project: UI.project, card: !document.getElementById('rb').hidden, pane: !document.getElementById('dev-pane').hidden }),
   devMachine: () => (SOURCE.mode === 'live' ? LIVE.slices.machine || null : null),
+  // the sorting factory (57-slack-room.js): open or not, the floors' rooms, the notes by lane, the 3D's robot, bins and parcels on the way
+  sfState: () => ({ open: SF.open, rooms: ROOMS.map((r) => r.id), focus: document.activeElement ? document.activeElement.id : null,
+    lanes: Object.fromEntries(SF_LANES.map((k) => [k, [...document.querySelectorAll(`#sf-wb [data-sf-lane="${CSS.escape(k)}"] .sf-note`)].map((n) => n.dataset.sfTask)])),
+    robot: SF.view ? SF.view.robotLabel : null, robotState: SF.view && SF.view.robot ? SF.view.robot.state : null,
+    bins: SF.view ? [...SF.view.bins.values()].map((b) => ({ project: b.project, n: b.n, stack: b.stack.length })) : [],
+    parcels: SF.parcels.map((p) => p.phase), covers: srCovers(), bg: SF.view ? SF.view.scene.background.getHexString() : null }),
   // the load box drawn from a machine slice the suite gives (the server's next push writes the real one over it)
   devMachineSet: (m) => { if (SOURCE.mode !== 'live') return false; LIVE.slices.machine = Object.assign({ at: Date.now() }, m); renderDevices(); return true; },
   devColours: () => { const b = document.getElementById('btn-devices'), keep = b.dataset.load;

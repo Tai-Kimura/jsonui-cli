@@ -169,6 +169,9 @@ class ServerContext:
     talk: object | None = None
     # The Slack intake (slack/intake.Service): /api/slack/status and /api/slack/fetch.
     slack: object | None = None
+    # The sorting factory (slack_room.SlackRoom) and the coroutine that reads its folder again and republishes it.
+    slack_room: object | None = None
+    slack_refresh: Callable[[], Awaitable[None]] | None = None
 
     def browser_present(self) -> bool:
         return self.present_until > now_ms()
@@ -1176,7 +1179,40 @@ def make_app(ctx: ServerContext) -> web.Application:
         return _clock_log(ctx, record, web.Response(status=outcome.status, text=outcome.reason + "\n"), world, sid, outcome)
 
     # Before the static catch-all: every method reaches the handler, which answers 405 to all but POST.
+    async def api_slack_room(request: web.Request) -> web.Response:
+        """The sorting factory's board (slack_room.py): POST /api/slack-room/task {id, op: save | ready | start | done |
+        revise, ...} and POST /api/slack-room/prompts {instructions, projects, chitchat, taskPrompt}. The checks of
+        /api/prompt (prompt_checks): start and revise send a prompt to a session."""
+        from . import slack_room
+
+        refused = prompt_checks(request, ctx, slack_room.PROMPT_MAX * 3)
+        if refused is not None:
+            return refused
+        body = await _capped_json(request, slack_room.PROMPT_MAX * 3)
+        if isinstance(body, web.Response):
+            return body
+        room = ctx.slack_room
+        if room is None:
+            return web.Response(status=503, text="the sorting factory is unavailable\n")
+        try:
+            if request.path.endswith("/prompts"):
+                await asyncio.get_running_loop().run_in_executor(None, slack_room.save_prompts, slack_room.clean_prompts(body), room.config_file)
+                result = {"ok": True}
+            else:
+                result = await room.act(body, now_ms())
+        except slack_room.Refused as exc:
+            return web.Response(status=exc.status, text=str(exc) + "\n")
+        except OSError as exc:
+            return web.Response(status=500, text=f"not written: {type(exc).__name__}\n")
+        if ctx.slack_refresh is not None:
+            await ctx.slack_refresh()
+        if ctx.publish:
+            ctx.publish()
+        return web.json_response(result)
+
     app.router.add_route("*", "/api/prompt", api_prompt)
+    app.router.add_route("*", "/api/slack-room/task", api_slack_room)
+    app.router.add_route("*", "/api/slack-room/prompts", api_slack_room)
     app.router.add_route('*', '/api/messages/send', api_messages)
     app.router.add_route('*', '/api/messages/peers', api_messages)
     app.router.add_route("*", "/api/attach", api_attach)

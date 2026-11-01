@@ -40,6 +40,8 @@ function keepFields(root, replace) {
   if (sel) { try { again.setSelectionRange(sel[0], sel[1], sel[2]); } catch (err) { /* a field with no text cursor */ } }
 }
 const setHTML = (el, html) => { if (el._html !== html) keepFields(el, () => { el.innerHTML = html; el._html = html; }); };
+/* The room a robot works in, by name; the sorting factory's robot has no floor's room (57-slack-room.js). */
+const roomNameOf = (label) => (PROJECT[PROJECT_OF[label]] ? PROJECT[PROJECT_OF[label]].name : tl('page.sf.title'));
 const setText = (el, text) => { if (el && el.textContent !== text) el.textContent = text; };
 /* The legend of heavy work's three looks (2.3.6), under the card's 重い作業 line. */
 const HEAVY_LEGEND = tl('panel.heavy.legend');
@@ -214,7 +216,7 @@ function renderPanel(model) {
   const tasks = [...scopedTasks].sort((a, b) => (b.perm ? 1 : 0) - (a.perm ? 1 : 0) || order[a.col] - order[b.col] || a.list.localeCompare(b.list) || a.id - b.id);
   const scopedPend = model.pending.filter((p) => inScope(projectOfRobot(p.who)));
   const loose = scopedPend.filter((p) => !p.task);
-  const projectTag = (list) => (UI.project === 'all' ? `<span class="ptag">${esc(PROJECT[PROJECT_OF[list]].name)}</span>` : '');
+  const projectTag = (list) => (UI.project === 'all' ? `<span class="ptag">${esc(roomNameOf(list))}</span>` : '');
   setHTML($('task-sum'), KCOLS.map(([c, label]) => `<span class="state ${COL_STATE[c][0]}">${esc(label)} ${scopedTasks.filter((x) => x.col === c).length}</span>`).join('') + (scopedPend.length ? `<span class="state st-waiting">${esc(tl('panel.count.waiting', { n: scopedPend.length }))}</span>` : ''));
   keyed($('tasks'), JSON.stringify([UI.project, NAMES.rev, loose.map(permSig), tasks.map((x) => `${x.key}:${x.col}:${permSig(x.perm)}:${x.subject}:${x.owner || ''}`)]), () => [
     ...loose.map((p) => `<li class="task has-perm perm-only"><button type="button" class="task-open" data-open="perm:${esc(p.id)}" data-fk="to-${esc(p.id)}"><span class="tid">${esc(tl('panel.task.session', { id: SESSION_OF[p.who] }))}</span><span class="subject">${esc(tl('panel.task.perm.outside'))}</span></button><span class="state st-waiting">${esc(tl('status.waiting'))}</span><span class="meta">${pill(p.who, DEF[p.who].role)} ${esc(DEF[p.who].agent)}${projectTag(SESSION_OF[p.who])}</span>${permBox(p)}</li>`),
@@ -1413,7 +1415,7 @@ function renderTaskBoard(model) {
         : col === 'wait' ? (x.dep ? `<span class="n-wait">${esc(tl('panel.note.dep', { id: x.dep.id, subject: x.dep.subject }))}</span>` : `<span class="n-wait">${esc(isTurn(x) ? (x.waitingFor === 'question' ? tl('status.asking') : tl('panel.note.perm')) : tl('panel.col.wait'))}</span>`)
           : col === 'done' ? `<span class="n-time">${esc(tl('panel.note.at', { time: fmtClock(BASE_CLOCK + loopStart + x.end), what: tl(x.failed ? 'panel.note.failed' : 'panel.note.done') }))}</span>` : '';
       const permHTML = x.perm ? `<div class="n-permbox"><p class="n-permq"><b>${esc(tl('status.waiting'))}</b> ${esc(x.perm.tool)} ${permSubject(x.perm)}</p><div class="perm-acts">${permButtons(x.perm, 'k')}</div></div>` : '';
-      return `<li class="note${x.perm ? ' n-perm' : ''}${x.fresh ? ' n-new' : ''}${isTurn(x) ? ' n-turn' : ''}"><button type="button" class="note-open" data-open="${esc(x.key)}" data-fk="nb-${esc(x.key)}"><span class="n-top"><span>${esc(taskRef(x))}</span><span>${UI.lanes ? '' : `${esc(tl('panel.note.list', { list: x.list }))}${UI.project === 'all' ? ` · ${esc(PROJECT[PROJECT_OF[x.list]].name)}` : ''}`}</span></span><span class="n-subj">${esc(x.subject)}</span>${extraHTML}<span class="n-owner">${ownerHTML}</span></button>${permHTML}</li>`;
+      return `<li class="note${x.perm ? ' n-perm' : ''}${x.fresh ? ' n-new' : ''}${isTurn(x) ? ' n-turn' : ''}"><button type="button" class="note-open" data-open="${esc(x.key)}" data-fk="nb-${esc(x.key)}"><span class="n-top"><span>${esc(taskRef(x))}</span><span>${UI.lanes ? '' : `${esc(tl('panel.note.list', { list: x.list }))}${UI.project === 'all' ? ` · ${esc(roomNameOf(x.list))}` : ''}`}</span></span><span class="n-subj">${esc(x.subject)}</span>${extraHTML}<span class="n-owner">${ownerHTML}</span></button>${permHTML}</li>`;
   };
   const sortCol = (col) => (a, b) => (b.perm ? 1 : 0) - (a.perm ? 1 : 0) || (col === 'done' ? b.end - a.end : 0) || a.list.localeCompare(b.list) || a.id - b.id;
   kanbanEl.classList.toggle('lanes', UI.lanes);

@@ -8,6 +8,7 @@ Design: 03 (fields), 04 §1–§4 (slices, robot states, rooms).
 """
 from __future__ import annotations
 
+import os
 import re
 import threading
 import time
@@ -407,6 +408,16 @@ class World:
             session["projectId"] = project["id"]
             session["cwd"] = tilde(cwd)
             self._dirty |= {"sessions", "projects"}
+
+    def set_factory_dir(self, folder: str | None, at: int) -> None:
+        """The Slack intake's folder (slack_room.py): every session in it moves to the sorting factory's room, and
+        one no longer in it back to its project's."""
+        if not self.rooms.set_factory_dir(folder):
+            return
+        for session in self.sessions.values():
+            if session["cwd"] != "?":
+                self._move(session, os.path.expanduser(session["cwd"]), at)
+        self._dirty |= {"sessions", "projects"}
 
     def _main(self, sid: str, at: int) -> dict:
         agent = self.agents.get(sid)

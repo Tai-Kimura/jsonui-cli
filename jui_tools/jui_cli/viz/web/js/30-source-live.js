@@ -947,7 +947,8 @@ const home = (s) => String(s || '');
 function rebuildRooms() {
   const list = Array.isArray(LIVE.slices.projects) ? LIVE.slices.projects : [];
   const old = Object.fromEntries(ROOMS.map((r) => [r.id, r]));
-  const next = list.filter((p) => p && typeof p.id === 'string').map((p, k) => {
+  // the sorting factory's room (slack_room.py: the Slack intake's robot) is never a floor's: the header's Slack opens it
+  const next = list.filter((p) => p && typeof p.id === 'string' && p.factory !== true).map((p, k) => {
     const r = old[p.id] || { id: p.id };
     r.name = String(p.name || p.id); r.path = home(p.displayRoot); r.jsonui = !!p.jsonui;
     r.mock = p.mock && typeof p.mock === 'object' ? { running: !!p.mock.running, port: Number(p.mock.port) || 0, other: !!p.mock.other } : null;

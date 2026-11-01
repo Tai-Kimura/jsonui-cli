@@ -10,7 +10,7 @@ import time
 from collections import deque
 from typing import Any
 
-SLICE_NAMES = ("projects", "sessions", "agents", "tasks", "specs", "tests", "perms", "questions", "denials", "calls", "devices", "server", "weather", "usage", "usageCodex", "settings", "bills", "prices", "cloudPrices", "machine", "slack")
+SLICE_NAMES = ("projects", "sessions", "agents", "tasks", "specs", "tests", "perms", "questions", "denials", "calls", "devices", "server", "weather", "usage", "usageCodex", "settings", "bills", "prices", "cloudPrices", "machine", "slack", "slackRoom")
 
 
 def now_ms() -> int:
@@ -24,6 +24,7 @@ class VizState:
         self.slices["server"] = {}
         self.slices["machine"] = {}
         self.slices["slack"] = {}
+        self.slices["slackRoom"] = {}   # the sorting factory (slack_room.py); {} until serve reads its folder
         self._dirty: set[str] = set()
         self.events: deque[dict] = deque(maxlen=events_keep)
         self._new_events: list[dict] = []

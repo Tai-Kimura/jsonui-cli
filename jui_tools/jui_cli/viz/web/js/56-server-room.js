@@ -75,7 +75,7 @@ function srViewPrefSet(project, flat) {
 }
 const srEl = $('sr'), srBubbleEl = $('sr-bubble');
 function srNow() { return performance.now(); }
-function srCovers() { return SR.phase === 'open'; }   // 40-scene.js: the room's 3D is not drawn under the server room
+function srCovers() { return SR.phase === 'open' || sfCovers(); }   // 40-scene.js: the room's 3D is not drawn under the server room, nor under the sorting factory (57-slack-room.js)
 function srLog(text) {
   SR.log.unshift({ at: Date.now(), text });
   SR.log.length = Math.min(SR.log.length, 200);

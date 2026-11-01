@@ -1988,3 +1988,136 @@ body.sd-on { overflow: hidden; }
   .sd-cols-head, .sd-row { gap: 0 6px; }
   .sd-cell { padding: 3px 4px; font-size: 11.5px; }
 }
+
+/* ---------- the sorting factory (57-slack-room.js): the Slack intake's room, a whiteboard with one note per task ---------- */
+.sfm { --sf-board: #f7f8f5; --sf-frame: #a9b2bd; --sf-marker: #1f4f8f; --sf-note-l: 88%; --sf-note-ink: #2b2410; --sf-shadow: rgba(30, 40, 55, 0.22); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .sfm { --sf-board: #e9ece6; --sf-frame: #5d6877; --sf-marker: #1f4f8f; --sf-note-l: 80%; --sf-note-ink: #221c0a; --sf-shadow: rgba(0, 0, 0, 0.45); }
+}
+:root[data-theme="dark"] .sfm { --sf-board: #e9ece6; --sf-frame: #5d6877; --sf-marker: #1f4f8f; --sf-note-l: 80%; --sf-note-ink: #221c0a; --sf-shadow: rgba(0, 0, 0, 0.45); }
+.sf-main { display: grid; grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.4fr); min-height: 0; }
+.sf-left { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); background: var(--panel); }
+.sf-stage { position: relative; flex: 1 1 46%; min-height: 220px; overflow: hidden; }
+.sf-stage canvas { display: block; width: 100%; height: 100%; }
+.sf-labels { position: absolute; inset: 0; pointer-events: none; }
+.sf-tag { position: absolute; left: 0; top: 0; padding: 0 6px; border-radius: 999px; background: var(--tag-bg); color: var(--ink); border: 1px solid var(--line); font: 700 11px/1.5 var(--font-body); white-space: nowrap; }
+.sf-panel { padding: 8px 12px; border-top: 1px solid var(--line); font: 13px/1.5 var(--font-body); }
+.sf-panel h3, .sf-board h3 { margin: 0 0 4px; font: 700 14px/1.4 var(--font-body); }
+.sf-flow { flex: 1 1 30%; overflow: auto; min-height: 0; }
+.sf-panel textarea, .sf-dialog textarea, .sf-dialog input[type="text"] { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: 13px/1.5 var(--font-body); resize: vertical; }
+.sf-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.sf-who { margin: 0 0 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sf-lamp { width: 10px; height: 10px; border-radius: 50%; background: #8fa3bf; flex: none; }
+.sf-lamp[data-state="typing"], .sf-lamp[data-state="reading"], .sf-lamp[data-state="command"] { background: #35d07f; }
+.sf-lamp[data-state="thinking"] { background: #8fe0b4; }
+.sf-lamp[data-state="waiting"] { background: #ffb020; }
+.sf-act { color: var(--ink-soft); }
+.sf-why { margin: 2px 0; color: var(--warn); }
+.sf-none { margin: 2px 0; color: var(--ink-soft); }
+.sf-copy { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0; }
+.sf-copy-label { font-size: 12px; color: inherit; opacity: 0.85; }
+.sf-copy code { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; word-break: break-all; padding: 2px 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.07); font: 12px/1.5 var(--font-mono); }
+.sf-counts { margin: 0 0 4px; font-weight: 700; }
+.sf-bins { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 4px 0; padding: 0; list-style: none; }
+.sf-bin-dot { display: inline-block; width: 10px; height: 10px; margin-right: 4px; border-radius: 2px; vertical-align: -1px; }
+.sf-msgs { margin: 4px 0 0; padding: 0; list-style: none; }
+.sf-msg { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 8px; padding: 4px 0; border-top: 1px dashed var(--line); }
+.sf-msg .sf-head { grid-column: 1 / -1; color: var(--ink); overflow-wrap: anywhere; }
+.sf-from { color: var(--ink-soft); font: 12px/1.5 var(--font-mono); overflow-wrap: anywhere; }
+.sf-to { display: inline-block; padding: 0 6px; border: 2px solid; border-radius: 4px; font: 700 11px/1.5 var(--font-mono); }
+/* the whiteboard: an aluminium frame, five lanes headed in marker, the notes pinned with a magnet */
+.sf-board { min-width: 0; min-height: 0; overflow: auto; padding: 10px 14px; background: var(--bg); }
+.sf-wb { display: grid; grid-template-columns: repeat(5, minmax(170px, 1fr)); gap: 0; min-height: calc(100% - 40px); padding: 10px 6px; border: 10px solid var(--sf-frame); border-radius: 8px;
+  background: var(--sf-board); box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.06), 0 2px 8px var(--sf-shadow); }
+.sf-lane { padding: 0 8px; border-left: 2px dashed rgba(31, 79, 143, 0.25); min-width: 0; }
+.sf-lane:first-child { border-left: 0; }
+.sf-lane h4 { margin: 2px 0 10px; color: var(--sf-marker); font: 400 17px/1.3 var(--font-display); letter-spacing: 0.04em; border-bottom: 3px solid var(--sf-marker); border-radius: 0 0 40% 8% / 0 0 6px 3px; }
+.sf-lane-n { font: 700 12px/1 var(--font-body); }
+.sf-lane-notes { display: flex; flex-direction: column; gap: 14px; }
+.sf-note { position: relative; padding: 16px 10px 8px; background: hsl(var(--note-h, 52) 92% var(--sf-note-l)); color: var(--sf-note-ink); border-radius: 2px 2px 10px 2px;
+  box-shadow: 0 6px 10px -4px var(--sf-shadow), 0 1px 0 rgba(0, 0, 0, 0.06); transform: rotate(var(--tilt, 0deg)); font: 12px/1.5 var(--font-body); }
+.sf-note::before { content: ""; position: absolute; top: 4px; left: 50%; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #ff8a8a, #c62f3c 70%); box-shadow: 0 2px 2px rgba(0, 0, 0, 0.3); }
+.sf-note:focus-within { transform: none; z-index: 1; }
+.sf-note-title { margin: 0 0 4px; font: 700 13px/1.4 var(--font-body); overflow-wrap: anywhere; }
+.sf-note-meta { display: flex; flex-wrap: wrap; gap: 4px 8px; margin: 0 0 6px; }
+.sf-note textarea, .sf-note select { width: 100%; box-sizing: border-box; padding: 4px 6px; border: 1px solid rgba(0, 0, 0, 0.2); border-radius: 4px; background: rgba(255, 255, 255, 0.7); color: var(--sf-note-ink); font: 12px/1.5 var(--font-body); resize: vertical; }
+.sf-note .wb-btn { border-color: rgba(0, 0, 0, 0.25); background: rgba(255, 255, 255, 0.75); color: var(--sf-note-ink); }
+.sf-note .wb-btn.sf-go { border-color: #1d6b3d; background: #1d8f4e; color: #fff; }
+.sf-note .sf-why, .sf-note .sf-copy-label { color: #6b4a00; }
+.sf-field { display: block; margin: 6px 0 0; font-weight: 700; }
+.sf-prompt-ro { margin: 0 0 4px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 9em; overflow: auto; }
+.sf-target-ro, .sf-note-times { margin: 0; display: flex; flex-wrap: wrap; gap: 0 8px; opacity: 0.85; }
+.sf-note-said { margin: 2px 0 0; font-weight: 700; }
+.sf-note-said:empty { display: none; }
+.sf-revise { margin-top: 6px; }
+.sf-revise summary { cursor: pointer; font-weight: 700; }
+.sf-revise .wb-btn { margin-top: 4px; }
+.sf-dialog { position: absolute; top: 56px; right: 16px; z-index: 3; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 90px); overflow: auto; box-sizing: border-box; padding: 12px 16px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); box-shadow: 0 10px 30px var(--shadow); font: 13px/1.5 var(--font-body); }
+.sf-dialog[hidden] { display: none; }
+.sf-dialog h3 { margin: 0 0 6px; font: 700 15px/1.4 var(--font-body); }
+.sf-dialog fieldset { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+.sf-projs { margin: 0; padding: 0; list-style: none; }
+.sf-proj { display: grid; grid-template-columns: minmax(80px, 0.35fr) minmax(0, 1fr) auto; gap: 6px; margin: 0 0 6px; align-items: start; }
+@media (max-width: 900px) {
+  .sf-main { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; overflow: auto; }
+  .sf-left { border-right: 0; min-height: auto; }
+  .sf-stage { min-height: 240px; flex: none; height: 260px; }
+  .sf-flow { flex: none; overflow: visible; }
+  .sf-board { overflow: visible; }
+  .sf-wb { grid-template-columns: repeat(5, minmax(160px, 1fr)); overflow-x: auto; }
+}
+/* the talking lane, a note's id (pressed: copied), its marks, its source messages */
+.sf-wb { grid-template-columns: repeat(6, minmax(160px, 1fr)); }
+.sf-note-head { display: flex; align-items: baseline; gap: 6px; margin: 0 0 4px; }
+.sf-note-head .sf-note-title { margin: 0; }
+.sf-id { flex: none; padding: 0 5px; border: 1px solid rgba(0, 0, 0, 0.35); border-radius: 4px; background: rgba(255, 255, 255, 0.8); color: var(--sf-note-ink); font: 700 11px/1.5 var(--font-mono); cursor: copy; }
+.sf-mark { margin: 0 0 4px; padding: 1px 6px; border-left: 3px solid #6b4ce6; background: rgba(255, 255, 255, 0.55); font-weight: 700; overflow-wrap: anywhere; }
+.sf-mark-more { border-left-color: #c62f3c; }
+.sf-mark-late { border-left-color: #9a6200; }
+.sf-src { margin: 0 0 6px; }
+.sf-src summary { cursor: pointer; }
+.sf-src ol { margin: 4px 0 0; padding-left: 18px; max-height: 12em; overflow: auto; }
+.sf-src li { overflow-wrap: anywhere; }
+.sf-src .sf-late { background: rgba(255, 176, 32, 0.35); }
+@media (max-width: 900px) { .sf-wb { grid-template-columns: repeat(6, minmax(160px, 1fr)); } }
+.sf-main { grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); }
+.sf-wb { grid-template-columns: repeat(6, minmax(150px, 1fr)); }
+.sf-note-head { flex-direction: column; align-items: flex-start; gap: 2px; }
+@media (max-width: 900px) { .sf-main { grid-template-columns: minmax(0, 1fr); } }
+.sf-note .sf-from { color: inherit; opacity: 0.75; }
+/* the lanes and notes stay in the whiteboard (requester 11-02: 「列とメモ紙がホワイトボードの中に収まるように」): the board is
+   its own scroller inside its frame; the whole board takes the room when asked */
+.sf-board { display: flex; flex-direction: column; overflow: hidden; }
+.sf-board-head { display: flex; align-items: center; gap: 10px; }
+.sf-wb { flex: 1 1 auto; min-height: 0; overflow: auto; align-content: start; }
+.sf-lane-notes { padding-bottom: 12px; }
+.sfm[data-board="full"] .sf-main { grid-template-columns: minmax(0, 1fr); }
+.sfm[data-board="full"] .sf-left { display: none; }
+.sfm[data-board="full"] .sf-wb { overflow: hidden; }
+@media (max-width: 900px) {
+  .sf-board { overflow: visible; }
+  .sf-wb { max-height: 80vh; }
+  .sfm[data-board="full"] .sf-main { overflow: hidden; }
+  .sfm[data-board="full"] .sf-board { overflow: hidden; height: 100%; }
+  .sfm[data-board="full"] .sf-wb { max-height: none; }
+}
+/* paler notes (requester 11-02: 「メモ紙の背景色をもっと淡く」): one light pastel per state in both themes (the whiteboard is
+   white in both), the words in two inks each at least 4.5:1 on every note's colour — measured by the e2e (slack-room) */
+.sfm { --sf-note-s: 65%; --sf-note-l: 92%; --sf-note-ink: #2b2410; --sf-note-soft: #4a4232; --sf-go: #17683f; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .sfm { --sf-note-l: 92%; --sf-note-ink: #2b2410; } }
+:root[data-theme="dark"] .sfm { --sf-note-l: 92%; --sf-note-ink: #2b2410; }
+.sf-note { background: hsl(var(--note-h, 52) var(--sf-note-s) var(--sf-note-l)); }
+.sf-note .sf-from, .sf-target-ro, .sf-note-times { color: var(--sf-note-soft); opacity: 1; }
+.sf-note .sf-why, .sf-note .sf-copy-label { color: #5c4000; }
+.sf-note .wb-btn.sf-go { border-color: var(--sf-go); background: var(--sf-go); color: #fff; }
+.sf-note .sf-copy code { background: rgba(0, 0, 0, 0.06); color: var(--sf-note-ink); }
+.sf-note textarea::placeholder { color: var(--sf-note-soft); opacity: 1; }
+@media (max-width: 900px) {
+  .sfm .sf-main { display: block; overflow: auto; }
+  .sfm .sf-board { display: block; overflow: visible; }
+  .sfm .sf-wb { height: 72vh; max-height: none; min-height: 0; overflow: auto; }
+  .sfm[data-board="full"] .sf-main { overflow: hidden; height: 100%; }
+  .sfm[data-board="full"] .sf-board { height: 100%; display: flex; }
+  .sfm[data-board="full"] .sf-wb { height: auto; flex: 1 1 auto; }
+}
