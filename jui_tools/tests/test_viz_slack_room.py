@@ -564,3 +564,13 @@ def test_a_task_moved_out_of_done_in_time_is_kept_and_done_again_starts_its_time
     run(room.act({"id": "T-0001", "op": "status", "status": "done"}, hour + 2))
     room.load()
     assert room.purge(2 * hour) == [] and room.purge(2 * hour + 2) == ["T-0001"] and not (factory / own).exists()
+
+
+
+def test_a_file_written_before_the_text_was_written_out_shows_it_written_out(home, factory):
+    """A projects/ file from 2.4.0 still has Slack's escapes: the room's heads and messages write them out."""
+    path = message(factory, "shop", "1-w-C1.json", "B&amp;S の件 <@U9> &lt;急ぎ&gt;")
+    task(factory, "T-0001", sources=[path])
+    room = room_for(FakeWorld())
+    assert room.slice()["sourceHeads"][path]["head"] == "B&S の件 @U9 <急ぎ>"
+    assert room.messages("T-0001")["messages"][0]["text"] == "B&S の件 @U9 <急ぎ>"

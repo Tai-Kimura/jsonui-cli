@@ -220,6 +220,8 @@
             <section class="sf-panel sf-flow" aria-labelledby="sf-flow-h">
               <div class="sf-board-head"><h3 id="sf-flow-h">{{tl:page.sf.flow}}仕分けの様子{{/tl}}</h3><button type="button" class="wb-btn" id="sf-fetch">{{tl:page.sf.fetch}}今すぐ取る{{/tl}}</button></div>
               <p class="dev-note" id="sf-intake" role="status"></p>
+              <p class="sf-why sf-intake-err" id="sf-intake-err" role="alert" hidden></p>
+              <p class="dev-note sf-mode-note" id="sf-mode-note" hidden></p>
               <div id="sf-flow-body"></div>
             </section>
           </div>
@@ -239,6 +241,14 @@
             <label class="sf-field" for="sf-revise-text">{{tl:page.sf.revise.label}}ロボットにどう直してほしいか（⌘Enter で送る）{{/tl}}</label>
             <textarea id="sf-revise-text" rows="8"></textarea>
             <div class="sf-acts"><button type="button" class="wb-btn sf-go" id="sf-revise-send">{{tl:page.sf.revise.send}}頼む{{/tl}}</button><span class="dev-note" id="sf-revise-said" role="status"></span></div>
+          </div>
+        </div>
+        <div class="sf-modal" id="sf-edit" hidden role="dialog" aria-modal="true" aria-labelledby="sf-edit-h">
+          <div class="sf-modal-box sf-edit-box">
+            <header class="sf-chat-head"><h3 id="sf-edit-h"></h3><button type="button" class="wb-btn" id="sf-edit-close" aria-label="{{tl:page.sf.chat.close}}閉じる（Esc）{{/tl}}">×</button></header>
+            <label class="sf-field" for="sf-edit-text" id="sf-edit-label"></label>
+            <textarea id="sf-edit-text" rows="18"></textarea>
+            <div class="sf-acts"><button type="button" class="wb-btn sf-go" id="sf-edit-save"></button><span class="dev-note" id="sf-edit-said" role="status"></span></div>
           </div>
         </div>
         <div class="sf-dialog" id="sf-prompts" hidden role="dialog" aria-labelledby="sf-prompts-h">

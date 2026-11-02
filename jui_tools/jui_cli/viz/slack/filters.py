@@ -74,6 +74,35 @@ def redact(text: str, compiled: list[tuple[str, re.Pattern]]) -> tuple[str, int]
     return text, count
 
 
+#: Slack's own marks in a message's text (the Web API's "mrkdwn"): <@U…>, <#C…|name>, <!here>, <!subteam^S…|@team>,
+#: <https://…|label>, <mailto:…>; and &, <, > written as &amp; &lt; &gt;.
+SLACK_MARK = re.compile(r"<([@#!][^<>]*|(?:https?|mailto|ftp|tel):[^<>]*)>")
+
+
+def _slack_mark(m: re.Match) -> str:
+    target, _, label = m.group(1).partition("|")
+    if target[:1] in "@#":
+        return target[0] + (label.lstrip(target[0]) or target[1:])
+    if target[:1] == "!":
+        name = target[1:]
+        if label:
+            return label
+        return "@" + (name.split("^", 1)[1] if name.startswith("subteam^") else name)
+    if target.startswith("mailto:"):
+        return target[len("mailto:"):]
+    bare = re.sub(r"^https?://", "", target)
+    return target if not label or label in (target, bare) else f"{label} ({target})"
+
+
+def slack_plain(text: str) -> str:
+    """A message's text as a person reads it: Slack's marks written out, &amp; &lt; &gt; back to & < > (the marks first,
+    so an escaped < in a label is not taken for a mark). The page escapes it again wherever it is HTML."""
+    if not isinstance(text, str):
+        return text
+    text = SLACK_MARK.sub(_slack_mark, text)
+    return text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+
+
 def builtin(record: dict, extra: list | None = None) -> tuple[dict, dict]:
     message = record.get("message") if isinstance(record.get("message"), dict) else {}
     files = message.get("files") if isinstance(message.get("files"), list) else []
@@ -87,6 +116,10 @@ def builtin(record: dict, extra: list | None = None) -> tuple[dict, dict]:
 def apply(record: dict, filter_cfg: dict, timeout: float = adapters.TIMEOUT_SEC) -> dict:
     """The filtered message in the shape of a projects/ file (router added later). Raises FilterError."""
     adapter = (filter_cfg or {}).get("adapter") or "builtin"
+    raw_message = record.get("message") if isinstance(record.get("message"), dict) else None
+    if raw_message is not None and isinstance(raw_message.get("text"), str):
+        # the filter, the router and the robot all read the text as written, not Slack's escaped form
+        record = {**record, "message": {**raw_message, "text": slack_plain(raw_message["text"])}}
     if adapter == "builtin":
         try:
             msg, stats = builtin(record, filter_cfg.get("extraPatterns"))

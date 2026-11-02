@@ -2045,7 +2045,6 @@ body.sd-on { overflow: hidden; }
 .sf-note .wb-btn.sf-go { border-color: #1d6b3d; background: #1d8f4e; color: #fff; }
 .sf-note .sf-why, .sf-note .sf-copy-label { color: #6b4a00; }
 .sf-field { display: block; margin: 6px 0 0; font-weight: 700; }
-.sf-prompt-ro { margin: 0 0 4px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 9em; overflow: auto; }
 .sf-target-ro, .sf-note-times { margin: 0; display: flex; flex-wrap: wrap; gap: 0 8px; opacity: 0.85; }
 .sf-note-said { margin: 2px 0 0; font-weight: 700; }
 .sf-note-said:empty { display: none; }
@@ -2161,8 +2160,7 @@ body.sd-on { overflow: hidden; }
 .sf-note-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; font: 700 13px/1.45 var(--font-body); overflow-wrap: anywhere; }
 .sf-note .sf-field { display: flex; flex-direction: column; gap: 4px; margin: 0; font-weight: 400; }
 .sf-label { font: 700 11px/1.3 var(--font-body); color: var(--sf-note-soft); letter-spacing: 0.02em; }
-.sf-note textarea, .sf-note .sf-prompt-ro { scrollbar-width: thin; scrollbar-color: rgba(43, 36, 16, 0.3) transparent; }
-.sf-note .sf-prompt-ro { padding: 4px 6px; border-radius: 4px; background: rgba(255, 255, 255, 0.45); max-height: 9em; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sf-note textarea { scrollbar-width: thin; scrollbar-color: rgba(43, 36, 16, 0.3) transparent; }
 .sf-note select[data-sf-target] { font-size: 12px; }
 .sf-note-acts { margin: 0; gap: 8px; }
 .sf-note-acts .grow { flex: 1; }
@@ -2174,5 +2172,15 @@ body.sd-on { overflow: hidden; }
 .sf-note .sf-field { gap: 6px; } .sf-label { display: block; }
 .sf-state-row .sf-state { max-width: none; width: 100%; padding: 3px 6px; font-size: 12px; }
 .sf-note .sf-revise-open { width: 100%; white-space: normal; text-align: center; }
-.sf-note .sf-copy code { max-height: 4.6em; overflow: auto; scrollbar-width: thin; }
+/* nothing scrolls inside a note (the requester, 11-02): the prompt shows its first lines and opens whole in a popup;
+   the start command wraps whole */
+.sf-note .sf-copy code { max-height: none; overflow: visible; }
+.sf-prompt-view { display: block; width: 100%; box-sizing: border-box; margin: 0; padding: 5px 7px; border: 1px solid rgba(0, 0, 0, 0.2); border-radius: 4px;
+  background: rgba(255, 255, 255, 0.55); color: var(--sf-note-ink); text-align: left; font: 12px/1.55 var(--font-body); cursor: pointer; }
+.sf-prompt-view:hover { border-color: rgba(0, 0, 0, 0.45); background: rgba(255, 255, 255, 0.75); }
+.sf-prompt-view .sf-prompt-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sf-prompt-view.is-empty .sf-prompt-text { color: var(--sf-note-soft); font-style: italic; }
+.sf-edit-box { width: min(880px, 100%); }
+.sf-edit-box textarea { min-height: min(60vh, 34em); font-size: 14px; }
+.sf-edit-box textarea[readonly] { background: var(--panel); }
 .sf-note .wb-btn { white-space: normal; }

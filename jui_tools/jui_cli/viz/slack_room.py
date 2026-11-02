@@ -40,6 +40,7 @@ from . import i18n
 from .rooms import tilde
 from . import paths
 from .slack import config as slack_config
+from .slack import filters as slack_filters
 from .sources import launch
 
 DEFAULT_DIR = slack_config.DEFAULT["orchestrationDir"]
@@ -223,6 +224,13 @@ def _read_small(path: Path, st) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
+def plain_text(data: dict) -> str:
+    """A projects/ file's text as written. Stage 1 writes it so (filters.apply); a file from before that still has
+    Slack's &amp; and <@U…>, written out here too (on a written-out text this changes only a literal "&amp;")."""
+    text = data.get("text") if isinstance(data, dict) else None
+    return slack_filters.slack_plain(text) if isinstance(text, str) else ""
+
+
 def _head(text) -> str:
     one = " ".join(str(text).split()) if isinstance(text, str) else ""
     return one if len(one) <= HEAD else one[: HEAD - 1] + "…"
@@ -269,7 +277,7 @@ class Scanner:
                         return {**row, "broken": True}
                     router = data.get("router") if isinstance(data.get("router"), dict) else {}
                     return {**row, "workspace": str(data.get("workspace") or ""), "channel": str(data.get("channel") or ""),
-                            "user": str(data.get("user") or ""), "ts": str(data.get("ts") or ""), "head": _head(data.get("text")),
+                            "user": str(data.get("user") or ""), "ts": str(data.get("ts") or ""), "head": _head(plain_text(data)),
                             "threadTs": str(data.get("threadTs") or data.get("ts") or ""),
                             "confidence": router.get("confidence") if isinstance(router.get("confidence"), (int, float)) else None}
                 row = self._cached(f, read)
@@ -616,7 +624,7 @@ class SlackRoom:
             link = data.get("permalink") if isinstance(data.get("permalink"), str) and data["permalink"].startswith("https://") else ""
             rows.append({"path": rel, "user": str(data.get("user") or ""), "channel": str(data.get("channel") or ""),
                          "workspace": str(data.get("workspace") or ""), "ts": ts, "threadTs": str(data.get("threadTs") or ts),
-                         "text": data["text"][:MESSAGE_MAX] if isinstance(data.get("text"), str) else "", "permalink": link})
+                         "text": plain_text(data)[:MESSAGE_MAX], "permalink": link})
         def num(x):
             try:
                 return float(x)

@@ -125,11 +125,12 @@ async def run_sorting_factory(pw, out, failures):
     message(orch, "booking", "1793500003-tanosys-C2.json", "予約の確認メールの日付が 1 日ずれている")
     task(orch, "T-0001", "draft", "カートの税込み表示", "ショップのカート画面で、合計金額を税込みで出すように直してください。", sources=[m1])
     task(orch, "T-0003", "ready", "予約メールの日付", "予約の確認メールの日付が 1 日ずれる件を調べて直してください。", project="booking")
-    task(orch, "T-0002", "draft", "ドキュメントの誤字", "ドキュメントサイトの誤字を直してください。", project="docs",
+    long_prompt = "ドキュメントサイトの誤字を直してください。\n" + "\n".join(f"{k}. ページ {k} の見出しと本文の誤字を確かめて直す（表記ゆれも揃える）" for k in range(1, 13))
+    task(orch, "T-0002", "draft", "ドキュメントの誤字", long_prompt, project="docs",
          target={"sessionName": "docs", "sessionId": None}, launchCommand="cd ~/work/docs && claude --channels plugin:jui-viz@jsonui")
     task(orch, "T-0004", "working", "商品一覧の並び順", "商品一覧の並び順を新しい順にしてください。", target={"sessionName": "shop", "sessionId": DEV},
          startedAt=T0 + 200_000)
-    t1 = message(orch, "booking", "1793500005-tanosys-C2.json", "決済画面の文言、どちらがいいか相談させてください")
+    t1 = message(orch, "booking", "1793500005-tanosys-C2.json", "決済画面の文言、どちらがいいか相談させてください（B&amp;S の &lt;決済&gt; 画面、<@U7> さんにも）")   # as 2.4.0 kept it: Slack's escapes
     t2 = message(orch, "booking", "1793500006-tanosys-C2.json", "A 案の方が良さそうですが、もう少し考えます。\n理由は 2 つあります:\n- 短い\n- ボタンの文言と揃う", user="U3", thread="1793500005")
     task(orch, "T-0009", "talking", "決済画面の文言の相談", "", project="booking", sources=[t1, t2], threads=["1793500005"])
     task(orch, "T-0010", "draft", "ログイン画面の文言（追加）", "ログイン画面の英語の文言も直してください。", relatedTaskId="T-0005")
@@ -273,9 +274,19 @@ async def run_sorting_factory(pw, out, failures):
           return { labels: [...n.querySelectorAll('.sf-label')].map((e) => e.textContent), labelGap, stFits, inside, revLines, tgFits, oneRow: acts.every((b) => Math.abs(b.top - acts[0].top) < 2),
             startRight: n.querySelector('[data-sf-op="start"]').getBoundingClientRect().right >= Math.max(...acts.map((b) => b.right)) - 1,
             titleLines: Math.round(title.getBoundingClientRect().height / lh), state: n.querySelector('[data-sf-status]').value,
-            scheme: getComputedStyle(n.querySelector('textarea')).colorScheme }; }""")
+            scheme: getComputedStyle(n.querySelector('[data-sf-status]')).colorScheme }; }""")
         check(lay["labels"] == [T("sf.note.state.label"), T("sf.note.prompt"), T("sf.note.target")] and lay["stFits"] and lay["inside"] and lay["revLines"] <= 1 and lay["tgFits"] and 4 <= lay["labelGap"] <= 8 and lay["oneRow"] and lay["startRight"]
               and lay["state"] == "ready" and lay["titleLines"] <= 3 and lay["scheme"] == "light", f"the note's layout: {lay}")
+        # nothing scrolls inside a note (the requester, 11-02): the prompt cut to its first lines, the start command whole
+        flat = res["note-no-scroll"] = await page.evaluate("""() => {
+          const scrolls = [...document.querySelectorAll('#sf-wb .sf-note, #sf-wb .sf-note *')].filter((e) => { const o = getComputedStyle(e).overflowY; return (o === 'auto' || o === 'scroll') && e.scrollHeight > e.clientHeight + 1; })
+            .map((e) => (e.closest('.sf-note') || e).dataset.sfTask + ':' + e.tagName + '.' + e.className);
+          const v = document.querySelector('#sf-wb [data-sf-task="T-0002"] [data-sf-prompt-open] .sf-prompt-text'), lh = parseFloat(getComputedStyle(v).lineHeight);
+          const code = document.querySelector('#sf-wb [data-sf-task="T-0002"] .sf-copy code');
+          return { scrolls, textareas: document.querySelectorAll('#sf-wb .sf-note textarea').length, lines: Math.round(v.getBoundingClientRect().height / lh), cut: v.scrollHeight > v.clientHeight + 1,
+            codeWhole: code.scrollHeight <= code.clientHeight + 1 && code.textContent.endsWith('jsonui') }; }""")
+        check(not flat["scrolls"] and flat["textareas"] == 0 and flat["lines"] == 5 and flat["cut"] and flat["codeWhole"],
+              f"no scroll inside a note: the prompt's first 5 lines, the start command whole: {flat}")
         check(marks["more"] == [T("sf.note.more", id="T-0010", title="ログイン画面の文言（追加）")] and marks["follows"] == [T("sf.note.follows", id="T-0005", title="ログイン画面の文言")],
               f"the tie both ways: {marks}")
         # every lane and note inside the whiteboard's frame: the board scrolls in itself, the column around it does not
@@ -315,6 +326,7 @@ async def run_sorting_factory(pw, out, failures):
               link: (b.querySelector('a') || {}).href || '', target: (b.querySelector('a') || {}).target || '' })), right: Math.round(innerWidth - r.right), w: Math.round(r.width) }; }""")
         check(chat["title"] == "T-0009 決済画面の文言の相談" and chat["focus"] == "sf-chat-close" and [r["who"] for r in chat["rows"]] == ["U1", "U3"]
               and not chat["rows"][0]["reply"] and chat["rows"][1]["reply"] and "ボタンの文言と揃う" in chat["rows"][1]["text"]
+              and "（B&S の <決済> 画面、@U7 さんにも）" in chat["rows"][0]["text"] and "&amp;" not in chat["rows"][0]["text"]
               and chat["rows"][0]["link"] == "https://acme.slack.com/archives/C1/p1793500005" and chat["rows"][0]["target"] == "_blank" and chat["right"] == 0,
               f"the chat: thread order, the reply set in, the whole text, the Slack link, at the side: {chat}")
         await shot(page, "slack-room-chat", out, failures)
@@ -356,6 +368,40 @@ async def run_sorting_factory(pw, out, failures):
         await wait(page, f"() => document.getElementById('sf-intake').textContent.startsWith({json.dumps(T('sf.intake.last', at='').strip())}) && !document.getElementById('sf-intake').textContent.includes({json.dumps(T('sf.intake.never'))})",
                    timeout=15000, label="the last fetch's time after 今すぐ取る")
         res["intake"] = await page.evaluate("() => document.getElementById('sf-intake').textContent")
+        clean = res["after-fetch"] = await page.evaluate("() => [document.getElementById('sf-intake-err').hidden, document.getElementById('sf-mode-note').hidden, document.getElementById('sf-intake-err').textContent]")
+        check(clean[:2] == [True, True], f"a fetch with no error and mode api: no error line, no connector note: {clean}")
+        # the last fetch's errors (2026-11-02-viz-slack-fetch-errors-not-shown-in-room): the count, the first one's words, a
+        # hint for missing_scope on a DM; a key-shaped word in it masked
+        key = "xox" + "b-1111-2222-e2ekey"
+        errs = [f"tanosys/D02HXM5RE: conversations.history: missing_scope (seen with {key})"] + [f"tanosys/D0{k}XM5RE: conversations.history: missing_scope" for k in range(4)]
+        st_file = orch / ".state" / "status.json"
+        st_data = json.loads(st_file.read_text())
+        st_data["lastRun"] = {**st_data["lastRun"], "errors": errs}
+        st_file.write_text(json.dumps(st_data))
+        await wait(page, "() => !document.getElementById('sf-intake-err').hidden", timeout=15000, label="the fetch's errors in the room")
+        er = res["fetch-errors"] = await page.evaluate("() => document.getElementById('sf-intake-err').textContent")
+        check(er.startswith(T("sf.intake.errors", n=5, error="tanosys/D02HXM5RE: conversations.history: missing_scope")) and er.endswith(T("sf.intake.hint.im"))
+              and key not in er and "…" in er, f"5 errors, the first's words, the DM's hint, the key masked: {er}")
+        code, snap = local("GET", "/api/snapshot")
+        slack_slice = (snap.get("slices") or {}).get("slack") if isinstance(snap, dict) else None
+        res["snapshot-slack"] = slack_slice
+        check(code == 200 and "missing_scope" in json.dumps(slack_slice, ensure_ascii=False) and key not in json.dumps(snap, ensure_ascii=False),
+              f"the slack slice carries no key-shaped word: {code} {list(snap)[:8] if isinstance(snap, dict) else snap}")
+        await page.evaluate("() => document.getElementById('sf-intake-err').scrollIntoView({ block: 'center' })")
+        await page.wait_for_timeout(400)
+        await shot(page, "slack-room-fetch-errors", out, failures)
+        # the connector's warning (2026-11-02-viz-slack-connector-mode-note-not-shown-in-room): shown while mode is connector
+        cfg_now = json.loads((state / "slack.json").read_text())
+        def set_mode(mode):
+            (state / "slack.json").write_text(json.dumps({**cfg_now, "source": {**cfg_now["source"], "mode": mode}}, ensure_ascii=False))
+            os.chmod(state / "slack.json", 0o600)
+        set_mode("connector")
+        await wait(page, "() => !document.getElementById('sf-mode-note').hidden", timeout=15000, label="the connector's note")
+        mn = res["mode-note"] = await page.evaluate("() => document.getElementById('sf-mode-note').textContent")
+        check(mn == T("sf.intake.modeNote", note=T("srv.slack.modeNote")), f"the connector's note, in the page's language: {mn}")
+        await shot(page, "slack-room-connector-note", out, failures)
+        set_mode("api")
+        await wait(page, "() => document.getElementById('sf-mode-note').hidden", timeout=15000, label="the note gone with mode api")
         # a message comes: the robot is told of it, a parcel rides the belt
         hook(BOT, hook_event_name="UserPromptSubmit", prompt="x")
         hook(BOT, hook_event_name="Stop")
@@ -367,21 +413,48 @@ async def run_sorting_factory(pw, out, failures):
                    timeout=20000, label="the parcel in shop's bin")
 
         # what is typed on a draft is kept
+        # (the prompt is typed in the large popup a press on the note's prompt opens: the requester, 11-02)
         note = '#sf-wb [data-sf-task="T-0001"]'
-        await page.fill(f"{note} [data-sf-prompt]", "TYPED: 税込みで出す。テストも足す")
+        await page.click(f"{note} [data-sf-prompt-open]")
+        await wait(page, "() => !document.getElementById('sf-edit').hidden", label="the prompt's popup")
+        pop = res["prompt-popup"] = await page.evaluate("""() => { const b = document.querySelector('#sf-edit .sf-modal-box').getBoundingClientRect(), t = document.getElementById('sf-edit-text');
+          return { w: Math.round(b.width), th: Math.round(t.getBoundingClientRect().height), value: t.value, ro: t.readOnly, save: !document.getElementById('sf-edit-save').hidden,
+            focus: document.activeElement.id, head: document.getElementById('sf-edit-h').textContent }; }""")
+        check(pop["w"] >= 800 and pop["th"] >= 400 and pop["value"] == "ショップのカート画面で、合計金額を税込みで出すように直してください。" and not pop["ro"] and pop["save"]
+              and pop["focus"] == "sf-edit-text" and pop["head"].startswith("T-0001"), f"the prompt large, whole, editable: {pop}")
+        await page.fill("#sf-edit-text", "TYPED: 税込みで出す。テストも足す")
         t = read_task(orch, "T-0001")
         t["title"] = "カートの税込み表示（ロボットが直した）"
         (orch / "tasks" / "T-0001.json").write_text(json.dumps(t, ensure_ascii=False))
         await page.wait_for_timeout(3500)                     # the scan and its push
-        check(await page.eval_on_selector(f"{note} [data-sf-prompt]", "(e) => e.value") == "TYPED: 税込みで出す。テストも足す", "typed text kept under the hand")
-        await page.click("#sf-flow-h")                        # the hand off the note: it is drawn again with what was typed
-        await wait(page, f"() => document.querySelector('{note} .sf-note-title').textContent.includes('ロボットが直した')", label="the note drawn again")
-        check(await page.eval_on_selector(f"{note} [data-sf-prompt]", "(e) => e.value") == "TYPED: 税込みで出す。テストも足す", "typed text kept through the redraw")
+        check(await page.eval_on_selector("#sf-edit-text", "(e) => e.value") == "TYPED: 税込みで出す。テストも足す", "typed text kept in the popup")
+        await page.keyboard.press("Escape")                   # closed unsaved: the note shows what was typed, the room stays
+        await wait(page, f"() => document.getElementById('sf-edit').hidden && document.querySelector('{note} .sf-note-title').textContent.includes('ロボットが直した')", label="the note drawn again")
+        check(await page.evaluate(f"() => window.__dbg.sfState().open && document.querySelector('{note} .sf-prompt-text').textContent") == "TYPED: 税込みで出す。テストも足す",
+              "typed text kept through the redraw, on the note")
         await page.click(f"{note} [data-sf-op='save']")
         await wait(page, f"() => document.querySelector('{note} .sf-note-said').textContent === {json.dumps(T('sf.said.save'))}", label="saved")
         t = read_task(orch, "T-0001")
         check(t["prompt"] == "TYPED: 税込みで出す。テストも足す" and t["promptEditedByUser"] is True and t["sourcesAtEdit"] == [m1], f"保存 wrote the prompt, marked by hand: {t}")
         await wait(page, f"() => document.querySelector('{note}').textContent.includes({json.dumps(T('sf.note.edited'))})", label="the hand-edited mark")
+        await page.click('#sf-wb [data-sf-task="T-0004"] [data-sf-prompt-open]')
+        await wait(page, "() => !document.getElementById('sf-edit').hidden", label="a working task's prompt")
+        ro = res["prompt-popup-read"] = await page.evaluate("() => ({ ro: document.getElementById('sf-edit-text').readOnly, save: !document.getElementById('sf-edit-save').hidden })")
+        check(ro == {"ro": True, "save": False}, f"a sent task's prompt opens to read only: {ro}")
+        await page.keyboard.press("Escape")
+        await page.click('#sf-wb [data-sf-task="T-0002"] [data-sf-prompt-open]')
+        await wait(page, "() => !document.getElementById('sf-edit').hidden", label="the long prompt large")
+        check(await page.evaluate("() => document.getElementById('sf-edit-text').value") == long_prompt, "the long prompt whole in the popup")
+        await page.wait_for_timeout(300)
+        await shot(page, "slack-room-prompt-popup", out, failures)
+        edited = long_prompt + "\n13. 用語集のページも見る"
+        await page.fill("#sf-edit-text", edited)
+        await page.click("#sf-edit-save")
+        await wait(page, "() => document.getElementById('sf-edit').hidden", label="saved from the popup")
+        t2_file = read_task(orch, "T-0002")
+        check(t2_file["prompt"] == edited and t2_file.get("promptEditedByUser") is True, f"保存 in the popup writes the file: {t2_file.get('promptEditedByUser')}")
+        long_prompt = edited
+        t = read_task(orch, "T-0001")
         t["sources"].append(m4)                                 # the robot adds a message to it, leaving the prompt
         (orch / "tasks" / "T-0001.json").write_text(json.dumps(t, ensure_ascii=False))
         await wait(page, f"() => (document.querySelector('{note} .sf-mark-late') || {{}}).textContent === {json.dumps(T('sf.note.late', n=1))}",

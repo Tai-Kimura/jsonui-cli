@@ -15,7 +15,7 @@
    /api/slack-room/task: the server sends the prompt and marks it working), 完了 closes it. A note being edited is not
    redrawn under the hand: what is typed stays until it is saved or sent. ---------- */
 const sfEl = $('sf');
-const SF = { open: false, opener: null, view: null, drafts: {}, notes: new Map(), seen: null, parcels: [], status: '' };
+const SF = { open: false, opener: null, view: null, edit: null, revise: null, drafts: {}, notes: new Map(), seen: null, parcels: [], status: '' };
 const SF_LANES = ['talking', 'draft', 'ready', 'working', 'ended', 'done'];
 const SF_LANE = { talking: tl('sf.lane.talking'), draft: tl('sf.lane.draft'), ready: tl('sf.lane.ready'), working: tl('sf.lane.working'), ended: tl('sf.lane.ended'), done: tl('sf.lane.done') };
 const SF_SAID = { save: tl('sf.said.save'), ready: tl('sf.said.ready'), start: tl('sf.said.start'), done: tl('sf.said.done'), revise: tl('sf.said.revise'), draft: tl('sf.said.draft'), status: tl('sf.said.status') };
@@ -64,6 +64,7 @@ function sfClose(back = true) {
   sfPromptsClose(false);
   sfChatClose(false);
   sfReviseClose(false);
+  sfEditClose(false);
   if (SF.full) sfFull(false);
   sfDispose();
   hideOverlay(sfEl);
@@ -134,6 +135,7 @@ function sfIntake() { return typeof LIVE !== 'undefined' && LIVE.slices.slack &&
 function sfRenderIntake() {
   const k = sfIntake(), btn = $('sf-fetch');
   btn.hidden = !k;
+  sfRenderFetchErrors(k);
   if (!k) { setText($('sf-intake'), ''); return; }
   btn.disabled = !k.configured || !!k.running;
   const failed = Array.isArray(k.failed) ? k.failed.length : 0;
@@ -142,6 +144,29 @@ function sfRenderIntake() {
       k.nextRun ? tl('sf.intake.next', { at: sfClock(k.nextRun) }) : tl('sf.intake.manual')]
       .concat(failed ? [tl('sf.intake.failed', { n: failed })] : []);
   setText($('sf-intake'), parts.join(tl('sf.intake.sep')));
+}
+/* The last fetch's errors (lastRun.errors: "<workspace>/<channel>: <method>: <Slack's error>"), the count and the
+   first one's words, with a hint where the fix is known; and the connector's warning (modeNote) while mode is
+   connector. The server writes paths from ~ and keeps no key in them (slack/intake.py); a key-shaped word is masked
+   here again. */
+const SF_KEY_SHAPE = /\b(?:xox[a-z]-|sk-ant-)[A-Za-z0-9_-]+/g;
+function sfFetchHint(text) {
+  const scope = /\/([CDG])[A-Z0-9]+: [^:]*: missing_scope\b/.exec(text);
+  if (scope) return tl(scope[1] === 'D' ? 'sf.intake.hint.im' : scope[1] === 'G' ? 'sf.intake.hint.groups' : 'sf.intake.hint.channels');
+  if (/: (?:not_in_channel|channel_not_found)\b/.test(text)) return tl('sf.intake.hint.invite');
+  if (/: (?:invalid_auth|not_authed|token_revoked|account_inactive|no token)\b/.test(text)) return tl('sf.intake.hint.token');
+  return '';
+}
+function sfRenderFetchErrors(k) {
+  const el = $('sf-intake-err'), note = $('sf-mode-note');
+  const errs = k && k.configured && !k.running && k.lastRun && Array.isArray(k.lastRun.errors) ? k.lastRun.errors.filter((e) => typeof e === 'string') : [];
+  const text = errs.length ? String(errs[0]).replace(SF_KEY_SHAPE, '…') : '';
+  const hint = text ? sfFetchHint(text) : '';
+  setText(el, text ? tl('sf.intake.errors', { n: errs.length, error: text }) + (hint ? tl('sf.intake.sep') + hint : '') : '');
+  el.hidden = !text;
+  const connector = !!(k && k.configured && k.mode === 'connector');
+  setText(note, connector ? tl('sf.intake.modeNote', { note: tl('srv.slack.modeNote') }) : '');
+  note.hidden = !connector;
 }
 async function sfFetch() {
   $('sf-fetch').disabled = true;
@@ -203,9 +228,11 @@ function sfNoteHTML(t, s) {
   const stateHTML = `<select class="sf-state" data-sf-status aria-label="${esc(tl('sf.note.state', { id: t.id }))}">${optionsHTML}</select>`;
   const left = Number(t.purgeAt) > 0 ? Math.max(0, Math.ceil((Number(t.purgeAt) - Date.now()) / 60000)) : -1;
   const purgeHTML = left >= 0 ? `<p class="sf-mark sf-mark-purge" data-sf-purge="${esc(String(t.purgeAt))}">${esc(tl('sf.note.purge', { n: left }))}</p>` : '';
-  const promptHTML = edit
-    ? `<label class="sf-field"><span class="sf-label">${esc(tl('sf.note.prompt'))}</span><textarea class="sf-prompt" data-sf-prompt rows="${t.status === 'talking' ? '3' : '6'}" placeholder="${esc(t.status === 'talking' ? tl('sf.note.talking') : '')}">${esc(prompt)}</textarea></label>`
-    : `<div class="sf-field"><span class="sf-label">${esc(tl('sf.note.prompt'))}</span><p class="sf-prompt-ro">${esc(prompt)}</p></div>`;
+  // the prompt's first lines only, no scroll inside the note: a press opens it whole in the popup (edited there while it can be)
+  const empty = !prompt.trim();
+  const promptHTML = `<div class="sf-field"><span class="sf-label">${esc(tl('sf.note.prompt'))}</span>`
+    + `<button type="button" class="sf-prompt-view${empty ? ' is-empty' : ''}" data-sf-prompt-open aria-haspopup="dialog" aria-label="${esc(tl(edit ? 'sf.note.prompt.edit' : 'sf.note.prompt.read', { id: t.id }))}">`
+    + `<span class="sf-prompt-text">${esc(empty ? (t.status === 'talking' ? tl('sf.note.talking') : tl('sf.note.prompt.empty')) : prompt)}</span></button></div>`;
   const actsHTML = edit
     ? `<button type="button" class="wb-btn sf-revise-open" data-sf-revise-open aria-haspopup="dialog">${esc(tl('sf.op.revise'))}</button>`
       + `<div class="sf-acts sf-note-acts"><button type="button" class="wb-btn" data-sf-op="save">${esc(tl('sf.op.save'))}</button>`
@@ -277,8 +304,8 @@ async function sfPost(route, body) {
 }
 async function sfNoteOp(note, op) {
   const id = note.dataset.sfTask, body = { id, op };
-  const area = note.querySelector('[data-sf-prompt]'), pick = note.querySelector('[data-sf-target]');
-  if ((op === 'save' || op === 'start') && area) body.prompt = area.value;
+  const pick = note.querySelector('[data-sf-target]');
+  if ((op === 'save' || op === 'start') && note.querySelector('[data-sf-prompt-open]') && sfEditable(id)) body.prompt = sfPromptOf(id);
   if ((op === 'save' || op === 'start') && pick) {
     const s = sfSlice(), t = s && sfTasks(s).find((x) => x.id === id);
     body.target = pick.value ? { sessionId: pick.value } : { sessionName: (t && t.target && t.target.sessionName) || '', sessionId: null };
@@ -384,6 +411,58 @@ async function sfReviseSend() {
   sfReviseClose();
   const note = $('sf-wb').querySelector(`[data-sf-task="${CSS.escape(id)}"] .sf-note-said`);
   if (note) setText(note, SF_SAID.revise);
+}
+
+/* ---------- a task's prompt, large (the note shows its first lines only) ---------- */
+function sfTaskOf(id) { const s = sfSlice(); return (s && sfTasks(s).find((x) => x.id === id)) || null; }
+function sfEditable(id) { const t = sfTaskOf(id); return !!t && (t.status === 'talking' || t.status === 'draft' || t.status === 'ready'); }
+/* What the task's prompt is now on this page: what was typed in the popup, else the file's. */
+function sfPromptOf(id) {
+  const d = SF.drafts[id] || {}, t = sfTaskOf(id);
+  return d.prompt !== undefined ? d.prompt : t && typeof t.prompt === 'string' ? t.prompt : '';
+}
+function sfEditOpen(note, opener) {
+  const id = note.dataset.sfTask, t = sfTaskOf(id), edit = sfEditable(id);
+  SF.edit = { id, opener };
+  setText($('sf-edit-h'), tl('sf.edit.head', { id, title: String((t && t.title) || '') }));
+  setText($('sf-edit-label'), tl(edit ? 'sf.edit.label' : 'sf.edit.label.read'));
+  const area = $('sf-edit-text');
+  area.value = sfPromptOf(id);
+  area.readOnly = !edit;
+  area.placeholder = t && t.status === 'talking' ? tl('sf.note.talking') : '';
+  setText($('sf-edit-save'), tl('sf.op.save'));
+  $('sf-edit-save').hidden = !edit;
+  setText($('sf-edit-said'), '');
+  $('sf-edit').hidden = false;
+  area.focus({ preventScroll: true });
+  area.setSelectionRange(0, 0);
+  area.scrollTop = 0;
+}
+function sfEditClose(back = true) {
+  if ($('sf-edit').hidden) return false;
+  $('sf-edit').hidden = true;
+  const ed = SF.edit; SF.edit = null;
+  // the note's first lines follow what was typed (kept until 保存 or 開始 sends it)
+  const s = sfSlice(), t = ed && sfTaskOf(ed.id), n = ed && SF.notes.get(ed.id);
+  if (s && t && n) { n.el.innerHTML = sfNoteHTML(t, s); n.sig = ''; }
+  const to = ed && n ? n.el.querySelector('[data-sf-prompt-open]') : ed && ed.opener;
+  if (back && to && document.contains(to)) to.focus({ preventScroll: true });
+  if (s) sfRenderBoard(s);
+  return true;
+}
+async function sfEditSave() {
+  const ed = SF.edit; if (!ed || !sfEditable(ed.id)) return;
+  const note = SF.notes.get(ed.id), pick = note && note.el.querySelector('[data-sf-target]'), t = sfTaskOf(ed.id);
+  const body = { id: ed.id, op: 'save', prompt: $('sf-edit-text').value };
+  if (pick) body.target = pick.value ? { sessionId: pick.value } : { sessionName: (t && t.target && t.target.sessionName) || '', sessionId: null };
+  $('sf-edit-save').disabled = true;
+  const got = await sfPost('/api/slack-room/task', body);
+  $('sf-edit-save').disabled = false;
+  if (!got.ok) { setText($('sf-edit-said'), tl('sf.failed', { error: got.error || String(got.status) })); return; }
+  if (SF.drafts[ed.id]) delete SF.drafts[ed.id].prompt;
+  sfEditClose();
+  const said = note && note.el.querySelector('.sf-note-said');
+  if (said) setText(said, SF_SAID.save);
 }
 
 /* ---------- the two prompts (slack.json's router.prompt and taskPrompt) ---------- */
@@ -633,6 +712,13 @@ $('btn-slack').addEventListener('click', (e) => (SF.open ? sfClose() : sfOpen(e.
 $('sf-back').addEventListener('click', () => sfClose());
 $('sf-full').addEventListener('click', () => sfFull(!SF.full));
 $('sf-chat-close').addEventListener('click', () => sfChatClose());
+$('sf-edit-close').addEventListener('click', () => sfEditClose());
+$('sf-edit-save').addEventListener('click', sfEditSave);
+$('sf-edit-text').addEventListener('input', (e) => {
+  if (!SF.edit || e.target.readOnly) return;
+  (SF.drafts[SF.edit.id] || (SF.drafts[SF.edit.id] = {})).prompt = e.target.value;
+});
+$('sf-edit-text').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sfEditSave(); } });
 $('sf-revise-close').addEventListener('click', () => sfReviseClose());
 $('sf-revise-send').addEventListener('click', sfReviseSend);
 $('sf-revise-text').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sfReviseSend(); } });
@@ -648,7 +734,7 @@ $('sf-p-projects').addEventListener('click', (e) => { const del = e.target.close
 sfEl.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   e.preventDefault(); e.stopPropagation();
-  if (!$('sf-prompts').hidden) sfPromptsClose(); else if (sfReviseClose() || sfChatClose()) return; else if (SF.full) sfFull(false); else sfClose();
+  if (!$('sf-prompts').hidden) sfPromptsClose(); else if (sfEditClose() || sfReviseClose() || sfChatClose()) return; else if (SF.full) sfFull(false); else sfClose();
 });
 sfEl.addEventListener('click', async (e) => {
   const copy = e.target.closest('[data-sf-copy]');
@@ -661,7 +747,10 @@ sfEl.addEventListener('click', async (e) => {
   if (chat) { sfChatOpen(chat.closest('.sf-note').dataset.sfTask, chat); return; }
   const rev = e.target.closest('[data-sf-revise-open]');
   if (rev) { sfReviseOpen(rev.closest('.sf-note'), rev); return; }
+  const big = e.target.closest('[data-sf-prompt-open]');
+  if (big) { sfEditOpen(big.closest('.sf-note'), big); return; }
   if (e.target === $('sf-revise')) { sfReviseClose(); return; }   // a press outside the box
+  if (e.target === $('sf-edit')) { sfEditClose(); return; }
   const op = e.target.closest('[data-sf-op]');
   if (op) sfNoteOp(op.closest('.sf-note'), op.dataset.sfOp);
 });
@@ -669,7 +758,6 @@ sfEl.addEventListener('click', async (e) => {
 $('sf-wb').addEventListener('input', (e) => {
   const note = e.target.closest('.sf-note'); if (!note) return;
   const d = SF.drafts[note.dataset.sfTask] || (SF.drafts[note.dataset.sfTask] = {});
-  if (e.target.matches('[data-sf-prompt]')) d.prompt = e.target.value;
   if (e.target.matches('[data-sf-target]')) d.sessionId = e.target.value;
 });
 $('sf-wb').addEventListener('change', async (e) => {

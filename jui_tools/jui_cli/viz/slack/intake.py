@@ -217,9 +217,14 @@ def snapshot(cfg: dict | None, cfg_error: str | None, running: bool, now: float 
     return _from_tilde(_snapshot(cfg, cfg_error, running, now))
 
 
+#: A Slack or Anthropic key's shape: never in an error the page shows (a fetch error is Slack's words, but kept safe).
+KEY_SHAPE = re.compile(r"\b(?:xox[a-z]-|sk-ant-)[A-Za-z0-9_-]+")
+
+
 def _from_tilde(value):
     if isinstance(value, str):
         home = str(Path.home()).rstrip(os.sep)
+        value = KEY_SHAPE.sub("…", value)
         return re.sub(re.escape(home) + r"(?![\w.-])", "~", value) if home else value
     if isinstance(value, dict):
         return {k: _from_tilde(v) for k, v in value.items()}

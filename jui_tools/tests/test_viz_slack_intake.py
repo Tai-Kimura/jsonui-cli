@@ -607,3 +607,38 @@ def test_the_slack_slice_carries_no_path_under_the_home(tmp_path, monkeypatch):
 
 async def _start(svc):
     return svc.start_fetch()
+
+
+def test_a_key_shaped_word_in_an_error_never_reaches_the_slack_slice(tmp_path, monkeypatch):
+    """The room shows the last fetch's first error as written (2026-11-02-viz-slack-fetch-errors-not-shown-in-room):
+    a Slack or Anthropic key's shape in it is masked before the slice."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    slack_key = "xox" + "b-1234-5678-abcdef"
+    anthropic_key = "sk-" + "ant-api03-abc_DEF-123"
+    snap = I.snapshot(None, f"bad token {slack_key} and {anthropic_key}", False)
+    assert slack_key not in json.dumps(snap) and anthropic_key not in json.dumps(snap)
+    assert snap["error"] == "bad token … and …"
+
+
+@pytest.mark.parametrize("raw, plain", [
+    ("B&amp;S の件 &lt;急ぎ&gt;", "B&S の件 <急ぎ>"),
+    ("<@U02HX> さん <#C1|general> で <!here>", "@U02HX さん #general で @here"),
+    ("<@U1|taro> と <!subteam^S1|@devs>", "@taro と @devs"),
+    ("<https://a.example/c?x=1&amp;y=2|設計書> と <https://a.example> と <mailto:a@b.example|a@b.example>",
+     "設計書 (https://a.example/c?x=1&y=2) と https://a.example と a@b.example"),
+    ("a < b and c &gt; d", "a < b and c > d"),
+])
+def test_slacks_marks_and_escapes_are_written_out(raw, plain):
+    from jui_cli.viz.slack import filters
+    assert filters.slack_plain(raw) == plain
+
+
+def test_the_filter_router_and_robot_get_the_text_as_written():
+    """2.4.0: the room showed B&amp;S: Slack's Web API sends & < > escaped; filters.apply writes them out first, so the
+    redaction, the router and the projects/ file (the robot reads it) all see the text as written."""
+    from jui_cli.viz.slack import filters
+    record = {"workspace": "acme", "channel": "C1", "ts": "1730000001.000100", "permalink": "",
+              "message": {"ts": "1730000001.000100", "user": "U1", "text": "B&amp;S の件 <@U2> &lt;b&gt;"}}
+    got = filters.apply(record, {"adapter": "builtin", "extraPatterns": []})
+    assert got["text"] == "B&S の件 @U2 <b>"
+    assert record["message"]["text"] == "B&amp;S の件 <@U2> &lt;b&gt;"            # the inbox record is left as fetched
