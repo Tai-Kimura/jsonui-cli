@@ -9,6 +9,9 @@ next_run       the schedule: slots every schedule.everyHours hours anchored on s
                missed while the server was down runs at once. everyHours 0 = by hand only.
 Service        the asyncio side for ``jui viz serve``: one loop polls inbox/ every WATCH_SEC and runs the schedule;
                fetch_now() is the API's 今すぐ取る. The work (HTTP, the child adapters, claude) runs off the loop.
+               With source.mode "socket" it also keeps one Socket Mode connection per workspace (socket_mode.py),
+               started, restarted and stopped as slack.json changes; a message pushed there is written to inbox/
+               and the loop is woken to process it at once.
 
 slack.json is only read here (stage 2/3 write router.prompt and taskPrompt); it is read again on every pass, so an
 edit applies without a restart. The state the intake keeps is <orchestrationDir>/.state/status.json.
@@ -27,7 +30,7 @@ from typing import Callable
 
 from . import config as C
 from . import fetch as F
-from . import filters, routers, store
+from . import filters, routers, socket_mode, store
 
 WATCH_SEC = 2.0
 RETRY_SEC = 600.0
@@ -78,7 +81,18 @@ class Status:
         store.write_json(self.path, self.data)
 
     def error(self, text: str) -> None:
-        self.data["errors"] = ([{"at": now_ms(), "error": text}] + self.data["errors"])[:ERRORS_KEPT]
+        """Newest first, at most ERRORS_KEPT. The same text again is one entry: its count grows, its ``at`` moves to
+        now (``firstAt`` keeps the first), and it comes to the front, so one error repeating every pass never pushes
+        the others out."""
+        at = now_ms()
+        errors = [e for e in self.data["errors"] if isinstance(e, dict)]
+        same = next((e for e in errors if e.get("error") == text), None)
+        entry = {"at": at, "error": text, "count": 1, "firstAt": at}
+        if same is not None:
+            errors.remove(same)
+            entry["count"] = int(same.get("count") or 1) + 1
+            entry["firstAt"] = same.get("firstAt") or same.get("at") or at
+        self.data["errors"] = ([entry] + errors)[:ERRORS_KEPT]
 
 
 def process_inbox(cfg: dict, root: Path, *, force: bool = False, now: float | None = None,
@@ -122,9 +136,9 @@ def process_inbox(cfg: dict, root: Path, *, force: bool = False, now: float | No
         _work("filter", k, len(files))
         try:
             message = apply_filter(record, filter_cfg)
-        except filters.FilterError as exc:
-            failed[name] = {"stage": "filter", "error": str(exc), "at": now_ms(), "fingerprint": fp}
-            status.error(f"filter: {name}: {exc}")
+        except Exception as exc:  # noqa: BLE001 — any failure keeps this file and lets the others through
+            failed[name] = {"stage": "filter", "error": _said(exc, filters.FilterError), "at": now_ms(), "fingerprint": fp}
+            status.error(f"filter: {name}: {_said(exc, filters.FilterError)}")
             out["failed"] += 1
             continue
         conf_min = router_cfg.get("confidenceMin", 0.6)
@@ -141,12 +155,13 @@ def process_inbox(cfg: dict, root: Path, *, force: bool = False, now: float | No
             _work("route", k, len(files))
             try:
                 verdict = route(message, router_cfg)
-            except routers.RouterError as exc:
-                failed[name] = {"stage": "router", "error": str(exc), "at": now_ms(), "retryAt": int((now + RETRY_SEC) * 1000)}
-                status.error(f"router: {name}: {exc}")
+                choice, confidence = verdict["choice"], float(verdict["confidence"])
+            except Exception as exc:  # noqa: BLE001 — retried later; the next message is not held up
+                failed[name] = {"stage": "router", "error": _said(exc, routers.RouterError), "at": now_ms(),
+                                "retryAt": int((now + RETRY_SEC) * 1000)}
+                status.error(f"router: {name}: {_said(exc, routers.RouterError)}")
                 out["failed"] += 1
                 continue
-            choice = verdict["choice"]
             if choice == routers.CHITCHAT and verdict["confidence"] >= conf_min:
                 to = None
             elif choice in known and C.safe_name(choice) and verdict["confidence"] >= conf_min:
@@ -175,6 +190,21 @@ def process_inbox(cfg: dict, root: Path, *, force: bool = False, now: float | No
     status.data["lastProcessed"] = {"at": now_ms(), **out}
     status.save()
     return out
+
+
+def _said(exc: BaseException, expected: type) -> str:
+    """An adapter's own error as it said it; anything else with its type, since it is a fault, not an answer."""
+    return str(exc) if isinstance(exc, expected) else f"unexpected {type(exc).__name__}: {exc}"
+
+
+def record_error(root: Path, text: str) -> None:
+    try:
+        store.ensure(root)
+        status = Status(root)
+        status.error(text)
+        status.save()
+    except OSError:
+        pass       # the folder cannot be written: nothing else can be either, and the loop goes on
 
 
 def _waits_for_parent(record: dict, root: Path) -> bool:
@@ -234,10 +264,15 @@ def run_once(cfg: dict, root: Path, trigger: str, **kw) -> dict:
     return {"fetched": got["fetched"], "errors": got["errors"], **processed}
 
 
-def snapshot(cfg: dict | None, cfg_error: str | None, running: bool, now: float | None = None) -> dict:
+def snapshot(cfg: dict | None, cfg_error: str | None, running: bool, now: float | None = None,
+             sockets: dict | None = None) -> dict:
     """The `slack` slice and GET /api/slack/status: no key, no message text, no path under the home (written from ~,
-    the way every slice writes one: the talk e2e reads /api/snapshot for the home's path)."""
-    return _from_tilde(_snapshot(cfg, cfg_error, running, now))
+    the way every slice writes one: the talk e2e reads /api/snapshot for the home's path). ``sockets``: with mode
+    socket, {workspace: {connected, since, lastEventAt, error, errorAt}} (socket_mode.State.public)."""
+    snap = _snapshot(cfg, cfg_error, running, now)
+    if snap.get("mode") == "socket":
+        snap["socket"] = sockets or {}
+    return _from_tilde(snap)
 
 
 #: A Slack or Anthropic key's shape: never in an error the page shows (a fetch error is Slack's words, but kept safe).
@@ -287,7 +322,8 @@ class Service:
     """The intake inside ``jui viz serve``. on_change(snapshot) is called on the loop after anything changes."""
 
     def __init__(self, on_change: Callable[[dict], None] | None = None, *, watch_sec: float = WATCH_SEC,
-                 loader: Callable[[], dict | None] = C.load, work_kw: dict | None = None):
+                 loader: Callable[[], dict | None] = C.load, work_kw: dict | None = None,
+                 socket_kw: dict | None = None):
         self.on_change = on_change
         self.watch_sec = watch_sec
         self.loader = loader
@@ -295,6 +331,10 @@ class Service:
         self.running = False
         self._last: dict | None = None
         self._task: asyncio.Task | None = None
+        self.socket_kw = socket_kw or {}       # socket_mode.Client's api_base / backoff (a test's fake server)
+        self.sockets: dict[str, tuple[tuple, socket_mode.Client, asyncio.Task]] = {}
+        self._team_urls: dict[str, str] = {}
+        self._wake: asyncio.Event | None = None
 
     def _config(self) -> tuple[dict | None, str | None]:
         try:
@@ -304,7 +344,56 @@ class Service:
 
     def status(self) -> dict:
         cfg, err = self._config()
-        return snapshot(cfg, err, self.running)
+        return snapshot(cfg, err, self.running, sockets={n: c.state.public() for n, (_k, c, _t) in self.sockets.items()})
+
+    # ---------------------------------------------------------------- Socket Mode
+
+    def _reconcile_sockets(self, cfg: dict | None) -> None:
+        """One connection per workspace while mode is socket; a workspace whose appToken, channels or token changed
+        is reconnected, one gone (or mode no longer socket) is closed."""
+        want = socket_mode.plan(cfg)
+        for name in list(self.sockets):
+            key, _client, task = self.sockets[name]
+            if want.get(name) != key or task.done():
+                task.cancel()
+                del self.sockets[name]
+                self._team_urls.pop(name, None)
+        workspaces = {str(ws.get("name")): ws for ws in ((cfg or {}).get("source") or {}).get("workspaces") or []
+                      if isinstance(ws, dict)}
+        for name, key in want.items():
+            if name not in self.sockets:
+                client = socket_mode.Client(workspaces[name], self._on_socket_message, self._publish, **self.socket_kw)
+                self.sockets[name] = (key, client, asyncio.get_running_loop().create_task(client.run()))
+
+    def _stop_sockets(self) -> None:
+        for _key, _client, task in self.sockets.values():
+            task.cancel()
+        self.sockets.clear()
+
+    async def _on_socket_message(self, workspace: str, event: dict) -> None:
+        cfg, _err = self._config()
+        if cfg is None or (cfg.get("source") or {}).get("mode") != "socket":
+            return
+        ws = next((w for w in cfg["source"].get("workspaces") or [] if isinstance(w, dict) and w.get("name") == workspace), None)
+        if ws is None or event.get("channel") not in (ws.get("channels") or []):
+            return
+        root = C.orchestration_dir(cfg)
+        get = self.work_kw.get("get", F.api_get)
+
+        def write() -> bool:
+            store.ensure(root)
+            url = self._team_urls.get(workspace)
+            if url is None and ws.get("token"):
+                try:
+                    url = str(get("auth.test", ws["token"], {}).get("url") or "")
+                    self._team_urls[workspace] = url
+                except F.FetchError:
+                    url = ""       # asked again with the next message
+            link = F.permalink(url or "", event["channel"], event["ts"], event.get("thread_ts"))
+            return F.write_message(root, workspace, event["channel"], dict(event), link, "socket")
+
+        if await asyncio.get_running_loop().run_in_executor(None, write) and self._wake is not None:
+            self._wake.set()       # processed now, not on the next poll
 
     def _publish(self) -> None:
         snap = self.status()
@@ -324,10 +413,14 @@ class Service:
             return 409, {"error": err or f"no {C.path()}"}
         self.running = True
         self._publish()
+        loop = asyncio.get_running_loop()
         try:
-            got = await asyncio.get_running_loop().run_in_executor(
-                None, lambda: run_once(cfg, C.orchestration_dir(cfg), trigger, **self.work_kw))
+            got = await loop.run_in_executor(None, lambda: run_once(cfg, C.orchestration_dir(cfg), trigger, **self.work_kw))
             return 200, got
+        except Exception as exc:  # noqa: BLE001 — said on the status; the schedule and the next press go on
+            text = f"{trigger} fetch: unexpected {type(exc).__name__}: {exc}"
+            await loop.run_in_executor(None, lambda: record_error(C.orchestration_dir(cfg), text))
+            return 500, {"error": text}
         finally:
             self.running = False
             self._publish()
@@ -345,20 +438,49 @@ class Service:
 
     async def run(self) -> None:
         loop = asyncio.get_running_loop()
+        self._wake = asyncio.Event()
+        try:
+            await self._loop(loop)
+        finally:
+            self._stop_sockets()
+
+    async def _loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        """Every pass; an exception in one is written to status.errors (counted when it repeats) and the next pass
+        runs as usual: a long-running serve never stops taking messages over one fault."""
         while True:
-            cfg, _err = self._config()
-            if cfg is not None and not self.running:
-                root = C.orchestration_dir(cfg)
-                status = Status(root) if (root / store.STATE).is_dir() else None
-                base = schedule_base(status)
-                nxt = next_run(base, time.time(), cfg.get("schedule") or {})
-                if base is None:
-                    # never run: make the folders and note when the schedule starts counting
-                    await loop.run_in_executor(None, lambda: start_schedule(root))
-                elif nxt is not None and nxt <= time.time():
-                    await self.fetch_now("schedule")
-                elif store.inbox_files(root):
-                    kw = {k: v for k, v in self.work_kw.items() if k in ("route", "apply_filter")}
-                    await loop.run_in_executor(None, lambda: process_inbox(cfg, root, **kw))
-            self._publish()
-            await asyncio.sleep(self.watch_sec)
+            cfg = None
+            try:
+                cfg, _err = self._config()
+                self._reconcile_sockets(cfg)
+                await self._pass(cfg, loop)
+                self._publish()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                if cfg is not None:
+                    text = f"intake: unexpected {type(exc).__name__}: {exc}"
+                    await loop.run_in_executor(None, lambda: record_error(C.orchestration_dir(cfg), text))
+                try:
+                    self._publish()
+                except Exception:  # noqa: BLE001 — the view only
+                    pass
+            try:
+                await asyncio.wait_for(self._wake.wait(), self.watch_sec)
+            except asyncio.TimeoutError:
+                pass
+            self._wake.clear()
+
+    async def _pass(self, cfg: dict | None, loop: asyncio.AbstractEventLoop) -> None:
+        if cfg is not None and not self.running:
+            root = C.orchestration_dir(cfg)
+            status = Status(root) if (root / store.STATE).is_dir() else None
+            base = schedule_base(status)
+            nxt = next_run(base, time.time(), cfg.get("schedule") or {})
+            if base is None:
+                # never run: make the folders and note when the schedule starts counting
+                await loop.run_in_executor(None, lambda: start_schedule(root))
+            elif nxt is not None and nxt <= time.time():
+                await self.fetch_now("schedule")
+            elif store.inbox_files(root):
+                kw = {k: v for k, v in self.work_kw.items() if k in ("route", "apply_filter")}
+                await loop.run_in_executor(None, lambda: process_inbox(cfg, root, **kw))

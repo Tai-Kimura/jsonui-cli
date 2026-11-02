@@ -9,6 +9,9 @@ mode "connector"  ``claude -p`` without a screen, reading Slack through the pers
                   on PATH, run in <orchestrationDir>/.state with only the Slack connector's tools allowed, with
                   ``--model source.connectorModel`` (default the light model; "" leaves --model off).
 
+mode "socket"     the messages are pushed as they are written (socket_mode.py); this fetch is the Web API's, run by the
+                  schedule to pick up what a dropped connection missed. Either way a message is written once.
+
 A channel never fetched starts from the last schedule.everyHours (24 when the schedule is manual only).
 The cursor moves only after a channel's messages are written; a failure leaves it where it was.
 """
@@ -19,6 +22,7 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -32,6 +36,7 @@ HTTP_TIMEOUT_SEC = 30.0
 PAGES_MAX = 50
 CONNECTOR_TIMEOUT_SEC = 900.0
 CONNECTOR_TOOLS = "mcp__claude_ai_Slack"
+TAKEN = "taken.json"
 # Slack's own notices, not anyone's words.
 SKIP_SUBTYPES = {"channel_join", "channel_leave", "channel_topic", "channel_purpose", "channel_name",
                  "channel_archive", "channel_unarchive", "group_join", "group_leave", "pinned_item", "unpinned_item"}
@@ -71,16 +76,49 @@ def permalink(team_url: str, channel: str, ts: str, thread_ts: str | None = None
     return link
 
 
-def _write(root: Path, workspace: str, channel: str, message: dict, link: str, via: str) -> bool:
+_TAKEN_LOCK = threading.Lock()
+
+
+def write_message(root: Path, workspace: str, channel: str, message: dict, link: str, via: str) -> bool:
+    """Write one message to inbox/, once: a channel + ts taken before (by a fetch or by Socket Mode, recorded in
+    .state/taken.json until the cursor and the thread watch have both passed it) is not written again."""
     ts = message.get("ts")
     if not store.valid_ts(ts) or message.get("subtype") in SKIP_SUBTYPES:
         return False
     target = root / store.INBOX / store.file_name(ts, workspace, channel)
-    if target.exists():
-        return False
-    store.write_json(target, {"workspace": workspace, "channel": channel, "ts": ts, "permalink": link,
-                              "via": via, "fetchedAt": int(time.time() * 1000), "message": message})
+    key = store.KeyedState.key(workspace, channel, ts)
+    with _TAKEN_LOCK:    # the schedule's fetch (a worker thread) and the socket (the loop's executor) may race
+        taken = store.KeyedState(root, TAKEN)
+        if taken.get(key) is not None or target.exists():
+            return False
+        store.write_json(target, {"workspace": workspace, "channel": channel, "ts": ts, "permalink": link,
+                                  "via": via, "fetchedAt": int(time.time() * 1000), "message": message})
+        taken.set(key, via)
+        taken.save()
     return True
+
+
+
+def prune_taken(root: Path, cfg: dict, now: float) -> None:
+    """Forget a taken message once no fetch can see it again: at or before its channel's cursor, and (for a reply)
+    older than the thread watch."""
+    watch = watch_from(cfg, now)
+    cursor = store.Cursor(root)
+    with _TAKEN_LOCK:
+        taken = store.KeyedState(root, TAKEN)
+        for key in list(taken.data):
+            parts = key.split("/")
+            if len(parts) != 3 or not store.valid_ts(parts[2]):
+                taken.data.pop(key)
+                taken.dirty = True
+                continue
+            before = cursor.get(parts[0], parts[1])
+            past_cursor = before is not None and float(parts[2]) <= float(before)
+            past_watch = watch is None or float(parts[2]) < watch
+            if past_cursor and past_watch:
+                taken.data.pop(key)
+                taken.dirty = True
+        taken.save()
 
 
 def watch_from(cfg: dict, now: float) -> float | None:
@@ -121,7 +159,7 @@ def fetch_api(cfg: dict, root: Path, get=api_get, now: float | None = None) -> d
                     if not store.valid_ts(ts):
                         continue
                     if float(ts) > float(oldest):   # oldest is exclusive: a message already taken is not taken again
-                        if _write(root, name, channel, msg, permalink(team_url, channel, ts, msg.get("thread_ts")), "api"):
+                        if write_message(root, name, channel, msg, permalink(team_url, channel, ts, msg.get("thread_ts")), "api"):
                             fetched += 1
                         if float(ts) > float(newest):
                             newest = ts
@@ -136,6 +174,7 @@ def fetch_api(cfg: dict, root: Path, get=api_get, now: float | None = None) -> d
     if watch is not None:
         threads.prune(watch)
         threads.save()
+    prune_taken(root, cfg, now)
     return {"fetched": fetched, "errors": errors}
 
 
@@ -158,7 +197,7 @@ def _thread(get, token: str, root: Path, threads: "store.KeyedState", workspace:
         if not store.valid_ts(rts) or rts == ts or float(rts) <= float(seen):
             continue
         reply.setdefault("thread_ts", ts)
-        if _write(root, workspace, channel, reply, permalink(team_url, channel, rts, ts), "api"):
+        if write_message(root, workspace, channel, reply, permalink(team_url, channel, rts, ts), "api"):
             n += 1
         if float(rts) > float(last):
             last = rts
@@ -274,7 +313,7 @@ def fetch_connector(cfg: dict, root: Path, run=subprocess.run, now: float | None
         message = {k: item.get(k) for k in ("ts", "thread_ts", "reply_count", "user", "text") if item.get(k) is not None}
         if isinstance(item.get("files"), list):
             message["files"] = [f for f in item["files"] if isinstance(f, dict)]
-        if _write(root, key[0], key[1], message, str(item.get("permalink") or ""), "connector"):
+        if write_message(root, key[0], key[1], message, str(item.get("permalink") or ""), "connector"):
             fetched += 1
         ts = item.get("ts")
         if store.valid_ts(ts) and (key not in newest or float(ts) > float(newest[key])):
@@ -288,4 +327,5 @@ def fetch(cfg: dict, root: Path, **kw) -> dict:
     store.ensure(root)
     if (cfg.get("source") or {}).get("mode") == "connector":
         return fetch_connector(cfg, root, **{k: v for k, v in kw.items() if k in ("run", "now")})
+    # api, and socket: the schedule (and a fetch by hand) reads the Web API to pick up what the socket missed
     return fetch_api(cfg, root, **{k: v for k, v in kw.items() if k in ("get", "now")})

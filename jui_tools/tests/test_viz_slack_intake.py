@@ -682,3 +682,107 @@ def test_the_filter_router_and_robot_get_the_text_as_written():
     got = filters.apply(record, {"adapter": "builtin", "extraPatterns": []})
     assert got["text"] == "B&S の件 @U2 <b>"
     assert record["message"]["text"] == "B&amp;S の件 <@U2> &lt;b&gt;"            # the inbox record is left as fetched
+
+
+# ---------------------------------------------------------------- a fault never stops the intake
+
+def test_a_router_that_throws_once_holds_only_its_own_message(tmp_path):
+    cfg = cfg_of(tmp_path)
+    root = C.orchestration_dir(cfg)
+    a, b = "1730000001.000100", "1730000002.000100"
+    inbox(root, a, "first")
+    inbox(root, b, "second")
+    route = FakeRoute([RuntimeError("boom"), {"choice": "shop", "confidence": 0.9}])
+    got = I.process_inbox(cfg, root, route=route, now=1730060000.0)
+    assert got["failed"] == 1 and got["projects"] == 1
+    assert files_under(root) == [f"inbox/{a}-acme-C0123.json", f"projects/shop/{b}-acme-C0123.json"]
+    st = I.Status(root).data
+    assert st["failed"][f"{a}-acme-C0123.json"]["stage"] == "router"
+    assert st["failed"][f"{a}-acme-C0123.json"]["error"] == "unexpected RuntimeError: boom"
+    assert st["errors"][0]["error"] == f"router: {a}-acme-C0123.json: unexpected RuntimeError: boom"
+    # retried like any router failure (here by hand)
+    I.process_inbox(cfg, root, route=FakeRoute([{"choice": "booking", "confidence": 0.9}]), force=True, now=1730060000.0)
+    assert files_under(root) == [f"projects/booking/{a}-acme-C0123.json", f"projects/shop/{b}-acme-C0123.json"]
+
+
+def test_a_filter_that_throws_holds_only_its_own_message(tmp_path):
+    cfg = cfg_of(tmp_path)
+    root = C.orchestration_dir(cfg)
+    a, b = "1730000001.000100", "1730000002.000100"
+    inbox(root, a, "first")
+    inbox(root, b, "second")
+
+    def apply_filter(record, filter_cfg):
+        if record["ts"] == a:
+            raise KeyError("text")
+        return FI.apply(record, filter_cfg)
+
+    got = I.process_inbox(cfg, root, route=FakeRoute([{"choice": "shop", "confidence": 0.9}]), apply_filter=apply_filter)
+    assert got["failed"] == 1 and got["projects"] == 1
+    assert I.Status(root).data["failed"][f"{a}-acme-C0123.json"]["error"] == "unexpected KeyError: 'text'"
+
+
+def test_a_fault_in_a_pass_is_written_counted_and_the_next_pass_runs(tmp_path, monkeypatch):
+    cfg = cfg_of(tmp_path)
+    root = C.orchestration_dir(cfg)
+    I.start_schedule(root)
+    ts = f"{int(time.time()) - 60}.000100"
+    inbox(root, ts, "x")
+    real, faults = I.process_inbox, []
+
+    def flaky(*a, **k):
+        if len(faults) < 3:
+            faults.append(1)
+            raise RuntimeError("disk said no")
+        return real(*a, **k)
+
+    monkeypatch.setattr(I, "process_inbox", flaky)
+    svc = I.Service(watch_sec=0.05, loader=lambda: cfg, work_kw={"route": FakeRoute([{"choice": "shop", "confidence": 0.9}])})
+
+    async def go():
+        task = asyncio.create_task(svc.run())
+        for _ in range(100):
+            await asyncio.sleep(0.05)
+            if (root / f"projects/shop/{ts}-acme-C0123.json").exists():
+                break
+        alive = not task.done()
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        return alive
+
+    assert asyncio.run(go()) is True
+    assert files_under(root) == [f"projects/shop/{ts}-acme-C0123.json"]
+    errors = I.Status(root).data["errors"]
+    same = [e for e in errors if e["error"] == "intake: unexpected RuntimeError: disk said no"]
+    assert len(same) == 1 and same[0]["count"] == 3 and same[0]["firstAt"] <= same[0]["at"]
+    assert svc.status()["errors"][0]["count"] == 3
+
+
+def test_an_unexpected_fault_in_a_fetch_answers_500_and_is_written(tmp_path):
+    cfg = cfg_of(tmp_path)
+    root = C.orchestration_dir(cfg)
+
+    def get(method, token, params):
+        raise RuntimeError("socket closed")
+
+    svc = I.Service(loader=lambda: cfg, work_kw={"get": get})
+    code, body = asyncio.run(svc.fetch_now("manual"))
+    assert code == 500 and body == {"error": "manual fetch: unexpected RuntimeError: socket closed"}
+    assert svc.running is False
+    assert I.Status(root).data["errors"][0]["error"] == "manual fetch: unexpected RuntimeError: socket closed"
+
+
+def test_the_same_error_again_is_one_entry_counted_and_the_others_stay(tmp_path):
+    root = tmp_path / "orch"
+    S.ensure(root)
+    st = I.Status(root)
+    st.error("other: one")
+    for _ in range(50):
+        st.error("loop: same")
+    st.error("other: two")
+    errors = st.data["errors"]
+    assert [e["error"] for e in errors] == ["other: two", "loop: same", "other: one"]
+    assert errors[1]["count"] == 50 and errors[1]["firstAt"] <= errors[1]["at"] and errors[0]["count"] == 1
+    for i in range(I.ERRORS_KEPT + 5):
+        st.error(f"many: {i}")
+    assert len(st.data["errors"]) == I.ERRORS_KEPT

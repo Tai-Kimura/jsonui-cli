@@ -16,6 +16,9 @@ from pathlib import Path
 from .. import paths
 
 FILE_NAME = "slack.json"
+#: api: the Web API on the schedule. connector: claude -p with the Slack connector. socket: Socket Mode pushes each
+#: message as it is written (workspaces[].appToken), and the schedule still reads the Web API (workspaces[].token).
+MODES = ("api", "connector", "socket")
 #: The connector's warning as written into a new slack.json (the page shows srv.slack.modeNote, in its language).
 MODE_NOTE = "With mode connector, the messages pass through Claude (Anthropic) before the filter"
 
@@ -95,8 +98,8 @@ def load(file: Path | None = None) -> dict | None:
 
 def validate(cfg: dict) -> None:
     src = cfg.get("source") or {}
-    if src.get("mode") not in ("api", "connector"):
-        raise ConfigError("source.mode must be api or connector")
+    if src.get("mode") not in MODES:
+        raise ConfigError("source.mode must be api, connector or socket")
     if not isinstance(src.get("workspaces"), list):
         raise ConfigError("source.workspaces must be a list")
     for ws in src["workspaces"]:
@@ -104,6 +107,9 @@ def validate(cfg: dict) -> None:
             raise ConfigError("each workspace needs a name")
         if not safe_name(ws["name"]):
             raise ConfigError(f"workspace name {ws['name']!r}: letters, digits, '.', '_' and '-' only")
+        for key in ("token", "appToken"):
+            if key in ws and not isinstance(ws[key], str):
+                raise ConfigError(f"workspace {ws['name']}: {key} must be a string")
         for ch in ws.get("channels") or []:
             if not isinstance(ch, str) or not safe_name(ch):
                 raise ConfigError(f"channel {ch!r}: letters, digits, '.', '_' and '-' only")
@@ -177,8 +183,9 @@ def public_view(cfg: dict) -> dict:
     """The config with every key blanked to whether it is set: what the page and the status may show."""
     out = copy.deepcopy(cfg)
     for ws in (out.get("source") or {}).get("workspaces") or []:
-        if isinstance(ws, dict) and "token" in ws:
-            ws["token"] = bool(ws["token"])
+        for key in ("token", "appToken"):
+            if isinstance(ws, dict) and key in ws:
+                ws[key] = bool(ws[key])
     router = out.get("router") or {}
     for key in ("anthropicApiKey", "typesafeApiKey"):
         if key in router:
