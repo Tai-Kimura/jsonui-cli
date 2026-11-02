@@ -2240,3 +2240,8 @@ body.sd-on { overflow: hidden; }
 .sfm[data-board="full"] .sf-note .sf-mark, .sfm[data-board="lane"] .sf-note .sf-mark,
 .sfm[data-board="full"] .sf-note .sf-why, .sfm[data-board="lane"] .sf-note .sf-why,
 .sfm[data-board="full"] .sf-src-open, .sfm[data-board="lane"] .sf-src-open { font-size: 13px; }
+.sf-socket { margin: 4px 0 0; padding: 0; list-style: none; font: 12px/1.5 var(--font-body); }
+.sf-socket li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; }
+.sf-socket .sf-lamp { flex: none; align-self: center; }
+.sf-socket .sf-socket-line { flex: 1 1 0; min-width: 0; }
+.sf-socket .sf-why { flex-basis: 100%; margin: 0; }

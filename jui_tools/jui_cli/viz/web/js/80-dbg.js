@@ -730,6 +730,9 @@ window.__dbg = {
     robot: SF.view ? SF.view.robotLabel : null, robotState: SF.view && SF.view.robot ? SF.view.robot.state : null,
     bins: SF.view ? [...SF.view.bins.values()].map((b) => ({ project: b.project, n: b.n, stack: b.stack.length })) : [],
     parcels: SF.parcels.map((p) => p.phase), covers: srCovers(), bg: SF.view ? SF.view.scene.background.getHexString() : null }),
+  // the intake's status line drawn from a slack slice the suite gives (a Socket Mode status before that branch is in)
+  sfSlackGet: () => (SOURCE.mode === 'live' ? LIVE.slices.slack || null : null),
+  sfSlackSet: (k) => { if (SOURCE.mode !== 'live') return false; LIVE.slices.slack = k; sfRenderIntake(); return true; },
   // the load box drawn from a machine slice the suite gives (the server's next push writes the real one over it)
   devMachineSet: (m) => { if (SOURCE.mode !== 'live') return false; LIVE.slices.machine = Object.assign({ at: Date.now() }, m); renderDevices(); return true; },
   devColours: () => { const b = document.getElementById('btn-devices'), keep = b.dataset.load;

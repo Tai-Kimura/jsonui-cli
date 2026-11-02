@@ -218,7 +218,7 @@ def snapshot(cfg: dict | None, cfg_error: str | None, running: bool, now: float 
 
 
 #: A Slack or Anthropic key's shape: never in an error the page shows (a fetch error is Slack's words, but kept safe).
-KEY_SHAPE = re.compile(r"\b(?:xox[a-z]-|sk-ant-)[A-Za-z0-9_-]+")
+KEY_SHAPE = re.compile(r"\b(?:xox[a-z]-|xapp-|sk-ant-)[A-Za-z0-9_-]+")
 
 
 def _from_tilde(value):

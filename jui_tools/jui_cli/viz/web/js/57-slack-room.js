@@ -151,8 +151,9 @@ function sfRenderIntake() {
    first one's words, with a hint where the fix is known; and the connector's warning (modeNote) while mode is
    connector. The server writes paths from ~ and keeps no key in them (slack/intake.py); a key-shaped word is masked
    here again. */
-const SF_KEY_SHAPE = /\b(?:xox[a-z]-|sk-ant-)[A-Za-z0-9_-]+/g;
+const SF_KEY_SHAPE = /\b(?:xox[a-z]-|xapp-|sk-ant-)[A-Za-z0-9_-]+/g;
 function sfFetchHint(text) {
+  if (/apps\.connections\.open: [^:]*(?:missing_scope|not_allowed_token_type|invalid_auth)\b/.test(text)) return tl('sf.intake.hint.appToken');
   const scope = /\/([CDG])[A-Z0-9]+: [^:]*: missing_scope\b/.exec(text);
   if (scope) return tl(scope[1] === 'D' ? 'sf.intake.hint.im' : scope[1] === 'G' ? 'sf.intake.hint.groups' : 'sf.intake.hint.channels');
   if (/: (?:not_in_channel|channel_not_found)\b/.test(text)) return tl('sf.intake.hint.invite');
@@ -166,6 +167,7 @@ function sfRenderFetchErrors(k) {
   const hint = text ? sfFetchHint(text) : '';
   setText(el, text ? tl('sf.intake.errors', { n: errs.length, error: text }) + (hint ? tl('sf.intake.sep') + hint : '') : '');
   el.hidden = !text;
+  sfRenderSocket(k);
   const connector = !!(k && k.configured && k.mode === 'connector');
   setText(note, connector ? tl('sf.intake.modeNote', { note: tl('srv.slack.modeNote') }) : '');
   note.hidden = !connector;
@@ -184,6 +186,23 @@ function sfTab(k, focus = false) {
   try { localStorage.setItem(SF_TAB_KEY, tab); } catch (err) { /* storage refused: the tab is not kept */ }
 }
 function sfTabSaved() { try { return localStorage.getItem(SF_TAB_KEY) === 'flow' ? 'flow' : 'talk'; } catch (err) { return 'talk'; } }
+/* Socket Mode (source.mode socket): a line per workspace, connected since when and the last message taken, or not
+   connected; its last error the way a fetch's is shown (the words, a hint), while it is not connected or came after. */
+function sfRenderSocket(k) {
+  const box = $('sf-socket');
+  const socks = k && k.configured && k.mode === 'socket' && k.socket && typeof k.socket === 'object' ? Object.entries(k.socket) : [];
+  const rowsHTML = socks.filter(([, v]) => v && typeof v === 'object').map(([ws, v]) => {
+    const err = typeof v.error === 'string' && v.error && (!v.connected || Number(v.errorAt) > Number(v.since || 0)) ? v.error.replace(SF_KEY_SHAPE, '…') : '';
+    const hint = err ? sfFetchHint(err) : '';
+    const line = v.connected
+      ? tl('sf.socket.on', { ws, since: sfClock(v.since) || tl('sf.intake.never'), at: sfClock(v.lastEventAt) || tl('sf.intake.never') })
+      : tl('sf.socket.off', { ws });
+    return `<li class="${v.connected ? 'sf-socket-on' : 'sf-socket-off'}"><span class="sf-lamp" data-state="${v.connected ? 'typing' : 'idle'}"></span><span class="sf-socket-line">${esc(line)}</span>`
+      + (err ? `<span class="sf-why">${esc(tl('sf.socket.error', { error: err, at: sfClock(v.errorAt) }) + (hint ? tl('sf.intake.sep') + hint : ''))}</span>` : '') + '</li>';
+  });
+  setHTML(box, rowsHTML.join(''));
+  box.hidden = !rowsHTML.length;
+}
 async function sfFetch() {
   $('sf-fetch').disabled = true;
   const got = await sfPost('/api/slack/fetch', {});

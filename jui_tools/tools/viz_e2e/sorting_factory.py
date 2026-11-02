@@ -483,6 +483,23 @@ async def run_sorting_factory(pw, out, failures):
         await shot(page, "slack-room-connector-note", out, failures)
         set_mode("api")
         await wait(page, "() => document.getElementById('sf-mode-note').hidden", timeout=15000, label="the note gone with mode api")
+        # Socket Mode's status (the socket branch's slice: slack.socket per workspace), drawn from a status the suite gives
+        app_key = "xapp" + "-1-A0E2E-123-abcdef"
+        now_ms = int(time.time() * 1000)
+        fake = await page.evaluate("() => window.__dbg.sfSlackGet()")
+        fake.update({"mode": "socket", "socket": {
+            "tanosys": {"connected": True, "since": now_ms - 3_600_000, "lastEventAt": now_ms - 60_000, "error": None, "errorAt": None},
+            "acme": {"connected": False, "since": None, "lastEventAt": None, "error": f"apps.connections.open: invalid_auth ({app_key})", "errorAt": now_ms - 30_000}}})
+        check(await page.evaluate("(k) => window.__dbg.sfSlackSet(k)", fake), "the suite's status drawn")
+        sock = res["socket"] = await page.evaluate("() => ({ hidden: document.getElementById('sf-socket').hidden, rows: [...document.querySelectorAll('#sf-socket li')].map((li) => li.textContent) })")
+        check(not sock["hidden"] and len(sock["rows"]) == 2 and sock["rows"][0].startswith("tanosys: ") and T("sf.socket.off", ws="acme") in sock["rows"][1]
+              and T("sf.intake.hint.appToken") in sock["rows"][1] and app_key not in sock["rows"][1] and "invalid_auth" in sock["rows"][1],
+              f"a line per workspace: connected since and the last message, or not, its error with the hint, the key masked: {sock}")
+        await page.evaluate("() => document.getElementById('sf-socket').scrollIntoView({ block: 'nearest' })")
+        await page.wait_for_timeout(600)                     # the 3D drawn again at the stage's new height
+        await shot(page, "slack-room-socket", out, failures)
+        await page.evaluate("(k) => window.__dbg.sfSlackSet(k)", {**fake, "mode": "api", "socket": None})
+        check(await page.evaluate("() => document.getElementById('sf-socket').hidden"), "no socket lines with mode api")
         # a message comes: the robot is told of it, a parcel rides the belt
         hook(BOT, hook_event_name="UserPromptSubmit", prompt="x")
         hook(BOT, hook_event_name="Stop")
