@@ -2144,12 +2144,13 @@ body.sd-on { overflow: hidden; }
 .sf-chat-head { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
 .sf-chat-head h3 { flex: 1; margin: 0; font: 700 14px/1.4 var(--font-body); overflow-wrap: anywhere; }
 .sf-chat-list { flex: 1; margin: 0; padding: 12px; overflow: auto; list-style: none; display: flex; flex-direction: column; gap: 10px; font: 13px/1.6 var(--font-body); }
-.sf-bubble { max-width: 92%; padding: 6px 10px; border-radius: 4px 12px 12px 12px; background: var(--chip); }
-.sf-bubble.sf-reply { margin-left: 22px; border-left: 3px solid var(--line); }
-.sf-bubble-head { margin: 0 0 2px; display: flex; flex-wrap: wrap; gap: 0 8px; align-items: baseline; }
-.sf-bubble-head span, .sf-bubble-head time { color: var(--ink-soft); font-size: 12px; }
-.sf-bubble-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.sf-bubble-link { font-size: 12px; color: var(--info); }
+/* a message's row in the chat: sf-msgb, not sf-bubble (the robot's bubble in the 3D, positioned over the stage with a tail) */
+.sf-msgb { max-width: 92%; padding: 6px 10px; border-radius: 4px 12px 12px 12px; background: var(--chip); }
+.sf-msgb.sf-reply { margin-left: 22px; border-left: 3px solid var(--line); }
+.sf-msgb-head { margin: 0 0 2px; display: flex; flex-wrap: wrap; gap: 0 8px; align-items: baseline; }
+.sf-msgb-head span, .sf-msgb-head time { color: var(--ink-soft); font-size: 12px; }
+.sf-msgb-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sf-msgb-link { font-size: 12px; color: var(--info); }
 .sf-chat-sep { border-top: 1px dashed var(--line); margin: 4px 0; }
 /* asking the robot to change a note: a popup over the room */
 .sf-modal { position: absolute; inset: 0; z-index: 6; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(10, 20, 35, 0.45); }

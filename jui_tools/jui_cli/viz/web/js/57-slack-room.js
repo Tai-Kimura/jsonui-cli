@@ -452,9 +452,9 @@ function sfChatRowHTML(m, k, rows) {
   const at = sfTs(m.ts), newThread = k === 0 || rows[k - 1].threadTs !== m.threadTs, reply = m.threadTs && m.threadTs !== m.ts;
   const when = at ? `${at.toLocaleDateString()} ${at.toTimeString().slice(0, 5)}` : '';
   return (newThread && k > 0 ? `<li class="sf-chat-sep" aria-hidden="true"></li>` : '')
-    + `<li class="sf-bubble${reply ? ' sf-reply' : ''}"><p class="sf-bubble-head"><b>${esc(m.user || '?')}</b> <span>${esc(m.channel)}</span> <time>${esc(when)}</time></p>`
-    + `<p class="sf-bubble-text">${esc(m.text)}</p>`
-    + (m.permalink ? `<a class="sf-bubble-link" href="${esc(m.permalink)}" target="_blank" rel="noopener noreferrer">${esc(tl('sf.chat.open'))}</a>` : '') + '</li>';
+    + `<li class="sf-msgb${reply ? ' sf-reply' : ''}"><p class="sf-msgb-head"><b>${esc(m.user || '?')}</b> <span>${esc(m.channel)}</span> <time>${esc(when)}</time></p>`
+    + `<p class="sf-msgb-text">${esc(m.text)}</p>`
+    + (m.permalink ? `<a class="sf-msgb-link" href="${esc(m.permalink)}" target="_blank" rel="noopener noreferrer">${esc(tl('sf.chat.open'))}</a>` : '') + '</li>';
 }
 async function sfChatOpen(id, opener) {
   SF.chatOpener = opener || null;
