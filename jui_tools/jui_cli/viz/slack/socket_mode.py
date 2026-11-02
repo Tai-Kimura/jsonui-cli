@@ -13,12 +13,14 @@ masked before anything leaves the machine). Slack's notices and edits/deletions 
 not taken. The schedule still fetches through the Web API in this mode (the workspace's token), to pick up what a
 dropped connection missed; a message taken here is not taken again there.
 
-The state the status shows (State.public): connected, since, lastEventAt, error, errorAt. No token, no text.
+The state the status shows (State.public): connected, since, lastEventAt, error, errorAt. No token, no text, no
+URL's query (Slack's ticket rides in it).
 """
 from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from typing import Awaitable, Callable
 
@@ -39,6 +41,16 @@ class SocketError(Exception):
     pass
 
 
+#: A URL's query and fragment. Slack's WebSocket URL carries a one-time ticket in its query (wss://…/link/?ticket=…
+#: &app_id=…), and aiohttp's errors repeat the URL whole: every error kept (the status, the slice, /api/snapshot) has
+#: them cut, the address up to its path left to read.
+URL_QUERY = re.compile(r"(\b[A-Za-z][A-Za-z0-9+.-]*://[^\s?#'\"()<>\[\]]*)[?#][^\s'\"()<>\[\]]*")
+
+
+def without_url_query(text: str) -> str:
+    return URL_QUERY.sub(r"\1?…", text)
+
+
 def now_ms() -> int:
     return int(time.time() * 1000)
 
@@ -52,7 +64,7 @@ class State:
         self.error_at: int | None = None
 
     def fail(self, text: str) -> None:
-        self.error, self.error_at = text, now_ms()
+        self.error, self.error_at = without_url_query(text), now_ms()
 
     def public(self) -> dict:
         return {"connected": self.connected, "since": self.since, "lastEventAt": self.last_event_at,

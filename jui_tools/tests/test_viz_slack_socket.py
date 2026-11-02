@@ -397,3 +397,54 @@ def test_the_socket_plan_follows_the_config(tmp_path):
     assert SM.plan(cfg) == {"acme": (APP, ("C0123",), "slk-tok-QQ7")}
     assert SM.plan(cfg_of(tmp_path, source={"mode": "api"})) == {}
     assert SM.plan(None) == {}
+
+
+# ---------------------------------------------------------------- Slack's ticket stays off every view
+
+TICKET = "".join(["tk", "-QQ9-one-time-0123456789"])
+
+
+class HandshakeRefused(FakeSocketSlack):
+    """apps.connections.open answers a URL with Slack's ticket in its query (wss://…/link/?ticket=…&app_id=…), and
+    the WebSocket's handshake is refused (401): aiohttp's error repeats the whole URL."""
+
+    async def open(self, request):
+        self.opens += 1
+        return web.json_response({"ok": True, "url": f"ws://127.0.0.1:{self.port}/link/?ticket={TICKET}&app_id=A0QQ"})
+
+    async def link(self, request):
+        return web.Response(status=401)
+
+
+def test_a_refused_handshake_keeps_slacks_ticket_off_the_status_the_slice_and_the_snapshot(tmp_path):
+    from jui_cli.viz.state import VizState
+
+    cfg = cfg_of(tmp_path)
+    state = VizState()
+    seen: list[dict] = []
+
+    def cond(svc):
+        snap = svc.status()
+        seen.append(snap)
+        state.set_slice("slack", snap)               # what serve's on_slack does; /api/snapshot is state.snapshot()
+        return bool(((snap.get("socket") or {}).get("acme") or {}).get("error"))
+
+    server = HandshakeRefused([])
+    ok, status, svc, snaps = run_service(cfg, server, FakeRoute([]), cond)
+    assert ok and server.opens >= 1
+    err = status["socket"]["acme"]["error"]
+    assert "Invalid response status" in err and f"127.0.0.1:{server.port}/link/?…" in err      # still says where, without the query
+    for view in (status, snaps, seen, state.snapshot()):
+        text = json.dumps(view)
+        assert TICKET not in text and "ticket=" not in text and "app_id=" not in text
+
+
+def test_every_error_the_state_keeps_has_no_urls_query():
+    st = SM.State()
+    st.fail(f"401, message='Invalid response status', url=URL('wss://wss-primary.slack.com/link/?ticket={TICKET}&app_id=A0QQ')")
+    assert st.error == "401, message='Invalid response status', url=URL('wss://wss-primary.slack.com/link/?…')"
+    st.fail(f"Cannot connect to host wss-primary.slack.com:443 ssl:default [https://x.example/a?b={TICKET}#f]")
+    assert TICKET not in st.error and "https://x.example/a?…]" in st.error
+    st.fail("the connection closed")
+    assert st.error == "the connection closed"
+    assert I._from_tilde(f"acme: ws://h/p?ticket={TICKET}") == "acme: ws://h/p?…"   # the same layer as the key mask

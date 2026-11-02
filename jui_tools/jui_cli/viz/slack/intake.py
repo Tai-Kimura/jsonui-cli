@@ -276,13 +276,14 @@ def snapshot(cfg: dict | None, cfg_error: str | None, running: bool, now: float 
 
 
 #: A Slack or Anthropic key's shape: never in an error the page shows (a fetch error is Slack's words, but kept safe).
+#: A URL's query is cut the same way (socket_mode.without_url_query: Slack's one-time ticket rides in one).
 KEY_SHAPE = re.compile(r"\b(?:xox[a-z]-|xapp-|sk-ant-)[A-Za-z0-9_-]+")
 
 
 def _from_tilde(value):
     if isinstance(value, str):
         home = str(Path.home()).rstrip(os.sep)
-        value = KEY_SHAPE.sub("…", value)
+        value = socket_mode.without_url_query(KEY_SHAPE.sub("…", value))
         return re.sub(re.escape(home) + r"(?![\w.-])", "~", value) if home else value
     if isinstance(value, dict):
         return {k: _from_tilde(v) for k, v in value.items()}
