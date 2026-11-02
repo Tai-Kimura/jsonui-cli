@@ -84,6 +84,9 @@ MEMBERS = [
      '<button type="button" role="tab" class="ds-tab">x<b>1</b></button>'),
     ("flow-zoom", "データの流れ: 合わせる・実寸", None, "aria-pressed", "#wb-body",
      '<div class="flow-mmd-wrap"><div class="flow-mmd-bar"><button type="button" class="wb-btn" data-flow-zoom>x</button></div></div>'),
+    ("sf-tab", "仕分け工場: ロボットへの指示・仕分けの様子", "#sf .sf-tab", "aria-selected", None, None),
+    ("sf-note", "仕分け工場: 選んだメモ紙", None, "aria-current", "#sf-wb",
+     '<section class="sf-lane"><div class="sf-lane-notes"><article class="sf-note"><p class="sf-note-title">x</p></article></div></section>'),
 ]
 
 # Where the page gives each member its state: every line of index.html and web/js/ that sets aria-pressed, -selected,
@@ -119,20 +122,24 @@ SOURCES = {
     "ws-apps": ["seg-filter ws-apps"],
     "ds-tab": ['class="ds-tab"'],
     "flow-zoom": ["data-flow-zoom", "String(wb.flowFit)"],
+    "sf-tab": ["b.setAttribute('aria-selected'", 'data-sf-tab="talk"', 'data-sf-tab="flow"'],
+    "sf-note": ["n.el.setAttribute('aria-current'"],
 }
 # lines that read a state and set none
 READS = ["popEl.querySelector('[role=\"option\"][aria-selected=\"true\"]')",
          # the side list finds the open spec's row to bring it into view (wbSideShowOpen): its look is .ws-item's
          "wbSideList.querySelector('.ws-item[aria-current=\"true\"]')",
          # the room's list finds the selected robot's row to bring it into view (rosterShowCurrent): its look is the row's
-         "list.querySelector('.roster-row[aria-current=\"true\"]')"]
+         "list.querySelector('.roster-row[aria-current=\"true\"]')",
+         # the tabs' own ← → find the tab shown (sfTab moves it): its look is .sf-tab's
+         "document.querySelector('#sf .sf-tab[aria-selected=\"true\"]')"]
 
 READ = """([sel, attr, home, made]) => {
   let el = sel ? document.querySelector(sel) : null, wrap = null;
   if (!el && made) {
     wrap = document.createElement('div'); wrap.dataset.e2eMade = ''; wrap.innerHTML = made;
     (document.querySelector(home) || document.body).appendChild(wrap);
-    el = wrap.querySelector('[data-flow-zoom], .sr-prov, [role=option], .ws-item, .ds-tab, .roster-row, button');
+    el = wrap.querySelector('[data-flow-zoom], .sr-prov, [role=option], .ws-item, .ds-tab, .roster-row, .sf-note, button');
   }
   if (!el) return null;
   const parse = (s) => { const m = s.match(/rgba?\\(([^)]+)\\)/); if (!m) return [0, 0, 0, 0]; const v = m[1].split(/[ ,\\/]+/).filter(Boolean).map(Number); return [v[0], v[1], v[2], v.length > 3 ? v[3] : 1]; };
