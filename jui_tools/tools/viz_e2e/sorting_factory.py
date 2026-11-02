@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import re
 import os
 import pathlib
 import stat
@@ -299,7 +300,7 @@ async def run_sorting_factory(pw, out, failures):
         await shot(page, "slack-room-light", out, failures)
         # the header's folder: cut in the middle, the whole on hover; the robot's start command names this viz's folder
         head = res["head"] = await page.evaluate("() => ({ text: document.getElementById('sf-dir').textContent, title: document.getElementById('sf-dir').title })")
-        check(head["title"] == str(orch) and "…" in head["text"] and len(head["text"]) <= 60 and head["text"].endswith("slack-orchestration"),
+        check(head["title"] == "~/" + str(orch.relative_to(home)) and "…" in head["text"] and len(head["text"]) <= 60 and head["text"].endswith("slack-orchestration"),
               f"the folder cut in the middle, whole on hover: {head}")
         # what can be pressed shows the pointing hand (the id's copy cursor read as "+")
         cur = res["cursor"] = await page.evaluate("""() => { const q = [...document.querySelectorAll('#sf button:not(:disabled), #sf summary, #sf a[href]')].filter((e) => e.getClientRects().length);
@@ -448,7 +449,7 @@ async def run_sorting_factory(pw, out, failures):
         # the start command: on T-0002 (the robot found no fitting session and wrote one), none on T-0001 (DEV is there)
         COPY = """(id) => { const c = document.querySelector(`#sf-wb [data-sf-task="${id}"] .sf-copy [data-sf-copy]`); return c ? c.dataset.sfCopy : null; }"""
         lines = res["copy"] = [await page.evaluate(COPY, "T-0002"), await page.evaluate(COPY, "T-0001")]
-        pre = f"JUI_VIZ_HOME={state} "
+        pre = "JUI_VIZ_HOME=~/viz-other "                     # written from ~: the slices never carry the home's path
         check(lines == [f"cd ~/work/docs && {pre}claude --channels plugin:jui-viz@jsonui", None], f"the start command only where no session fits: {lines}")
         await page.click('#sf-wb [data-sf-task="T-0002"] .sf-copy [data-sf-copy]')
         await wait(page, f"""() => document.querySelector('#sf-wb [data-sf-task="T-0002"] .sf-copy [data-sf-copy]').textContent === {json.dumps(T('sf.copied'))}""",
@@ -488,6 +489,15 @@ async def run_sorting_factory(pw, out, failures):
         await page.keyboard.press("Escape")
         st = await page.evaluate(STATE)
         check(not st["open"] and st["focus"] == "btn-slack" and not st["covers"], f"Esc closes the room, the focus on the button: {st}")
+        # the floors' arrow keys and the roster test for an open page-wide dialog by [aria-modal="true"]:not([hidden]):
+        # nothing of the room's may answer it once the room is closed (2.4.0's arrows-rooms, room-roster, card-waits)
+        await page.wait_for_timeout(600)                     # hideOverlay hides the room 240 ms after its fade
+        modal = res["modal-after-close"] = await page.evaluate("""() => [...document.querySelectorAll('[aria-modal="true"]:not([hidden])')].map((e) => e.id || e.className)""")
+        check(modal == [], f"no page-wide dialog is left open by the closed room: {modal}")
+        code, snap = local("GET", "/api/snapshot")
+        snap_text = json.dumps(snap, ensure_ascii=False)
+        at = [snap_text[max(0, m.start() - 60):m.end() + 40] for m in re.finditer(re.escape(str(home)), snap_text)][:3]
+        check(code == 200 and "slackRoom" in snap_text and not at, f"the snapshot carries no path under the home: {code} {at}")
         phone = await new_page(browser, watch, "slack-room-phone", **PHONE)
         await phone.goto(url + "/")
         await ready(phone)

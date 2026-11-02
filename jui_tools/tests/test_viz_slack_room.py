@@ -479,7 +479,7 @@ def test_a_tasks_messages_come_whole_in_thread_order_and_only_from_projects(home
 def test_the_start_command_names_this_vizs_folder_when_it_is_not_the_default(home, monkeypatch):
     assert slack_room.home_prefix() == "" and slack_room.with_home("claude --channels x") == "claude --channels x"
     monkeypatch.setenv("JUI_VIZ_HOME", str(home / "other viz"))
-    want = f"JUI_VIZ_HOME='{home}/other viz' "
+    want = "JUI_VIZ_HOME=~/'other viz' "                                                     # from ~, not the home's path
     assert slack_room.home_prefix() == want
     assert slack_room.with_home("claude --channels x") == want + "claude --channels x"
     assert slack_room.with_home("cd ~/work/docs && claude --channels x") == f"cd ~/work/docs && {want}claude --channels x"
@@ -488,6 +488,24 @@ def test_the_start_command_names_this_vizs_folder_when_it_is_not_the_default(hom
     s = room.slice()
     assert s["robotLaunch"] == f"cd {slack_room._sh(str(room.root).replace(str(home), '~', 1))} && {want}{slack_room.LAUNCH_COMMAND}"
     assert s["launch"] == want + slack_room.LAUNCH_COMMAND
+    monkeypatch.setenv("JUI_VIZ_HOME", "/srv/viz")                                              # outside the home: as it is
+    assert slack_room.home_prefix() == "JUI_VIZ_HOME=/srv/viz "
+
+
+def test_the_slice_never_carries_the_homes_path(home, factory, monkeypatch):
+    """The talk e2e reads /api/snapshot for the home's path: the factory's folder, the targets' cwd, the start commands
+    (the robot's own, written from the full path, too) and the config's refusal are all written from ~."""
+    cfg = json.loads(slack_room.config_path().read_text())
+    monkeypatch.setenv("JUI_VIZ_HOME", str(home / "other viz"))
+    slack_config.save(cfg)
+    world = FakeWorld()
+    world.add("d1" * 18, str(home / "work" / "shop"))
+    task(factory, "T-0001", launchCommand=f"cd {home}/work/docs && claude --channels x")
+    room = room_for(world)
+    room.cfg_why = f"{home}/.local/state/jui-viz/slack.json is readable by others"
+    text = json.dumps(room.slice(), ensure_ascii=False)
+    assert str(home) not in text
+    assert "dirFull" not in text and "~/work/shop" in text and "cd ~/work/docs && JUI_VIZ_HOME=~/'other viz' claude" in text
 
 
 

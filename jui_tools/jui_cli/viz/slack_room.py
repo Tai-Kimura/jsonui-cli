@@ -69,10 +69,11 @@ def home_prefix() -> str:
     """`JUI_VIZ_HOME=<folder> ` when this viz keeps its files somewhere other than the default (a test viz on another
     port, JUI_VIZ_HOME or XDG_STATE_HOME set): a session started without it would reach the default viz, not this one —
     its hooks and its channel find the server by that folder (paths.py), and it shows relay: false here (the trial,
-    11-02). Empty for the default folder."""
+    11-02). Empty for the default folder. A folder under the home is written from ~ (the shell expands it in an
+    assignment), so the page's slices never carry the home's path."""
     here = paths.viz_home()
     default = Path.home() / ".local" / "state" / "jui-viz"
-    return "" if here == default else f"JUI_VIZ_HOME={_sh(str(here))} "
+    return "" if here == default else f"JUI_VIZ_HOME={_sh(tilde(str(here)))} "
 
 
 def with_home(command: str) -> str:
@@ -82,6 +83,13 @@ def with_home(command: str) -> str:
         return command
     m = re.search(r"(^|&&\s*|;\s*)claude\b", command)
     return command[:m.end(1)] + prefix + command[m.end(1):] if m else prefix + command
+
+
+def home_to_tilde(text: str) -> str:
+    """A line with the home's path written as ~ (the robot may write a start command from the full path): the page's
+    slices never carry the home's path (the talk e2e's check)."""
+    home = str(Path.home()).rstrip(os.sep)
+    return re.sub(re.escape(home) + r"(?![\w.-])", "~", text) if home and isinstance(text, str) else text
 
 
 def config_path() -> Path:
@@ -651,7 +659,7 @@ class SlackRoom:
             if row["status"] == "done" and isinstance(row.get("doneAt"), (int, float)):
                 row["purgeAt"] = int(row["doneAt"] + self.retention_ms())
             if isinstance(row.get("launchCommand"), str):
-                row["launchCommand"] = with_home(row["launchCommand"])   # the file keeps the robot's words
+                row["launchCommand"] = with_home(home_to_tilde(row["launchCommand"]))   # the file keeps the robot's words
             tasks.append(row)
         # each task's source messages, as the room shows them (the newest tasks first, up to HEADS_MAX)
         by_path = {a["path"]: a for a in arrivals}
@@ -662,14 +670,14 @@ class SlackRoom:
                     a = by_path[p]
                     heads[p] = {k: a.get(k) for k in ("user", "channel", "ts", "threadTs", "head", "broken")}
         return {
-            "config": {"path": tilde(str(self.config_file or config_path())), "state": self.cfg_why or "ok"},
+            "config": {"path": tilde(str(self.config_file or config_path())), "state": home_to_tilde(self.cfg_why) or "ok"},
             "dir": tilde(str(self.root)), "dirExists": self.scanned["exists"],
             "robot": robot, "robotLaunch": with_home(f"cd {_sh(tilde(str(self.root)))} && {LAUNCH_COMMAND}"), "launch": with_home(LAUNCH_COMMAND),
-            "dirFull": str(self.root),
             "arrivals": {"total": len(arrivals), "byProject": by_project, "unsorted": self.scanned["unsorted"],
                          "broken": self.scanned["broken"], "pending": len(self.pending()), "recent": arrivals[-RECENT_MAX:][::-1]},
-            "toldAt": self.last_told_at, "told": len(self.last_told), "note": self.note,
-            "tasks": tasks, "sourceHeads": heads, "targets": self.targets(), "prompts": prompts_of(self.cfg),
+            "toldAt": self.last_told_at, "told": len(self.last_told), "note": home_to_tilde(self.note),
+            "tasks": tasks, "sourceHeads": heads, "targets": [dict(t, cwd=tilde(str(t["cwd"]))) for t in self.targets()],
+            "prompts": prompts_of(self.cfg),
         }
 
 

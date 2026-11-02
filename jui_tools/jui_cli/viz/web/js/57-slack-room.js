@@ -73,7 +73,7 @@ function sfClose(back = true) {
 }
 function sfRender(s) {
   setText($('sf-dir'), sfShortPath(s.dir) + (s.dirExists ? '' : tl('sf.dir.missing')));
-  if ($('sf-dir').title !== String(s.dirFull || s.dir)) $('sf-dir').title = String(s.dirFull || s.dir);
+  if ($('sf-dir').title !== String(s.dir)) $('sf-dir').title = String(s.dir);
   sfRenderRobot(s);
   sfRenderFlow(s);
   sfRenderBoard(s);

@@ -589,7 +589,20 @@ def test_the_service_without_a_config_says_so_and_fetches_nothing(tmp_path):
     def bad():
         raise C.ConfigError("readable by others")
     assert I.Service(loader=bad).status() == {"configured": False, "error": "readable by others", "running": False,
-                                             "configPath": str(C.path())}
+                                             "configPath": str(C.path()).replace(str(Path.home()), "~", 1)}
+
+
+def test_the_slack_slice_carries_no_path_under_the_home(tmp_path, monkeypatch):
+    """Every slice writes a path from ~ (the talk e2e reads /api/snapshot for the home's path): the config's path,
+    the orchestration folder and an error that names a file."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("JUI_VIZ_HOME", raising=False)
+    monkeypatch.delenv("XDG_STATE_HOME", raising=False)
+    err = I.snapshot(None, f"{tmp_path}/.local/state/jui-viz/slack.json is readable by others", False)
+    assert err["configPath"] == "~/.local/state/jui-viz/slack.json" and err["error"].startswith("~/.local/")
+    cfg = C._merge(C.DEFAULT, {"orchestrationDir": str(tmp_path / "orch")})
+    snap = I.snapshot(cfg, None, False)
+    assert snap["orchestrationDir"] == "~/orch" and str(tmp_path) not in json.dumps(snap)
 
 
 async def _start(svc):

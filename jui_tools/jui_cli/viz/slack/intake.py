@@ -20,6 +20,7 @@ import datetime as dt
 import hashlib
 import json
 import os
+import re
 import time
 from pathlib import Path
 from typing import Callable
@@ -211,7 +212,23 @@ def run_once(cfg: dict, root: Path, trigger: str, **kw) -> dict:
 
 
 def snapshot(cfg: dict | None, cfg_error: str | None, running: bool, now: float | None = None) -> dict:
-    """The `slack` slice and GET /api/slack/status: no key, no message text."""
+    """The `slack` slice and GET /api/slack/status: no key, no message text, no path under the home (written from ~,
+    the way every slice writes one: the talk e2e reads /api/snapshot for the home's path)."""
+    return _from_tilde(_snapshot(cfg, cfg_error, running, now))
+
+
+def _from_tilde(value):
+    if isinstance(value, str):
+        home = str(Path.home()).rstrip(os.sep)
+        return re.sub(re.escape(home) + r"(?![\w.-])", "~", value) if home else value
+    if isinstance(value, dict):
+        return {k: _from_tilde(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_from_tilde(v) for v in value]
+    return value
+
+
+def _snapshot(cfg: dict | None, cfg_error: str | None, running: bool, now: float | None = None) -> dict:
     now = time.time() if now is None else now
     if cfg_error:
         return {"configured": False, "error": cfg_error, "running": running, "configPath": str(C.path())}
