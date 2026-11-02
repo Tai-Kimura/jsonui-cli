@@ -15,7 +15,7 @@
    /api/slack-room/task: the server sends the prompt and marks it working), 完了 closes it. A note being edited is not
    redrawn under the hand: what is typed stays until it is saved or sent. ---------- */
 const sfEl = $('sf');
-const SF = { open: false, opener: null, view: null, edit: null, revise: null, drafts: {}, notes: new Map(), seen: null, parcels: [], status: '' };
+const SF = { open: false, opener: null, view: null, full: false, lane: null, sel: null, edit: null, revise: null, drafts: {}, notes: new Map(), seen: null, parcels: [], status: '' };
 const SF_LANES = ['talking', 'draft', 'ready', 'working', 'ended', 'done'];
 const SF_LANE = { talking: tl('sf.lane.talking'), draft: tl('sf.lane.draft'), ready: tl('sf.lane.ready'), working: tl('sf.lane.working'), ended: tl('sf.lane.ended'), done: tl('sf.lane.done') };
 const SF_SAID = { save: tl('sf.said.save'), ready: tl('sf.said.ready'), start: tl('sf.said.start'), done: tl('sf.said.done'), revise: tl('sf.said.revise'), draft: tl('sf.said.draft'), status: tl('sf.said.status') };
@@ -170,6 +170,20 @@ function sfRenderFetchErrors(k) {
   setText(note, connector ? tl('sf.intake.modeNote', { note: tl('srv.slack.modeNote') }) : '');
   note.hidden = !connector;
 }
+/* The left column's two tabs (the requester, 11-02): one at a time, the column's height its own; the last one kept. */
+const SF_TAB_KEY = 'jui-viz.sf.tab';
+function sfTab(k, focus = false) {
+  const tab = k === 'flow' ? 'flow' : 'talk';
+  for (const b of document.querySelectorAll('#sf .sf-tab')) {
+    const on = b.dataset.sfTab === tab;
+    b.setAttribute('aria-selected', String(on));
+    b.tabIndex = on ? 0 : -1;
+    $(b.getAttribute('aria-controls')).hidden = !on;
+    if (on && focus) b.focus();
+  }
+  try { localStorage.setItem(SF_TAB_KEY, tab); } catch (err) { /* storage refused: the tab is not kept */ }
+}
+function sfTabSaved() { try { return localStorage.getItem(SF_TAB_KEY) === 'flow' ? 'flow' : 'talk'; } catch (err) { return 'talk'; } }
 async function sfFetch() {
   $('sf-fetch').disabled = true;
   const got = await sfPost('/api/slack/fetch', {});
@@ -277,7 +291,7 @@ function sfDraft(id) {
 function sfRenderBoard(s) {
   const wb = $('sf-wb');
   if (!wb.firstChild) {
-    const lanesHTML = SF_LANES.map((k) => `<section class="sf-lane" data-sf-lane="${esc(k)}"><h4>${esc(SF_LANE[k])} <span class="sf-lane-n"></span></h4><div class="sf-lane-notes"></div></section>`).join('');
+    const lanesHTML = SF_LANES.map((k) => `<section class="sf-lane" data-sf-lane="${esc(k)}"><h4><button type="button" class="sf-lane-btn" data-sf-lane-open="${esc(k)}" title="${esc(tl('sf.lane.open', { lane: SF_LANE[k] }))}">${esc(SF_LANE[k])} <span class="sf-lane-n"></span></button></h4><div class="sf-lane-notes"></div></section>`).join('');
     wb.innerHTML = lanesHTML;
   }
   const tasks = sfTasks(s), ids = new Set(tasks.map((t) => t.id));
@@ -313,6 +327,7 @@ function sfRenderBoard(s) {
       if (said) setText(n.el.querySelector('.sf-note-said'), said);
       for (const x of n.el.querySelectorAll('details')) if (open.includes(`${x.className}:open`)) x.open = true;
       if (again) { const to = n.el.querySelector(again) || n.el.querySelector('[data-sf-prompt-open]'); if (to) to.focus({ preventScroll: true }); }
+      else if (hand === n.el) n.el.focus({ preventScroll: true });
       n.sig = sig;
     }
   });
@@ -321,7 +336,7 @@ function sfRenderBoard(s) {
     setText(lane.querySelector('.sf-lane-n'), String(lane.querySelectorAll('.sf-note').length));
   }
   setText($('sf-board-empty'), tasks.length ? '' : tl('sf.board.empty'));
-  if (SF.full) sfFit();
+  sfApplyView();
 }
 async function sfPost(route, body) {
   if (typeof NET === 'undefined') return { ok: false, status: 0, error: tl('live.offline') };
@@ -356,18 +371,50 @@ async function sfNoteOp(note, op) {
 
 /* ---------- the whole board at once (requester 11-02: the whole board seen at once): the board takes the room, and
    shrinks until every lane and note is in view; Esc or the button again goes back. ---------- */
-function sfFull(on) {
-  SF.full = !!on;
-  sfEl.dataset.board = SF.full ? 'full' : '';
+/* The board's views (the requester, 11-02): the room's (beside the 3D); the whole board (ボード全体: the six lanes over the
+   room, nothing shrunk, sized to read); one lane (its heading pressed, or a note: its notes side by side), a note
+   selected in it (← → the next lane's, ↑ ↓ the lane's next note; Esc a step back). */
+function sfView(full, lane = null, sel = null) {
+  SF.full = !!full;
+  SF.lane = SF.full && lane ? lane : null;
+  SF.sel = SF.lane && sel ? sel : null;
+  sfEl.dataset.board = !SF.full ? '' : SF.lane ? 'lane' : 'full';
   setText($('sf-full'), SF.full ? tl('sf.full.back') : tl('sf.full'));
-  sfFit();
+  sfApplyView();
+  const note = SF.sel && SF.notes.get(SF.sel);
+  if (note) { note.el.focus({ preventScroll: true }); note.el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
 }
-function sfFit() {
+function sfFull(on) { sfView(on); }
+function sfApplyView() {
   const wb = $('sf-wb');
-  wb.style.zoom = '';
-  if (!SF.full) return;
-  const k = Math.min(1, wb.clientWidth / wb.scrollWidth, wb.clientHeight / wb.scrollHeight);
-  if (k < 1) wb.style.zoom = String(Math.max(0.3, Math.floor(k * 100) / 100));
+  const picked = SF.sel && SF.notes.get(SF.sel);
+  if (SF.sel && !picked) SF.sel = null;                                   // the note went (purged)
+  if (picked && picked.el.dataset.status !== SF.lane) SF.lane = picked.el.dataset.status;   // its state changed: the lane follows
+  for (const lane of wb.querySelectorAll('.sf-lane')) {
+    lane.hidden = !!SF.lane && lane.dataset.sfLane !== SF.lane;
+  }
+  for (const [id, n] of SF.notes) {
+    const on = id === SF.sel;
+    n.el.classList.toggle('is-selected', on);
+    n.el.tabIndex = -1;   // focused from the keys, not a Tab stop
+    if (on) n.el.setAttribute('aria-current', 'true'); else n.el.removeAttribute('aria-current');
+  }
+}
+/* A lane's notes, top to bottom. */
+function sfNotesOf(k) { return [...$('sf-wb').querySelectorAll('[data-sf-lane="' + CSS.escape(k) + '"] .sf-note')]; }   // a selector, not HTML
+/* ← → ↑ ↓ while a note is selected. */
+function sfStep(key) {
+  if (key === 'ArrowLeft' || key === 'ArrowRight') {
+    const dir = key === 'ArrowRight' ? 1 : -1;
+    for (let i = SF_LANES.indexOf(SF.lane) + dir; i >= 0 && i < SF_LANES.length; i += dir) {
+      const first = sfNotesOf(SF_LANES[i])[0];
+      if (first) { sfView(true, SF_LANES[i], first.dataset.sfTask); return; }   // an empty lane is passed over
+    }
+    return;
+  }
+  const list = sfNotesOf(SF.lane), k = list.findIndex((n) => n.dataset.sfTask === SF.sel);
+  const next = list[Math.max(0, Math.min(list.length - 1, k + (key === 'ArrowDown' ? 1 : -1)))];
+  if (next) sfView(true, SF.lane, next.dataset.sfTask);
 }
 
 /* ---------- a task's messages as a chat (requester 11-02: like the robot's history, beside the board; who, when and
@@ -754,9 +801,16 @@ $('sf-edit-text').addEventListener('keydown', (e) => { if (e.key === 'Enter' && 
 $('sf-revise-close').addEventListener('click', () => sfReviseClose());
 $('sf-revise-send').addEventListener('click', sfReviseSend);
 $('sf-revise-text').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sfReviseSend(); } });
-window.addEventListener('resize', () => { if (SF.full) sfFit(); });
 $('sf-send').addEventListener('click', sfSend);
 $('sf-fetch').addEventListener('click', sfFetch);
+document.querySelector('#sf .sf-tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-sf-tab]'); if (b) sfTab(b.dataset.sfTab); });
+document.querySelector('#sf .sf-tabs').addEventListener('keydown', (e) => {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') return;
+  e.preventDefault(); e.stopPropagation();
+  const now = document.querySelector('#sf .sf-tab[aria-selected="true"]').dataset.sfTab;
+  sfTab(e.key === 'Home' ? 'talk' : e.key === 'End' ? 'flow' : now === 'talk' ? 'flow' : 'talk', true);
+});
+sfTab(sfTabSaved());
 $('sf-say').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sfSend(); } });
 $('sf-prompts-btn').addEventListener('click', () => ($('sf-prompts').hidden ? sfPromptsOpen() : sfPromptsClose()));
 $('sf-p-close').addEventListener('click', () => sfPromptsClose());
@@ -764,9 +818,19 @@ $('sf-p-save').addEventListener('click', sfPromptsSave);
 $('sf-p-add').addEventListener('click', () => { $('sf-p-projects').insertAdjacentHTML('beforeend', sfProjectRowHTML('', '')); $('sf-p-projects').lastElementChild.querySelector('input').focus(); });
 $('sf-p-projects').addEventListener('click', (e) => { const del = e.target.closest('[data-sf-proj-del]'); if (del) del.closest('.sf-proj').remove(); });
 sfEl.addEventListener('keydown', (e) => {
+  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+    // a field, a select, the tabs and the popups keep their arrows; the floors' arrows never run under the room (aria-modal)
+    const t = e.target;
+    if (!SF.sel || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.isComposing) return;
+    if (t && (t.isContentEditable || (t.closest && t.closest('input, textarea, select, [role="tablist"], .sf-modal, .sf-dialog, .sf-chat')))) return;
+    e.preventDefault(); e.stopPropagation();
+    sfStep(e.key);
+    return;
+  }
   if (e.key !== 'Escape') return;
   e.preventDefault(); e.stopPropagation();
-  if (!$('sf-prompts').hidden) sfPromptsClose(); else if (sfEditClose() || sfReviseClose() || sfChatClose()) return; else if (SF.full) sfFull(false); else sfClose();
+  if (!$('sf-prompts').hidden) sfPromptsClose(); else if (sfEditClose() || sfReviseClose() || sfChatClose()) return;
+  else if (SF.sel) sfView(true, SF.lane); else if (SF.lane) sfView(true); else if (SF.full) sfFull(false); else sfClose();
 });
 sfEl.addEventListener('click', async (e) => {
   const copy = e.target.closest('[data-sf-copy]');
@@ -779,6 +843,8 @@ sfEl.addEventListener('click', async (e) => {
   if (chat) { sfChatOpen(chat.closest('.sf-note').dataset.sfTask, chat); return; }
   const rev = e.target.closest('[data-sf-revise-open]');
   if (rev) { sfReviseOpen(rev.closest('.sf-note'), rev); return; }
+  const laneBtn = e.target.closest('[data-sf-lane-open]');
+  if (laneBtn) { const k = laneBtn.dataset.sfLaneOpen; if (SF.lane === k) sfView(true); else sfView(true, k); return; }
   const reload = e.target.closest('[data-sf-reload]');
   if (reload) {
     const n = reload.closest('.sf-note'); delete SF.drafts[n.dataset.sfTask];
@@ -791,7 +857,10 @@ sfEl.addEventListener('click', async (e) => {
   if (e.target === $('sf-revise')) { sfReviseClose(); return; }   // a press outside the box
   if (e.target === $('sf-edit')) { sfEditClose(); return; }
   const op = e.target.closest('[data-sf-op]');
-  if (op) sfNoteOp(op.closest('.sf-note'), op.dataset.sfOp);
+  if (op) { sfNoteOp(op.closest('.sf-note'), op.dataset.sfOp); return; }
+  // a press on a note's own surface (not one of its controls): its lane over the room, the note selected
+  const card = e.target.closest('.sf-note');
+  if (card && !e.target.closest('button, select, input, textarea, a, label, summary, code')) sfView(true, card.dataset.status, card.dataset.sfTask);
 });
 /* What is typed on a note is kept (a push redraws only a note no hand is on). */
 $('sf-wb').addEventListener('input', (e) => {

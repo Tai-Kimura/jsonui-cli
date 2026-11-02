@@ -2543,6 +2543,8 @@
   "sf.intake.manual": "自動の取得なし（手でだけ）",
   "sf.intake.failed": "処理できなかったメッセージ {n} 件",
   "sf.intake.sep": " · ",
+  "sf.lane.open": "{lane} の列だけを大きく出す（もう一度押すと 6 列に戻る）",
+  "page.sf.tabs": "ロボットへの指示と仕分けの様子",
   "sf.note.stale": "新しい中身があります（押して読み直す。打った分は消えます）",
   "sf.note.prompt.edit": "{id} のプロンプトを大きく開いて直す",
   "sf.note.prompt.read": "{id} のプロンプトを大きく開く",

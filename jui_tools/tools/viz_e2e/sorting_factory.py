@@ -249,7 +249,7 @@ async def run_sorting_factory(pw, out, failures):
         check(st["lanes"] == {"talking": ["T-0009"], "draft": ["T-0001", "T-0002", "T-0010"], "ready": ["T-0003"], "working": ["T-0004"], "ended": ["T-0005"], "done": ["T-0006"]},
               f"each note in its lane: {st['lanes']}")
         check(sorted((b["project"], b["n"]) for b in st["bins"]) == [("booking", 3), ("shop", 2)], f"a bin per project: {st['bins']}")
-        texts = res["texts"] = await page.evaluate("""() => ({ lanes: [...document.querySelectorAll('#sf-wb .sf-lane h4')].map((h) => h.firstChild.textContent.trim()),
+        texts = res["texts"] = await page.evaluate("""() => ({ lanes: [...document.querySelectorAll('#sf-wb .sf-lane-btn')].map((h) => h.firstChild.textContent.trim()),
           flow: document.getElementById('sf-flow-body').textContent, robot: document.getElementById('sf-robot').textContent,
           seen: ['sf-canvas', 'sf-wb', 'sf-say'].map((id) => { const r = document.getElementById(id).getBoundingClientRect(); const e = document.elementFromPoint(r.left + r.width / 2, r.top + Math.min(r.height / 2, 30));
             return !!e && (e.id === id || !!e.closest('#' + id)); }) })""")
@@ -343,15 +343,66 @@ async def run_sorting_factory(pw, out, failures):
         await wait(page, "() => !document.getElementById('sf-chat').hidden", label="the chat again")
         await page.click("#sf-chat-close")
         check(await page.evaluate("() => document.getElementById('sf-chat').hidden"), "x closes the chat")
-        # the whole board at once: every note in view, Esc back to the room (not out of it)
+        # the whole board (the requester, 11-02): the six lanes over the room, nothing shrunk, sized to read; what is below
+        # scrolls in the board
+        READ = """() => { const px = (q) => [...document.querySelectorAll('#sf-wb .sf-lane:not([hidden]) ' + q)].filter((e) => e.getClientRects().length).map((e) => parseFloat(getComputedStyle(e).fontSize));
+          const min = (a) => (a.length ? Math.min(...a) : 0);
+          return { zoom: document.getElementById('sf-wb').style.zoom || getComputedStyle(document.getElementById('sf-wb')).zoom, title: min(px('.sf-note-title')), prompt: min(px('.sf-prompt-text')),
+            select: min(px('.sf-note select')), button: min(px('.sf-note .wb-btn')), label: min(px('.sf-label')), lane: min(px('h4')),
+            lanes: [...document.querySelectorAll('#sf-wb .sf-lane')].filter((l) => !l.hidden).map((l) => l.dataset.sfLane), board: document.getElementById('sf').dataset.board }; }"""
         await page.click("#sf-full")
         await page.wait_for_timeout(400)
         full = res["full"] = await page.evaluate(INSIDE)
         left = await page.evaluate("() => getComputedStyle(document.querySelector('.sf-left')).display")
-        check(not full["sideways"] and not full["below"] and left == "none" and await page.evaluate(f"() => document.getElementById('sf-full').textContent === {json.dumps(T('sf.full.back'))}"),
-              f"the whole board: every note in view, the left side away: {full} {left}")
+        check(not full["sideways"] and (not full["below"] or full["wbScrolls"]) and left == "none" and await page.evaluate(f"() => document.getElementById('sf-full').textContent === {json.dumps(T('sf.full.back'))}"),
+              f"the whole board: the six lanes side by side, what is below scrolls in it, the left side away: {full} {left}")
+        rd = res["full-read"] = await page.evaluate(READ)
+        check(rd["zoom"] in ("", "1") and rd["title"] >= 16 and rd["prompt"] >= 14 and rd["select"] >= 14 and rd["button"] >= 14 and rd["label"] >= 13 and rd["lane"] >= 20
+              and len(rd["lanes"]) == 6, f"the whole board sized to read, not shrunk: {rd}")
         await shot(page, "slack-room-full", out, failures)
-        await page.keyboard.press("Escape")
+        # a lane's heading: that lane alone, its notes side by side
+        await page.click('#sf-wb [data-sf-lane-open="draft"]')
+        await page.wait_for_timeout(300)
+        ln = res["lane"] = await page.evaluate("""() => { const tops = [...document.querySelectorAll('#sf-wb [data-sf-lane="draft"] .sf-note')].map((n) => Math.round(n.getBoundingClientRect().top));
+          return { board: document.getElementById('sf').dataset.board, lanes: [...document.querySelectorAll('#sf-wb .sf-lane')].filter((l) => !l.hidden).map((l) => l.dataset.sfLane), tops }; }""")
+        check(ln["board"] == "lane" and ln["lanes"] == ["draft"] and len(ln["tops"]) >= 3 and abs(ln["tops"][0] - ln["tops"][1]) <= 12,
+              f"the draft lane alone, its notes side by side (a note's tilt moves its top a little): {ln}")
+        check((await page.evaluate(READ))["prompt"] >= 14, "the lane sized to read")
+        await shot(page, "slack-room-lane", out, failures)
+        await page.click('#sf-wb [data-sf-lane-open="draft"]')                          # pressed again: the six lanes
+        check(await page.evaluate("() => document.getElementById('sf').dataset.board") == "full", "the heading pressed again: back to the six lanes")
+        # a note pressed (its own surface): its lane alone, the note selected; ↑ ↓ in the lane, ← → to the next lane's
+        SEL = "() => ({ sel: [...document.querySelectorAll('#sf-wb .sf-note.is-selected')].map((n) => n.dataset.sfTask), board: document.getElementById('sf').dataset.board, lanes: [...document.querySelectorAll('#sf-wb .sf-lane')].filter((l) => !l.hidden).map((l) => l.dataset.sfLane), focus: document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.sfTask || document.activeElement.id : null })"
+        await page.click('#sf-wb [data-sf-task="T-0001"] .sf-note-title')
+        await page.wait_for_timeout(300)
+        picked = res["picked"] = await page.evaluate(SEL)
+        check(picked == {"sel": ["T-0001"], "board": "lane", "lanes": ["draft"], "focus": "T-0001"}, f"a note pressed: its lane alone, the note selected: {picked}")
+        await shot(page, "slack-room-selected", out, failures)
+        walk = []
+        for key in ("ArrowDown", "ArrowDown", "ArrowUp", "ArrowRight", "ArrowRight", "ArrowLeft"):
+            await page.keyboard.press(key)
+            await page.wait_for_timeout(120)
+            st_now = await page.evaluate(SEL)
+            walk.append((key, st_now["sel"], st_now["lanes"]))
+        res["walk"] = walk
+        order = [n for n in ("T-0001", "T-0002", "T-0010")]
+        check([w[1] for w in walk] == [[order[1]], [order[2]], [order[1]], ["T-0003"], ["T-0004"], ["T-0003"]] and [w[2] for w in walk][3:] == [["ready"], ["working"], ["ready"]],
+              f"↓ ↓ ↑ in the lane, → → ← to the next lanes' first notes: {walk}")
+        # a select keeps its arrows (they move its value, not the selection)
+        kept = await page.evaluate("""() => { const s = document.querySelector('#sf-wb [data-sf-task="T-0003"] [data-sf-status]'); s.focus();
+          s.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+          return [...document.querySelectorAll('#sf-wb .sf-note.is-selected')].map((n) => n.dataset.sfTask); }""")
+        check(kept == ["T-0003"], f"an arrow on a select is the select's: {kept}")
+        await page.evaluate("() => document.querySelector('#sf-wb [data-sf-task=\"T-0003\"]').focus()")
+        # Esc a step back: the selection, the lane, the whole board, then the room's own board
+        steps = []
+        for _ in range(3):
+            await page.keyboard.press("Escape")
+            await page.wait_for_timeout(150)
+            st_now = await page.evaluate(SEL)
+            steps.append((st_now["board"], st_now["sel"]))
+        res["esc-steps"] = steps
+        check(steps == [("lane", []), ("full", []), ("", [])], f"Esc a step back each time: {steps}")
         back = await page.evaluate("() => ({ open: window.__dbg.sfState().open, full: document.getElementById('sf').dataset.board, zoom: document.getElementById('sf-wb').style.zoom })")
         check(back == {"open": True, "full": "", "zoom": ""}, f"Esc leaves the whole board, the room stays: {back}")
         await page.wait_for_timeout(500)
@@ -396,6 +447,30 @@ async def run_sorting_factory(pw, out, failures):
         await page.evaluate("() => document.getElementById('sf-intake-err').scrollIntoView({ block: 'center' })")
         await page.wait_for_timeout(400)
         await shot(page, "slack-room-fetch-errors", out, failures)
+        # the left column's two tabs (the requester, 11-02): one at a time with the column's height; the fetch bar fixed above
+        TABS = """() => { const L = document.querySelector('.sf-left').getBoundingClientRect(), f = document.getElementById('sf-fetch').getBoundingClientRect();
+          const pane = (id) => { const e = document.getElementById(id), r = e.getBoundingClientRect(); return { shown: !e.hidden && r.height > 0, bottom: Math.round(r.bottom), h: Math.round(r.height) }; };
+          const at = document.elementFromPoint(f.left + f.width / 2, f.top + f.height / 2);
+          let kept = null; try { kept = localStorage.getItem('jui-viz.sf.tab'); } catch (err) { kept = 'refused'; }
+          return { talk: pane('sf-pane-talk'), flow: pane('sf-pane-flow'), leftBottom: Math.round(L.bottom), fetchTop: Math.round(f.top), fetchSeen: !!at && (at.id === 'sf-fetch' || !!at.closest('#sf-fetch')),
+            selected: [...document.querySelectorAll('#sf .sf-tab')].filter((b) => b.getAttribute('aria-selected') === 'true').map((b) => b.dataset.sfTab), kept }; }"""
+        tb0 = res["tabs-talk"] = await page.evaluate(TABS)
+        check(tb0["selected"] == ["talk"] and tb0["talk"]["shown"] and not tb0["flow"]["shown"] and abs(tb0["talk"]["bottom"] - tb0["leftBottom"]) <= 2 and tb0["fetchSeen"],
+              f"the talk tab first, down to the column's foot, the fetch bar in view: {tb0}")
+        await page.evaluate("() => document.getElementById('sf-intake-err').scrollIntoView({ block: 'nearest' })")
+        await shot(page, "slack-room-tab-talk", out, failures)
+        await page.click("#sf-flow-h")
+        await page.wait_for_timeout(200)
+        tb1 = res["tabs-flow"] = await page.evaluate(TABS)
+        check(tb1["selected"] == ["flow"] and tb1["flow"]["shown"] and not tb1["talk"]["shown"] and abs(tb1["flow"]["bottom"] - tb1["leftBottom"]) <= 2
+              and tb1["fetchSeen"] and tb1["fetchTop"] == tb0["fetchTop"] and tb1["kept"] == "flow", f"the flow tab: the column's height, the fetch bar where it was, kept: {tb1}")
+        await page.evaluate("() => { const p = document.getElementById('sf-pane-flow'); p.scrollTop = p.scrollHeight; }")
+        tb2 = await page.evaluate(TABS)
+        check(tb2["fetchSeen"] and tb2["fetchTop"] == tb0["fetchTop"], f"the fetch bar does not scroll away with the pane: {tb2}")
+        await page.evaluate("() => { document.getElementById('sf-pane-flow').scrollTop = 0; }")
+        await shot(page, "slack-room-tab-flow", out, failures)
+        await page.keyboard.press("ArrowLeft")                                          # the tabs' own arrows (focus on the tab)
+        check((await page.evaluate(TABS))["selected"] == ["talk"], "← on the tabs goes to the other tab")
         # the connector's warning (2026-11-02-viz-slack-connector-mode-note-not-shown-in-room): shown while mode is connector
         cfg_now = json.loads((state / "slack.json").read_text())
         def set_mode(mode):

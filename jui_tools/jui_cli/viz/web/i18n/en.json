@@ -2596,6 +2596,8 @@
   "sf.intake.manual": "no automatic fetch (by hand only)",
   "sf.intake.failed": "{n} message(s) not processed",
   "sf.intake.sep": " · ",
+  "sf.lane.open": "Show the {lane} lane alone, large (press again for the six lanes)",
+  "page.sf.tabs": "The robot's instructions and the sorting",
   "sf.note.stale": "There is newer content (press to reload; what you typed is dropped)",
   "sf.note.prompt.edit": "Open {id}'s prompt large to edit it",
   "sf.note.prompt.read": "Open {id}'s prompt large",

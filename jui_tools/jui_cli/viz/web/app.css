@@ -2185,3 +2185,58 @@ body.sd-on { overflow: hidden; }
 .sf-edit-box textarea { min-height: min(60vh, 34em); font-size: 14px; }
 .sf-edit-box textarea[readonly] { background: var(--panel); }
 .sf-note .wb-btn { white-space: normal; }
+
+/* ---- the sorting factory's left column: the fetch bar fixed, two tabs (the requester, 11-02) ---- */
+.sf-fetchbar { flex: none; padding: 8px 12px 6px; border-top: 1px solid var(--line); background: var(--panel); font: 13px/1.5 var(--font-body); }
+.sf-fetchbar .sf-board-head { flex-wrap: wrap; gap: 4px 10px; margin: 0; }
+.sf-fetchbar #sf-intake { margin: 0; }
+.sf-fetchbar .sf-intake-err, .sf-fetchbar .sf-mode-note { margin: 4px 0 0; }
+.sf-tabs { flex: none; display: flex; gap: 2px; padding: 0 8px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.sf-tab { flex: 1 1 0; padding: 8px 10px 7px; border: 0; border-bottom: 3px solid transparent; background: none; color: var(--ink-soft, var(--ink)); font: 700 14px/1.3 var(--font-body); cursor: pointer; }
+.sf-tab[aria-selected="true"] { border-bottom-color: var(--accent, #1f4f8f); color: var(--ink); }
+.sf-tab:hover { background: rgba(127, 127, 127, 0.08); }
+.sf-pane { flex: 1 1 54%; min-height: 0; overflow: auto; border-top: 0; }
+.sf-pane[hidden] { display: none; }
+#sf-pane-talk { display: flex; flex-direction: column; gap: 6px; }
+#sf-pane-talk[hidden] { display: none; }
+#sf-pane-talk #sf-say { flex: 1 1 auto; min-height: 5em; resize: none; }
+#sf-pane-talk .sf-acts { margin-top: 0; }
+.sf-dock { flex: none; }
+@media (max-width: 900px) {
+  .sf-dock { position: sticky; top: 0; z-index: 3; }
+  .sf-pane { flex: none; overflow: visible; }
+  #sf-pane-talk #sf-say { flex: none; min-height: 6em; }
+}
+
+/* ---- the whole board and one lane: nothing shrunk, sized to read (the requester, 11-02) ---- */
+.sf-lane h4 { margin: 2px 0 10px; }
+.sf-lane-btn { all: unset; box-sizing: border-box; display: block; width: 100%; cursor: pointer; color: inherit; font: inherit; letter-spacing: inherit; border-radius: 4px; }
+.sf-lane-btn:hover { background: rgba(31, 79, 143, 0.08); }
+.sf-lane-btn:focus-visible { outline: 2px solid var(--sf-marker); outline-offset: 2px; }
+.sf-lane[hidden] { display: none; }
+.sf-note { cursor: pointer; }
+.sf-note.is-selected { outline: 3px solid #1f4f8f; outline-offset: 3px; transform: none; box-shadow: 0 10px 26px rgba(16, 32, 64, 0.35); }
+.sf-note:focus { outline: none; }
+.sf-note.is-selected:focus { outline: 3px solid #1f4f8f; }
+.sfm[data-board="lane"] .sf-main { grid-template-columns: minmax(0, 1fr); }
+.sfm[data-board="lane"] .sf-left { display: none; }
+.sfm[data-board="full"] .sf-wb, .sfm[data-board="lane"] .sf-wb { overflow: auto; zoom: 1; }
+.sfm[data-board="full"] .sf-wb { grid-template-columns: repeat(6, minmax(220px, 1fr)); }
+.sfm[data-board="lane"] .sf-wb { grid-template-columns: minmax(0, 1fr); }
+.sfm[data-board="lane"] .sf-lane-notes { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 22px 20px; align-items: start; padding: 6px 4px 16px; }
+.sfm[data-board="full"] .sf-lane h4, .sfm[data-board="lane"] .sf-lane h4 { font-size: 22px; }
+.sfm[data-board="full"] .sf-lane-n, .sfm[data-board="lane"] .sf-lane-n { font-size: 15px; }
+.sfm[data-board="full"] .sf-note, .sfm[data-board="lane"] .sf-note { padding: 20px 14px 12px; font-size: 14px; }
+.sfm[data-board="full"] .sf-note-title, .sfm[data-board="lane"] .sf-note-title { font-size: 16px; }
+.sfm[data-board="full"] .sf-label, .sfm[data-board="lane"] .sf-label { font-size: 13px; }
+.sfm[data-board="full"] .sf-note .sf-prompt-view, .sfm[data-board="lane"] .sf-note .sf-prompt-view { font-size: 14px; }
+.sfm[data-board="full"] .sf-note select, .sfm[data-board="lane"] .sf-note select,
+.sfm[data-board="full"] .sf-note .wb-btn, .sfm[data-board="lane"] .sf-note .wb-btn { font-size: 14px; }
+.sfm[data-board="full"] .sf-note .wb-btn, .sfm[data-board="lane"] .sf-note .wb-btn { padding: 6px 12px; }
+.sfm[data-board="full"] .sf-note .sf-id, .sfm[data-board="lane"] .sf-note .sf-id,
+.sfm[data-board="full"] .sf-note .sf-to, .sfm[data-board="lane"] .sf-note .sf-to,
+.sfm[data-board="full"] .sf-note .sf-copy code, .sfm[data-board="lane"] .sf-note .sf-copy code { font-size: 13px; }
+.sfm[data-board="full"] .sf-note-times, .sfm[data-board="lane"] .sf-note-times,
+.sfm[data-board="full"] .sf-note .sf-mark, .sfm[data-board="lane"] .sf-note .sf-mark,
+.sfm[data-board="full"] .sf-note .sf-why, .sfm[data-board="lane"] .sf-note .sf-why,
+.sfm[data-board="full"] .sf-src-open, .sfm[data-board="lane"] .sf-src-open { font-size: 13px; }
