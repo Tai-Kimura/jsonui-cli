@@ -49,7 +49,8 @@ def env(eid: str, event: dict, kind: str = "events_api") -> dict:
 
 class FakeSocketSlack:
     """scripts: one list per connection, sent after hello. A dict is sent (and, with an envelope_id, its ack is
-    awaited before the next); "drop" closes the socket without a word; the end of a script holds it open."""
+    awaited before the next); a callable is waited for (until it returns true) before the next item; "drop" closes
+    the socket without a word; the end of a script holds it open."""
 
     def __init__(self, scripts, open_answers=()):
         self.scripts, self.open_answers = list(scripts), list(open_answers)
@@ -91,6 +92,9 @@ class FakeSocketSlack:
             if item == "drop":
                 await ws.close()
                 return ws
+            if callable(item):
+                assert await until(item), "the script's wait"
+                continue
             await ws.send_json(item)
             self.order.append(f"sent {item.get('envelope_id') or item.get('type')}")
             if item.get("envelope_id"):
@@ -342,8 +346,14 @@ def test_a_message_sent_twice_and_fetched_again_is_taken_once_and_the_fetch_move
 def test_a_pushed_reply_follows_its_thread(tmp_path):
     cfg = cfg_of(tmp_path)
     root = C.orchestration_dir(cfg)
-    parent, reply = "1730000001.000100", "1730000009.000100"
-    server = FakeSocketSlack([[env("e1", msg(parent)), env("e2", msg(reply, thread_ts=parent, parent_user_id="U1"))]])
+    # Recent ts: every pass forgets the threads older than the thread watch (14 days by the real clock), so a
+    # thread started in 2024 was forgotten before its reply's own pass and the reply went to the router again.
+    now = int(time.time())
+    parent, reply = f"{now - 60}.000100", f"{now - 30}.000100"
+    placed_parent = root / f"projects/shop/{parent}-acme-C0123.json"
+    # the reply comes only once the parent is placed: its own pass, the order that went red
+    server = FakeSocketSlack([[env("e1", msg(parent)), placed_parent.exists,
+                               env("e2", msg(reply, thread_ts=parent, parent_user_id="U1"))]])
     route = FakeRoute([{"choice": "shop", "confidence": 0.9}])
     ok, *_ = run_service(cfg, server, route, lambda s: (root / f"projects/shop/{reply}-acme-C0123.json").exists())
     assert ok and len(route.seen) == 1                       # the reply went without the router
