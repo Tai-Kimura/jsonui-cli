@@ -15,7 +15,8 @@
    /api/slack-room/task: the server sends the prompt and marks it working), 完了 closes it. A note being edited is not
    redrawn under the hand: what is typed stays until it is saved or sent. ---------- */
 const sfEl = $('sf');
-const SF = { open: false, opener: null, view: null, full: false, lane: null, sel: null, edit: null, revise: null, drafts: {}, notes: new Map(), seen: null, parcels: [], status: '' };
+const SF = { open: false, opener: null, view: null, full: false, lane: null, sel: null, edit: null, revise: null, drafts: {}, notes: new Map(), seen: null, parcels: [], status: '',
+  job: null, stage: null, pinQueue: [], taskSeen: null, revising: null, fake: null };
 const SF_LANES = ['talking', 'draft', 'ready', 'working', 'ended', 'done'];
 const SF_LANE = { talking: tl('sf.lane.talking'), draft: tl('sf.lane.draft'), ready: tl('sf.lane.ready'), working: tl('sf.lane.working'), ended: tl('sf.lane.ended'), done: tl('sf.lane.done') };
 const SF_SAID = { save: tl('sf.said.save'), ready: tl('sf.said.ready'), start: tl('sf.said.start'), done: tl('sf.said.done'), revise: tl('sf.said.revise'), draft: tl('sf.said.draft'), status: tl('sf.said.status') };
@@ -52,6 +53,7 @@ function sfOpen(opener) {
   if (!s) return;
   SF.open = true; SF.opener = opener || null;
   SF.seen = null;   // the first render takes what is there as already sorted: only what comes later rides the belt
+  SF.taskSeen = null;   // and the tasks there as pinned already: only a new one is walked to the board
   showOverlay(sfEl);
   $('btn-slack').setAttribute('aria-expanded', 'true');
   sfBuild();
@@ -507,6 +509,7 @@ async function sfReviseSend() {
   if (!got.ok) { setText($('sf-revise-said'), tl('sf.failed', { error: got.error || String(got.status) })); return; }
   $('sf-revise-text').value = '';
   sfReviseClose();
+  SF.revising = { id, at: Date.now() };   // the robot's bubble says it is revising this one while it works (sfStage)
   const note = $('sf-wb').querySelector(`[data-sf-task="${CSS.escape(id)}"] .sf-note-said`);
   if (note) setText(note, SF_SAID.revise);
 }
@@ -642,7 +645,22 @@ function sfBuild() {
     const roller = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.3, 10), mat('#8b939e')); roller.rotation.x = Math.PI / 2; roller.position.set(x, SF_BELT.y - 0.2, 0); scene.add(roller); rollers.push(roller);
   }
   const table = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.82, 1.6), mat(dark ? '#6b5a48' : '#b38b62')); table.position.set(1.4, 0.41, 0); scene.add(table);
-  const view = { renderer, scene, camera, controls, rollers, bins: new Map(), mat, robot: null, robotLabel: '', raf: 0, last: performance.now(), t0: performance.now() };
+  // the beacon on the table's corner (red in an error), the chute's lamp (blue while fetching), the parcel opened on the
+  // table while a message is sorted, the cork board on the back wall the robot pins each new task's memo to
+  const glow = (c) => new THREE.MeshBasicMaterial({ color: c });
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.7, 8), mat('#59606b')); pole.position.set(2.1, 1.17, 0.6); scene.add(pole);
+  const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.26, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), glow('#5a2a2a')); beacon.position.set(2.1, 1.52, 0.6); scene.add(beacon);
+  const chuteLamp = new THREE.Mesh(new THREE.SphereGeometry(0.18, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), glow('#2a3a4a')); chuteLamp.position.set(SF_BELT.from - 0.4, 2.9, 0); scene.add(chuteLamp);
+  const onTable = new THREE.Group(); onTable.position.set(1.4, 0.82 + 0.18, -0.35); scene.add(onTable);
+  onTable.add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.36, 0.42), mat('#c89a5e')));
+  for (const side of [-1, 1]) { const flap = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.02, 0.2), mat('#b4864c')); flap.position.set(0, 0.2, side * 0.3); flap.rotation.x = side * 0.5; onTable.add(flap); }
+  onTable.visible = false;
+  const B = SF_BOARD, board = new THREE.Group(); board.position.set(B.x, B.y, B.z); scene.add(board);
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(B.w + 0.12, B.h + 0.12, 0.05), mat(dark ? '#4a3a2a' : '#7a5a3a')); board.add(frame);
+  const cork = new THREE.Mesh(new THREE.BoxGeometry(B.w, B.h, 0.06), mat(dark ? '#9a7048' : '#c49a6c')); cork.position.z = 0.01; board.add(cork);
+  const view = { renderer, scene, camera, controls, rollers, bins: new Map(), mat, robot: null, robotLabel: '', raf: 0, last: performance.now(), t0: performance.now(),
+    beacon, chuteLamp, onTable, memos: new Map(), memoGeo: new THREE.BoxGeometry(0.36, 0.36, 0.015), at: SF_HOME, goal: SF_HOME, path: null, bubble: null };
+  const bubble = document.createElement('div'); bubble.className = 'sf-bubble'; bubble.hidden = true; $('sf-labels').appendChild(bubble); view.bubble = bubble;
   view.ro = new ResizeObserver(() => sfResize(view)); view.ro.observe(cv.parentElement);
   SF.view = view;
   SF.parcels = [];
@@ -671,6 +689,7 @@ function sfDispose() {
   $('sf-labels').innerHTML = '';
   SF.view = null;
   SF.parcels = [];
+  SF.job = null; SF.pinQueue = []; SF.stage = null;
 }
 /* A bin per project, in the order they came (at most SF_BIN_MAX; more share the last as その他). */
 function sfBinFor(V, project) {
@@ -695,6 +714,26 @@ function sfParcel(V, color) {
   V.scene.add(g);
   return g;
 }
+/* The board's memos follow the tasks not done (the oldest first, as many as fit); one not seen before stays off the
+   board until the robot has walked it there (sfJobTick), at once with no robot or under reduced motion. */
+function sfMemos(V, s) {
+  const B = SF_BOARD, max = B.cols * B.rows, tasks = sfTasks(s).filter((t) => t.status !== 'done').slice(-max), ids = new Set(tasks.map((t) => t.id));
+  for (const [id, m] of V.memos) if (!ids.has(id)) { V.scene.remove(m); m.material.dispose(); V.memos.delete(id); }
+  const first = SF.taskSeen === null;
+  if (first) SF.taskSeen = new Set();
+  tasks.forEach((t, i) => {
+    let m = V.memos.get(t.id);
+    if (!m) {
+      m = new THREE.Mesh(V.memoGeo, V.mat('#fff3a8')); V.scene.add(m); V.memos.set(t.id, m);
+      if (!first && !SF.taskSeen.has(t.id) && V.robot && !reduceMotion) { m.visible = false; SF.pinQueue.push(t.id); }
+    }
+    SF.taskSeen.add(t.id);
+    m.material.color.set(`hsl(${SF_NOTE_HUE[t.status] || 52}, 85%, 78%)`);
+    const col = i % B.cols, row = Math.floor(i / B.cols);
+    m.position.set(B.x - B.w / 2 + 0.3 + col * 0.475, B.y + B.h / 2 - 0.3 - row * 0.45, B.z + 0.05);
+    m.rotation.z = ((i * 37) % 7 - 3) * 0.03;
+  });
+}
 /* The bins' contents follow the counts; a message not seen before rides the belt (the first render only fills the bins). */
 function sfSync(s) {
   const V = SF.view;
@@ -713,6 +752,7 @@ function sfSync(s) {
     }
     setText(bin.tag, tl('sf.bin', { project: bin.project, n: bin.n }));
   }
+  sfMemos(V, s);
   const recent = Array.isArray(a.recent) ? a.recent : [];
   const paths = recent.map((r) => String(r.path || ''));
   if (SF.seen === null) { SF.seen = new Set(paths); return; }
@@ -733,7 +773,7 @@ function sfFrame(V, now) {
   V.controls.update();
   for (const r of V.rollers) r.rotation.y += dt * (reduceMotion ? 0 : 6);
   const s = sfSlice();
-  sfRobotTick(V, s, t, dt);
+  let ahead = 0;   // the parcels before this one on the belt: each stops a parcel's length behind the one before
   for (const p of SF.parcels.slice()) {
     if (p.delay > 0) { p.delay -= dt; continue; }
     p.t += dt;
@@ -741,19 +781,139 @@ function sfFrame(V, now) {
       p.g.position.y = Math.max(SF_BELT.y + 0.18, 2.0 - p.t * p.t * 5);
       if (p.g.position.y <= SF_BELT.y + 0.18) { p.phase = 'belt'; p.t = 0; }
     } else if (p.phase === 'belt') {
-      p.g.position.x += dt * SF_BELT.speed;
-      if (p.g.position.x >= SF_BELT.to + 0.6) { p.phase = 'sort'; p.t = 0; p.from = p.g.position.clone(); }
+      // to the belt's end, where the robot takes it; with no robot it goes on into its bin (the 2.4.0 arc)
+      const end = SF_BELT.to - 0.2 - ahead * 0.6;
+      ahead += 1;
+      p.g.position.x = Math.min(end, p.g.position.x + dt * SF_BELT.speed);
+      if (!V.robot && p.g.position.x >= SF_BELT.to - 0.2) { p.phase = 'sort'; p.t = 0; p.from = p.g.position.clone(); }
     } else if (p.phase === 'sort') {
       const u = Math.min(1, p.t / 0.9), to = p.bin.group.position;
       p.g.position.set(p.from.x + (to.x - p.from.x) * u, p.from.y + Math.sin(u * Math.PI) * 1.6 + (1.1 - p.from.y) * u, p.from.z + (to.z - p.from.z) * u);
       p.g.rotation.y += dt * 4;
-      if (u >= 1) { V.scene.remove(p.g); SF.parcels.splice(SF.parcels.indexOf(p), 1); if (s) sfSync(s); }
+      if (u >= 1) sfParcelIn(V, p, s);
     }
+    // 'held' and 'into': the robot's job moves it (sfJobTick)
   }
+  sfRobotTick(V, s, t, dt);
+  sfFixturesTick(V, t);
   sfPlaceTags(V);
+  sfPlaceBubble(V);
   V.renderer.render(V.scene, V.camera);
 }
-/* The one robot: the factory session's own state (robotState, from the agents slice), standing at the table. */
+function sfParcelIn(V, p, s) {
+  V.scene.remove(p.g);
+  SF.parcels.splice(SF.parcels.indexOf(p), 1);
+  if (s) sfSync(s);
+}
+
+/* ---------- what the robot is doing (requester 11-02 (14): 「仕分け中の状況に合わせてロボットの様子を変えて、今何をやって
+   いるか分かるようにしたい」) ----------
+   One stage at a time, the first that holds (sfStage):
+     carry    a message the page saw come rides the belt; the robot takes it at the belt's end and walks it to its
+              project's bin (round the bins, never through them), drops it in, and takes the next
+     pin      a task not seen before: from the desk it walks a memo to the cork board on the back wall and pins it
+     fetch    the intake is fetching (slackRoom.work stage fetch, or the slack slice's running before the work says so):
+              at the sorting table facing the chute, at its panel; the chute's lamp blinks. receive: a Socket Mode
+              message just in (its workspace's lastEventAt within SF_RECV_MS), the same look
+     sort     the intake is filtering (reading the message) or asking the router (a hand to the chin), work's done /
+              total in the bubble; a parcel open on the table before it
+     write    its session at work on a task id (its act's T-0005) made after its last prompt, or not made yet: at the
+              desk, typing. revise: one made before that prompt, or the one 直しを頼む named in the last 10 minutes
+     busy     its session at work on anything else: at the desk in its own pose, the state's name
+     error    the last fetch's errors, a Socket Mode connection's error, a slack.json that cannot be read: standing at
+              the table, its lamp and the beacon on the table's corner red and blinking
+     idle     at the table, 待機中
+   Between places it walks (the stroll); the bubble over its head says the stage in a few words, in the spirits'
+   bubble's shape (app.css .sf-bubble, as .spirit-bubble), and the same words are in #sf-doing for a screen reader. */
+const SF_HOME = { x: 1.4, z: -1.25, yaw: 0, route: [] };
+const SF_SPOT = {
+  home: SF_HOME,
+  pick: { x: 0.25, z: -1.15, yaw: -0.25, route: [] },            // beside the belt's end
+  desk: { x: -0.9, z: -2.7, yaw: 0, route: [] },                 // the writing desk (the typing pose brings it)
+  board: { x: -2.4, z: -3.75, yaw: Math.PI, route: [] },         // before the cork board on the back wall
+};
+const SF_BOARD = { x: -2.4, y: 1.95, z: -4.47, cols: 5, rows: 3, w: 2.5, h: 1.5 };
+const SF_WALK = 2.4, SF_RECV_MS = 4000, SF_REVISE_MS = 10 * 60 * 1000;
+const SF_TASK_ID = /\bT-\d{3,}\b/;
+const SF_RED = '#ff3b30', SF_ROBOT_SCALE = 1.3;
+/* Where the robot stands to drop into a bin: behind a front-row bin, or in the lane before a back-row one (reached
+   behind the front row and through the gap after its first bin). */
+function sfBinSpot(bin) {
+  const p = bin.group.position;
+  if (p.z < 0) return { x: p.x, z: p.z - 1.2, yaw: 0, route: [{ x: SF_HOME.x, z: -2.75 }, { x: p.x, z: -2.75 }] };
+  return { x: p.x, z: 0.15, yaw: 0, route: [{ x: SF_HOME.x, z: -2.75 }, { x: 4.4, z: -2.75 }, { x: 4.4, z: 0.15 }] };
+}
+/* From one place to another: back along the first's way to the table, then out along the second's. */
+function sfPath(from, to) {
+  const out = (from && from.route ? from.route.slice().reverse() : []).concat(from && from !== SF_HOME && from.route && from.route.length ? [{ x: SF_HOME.x, z: SF_HOME.z }] : []);
+  return out.concat(to.route, [{ x: to.x, z: to.z }]);
+}
+function sfTurn(root, yaw, k) {
+  let d = yaw - root.rotation.y;
+  d = Math.atan2(Math.sin(d), Math.cos(d));
+  const y = root.rotation.y + d * Math.min(1, k);
+  root.rotation.y = Math.atan2(Math.sin(y), Math.cos(y));   // kept in (-π, π]: turning never winds it up
+}
+/* One step along the path; true at its end. */
+function sfWalk(V, path, dt) {
+  const r = V.robot.root;
+  let step = SF_WALK * dt;
+  while (path.length && step > 0) {
+    const p = path[0], dx = p.x - r.position.x, dz = p.z - r.position.z, d = Math.hypot(dx, dz);
+    if (d > 0.02) sfTurn(r, Math.atan2(dx, dz), dt * 12);
+    if (d <= step) { r.position.x = p.x; r.position.z = p.z; path.shift(); step -= d; } else { r.position.x += (dx / d) * step; r.position.z += (dz / d) * step; step = 0; }
+  }
+  return path.length === 0;
+}
+function sfErrorText(k) {
+  if (!k) return '';
+  if (k.configured === false && k.error) return tl('sf.doing.config');
+  const socks = k.configured && k.mode === 'socket' && k.socket && typeof k.socket === 'object' ? Object.entries(k.socket).filter(([, v]) => v && !v.connected && v.error) : [];
+  if (socks.length) return tl('sf.doing.socket', { ws: socks[0][0] });
+  const errs = k.configured && !k.running && k.lastRun && Array.isArray(k.lastRun.errors) ? k.lastRun.errors.length : 0;
+  return errs ? tl('sf.doing.errors', { n: errs }) : '';
+}
+/* {stage, text, pose}: what the robot is doing now, from the slices (and the fakes the e2e gives: SF.fake). */
+function sfStage(s, now) {
+  const f = SF.fake || {}, job = SF.job;
+  if (job && job.kind === 'carry') return { stage: 'carry', text: tl('sf.doing.carry', { project: job.project }) };
+  if (job && job.kind === 'pin') return { stage: 'pin', text: tl('sf.doing.pin', { id: job.id }) };
+  const k = f.slack !== undefined ? f.slack : sfIntake();
+  const w = f.work !== undefined ? f.work : s && s.work && typeof s.work === 'object' ? s.work : {};
+  const label = s ? sfRobotLabel(s) : '';
+  const st = f.robot !== undefined ? f.robot : robotState[label] || null;
+  if (w && w.stage === 'fetch') return { stage: 'fetch', text: tl('sf.doing.fetch') };
+  if (w && (w.stage === 'filter' || w.stage === 'route')) {
+    const total = Math.max(1, Number(w.total) || 1), n = Math.min(total, (Number(w.done) || 0) + 1);
+    return { stage: 'sort', text: tl(w.stage === 'filter' ? 'sf.doing.filter' : 'sf.doing.route', { n, total }), pose: w.stage === 'filter' ? 'reading' : 'thinking' };
+  }
+  if (k && k.running) return { stage: 'fetch', text: tl('sf.doing.fetch') };
+  const socks = k && k.socket && typeof k.socket === 'object' ? Object.values(k.socket) : [];
+  if (socks.some((v) => v && Number(v.lastEventAt) > 0 && now - Number(v.lastEventAt) < SF_RECV_MS && now >= Number(v.lastEventAt) - 1000)) {
+    return { stage: 'receive', text: tl('sf.doing.receive') };
+  }
+  const state = st && STATES[st.state] ? st.state : 'idle';
+  if (state !== 'idle' && state !== 'done') {
+    const m = String(st.act || '').match(SF_TASK_ID), asked = SF.revising && now - SF.revising.at < SF_REVISE_MS ? SF.revising.id : '';
+    const id = m ? m[0] : asked;
+    if (id) {
+      const task = s ? sfTasks(s).find((x) => x.id === id) : null;
+      const before = task && Number(task.createdAt) > 0 && Number(st.promptAt) > 0 && Number(task.createdAt) < Number(st.promptAt);
+      return id === asked || before ? { stage: 'revise', text: tl('sf.doing.revise', { id }) } : { stage: 'write', text: tl('sf.doing.write', { id }) };
+    }
+    return { stage: 'busy', text: STATES[state].name, pose: state };
+  }
+  const err = sfErrorText(k);
+  if (err) return { stage: 'error', text: err };
+  return { stage: 'idle', text: tl('sf.doing.idle') };
+}
+/* Where each stage stands, and in what pose. */
+const SF_STAGE_AT = {
+  idle: ['home', 'idle'], fetch: ['home', 'command'], receive: ['home', 'command'], sort: ['home', 'reading'],
+  write: ['desk', 'typing'], revise: ['desk', 'typing'], busy: ['desk', 'typing'], error: ['home', 'idle'],
+};
+const SF_CHUTE_YAW = Math.atan2(-6.0 - SF_HOME.x, 0 - SF_HOME.z);   // at the table, toward the chute
+/* The one robot: the factory session (robotState, from the agents slice), doing the stage's work. */
 function sfRobotTick(V, s, t, dt) {
   const label = s ? sfRobotLabel(s) : '';
   if (label !== V.robotLabel) {
@@ -762,35 +922,151 @@ function sfRobotTick(V, s, t, dt) {
     if (label) {
       const def = DEF[label];
       V.robot = createRobot({ label, role: (def && def.role) || 'main', state: 'idle', seed: 2.1, furnished: false });
-      V.robot.root.position.set(1.4, 0, -1.25);
+      V.robot.root.position.set(SF_HOME.x, 0, SF_HOME.z);
       V.robot.root.rotation.y = 0;
+      V.robot.root.scale.setScalar(SF_ROBOT_SCALE);   // the one robot in a wide room: larger than a desk's, to be read at a glance
       V.robot.root.traverse((o) => { o.userData.shared = true; });
       V.scene.add(V.robot.root);
+      V.at = SF_HOME; V.path = null; V.goal = SF_HOME;
     }
   }
+  const now = Date.now();
+  if (V.robot && !SF.job) sfJobNext(V);
+  const stage = sfStage(s, now);
+  SF.stage = stage;
+  sfDoingText(stage);
   if (!V.robot) return;
-  const st = robotState[label] || { state: 'idle' };
-  const busy = SF.parcels.some((p) => p.phase === 'sort');
-  const want = busy && st.state === 'idle' ? 'command' : st.state;
-  if (want !== V.robot.state) setRobotState(V.robot, want);
-  updateRobot(V.robot, t, dt);
+  const r = V.robot;
+  let want = 'idle', held = false;
+  if (SF.job) {
+    const out = sfJobTick(V, SF.job, dt, s);
+    want = out.pose; held = out.held;
+  } else {
+    const [spot, pose] = SF_STAGE_AT[stage.stage] || SF_STAGE_AT.idle;
+    const goal = SF_SPOT[spot];
+    if (V.goal !== goal) { V.path = sfPath(V.at, goal); V.goal = goal; }
+    if (V.path && V.path.length) { sfWalk(V, V.path, dt); want = 'stroll'; if (!V.path.length) V.at = goal; } else {
+      V.at = goal;
+      sfTurn(r.root, stage.stage === 'fetch' || stage.stage === 'receive' ? SF_CHUTE_YAW : goal.yaw, dt * 6);
+      want = stage.pose || pose;
+    }
+  }
+  if (want !== r.state) setRobotState(r, want);
+  r.lampState = stage.stage === 'idle' || stage.stage === 'error' ? 'idle' : stage.stage === 'busy' ? null : 'typing';
+  updateRobot(r, t, dt);
+  if (r.props.carry) {   // a parcel in its hands: no papers (the parcel is the load); a memo: one sheet
+    r.carrySheets = 1;
+    r.props.carry.group.visible = r.props.carry.group.visible && !held;
+  }
+  if (stage.stage === 'error' && !SF.job && !(V.path && V.path.length)) {   // stopped: its head down, its arms still, the lamp red
+    r.lampMat.color.set(reduceMotion || Math.floor(t * 2.5) % 2 === 0 ? SF_RED : LAMP.off);
+    r.head.rotation.set(0.38, 0, 0); r.armL.rotation.set(0, 0, 0.08); r.armR.rotation.set(0, 0, -0.08);
+  }
+}
+/* The next job: a parcel waiting at the belt's end first, then a memo to pin. */
+function sfJobNext(V) {
+  if (reduceMotion) return;
+  const head = SF.parcels.find((p) => p.phase === 'belt');
+  if (head && head.g.position.x >= SF_BELT.to - 0.25) {
+    SF.job = { kind: 'carry', parcel: head, project: head.bin.project, phase: 'reach', t: 0, path: sfPath(V.at, SF_SPOT.pick) };
+    V.goal = null;
+    return;
+  }
+  const id = SF.pinQueue.shift();
+  if (id && V.memos && V.memos.has(id)) SF.job = { kind: 'pin', id, phase: 'go', t: 0, path: sfPath(V.at, SF_SPOT.board) };
+  if (SF.job) V.goal = null;
+}
+const SF_HANDS = new THREE.Vector3(0, 0.82, 0.48);
+function sfJobTick(V, job, dt, s) {
+  const r = V.robot, p = job.parcel;
+  job.t += dt;
+  if (job.kind === 'carry') {
+    if (job.phase === 'reach') {
+      if (sfWalk(V, job.path, dt)) { V.at = SF_SPOT.pick; sfTurn(r.root, Math.atan2(p.g.position.x - r.root.position.x, p.g.position.z - r.root.position.z), 1); job.phase = 'take'; job.t = 0; job.from = p.g.position.clone(); p.phase = 'held'; }
+      return { pose: 'stroll', held: false };
+    }
+    const hands = r.root.localToWorld(SF_HANDS.clone());
+    if (job.phase === 'take') {
+      const u = Math.min(1, job.t / 0.45);
+      p.g.position.lerpVectors(job.from, hands, u); p.g.position.y += Math.sin(u * Math.PI) * 0.3;
+      if (u >= 1) { job.phase = 'go'; job.spot = sfBinSpot(p.bin); job.path = sfPath(SF_SPOT.pick, job.spot); }
+      return { pose: 'carry', held: true };
+    }
+    if (job.phase === 'go') {
+      const there = sfWalk(V, job.path, dt);
+      p.g.position.copy(r.root.localToWorld(SF_HANDS.clone())); p.g.rotation.y = r.root.rotation.y;
+      if (there) { sfTurn(r.root, job.spot.yaw, 1); job.phase = 'into'; job.t = 0; job.from = p.g.position.clone(); p.phase = 'into'; V.at = job.spot; }
+      return { pose: 'carry', held: true };
+    }
+    // into: over the bin's lip and down
+    const u = Math.min(1, job.t / 0.5), to = p.bin.group.position;
+    p.g.position.set(job.from.x + (to.x - job.from.x) * u, job.from.y + Math.sin(u * Math.PI) * 0.6 + (1.1 - job.from.y) * u, job.from.z + (to.z - job.from.z) * u);
+    if (u >= 1) { sfParcelIn(V, p, s); SF.job = null; }
+    return { pose: 'carry', held: true };
+  }
+  // pin: walk the memo to the board, reach up and pin it (it shows on the board then), and done
+  const memo = V.memos.get(job.id);
+  if (job.phase === 'go') {
+    if (sfWalk(V, job.path, dt)) { V.at = SF_SPOT.board; job.phase = 'stick'; job.t = 0; }
+    return { pose: 'carry', held: false };
+  }
+  sfTurn(r.root, SF_SPOT.board.yaw, dt * 10);
+  if (job.t > 0.6 && memo) memo.visible = true;
+  if (job.t >= 1.2) SF.job = null;
+  return { pose: 'waiting', held: false };
 }
 function sfRobotDrop(V) {
   V.scene.remove(V.robot.root);
   const k = fontRedraws.indexOf(V.robot.fontRedraw);
   if (k >= 0) fontRedraws.splice(k, 1);
   V.robot = null;
+  if (SF.job && SF.job.parcel) { SF.job.parcel.phase = 'belt'; }
+  SF.job = null;
+}
+/* The beacon on the table's corner (red, blinking, in an error), the chute's lamp (blinking while it fetches) and the
+   parcel open on the table while a message is being sorted. */
+function sfFixturesTick(V, t) {
+  const stage = SF.stage ? SF.stage.stage : 'idle', blink = reduceMotion || Math.floor(t * 2.5) % 2 === 0;
+  V.beacon.material.color.set(stage === 'error' && blink ? SF_RED : '#5a2a2a');
+  V.beacon.scale.setScalar(stage === 'error' && !reduceMotion ? 1 + Math.sin(t * 10) * 0.08 : 1);
+  V.chuteLamp.material.color.set((stage === 'fetch' || stage === 'receive') && blink ? '#4cc3ff' : '#2a3a4a');
+  V.onTable.visible = stage === 'sort';
+}
+function sfDoingText(stage) {
+  const el = $('sf-doing');
+  if (el.dataset.sfStage !== stage.stage) el.dataset.sfStage = stage.stage;
+  setText(el, stage.text);
+}
+/* The bubble over the robot's head: the stage's words; its tail toward the head. */
+function sfPlaceBubble(V) {
+  const el = V.bubble, stage = SF.stage;
+  if (!el) return;
+  const on = !!(V.robot && stage);
+  if (on) {
+    const v = new THREE.Vector3(V.robot.root.position.x, 2.45 * SF_ROBOT_SCALE, V.robot.root.position.z).project(V.camera);
+    const box = $('sf-canvas').getBoundingClientRect(), shown = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
+    el.hidden = !shown;
+    if (!shown) return;
+    if (el.dataset.sfStage !== stage.stage) el.dataset.sfStage = stage.stage;
+    setText(el, stage.text);
+    const w = el.offsetWidth, h = el.offsetHeight;
+    const x = Math.max(2, Math.min(box.width - w - 2, Math.round((v.x + 1) / 2 * box.width - w / 2)));
+    const y = Math.max(2, Math.round((1 - v.y) / 2 * box.height) - h - 10);
+    el.style.transform = `translate(${x}px, ${y}px)`;
+  } else el.hidden = true;
 }
 function sfPlaceTags(V) {
-  const box = $('sf-canvas').getBoundingClientRect(), v = new THREE.Vector3(), placed = [];
+  const box = $('sf-canvas').getBoundingClientRect(), v = new THREE.Vector3(), placed = [], bot = sfRobotRect(V, box);
   for (const bin of V.bins.values()) {
     v.set(bin.group.position.x, 1.5, bin.group.position.z).project(V.camera);
     const on = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
     bin.tag.hidden = !on;
     if (!on) continue;
     // over its bin; lifted above any tag already placed that it would cover (neighbours never hide each other's names)
-    const w = bin.tag.offsetWidth, h = bin.tag.offsetHeight, x = Math.round((v.x + 1) / 2 * box.width) - w / 2;
-    let y = Math.round((1 - v.y) / 2 * box.height) - h;
+    const w = bin.tag.offsetWidth, h = bin.tag.offsetHeight;
+    let x = Math.round((v.x + 1) / 2 * box.width) - w / 2, y = Math.round((1 - v.y) / 2 * box.height) - h;
+    // never over the robot (its face and its bubble's tail): moved aside, to the side its bin is on
+    if (bot && x < bot.x + bot.w && bot.x < x + w && y < bot.y + bot.h && bot.y < y + h) x = x + w / 2 >= bot.x + bot.w / 2 ? bot.x + bot.w + 2 : bot.x - w - 2;
     for (let moved = true; moved;) {
       moved = false;
       for (const p of placed) if (x < p.x + p.w + 2 && p.x < x + w + 2 && y < p.y + p.h + 2 && p.y < y + h + 2) { y = p.y - h - 2; moved = true; }
@@ -800,8 +1076,20 @@ function sfPlaceTags(V) {
   }
 }
 
+/* The robot's box on the canvas (its feet to the top of its head, its shoulders' width), or null. */
+function sfRobotRect(V, box) {
+  if (!V.robot) return null;
+  const p = V.robot.root.position, k = SF_ROBOT_SCALE, v = new THREE.Vector3(), xs = [], ys = [];
+  for (const [dx, y] of [[-0.6, 0], [0.6, 0], [-0.6, 2.2], [0.6, 2.2]]) {
+    v.set(p.x + dx * k, y * k, p.z).project(V.camera);
+    xs.push((v.x + 1) / 2 * box.width); ys.push((1 - v.y) / 2 * box.height);
+  }
+  const x = Math.min(...xs), y = Math.min(...ys);
+  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+}
+
 /* The theme changed while the room is open: built again in its colours (the parcels on their way start over). */
-function sfRetheme() { if (SF.open) { sfBuild(); const s = sfSlice(); SF.seen = null; if (s) sfSync(s); } }
+function sfRetheme() { if (SF.open) { sfBuild(); const s = sfSlice(); SF.seen = null; SF.taskSeen = null; if (s) sfSync(s); } }
 if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', sfRetheme);
 new MutationObserver(sfRetheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 

@@ -33,9 +33,24 @@ WATCH_SEC = 2.0
 RETRY_SEC = 600.0
 ERRORS_KEPT = 20
 
+#: What the intake is doing this moment, for the sorting factory's robot (slack_room.py reads it on its 2 s pass):
+#: {"stage": "fetch" | "filter" | "route", "done", "total", "since"}, {} between passes. Counts only: no path, no text.
+#: One left by a pass that raised is dropped after WORK_STALE_SEC (each message sets it again: one route is well under).
+_WORK: dict = {"now": {}}
+WORK_STALE_SEC = 300
+
 
 def now_ms() -> int:
     return int(time.time() * 1000)
+
+
+def work() -> dict:
+    now = _WORK["now"]
+    return dict(now) if now and now_ms() - now["since"] < WORK_STALE_SEC * 1000 else {}
+
+
+def _work(stage: str | None, done: int = 0, total: int = 0) -> None:
+    _WORK["now"] = {"stage": stage, "done": done, "total": total, "since": now_ms()} if stage else {}
 
 
 def _filter_fingerprint(filter_cfg: dict) -> str:
@@ -84,7 +99,8 @@ def process_inbox(cfg: dict, root: Path, *, force: bool = False, now: float | No
     if watch is not None:
         routes.prune(watch)
     seen = set()
-    for path in store.inbox_files(root):
+    files = store.inbox_files(root)
+    for k, path in enumerate(files):
         name = path.name
         seen.add(name)
         prior = failed.get(name)
@@ -103,6 +119,7 @@ def process_inbox(cfg: dict, root: Path, *, force: bool = False, now: float | No
             failed[name] = {"stage": "read", "error": "not a JSON object", "at": now_ms(), "fingerprint": fp}
             out["failed"] += 1
             continue
+        _work("filter", k, len(files))
         try:
             message = apply_filter(record, filter_cfg)
         except filters.FilterError as exc:
@@ -121,6 +138,7 @@ def process_inbox(cfg: dict, root: Path, *, force: bool = False, now: float | No
             out["followed"] += 1
         else:
             # a thread's first message, or a reply whose thread was chitchat (never recorded) or is not known
+            _work("route", k, len(files))
             try:
                 verdict = route(message, router_cfg)
             except routers.RouterError as exc:
@@ -153,6 +171,7 @@ def process_inbox(cfg: dict, root: Path, *, force: bool = False, now: float | No
         if name not in seen:
             failed.pop(name)
     routes.save()
+    _work(None)
     status.data["lastProcessed"] = {"at": now_ms(), **out}
     status.save()
     return out
@@ -199,7 +218,11 @@ def start_schedule(root: Path) -> None:
 
 def run_once(cfg: dict, root: Path, trigger: str, **kw) -> dict:
     """Fetch, then process inbox/ (a fetch by hand also retries the failed files). Records lastRun."""
-    got = F.fetch(cfg, root, **{k: v for k, v in kw.items() if k in ("get", "run", "now")})
+    _work("fetch")
+    try:
+        got = F.fetch(cfg, root, **{k: v for k, v in kw.items() if k in ("get", "run", "now")})
+    finally:
+        _work(None)
     status = Status(root)
     status.data["lastRun"] = {"at": now_ms(), "trigger": trigger, "mode": (cfg.get("source") or {}).get("mode"),
                               "fetched": got["fetched"], "errors": got["errors"][:ERRORS_KEPT]}

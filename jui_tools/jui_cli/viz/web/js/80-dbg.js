@@ -733,6 +733,17 @@ window.__dbg = {
   // the intake's status line drawn from a slack slice the suite gives (a Socket Mode status before that branch is in)
   sfSlackGet: () => (SOURCE.mode === 'live' ? LIVE.slices.slack || null : null),
   sfSlackSet: (k) => { if (SOURCE.mode !== 'live') return false; LIVE.slices.slack = k; sfRenderIntake(); return true; },
+  // the robot's stage (57-slack-room.js sfStage, (14)): what it shows, and a stage given by the suite (work / slack / the
+  // robot's state in place of the slices'; null gives the slices back)
+  sfDoing: () => { const V = SF.view, r = V && V.robot, b = V && V.bubble;
+    return { stage: SF.stage ? SF.stage.stage : null, text: SF.stage ? SF.stage.text : null, sr: document.getElementById('sf-doing').textContent,
+      state: r ? r.state : null, pose: r ? r.poseName : null, lamp: r ? '#' + r.lampMat.color.getHexString() : null,
+      at: r ? { x: +r.root.position.x.toFixed(2), z: +r.root.position.z.toFixed(2), yaw: +r.root.rotation.y.toFixed(2) } : null,
+      walking: !!(V && V.path && V.path.length), job: SF.job ? { kind: SF.job.kind, phase: SF.job.phase } : null,
+      beacon: V ? '#' + V.beacon.material.color.getHexString() : null, chute: V ? '#' + V.chuteLamp.material.color.getHexString() : null,
+      onTable: V ? V.onTable.visible : null, memos: V ? [...V.memos.entries()].map(([id, m]) => ({ id, shown: m.visible })) : [],
+      bubble: b ? { text: b.textContent, shown: !b.hidden, stage: b.dataset.sfStage || '', rect: (() => { const q = b.getBoundingClientRect(); return { x: q.x, y: q.y, w: q.width, h: q.height }; })() } : null }; },
+  sfFake: (f) => { SF.fake = f || null; return true; },
   // the load box drawn from a machine slice the suite gives (the server's next push writes the real one over it)
   devMachineSet: (m) => { if (SOURCE.mode !== 'live') return false; LIVE.slices.machine = Object.assign({ at: Date.now() }, m); renderDevices(); return true; },
   devColours: () => { const b = document.getElementById('btn-devices'), keep = b.dataset.load;

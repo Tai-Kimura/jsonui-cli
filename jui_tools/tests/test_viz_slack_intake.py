@@ -286,6 +286,46 @@ def test_the_api_fetch_pages_reads_threads_skips_notices_and_moves_the_cursor(tm
     assert [c for c in slack.calls if c[0] == "conversations.history"][0][2]["oldest"] == f"{1730000200.0 - 14 * 86400:.6f}"
 
 
+def test_what_the_intake_is_doing_is_kept_for_the_robot_while_it_works_and_cleared_after(tmp_path):
+    """(14) the sorting factory's robot shows the stage: fetch, then filter / route with done / total; counts only."""
+    cfg = cfg_of(tmp_path)
+    root = C.orchestration_dir(cfg)
+    seen = []
+
+    class Watching(FakeSlack):
+        def __call__(self, method, token, params):
+            seen.append(("get", I.work()))
+            return super().__call__(method, token, params)
+
+    def watch_filter(record, filter_cfg):
+        seen.append(("filter", I.work()))
+        return FI.apply(record, filter_cfg)
+
+    route = FakeRoute([{"choice": "shop", "confidence": 0.9}, {"choice": "chitchat", "confidence": 0.95}])
+
+    def watch_route(message, router_cfg):
+        seen.append(("route", I.work()))
+        return route(message, router_cfg)
+
+    slack = Watching(history=[[{"ts": "1730000002.000100", "user": "U1", "text": "two"},
+                               {"ts": "1730000001.000100", "user": "U1", "text": "one"}]])
+    I.run_once(cfg, root, "manual", get=slack, now=1730000100.0, route=watch_route, apply_filter=watch_filter)
+    stages = [(where, w.get("stage"), w.get("done"), w.get("total")) for where, w in seen]
+    assert stages[0] == ("get", "fetch", 0, 0)
+    assert [x for x in stages if x[0] != "get"] == [("filter", "filter", 0, 2), ("route", "route", 0, 2),
+                                                    ("filter", "filter", 1, 2), ("route", "route", 1, 2)]
+    assert all(set(w) == {"stage", "done", "total", "since"} for _where, w in seen)     # no path, no text
+    assert I.work() == {}                                                                # cleared after the pass
+
+
+def test_a_stage_left_by_a_pass_that_raised_is_dropped_after_a_while(monkeypatch):
+    I._work("route", 1, 3)
+    assert I.work()["stage"] == "route"
+    monkeypatch.setitem(I._WORK, "now", {**I._WORK["now"], "since": I.now_ms() - I.WORK_STALE_SEC * 1000 - 1})
+    assert I.work() == {}
+    I._work(None)
+
+
 def test_a_failing_channel_leaves_its_cursor_and_the_others_go_on(tmp_path):
     cfg = cfg_of(tmp_path, source={"workspaces": [{"name": "acme", "token": "t-1", "channels": ["C0123", "C0456"]},
                                                   {"name": "other", "token": "", "channels": ["C1"]}]})

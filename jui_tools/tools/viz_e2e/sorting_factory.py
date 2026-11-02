@@ -99,6 +99,100 @@ def read_task(orch, tid):
     return json.loads((orch / "tasks" / f"{tid}.json").read_text())
 
 
+async def stage_shot(page, name, out, failures):
+    """A still of the factory's 3D alone (the robot's stage, (14))."""
+    r = await page.evaluate("() => { const q = document.getElementById('sf-canvas').parentElement.getBoundingClientRect(); return { x: q.x, y: q.y, width: q.width, height: q.height }; }")
+    await shot(page, name, out, failures, clip=r)
+
+
+def near(hex_a, hex_b, tol=24):
+    """Two colours read back from three.js (#rrggbb) within tol per channel (the colour space's rounding)."""
+    if not (isinstance(hex_a, str) and isinstance(hex_b, str)):
+        return False
+    a, b = (tuple(int(h[i:i + 2], 16) for i in (1, 3, 5)) for h in (hex_a, hex_b))
+    return all(abs(x - y) <= tol for x, y in zip(a, b))
+
+
+async def doing(page, fake, stage, label, settle=900):
+    """The robot's stage from a fake (work / slack / its state in place of the slices'), once it stands at its place."""
+    await page.evaluate("(f) => window.__dbg.sfFake(f)", fake)
+    await wait(page, "(s) => { const d = window.__dbg.sfDoing(); return d.stage === s && !d.walking && !d.job; }", arg=stage, timeout=15000, label=label)
+    await page.wait_for_timeout(settle)                      # the pose's blend and the turn
+    return await page.evaluate("() => window.__dbg.sfDoing()")
+
+
+async def doing_arms(page, orch, out, failures, res, check):
+    """(14) requester 11-02: 「仕分け中の状況に合わせてロボットの様子を変えて、今何をやっているか分かるようにしたい」. Each stage
+    changes where the robot stands, its pose, its lamp and the fixtures, and the words over its head."""
+    k0 = {"configured": True, "running": False, "mode": "api", "lastRun": {"at": 1, "errors": []}}
+    idle = {"state": "idle", "act": ""}
+    # idle: at the sorting table, 待機中
+    d = res["doing-idle"] = await doing(page, {"work": {}, "slack": k0, "robot": idle}, "idle", "idle")
+    check(d["bubble"]["text"] == T("sf.doing.idle") and d["state"] == "idle" and abs(d["at"]["x"] - 1.4) < 0.05 and abs(d["at"]["z"] + 1.25) < 0.05
+          and near(d["lamp"], "#8fa3bf") and not d["onTable"] and d["sr"] == d["bubble"]["text"], f"idle at the table: {d}")
+    await stage_shot(page, "slack-room-doing-idle", out, failures)
+    # fetch: facing the chute at its panel, the chute's lamp blinking blue
+    d = res["doing-fetch"] = await doing(page, {"work": {"stage": "fetch"}, "slack": {**k0, "running": True}, "robot": idle}, "fetch", "fetch", settle=1500)
+    check(d["bubble"]["text"] == T("sf.doing.fetch") and d["state"] == "command" and abs(d["at"]["yaw"] + 1.40) < 0.2 and near(d["lamp"], "#35d07f"),
+          f"fetching: at the panel, toward the chute, its lamp at work: {d}")
+    await wait(page, "() => window.__dbg.sfDoing().chute === '#4cc3ff' || window.__dbg.sfDoing().chute.startsWith('#4c')", timeout=5000, label="the chute's lamp lit")
+    await stage_shot(page, "slack-room-doing-fetch", out, failures)
+    # receive: a Socket Mode message just in (its lastEventAt now)
+    await page.evaluate("(k) => { k.socket.acme.lastEventAt = Date.now(); return window.__dbg.sfFake({ work: {}, slack: k, robot: { state: 'idle', act: '' } }); }",
+                        {**k0, "mode": "socket", "socket": {"acme": {"connected": True, "since": 1, "lastEventAt": 0, "error": None, "errorAt": None}}})
+    await wait(page, "() => window.__dbg.sfDoing().stage === 'receive'", timeout=3000, label="receive")
+    d = res["doing-receive"] = await page.evaluate("() => window.__dbg.sfDoing()")
+    check(d["bubble"]["text"] == T("sf.doing.receive"), f"a Socket Mode message just in: {d}")
+    await stage_shot(page, "slack-room-doing-receive", out, failures)
+    await wait(page, "() => window.__dbg.sfDoing().stage === 'idle'", timeout=8000, label="receive over after a few seconds")
+    # sort: the filter (reading) and the router (a hand to the chin), done / total; a parcel open on the table
+    d = res["doing-filter"] = await doing(page, {"work": {"stage": "filter", "done": 0, "total": 6}, "slack": k0, "robot": idle}, "sort", "filter")
+    check(d["bubble"]["text"] == T("sf.doing.filter", n=1, total=6) and d["state"] == "reading" and d["onTable"], f"filtering: reading the message: {d}")
+    d = res["doing-route"] = await doing(page, {"work": {"stage": "route", "done": 2, "total": 6}, "slack": k0, "robot": idle}, "sort", "route")
+    check(d["bubble"]["text"] == T("sf.doing.route", n=3, total=6) and d["state"] == "thinking" and d["onTable"], f"routing 3/6: a hand to the chin: {d}")
+    await stage_shot(page, "slack-room-doing-sort", out, failures)
+    # error: the last fetch's errors; standing at the table, its lamp and the beacon red and blinking, the bubble red
+    d = res["doing-error"] = await doing(page, {"work": {}, "slack": {**k0, "lastRun": {"at": 1, "errors": ["conversations.history C1: missing_scope", "x"]}}, "robot": idle}, "error", "error")
+    check(d["bubble"]["text"] == T("sf.doing.errors", n=2) and d["bubble"]["stage"] == "error" and d["state"] == "idle", f"error: {d}")
+    await wait(page, "() => { const d = window.__dbg.sfDoing(); return d.lamp.startsWith('#ff') && d.beacon.startsWith('#ff'); }", timeout=5000, label="the lamp and the beacon red")
+    border = await page.evaluate("() => getComputedStyle(document.querySelector('#sf-labels .sf-bubble')).borderTopColor")
+    check(border == "rgb(201, 42, 42)", f"the error's bubble red-edged: {border}")
+    await stage_shot(page, "slack-room-doing-error", out, failures)
+    d = res["doing-socket-error"] = await doing(page, {"work": {}, "slack": {**k0, "mode": "socket", "socket": {"acme": {"connected": False, "error": "invalid_auth", "errorAt": 1}}}, "robot": idle}, "error", "socket error")
+    check(d["bubble"]["text"] == T("sf.doing.socket", ws="acme"), f"a lost Socket Mode connection: {d}")
+    # busy: its session at work on something else: at the desk in its own pose, the state's name
+    d = res["doing-busy"] = await doing(page, {"work": {}, "slack": k0, "robot": {"state": "thinking", "act": ""}}, "busy", "busy")
+    check(d["bubble"]["text"] == T("status.thinking") and d["state"] == "thinking" and abs(d["at"]["x"] + 0.9) < 0.05 and abs(d["at"]["z"] + 2.7) < 0.05, f"busy at the desk: {d}")
+    # write: a task made after its last prompt (not made yet): typing at the desk
+    d = res["doing-write"] = await page.evaluate("() => window.__dbg.sfFake({ work: {}, slack: null, robot: { state: 'typing', act: 'Write tasks/T-0042.json', promptAt: Date.now() } })")
+    await wait(page, "() => window.__dbg.sfDoing().stage === 'write'", label="write")
+    await page.wait_for_timeout(900)
+    d = res["doing-write"] = await page.evaluate("() => window.__dbg.sfDoing()")
+    check(d["bubble"]["text"] == T("sf.doing.write", id="T-0042") and d["state"] == "typing" and abs(d["at"]["z"] + 2.7) < 0.05, f"writing T-0042 at the desk: {d}")
+    await stage_shot(page, "slack-room-doing-write", out, failures)
+    # revise: a task made before that prompt
+    await page.evaluate("() => window.__dbg.sfFake({ work: {}, slack: null, robot: { state: 'typing', act: 'Write tasks/T-0001.json', promptAt: Date.now() } })")
+    await wait(page, "() => window.__dbg.sfDoing().stage === 'revise'", label="revise")
+    d = res["doing-revise"] = await page.evaluate("() => window.__dbg.sfDoing()")
+    check(d["bubble"]["text"] == T("sf.doing.revise", id="T-0001"), f"revising T-0001: {d}")
+    # pin: a new task's memo walked to the board (the slices again, the real robot)
+    await page.evaluate("() => window.__dbg.sfFake(null)")
+    task(orch, "T-0099", "draft", "新しいタスク", "x", project="shop")
+    await wait(page, "() => { const d = window.__dbg.sfDoing(); return d.job && d.job.kind === 'pin' && d.job.phase === 'stick'; }", timeout=20000, label="the robot at the board")
+    d = res["doing-pin"] = await page.evaluate("() => window.__dbg.sfDoing()")
+    check(d["stage"] == "pin" and d["bubble"]["text"] == T("sf.doing.pin", id="T-0099") and abs(d["at"]["z"] + 3.75) < 0.05
+          and any(m["id"] == "T-0099" and not m["shown"] for m in d["memos"]), f"at the board with the memo, not pinned yet: {d}")
+    await page.wait_for_timeout(450)
+    await stage_shot(page, "slack-room-doing-pin", out, failures)
+    await wait(page, "() => { const d = window.__dbg.sfDoing(); return !d.job && d.memos.some((m) => m.id === 'T-0099' && m.shown); }", timeout=5000, label="the memo pinned")
+    (orch / "tasks" / "T-0099.json").unlink()
+    await wait(page, "() => !window.__dbg.sfDoing().memos.some((m) => m.id === 'T-0099')", timeout=10000, label="the memo gone with its task")
+    try:
+        await wait(page, "() => { const d = window.__dbg.sfDoing(); return !d.job && !d.walking && d.at.z === -1.25 && d.at.x === 1.4; }", timeout=15000, label="back at the table")
+    except RuntimeError as e:
+        check(False, f"{e}: {await page.evaluate('() => window.__dbg.sfDoing()')}")
+
+
 async def run_sorting_factory(pw, out, failures):
     from run import free_port
     out = pathlib.Path(out) / "slack-room"
@@ -507,8 +601,17 @@ async def run_sorting_factory(pw, out, failures):
         await wait(page, "() => window.__dbg.sfState().parcels.length > 0", timeout=15000, label="a parcel on its way")
         told = poll(channels[BOT])
         check(len(told) == 1 and m4 in told[0], f"the robot told of the new one only: {[t[:160] for t in told]}")
+        # (14) the robot takes it at the belt's end and walks it to the bin, saying so over its head
+        await page.evaluate("() => document.getElementById('sf-canvas').scrollIntoView({ block: 'nearest' })")
+        await wait(page, "() => { const d = window.__dbg.sfDoing(); return d.job && d.job.kind === 'carry' && d.job.phase === 'go'; }", timeout=15000, label="the robot carrying it")
+        await page.wait_for_timeout(500)
+        d = res["doing-carry"] = await page.evaluate("() => window.__dbg.sfDoing()")
+        check(d["stage"] == "carry" and d["state"] == "carry" and d["bubble"]["shown"] and d["bubble"]["text"] == T("sf.doing.carry", project="shop")
+              and d["sr"] == d["bubble"]["text"] and d["at"]["z"] < -1.3, f"carrying: its pose, its words over its head and for a screen reader, away from the table: {d}")
+        await stage_shot(page, "slack-room-doing-carry", out, failures)
         await wait(page, "() => window.__dbg.sfState().parcels.length === 0 && window.__dbg.sfState().bins.find((b) => b.project === 'shop').n === 3",
                    timeout=20000, label="the parcel in shop's bin")
+        await doing_arms(page, orch, out, failures, res, check)
 
         # what is typed on a draft is kept
         # (the prompt is typed in the large popup a press on the note's prompt opens: the requester, 11-02)

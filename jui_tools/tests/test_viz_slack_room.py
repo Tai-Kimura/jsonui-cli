@@ -271,6 +271,13 @@ def test_the_slice_says_what_the_page_shows(home, factory):
     assert s["tasks"][0]["status"] == "draft"                    # a status that is not one shows as a draft
     assert s["robotLaunch"] == f"cd ~/orch && {slack_room.LAUNCH_COMMAND} -n 'Sorting factory'"   # named: the room's name
     assert s["prompts"]["instructions"] == "old"
+    assert s["work"] == {}                                       # (14) the intake's stage: nothing runs
+
+
+def test_the_slice_carries_what_the_intake_is_doing(home, factory, monkeypatch):
+    from jui_cli.viz.slack import intake
+    monkeypatch.setitem(intake._WORK, "now", {"stage": "route", "done": 2, "total": 6, "since": intake.now_ms()})
+    assert room_for(FakeWorld()).slice()["work"] == {"stage": "route", "done": 2, "total": 6, "since": intake._WORK["now"]["since"]}
 
 
 def test_no_folder_yet_is_an_empty_room(home):

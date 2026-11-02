@@ -41,6 +41,7 @@ from .rooms import tilde
 from . import paths
 from .slack import config as slack_config
 from .slack import filters as slack_filters
+from .slack import intake as slack_intake
 from .sources import launch
 
 DEFAULT_DIR = slack_config.DEFAULT["orchestrationDir"]
@@ -719,6 +720,8 @@ class SlackRoom:
             "toldAt": self.last_told_at, "told": len(self.last_told), "note": home_to_tilde(self.note),
             "tasks": tasks, "sourceHeads": heads, "targets": [dict(t, cwd=tilde(str(t["cwd"]))) for t in self.targets()],
             "prompts": prompts_of(self.cfg),
+            # what the intake is doing (fetch / filter / route, with counts), for the robot's look and bubble
+            "work": slack_intake.work(),
         }
 
 
