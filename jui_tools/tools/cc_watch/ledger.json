@@ -381,6 +381,7 @@
     "jui_tools/jui_cli/viz/slack/config.py": "viz の home の slack.json を読むだけ。Claude Code の設定には触らない",
     "jui_tools/jui_cli/viz/slack/filters.py": "伏せ字の正規表現だけ。CLI に触らない",
     "jui_tools/jui_cli/viz/slack/intake.py": "inbox の見張りと定時。CLI は fetch.py を通してだけ使う",
+    "jui_tools/jui_cli/viz/slack/socket_mode.py": "Slack の Socket Mode（apps.connections.open と WebSocket）に aiohttp でつなぐだけ。CLI に触らない",
     "jui_tools/jui_cli/viz/slack/routers.py": "Anthropic の Messages API と TypeSafe の API を HTTP で呼ぶだけ。Claude Code の CLI には触らない",
     "jui_tools/jui_cli/viz/slack/store.py": "orchestrationDir のファイルの読み書きだけ"
   }

@@ -8,6 +8,9 @@
     .state/threads.json                              threads watched for new replies: {"<ws>/<ch>/<threadTs>": "<last reply ts>"}
     .state/routes.json                               where a thread went: {"<ws>/<ch>/<threadTs>": {to, choice, confidence}}
                                                      (no text; a thread routed as chitchat is never written here)
+    .state/taken.json                                messages written to inbox/ ({"<ws>/<ch>/<ts>": via}), so a fetch and the
+                                                     socket never write one twice; forgotten once the cursor and the
+                                                     thread watch have passed it
     .state/status.json                               last run, failures (written by the intake only)
 
 Every write is a temporary dot-file renamed into place (the watcher skips dot-files), files 0600, folders 0700.

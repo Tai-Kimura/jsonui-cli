@@ -9,6 +9,9 @@ next_run       the schedule: slots every schedule.everyHours hours anchored on s
                missed while the server was down runs at once. everyHours 0 = by hand only.
 Service        the asyncio side for ``jui viz serve``: one loop polls inbox/ every WATCH_SEC and runs the schedule;
                fetch_now() is the API's 今すぐ取る. The work (HTTP, the child adapters, claude) runs off the loop.
+               With source.mode "socket" it also keeps one Socket Mode connection per workspace (socket_mode.py),
+               started, restarted and stopped as slack.json changes; a message pushed there is written to inbox/
+               and the loop is woken to process it at once.
 
 slack.json is only read here (stage 2/3 write router.prompt and taskPrompt); it is read again on every pass, so an
 edit applies without a restart. The state the intake keeps is <orchestrationDir>/.state/status.json.
@@ -27,7 +30,7 @@ from typing import Callable
 
 from . import config as C
 from . import fetch as F
-from . import filters, routers, store
+from . import filters, routers, socket_mode, store
 
 WATCH_SEC = 2.0
 RETRY_SEC = 600.0
@@ -211,10 +214,15 @@ def run_once(cfg: dict, root: Path, trigger: str, **kw) -> dict:
     return {"fetched": got["fetched"], "errors": got["errors"], **processed}
 
 
-def snapshot(cfg: dict | None, cfg_error: str | None, running: bool, now: float | None = None) -> dict:
+def snapshot(cfg: dict | None, cfg_error: str | None, running: bool, now: float | None = None,
+             sockets: dict | None = None) -> dict:
     """The `slack` slice and GET /api/slack/status: no key, no message text, no path under the home (written from ~,
-    the way every slice writes one: the talk e2e reads /api/snapshot for the home's path)."""
-    return _from_tilde(_snapshot(cfg, cfg_error, running, now))
+    the way every slice writes one: the talk e2e reads /api/snapshot for the home's path). ``sockets``: with mode
+    socket, {workspace: {connected, since, lastEventAt, error, errorAt}} (socket_mode.State.public)."""
+    snap = _snapshot(cfg, cfg_error, running, now)
+    if snap.get("mode") == "socket":
+        snap["socket"] = sockets or {}
+    return _from_tilde(snap)
 
 
 def _from_tilde(value):
@@ -259,7 +267,8 @@ class Service:
     """The intake inside ``jui viz serve``. on_change(snapshot) is called on the loop after anything changes."""
 
     def __init__(self, on_change: Callable[[dict], None] | None = None, *, watch_sec: float = WATCH_SEC,
-                 loader: Callable[[], dict | None] = C.load, work_kw: dict | None = None):
+                 loader: Callable[[], dict | None] = C.load, work_kw: dict | None = None,
+                 socket_kw: dict | None = None):
         self.on_change = on_change
         self.watch_sec = watch_sec
         self.loader = loader
@@ -267,6 +276,10 @@ class Service:
         self.running = False
         self._last: dict | None = None
         self._task: asyncio.Task | None = None
+        self.socket_kw = socket_kw or {}       # socket_mode.Client's api_base / backoff (a test's fake server)
+        self.sockets: dict[str, tuple[tuple, socket_mode.Client, asyncio.Task]] = {}
+        self._team_urls: dict[str, str] = {}
+        self._wake: asyncio.Event | None = None
 
     def _config(self) -> tuple[dict | None, str | None]:
         try:
@@ -276,7 +289,56 @@ class Service:
 
     def status(self) -> dict:
         cfg, err = self._config()
-        return snapshot(cfg, err, self.running)
+        return snapshot(cfg, err, self.running, sockets={n: c.state.public() for n, (_k, c, _t) in self.sockets.items()})
+
+    # ---------------------------------------------------------------- Socket Mode
+
+    def _reconcile_sockets(self, cfg: dict | None) -> None:
+        """One connection per workspace while mode is socket; a workspace whose appToken, channels or token changed
+        is reconnected, one gone (or mode no longer socket) is closed."""
+        want = socket_mode.plan(cfg)
+        for name in list(self.sockets):
+            key, _client, task = self.sockets[name]
+            if want.get(name) != key or task.done():
+                task.cancel()
+                del self.sockets[name]
+                self._team_urls.pop(name, None)
+        workspaces = {str(ws.get("name")): ws for ws in ((cfg or {}).get("source") or {}).get("workspaces") or []
+                      if isinstance(ws, dict)}
+        for name, key in want.items():
+            if name not in self.sockets:
+                client = socket_mode.Client(workspaces[name], self._on_socket_message, self._publish, **self.socket_kw)
+                self.sockets[name] = (key, client, asyncio.get_running_loop().create_task(client.run()))
+
+    def _stop_sockets(self) -> None:
+        for _key, _client, task in self.sockets.values():
+            task.cancel()
+        self.sockets.clear()
+
+    async def _on_socket_message(self, workspace: str, event: dict) -> None:
+        cfg, _err = self._config()
+        if cfg is None or (cfg.get("source") or {}).get("mode") != "socket":
+            return
+        ws = next((w for w in cfg["source"].get("workspaces") or [] if isinstance(w, dict) and w.get("name") == workspace), None)
+        if ws is None or event.get("channel") not in (ws.get("channels") or []):
+            return
+        root = C.orchestration_dir(cfg)
+        get = self.work_kw.get("get", F.api_get)
+
+        def write() -> bool:
+            store.ensure(root)
+            url = self._team_urls.get(workspace)
+            if url is None and ws.get("token"):
+                try:
+                    url = str(get("auth.test", ws["token"], {}).get("url") or "")
+                    self._team_urls[workspace] = url
+                except F.FetchError:
+                    url = ""       # asked again with the next message
+            link = F.permalink(url or "", event["channel"], event["ts"], event.get("thread_ts"))
+            return F.write_message(root, workspace, event["channel"], dict(event), link, "socket")
+
+        if await asyncio.get_running_loop().run_in_executor(None, write) and self._wake is not None:
+            self._wake.set()       # processed now, not on the next poll
 
     def _publish(self) -> None:
         snap = self.status()
@@ -317,8 +379,16 @@ class Service:
 
     async def run(self) -> None:
         loop = asyncio.get_running_loop()
+        self._wake = asyncio.Event()
+        try:
+            await self._loop(loop)
+        finally:
+            self._stop_sockets()
+
+    async def _loop(self, loop: asyncio.AbstractEventLoop) -> None:
         while True:
             cfg, _err = self._config()
+            self._reconcile_sockets(cfg)
             if cfg is not None and not self.running:
                 root = C.orchestration_dir(cfg)
                 status = Status(root) if (root / store.STATE).is_dir() else None
@@ -333,4 +403,8 @@ class Service:
                     kw = {k: v for k, v in self.work_kw.items() if k in ("route", "apply_filter")}
                     await loop.run_in_executor(None, lambda: process_inbox(cfg, root, **kw))
             self._publish()
-            await asyncio.sleep(self.watch_sec)
+            try:
+                await asyncio.wait_for(self._wake.wait(), self.watch_sec)
+            except asyncio.TimeoutError:
+                pass
+            self._wake.clear()
