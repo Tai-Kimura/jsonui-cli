@@ -592,6 +592,17 @@ async def run_sorting_factory(pw, out, failures):
         await page.evaluate("() => document.getElementById('sf-socket').scrollIntoView({ block: 'nearest' })")
         await page.wait_for_timeout(600)                     # the 3D drawn again at the stage's new height
         await shot(page, "slack-room-socket", out, failures)
+        # no appToken and Socket Mode off for the app: each line says where the fix is
+        await page.evaluate("(k) => window.__dbg.sfSlackSet(k)", {**fake, "socket": {
+            "acme": {"connected": False, "since": None, "lastEventAt": None, "error": "no appToken", "errorAt": now_ms - 20_000},
+            "beta": {"connected": False, "since": None, "lastEventAt": None,
+                     "error": "disconnect: link_disabled (Socket Mode is off for the app)", "errorAt": now_ms - 10_000}}})
+        sock2 = res["socket-hints"] = await page.evaluate("() => [...document.querySelectorAll('#sf-socket li')].map((li) => li.textContent)")
+        check(len(sock2) == 2 and "no appToken" in sock2[0] and sock2[0].endswith(T("sf.intake.hint.appTokenMissing"))
+              and "link_disabled" in sock2[1] and sock2[1].endswith(T("sf.intake.hint.socketOff")),
+              f"no appToken and link_disabled, each with where its fix is: {sock2}")
+        await page.wait_for_timeout(300)
+        await shot(page, "slack-room-socket-hints", out, failures)
         await page.evaluate("(k) => window.__dbg.sfSlackSet(k)", {**fake, "mode": "api", "socket": None})
         check(await page.evaluate("() => document.getElementById('sf-socket').hidden"), "no socket lines with mode api")
         # a message comes: the robot is told of it, a parcel rides the belt
