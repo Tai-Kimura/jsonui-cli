@@ -419,10 +419,18 @@ async def run_sorting_factory(pw, out, failures):
         check(cur["id"] == "pointer" and cur["n"] > 20 and not cur["not"], f"the pointing hand on the id and everything pressable: {cur}")
         # a task's messages as a chat beside the board: thread order, the reply set in, the whole text, its Slack link
         await page.click('#sf-wb [data-sf-task="T-0009"] [data-sf-chat]')
-        await wait(page, "() => document.querySelectorAll('#sf-chat .sf-bubble').length === 2", label="the chat's two messages")
+        await wait(page, "() => document.querySelectorAll('#sf-chat-list > li:not(.sf-chat-sep):not(.sf-why)').length === 2", label="the chat's two messages")
+        # the rows one under another (2.5.0 named them sf-bubble, the robot's bubble in the 3D: position absolute at the top,
+        # its tail under each, the two on top of each other): every row of the list, whatever its name, in the flow
+        rows_at = res["chat-rows-at"] = await page.evaluate("""() => [...document.querySelectorAll('#sf-chat-list > li')].filter((li) => !li.matches('.sf-chat-sep, .sf-why'))
+          .map((li) => { const cs = getComputedStyle(li), q = li.getBoundingClientRect(), a = getComputedStyle(li, '::after').content;
+            return { position: cs.position, top: Math.round(q.top), bottom: Math.round(q.bottom), after: a === 'none' || a === 'normal' ? '' : a }; })""")
+        check(len(rows_at) == 2 and all(r["position"] == "static" and not r["after"] for r in rows_at)
+              and all(b["top"] >= a["bottom"] - 1 for a, b in zip(rows_at, rows_at[1:])),
+              f"the chat's rows one under another, no bubble's tail: {rows_at}")
         chat = res["chat"] = await page.evaluate("""() => { const p = document.getElementById('sf-chat'), r = p.getBoundingClientRect();
           return { title: document.getElementById('sf-chat-title').textContent, focus: document.activeElement.id,
-            rows: [...p.querySelectorAll('.sf-bubble')].map((b) => ({ reply: b.classList.contains('sf-reply'), who: b.querySelector('b').textContent, text: b.querySelector('.sf-bubble-text').textContent,
+            rows: [...p.querySelectorAll('.sf-msgb')].map((b) => ({ reply: b.classList.contains('sf-reply'), who: b.querySelector('b').textContent, text: b.querySelector('.sf-msgb-text').textContent,
               link: (b.querySelector('a') || {}).href || '', target: (b.querySelector('a') || {}).target || '' })), right: Math.round(innerWidth - r.right), w: Math.round(r.width) }; }""")
         check(chat["title"] == "T-0009 決済画面の文言の相談" and chat["focus"] == "sf-chat-close" and [r["who"] for r in chat["rows"]] == ["U1", "U3"]
               and not chat["rows"][0]["reply"] and chat["rows"][1]["reply"] and "ボタンの文言と揃う" in chat["rows"][1]["text"]
