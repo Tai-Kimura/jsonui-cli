@@ -147,12 +147,15 @@ async def run_sorting_factory(pw, out, failures):
     sessions_dir.mkdir(parents=True, exist_ok=True)
     stand_ins: list = []
 
+    names = {BOT: T("page.sf.title")}   # what `claude -n` (the room's robotLaunch) writes into the session's registry row
+
     def session_process(sid, *args):
         proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(900)", *args],
                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         stand_ins.append(proc)
         (sessions_dir / f"{proc.pid}.json").write_text(json.dumps({"pid": proc.pid, "sessionId": sid, "cwd": cwds[sid], "kind": "interactive",
-                                                                  "entrypoint": "cli", "status": "idle", "procStart": f"t{proc.pid}"}))
+                                                                  "entrypoint": "cli", "status": "idle", "procStart": f"t{proc.pid}",
+                                                                  **({"name": names[sid]} if sid in names else {})}))
     log = open(out / "serve.log", "w")
     srv = subprocess.Popen([sys.executable, str(jt / "bin" / "jui"), "viz", "serve", "--port", str(port)], stdout=log, stderr=subprocess.STDOUT, env=env)
     url = f"http://127.0.0.1:{port}"
@@ -253,6 +256,9 @@ async def run_sorting_factory(pw, out, failures):
         check(texts["lanes"] == [T(f"sf.lane.{k}") for k in ("talking", "draft", "ready", "working", "ended", "done")], f"the lanes: {texts['lanes']}")
         check(T("sf.flow.counts", total=5, pending=0, unsorted=1) in texts["flow"] and "カートの合計金額" in texts["flow"] and bot in texts["robot"],
               f"what was sorted and the robot: {texts['flow'][:200]} / {texts['robot']}")
+        # the robot's session named as its start command names it (claude -n, the room's name by default): the box shows it
+        rname = res["robot-name"] = await page.evaluate("() => (document.querySelector('#sf-robot .sf-robot-name') || {}).textContent")
+        check(rname == T("page.sf.title"), f"the robot's session name on its line: {rname!r}")
         lanes_in = res["lanes-in"] = await page.evaluate("() => { const b = document.querySelector('.sf-board'); return { scroll: b.scrollWidth, client: b.clientWidth }; }")
         check(lanes_in["scroll"] <= lanes_in["client"], f"the six lanes fit the board at 1440: {lanes_in}")
         check(all(texts["seen"]), f"the 3D, the board and the box are on the page, not under something: {texts['seen']}")
@@ -284,7 +290,7 @@ async def run_sorting_factory(pw, out, failures):
           const v = document.querySelector('#sf-wb [data-sf-task="T-0002"] [data-sf-prompt-open] .sf-prompt-text'), lh = parseFloat(getComputedStyle(v).lineHeight);
           const code = document.querySelector('#sf-wb [data-sf-task="T-0002"] .sf-copy code');
           return { scrolls, textareas: document.querySelectorAll('#sf-wb .sf-note textarea').length, lines: Math.round(v.getBoundingClientRect().height / lh), cut: v.scrollHeight > v.clientHeight + 1,
-            codeWhole: code.scrollHeight <= code.clientHeight + 1 && code.textContent.endsWith('jsonui') }; }""")
+            codeWhole: code.scrollHeight <= code.clientHeight + 1 && code.textContent.endsWith("-n 'docs T-0002'") }; }""")
         check(not flat["scrolls"] and flat["textareas"] == 0 and flat["lines"] == 5 and flat["cut"] and flat["codeWhole"],
               f"no scroll inside a note: the prompt's first 5 lines, the start command whole: {flat}")
         check(marks["more"] == [T("sf.note.more", id="T-0010", title="ログイン画面の文言（追加）")] and marks["follows"] == [T("sf.note.follows", id="T-0005", title="ログイン画面の文言")],
@@ -511,6 +517,27 @@ async def run_sorting_factory(pw, out, failures):
         await wait(page, f"() => document.getElementById('sf-revise').hidden && document.querySelector('{note} .sf-note-said').textContent === {json.dumps(T('sf.said.revise'))}",
                    label="the popup closed, the note says asked")
         check(await page.evaluate("() => document.activeElement && document.activeElement.matches('[data-sf-revise-open]')"), "the focus back on the note's button")
+        # the robot rewrites the task (2.4.0: the note kept its old words while the focus sat on its button): the note
+        # follows the file, the focus kept on the same button
+        t = read_task(orch, "T-0001")
+        t["title"], t["prompt"] = "カートの税込み表示（直しが入った）", "直した後のプロンプト: テストの観点も書いた"
+        (orch / "tasks" / "T-0001.json").write_text(json.dumps(t, ensure_ascii=False))
+        await wait(page, f"""() => document.querySelector('{note} .sf-note-title').textContent.includes('直しが入った')
+          && document.querySelector('{note} .sf-prompt-text').textContent === '直した後のプロンプト: テストの観点も書いた'""", timeout=10000, label="the robot's rewrite on the note")
+        check(await page.evaluate(f"() => !!document.activeElement.closest('{note}') && document.activeElement.matches('[data-sf-revise-open]')"), "the focus kept on the redrawn note's button")
+        # typed and not saved, then the file changes: what was typed stays, the note says there is newer content; 読み直す takes it
+        await page.click(f"{note} [data-sf-prompt-open]")
+        await page.fill("#sf-edit-text", "DRAFT: まだ保存していない")
+        await page.keyboard.press("Escape")
+        t = read_task(orch, "T-0001")
+        t["title"], t["prompt"] = "カートの税込み表示（もう一度直った）", "二度目の直し"
+        (orch / "tasks" / "T-0001.json").write_text(json.dumps(t, ensure_ascii=False))
+        await wait(page, f"() => document.querySelector('{note} .sf-note-title').textContent.includes('もう一度直った') && !!document.querySelector('{note} [data-sf-reload]')",
+                   timeout=10000, label="the newer content said on the note")
+        stale = res["stale"] = await page.evaluate(f"() => [document.querySelector('{note} .sf-prompt-text').textContent, document.querySelector('{note} [data-sf-reload]').textContent]")
+        check(stale == ["DRAFT: まだ保存していない", T("sf.note.stale")], f"what was typed kept, the newer content said: {stale}")
+        await page.click(f"{note} [data-sf-reload]")
+        await wait(page, f"() => document.querySelector('{note} .sf-prompt-text').textContent === '二度目の直し' && !document.querySelector('{note} [data-sf-reload]')", label="読み直す")
         await page.click(f"{note} [data-sf-revise-open]")
         await page.keyboard.press("Escape")
         check(await page.evaluate("() => document.getElementById('sf-revise').hidden && window.__dbg.sfState().open"), "Esc closes the popup, not the room")
@@ -523,7 +550,7 @@ async def run_sorting_factory(pw, out, failures):
         COPY = """(id) => { const c = document.querySelector(`#sf-wb [data-sf-task="${id}"] .sf-copy [data-sf-copy]`); return c ? c.dataset.sfCopy : null; }"""
         lines = res["copy"] = [await page.evaluate(COPY, "T-0002"), await page.evaluate(COPY, "T-0001")]
         pre = "JUI_VIZ_HOME=~/viz-other "                     # written from ~: the slices never carry the home's path
-        check(lines == [f"cd ~/work/docs && {pre}claude --channels plugin:jui-viz@jsonui", None], f"the start command only where no session fits: {lines}")
+        check(lines == [f"cd ~/work/docs && {pre}claude --channels plugin:jui-viz@jsonui -n 'docs T-0002'", None], f"the start command only where no session fits, its session named: {lines}")
         await page.click('#sf-wb [data-sf-task="T-0002"] .sf-copy [data-sf-copy]')
         await wait(page, f"""() => document.querySelector('#sf-wb [data-sf-task="T-0002"] .sf-copy [data-sf-copy]').textContent === {json.dumps(T('sf.copied'))}""",
                    label="copied")

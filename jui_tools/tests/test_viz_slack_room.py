@@ -269,7 +269,7 @@ def test_the_slice_says_what_the_page_shows(home, factory):
     assert s["arrivals"]["byProject"] == {"shop": 2} and s["arrivals"]["pending"] == 1
     assert any(r.get("head") == "line one and two" for r in s["arrivals"]["recent"])
     assert s["tasks"][0]["status"] == "draft"                    # a status that is not one shows as a draft
-    assert s["robotLaunch"] == f"cd ~/orch && {slack_room.LAUNCH_COMMAND}"
+    assert s["robotLaunch"] == f"cd ~/orch && {slack_room.LAUNCH_COMMAND} -n 'Sorting factory'"   # named: the room's name
     assert s["prompts"]["instructions"] == "old"
 
 
@@ -486,7 +486,7 @@ def test_the_start_command_names_this_vizs_folder_when_it_is_not_the_default(hom
     assert slack_room.with_home(f"cd a && {want}claude x") == f"cd a && {want}claude x"            # once
     room = room_for(FakeWorld())
     s = room.slice()
-    assert s["robotLaunch"] == f"cd {slack_room._sh(str(room.root).replace(str(home), '~', 1))} && {want}{slack_room.LAUNCH_COMMAND}"
+    assert s["robotLaunch"] == f"cd {slack_room._sh(str(room.root).replace(str(home), '~', 1))} && {want}{slack_room.LAUNCH_COMMAND} -n 'Sorting factory'"
     assert s["launch"] == want + slack_room.LAUNCH_COMMAND
     monkeypatch.setenv("JUI_VIZ_HOME", "/srv/viz")                                              # outside the home: as it is
     assert slack_room.home_prefix() == "JUI_VIZ_HOME=/srv/viz "
@@ -574,3 +574,35 @@ def test_a_file_written_before_the_text_was_written_out_shows_it_written_out(hom
     room = room_for(FakeWorld())
     assert room.slice()["sourceHeads"][path]["head"] == "B&S の件 @U9 <急ぎ>"
     assert room.messages("T-0001")["messages"][0]["text"] == "B&S の件 @U9 <急ぎ>"
+
+
+
+# ---- the sessions it starts are named (11-02) --------------------------------------------------------------------
+
+def test_the_robots_start_command_names_its_session_and_slack_json_may_rename_it(home, factory, monkeypatch):
+    room = room_for(FakeWorld())
+    assert room.slice()["robotLaunch"].endswith(f"{slack_room.LAUNCH_COMMAND} -n 'Sorting factory'")   # -n after the channels' value
+    cfg = json.loads(slack_room.config_path().read_text())
+    slack_config.save({**cfg, "robotName": "Slack の受付"})
+    room.load()
+    assert room.slice()["robotLaunch"].endswith(f"{slack_room.LAUNCH_COMMAND} -n 'Slack の受付'")
+    slack_config.save({**cfg, "robotName": "--evil\nname"})                   # one line, never a flag
+    room.load()
+    assert room.slice()["robotLaunch"].endswith(f"{slack_room.LAUNCH_COMMAND} -n 'evil name'")
+
+
+def test_a_tasks_start_command_names_its_session_on_the_page_and_the_file_keeps_the_robots_words(home, factory):
+    task(factory, "T-0001", launchCommand="cd ~/work/docs && claude --channels plugin:jui-viz@jsonui")
+    task(factory, "T-0002", launchCommand="cd ~/work/docs && claude -n mine --channels plugin:jui-viz@jsonui")
+    task(factory, "T-0003", projectId=None, launchCommand="cd ~/w && claude")
+    rows = {t["id"]: t["launchCommand"] for t in room_for(FakeWorld()).slice()["tasks"]}
+    assert rows["T-0001"] == "cd ~/work/docs && claude --channels plugin:jui-viz@jsonui -n 'shop T-0001'"
+    assert rows["T-0002"] == "cd ~/work/docs && claude -n mine --channels plugin:jui-viz@jsonui"       # its own name kept
+    assert rows["T-0003"] == "cd ~/w && claude -n T-0003"
+    assert json.loads((factory / "tasks" / "T-0001.json").read_text())["launchCommand"] == "cd ~/work/docs && claude --channels plugin:jui-viz@jsonui"
+
+
+def test_a_name_is_quoted_as_the_shell_reads_it():
+    assert slack_room.with_name("claude", "it's ~mine") == "claude -n 'it'\\''s ~mine'"
+    assert slack_room.with_name("claude", "~/x") == "claude -n '~/x'"
+    assert slack_room.with_name("claude", "plain") == "claude -n plain"

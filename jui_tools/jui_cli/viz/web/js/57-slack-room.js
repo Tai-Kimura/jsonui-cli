@@ -90,7 +90,9 @@ function sfRobotHTML(s) {
   }
   const st = robotState[r.label] || { state: 'idle', act: '' };
   const lamp = LAMP_TEXT[st.state] || st.state;
-  return `<p class="sf-who"><span class="sf-lamp" data-state="${esc(st.state)}"></span><b>${esc(r.label)}</b> ${esc(lamp)} <span class="sf-act">${esc(st.act || '')}</span></p>`
+  // the session's name (claude -n, from robotLaunch) where it has one, its label beside it
+  const name = typeof r.title === 'string' && r.title.trim() ? r.title.trim() : '';
+  return `<p class="sf-who"><span class="sf-lamp" data-state="${esc(st.state)}"></span><b class="sf-robot-name">${esc(name || r.label)}</b>${name ? ` <span class="sf-act">${esc(r.label)}</span>` : ''} ${esc(lamp)} <span class="sf-act">${esc(st.act || '')}</span></p>`
     + (r.canPrompt ? '' : `<p class="sf-why">${esc(tl('sf.robot.cannot', { why: String(r.why || '') }))}</p>${sfCopyHTML(String(s.robotLaunch || ''), tl('sf.robot.launch'))}`);
 }
 function sfRenderRobot(s) {
@@ -240,6 +242,7 @@ function sfNoteHTML(t, s) {
     : '';
   return `<div class="sf-note-top">${idHTML}</div>`
     + `<p class="sf-note-title" title="${esc(title)}">${esc(title)}</p>`
+    + (sfStale(t) ? `<button type="button" class="wb-btn sf-reload" data-sf-reload>${esc(tl('sf.note.stale'))}</button>` : '')
     + `<label class="sf-field sf-state-row"><span class="sf-label">${esc(tl('sf.note.state.label'))}</span>${stateHTML}</label>`
     + (t.projectId ? `<p class="sf-note-meta"><span class="sf-to" style="border-color:${esc(sfProjectColor(String(t.projectId)))}">${esc(String(t.projectId))}</span></p>` : '')
     + `${purgeHTML}${sfRelatedHTML(t, s)}${sfSourcesHTML(t, s)}${promptHTML}`
@@ -247,7 +250,30 @@ function sfNoteHTML(t, s) {
     + (edit && t.status !== 'talking' ? sfTargetHTML(t, s) : who ? `<p class="sf-target-ro">${esc(tl('sf.note.sent', { name: who }))}</p>` : '')
     + `${actsHTML}<p class="sf-note-times">${timesHTML}</p><p class="sf-note-said" role="status"></p>`;
 }
-/* One lane per state, drawn once; a note is drawn again only when its task changed and no hand is on it. */
+/* The selector of a pressed thing on a note, to find it again after the note is drawn again. */
+function sfFocusKey(el) {
+  const attr = ['data-sf-op', 'data-sf-revise-open', 'data-sf-prompt-open', 'data-sf-chat', 'data-sf-reload', 'data-sf-copy'].find((a) => el.hasAttribute(a));
+  if (!attr) return el.classList.contains('sf-id') ? '.sf-id' : '';
+  const v = el.getAttribute(attr);
+  return v ? '[' + attr + '="' + CSS.escape(v) + '"]' : '[' + attr + ']';   // a selector, not HTML
+}
+/* What was typed on a note and not saved, while its file changed under it: the prompt or the target. */
+function sfStale(t) {
+  const d = SF.drafts[t.id]; if (!d) return false;
+  const prompt = typeof t.prompt === 'string' ? t.prompt : '', sid = (t.target && t.target.sessionId) || '';
+  return (d.prompt !== undefined && d.promptBase !== undefined && d.promptBase !== prompt)
+    || (d.sessionId !== undefined && d.sessionBase !== undefined && d.sessionBase !== sid);
+}
+/* A draft of a note: what is typed, and the file's value it was typed over (sfStale). */
+function sfDraft(id) {
+  let d = SF.drafts[id];
+  if (!d) {
+    const t = sfTaskOf(id);
+    d = SF.drafts[id] = { promptBase: t && typeof t.prompt === 'string' ? t.prompt : '', sessionBase: (t && t.target && t.target.sessionId) || '' };
+  }
+  return d;
+}
+/* One lane per state, drawn once; a note is drawn again when its task changed. */
 function sfRenderBoard(s) {
   const wb = $('sf-wb');
   if (!wb.firstChild) {
@@ -274,13 +300,19 @@ function sfRenderBoard(s) {
     n.el.style.setProperty('--note-h', String(SF_NOTE_HUE[lane]));
     const box = wb.querySelector(`[data-sf-lane="${CSS.escape(lane)}"] .sf-lane-notes`);
     if (n.el.parentElement !== box) box.appendChild(n.el);
-    const sig = JSON.stringify([t, ties(t), lane === 'draft' || lane === 'ready' ? targetsSig : '']);
-    if (sig !== n.sig && !n.el.contains(document.activeElement)) {
+    const sig = JSON.stringify([t, ties(t), lane === 'draft' || lane === 'ready' ? targetsSig : '', sfStale(t)]);
+    // a note follows its file (the robot's rewrite after 直しを頼む, 2.4.0): drawn again unless a select or a field in it
+    // has the focus; a button's focus moves to the same button. What was typed and not saved stays (SF.drafts), and a
+    // note whose file changed under it says so (sfStale), its 読み直す dropping what was typed.
+    const hand = n.el.contains(document.activeElement) ? document.activeElement : null;
+    if (sig !== n.sig && !(hand && hand.matches('select, input, textarea'))) {
       const said = (n.el.querySelector('.sf-note-said') || {}).textContent || '';
       const open = [...n.el.querySelectorAll('details')].map((x) => x.className + (x.open ? ':open' : ''));
+      const again = hand ? sfFocusKey(hand) : '';
       n.el.innerHTML = sfNoteHTML(t, s);
       if (said) setText(n.el.querySelector('.sf-note-said'), said);
       for (const x of n.el.querySelectorAll('details')) if (open.includes(`${x.className}:open`)) x.open = true;
+      if (again) { const to = n.el.querySelector(again) || n.el.querySelector('[data-sf-prompt-open]'); if (to) to.focus({ preventScroll: true }); }
       n.sig = sig;
     }
   });
@@ -459,7 +491,7 @@ async function sfEditSave() {
   const got = await sfPost('/api/slack-room/task', body);
   $('sf-edit-save').disabled = false;
   if (!got.ok) { setText($('sf-edit-said'), tl('sf.failed', { error: got.error || String(got.status) })); return; }
-  if (SF.drafts[ed.id]) delete SF.drafts[ed.id].prompt;
+  if (SF.drafts[ed.id]) { delete SF.drafts[ed.id].prompt; delete SF.drafts[ed.id].promptBase; if (SF.drafts[ed.id].sessionId === undefined) delete SF.drafts[ed.id]; }
   sfEditClose();
   const said = note && note.el.querySelector('.sf-note-said');
   if (said) setText(said, SF_SAID.save);
@@ -716,7 +748,7 @@ $('sf-edit-close').addEventListener('click', () => sfEditClose());
 $('sf-edit-save').addEventListener('click', sfEditSave);
 $('sf-edit-text').addEventListener('input', (e) => {
   if (!SF.edit || e.target.readOnly) return;
-  (SF.drafts[SF.edit.id] || (SF.drafts[SF.edit.id] = {})).prompt = e.target.value;
+  sfDraft(SF.edit.id).prompt = e.target.value;
 });
 $('sf-edit-text').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sfEditSave(); } });
 $('sf-revise-close').addEventListener('click', () => sfReviseClose());
@@ -747,6 +779,13 @@ sfEl.addEventListener('click', async (e) => {
   if (chat) { sfChatOpen(chat.closest('.sf-note').dataset.sfTask, chat); return; }
   const rev = e.target.closest('[data-sf-revise-open]');
   if (rev) { sfReviseOpen(rev.closest('.sf-note'), rev); return; }
+  const reload = e.target.closest('[data-sf-reload]');
+  if (reload) {
+    const n = reload.closest('.sf-note'); delete SF.drafts[n.dataset.sfTask];
+    const s = sfSlice(); if (s) sfRenderBoard(s);
+    const to = n.querySelector('[data-sf-prompt-open]'); if (to) to.focus({ preventScroll: true });
+    return;
+  }
   const big = e.target.closest('[data-sf-prompt-open]');
   if (big) { sfEditOpen(big.closest('.sf-note'), big); return; }
   if (e.target === $('sf-revise')) { sfReviseClose(); return; }   // a press outside the box
@@ -757,8 +796,7 @@ sfEl.addEventListener('click', async (e) => {
 /* What is typed on a note is kept (a push redraws only a note no hand is on). */
 $('sf-wb').addEventListener('input', (e) => {
   const note = e.target.closest('.sf-note'); if (!note) return;
-  const d = SF.drafts[note.dataset.sfTask] || (SF.drafts[note.dataset.sfTask] = {});
-  if (e.target.matches('[data-sf-target]')) d.sessionId = e.target.value;
+  if (e.target.matches('[data-sf-target]')) sfDraft(note.dataset.sfTask).sessionId = e.target.value;
 });
 $('sf-wb').addEventListener('change', async (e) => {
   if (e.target.matches('[data-sf-status]')) {
@@ -770,7 +808,7 @@ $('sf-wb').addEventListener('change', async (e) => {
     return;
   }
   const note = e.target.closest('.sf-note'); if (!note || !e.target.matches('[data-sf-target]')) return;
-  (SF.drafts[note.dataset.sfTask] || (SF.drafts[note.dataset.sfTask] = {})).sessionId = e.target.value;
+  sfDraft(note.dataset.sfTask).sessionId = e.target.value;
 });
 $('sf-wb').addEventListener('focusout', () => setTimeout(() => { const s = sfSlice(); if (SF.open && s) sfRenderBoard(s); }, 0));
 setInterval(renderSlackButton, 1000);

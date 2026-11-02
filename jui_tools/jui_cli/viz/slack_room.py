@@ -93,6 +93,33 @@ def home_to_tilde(text: str) -> str:
     return re.sub(re.escape(home) + r"(?![\w.-])", "~", text) if home and isinstance(text, str) else text
 
 
+NAME_MAX = 60   # characters of a session name the room puts in a start command (-n)
+#: The channels flag takes any number of values, so -n goes right after its one value (session-recovery's term_cmd).
+CHANNELS_VALUE = re.compile(r"(--channels|--dangerously-load-development-channels)\s+(\S+)")
+
+
+def session_name(value) -> str:
+    """A name for -n: one line, printable, at most NAME_MAX characters; '' when nothing usable is left."""
+    if not isinstance(value, str):
+        return ""
+    one = " ".join("".join(c if c.isprintable() else " " for c in value).split()).lstrip("-").strip()   # never read as a flag
+    return one[:NAME_MAX]
+
+
+def with_name(command: str, name: str) -> str:
+    """A start command with `-n <name>` (quoted as _sh quotes), right after the channels flag's value, or after the claude
+    word; left as it is when it already names its session (-n / --name) or has no claude word."""
+    name = session_name(name)
+    if not name or not isinstance(command, str) or re.search(r"(^|\s)(-n|--name)(\s|=|$)", command):
+        return command
+    flag = _sh(name) if not name.startswith("~") else "'" + name.replace("'", "'\\''") + "'"
+    m = CHANNELS_VALUE.search(command)
+    if m:
+        return command[:m.end()] + f" -n {flag}" + command[m.end():]
+    m = re.search(r"(^|&&\s*|;\s*|\s)claude\b", command)
+    return command[:m.end()] + f" -n {flag}" + command[m.end():] if m else command
+
+
 def config_path() -> Path:
     return slack_config.path()
 
@@ -470,6 +497,10 @@ class SlackRoom:
         return changed
 
     # -- done tasks go (requester 11-02: 「いつまでもメッセージ保管したくない」)
+    def robot_name(self) -> str:
+        """The robot's session name in its start command (slack.json robotName; the room's name by default)."""
+        return session_name(self.cfg.get("robotName")) or session_name(i18n.tl("page.sf.title"))
+
     def retention_ms(self) -> int:
         got = self.cfg.get("doneRetentionMinutes", DONE_RETENTION_MIN)
         return int(got * 60_000) if isinstance(got, (int, float)) and not isinstance(got, bool) and got >= 0 else DONE_RETENTION_MIN * 60_000
@@ -653,7 +684,7 @@ class SlackRoom:
         if sid:
             s = self.world.sessions[sid]
             refused = self.world.prompt_refusal(sid)
-            robot = {"sessionId": sid, "label": s.get("label", ""), "status": s.get("status", ""),
+            robot = {"sessionId": sid, "label": s.get("label", ""), "title": s.get("title") or "", "status": s.get("status", ""),
                      "canPrompt": refused is None, "why": refused[1] if refused else ""}
         arrivals = self.scanned["arrivals"]
         by_project: dict[str, int] = {}
@@ -667,7 +698,9 @@ class SlackRoom:
             if row["status"] == "done" and isinstance(row.get("doneAt"), (int, float)):
                 row["purgeAt"] = int(row["doneAt"] + self.retention_ms())
             if isinstance(row.get("launchCommand"), str):
-                row["launchCommand"] = with_home(home_to_tilde(row["launchCommand"]))   # the file keeps the robot's words
+                # the file keeps the robot's words; the page's line names the session "<project> <id>" when the robot did not
+                named = with_name(row["launchCommand"], " ".join(x for x in (str(row.get("projectId") or ""), str(row.get("id") or "")) if x))
+                row["launchCommand"] = with_home(home_to_tilde(named))
             tasks.append(row)
         # each task's source messages, as the room shows them (the newest tasks first, up to HEADS_MAX)
         by_path = {a["path"]: a for a in arrivals}
@@ -680,7 +713,7 @@ class SlackRoom:
         return {
             "config": {"path": tilde(str(self.config_file or config_path())), "state": home_to_tilde(self.cfg_why) or "ok"},
             "dir": tilde(str(self.root)), "dirExists": self.scanned["exists"],
-            "robot": robot, "robotLaunch": with_home(f"cd {_sh(tilde(str(self.root)))} && {LAUNCH_COMMAND}"), "launch": with_home(LAUNCH_COMMAND),
+            "robot": robot, "robotLaunch": with_home(with_name(f"cd {_sh(tilde(str(self.root)))} && {LAUNCH_COMMAND}", self.robot_name())), "launch": with_home(LAUNCH_COMMAND),
             "arrivals": {"total": len(arrivals), "byProject": by_project, "unsorted": self.scanned["unsorted"],
                          "broken": self.scanned["broken"], "pending": len(self.pending()), "recent": arrivals[-RECENT_MAX:][::-1]},
             "toldAt": self.last_told_at, "told": len(self.last_told), "note": home_to_tilde(self.note),

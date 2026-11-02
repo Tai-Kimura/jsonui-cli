@@ -2181,6 +2181,7 @@ body.sd-on { overflow: hidden; }
 .sf-prompt-view .sf-prompt-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; }
 .sf-prompt-view.is-empty .sf-prompt-text { color: var(--sf-note-soft); font-style: italic; }
 .sf-edit-box { width: min(880px, 100%); }
+.sf-note .sf-reload { width: 100%; border-color: #8a5a00; background: #fff4d6; color: #5c4000; font-weight: 700; }
 .sf-edit-box textarea { min-height: min(60vh, 34em); font-size: 14px; }
 .sf-edit-box textarea[readonly] { background: var(--panel); }
 .sf-note .wb-btn { white-space: normal; }
