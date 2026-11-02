@@ -259,10 +259,12 @@ def test_a_push_of_page_only_slices_alone_rebuilds_nothing_and_any_other_slice_s
         ({"machine": {"level": "ok"}}, False),                         # the load alone: stored, nothing rebuilt
         ({"cloudPrices": {"on": True}}, False),
         ({"machine": {"level": "busy"}, "cloudPrices": {}}, False),    # page-only slices only: still nothing
+        ({"slack": {"running": False}}, False),                         # the Slack intake's two slices: the factory's alone
+        ({"slackRoom": {"targets": [{"status": "busy"}]}}, False),     # (a target's status, 0-2 s after the sessions push)
         ({"machine": {"level": "high"}, "sessions": []}, False),        # with another slice: the scene is rebuilt
         ({"sessions": []}, False),
         ({"machine": {"level": "ok"}}, True),                          # a snapshot (replace) always rebuilds
         ({}, False),
     ])
-    assert [n for n, _ in got] == [0, 0, 0, 1, 1, 1, 1], got
-    assert "machine" in got[0][1] and "sessions" in got[3][1]          # stored either way
+    assert [n for n, _ in got] == [0, 0, 0, 0, 0, 1, 1, 1, 1], got
+    assert "machine" in got[0][1] and "slackRoom" in got[4][1] and "sessions" in got[5][1]          # stored either way
