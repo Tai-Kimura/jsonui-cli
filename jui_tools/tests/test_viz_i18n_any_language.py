@@ -120,9 +120,17 @@ def test_jui_viz_strings_template(capsys, monkeypatch, tmp_path):
 
 # ---- the page: 05-i18n.js itself, in node (its Intl is the browser's kind: the full ICU), with the table the server
 # writes. A count's form and a number's shape come from the code.
+def _blob(folder, text: str) -> str:
+    """The page handed to node as a file: the table is over 128 KiB, Linux's cap on one argument (E2BIG on CI)."""
+    path = folder / "page.html"
+    path.write_text(text, encoding="utf-8")
+    return str(path)
+
+
 PAGE_PROBE = r"""
 const fs = require('fs');
-const [file, blob] = process.argv.slice(2);
+const [file, blobFile] = process.argv.slice(2);
+const blob = fs.readFileSync(blobFile, 'utf8');   // a file, not an argument: Linux caps one argument at 128 KiB
 global.document = { getElementById: () => ({ textContent: blob }), documentElement: { style: { setProperty() {} } } };
 eval(fs.readFileSync(file, 'utf8') + `
 console.log(JSON.stringify({ locale: LOCALE, forms: [0, 1, 2, 1000000].map((n) => tl('bill.title.responses', { n })),
@@ -136,7 +144,7 @@ def test_the_page_counts_and_numbers_in_french(fr_words, tmp_path):
     page = i18n.page_html(i18n.STRINGS_SLOT, words)
     probe = tmp_path / "probe.js"
     probe.write_text(PAGE_PROBE, encoding="utf-8")
-    run = subprocess.run([NODE, str(probe), str(VIZ / "web/js/05-i18n.js"), page], capture_output=True, text=True,
+    run = subprocess.run([NODE, str(probe), str(VIZ / "web/js/05-i18n.js"), _blob(tmp_path, page)], capture_output=True, text=True,
                          timeout=60)
     assert run.returncode == 0, run.stderr
     got = json.loads(run.stdout)
@@ -145,7 +153,7 @@ def test_the_page_counts_and_numbers_in_french(fr_words, tmp_path):
     assert got["num"] == "1 234 567,5", got["num"]   # French: a narrow space, a comma
     # the same page in English is English-shaped (the control)
     page = i18n.page_html(i18n.STRINGS_SLOT, i18n.load("en", use_env=False))
-    run = subprocess.run([NODE, str(probe), str(VIZ / "web/js/05-i18n.js"), page], capture_output=True, text=True,
+    run = subprocess.run([NODE, str(probe), str(VIZ / "web/js/05-i18n.js"), _blob(tmp_path, page)], capture_output=True, text=True,
                          timeout=60)
     assert json.loads(run.stdout)["num"] == "1,234,567.5"
 
@@ -226,7 +234,8 @@ CODES = {   # code -> (plural forms, a million's form, 1234567.5 on the page, 24
 }
 DATE_PROBE = r"""
 const fs = require('fs');
-const [file, blob] = process.argv.slice(2);
+const [file, blobFile] = process.argv.slice(2);
+const blob = fs.readFileSync(blobFile, 'utf8');   // a file, not an argument: Linux caps one argument at 128 KiB
 global.document = { getElementById: () => ({ textContent: blob }), documentElement: { style: { setProperty() {} } } };
 eval(fs.readFileSync(file, 'utf8') + `
 console.log(JSON.stringify({ locale: LOCALE, million: PLURAL.select(1000000), one: PLURAL.select(1), num: fmtNum(1234567.5),
@@ -249,7 +258,7 @@ def test_each_code_is_the_pages_language_with_its_forms(code, tmp_path):
         pytest.skip("node is not on PATH: the page's dates and numbers are not read")
     probe = tmp_path / "date.js"
     probe.write_text(DATE_PROBE, encoding="utf-8")
-    run = subprocess.run([NODE, str(probe), str(VIZ / "web/js/05-i18n.js"), page.split(">", 1)[1]], capture_output=True,
+    run = subprocess.run([NODE, str(probe), str(VIZ / "web/js/05-i18n.js"), _blob(tmp_path, page.split(">", 1)[1])], capture_output=True,
                          text=True, timeout=60)
     assert run.returncode == 0, run.stderr
     got = json.loads(run.stdout)
