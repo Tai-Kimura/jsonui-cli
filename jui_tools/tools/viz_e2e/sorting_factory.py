@@ -34,7 +34,9 @@ import pathlib
 import stat
 import subprocess
 import sys
+import threading
 import time
+import traceback
 
 from common import DESKTOP, ISOLATE, LAUNCH_ARGS, PHONE, T, Watch, dump, new_page, ready, shot
 
@@ -97,6 +99,19 @@ def task(orch, tid, status, title, prompt, project="shop", sources=(), **extra):
 
 def read_task(orch, tid):
     return json.loads((orch / "tasks" / f"{tid}.json").read_text())
+
+
+# every shown note that can be changed: 直しを頼む on one line, 保存 and 開始 on one row, 開始 at its right, no word out of its button
+NOTE_ACTS = """() => { const lines = (b) => { const c = getComputedStyle(b); return Math.round((b.offsetHeight - parseFloat(c.paddingTop) - parseFloat(c.paddingBottom) - parseFloat(c.borderTopWidth) - parseFloat(c.borderBottomWidth)) / parseFloat(c.lineHeight)); };
+  const notes = [...document.querySelectorAll('#sf-wb .sf-note')].filter((n) => n.offsetWidth > 0 && n.querySelector('[data-sf-revise-open]'));
+  const broken = notes.map((n) => { const rev = n.querySelector('[data-sf-revise-open]'), bs = [...n.querySelectorAll('.sf-note-acts button')], go = n.querySelector('[data-sf-op="start"]');
+    const why = [];
+    if (lines(rev) > 1) why.push('revise on ' + lines(rev) + ' lines');
+    if (bs.some((b) => b.offsetTop !== bs[0].offsetTop)) why.push('actions on two rows');
+    if (go && go.offsetLeft + go.offsetWidth < Math.max(...bs.map((b) => b.offsetLeft + b.offsetWidth))) why.push('start not at the right');
+    if ([rev, ...bs].some((b) => b.scrollWidth > b.clientWidth + 1 || lines(b) > 1 && b !== rev)) why.push('a word out of its button');
+    return why.length ? `${n.dataset.sfTask} (${n.offsetWidth} px): ${why.join(', ')}` : null; }).filter(Boolean);
+  return { notes: notes.length, width: notes.length ? Math.min(...notes.map((n) => n.offsetWidth)) : 0, broken }; }"""
 
 
 async def stage_shot(page, name, out, failures):
@@ -278,16 +293,32 @@ async def run_sorting_factory(pw, out, failures):
         finally:
             conn.close()
 
-    def poll(channel, want=1, within=30):
-        """What the server queued for a channel, as channel.py takes it (one poll may come back empty)."""
-        got: list = []
-        end = time.time() + within
-        while len(got) < want and time.time() < end:
+    inbox: dict = {}
+    pollers: list = []
+    polling_done = threading.Event()
+
+    def keep_polling(channel):
+        """channel.py's loop: it polls for as long as it lives. A channel not polled for 60 s is dead to the server
+        (permissions.CHANNEL_DEAD_MS), so a stand-in that polled only when a check wanted a prompt lost its channel on a slow run."""
+        while not polling_done.is_set():
             try:
-                _, polled = local("GET", f"/channel/poll?channelId={channel}", timeout=within + 5)
-            except TimeoutError:   # the server holds a poll longer than a short wait: nothing came
-                polled = None
-            got += [p["text"] for p in (polled or {}).get("prompts", [])]
+                _, polled = local("GET", f"/channel/poll?channelId={channel}", timeout=35)
+            except (OSError, ValueError, http.client.HTTPException):   # the server gone at the end, or the channel: a check says what is missing
+                polling_done.wait(0.2)
+                continue
+            inbox[channel] += [p["text"] for p in (polled or {}).get("prompts", [])]
+
+    def start_polling(channel):
+        inbox[channel] = []
+        pollers.append(threading.Thread(target=keep_polling, args=(channel,), daemon=True))
+        pollers[-1].start()
+
+    def poll(channel, want=1, within=30):
+        """What the server queued for a channel since the last look, waiting up to `within` for `want` of them."""
+        end = time.time() + within
+        while len(inbox[channel]) < want and time.time() < end:
+            time.sleep(0.1)
+        got, inbox[channel] = inbox[channel], []
         return got
 
     browser = await pw.chromium.launch(args=LAUNCH_ARGS)
@@ -310,6 +341,7 @@ async def run_sorting_factory(pw, out, failures):
             status, hello = local("POST", "/channel/hello", {"ppid": 1, "cwd": "/", "sessionId": sid, "version": "2", "accepts": ["prompt"], "via": "plugin"})
             check(status == 200, f"hello {sid[-2:]}: {status}")
             channels[sid] = hello["channelId"]
+            start_polling(hello["channelId"])
 
         # the robot is told of the three messages no task names... (two: m1 is T-0001's)
         told = poll(channels[BOT])
@@ -367,16 +399,24 @@ async def run_sorting_factory(pw, out, failures):
           const title = n.querySelector('.sf-note-title'), lh = parseFloat(getComputedStyle(title).lineHeight);
           const st = n.querySelector('[data-sf-status]'), stFits = st.scrollWidth <= st.clientWidth + 1 && st.getBoundingClientRect().width >= 90;
           const inside = [...n.querySelectorAll('button, select, textarea, code')].every((e) => { const a = e.getBoundingClientRect(), b = n.getBoundingClientRect(); return a.left >= b.left - 1 && a.right <= b.right + 1; });
-          const rev = n.querySelector('[data-sf-revise-open]'), rs = getComputedStyle(rev), revLines = Math.round((rev.getBoundingClientRect().height - ['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth'].reduce((a, k) => a + parseFloat(rs[k]), 0)) / parseFloat(rs.lineHeight));
+          const rev = n.querySelector('[data-sf-revise-open]'), rs = getComputedStyle(rev), revLines = Math.round((rev.offsetHeight - ['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth'].reduce((a, k) => a + parseFloat(rs[k]), 0)) / parseFloat(rs.lineHeight));   // offset*, not the rect: a note is tilted, and a tilted rect is taller the wider the note
           const tg = n.querySelector('[data-sf-target]'), ctx = document.createElement('canvas').getContext('2d'), ts = getComputedStyle(tg);
           ctx.font = `${ts.fontWeight} ${ts.fontSize} ${ts.fontFamily}`;   // a select's scrollWidth ignores its cut text: the chosen words measured
           const tgFits = ctx.measureText(tg.options[tg.selectedIndex].text).width <= tg.clientWidth - parseFloat(ts.paddingLeft) - parseFloat(ts.paddingRight) - 20;
-          return { labels: [...n.querySelectorAll('.sf-label')].map((e) => e.textContent), labelGap, stFits, inside, revLines, tgFits, oneRow: acts.every((b) => Math.abs(b.top - acts[0].top) < 2),
+          return { labels: [...n.querySelectorAll('.sf-label')].map((e) => e.textContent), labelGap, stFits, inside, revLines, tgFits, oneRow: [...n.querySelectorAll('.sf-note-acts button')].every((b, _, all) => b.offsetTop === all[0].offsetTop),
             startRight: n.querySelector('[data-sf-op="start"]').getBoundingClientRect().right >= Math.max(...acts.map((b) => b.right)) - 1,
             titleLines: Math.round(title.getBoundingClientRect().height / lh), state: n.querySelector('[data-sf-status]').value,
             scheme: getComputedStyle(n.querySelector('[data-sf-status]')).colorScheme }; }""")
         check(lay["labels"] == [T("sf.note.state.label"), T("sf.note.prompt"), T("sf.note.target")] and lay["stFits"] and lay["inside"] and lay["revLines"] <= 1 and lay["tgFits"] and 4 <= lay["labelGap"] <= 8 and lay["oneRow"] and lay["startRight"]
               and lay["state"] == "ready" and lay["titleLines"] <= 3 and lay["scheme"] == "light", f"the note's layout: {lay}")
+        # the same on every note at the widths that narrow it: a 1280 px window leaves 108 px inside a note, in either language
+        for w, h in ((1920, 1080), (1280, 800), (1024, 768), (390, 844)):
+            await page.set_viewport_size({"width": w, "height": h})
+            await page.wait_for_timeout(300)
+            acts = res[f"note-acts-{w}"] = await page.evaluate(NOTE_ACTS)
+            check(acts["notes"] >= 3 and not acts["broken"], f"at {w} px every note's actions hold their lines: {acts}")
+        await page.set_viewport_size(DESKTOP["viewport"])
+        await page.wait_for_timeout(300)
         # nothing scrolls inside a note (the requester, 11-02): the prompt cut to its first lines, the start command whole
         flat = res["note-no-scroll"] = await page.evaluate("""() => {
           const scrolls = [...document.querySelectorAll('#sf-wb .sf-note, #sf-wb .sf-note *')].filter((e) => { const o = getComputedStyle(e).overflowY; return (o === 'auto' || o === 'scroll') && e.scrollHeight > e.clientHeight + 1; })
@@ -461,6 +501,8 @@ async def run_sorting_factory(pw, out, failures):
         rd = res["full-read"] = await page.evaluate(READ)
         check(rd["zoom"] in ("", "1") and rd["title"] >= 16 and rd["prompt"] >= 14 and rd["select"] >= 14 and rd["button"] >= 14 and rd["label"] >= 13 and rd["lane"] >= 20
               and len(rd["lanes"]) == 6, f"the whole board sized to read, not shrunk: {rd}")
+        acts = res["note-acts-full"] = await page.evaluate(NOTE_ACTS)
+        check(acts["notes"] >= 3 and not acts["broken"], f"the whole board: every note's actions hold their lines: {acts}")
         await shot(page, "slack-room-full", out, failures)
         # a lane's heading: that lane alone, its notes side by side
         await page.click('#sf-wb [data-sf-lane-open="draft"]')
@@ -470,6 +512,8 @@ async def run_sorting_factory(pw, out, failures):
         check(ln["board"] == "lane" and ln["lanes"] == ["draft"] and len(ln["tops"]) >= 3 and abs(ln["tops"][0] - ln["tops"][1]) <= 12,
               f"the draft lane alone, its notes side by side (a note's tilt moves its top a little): {ln}")
         check((await page.evaluate(READ))["prompt"] >= 14, "the lane sized to read")
+        acts = res["note-acts-lane"] = await page.evaluate(NOTE_ACTS)
+        check(acts["notes"] >= 2 and not acts["broken"], f"a lane alone: every note's actions hold their lines: {acts}")
         await shot(page, "slack-room-lane", out, failures)
         await page.click('#sf-wb [data-sf-lane-open="draft"]')                          # pressed again: the six lanes
         check(await page.evaluate("() => document.getElementById('sf').dataset.board") == "full", "the heading pressed again: back to the six lanes")
@@ -852,8 +896,10 @@ async def run_sorting_factory(pw, out, failures):
         for u in watch.foreign:
             failures.append(f"slack-room: request outside the server: {u}")
     except Exception as e:
-        failures.append(f"slack-room: {type(e).__name__}: {str(e).splitlines()[0]}")
+        failures.append(f"slack-room: {type(e).__name__}: {(str(e).splitlines() or [''])[0]}")
+        (pathlib.Path(out) / "slack-room-traceback.txt").write_text(traceback.format_exc())   # which read it was, when the line alone does not say
     finally:
+        polling_done.set()
         for proc in stand_ins:   # the session stand-ins this suite started
             proc.kill()
             proc.wait()

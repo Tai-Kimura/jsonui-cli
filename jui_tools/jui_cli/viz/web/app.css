@@ -2196,6 +2196,12 @@ body.sd-on { overflow: hidden; }
 .sf-edit-box textarea { min-height: min(60vh, 34em); font-size: 14px; }
 .sf-edit-box textarea[readonly] { background: var(--panel); }
 .sf-note .wb-btn { white-space: normal; }
+/* a note's actions at its narrowest (108 px inside, a 1280 px window or less): 保存 and 開始 on one row in either language, 開始 at
+   its right; the spacer's own two gaps were what broke the row. 直しを頼む keeps to one line */
+.sf-note .sf-note-acts { flex-wrap: nowrap; gap: 4px; }
+.sf-note-acts .grow { display: none; }
+.sf-note-acts [data-sf-op="start"] { margin-left: auto; }
+.sf-note .sf-note-acts .wb-btn, .sf-note .sf-revise-open { padding-left: 7px; padding-right: 7px; }
 
 /* ---- the sorting factory's left column: the fetch bar fixed, two tabs (the requester, 11-02) ---- */
 .sf-fetchbar { flex: none; padding: 8px 12px 6px; border-top: 1px solid var(--line); background: var(--panel); font: 13px/1.5 var(--font-body); }

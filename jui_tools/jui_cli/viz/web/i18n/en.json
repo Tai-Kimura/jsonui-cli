@@ -2562,7 +2562,7 @@
   "sf.note.broken": "tasks/{id}.json cannot be read",
   "sf.op.save": "Save",
   "sf.op.start": "Start",
-  "sf.op.revise": "Ask for a change",
+  "sf.op.revise": "Ask to edit",
   "sf.said.save": "Saved",
   "sf.said.ready": "Marked ready",
   "sf.said.start": "Sent to the session",
