@@ -1086,6 +1086,10 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .h-who { display: flex; gap: 8px; margin: 0 0 2px; color: var(--ink-soft); font: 700 11px/1.4 var(--font-body); }
 .h-at { color: var(--ink-soft); font: 500 11px/1.4 var(--font-mono); }
 .h-plain { margin: 0; white-space: pre-wrap; }
+.h-long-note { margin: 0 0 4px; color: var(--ink-soft); font: 700 11.5px/1.5 var(--font-body); overflow-wrap: anywhere; }
+.h-long-head { overflow-wrap: anywhere; }
+.h-long-open { max-height: 60vh; overflow: auto; }
+.h-long-more { margin-top: 4px; font: 700 11.5px/1.5 var(--font-body); color: inherit; background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; }
 .h-md { display: grid; gap: 6px; line-height: 1.6; }
 .h-md p, .h-md .h-h, .h-md .h-list, .h-md blockquote { margin: 0; }
 .h-md .h-list { padding-left: 1.3em; }

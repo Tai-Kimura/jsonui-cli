@@ -6,8 +6,13 @@ file with its absolute path, which the receiving session opens with Read.
 
 The files are kept in one place only, ``<viz_home>/uploads/<session>/`` (0700), named by ``Attachments.folder``.
 The receiving session's Read of it goes through its ordinary permission check (measured 10-20 10:39: a file outside
-the working folder gives a PermissionRequest), which the viz permission board and notification show. viz never
-changes the receiving session's settings or permission rules, and adds nothing that widens them (requester 10-20).
+the working folder gives a PermissionRequest), which the viz permission board and notification show. Measured again
+11-04 on 2.1.318: auto mode, now the CLI's default, asks nothing; default and acceptEdits ask for each Read until the
+card's "from now on" adds its session-scoped rule for this folder. viz never changes the receiving session's settings
+or permission rules, and adds nothing that widens them (requester 10-20).
+
+A prompt too long for POST /api/prompt goes the same way (ticket 2026-11-04-viz-long-prompt-goes-as-a-file): the page
+keeps its text here as prompt.md, and read_text gives it back for the history.
 
 How a file is written and removed:
 
@@ -37,6 +42,8 @@ SESSION_FILES_MAX = 100
 SESSION_BYTES_MAX = 200 * 1024 * 1024
 KEEP_MS = 3_600_000
 NAME_MAX = 120
+#: how much of a long prompt the history shows; the rest is in the file (a press shows it in Finder)
+TEXT_VIEW_MAX = 1024 * 1024
 
 PRIVATE_DIR = "uploads"
 
@@ -243,6 +250,39 @@ class Attachments:
         if len(data) > FILE_MAX or not data.startswith(_MAGIC[ext]):
             raise Refused(415, "not an image")
         return _MEDIA_BY_IMAGE_EXT[ext], data
+
+    def read_text(self, sid: str, fid: str) -> dict:
+        """A long prompt's text for the history: <fid>.md through the folder's descriptor, never following a symlink, a
+        plain file, at most TEXT_VIEW_MAX bytes of it, cut on a whole character. {text, size, cut}. Refused 404 when it
+        is gone, 400 for a malformed id. Only .md: the name the page gives a long prompt."""
+        if not isinstance(fid, str) or not _ID.fullmatch(fid):
+            raise Refused(400, "not an attachment")
+        try:
+            fd = self._open(sid, create=False)
+        except (OSError, Refused):
+            raise Refused(404, "gone") from None
+        try:
+            try:
+                out = os.open(f"{fid}.md", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=fd)
+            except OSError:
+                raise Refused(404, "gone") from None
+            try:
+                st = os.fstat(out)
+                if not stat.S_ISREG(st.st_mode):
+                    raise Refused(404, "gone")
+                data = b""
+                while len(data) < TEXT_VIEW_MAX:
+                    chunk = os.read(out, TEXT_VIEW_MAX - len(data))
+                    if not chunk:
+                        break
+                    data += chunk
+            finally:
+                os.close(out)
+        finally:
+            os.close(fd)
+        cut = st.st_size > len(data)
+        text = data.decode("utf-8", errors="ignore" if cut else "replace")
+        return {"text": text, "size": st.st_size, "cut": cut}
 
     def reveal_path(self, sid: str, fid: str, ext: str) -> str:
         """The path of one kept file, to show in Finder (2.3.12, requester 10-21): <viz home>/uploads/<sid>/<fid>.<ext>,

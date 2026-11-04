@@ -15,6 +15,7 @@ Routes (design: dev-guide, 05 §3):
   POST /api/attach    one file for a prompt, kept in <viz home>/uploads/<session>/ (the same checks, octet-stream)
   POST /api/attach-remove  an attachment taken off before sending (the same checks)
   POST /api/denial    a card of a call stopped by auto mode: approve (its fixed words as a prompt) or dismiss (the same checks)
+  POST /api/attach-text  the text of a prompt that went as a file, for the history (the same checks)
   POST /api/attach-image  one attached image for the history's thumbnail and large view, by session and id (the same checks)
   POST /api/history-image  one picture of a robot's 応答の履歴, named by the robot and its place (the same checks)
   POST /api/history-file  one picture a session sent with SendUserFile, named by the robot, the call and the file (the same checks)
@@ -634,7 +635,8 @@ def make_app(ctx: ServerContext) -> web.Application:
             return web.Response(status=exc.status, text=f"{exc}\n")
         except OSError:
             return web.Response(status=404, text="no such attachment\n")
-        refused_by = await ctx.world.submit_prompt(sid, text, now_ms(), attached)
+        shown = body.get("shown") if isinstance(body, dict) else None   # a long prompt's head, for the event log only
+        refused_by = await ctx.world.submit_prompt(sid, text, now_ms(), attached, shown if isinstance(shown, str) else None)
         if refused_by is not None:
             return web.Response(status=refused_by[0], text=refused_by[1] + "\n")
         if ctx.publish:
@@ -726,6 +728,30 @@ def make_app(ctx: ServerContext) -> web.Application:
             return web.Response(status=exc.status, text=f"{exc}\n")
         return web.Response(body=data, content_type=media,
                             headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Content-Disposition": "inline"})
+
+    async def api_attach_text(request: web.Request) -> web.Response:
+        """A long prompt's text, for the history (ticket 2026-11-04-viz-long-prompt-goes-as-a-file): {"sessionId", "id"}
+        from the prompt's line, never a path. The checks of /api/prompt; attachments.Attachments.read_text reads it off
+        the event loop. A file that is gone is {"gone": true} with 200, as /api/attach-image's."""
+        refused = prompt_checks(request, ctx)
+        if refused is not None:
+            log(f"refused: /api/attach-text ({refused.text.strip()})")
+            return refused
+        body = await _capped_json(request, PROMPT_MAX_BODY)
+        if isinstance(body, web.Response):
+            return body
+        sid, fid = body.get("sessionId"), body.get("id")
+        if not isinstance(sid, str) or not isinstance(fid, str):
+            return web.Response(status=400, text="sessionId and id are required\n")
+        if ctx.world is None:
+            return web.Response(status=503, text="no world\n")
+        try:
+            got = await asyncio.get_running_loop().run_in_executor(None, ctx.world.attachments.read_text, sid, fid)
+        except attachments.Refused as exc:
+            if exc.status == 404:
+                return web.json_response({"gone": True}, headers={"Cache-Control": "no-store"})
+            return web.Response(status=exc.status, text=f"{exc}\n")
+        return web.json_response(got, headers={"Cache-Control": "no-store"})
 
     async def api_attach_remove(request: web.Request) -> web.Response:
         """× on an attachment not sent yet: {sessionId, id}; the checks of /api/prompt."""
@@ -1224,6 +1250,7 @@ def make_app(ctx: ServerContext) -> web.Application:
     app.router.add_route('*', '/api/messages/peers', api_messages)
     app.router.add_route("*", "/api/attach", api_attach)
     app.router.add_route("*", "/api/attach-remove", api_attach_remove)
+    app.router.add_route("*", "/api/attach-text", api_attach_text)
     app.router.add_route("*", "/api/denial", api_denial)
     app.router.add_route("*", "/api/attach-image", api_attach_image)
     app.router.add_route("*", "/api/history-image", api_history_image)

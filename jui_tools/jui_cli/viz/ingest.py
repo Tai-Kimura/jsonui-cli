@@ -1492,11 +1492,13 @@ class World:
         self._argv[proc] = argv
         return argv
 
-    async def submit_prompt(self, sid: str, text: str, at: int, attached: list[dict] | None = None) -> tuple[int, str] | None:
-        """The HTTP prompt path: Claude's channel queue or an acknowledged Codex daemon request."""
+    async def submit_prompt(self, sid: str, text: str, at: int, attached: list[dict] | None = None,
+                            shown: str | None = None) -> tuple[int, str] | None:
+        """The HTTP prompt path: Claude's channel queue or an acknowledged Codex daemon request. ``shown`` is what the
+        event log says instead of the text (a long prompt's own head, its text being one fixed line)."""
         session = self.sessions.get(sid)
         if not session or session.get("cli") != "codex":
-            return self.send_prompt(sid, text, at, attached)
+            return self.send_prompt(sid, text, at, attached, shown)
         refused = self.prompt_refusal(sid)
         if refused is not None:
             return refused
@@ -1504,7 +1506,7 @@ class World:
         full = "\n".join([text.rstrip(), *lines]).strip() if lines else text
         refused = await self.codex_prompt(sid, full)
         if refused is None:
-            self._prompt_event(sid, text, at, lines)
+            self._prompt_event(sid, shown or text, at, lines)
         return refused
 
     def _prompt_event(self, sid: str, text: str, at: int, lines: list) -> None:
@@ -1514,7 +1516,8 @@ class World:
         self.state.add_event({"at": at, "sessionId": sid, "agentId": sid, "kind": "PromptSent", "cat": "perm",
                               "text": i18n.tl("ev.prompt.sent", label=self.sessions[sid]['label'], head=head, extra=extra)})
 
-    def send_prompt(self, sid: str, text: str, at: int, attached: list[dict] | None = None) -> tuple[int, str] | None:
+    def send_prompt(self, sid: str, text: str, at: int, attached: list[dict] | None = None,
+                    shown: str | None = None) -> tuple[int, str] | None:
         """A prompt typed in the page for this session (POST /api/prompt, after its checks): queued for that session's
         channel only, and the event log gets when, to whom and the first PROMPT_HEAD characters — never the whole
         text, which lives only in the channel's queue until its next poll. ``attached`` (attachments.Attachments.take)
@@ -1531,7 +1534,7 @@ class World:
         lines = [attachment_line(a) for a in attached or []]
         full = "\n".join([text.rstrip(), *lines]).strip() if lines else text
         channel.inbox.append({"text": full, "at": at})
-        self._prompt_event(sid, text, at, lines)
+        self._prompt_event(sid, shown or text, at, lines)
         return None
 
     def prompt_refusal(self, sid: str) -> tuple[int, str] | None:

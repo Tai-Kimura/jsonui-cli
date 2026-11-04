@@ -803,6 +803,15 @@ async def run_sorting_factory(pw, out, failures):
         await page.click("#sf-send")
         got = poll(channels[BOT])
         check(got == ["今日は shop を優先して"], f"the box to the robot: {got}")
+        # the same box, a text too long for /api/prompt: a file, as the history's box (ticket 2026-11-04-viz-long-prompt-goes-as-a-file)
+        long_say = "長い頼みごと\n" * 1000
+        await page.fill("#sf-say", long_say)
+        await page.click("#sf-send")
+        got = poll(channels[BOT])
+        check(len(got) == 1 and got[0].startswith("The whole prompt is in the attached file") and "attached: /" in got[0], f"a long text from the box goes as a file: {got}")
+        kept = pathlib.Path(got[0].split("attached: ", 1)[1].split(" ", 1)[0]) if got and "attached: " in got[0] else None
+        check(kept is not None and kept.read_bytes() == long_say.encode("utf-8"), "a long text from the box: the file has its bytes")
+        check(await page.evaluate("() => document.getElementById('sf-say').value === ''"), "a long text from the box: the box is empty once sent")
 
         # the start command: on T-0002 (the robot found no fitting session and wrote one), none on T-0001 (DEV is there)
         COPY = """(id) => { const c = document.querySelector(`#sf-wb [data-sf-task="${id}"] .sf-copy [data-sf-copy]`); return c ? c.dataset.sfCopy : null; }"""

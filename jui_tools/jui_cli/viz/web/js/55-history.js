@@ -212,12 +212,47 @@ function histPeerName(text, session) {
   s.title = tl('hist.peer.unseen');
   return s;
 }
+/* A prompt sent as a file: the person's own words, not the fixed line the receiver got. Its head shows at once, the whole
+   text behind a press (up to what the server gives; the file's mark below shows the rest in Finder). The file goes an
+   hour after its session ended, and then this says so. */
+const HIST_LONG_HEAD = 300;
+const histLongTexts = new Map();
+function histLongPrompt(m) {
+  const ref = { sessionId: m[2], id: m[3] }, key = `${m[2]}:${m[3]}`;
+  const box = hNode('div', 'h-long');
+  box.appendChild(hNode('p', 'h-long-note', tl('hist.long.note', { size: m[7] })));
+  const head = hNode('p', 'h-plain h-long-head', '…');
+  const more = hNode('button', 'h-long-more', tl('hist.long.more'));
+  more.type = 'button'; more.hidden = true;
+  const note = hNode('p', 'h-long-note'); note.hidden = true;
+  box.append(head, more, note);
+  if (!histLongTexts.has(key)) histLongTexts.set(key, SOURCE.attachText(ref));
+  histLongTexts.get(key).then((got) => {
+    if (!got.ok) {
+      head.textContent = got.gone ? tl('hist.long.gone') : tl('hist.long.failed', { error: got.error || got.status });
+      head.classList.add('h-gone');
+      return;
+    }
+    const whole = got.text.length <= HIST_LONG_HEAD;
+    head.textContent = whole ? got.text : `${got.text.slice(0, HIST_LONG_HEAD)}…`;
+    more.hidden = whole;
+    more.addEventListener('click', () => {
+      const open = head.classList.toggle('h-long-open');
+      head.textContent = open ? got.text : `${got.text.slice(0, HIST_LONG_HEAD)}…`;
+      setText(more, tl(open ? 'hist.long.less' : 'hist.long.more'));
+      note.hidden = !(open && got.cut);
+    });
+    if (got.cut) note.textContent = tl('hist.long.cut', { size: attachSize(got.size) });
+  });
+  return box;
+}
 function histItem(item) {
   const at = hNode('time', 'h-at', HIST_TIME(item.at));
   if (item.kind === 'user') {
     const n = hNode('div', 'h-item h-user');
     const head = hNode('p', 'h-who', tl('hist.who.user')); head.appendChild(at); n.appendChild(head);
-    n.appendChild(hNode('p', 'h-plain', item.text));
+    const said = String(item.text).split('\n'), long = said[0].trim() === LONG_PROMPT_LINE ? said.map((l) => histAttachMatch(l)).find(Boolean) : null;   // Codex records a page's prompt as a user message
+    n.appendChild(long ? histLongPrompt(long) : hNode('p', 'h-plain', item.text));
     const cut = histCutNote(item); if (cut) n.appendChild(cut);
     for (const path of Array.isArray(item.gone) ? item.gone : []) n.appendChild(hNode('p', 'h-gone', tl('hist.img.gone', { path })));
     return n;
@@ -234,7 +269,8 @@ function histItem(item) {
     head.appendChild(at); n.appendChild(head);
     const lines = String(item.text).split('\n'), files = lines.filter((l) => histAttachMatch(l));
     const rest = lines.filter((l) => !histAttachMatch(l)).join('\n');
-    if (rest.trim()) n.appendChild(hNode('p', 'h-plain', rest));
+    if (rest.trim() === LONG_PROMPT_LINE && files.length) n.appendChild(histLongPrompt(histAttachMatch(files[0])));
+    else if (rest.trim()) n.appendChild(hNode('p', 'h-plain', rest));
     if (files.length) n.appendChild(histAttachMarks(files));
     const cut = histCutNote(item); if (cut) n.appendChild(cut);
     return n;
@@ -503,8 +539,43 @@ rbEl.addEventListener('click', (e) => {
    so what is typed survives a rebuild. A session without the relay, or with a jui-viz plugin older than 1.2.0 (its
    channel cannot deliver), gets the box disabled and the reason. */
 const PROMPT_MAX_BYTES = 8192;   // server.PROMPT_MAX_BODY: the JSON body, not only the text
-const composeBytes = (label, text) => new TextEncoder().encode(JSON.stringify({ sessionId: SESSION_UUID[label] || '', text,
-  attachments: HIST.attach.map((a) => a.id || '0000000000000000') })).length;
+const promptBodyBytes = (label, text, count) => new TextEncoder().encode(JSON.stringify({ sessionId: SESSION_UUID[label] || '', text,
+  attachments: Array(count).fill('0000000000000000') })).length;
+/* A text whose body would pass PROMPT_MAX_BYTES goes as a file (ticket 2026-11-04-viz-long-prompt-goes-as-a-file; requester:
+   「一定バイト以上ある場合はファイル化して一時保存後にclaudeにファイルとして投げる」): kept by POST /api/attach as prompt.md, its
+   bytes the text's UTF-8, and the prompt is this one line and the file's. The line says the file is the prompt: of the
+   files sent with words of their own, receivers had read 3 in 8; of files sent with none, 7 in 7 (11-04, their records).
+   The history knows a long prompt by this line, so it stays as it is in what is already written. */
+const LONG_PROMPT_LINE = 'The whole prompt is in the attached file (it was too long to send as text). Read all of it, in parts if it is long, then follow it as this prompt.';
+const LONG_PROMPT_FILE = 'prompt.md';
+/* Over this the receiver's Read refuses the whole file at once (measured 11-04 on 2.1.318: "exceeds maximum allowed size
+   (256KB)"), and in 3 of 3 tries it then looked through it with Bash. It still goes; the box says so before it does. */
+const LONG_PROMPT_READ_MAX = 256 * 1024;
+let textBytesSeen = { text: '', n: 0 };
+const textBytes = (text) => {   // the box paints often and a text can be 20 MB: counted once per text
+  if (textBytesSeen.text !== text) textBytesSeen = { text, n: new TextEncoder().encode(text).length };
+  return textBytesSeen.n;
+};
+/* How this text can go: plain, file, big (over the file limit), many (the file would be one attachment too many). */
+function promptShape(label, text, count) {
+  if (promptBodyBytes(label, text, count) <= PROMPT_MAX_BYTES) return 'plain';
+  if (textBytes(text) > ATTACH_FILE_MAX) return 'big';
+  return count >= ATTACH_MAX ? 'many' : 'file';
+}
+/* The one way a typed text is sent (the history's box, the sorting factory's). A refusal leaves the text with the caller;
+   a file that went up for a prompt that was then refused is taken back. { ok, status, error, wire }: wire, the text sent. */
+async function promptSend(label, text, ids) {
+  const shape = promptShape(label, text, ids.length);
+  if (shape === 'plain') return { ...(await SOURCE.sendPrompt(label, text, ids)), wire: text };
+  if (shape === 'big') return { ok: false, status: 413, error: tl('hist.state.long', { n: fmtNum(textBytes(text)), max: fmtNum(ATTACH_FILE_MAX) }) };
+  if (shape === 'many') return { ok: false, status: 400, error: tl('hist.state.asfile.many', { max: ATTACH_MAX }) };
+  const up = await SOURCE.attachFile(label, new File([text], LONG_PROMPT_FILE, { type: 'text/markdown' }));
+  if (!up.ok) return { ok: false, status: up.status, error: up.error };
+  const shown = composeNorm(text.slice(0, 200).replace(/[\ud800-\udbff]$/, ''));
+  const got = await SOURCE.sendPrompt(label, LONG_PROMPT_LINE, [up.id, ...ids], shown);
+  if (!got.ok) SOURCE.attachRemove(label, up.id);
+  return { ...got, wire: LONG_PROMPT_LINE };
+}
 /* Files attached to the prompt (ticket 2026-10-20 prompt-attach): the 添付… button, a drop on the box, or an image pasted
    into the text (Ctrl/⌘+V). Each goes to the server at once (SOURCE.attachFile, POST /api/attach); the prompt names their
    ids and the server adds a line with each file's path, which the receiver opens with Read (its own permission check:
@@ -631,7 +702,10 @@ function composeBuild() {
   acts.append(go, back);
   confirm.append(to, preview, acts);
   box.append(head, area, list, row, stopState, confirm);
-  area.addEventListener('input', () => composePaint());
+  area.addEventListener('input', () => {
+    if (HIST.sent && HIST.sent.error) HIST.sent = null;   // that failure was about the text before: the line says what this one will do
+    composePaint();
+  });
   pick.addEventListener('click', () => input.click());
   input.addEventListener('change', () => { attachAdd([...input.files]); input.value = ''; });
   box.addEventListener('dragover', (e) => {
@@ -832,6 +906,15 @@ function histCardsPaint(id = HIST.compose && HIST.compose._for, off = HIST.tab !
     () => `${histFoldBar(fold, perms, qs, ds)}${perms.map((p) => permDetail(p, `hb-${p.id}`)).join('')}${qs.map((q) => questionHTML(q, 'h')).join('')}${ds.map((d) => denialHTML(d, 'h')).join('')}`);
   histLowBtn().hidden = el.hidden || fold.folded;   // the handle that grows this box: shown with it, on its top edge (not while folded)
 }
+/* The box paints often (each state from the server) and a text can be 20 MB: its shape is worked out once per text. */
+let composeShapeSeen = null;
+function composeShapeOf(id, text) {
+  const n = HIST.attach.length;
+  if (!composeShapeSeen || composeShapeSeen.text !== text || composeShapeSeen.n !== n || composeShapeSeen.id !== id) {
+    composeShapeSeen = { text, n, id, shape: promptShape(id, text, n) };
+  }
+  return composeShapeSeen.shape;
+}
 function composePaint() {
   if (!HIST.compose) return;
   const E = composeEls(), id = HIST.compose._for, t = composeTarget(id);
@@ -844,19 +927,23 @@ function composePaint() {
   E.head.hidden = E.why.hidden;
   E.area.disabled = !!t.why;
   E.area.readOnly = asking;
-  const text = E.area.value, files = attachReady().length, bytes = text.trim() || files ? composeBytes(id, text) : 0;
-  E.send.disabled = !!t.why || (!text.trim() && !files) || attachBusy() || bytes > PROMPT_MAX_BYTES || asking;
+  const text = E.area.value, files = attachReady().length;
+  const shape = composeShapeOf(id, text);
+  const stopped = shape === 'big' || shape === 'many';
+  E.send.disabled = !!t.why || (!text.trim() && !files) || attachBusy() || stopped || asking;
   E.pick.disabled = !!t.why || asking || HIST.attach.length >= ATTACH_MAX;
   attachPaint(E);
   const sent = HIST.sent && HIST.sent.id === id ? HIST.sent : null;
   const phase = sent && !sent.error ? composePhase(sent) : '';
-  E.state.textContent = bytes > PROMPT_MAX_BYTES ? tl('hist.state.long', { n: fmtNum(bytes), max: fmtNum(PROMPT_MAX_BYTES) })
+  E.state.textContent = shape === 'big' ? tl('hist.state.long', { n: fmtNum(textBytes(text)), max: fmtNum(ATTACH_FILE_MAX) })
+    : shape === 'many' ? tl('hist.state.asfile.many', { max: ATTACH_MAX })
     : sent && sent.error ? tl('hist.state.failed', { error: sent.error })
+    : shape === 'file' ? tl(textBytes(text) > LONG_PROMPT_READ_MAX ? 'hist.state.asfile.big' : 'hist.state.asfile', { size: attachSize(textBytes(text)) })
     : phase === 'arrived' ? tl('hist.state.arrived', { at: HIST_TIME(sent.arrivedAt) })
     : phase === 'missing' ? tl('hist.state.missing', { at: HIST_TIME(sent.at) })
     : sent ? tl('hist.state.sending', { at: HIST_TIME(sent.at) }) : '';
-  E.state.dataset.hPhase = bytes > PROMPT_MAX_BYTES ? 'long' : sent && sent.error ? 'error' : phase;
-  E.state.classList.toggle('h-compose-err', bytes > PROMPT_MAX_BYTES || !!(sent && sent.error) || phase === 'missing');
+  E.state.dataset.hPhase = shape === 'big' ? 'long' : shape === 'many' ? 'many' : sent && sent.error ? 'error' : shape === 'file' ? (textBytes(text) > LONG_PROMPT_READ_MAX ? 'asfile-big' : 'asfile') : phase;
+  E.state.classList.toggle('h-compose-err', stopped || !!(sent && sent.error) || (phase === 'missing' && shape !== 'file'));
   if (asking && t.why) composeClose(false);   // the session lost its relay while the confirmation was open
   stopPaint(E, id);
 }
@@ -911,11 +998,13 @@ function composePhase(sent) {
 }
 function composeAsk() {
   const E = composeEls(), id = HIST.compose._for, t = composeTarget(id), text = E.area.value, files = attachReady();
-  if (t.why || (!text.trim() && !files.length) || attachBusy() || composeBytes(id, text) > PROMPT_MAX_BYTES || !E.confirm.hidden) return;
+  const shape = composeShapeOf(id, text);
+  if (t.why || (!text.trim() && !files.length) || attachBusy() || shape === 'big' || shape === 'many' || !E.confirm.hidden) return;
   E.to.textContent = tl('hist.confirm.to', { name: t.name });
   const listed = files.map((a) => tl('hist.confirm.file', { name: a.name, size: attachSize(a.size) })).join('\n');
   const shown = text.length > 400 ? `${text.slice(0, 400)}…` : text;
-  E.preview.textContent = [shown, listed].filter(Boolean).join('\n');
+  const asFile = shape === 'file' ? tl('hist.confirm.asfile', { name: LONG_PROMPT_FILE, size: attachSize(textBytes(text)) }) : '';
+  E.preview.textContent = [shown, asFile, listed].filter(Boolean).join('\n');
   E.confirm.hidden = false;
   E.box._askedAt = Date.now();
   composePaint();
@@ -931,11 +1020,11 @@ async function composeSend() {
   const E = composeEls(), id = HIST.compose._for, text = E.area.value, files = attachReady();
   if (composeTarget(id).why || (!text.trim() && !files.length)) return;
   E.go.disabled = true;
-  const got = await SOURCE.sendPrompt(id, text, files.map((a) => a.id));
+  const got = await promptSend(id, text, files.map((a) => a.id));
   E.go.disabled = false;
   composeClose(!got.ok);
   if (got.ok) {
-    HIST.sent = { id, text, at: Date.now() }; E.area.value = ''; dropDrafts(`prompt:${id}`);
+    HIST.sent = { id, text: got.wire, at: Date.now() }; E.area.value = ''; dropDrafts(`prompt:${id}`);
     for (const a of HIST.attach) attachKeepThumb(a);
     HIST.attach = [];
   } else HIST.sent = { id, text, at: Date.now(), error: got.error || `HTTP ${got.status}` };
@@ -962,6 +1051,7 @@ function composeArrived(items) {
 const histRefKey = (ref) => (ref.attach ? `a:${ref.attach.sessionId}:${ref.attach.id}` : ref.sent ? `s:${ref.sent.off}:${ref.sent.n}` : `${ref.off}:${ref.n}`);   // a history picture, an attached image, a file the session sent
 const histImgKey = (ref) => `${HIST.id}|${histRefKey(ref)}`;
 function histImgsDrop() {
+  histLongTexts.clear();
   for (const v of HIST.imgs.values()) v.then((g) => { if (g.url) URL.revokeObjectURL(g.url); });
   HIST.imgs.clear();
 }
