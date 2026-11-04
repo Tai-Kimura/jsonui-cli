@@ -219,7 +219,9 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-body); 
 .topbar-title .usage { flex-wrap: wrap; min-width: 0; max-width: 100%; }
 .topbar-menu .scope-top { max-width: min(280px, 100%); }
 .topbar-menu .chips { flex: 1 1 480px; align-items: center; min-width: 0; }
-.topbar-menu .controls { flex-shrink: 0; }
+.topbar-menu .controls { flex-shrink: 0; max-width: 100%; }
+/* max-width: flex-shrink 0 keeps the buttons from giving way to the chips, but it also held them on one line wider than a
+   phone: 4 English buttons are 384 px, so the page scrolled sideways once the Slack button came. Capped, they wrap. */
 .brand { margin: 0; font: 400 18px/1.3 var(--font-display); letter-spacing: 0.02em; white-space: nowrap; }
 .cloth { display: inline-block; margin-right: 0.25em; padding: 0 0.3em 0.05em; background: var(--cloth); color: var(--cloth-ink); border: 2px solid var(--cloth-ink); transform: rotate(-2deg); }
 .chips { display: flex; flex: 1 1 auto; flex-wrap: wrap; gap: 6px; }

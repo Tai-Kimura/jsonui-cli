@@ -49,6 +49,37 @@ async def run_header_rows(pw, out, failures, Server):
                 if boxes['sw'] > width:
                     failures.append(f'header-rows: horizontal overflow ({scheme}, {width}): {boxes}')
                 await page.screenshot(path=str(out/f'{scheme}-{width}.png'),clip={'x':0,'y':0,'width':width,'height':min(500,1000)})
+        # Every button at once (ticket 2026-11-04-viz-en-phone-card-header-overflows-10px): wider than a phone in either
+        # language (ja 438 px, en 520 px), so this holds whichever language the run is in. They wrap inside the page, keep
+        # to the right, and none lies on another; on a desktop they stay on one line.
+        await page.emulate_media(color_scheme='light')
+        for width in (320, 360, 375, 390, 414, 480, 600, 768, 900, 1440):
+            await page.set_viewport_size({'width':width,'height':1000})
+            r = await page.evaluate('''() => {
+              const btns=[...document.querySelectorAll('.controls button')];
+              for (const b of btns) b.hidden=false;
+              const boxes=btns.map(b=>b.getBoundingClientRect());
+              const vw=document.documentElement.clientWidth;
+              return {sw:document.documentElement.scrollWidth,vw,
+                out:btns.filter((b,i)=>boxes[i].left<0||boxes[i].right>vw).map(b=>b.id),
+                covered:btns.filter((b,i)=>{const hit=document.elementFromPoint(boxes[i].left+boxes[i].width/2,boxes[i].top+boxes[i].height/2);return hit!==b;}).map(b=>b.id),
+                rows:new Set(boxes.map(b=>Math.round(b.top))).size,
+                rightGap:vw-Math.max(...boxes.map(b=>b.right)),count:btns.length};
+            }''')
+            if r['sw'] > r['vw'] or r['out']:
+                failures.append(f'header-rows: every button, sideways at {width}: {r}')
+            if r['covered']:
+                failures.append(f'header-rows: every button, one covered at {width}: {r}')
+            if r['count'] != 6:
+                failures.append(f'header-rows: every button, expected the six at {width}: {r}')
+            if width <= 414 and r['rows'] < 2:
+                failures.append(f'header-rows: every button, did not reach the wrap at {width}: {r}')
+            if width >= 900 and r['rows'] != 1:
+                failures.append(f'header-rows: every button, wrapped on a wide page at {width}: {r}')
+            if not 15 <= r['rightGap'] <= 17:
+                failures.append(f'header-rows: every button, not at the right at {width}: {r}')
+            if width in (390, 1440):
+                await page.screenshot(path=str(out/f'every-button-{width}.png'),clip={'x':0,'y':0,'width':width,'height':400})
         for error in [*watch.console, *watch.csp, *watch.foreign]:
             failures.append('header-rows: '+str(error))
     finally:
