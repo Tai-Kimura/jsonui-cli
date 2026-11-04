@@ -9,8 +9,10 @@ into the text with Ctrl/⌘+V each go up and show as a chip; the confirmation li
 one line per file with its absolute path under <viz home>/uploads/<session>/, and each file is there with the same
 bytes, 0600; a file over 20 MB is refused on the page and nothing is kept; × takes one off and the server removes it;
 the receiver's Read of an attachment asks permission (measured 10-20 10:39) and that request is on the permission board
-with the path; the history's line of the prompt shows the files as marks, the pasted image with its thumbnail. Dark
-and 390 px; no console error; nothing outside the server.
+with the path; the history's line of the prompt shows the files as marks, the pasted image with its thumbnail. A text
+too long for /api/prompt: at 8,192 bytes as text, a byte over as prompt.md with the same bytes (many-byte characters too),
+its head and whole text in the history, a failure keeps the text, ten attached or over 20 MB stops it with the reason,
+the file gone says so. Dark and 390 px; no console error; nothing outside the server.
 """
 
 from __future__ import annotations
@@ -333,6 +335,148 @@ async def run_attach(pw, out, failures):
         check(not res["goneLight"]["src"], f"the large view shows no broken picture: {res['goneLight']}")
         await page.screenshot(path=str(out / "attach-gone.png"))
         await page.keyboard.press("Escape")
+        # A text too long for /api/prompt goes as a file (ticket 2026-11-04-viz-long-prompt-goes-as-a-file)
+        STATE = "() => { const s = document.querySelector('[data-h-compose] [data-h-state]'); return { phase: s.dataset.hPhase, text: s.textContent, err: s.classList.contains('h-compose-err'), send: document.querySelector('[data-h-send]').disabled }; }"
+        AREA = "() => document.querySelector('[data-h-text]').value"
+        async def put(p, text):
+            await p.evaluate("(t) => { const a = document.querySelector('[data-h-text]'); a.value = t; a.dispatchEvent(new Event('input', { bubbles: true })); }", text)
+        async def phase_is(p, want, label):
+            await wait(p, "(w) => document.querySelector('[data-h-compose] [data-h-state]').dataset.hPhase === w", arg=want, label=label)
+        async def press_send(p):
+            await p.click("[data-h-send]")
+            await p.wait_for_timeout(500)   # the confirmation takes no click in its first moment
+            await p.click("[data-h-go]")
+        def take():
+            _, got = local("GET", f"/channel/poll?channelId={channel}", timeout=30)
+            return got["prompts"][0]["text"] if got["prompts"] else ""
+        def kept_md():
+            return sorted(uploads.glob("*.md"))
+        await page.evaluate("() => document.querySelectorAll('[data-h-attach] .h-attach-x').forEach((b) => b.click())")
+        await wait(page, f"() => ({CHIPS})().length === 0", label="no chips before the long text")
+        room = 8192 - len(json.dumps({"sessionId": S_OK, "text": "", "attachments": []}, separators=(",", ":")).encode())
+        # just under: the plain way, the box as it was
+        before = kept_md()
+        under = "x" * room
+        await put(page, under)
+        await page.wait_for_timeout(300)
+        r = res["longUnder"] = await page.evaluate(STATE)
+        check(r["phase"] != "asfile" and not r["send"], f"at 8,192 bytes the text goes as text: {r}")
+        await press_send(page)
+        await wait(page, "() => document.querySelector('[data-h-text]').value === ''", label="the text at the limit sent")
+        check(take() == under and kept_md() == before, "at 8,192 bytes the channel gets the text itself and nothing is kept")
+        # just over: a file, with the same bytes
+        over = "x" * (room + 1)
+        await put(page, over)
+        await phase_is(page, "asfile", "a text one byte over says it goes as a file")
+        r = res["longOver"] = await page.evaluate(STATE)
+        check(not r["send"] and not r["err"] and T_pattern("hist.state.asfile").search(r["text"]), f"one byte over: not stopped, not an error, says so: {r}")
+        await page.click("[data-h-send]")
+        preview = await page.evaluate("() => document.querySelector('[data-h-preview]').textContent")
+        res["longPreview"] = preview
+        check(T_pattern("hist.confirm.asfile").search(preview), f"the confirmation says it goes as a file: {preview[-200:]!r}")
+        await page.screenshot(path=str(out / "long-confirm.png"))
+        await page.wait_for_timeout(500)
+        await page.click("[data-h-go]")
+        await wait(page, "() => document.querySelector('[data-h-text]').value === ''", label="the long text sent")
+        lines = take().split("\n")
+        m = LINE_RE.match(lines[1]) if len(lines) == 2 else None
+        LONG = re.search(r"const LONG_PROMPT_LINE = '([^']+)';", (jt / "jui_cli" / "viz" / "web" / "js" / "55-history.js").read_text(encoding="utf-8")).group(1)
+        check(lines[0] == LONG and m and m.group(4) == "prompt.md" and m.group(5) == "text/markdown", f"the channel gets the fixed line and the file: {lines}")
+        check(m and pathlib.Path(m.group(1)).read_bytes() == over.encode(), "one byte over: the file has the text's bytes")
+        # only many-byte characters, cut nowhere
+        wide = "日本語の依頼😀\n" * 2000
+        await put(page, wide)
+        await phase_is(page, "asfile", "the wide text goes as a file")
+        await press_send(page)
+        await wait(page, "() => document.querySelector('[data-h-text]').value === ''", label="the wide text sent")
+        sent_long = take()
+        lines = sent_long.split("\n")
+        m = LINE_RE.match(lines[1]) if len(lines) == 2 else None
+        check(m and pathlib.Path(m.group(1)).read_bytes() == wide.encode("utf-8"), "many-byte characters only: the file has the text's bytes exactly")
+        wide_path = pathlib.Path(m.group(1)) if m else None
+        await wait(page, "() => document.getElementById('ticker').textContent.includes('日本語の依頼😀')", label="the event log says the person's words")
+        check(LONG not in await page.evaluate("() => document.getElementById('ticker').textContent"), "the event log does not say the fixed line")
+        # the history: the person's words, not the fixed line; the whole text behind a press; arrived
+        with open(transcript, "a") as f:
+            f.write(json.dumps({"type": "user", "isMeta": True, "promptSource": "system", "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                                "origin": {"kind": "channel", "server": "plugin:jui-viz:jui-viz"}, "userType": "external", "entrypoint": "cli",
+                                "message": {"role": "user", "content": f'<channel source="plugin:jui-viz:jui-viz" sender="jui_viz_page">\n{sent_long}\n</channel>'}},
+                               ensure_ascii=False) + "\n")
+        LONGBOX = "[data-rb-hist] .h-long"
+        await wait(page, f"() => {{ const h = document.querySelector('{LONGBOX} .h-long-head'); return h && h.textContent.startsWith('日本語の依頼'); }}", timeout=15000, label="the long prompt's head in the history")
+        await wait(page, "(l) => new RegExp(l).test(document.querySelector('[data-h-compose] [data-h-state]').textContent)", arg="^" + T_pattern("hist.state.arrived").pattern, timeout=15000, label="the long prompt arrived")
+        r = res["longHistory"] = await page.evaluate(f"() => ({{ line: document.querySelector('[data-rb-hist]').textContent.includes({json.dumps(LONG)}), head: document.querySelector('{LONGBOX} .h-long-head').textContent.length, marks: [...document.querySelectorAll('[data-rb-hist] .h-attach-sent li .h-attach-name')].map((x) => x.textContent) }})")
+        check(not r["line"] and r["head"] == 301 and any("prompt.md" in x for x in r["marks"]), f"the history shows the head, not the fixed line, and the file's mark: {r}")
+        await page.screenshot(path=str(out / "long-history.png"))
+        await page.click(f"{LONGBOX} .h-long-more")
+        whole = await page.evaluate(f"() => document.querySelector('{LONGBOX} .h-long-head').textContent")
+        check(whole == wide, f"a press shows the whole text: {len(whole)} of {len(wide)}")
+        await page.screenshot(path=str(out / "long-history-open.png"))
+        # a failure keeps the text: the file refused, then the prompt refused (and its file taken back)
+        kept = "失敗しても消えない文" * 400
+        said_before = len(watch.console)
+        await page.route("**/api/attach", lambda route: route.fulfill(status=500, body="no room"))
+        await put(page, kept)
+        await phase_is(page, "asfile", "the text for the failures")
+        await press_send(page)
+        await phase_is(page, "error", "the file refused")
+        check(await page.evaluate(AREA) == kept, "the file refused: the text is still in the box")
+        await page.unroute("**/api/attach")
+        before = kept_md()
+        await page.route("**/api/prompt", lambda route: route.fulfill(status=500, body="no room"))
+        await press_send(page)
+        await wait(page, "() => document.querySelector('[data-h-compose] [data-h-state]').textContent.includes('no room') && !!document.querySelector('[data-h-confirm]').hidden", label="the prompt refused")
+        check(await page.evaluate(AREA) == kept, "the prompt refused: the text is still in the box")
+        for _ in range(50):
+            if kept_md() == before:
+                break
+            time.sleep(0.1)
+        check(kept_md() == before, "the prompt refused: the file that went up is taken back")
+        await page.unroute("**/api/prompt")
+        watch.console[said_before:] = [c for c in watch.console[said_before:] if "status of 500" not in c]   # the two refused here on purpose
+        await phase_is(page, "error", "the failure stays while the text is the one that failed")
+        await put(page, kept + "。")
+        await phase_is(page, "asfile", "a changed text: the line says what this one will do")
+        # ten attached: the long text would be the eleventh
+        await page.evaluate("""() => {
+          const box = document.querySelector('[data-h-compose]'), dt = new DataTransfer();
+          for (let i = 0; i < 10; i += 1) dt.items.add(new File(['x'], `n${i}.txt`, { type: 'text/plain' }));
+          box.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+        }""")
+        await chips_ready(page, 10, "ten chips")
+        await phase_is(page, "many", "the long text with ten attached")
+        r = res["longMany"] = await page.evaluate(STATE)
+        check(r["send"] and r["err"] and T_pattern("hist.state.asfile.many").search(r["text"]), f"the eleventh: stopped, says why: {r}")
+        await page.click("[data-h-attach] li:nth-child(1) .h-attach-x")
+        await phase_is(page, "asfile", "one taken off")
+        await page.evaluate("() => document.querySelectorAll('[data-h-attach] .h-attach-x').forEach((b) => b.click())")
+        await wait(page, f"() => ({CHIPS})().length === 0", label="no chips after the ten")
+        # over the receiver's Read limit (256 KB) it still goes, and says what that means first
+        await put(page, "x" * (256 * 1024))
+        await phase_is(page, "asfile", "256 KB: nothing more to say")
+        await put(page, "x" * (256 * 1024 + 1))
+        await phase_is(page, "asfile-big", "a byte over 256 KB")
+        r = res["longOverRead"] = await page.evaluate(STATE)
+        check(not r["send"] and not r["err"] and T_pattern("hist.state.asfile.big").search(r["text"]), f"over 256 KB: not stopped, says the receiver may not read all of it: {r}")
+        await page.screenshot(path=str(out / "long-over-read.png"))
+        # at the file's limit it can go; a byte over it is stopped and the text stays
+        await page.evaluate("() => { const a = document.querySelector('[data-h-text]'); a.value = 'x'.repeat(20 * 1024 * 1024); a.dispatchEvent(new Event('input', { bubbles: true })); }")
+        await phase_is(page, "asfile-big", "20 MB goes as a file, and says the receiver may not read all of it")
+        await page.evaluate("() => { const a = document.querySelector('[data-h-text]'); a.value = 'x'.repeat(20 * 1024 * 1024 + 1); a.dispatchEvent(new Event('input', { bubbles: true })); }")
+        await phase_is(page, "long", "a byte over 20 MB")
+        r = res["longBig"] = await page.evaluate(STATE)
+        check(r["send"] and r["err"] and T_pattern("hist.state.long").search(r["text"]), f"over 20 MB: stopped, says why: {r}")
+        check(await page.evaluate("() => document.querySelector('[data-h-text]').value.length") == 20 * 1024 * 1024 + 1, "over 20 MB: the text stays")
+        await page.screenshot(path=str(out / "long-too-big.png"))
+        await put(page, "")
+        # the file gone (an hour after its session ended): the history says so
+        if wide_path:
+            wide_path.unlink()
+        await page.reload()
+        await ready(page)
+        await wait(page, "() => document.querySelectorAll('#sessions [data-robot-open]').length >= 1", label="the session after the reload")
+        await open_robot(page)
+        await wait(page, f"(g) => {{ const h = document.querySelector('{LONGBOX} .h-long-head'); return h && h.textContent === g; }}", arg=T("hist.long.gone"), timeout=15000, label="the gone long prompt says so")
         await page.emulate_media(color_scheme="dark")
         await page.set_input_files("[data-h-file]", str(files / "仕様メモ.md"))
         await chips_ready(page, 1, "a chip in dark")
@@ -342,6 +486,11 @@ async def run_attach(pw, out, failures):
         await ready(phone)
         await wait(phone, "() => document.querySelectorAll('#sessions [data-robot-open]').length >= 1", label="the phone's session")
         await open_robot(phone)
+        await put(phone, "x" * 9000)
+        await phase_is(phone, "asfile", "the phone's state line for a long text")
+        res["phoneLong"] = await phone.evaluate("() => { const s = document.querySelector('[data-h-compose] [data-h-state]').getBoundingClientRect(); return { left: s.left, right: s.right, width: innerWidth, h: s.height }; }")
+        check(res["phoneLong"]["left"] >= 0 and res["phoneLong"]["right"] <= res["phoneLong"]["width"] and res["phoneLong"]["h"] > 0, f"390 px: the long text's state line is inside the screen: {res['phoneLong']}")
+        await phone.screenshot(path=str(out / "phone-long.png"))
         r = res["phone"] = await phone.evaluate("() => ({ hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth, pick: !!document.querySelector('[data-h-pick]') })")
         await phone.screenshot(path=str(out / "phone.png"))
         check(r == {"hscroll": False, "pick": True}, f"390 px: the button shows, no horizontal scroll: {r}")

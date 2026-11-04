@@ -72,10 +72,11 @@ const SOURCE = {
   setReplaySpeed(v) { this.replaySpeed = Number(v) || 1; },
   /* A prompt typed in the 応答の履歴 tab, for this robot's session (POST /api/prompt; server.prompt_checks says what it
      must carry: the page's own Host and Origin, which the browser sets, the token, JSON). Resolves { ok, status, error }. */
-  async sendPrompt(label, text, attachments) {
+  async sendPrompt(label, text, attachments, shown) {
     try {
       const body = { sessionId: SESSION_UUID[label] || '', text };
       if (attachments && attachments.length) body.attachments = attachments;
+      if (shown) body.shown = shown;
       const res = await fetch('/api/prompt', {
         method: 'POST', cache: 'no-store', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token },
@@ -279,6 +280,20 @@ const SOURCE = {
       if (!res.ok) return { ok: false, status: res.status, error: (await res.text()).trim() };
       if ((res.headers.get('Content-Type') || '').startsWith('application/json')) return { ok: false, gone: !!(await res.json()).gone, status: 200 };
       return { ok: true, blob: await res.blob() };
+    } catch (err) { return { ok: false, status: 0, error: tl('live.offline') }; }
+  },
+  /* A long prompt's text, for the history (POST /api/attach-text: the session and the id from the prompt's line, under
+     the prompt's checks). Resolves { ok, text, size, cut }, { ok: false, gone: true } or { ok: false, status, error }. */
+  async attachText(ref) {
+    try {
+      const res = await fetch('/api/attach-text', {
+        method: 'POST', cache: 'no-store', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Jui-Viz-Token': NET.token },
+        body: JSON.stringify({ sessionId: ref.sessionId, id: ref.id }),
+      });
+      if (!res.ok) return { ok: false, status: res.status, error: (await res.text()).trim() };
+      const got = await res.json();
+      return got.gone ? { ok: false, gone: true, status: 200 } : { ok: true, ...got };
     } catch (err) { return { ok: false, status: 0, error: tl('live.offline') }; }
   },
   /* One picture the robot's session sent with SendUserFile (POST /api/history-file: the robot, the call's record and

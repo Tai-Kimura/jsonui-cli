@@ -108,7 +108,7 @@ async function sfSend() {
   const s = sfSlice(), area = $('sf-say'), text = area.value;
   if (!s || !s.robot || !text.trim()) return;
   $('sf-send').disabled = true;
-  const got = await SOURCE.sendPrompt(s.robot.label, text, []);
+  const got = await promptSend(s.robot.label, text, []);
   $('sf-send').disabled = false;
   if (got.ok) { area.value = ''; setText($('sf-said'), tl('sf.say.sent')); }
   else setText($('sf-said'), tl('sf.failed', { error: got.error || String(got.status) }));

@@ -711,7 +711,7 @@ JS_GLOBALS = {
     "decodeURIComponent", "structuredClone", "setTimeout", "clearTimeout", "setInterval", "clearInterval",
     "requestAnimationFrame", "cancelAnimationFrame", "fetch", "getComputedStyle", "queueMicrotask", "alert",
     "WebSocket", "URL", "URLSearchParams", "Event", "CustomEvent", "PointerEvent", "WheelEvent", "MutationObserver", "ResizeObserver",
-    "IntersectionObserver", "TextEncoder", "TextDecoder", "Blob", "FileReader", "Image", "CSS",
+    "IntersectionObserver", "TextEncoder", "TextDecoder", "Blob", "File", "FileReader", "Image", "CSS",
     "Notification",   # the browser notifications (2.3.6, 50-panel.js notifyOut)
     "BroadcastChannel",   # the tabs tell each other whether their sound runs (2.3.6, 50-panel.js notifyAudioSay)
     "Float32Array", "Uint8Array", "Uint16Array", "Uint32Array", "Int32Array",
