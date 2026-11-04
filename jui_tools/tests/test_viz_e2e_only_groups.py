@@ -47,8 +47,8 @@ def test_run_py_checks_the_group_before_it_takes_a_ticket():
     assert '"--group-ok"' in RUN and re.search(r"if stop:\n\s+return 2", RUN)
 
 
-EN_REPS = ["demo", "live", "ask", "notify", "history", "usage", "server-room", "data-server", "cost-bill", "talk-ui",
-           "lang-checks", "denied", "devices", "slack-room"]
+EN_REPS = ["demo", "live", "ask", "notify", "history", "hist-peers", "usage", "spec-diff", "server-room", "data-server", "cost-bill", "talk-ui",
+           "lang-checks", "denied", "hist-cards", "devices", "slack-room"]
 
 
 def test_en_reps_is_the_english_representatives_and_nothing_else():

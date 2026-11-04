@@ -241,6 +241,31 @@ async def run_hist_cards(pw, out, failures):
         check(failures, fb["barRight"] <= fb["boxRight"] + 0.5 and fb["barH"] <= 30, f"all three kinds folded: the bar is one line inside its box: {fb}")
         await page.click('#rb [data-h-fold]')
         await wait(page, "() => !window.__dbg.histFold().folded", label="all three kinds open again")
+        # opened again the cards are drawn anew: 待ち 0:03 is painted a beat later (100-300 ms), and it does come back
+        await wait(page, "() => { const w = [...document.querySelectorAll('#rb [data-h-cards] .tbd-perm .tbd-wait')]; return w.length === 2 && w.every((e) => e.textContent && e.getClientRects().length); }",
+                   timeout=3000, label="the permissions' waiting time back after opening")
+        # a field half under the bar (two lines, all three kinds), typed in: the browser brings it clear of the bar. scroll-padding-top
+        # is what it goes by, and it did not move the field at 44 px, one line's worth; focus() centres, so only typing shows this.
+        half = """() => { const c = document.querySelector('#rb [data-h-cards]'), bar = c.querySelector('[data-h-fold]'), f = c.querySelector('.tbd-perm input, .tbd-perm textarea');
+          c.scrollTop = 0; f.focus({ preventScroll: true });
+          c.scrollTop += f.getBoundingClientRect().top - bar.getBoundingClientRect().bottom + 14;
+          return { barH: bar.offsetHeight, covered: bar.getBoundingClientRect().bottom - f.getBoundingClientRect().top }; }"""
+        after = """() => { const c = document.querySelector('#rb [data-h-cards]'), bar = c.querySelector('[data-h-fold]'), f = c.querySelector('.tbd-perm input, .tbd-perm textarea');
+          return { covered: bar.getBoundingClientRect().bottom - f.getBoundingClientRect().top, value: f.value }; }"""
+        for width in (1440, 390):
+            await page.set_viewport_size({"width": width, "height": DESKTOP["viewport"]["height"]})
+            await page.wait_for_timeout(300)
+            st = await page.evaluate(half)
+            await page.wait_for_timeout(100)
+            await page.keyboard.type("x")
+            await page.wait_for_timeout(150)
+            ty = res[f"typedUnderBar{width}"] = {"start": st, "typed": await page.evaluate(after)}
+            check(failures, st["barH"] >= 40 and st["covered"] > 0 and ty["typed"]["value"] == "x" and ty["typed"]["covered"] <= 0,
+                  f"{width}px: a field half under the two-line bar, typed in, comes clear of it: {ty}")
+            await page.keyboard.press("Backspace")
+        await page.set_viewport_size(DESKTOP["viewport"])
+        await page.evaluate("() => document.activeElement && document.activeElement.blur()")
+        await page.wait_for_timeout(300)
         check(failures, not lo["on"] and lo["pressed"] == "false" and lo["label"] == T("hist.low.on") and lo["edge"] and lo["cardsScroll"] > 0,
               f"before 下を広げる the cards box scrolls (the control), its handle on the box's top edge: {lo}")
         check(failures, lo["cardsBelowHist"] and lo["histHeight"] >= 119, f"the history keeps 120 px and does not run under the cards: {lo}")
