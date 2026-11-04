@@ -78,6 +78,70 @@ def check(failures, cond, text):
         failures.append(f"hist-cards: {text}")
 
 
+HANDLE_WORDS = """(extra) => { const b = document.querySelector('#rb [data-rb-low]'), was = b.textContent;
+  if (extra) b.textContent = was + ' ' + was + ' ' + was;
+  const r = document.createRange(); r.selectNodeContents(b);
+  const box = b.getBoundingClientRect(), rects = [...r.getClientRects()].filter((x) => x.height > 0);
+  const out = { words: b.textContent.length, height: Math.round(box.height), lines: new Set(rects.map((x) => Math.round(x.top))).size,
+    below: Math.round(Math.max(...rects.map((x) => x.bottom)) - box.bottom), cut: b.scrollWidth > b.clientWidth + 1 };
+  b.textContent = was; return out; }"""
+
+
+async def handle_words(page, failures, state):
+    """The handle's words stay on its 26 px, in either language: on the card's width and a phone's the English once ran to a
+    second line under the dashed edge, over the next card (ticket 2026-11-05-viz-en-grow-bar-spills-and-phone-card-covers-header).
+    Its own words whole; words three times as long cut on the one line, not spilled."""
+    was = page.viewport_size
+    for width, height in ((1440, 900), (390, 844)):
+        await page.set_viewport_size({"width": width, "height": height})
+        await page.wait_for_timeout(300)
+        own, long_words = await page.evaluate(HANDLE_WORDS, False), await page.evaluate(HANDLE_WORDS, True)
+        check(failures, own["height"] == 26 and own["lines"] == 1 and own["below"] <= 0 and not own["cut"], f"{state}, {width}px: the handle's own words whole on its one line: {own}")
+        check(failures, long_words["height"] == 26 and long_words["lines"] == 1 and long_words["below"] <= 0 and long_words["cut"], f"{state}, {width}px: words too long cut on the one line, nothing spilled: {long_words}")
+    await page.set_viewport_size(was)
+    await page.wait_for_timeout(300)
+
+
+PHONE_CARD = """() => { const rb = document.getElementById('rb'), box = rb.getBoundingClientRect(), bar = document.querySelector('.topbar').getBoundingClientRect();
+  const hit = (el) => { const b = el.getBoundingClientRect(), e = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2); return !!e && (e === el || el.contains(e)); };
+  const send = rb.querySelector('[data-h-send]');
+  const btns = [...document.querySelectorAll('.controls button')].filter((b) => b.offsetParent !== null);
+  const out = { sheetTop: Math.round(box.top), barBottom: Math.round(bar.bottom), sheetH: Math.round(box.height), sideways: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    shown: btns.length, covered: btns.filter((b) => !hit(b)).map((b) => b.id), cardsH: Math.round(rb.querySelector('[data-h-cards]').getBoundingClientRect().height) };
+  send.scrollIntoView({ block: 'nearest' });
+  const s = send.getBoundingClientRect(), r = rb.getBoundingClientRect();
+  out.sendIn = s.height > 0 && s.top >= r.top && s.bottom <= r.bottom + 0.5 && hit(send);
+  rb.scrollTop = 0; return out; }"""
+
+
+async def phone_card(page, failures, res):
+    """A phone with the card open: every button the header wrapped stays pressable, whatever its lines (elementFromPoint, the
+    four of the live page shown), and all the card is still reached, Send by scrolling in the card. The same ticket: with the
+    buttons wrapping, 70vh of card covered them in English, 375 x 667 and 390 x 844 with one more line of chips."""
+    was = page.viewport_size
+    await page.evaluate("""() => { const st = document.createElement('style'); st.id = 'four-btns';
+      st.textContent = '.controls button { display: none !important } #btn-devices, #btn-slack, #btn-notify, #btn-side { display: inline-block !important }'; document.head.append(st); }""")
+    for width, height in ((390, 844), (375, 667), (360, 640), (320, 568)):
+        await page.set_viewport_size({"width": width, "height": height})
+        await page.wait_for_timeout(400)
+        r = res[f"phoneCard{width}"] = await page.evaluate(PHONE_CARD)
+        check(failures, r["shown"] == 4 and not r["covered"] and r["sheetTop"] >= r["barBottom"] and r["sideways"] <= 0, f"{width} x {height}: the card stops under the header, its buttons all pressable: {r}")
+        check(failures, r["sendIn"] and r["cardsH"] >= 88, f"{width} x {height}: Send is reached in the card, the cards keep a height to answer in: {r}")
+        if width in (390, 375):
+            await page.screenshot(path=str(pathlib.Path(res["_out"]) / f"phone-card-{width}.png"))
+        # a person's wheel, not scrollIntoView: that moves an overflow: hidden box too, where a finger could not
+        over = await page.evaluate("() => { const rb = document.getElementById('rb'); return rb.scrollHeight - rb.clientHeight; }")
+        if width <= 375:
+            await page.mouse.move(width / 2, r["sheetTop"] + 30)
+            await page.mouse.wheel(0, 60)
+            await page.wait_for_timeout(200)
+            moved = await page.evaluate("() => { const rb = document.getElementById('rb'), y = rb.scrollTop; rb.scrollTop = 0; return y; }")
+            check(failures, over > 0 and moved > 0, f"{width} x {height}: the card, taller than its room, scrolls under a person's wheel: over {over}, moved {moved}")
+    await page.evaluate("() => document.getElementById('four-btns').remove()")
+    await page.set_viewport_size(was)
+    await page.wait_for_timeout(300)
+
+
 async def press_low(page):
     """The cards box's handle pressed where it is drawn, as a pointer does (2.3.20: it sticks to the box's top edge, and
     page.click would first scroll the box to the handle's place in the flow — the top — which a person's press does not)."""
@@ -269,16 +333,20 @@ async def run_hist_cards(pw, out, failures):
         check(failures, not lo["on"] and lo["pressed"] == "false" and lo["label"] == T("hist.low.on") and lo["edge"] and lo["cardsScroll"] > 0,
               f"before 下を広げる the cards box scrolls (the control), its handle on the box's top edge: {lo}")
         check(failures, lo["cardsBelowHist"] and lo["histHeight"] >= 119, f"the history keeps 120 px and does not run under the cards: {lo}")
+        await handle_words(page, failures, "folded down")
         await press_low(page)
         lo = res["lowOn"] = await page.evaluate(LOW)
         check(failures, lo["on"] and lo["pressed"] == "true" and lo["label"] == T("hist.low.off") and lo["edge"] and lo["sendIn"] and lo["cardsBelowHist"]
               and lo["cardsHeight"] > res["lowBefore"]["cardsHeight"] and lo["histHeight"] >= 50,
               f"下を広げる with four cards: the cards box grows, 送信 inside the card, a strip of the history above: {lo}")
         await page.screenshot(path=str(out / "low.png"))
+        await handle_words(page, failures, "grown")
         await press_low(page)
         lo = res["lowOff"] = await page.evaluate(LOW)
         check(failures, not lo["on"] and lo["pressed"] == "false" and lo["histHeight"] >= res["lowBefore"]["histHeight"] - 1,
               f"元の高さに戻す: the history's height back: {lo}")
+        res["_out"] = str(out)
+        await phone_card(page, failures, res)
         # the 今の様子 tab: no cards box there (the box is the history tab's; the independent check's X4)
         await page.click('#rb [data-rb-tab="now"]')
         await page.wait_for_timeout(400)

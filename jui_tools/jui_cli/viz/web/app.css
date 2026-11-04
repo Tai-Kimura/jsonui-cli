@@ -1033,14 +1033,17 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
    history's least height is its row's: a min-height on the pane alone left the row shorter and the pane ran 41 px
    under the cards, the newest rows hidden there (measured 10-21, a 900 px window). Short of room the cards give way
    first (their own scroll). 下を広げる: the cards their full height, the history a strip (its padding and a line). */
-.rb.rb-histtab:not(.rb-talking) { grid-template-rows: auto auto minmax(120px, 1fr) minmax(0, max-content) auto; }
+.rb.rb-histtab:not(.rb-talking) { grid-template-rows: auto auto minmax(120px, 1fr) minmax(var(--rb-cards-min, 0px), max-content) auto; }
 .rb.rb-histtab:not(.rb-talking) > .rb-hist { grid-row: 3; min-height: 0; }
 .rb.rb-histtab:not(.rb-talking) > .h-low { grid-area: 4 / 1; align-self: start; position: relative; z-index: 2; margin-top: -26px; }   /* in the cards' row, pulled up over the history's bottom edge: no row or gap of its own, the cards keep all their height */
 .rb.rb-histtab:not(.rb-talking):has(> .h-low:not([hidden])) > .rb-hist { padding-bottom: 44px; }   /* the newest line clears the handle */
 .rb.rb-histtab:not(.rb-talking):has(> .h-low:not([hidden])) .h-newer { bottom: 30px; }
 .rb.rb-histtab:not(.rb-talking) > .h-cards { grid-area: 4 / 1; }   /* the column too: two items in one row would open a second column */
 .rb.rb-histtab:not(.rb-talking) > .h-compose { grid-row: 5; }
-.rb.rb-histtab.rb-low:not(.rb-talking) { grid-template-rows: auto auto minmax(56px, 1fr) minmax(0, max-content) auto; }
+.rb.rb-histtab.rb-low:not(.rb-talking) { grid-template-rows: auto auto minmax(56px, 1fr) minmax(var(--rb-cards-min, 0px), max-content) auto; }
+@media (max-width: 900px) {   /* a short phone: the card scrolls, so the cards keep a height to answer in rather than give way to nothing */
+  .rb:has(> .h-cards:not([hidden], .h-folded)) { --rb-cards-min: 88px; }
+}
 .rb.rb-low .h-cards { max-height: none; }
 .h-compose { display: grid; gap: 6px; padding: 8px 14px 12px; border-top: 1px solid var(--line); background: var(--panel); }
 .h-compose[hidden], .h-confirm[hidden], .h-compose-why[hidden] { display: none; }
@@ -1278,7 +1281,7 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
   #ticker .kind { display: none; }
   .wb { position: fixed; z-index: 40; padding: 6px; }
   .wb-frame { border-width: 6px; }
-  .rb { position: fixed; inset: auto 0 0 0; z-index: 40; width: 100%; max-height: 70vh; border-radius: 16px 16px 0 0; transform: translateY(16px); }
+  .rb { position: fixed; inset: auto 0 0 0; z-index: 40; width: 100%; max-height: 70vh; max-height: min(70vh, max(100dvh - var(--topbar-h, 0px), 40vh)); overflow: hidden auto; border-radius: 16px 16px 0 0; transform: translateY(16px); }   /* stops under the header, whose buttons wrap to more lines on a phone (--topbar-h, 50-panel.js), and keeps 40% of the screen for itself; what does not fit on a short phone scrolls in the card, Send included */
   .toast { bottom: 24px; }
 }
 
@@ -1476,7 +1479,7 @@ details.h-item[open] > :not(summary) :is(a[href], button, img, .h-thumb) { curso
 .rb-tabs .rb-wide-btn { order: 2; margin: 0 0 4px auto; align-self: center; padding: 3px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: 700 12px/1.5 var(--font-body); }
 .rb-tabs .rb-wide-btn[aria-pressed="true"] { border-color: var(--info); background: var(--info); color: var(--panel); }
 /* the cards box's handle (55-history.js histSync): a row of its own on the box's top edge, outside the box's scroll */
-.h-low { display: block; box-sizing: border-box; width: 100%; height: 26px; padding: 3px 12px; border: 0; border-top: 1px solid var(--line); border-bottom: 1px dashed var(--info); background: var(--info-bg); color: var(--info); font: 700 12px/1.5 var(--font-body); text-align: center; cursor: pointer; }
+.h-low { display: block; box-sizing: border-box; width: 100%; height: 26px; padding: 3px 12px; border: 0; border-top: 1px solid var(--line); border-bottom: 1px dashed var(--info); background: var(--info-bg); color: var(--info); font: 700 12px/1.5 var(--font-body); text-align: center; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* one line whatever the words: the layout counts on its 26 px (the pull over the history, the history's padding, the newer button) */
 .h-low[hidden] { display: none; }
 .h-low:hover, .h-low:focus-visible { background: var(--bg); outline: 2px solid var(--info); outline-offset: -2px; }
 /* Wide, the head is one row (requester 10-19, issue #36): the mark and the name on the left, ‹ › 「← 3D に戻る」 and 退勤

@@ -1086,7 +1086,7 @@
   "hist.wide.off.title": "Back to this card’s width (Esc)",
   "hist.wide.on.title": "Widen this card to the whole screen (the same on both tabs)",
   "hist.low.off": "▼ This box of cards back to its height (more history)",
-  "hist.low.on": "▲ Grow this box of cards upwards to see them all (the history gets thin)",
+  "hist.low.on": "▲ Grow this box to see all cards (less history)",
   "hist.low.off.title": "This box of cards back to its height, the history wider again",
   "hist.low.on.title": "Grow this box of cards upwards, so the cards, the prompt box and Send are all in sight",
   "core.role.main": "Main session",

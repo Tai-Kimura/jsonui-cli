@@ -118,6 +118,9 @@ function applySide() {
   b.setAttribute('aria-expanded', String(sideOpen));
   b.textContent = sideOpen ? tl('panel.side.close') : tl('panel.side.open');
 }
+// the header's foot at the page's top: a phone's card stops there (app.css .rb), not over the buttons the header wrapped
+const topbarEl = document.querySelector('.topbar');
+new ResizeObserver(() => document.documentElement.style.setProperty('--topbar-h', `${topbarEl.offsetTop + topbarEl.offsetHeight}px`)).observe(topbarEl);
 $('btn-side').addEventListener('click', () => { sideOpen = !sideOpen; writePref('side', sideOpen ? 'open' : 'closed'); applySide(); });
 applySide();
 
