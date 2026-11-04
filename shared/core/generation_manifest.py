@@ -26,6 +26,13 @@ version — a partial regeneration must not claim the new version for files
 it never looked at. A record is trusted in a way a guess is not, so a
 manifest that overstates is worse than no manifest.
 
+A FILE THAT WAS NOT THERE WHEN THE RUN BEGAN WAS WRITTEN BY THE RUN, whatever
+its entry says. In a new worktree a gitignored output is absent, so the first
+build writes it and stamps it, even with bytes equal to another worktree's
+copy: the entry holds no hash to compare with, and this tree's file did come
+from this run. A project that tracks this file and ignores those outputs sees
+that as a diff; SOURCE_DATE_EPOCH removes it while the version stays the same.
+
 The cost of that choice, stated rather than hidden: a tool that regenerates
 a file, finds byte-identical content and skips the write leaves the earlier
 version in place. The manifest records WRITES, not verifications, and the
@@ -352,6 +359,16 @@ class GenerationRun:
             state = _state_of(path)
             if state is not None:
                 self.before[self._key(path, listings=listings)] = state
+
+    def add_roots(self, roots) -> None:
+        """Directories the run created or found after `observe`.
+
+        Added to the roots `observe` named, never replacing them: a directory
+        the run removed was still declared when the run began.
+        """
+        listings = listing_memo()
+        added = {self._root_key(r, listings=listings) for r in roots}
+        self.roots = tuple(sorted(added | set(self.roots or ())))
 
     def observe_written(self, keys, *, roots=None) -> None:
         """A producer that has no before/after — it knows what it wrote.
