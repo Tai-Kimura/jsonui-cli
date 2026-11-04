@@ -472,9 +472,9 @@ def cmd_build(args: argparse.Namespace) -> int:
         window is the only direct evidence a halted run has.
         """
         with clock.stage("scan generated files (after build)"):
-            halted = _generated_paths(config_mgr)
+            halted, halted_roots = _generated_scan(config_mgr)
         with clock.stage("record generation manifest"):
-            _record_generation(config_mgr, gen_run, halted, bootstrap=False)
+            _record_generation(config_mgr, gen_run, halted, roots=halted_roots, bootstrap=False)
         # Printed even though the build failed: a record nobody is told
         # about is the same as no record when the next reader tries to
         # explain a version stamp. The success line is not printed — the
@@ -607,9 +607,9 @@ def cmd_build(args: argparse.Namespace) -> int:
         # be observed, and can leave others exactly as they were.
         print(flush=True)
         with clock.stage("scan generated files (after build)"):
-            present = _generated_paths(config_mgr)
+            present, present_roots = _generated_scan(config_mgr)
         with clock.stage("record generation manifest"):
-            _record_generation(config_mgr, gen_run, present)
+            _record_generation(config_mgr, gen_run, present, roots=present_roots)
         clock.print_summary()
         print()
         print(generation_manifest.coverage_line(gen_run))
@@ -757,7 +757,7 @@ def _print_stage_failures(entries: list) -> None:
         print(f"  - {entry.get('stage', '?')}: {entry.get('message', '')}")
 
 
-def _record_generation(config_mgr, gen_run, present, *, bootstrap=True):  # -> GenerationRun
+def _record_generation(config_mgr, gen_run, present, *, roots=None, bootstrap=True):  # -> GenerationRun
     """Decide what this run changed in the record, and save it.
 
     THE ORDER IS THE CONTRACT, which is why it is one function instead of
@@ -774,9 +774,17 @@ def _record_generation(config_mgr, gen_run, present, *, bootstrap=True):  # -> G
 
     Both sides now come from `load_migrated`, and a build cannot use one
     without the other.
+
+    `roots` is the scan's directories AFTER the run. The first scan cannot
+    name a directory the run has yet to create, so in a new worktree whose
+    output dirs are gitignored every file this build wrote counted as outside
+    the declared roots (342 on one face, 0 on the next build, with nothing
+    changed but the directories being there).
     """
     from ..core import generation_manifest
 
+    if roots is not None:
+        gen_run.add_roots(roots)
     known = set(generation_manifest.load_migrated(config_mgr.project_root))
     gen_run.written(present, known=known, bootstrap=bootstrap)
     # Observed here, at the point it is measured — not computed at the print
