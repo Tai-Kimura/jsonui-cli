@@ -7,12 +7,32 @@ an error and the desktop app shows no change. The ruling: the button works for t
 registry's ``entrypoint`` is ``cli``); VS Code and the desktop app are refused, here and on the page. The signal is
 SIGTERM, sent once. Nothing here ever sends SIGKILL: a session that does not end is reported as not ended.
 
+A background session (``kind: bg``, started by ``claude --bg`` or a slash command, run by the claude daemon) is stopped
+with ``claude stop <jobId>``, never a signal. Measured on throwaway sessions (2.1.317, ticket
+2026-11-04-viz-background-session-cannot-clock-out):
+
+    ==================  =================================================  =======================================
+    session             SIGTERM                                            claude stop <jobId>
+    ==================  =================================================  =======================================
+    interactive (cli)   ends in 0.3 s, entry gone, stays gone              rc 1 "No job matching": nothing happens
+    bg idle / busy      ends at once, and the daemon starts it again       rc 0, ends in 0.06 s, entry gone, stays
+                        under a new pid about 10.5 s later, every time     gone ("stopped" in agents --all)
+    bg with a terminal  the same; the terminal stays attached              the same; the terminal's attach ends
+    ==================  =================================================  =======================================
+
+So a signal would read as "ended" and the robot would be back ten seconds later. ``claude stop`` takes the job's id, not
+the sessionId (the full id is "No job matching"), matches a prefix of it (so only a whole id in the entry's shape is
+sent), and also says rc 0 for a job that has already stopped and before the process has gone: only the process going
+says it ended. A worker down between its death and its restart has no entry and no process, and the daemon still means
+to restart it: there the id the server last saw is stopped too, or the session would come back after being told it had
+already ended.
+
 Before the one signal every check below must hold, and all of them are made twice — once to decide, and again
 immediately before ``os.kill`` (a pid that exited in between can be another process by then):
 
   * the pid is above 1 and is not this server's;
   * ``~/.claude/sessions/<pid>.json`` (a regular file, never through a symlink) names this sessionId, its ``pid`` is
-    that pid, its ``kind`` is ``interactive`` and its ``entrypoint`` is ``cli`` (a terminal);
+    that pid, its ``kind`` is ``interactive`` or ``bg`` (with a job id) and its ``entrypoint`` is ``cli`` (a terminal);
   * ``ps``: the process exists, is not a zombie, its argv[0] is a claude CLI (``…/claude`` or a native install's
     ``…/claude/versions/<version>``), and it started at the file's ``procStart`` — a reused pid started later.
 
@@ -30,6 +50,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import time
@@ -43,6 +64,12 @@ from .sources import session_files
 SIGNAL = signal.SIGTERM
 WAIT_SEC = 6.0
 POLL_SEC = 0.1
+STOP_TIMEOUT_SEC = 10.0
+
+#: The registry's ``kind`` of a session run by the claude daemon (``claude agents --json`` says ``background``).
+BG_KIND = "bg"
+#: A whole job id as the registry writes it. ``claude stop`` matches prefixes, so nothing shorter is ever sent.
+_JOB_ID = re.compile(r"[0-9a-f]{8,}")
 
 #: The registry's ``entrypoint`` -> the client the page names. Only "terminal" may be clocked out.
 CLIENTS = {"cli": "terminal", "claude-vscode": "vscode", "claude-desktop": "desktop"}
@@ -62,6 +89,26 @@ _NATIVE = re.compile(r"/claude/versions/[0-9][0-9A-Za-z.+-]*$")
 def _kill(pid: int, sig: int) -> None:
     """The one place a signal is sent (tests replace it to record, and to refuse any pid they did not start)."""
     os.kill(pid, sig)
+
+
+def stop_job(job: str) -> tuple[int | None, str]:
+    """The one place ``claude stop`` is run (tests replace it): (its exit code, what it said); None: it did not run or
+    answer. Its own session, so nothing it leaves behind is in this server's group."""
+    claude = shutil.which("claude")
+    if claude is None:
+        return None, "claude is not on PATH"
+    try:
+        out = subprocess.run([claude, "stop", job], stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                             timeout=STOP_TIMEOUT_SEC, start_new_session=True)
+    except subprocess.TimeoutExpired:
+        return None, f"claude stop did not answer within {STOP_TIMEOUT_SEC:g} s"
+    except OSError as exc:
+        return None, f"claude stop did not run: {exc}"
+    return out.returncode, " ".join((out.stdout + out.stderr).split())
+
+
+def is_job_id(job) -> bool:
+    return isinstance(job, str) and _JOB_ID.fullmatch(job) is not None
 
 
 def client_of(entrypoint) -> str:
@@ -119,8 +166,11 @@ def check_pid(folder: Path, pid: int, sid: str, own_pid: int,
         return 409, "the pid's sessionId does not match"
     if data.get("pid") != pid or isinstance(data.get("pid"), bool):
         return 409, "the entry's pid is not its file's"
-    if data.get("kind") != "interactive":
-        return 409, "not an interactive session"
+    kind = data.get("kind")
+    if kind not in ("interactive", BG_KIND):
+        return 409, "not an interactive or background session"
+    if kind == BG_KIND and not is_job_id(data.get("jobId")):
+        return 409, "the background session's entry has no job id to stop it by"
     client = client_of(data.get("entrypoint"))
     if client != "terminal":
         return 409, i18n.tl(REFUSED_CLIENT[client])
@@ -144,6 +194,7 @@ class Outcome:
     reason: str
     pid: int | None = None
     signalled: bool = False
+    stopped: bool = False  # claude stop answered for the job (a background session: no signal)
 
 
 def _gone(pid: int, start: str, procs) -> bool:
@@ -151,14 +202,40 @@ def _gone(pid: int, start: str, procs) -> bool:
     return info is None or "Z" in info[0] or _norm(info[1]) != _norm(start)
 
 
+def _stop_background(job: str, pid: int, start: str, procs, wait_sec: float, poll_sec: float) -> Outcome:
+    """claude stop for a background session whose checks hold, then wait for its process to go: its rc 0 says neither
+    (see the table above)."""
+    code, said = stop_job(job)
+    if code != 0:
+        if _gone(pid, start, procs):
+            return Outcome("ended", 200, "it had already ended", pid)
+        return Outcome("refused", 409, f"claude stop {job}: {said or code}", pid)
+    deadline = time.monotonic() + wait_sec
+    while time.monotonic() < deadline:
+        if _gone(pid, start, procs):
+            return Outcome("ended", 200, "ended after claude stop", pid, stopped=True)
+        time.sleep(poll_sec)
+    if _gone(pid, start, procs):
+        return Outcome("ended", 200, "ended after claude stop", pid, stopped=True)
+    return Outcome("not-ended", 504, f"claude stop {job} answered and it has not ended within {wait_sec:g} s (nothing more is sent)",
+                   pid, stopped=True)
+
+
 def end_session(folder: Path, sid: str, own_pid: int, *, procs=proc_info, before_signal: Callable[[int], None] | None = None,
-                wait_sec: float = WAIT_SEC, poll_sec: float = POLL_SEC, known: tuple | None = None) -> Outcome:
-    """Find the session's pid, check it, check it again, send SIGTERM once, wait for it to go. Blocking (run it in an
-    executor). ``before_signal`` is for the race arm only: it runs between the two checks. ``known`` is the
-    (pid, procStart) the server last saw for the session: with no entry left and that process gone, the session
-    had already ended (killed without its SessionEnd) and nothing is sent."""
+                wait_sec: float = WAIT_SEC, poll_sec: float = POLL_SEC, known: tuple | None = None, job: str | None = None) -> Outcome:
+    """Find the session's pid, check it, check it again, then send SIGTERM once (a background session: run claude stop
+    once) and wait for it to go. Blocking (run it in an executor). ``before_signal`` is for the race arm only: it runs
+    between the two checks. ``known`` is the (pid, procStart) the server last saw for the session: with no entry left
+    and that process gone, the session had already ended (killed without its SessionEnd) and nothing is sent. ``job`` is
+    the job id the server last saw: with no entry left, its worker is down and the daemon would start it again, so the
+    job is stopped."""
     pids = registry_pids(folder, sid)
     if not pids:
+        if is_job_id(job):
+            code, _said = stop_job(job)
+            if code == 0 and not registry_pids(folder, sid):
+                return Outcome("ended", 200, "no ~/.claude/sessions entry; its job was stopped so the daemon does not start it again",
+                               known[0] if known and isinstance(known[0], int) else None, stopped=True)
         if known and isinstance(known[0], int) and isinstance(known[1], str) and known[1].strip() \
                 and _gone(known[0], known[1], procs) and not registry_pids(folder, sid):
             return Outcome("ended", 200, "no ~/.claude/sessions entry and its process is gone (it had already ended)", known[0])
@@ -175,6 +252,11 @@ def end_session(folder: Path, sid: str, own_pid: int, *, procs=proc_info, before
     refused = check_pid(folder, pid, sid, own_pid, procs)   # immediately before the signal
     if refused is not None:
         return Outcome("refused", refused[0], refused[1], pid)
+    entry = session_files.read_session_file(folder / f"{pid}.json") or {}
+    if entry.get("kind") != "interactive":   # what the checks just passed: a job, or a file gone in between (below: no signal)
+        if entry.get("kind") == BG_KIND and is_job_id(entry.get("jobId")):
+            return _stop_background(entry["jobId"], pid, start, procs, wait_sec, poll_sec)
+        return Outcome("refused", 409, "the session's ~/.claude/sessions entry changed (it has ended?)", pid)
     try:
         _kill(pid, SIGNAL)
     except ProcessLookupError:

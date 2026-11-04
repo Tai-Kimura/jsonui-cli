@@ -47,6 +47,9 @@ def _env(home: Path) -> dict:
     return env
 
 
+_ENV_FIRST = _env
+
+
 def _free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -605,3 +608,213 @@ def test_which_command_lines_are_a_claude_cli():
 def test_clients():
     assert [clockout.client_of(e) for e in ("cli", "claude-vscode", "claude-desktop", "sdk-ts", "", None)] == \
         ["terminal", "vscode", "desktop", "other", "unknown", "unknown"]
+
+
+# ---------------------------------------------------------------- a background session: claude stop, never a signal
+# (ticket 2026-11-04-viz-background-session-cannot-clock-out; the measured table is in clockout.py)
+
+JOB = "b6fb7f60"
+
+
+def _bg(tmp_path, standins, monkeypatch, stop, job=JOB, entrypoint="cli", kind="bg"):
+    """A stand-in with a background session's entry; clockout.stop_job and _kill replaced by recorders."""
+    folder = tmp_path / "bg-sessions"
+    p = standins.start("sleep")
+    write_registry(folder, p.pid, "s-bg", kind=kind, entrypoint=entrypoint, jobId=job)
+    sent: list = []
+    stops: list = []
+    monkeypatch.setattr(clockout, "_kill", standins.guarded_kill(sent))
+    monkeypatch.setattr(clockout, "stop_job", lambda j: (stops.append(j), stop(p))[1])
+    return folder, p, sent, stops
+
+
+def _stops_it(p):
+    os.kill(p.pid, signal.SIGTERM)   # our own stand-in: what the daemon does
+    return 0, f"stopped {JOB}"
+
+
+def test_a_background_session_is_stopped_by_its_job_once_and_never_signalled(tmp_path, standins, monkeypatch):
+    folder, p, sent, stops = _bg(tmp_path, standins, monkeypatch, _stops_it)
+    out = clockout.end_session(folder, "s-bg", os.getpid(), wait_sec=5)
+    assert (out.result, out.status, out.pid, out.stopped, out.signalled) == ("ended", 200, p.pid, True, False)
+    assert stops == [JOB] and sent == []
+
+
+def test_claude_stops_rc_0_is_not_the_end_only_the_process_going_is(tmp_path, standins, monkeypatch):
+    # measured: rc 0 comes before the process has gone, and for a job that has already stopped
+    folder, p, sent, stops = _bg(tmp_path, standins, monkeypatch, lambda p: (0, f"stopped {JOB}"))
+    out = clockout.end_session(folder, "s-bg", os.getpid(), wait_sec=0.5)
+    assert (out.result, out.status, out.stopped) == ("not-ended", 504, True) and JOB in out.reason
+    assert stops == [JOB] and sent == [] and standins.alive(p)
+
+
+@pytest.mark.parametrize("said", [(1, f"No job matching '{JOB}'."), (None, "claude is not on PATH"), (None, "claude stop did not answer within 10 s")])
+def test_a_stop_that_fails_is_refused_with_its_words_and_no_signal_follows(tmp_path, standins, monkeypatch, said):
+    folder, p, sent, stops = _bg(tmp_path, standins, monkeypatch, lambda p: said)
+    out = clockout.end_session(folder, "s-bg", os.getpid(), wait_sec=0.5)
+    assert (out.result, out.status, out.stopped) == ("refused", 409, False) and said[1] in out.reason
+    assert stops == [JOB] and sent == [] and standins.alive(p)
+
+
+@pytest.mark.parametrize("job", [None, "", "b6fb", "--all", "b6fb7f60 x", "B6FB7F60", 12345678])
+def test_an_id_not_whole_is_never_sent_since_claude_stop_matches_prefixes(tmp_path, standins, monkeypatch, job):
+    folder, p, sent, stops = _bg(tmp_path, standins, monkeypatch, _stops_it, job=job)
+    out = clockout.end_session(folder, "s-bg", os.getpid(), wait_sec=0.5)
+    assert (out.result, out.status) == ("refused", 409) and "job id" in out.reason
+    assert stops == [] and sent == [] and standins.alive(p)
+
+
+@pytest.mark.parametrize("entrypoint", ["claude-desktop", "claude-vscode", "sdk-cli", None])
+def test_a_background_entry_not_of_a_terminal_is_refused_as_before(tmp_path, standins, monkeypatch, entrypoint):
+    folder, p, sent, stops = _bg(tmp_path, standins, monkeypatch, _stops_it, entrypoint=entrypoint)
+    out = clockout.end_session(folder, "s-bg", os.getpid(), wait_sec=0.5)
+    assert out.result == "refused" and stops == [] and sent == [] and standins.alive(p)
+
+
+def test_another_kind_is_refused(tmp_path, standins, monkeypatch):
+    folder, p, sent, stops = _bg(tmp_path, standins, monkeypatch, _stops_it, kind="teammate")
+    out = clockout.end_session(folder, "s-bg", os.getpid(), wait_sec=0.5)
+    assert (out.result, out.status) == ("refused", 409) and "kind" not in out.reason and stops == [] and sent == []
+
+
+def test_a_terminal_session_never_runs_claude_stop_whatever_the_server_remembers(tmp_path, standins, monkeypatch):
+    # resumed in a terminal: its entry says interactive, and claude stop says "No job matching" (measured)
+    folder, p, sent, stops = _bg(tmp_path, standins, monkeypatch, _stops_it, kind="interactive", job=None)
+    out = clockout.end_session(folder, "s-bg", os.getpid(), wait_sec=5, job=JOB)
+    assert (out.result, out.signalled, out.stopped) == ("ended", True, False)
+    assert stops == [] and sent == [(p.pid, signal.SIGTERM)]
+
+
+def test_a_worker_down_with_no_entry_has_its_job_stopped_or_the_daemon_brings_it_back(tmp_path, standins, monkeypatch):
+    # measured: after a SIGTERM from elsewhere there is no entry and no process for about 10.5 s, and then it is back
+    folder, p, sent, stops = _bg(tmp_path, standins, monkeypatch, lambda p: (0, f"stopped {JOB}"))
+    (folder / f"{p.pid}.json").unlink()
+    out = clockout.end_session(folder, "s-bg", os.getpid(), wait_sec=0.5, job=JOB, known=(4242, "Tue Nov  3 23:50:39 2026"))
+    assert (out.result, out.status, out.pid, out.stopped, out.signalled) == ("ended", 200, 4242, True, False)
+    assert stops == [JOB] and sent == []
+
+
+def test_no_entry_and_no_such_job_is_the_old_answer(tmp_path, standins, monkeypatch):
+    folder, p, sent, stops = _bg(tmp_path, standins, monkeypatch, lambda p: (1, "No job matching"))
+    (folder / f"{p.pid}.json").unlink()
+    out = clockout.end_session(folder, "s-bg", os.getpid(), wait_sec=0.5, job=JOB)
+    assert (out.result, out.status, out.stopped) == ("refused", 409, False) and "no ~/.claude/sessions entry" in out.reason
+    assert stops == [JOB] and sent == [] and standins.alive(p)
+
+
+def test_an_entry_gone_between_the_checks_gets_neither(tmp_path, standins, monkeypatch):
+    folder, p, sent, stops = _bg(tmp_path, standins, monkeypatch, _stops_it)
+    out = clockout.end_session(folder, "s-bg", os.getpid(), wait_sec=0.5, before_signal=lambda pid: (folder / f"{pid}.json").unlink())
+    assert out.result == "refused" and stops == [] and sent == [] and standins.alive(p)
+
+
+def test_stop_job_runs_the_cli_on_path_with_the_id_alone(tmp_path, monkeypatch):
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    fake = bindir / "claude"
+    fake.write_text(f'#!/bin/sh\nprintf "%s\\n" "$@" > "{tmp_path}/argv"\necho "stopped  $2"\nexit 3\n')
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bindir}:/usr/bin:/bin")
+    assert clockout.stop_job(JOB) == (3, f"stopped {JOB}")
+    assert (tmp_path / "argv").read_text().split() == ["stop", JOB]
+    monkeypatch.setenv("PATH", str(tmp_path / "nowhere"))
+    assert clockout.stop_job(JOB) == (None, "claude is not on PATH")
+
+
+@pytest.mark.viz_ja
+def test_the_world_keeps_a_background_sessions_job_from_the_file_and_the_list_and_drops_it_in_a_terminal():
+    from jui_cli.viz.ingest import World
+    from jui_cli.viz.state import VizState
+    w = World(VizState(100))
+    w.apply_session_file({"pid": 4242, "sessionId": "s-b", "cwd": "/work/b", "entrypoint": "cli", "kind": "bg", "jobId": JOB, "status": "idle"}, 1000)
+    assert (w.sessions["s-b"]["bgJob"], w.sessions["s-b"]["client"]) == (JOB, "terminal")
+    w.apply_agents_list([{"sessionId": "s-c", "cwd": "/work/c", "kind": "background", "id": "2f30b298", "state": "blocked"}], 1000)
+    assert w.sessions["s-c"]["bgJob"] == "2f30b298"
+    w.apply_agents_list([{"sessionId": "s-b", "pid": 4242, "status": "idle"}], 1100)   # no kind: nothing is known either way
+    assert w.sessions["s-b"]["bgJob"] == JOB
+    w.apply_session_file({"pid": 4343, "sessionId": "s-b", "cwd": "/work/b", "entrypoint": "cli", "kind": "interactive", "status": "idle"}, 1200)
+    assert "bgJob" not in w.sessions["s-b"]
+    w.apply_session_file({"pid": 4444, "sessionId": "s-d", "cwd": "/work/d", "entrypoint": "cli", "kind": "interactive", "status": "idle"}, 1200)
+    assert "bgJob" not in w.sessions["s-d"]
+    label = w.sessions["s-c"]["label"]
+    w.clock_out_event("s-c", 1500, {"result": "ended", "pid": 4242, "stopped": True})
+    w.clock_out_event("s-c", 1600, {"result": "refused", "pid": 4242, "reason": "claude stop 2f30b298: boom"})
+    assert [e["text"] for e in w.state.recent_events()][-2:] == [f"退勤（claude stop）→ {label}（pid 4242） 終わった",
+                                                                 f"退勤の合図 → {label}（pid 4242） 断った: claude stop 2f30b298: boom"]
+
+
+def test_the_server_with_no_claude_on_path_refuses_and_sends_no_signal(viz, standins):
+    p = standins.start("sleep")
+    sid = "c1000000-0000-4000-8000-000000000040"
+    write_registry(viz.sessions_dir, p.pid, sid, kind="bg", jobId=JOB)
+    viz.wait(lambda: sid in viz.sessions(), "the session")
+    assert viz.sessions()[sid]["bgJob"] == JOB
+    status, text = viz.end(sid)
+    assert "claude is not on PATH" in text, text
+    _refused_untouched(viz, standins, p, sid, 409, (status, text))
+    assert viz.log()[-1]["signalled"] is False
+
+
+@pytest.fixture()
+def bg_viz(tmp_path, standins, monkeypatch):
+    """The real server with a stand-in claude on PATH: `claude agents --json` prints rows.json, and `claude stop <job>`
+    empties it and ends the stand-in session, as the daemon does. Returns (viz, stand-in, sessionId, the calls' file, rows.json)."""
+    home = tmp_path / "home"
+    for k in DROP:
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("HOME", str(home))
+    sr = home / ".claude" / "session-recovery"
+    sr.mkdir(parents=True)
+    p = standins.start("sleep")
+    sid = "c1000000-0000-4000-8000-000000000041"
+    (sr / "active.json").write_text(json.dumps([{"session_id": sid, "name": "a"}]))
+    bindir = tmp_path / "pathbin"
+    bindir.mkdir()
+    calls, rows = tmp_path / "calls", tmp_path / "rows.json"
+    rows.write_text(json.dumps([{"sessionId": sid, "id": JOB, "kind": "background", "cwd": "/work/bg", "state": "blocked"}]))
+    fake = bindir / "claude"
+    fake.write_text(f"""#!/bin/sh
+case "$1" in
+  agents) cat '{rows}' ;;
+  stop) echo "$*" >> '{calls}'; echo '[]' > '{rows}'; rm -f '{home}/.claude/sessions/{p.pid}.json'; kill -TERM {p.pid} 2>/dev/null; echo "stopped $2" ;;
+  *) exit 1 ;;
+esac
+""")
+    fake.chmod(0o755)
+    monkeypatch.setattr(sys.modules[__name__], "_env", lambda h: dict(_ENV_FIRST(h), PATH=f"{bindir}:/usr/bin:/bin"))
+    viz = Viz(home)
+    viz.sr = sr
+    try:
+        write_registry(viz.sessions_dir, p.pid, sid, kind="bg", jobId=JOB)
+        viz.wait(lambda: sid in viz.sessions() and viz.sessions()[sid].get("bgJob") == JOB, "the session")
+        yield viz, p, sid, calls
+    finally:
+        viz.stop()
+
+
+def test_the_server_stops_a_background_session_logs_it_marks_the_ledger_and_its_robot_leaves(bg_viz):
+    viz, p, sid, calls = bg_viz
+    status, text = viz.end(sid)
+    assert status == 200, text
+    assert p.wait(timeout=5) == -signal.SIGTERM
+    assert calls.read_text().split() == ["stop", JOB]   # once, by the job's id
+    s = viz.sessions()[sid]
+    assert s["status"] == "ended" and s.get("clockedOut")
+    rec = viz.log()[-1]
+    assert (rec["result"], rec["status"], rec["signalled"], rec["stopped"], rec["pid"]) == ("ended", 200, False, True, p.pid)
+    assert json.loads((viz.sr / "active.json").read_text())[0]["ended_reason"] == "clocked-out"
+
+
+def test_the_server_stops_the_job_of_a_worker_that_is_down_so_the_daemon_does_not_bring_it_back(bg_viz):
+    # measured: killed from elsewhere, the list still has the row (state blocked, no pid), there is no entry, and it is back ~10.5 s later
+    viz, p, sid, calls = bg_viz
+    (viz.sessions_dir / f"{p.pid}.json").unlink()
+    time.sleep(0.3)
+    assert viz.sessions()[sid]["status"] != "ended"
+    status, text = viz.end(sid)
+    assert status == 200, text
+    assert calls.read_text().split() == ["stop", JOB]
+    s = viz.sessions()[sid]
+    assert s["status"] == "ended" and s.get("clockedOut")
+    rec = viz.log()[-1]
+    assert (rec["result"], rec["signalled"], rec["stopped"]) == ("ended", False, True)

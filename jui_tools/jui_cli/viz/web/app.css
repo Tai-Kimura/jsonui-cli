@@ -997,6 +997,7 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 /* the session's model (30-source-live.js llm), and the mark of a local one (LM Studio / Ollama, codex --oss) */
 .rb-model { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0 0; color: var(--ink-soft); font: 500 11px/1.5 var(--font-mono); overflow-wrap: anywhere; }
 .rb-local { padding: 0 5px; border: 1.5px solid var(--ok); border-radius: 4px; color: var(--ok); font: 700 9.5px/1.5 var(--font-mono); }
+.rb-bg { padding: 0 5px; border: 1.5px solid var(--ink-soft); border-radius: 4px; color: var(--ink-soft); font: 700 9.5px/1.5 var(--font-mono); }
 .rb-body { display: grid; align-content: start; gap: 16px; min-height: 0; overflow-y: auto; padding: 12px 14px 20px; }
 .rb-body[hidden] { display: none; }
 .rb-tabs { display: flex; gap: 4px; padding: 6px 14px 0; border-bottom: 1px solid var(--line); }

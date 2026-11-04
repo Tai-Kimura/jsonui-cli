@@ -146,6 +146,16 @@
       ]
     },
     {
+      "id": "bg-stop",
+      "name": "裏のセッションの止め方（claude stop <jobId>、~/.claude/sessions の kind: bg・jobId、claude agents の kind: background）",
+      "relies_on": "a session run by the daemon has kind bg and a jobId in its registry entry (kind background and id in claude agents --json); claude stop <jobId> ends it for good, SIGTERM only makes the daemon start it again about 10.5 s later (11-04 with 2.1.317, measured on throwaway sessions: the table is in clockout.py). The probe reads the sub-command's help and the --bg flag; the entry's shape takes a daemon, so it was measured by hand and is refused, never guessed, when it changes",
+      "probe": "bg_stop",
+      "impact": "viz: 裏のセッションの退勤が断られる（jobId の形が変わった）、または止まらないと出る。ボタンはプロセスが消えたのを見て終わらせるので、止まっていないのに消えることはない",
+      "files": [
+        "jui_tools/jui_cli/viz/clockout.py"
+      ]
+    },
+    {
       "id": "statusline",
       "name": "statusLine に渡る入力の形（利用量の取り方）",
       "relies_on": "the statusLine command's stdin (session_id, transcript_path, model, workspace, cost)",

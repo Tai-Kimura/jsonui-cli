@@ -572,6 +572,13 @@ def test_the_agents_probe_reads_the_json_option():
     assert P.agents_cli(P.Context(run=run)) == {"exit": 0, "json": True}
 
 
+def test_the_bg_stop_probe_reads_the_stop_help_and_the_bg_flag():
+    def run(argv):
+        return {("stop", "--help"): (0, "Usage: claude stop <id>\n"), ("--help",): (0, "Options:\n  --bg, --background  go\n")}.get(tuple(argv), (1, ""))
+    assert P.bg_stop(P.Context(run=run)) == {"exit": 0, "takes_id": True, "bg_flag": True}
+    assert P.bg_stop(P.Context(run=lambda argv: (1, ""))) == {"exit": 1, "takes_id": False, "bg_flag": False}
+
+
 def test_an_untracked_plant_in_a_facing_area_is_red(tmp_path):
     """A file not yet added to git is seen too (git ls-files --others --exclude-standard), so the local suite is red
     before the commit, not only CI after it; an ignored file is not a file of the repository."""

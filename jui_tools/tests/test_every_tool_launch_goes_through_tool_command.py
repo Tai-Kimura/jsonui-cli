@@ -76,6 +76,8 @@ NOT_A_TOOL = {
     ("jui_tools/jui_cli/viz/slack/adapters.py", "run_file", "[sys.executable, '-I', '-c', _HOST, str(path), func]"):
         "the Slack intake's filter / router adapter: this Python (sys.executable -I) running the person's own .py file, "
         "named by an absolute path in slack.json",
+    ("jui_tools/jui_cli/viz/clockout.py", "stop_job", "[claude, 'stop', job]"):
+        "the Claude Code CLI, located by shutil.which('claude') — `claude stop <jobId>` for a background session's 退勤",
     ("jui_tools/jui_cli/viz/sources/agents_cli.py", "poll_once", "claude"):
         "the Claude Code CLI, located by shutil.which('claude') — `claude agents --json` for the session list",
 }

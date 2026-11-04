@@ -190,6 +190,13 @@ def agents_cli(ctx: Context):
     return {"exit": rc, "json": "--json" in _help_options(text)}
 
 
+def bg_stop(ctx: Context):
+    """`claude stop <id>` (viz/clockout.py, a background session's 退勤) and the --bg flag that starts such a session."""
+    rc, text = ctx.run(["stop", "--help"])
+    rc2, text2 = ctx.run(["--help"])
+    return {"exit": rc, "takes_id": "stop <id>" in text, "bg_flag": rc2 == 0 and "--bg" in _help_options(text2)}
+
+
 def tool_names(ctx: Context):
     """The tools the session offers (the stream's init record), by the names viz keys on; and that MCP tools are still
     named mcp__<server>__<tool> (only when the session has an MCP server: otherwise None)."""
@@ -516,7 +523,7 @@ PROBES: dict[str, Callable[[Context], object]] = {
     "cli_flags": cli_flags, "plugin_cli": plugin_cli, "mcp_cli": mcp_cli, "channels_flags": channels_flags,
     "transcript_shape": transcript_shape, "hook_input_shape": hook_input_shape, "env_vars": env_vars,
     "statusline_input": statusline_input, "sigterm_session_end": sigterm_session_end, "config_paths": config_paths,
-    "session_ran": session_ran, "agents_cli": agents_cli, "tool_names": tool_names,
+    "session_ran": session_ran, "agents_cli": agents_cli, "bg_stop": bg_stop, "tool_names": tool_names,
     "price_table_models": price_table_models,
     "talk_send_input": talk_send_input, "talk_msg_id": talk_msg_id, "talk_origin": talk_origin,
     "talk_envelope": talk_envelope, "auto_mode_denial": auto_mode_denial, "skill_tool_shape": skill_tool_shape,

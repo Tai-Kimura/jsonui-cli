@@ -16,6 +16,12 @@ A Codex session (ticket 2026-10-29-viz-codex-clock-out-button), from a stand-in 
 socket at this HOME's ~/.codex (no codex runs): its button is enabled, the dialog says Codex and what leaving means, and
 退勤させる unsubscribes from the thread (no process signalled) — the session ends, the robot walks out, and while the
 daemon still lists the thread it is not subscribed to again.
+
+A background session (ticket 2026-11-04-viz-background-session-cannot-clock-out): an entry with kind bg and a jobId for a
+stand-in, and a stand-in `claude` on PATH that answers `agents --json` with an empty list and ends the stand-in on `stop`,
+as the daemon does (the real CLI was measured by hand: the table is in clockout.py). Its card has the mark, a terminal's has
+none; the dialog says what it is and that claude stop will stop it; 退勤させる runs `claude stop <jobId>` once, sends no
+signal of its own, and the session ends with its robot walked out and its line in the event log.
 """
 
 from __future__ import annotations
@@ -35,6 +41,9 @@ S_VSC = "e2e00000-0000-4000-8000-0000000000e2"
 S_DESK = "e2e00000-0000-4000-8000-0000000000e3"
 SUB = "e2e-sub-clock-0001"
 S_CODEX = "e2e00000-0000-4000-8000-0000000000e4"
+S_BG = "e2e00000-0000-4000-8000-0000000000e5"
+BG_JOB = "e2e00000"
+BG_TITLE = "退勤テスト（裏）"
 CODEX_TITLE = "退勤テスト（Codex）"
 ENTRY = {S_TERM: "cli", S_VSC: "claude-vscode", S_DESK: "claude-desktop"}
 CWDS = {S_TERM: "/work/clock-term", S_VSC: "/work/clock-vscode", S_DESK: "/work/clock-desktop"}
@@ -128,6 +137,20 @@ async def run_clock_out(pw, out, failures):
     claude = bindir / "claude"
     if not claude.exists():
         os.symlink("/bin/sleep", claude)
+    pathbin = out / "pathbin"
+    pathbin.mkdir(exist_ok=True)
+    stop_calls = out / "stop-calls.txt"
+    stop_calls.unlink(missing_ok=True)
+    bg_pid = out / "bg-pid.txt"
+    fake_cli = pathbin / "claude"
+    fake_cli.write_text(f"""#!/bin/sh
+case "$1" in
+  agents) echo '[]' ;;
+  stop) echo "$*" >> '{stop_calls}'; p=$(cat '{bg_pid}'); rm -f '{sessions_dir}/'"$p".json; kill -TERM "$p"; echo "stopped $2" ;;
+  *) exit 1 ;;
+esac
+""")
+    fake_cli.chmod(0o755)
     stand = {}
     for sid in ENTRY:
         p = subprocess.Popen([str(claude), "900"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -136,7 +159,7 @@ async def run_clock_out(pw, out, failures):
                                                                  "procStart": _lstart(p.pid), "status": "idle", "name": TITLES[sid], "startedAt": int(time.time() * 1000)}, ensure_ascii=False))
     jt = pathlib.Path(__file__).resolve().parents[2]
     port = free_port()
-    env = dict({k: v for k, v in os.environ.items() if k not in ISOLATE + ("PYTHONPATH", "CLAUDE_CONFIG_DIR")}, HOME=str(home), JUI_VIZ_E2E="1", PATH="/usr/bin:/bin")
+    env = dict({k: v for k, v in os.environ.items() if k not in ISOLATE + ("PYTHONPATH", "CLAUDE_CONFIG_DIR")}, HOME=str(home), JUI_VIZ_E2E="1", PATH=f"{pathbin}:/usr/bin:/bin")
     log = open(out / "serve.log", "w")
     srv = subprocess.Popen([sys.executable, str(jt / "bin" / "jui"), "viz", "serve", "--port", str(port)], stdout=log, stderr=subprocess.STDOUT, env=env)
     url = f"http://127.0.0.1:{port}"
@@ -225,6 +248,7 @@ async def run_clock_out(pw, out, failures):
         await page.wait_for_timeout(600)
         r = res["terminal"] = await page.evaluate(CARD)
         check(r and not r["disabled"] and r["why"] == "" and r["above"] and r["nearX"] and r["text"] == T("panel.clk.button"), f"terminal: enabled, above 「← 3D に戻る」: {r}")
+        check(not await page.evaluate("() => !!document.querySelector('#rb [data-rb-bg]')"), "terminal: no background mark on its card")
         await page.screenshot(path=str(out / "terminal-card-light.png"))
         await page.click("#rb [data-rb-clock]")
         r = res["dialog"] = await page.evaluate(DIALOG)
@@ -340,6 +364,53 @@ async def run_clock_out(pw, out, failures):
         res["codexLog"] = await page.evaluate("(w) => [...document.querySelectorAll('body *')].map((n) => n.childElementCount ? '' : n.textContent).find((t) => t.includes(w)) || ''", want)
         signal_head = T_head("ev.clockout", "label", pid="", how="", why="")
         check(res["codexLog"] and signal_head not in res["codexLog"], f"codex: the event log says no signal was sent: {res['codexLog']!r}")
+        # a background session: the mark; the dialog says what it is; 退勤させる runs claude stop on its job and signals nothing
+        bg = subprocess.Popen([str(claude), "900"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        stand[S_BG] = bg
+        bg_pid.write_text(str(bg.pid))
+        (sessions_dir / f"{bg.pid}.json").write_text(json.dumps({"pid": bg.pid, "sessionId": S_BG, "cwd": "/work/clock-bg", "kind": "bg", "entrypoint": "cli", "jobId": BG_JOB,
+                                                                 "procStart": _lstart(bg.pid), "status": "idle", "name": BG_TITLE, "startedAt": int(time.time() * 1000)}, ensure_ascii=False))
+        for _ in range(100):
+            if any(x["id"] == S_BG for x in local("GET", "/api/snapshot")[1]["slices"]["sessions"]):
+                break
+            await page.wait_for_timeout(100)
+        bg_label = label_of(S_BG)
+        await wait(page, "(l) => !!document.querySelector(`#sessions [data-robot-open=\"${l}\"]`)", arg=bg_label, label="the background session's row")
+        await open_robot(page, bg_label)
+        await page.wait_for_timeout(600)
+        r = res["bg"] = await page.evaluate(CARD)
+        mark = res["bgMark"] = await page.evaluate("() => (document.querySelector('#rb [data-rb-bg]') || {}).textContent || ''")
+        check(r and not r["disabled"] and r["why"] == "" and mark == T("panel.rb.bg"), f"background: enabled, with its mark: {r} {mark!r}")
+        await page.screenshot(path=str(out / "bg-card-light.png"))
+        await page.click("#rb [data-rb-clock]")
+        r = res["bgDialog"] = await page.evaluate(DIALOG)
+        note = await page.evaluate("() => (document.getElementById('clk-note') || {}).textContent || ''")
+        check(r and r["focus"] and r["session"] == BG_TITLE and r["client"] == T("panel.client.bg") and note == T("panel.clk.note.bg", job=BG_JOB),
+              f"background: the dialog says what it is and how it is stopped: {r} {note!r}")
+        await page.screenshot(path=str(out / "bg-dialog-light.png"))
+        await page.emulate_media(color_scheme="dark")
+        await page.wait_for_timeout(400)
+        await page.screenshot(path=str(out / "bg-dialog-dark.png"))
+        await page.emulate_media(color_scheme="light")
+        await page.click(".clock-confirm [data-clk-go]")
+        try:
+            code = bg.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            code = None
+        check(code == -signal.SIGTERM, f"background: the stand-in ended (by the stand-in CLI): {code}")
+        await wait(page, "(l) => !window.__dbg.robots.find((x) => x.def.id === l)", arg=bg_label, timeout=90000, label="the background robot walked out and is gone")
+        calls = res["bgStops"] = stop_calls.read_text().split("\n")[:-1] if stop_calls.exists() else []
+        check(calls == [f"stop {BG_JOB}"], f"background: claude stop ran once, by the job's id: {calls}")
+        _, snap = local("GET", "/api/snapshot")
+        s = next(x for x in snap["slices"]["sessions"] if x["id"] == S_BG)
+        check(s["status"] == "ended" and s.get("clockedOut"), f"background: the session is ended: {s.get('status')}")
+        rec = json.loads(attempts()[-1])
+        res["bgAttempt"] = {k: rec.get(k) for k in ("result", "status", "signalled", "stopped", "pid")}
+        check(res["bgAttempt"] == {"result": "ended", "status": 200, "signalled": False, "stopped": True, "pid": bg.pid}, f"background: the attempt: {res['bgAttempt']}")
+        want = T("ev.clockout.bg", label=bg_label, pid=T("ev.clockout.pid", pid=bg.pid), how=T("ev.clockout.ended"), why="")
+        res["bgLog"] = await page.evaluate("(w) => [...document.querySelectorAll('body *')].map((n) => n.childElementCount ? '' : n.textContent).find((t) => t.includes(w)) || ''", want)
+        check(res["bgLog"], f"background: the event log has the line {want!r}")
+        check(all(stand[s].poll() is None for s in (S_VSC, S_DESK)), "background: the other stand-ins are untouched")
         # 390 px: the card with the button, no horizontal scroll
         phone = await new_page(browser, watch, "clock-out-phone", **PHONE)
         await phone.goto(url + "/")

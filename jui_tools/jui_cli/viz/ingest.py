@@ -502,6 +502,9 @@ class World:
         why = "" if record.get("result") == "ended" else f": {record.get('reason', '')}"
         if record.get("cli") == "codex":   # no signal: its thread was unsubscribed from (CodexLink.end)
             text = i18n.tl("ev.clockout.codex", label=label, how=how, why=why)
+        elif record.get("stopped"):   # no signal: claude stop on a background session's job
+            pid = i18n.tl("ev.clockout.pid", pid=record["pid"]) if record.get("pid") else ""
+            text = i18n.tl("ev.clockout.bg", label=label, pid=pid, how=how, why=why)
         else:
             pid = i18n.tl("ev.clockout.pid", pid=record["pid"]) if record.get("pid") else ""
             text = i18n.tl("ev.clockout", label=label, pid=pid, how=how, why=why)
@@ -1361,6 +1364,14 @@ class World:
             entry = _s(row.get("entrypoint"))
             if entry and session.get("client") != clockout.client_of(entry):
                 session["client"] = clockout.client_of(entry)   # terminal / vscode / desktop / other: 退勤 is terminal only
+                self._dirty.add("sessions")
+            kind = row.get("kind")
+            if kind in (clockout.BG_KIND, "background"):   # the file's word and claude agents' word: 退勤 runs claude stop on its job
+                job = _s(row.get("jobId")) or (_s(row.get("id")) if kind == "background" else None)
+                if job and session.get("bgJob") != job:
+                    session["bgJob"] = job
+                    self._dirty.add("sessions")
+            elif kind and session.pop("bgJob", None) is not None:   # resumed in a terminal
                 self._dirty.add("sessions")
             name = _s(row.get("name"))
             if name:   # the name a SendMessage's `to` uses (changes on a restart: the newest row wins)

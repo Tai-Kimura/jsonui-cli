@@ -21,7 +21,7 @@ Routes (design: dev-guide, 05 §3):
   POST /api/reveal-file  show one file of the history in Finder (open -R): a SendUserFile file or an attachment, named as above (the same checks)
   POST /api/data-docs  a JsonUI room's API and DB specifications for its data server, named by the room (the same checks)
   POST /api/stop    停止: ask one session to stop at its next tool boundary, or take it back (prompt_checks)
-  POST /api/session/end  退勤: SIGTERM to one terminal session's claude (prompt_checks, then clockout.py's checks);
+  POST /api/session/end  退勤: SIGTERM to one terminal session's claude, claude stop for a background one (prompt_checks, then clockout.py's checks);
                          a Codex session's thread is unsubscribed instead (CodexLink.end)
   POST /api/local-models  the call dialog's Codex tab: the models LM Studio and Ollama list here (local_models.py; prompt_checks)
 """
@@ -1138,7 +1138,7 @@ def make_app(ctx: ServerContext) -> web.Application:
         """退勤 from a robot card (ticket 2026-10-19-jui-viz-clock-out-button): the checks of /api/prompt
         (prompt_checks, with this route's cap), then the session in this server's list and not ended, the robot asked
         for its main robot (never a subagent), then clockout.end_session's checks of the pid, made twice, and one
-        SIGTERM. Every attempt goes to clock-out.log in the runtime folder and to stderr; one naming a session this
+        SIGTERM (a background session: one claude stop). Every attempt goes to clock-out.log in the runtime folder and to stderr; one naming a session this
         server knows, to the event log too."""
         at = now_ms()
         record = {"at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "remote": request.remote}
@@ -1166,8 +1166,10 @@ def make_app(ctx: ServerContext) -> web.Application:
         loop = asyncio.get_running_loop()
         known = world.session_proc.get(sid)
         outcome = await loop.run_in_executor(None, lambda: clockout.end_session(
-            paths.claude_sessions_dir(), sid, os.getpid(), known=known[:2] if known else None))
+            paths.claude_sessions_dir(), sid, os.getpid(), known=known[:2] if known else None, job=session.get("bgJob")))
         record.update(pid=outcome.pid, signalled=outcome.signalled)
+        if outcome.stopped:
+            record["stopped"] = True   # claude stop answered for its job, and no signal was sent
         if outcome.result == "ended" and not outcome.signalled:
             record["detail"] = outcome.reason   # why nothing was sent (it had already ended)
         if outcome.result == "ended":

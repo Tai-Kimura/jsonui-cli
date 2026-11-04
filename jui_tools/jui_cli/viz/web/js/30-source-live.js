@@ -123,7 +123,7 @@ const SOURCE = {
     } catch (err) { return { ok: false, status: 0, error: tl('live.offline') }; }
   },
   /* 退勤 (50-panel.js): POST /api/session/end with the same page-only checks as /api/prompt; the server checks the session,
-     the robot (a main one) and the process again, sends SIGTERM once and answers when it has gone (a Codex session: its thread
+     the robot (a main one) and the process again, sends SIGTERM once (a background session: claude stop) and answers when it has gone (a Codex session: its thread
      is unsubscribed, and note says when a terminal runs in its Codex home). Resolves { ok, status, note, error }. */
   async clockOut(label) {
     try {
@@ -1051,6 +1051,7 @@ function rebuildSessions() {
       stopAt: Number.isFinite(s.stopAt) && s.stopAt > 0 ? s.stopAt : 0, stoppedAt: Number.isFinite(s.stoppedAt) && s.stoppedAt > 0 ? s.stoppedAt : 0,
       stopHook: s.stopHook === true,
       client: ['terminal', 'vscode', 'desktop', 'other'].includes(s.client) ? s.client : 'unknown',   // 退勤: terminal only
+      bgJob: typeof s.bgJob === 'string' ? s.bgJob : '',   // run by the claude daemon: its card says so, 退勤 runs claude stop on this job
       since: Number.isFinite(s.since) && s.since > 0 ? s.since : null,
       inputWaitAt: Number.isFinite(s.inputWaitAt) && s.inputWaitAt > 0 ? s.inputWaitAt : 0,   // 入力待ち since (53-waits.js)
       heavy: Array.isArray(s.heavy) ? s.heavy.filter((x) => typeof x === 'string') : [],   // tokens / tool / subagents
