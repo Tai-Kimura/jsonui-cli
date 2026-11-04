@@ -125,7 +125,10 @@ async def run_usage(pw, out, failures):
               f"{tag}: each chip's text sits in its middle: {[(c['name'], c['mid'], c['textMid']) for c in stale]}")
     async def buttons_right(page, tag: str, wrap: bool = False, wide: bool = False) -> None:
         """通知 and パネルを閉じる stay at the header's right edge, on the first line or wrapped to the next, and nothing
-        sticks out sideways (requester 10-20, ticket 2026-10-20-jui-viz-header-buttons-right-aligned). Wide is 2400 px,
+        sticks out sideways (requester 10-20, ticket 2026-10-20-jui-viz-header-buttons-right-aligned). パネルを閉じる is on
+        通知's line unless it does not fit there: then it is on the very next line, both lines at the right edge (a phone in
+        English, ticket 2026-11-04-viz-en-phone-card-header-overflows-10px). Sideways is read against the viewport asked
+        for: with is_mobile the page's innerWidth grows with what overflows, so it passes whatever sticks out. Wide is 2400 px,
         where the menu controls share their dedicated second row. With wrap,
         the widest width (from 2400 down, 20 px a step) at which the buttons stand on a line of their own below the chips
         (the requester's 09:08 screen) is found first."""
@@ -135,9 +138,15 @@ async def run_usage(pw, out, failures):
           const box = (id) => { const e = document.getElementById(id); if (!e || e.offsetParent === null) return null;
             const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; };
           const side = box('btn-side'), bell = box('btn-notify');
+          const btns = [...document.querySelectorAll('.controls button')].filter((e) => e.offsetParent !== null).map((e) => { const r = e.getBoundingClientRect(); return { id: e.id, left: r.left, right: r.right, top: r.top, bottom: r.bottom }; });
+          const overlap = btns.flatMap((a, i) => btns.slice(i + 1).filter((c) => a.left < c.right - 0.5 && c.left < a.right - 0.5 && a.top < c.bottom - 0.5 && c.top < a.bottom - 0.5).map((c) => [a.id, c.id]));
+          const left = b.left + parseFloat(cs.paddingLeft);
+          const outside = btns.filter((c) => c.left < left - 1 || c.right > right + 1).map((c) => c.id);
+          const bellLine = bell ? btns.filter((c) => Math.abs(c.top - bell.top) <= 2) : [];
+          const lineWith = side && bellLine.length ? Math.max(...bellLine.map((c) => c.right)) - Math.min(...bellLine.map((c) => c.left)) + parseFloat(getComputedStyle(document.querySelector('.controls')).columnGap) + (side.right - side.left) : 0;
           const chips = document.querySelector('.chips').getBoundingClientRect(), ctl = document.querySelector('.controls').getBoundingClientRect();
-          return { w: innerWidth, right, side, bell, oneLine: ctl.top < menu.top + ctl.height - 0.5, alone: ctl.top >= chips.bottom - 0.5,
-                   scrollW: document.documentElement.scrollWidth, innerW: innerWidth };
+          return { w: document.documentElement.clientWidth, right, side, bell, overlap, outside, lineWith, room: menu.width, foot: b.bottom, oneLine: ctl.top < menu.top + ctl.height - 0.5, alone: ctl.top >= chips.bottom - 0.5,
+                   scrollW: document.documentElement.scrollWidth };
         }"""
         if wrap:
             vp = page.viewport_size
@@ -150,7 +159,7 @@ async def run_usage(pw, out, failures):
             await page.set_viewport_size({"width": 2400, "height": page.viewport_size["height"]})
         await page.wait_for_timeout(300)
         g = res[f"buttons-{tag}"] = await page.evaluate(js)
-        await page.screenshot(path=str(out / f"header-buttons-{tag}.png"), clip={"x": 0, "y": 0, "width": g["w"], "height": 140})
+        await page.screenshot(path=str(out / f"header-buttons-{tag}.png"), clip={"x": 0, "y": 0, "width": g["w"], "height": g["foot"] + 8})
         if wrap:
             check(failures, g["alone"], f"{tag}: the buttons wrapped to a line of their own at {g['w']} px (else this arm proves nothing): {g}")
         elif wide:
@@ -158,9 +167,17 @@ async def run_usage(pw, out, failures):
         side, bell = g["side"], g["bell"]
         check(failures, side is not None and abs(side["right"] - g["right"]) <= 1,
               f"{tag}: パネルを閉じる ends at the header's right edge ({g['right']}): {side}")
-        check(failures, bell is None or (bell["right"] <= side["left"] + 0.5 and abs(bell["top"] - side["top"]) <= 2 and side["left"] - bell["right"] <= 12),
-              f"{tag}: 通知 sits just left of パネルを閉じる, on its line: {bell} {side}")
-        check(failures, g["scrollW"] <= g["innerW"], f"{tag}: nothing sticks out sideways: scrollWidth {g['scrollW']} > {g['innerW']}")
+        if bell is not None and side is not None and side["top"] >= bell["bottom"] - 0.5:   # パネルを閉じる on a line below 通知's
+            check(failures, g["lineWith"] > g["room"], f"{tag}: パネルを閉じる leaves 通知's line only when it does not fit there ({g['lineWith']} in {g['room']}): {bell} {side}")
+            check(failures, side["top"] - bell["bottom"] <= 8, f"{tag}: パネルを閉じる is on the very next line: {bell} {side}")
+            check(failures, abs(bell["right"] - g["right"]) <= 1, f"{tag}: 通知's line ends at the header's right edge too ({g['right']}): {bell}")
+        else:
+            check(failures, bell is None or (bell["right"] <= side["left"] + 0.5 and abs(bell["top"] - side["top"]) <= 2 and side["left"] - bell["right"] <= 12),
+                  f"{tag}: 通知 sits just left of パネルを閉じる, on its line: {bell} {side}")
+        check(failures, not g["overlap"], f"{tag}: no button lies on another: {g['overlap']}")
+        check(failures, not g["outside"], f"{tag}: every button inside the header's padding: {g['outside']}")
+        asked = page.viewport_size["width"]
+        check(failures, g["scrollW"] <= asked, f"{tag}: nothing sticks out sideways: scrollWidth {g['scrollW']} > {asked}")
 
     browser = await pw.chromium.launch(args=LAUNCH_ARGS)
     t0 = time.monotonic()
