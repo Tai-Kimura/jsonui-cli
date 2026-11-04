@@ -28,7 +28,7 @@ import subprocess
 import sys
 import time
 
-from common import DESKTOP, LAUNCH_ARGS, PHONE, Watch, new_page, ready
+from common import DESKTOP, LAUNCH_ARGS, PHONE, T, Watch, new_page, ready
 
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
 SID_ROOM = "e2e00000-0000-4000-8000-000000000d01"
@@ -269,22 +269,22 @@ async def run_spec_diff(pw, out, failures, jt=None):
                     await page.wait_for_timeout(300)
                     f = r["fold"] = await page.evaluate(FOLD_JS)
                     await shot("fold-folded")
-                    check(failures, f["vars"] == [f"v{k}" for k in range(27, 34)] and f["gaps"] == [["⋯ 変わらない 27 行", ["↑ 上へ 20 行", "全部（27 行）"]], ["⋯ 変わらない 26 行", ["↓ 下へ 20 行", "全部（26 行）"]]],
+                    check(failures, f["vars"] == [f"v{k}" for k in range(27, 34)] and f["gaps"] == [[T("sd.gap.hidden", n=27), [T("sd.gap.up", n=20), T("sd.gap.all", n=27)]], [T("sd.gap.hidden", n=26), [T("sd.gap.down", n=20), T("sd.gap.all", n=26)]]],
                           f"{tag}: folded: v27..v33 shown (3 rows each side of v30), 27 and 26 unchanged rows one line each: {f}")
-                    check(failures, f["events"] == {"expanded": "false", "rows": 0, "tag": "変更なし · 4 行"},
+                    check(failures, f["events"] == {"expanded": "false", "rows": 0, "tag": T("sd.sec.same", n=4)},
                           f"{tag}: the event handlers, unchanged, are a folded head: {f['events']}")
                     check(failures, f["chg"] == ["v30"], f"{tag}: the changed row is never folded: {f['chg']}")
-                    await page.click("#sd-body .sd-gap >> nth=0 >> text=↑ 上へ 20 行")
+                    await page.click(f"#sd-body .sd-gap >> nth=0 >> text={T('sd.gap.up', n=20)}")
                     f = r["fold-up"] = await page.evaluate(FOLD_JS)
-                    check(failures, f["vars"] == [f"v{k:02d}" for k in range(7, 34)] and f["gaps"][0][0] == "⋯ 変わらない 7 行" and f["gaps"][0][1] == ["7 行を表示"],
+                    check(failures, f["vars"] == [f"v{k:02d}" for k in range(7, 34)] and f["gaps"][0][0] == T("sd.gap.hidden", n=7) and f["gaps"][0][1] == [T("sd.gap.show", n=7)],
                           f"{tag}: ↑ opens the 20 rows next to the change (v07..v26), 7 left with one button: {f['vars'][:3]} {f['gaps']}")
                     check(failures, f["focus"] is not None and f["focus"].startswith("sd-gap"), f"{tag}: the focus stays on the gap: {f['focus']}")
-                    await page.click("#sd-body .sd-gap >> nth=1 >> text=↓ 下へ 20 行")
+                    await page.click(f"#sd-body .sd-gap >> nth=1 >> text={T('sd.gap.down', n=20)}")
                     f = r["fold-down"] = await page.evaluate(FOLD_JS)
-                    check(failures, f["vars"][-1] == "v53" and f["gaps"][-1][0] == "⋯ 変わらない 6 行",
+                    check(failures, f["vars"][-1] == "v53" and f["gaps"][-1][0] == T("sd.gap.hidden", n=6),
                           f"{tag}: ↓ opens the 20 rows after the change (to v53), 6 left: {f['vars'][-3:]} {f['gaps']}")
-                    await page.click("#sd-body .sd-gap >> nth=1 >> text=6 行を表示")
-                    await page.click("#sd-body .sd-gap >> nth=0 >> text=7 行を表示")
+                    await page.click(f"#sd-body .sd-gap >> nth=1 >> text={T('sd.gap.show', n=6)}")
+                    await page.click(f"#sd-body .sd-gap >> nth=0 >> text={T('sd.gap.show', n=7)}")
                     f = r["fold-all"] = await page.evaluate(FOLD_JS)
                     check(failures, f["vars"] == [f"v{k:02d}" for k in range(60)] and f["gaps"] == [],
                           f"{tag}: every row shown once each gap is opened: {len(f['vars'])} {f['gaps']}")
@@ -335,7 +335,7 @@ async def run_spec_diff(pw, out, failures, jt=None):
             check(failures, ch.get("counts") == "+5−2~2",
                   f"{tag}: ログイン's counts (added heading, forgotButton, rememberMe, onForgotTap, an action; removed title, password; rewritten the description and isLoading): {ch.get('counts')!r}")
             sections = {s["h"]: s["rows"] for s in ch.get("rows", [])}
-            variables = [(st, l or rr) for st, l, rr, _m in next((v for k, v in sections.items() if "変数" in k), [])]
+            variables = [(st, l or rr) for st, l, rr, _m in next((v for k, v in sections.items() if T("sd.sec.vars") in k), [])]
             # the changed column only, on both sides: isLoading's type, the description's text (not its name)
             marks = {(l or rr).split(":")[0]: m for _h, rows in sections.items() for st, l, rr, m in rows if st == "sd-chg"}
             check(failures, marks.get("isLoading") == [["Bool"], ["LoadState"]],
@@ -345,16 +345,16 @@ async def run_spec_diff(pw, out, failures, jt=None):
             check(failures, [st for st, _ in variables] == ["sd-same", "sd-del", "sd-chg", "sd-add"],
                   f"{tag}: the variables: email same, password removed, isLoading rewritten, rememberMe added: {variables}")
             check(failures, r.get("focus-back") == "wb-diff", f"{tag}: Esc gives the focus back to the button: {r.get('focus-back')!r}")
-            check(failures, any("差はありません" in b for b in r.get("diff-none", {}).get("band", [])), f"{tag}: プロフィール says no difference: {r.get('diff-none', {}).get('band')}")
-            check(failures, any("新しいファイル" in n for n in r.get("diff-new", {}).get("notes", [])), f"{tag}: 注文 is new: {r.get('diff-new', {}).get('notes')}")
+            check(failures, any(T("sd.none") in b for b in r.get("diff-none", {}).get("band", [])), f"{tag}: プロフィール says no difference: {r.get('diff-none', {}).get('band')}")
+            check(failures, any(T("sd.left.new") in n for n in r.get("diff-new", {}).get("notes", [])), f"{tag}: 注文 is new: {r.get('diff-new', {}).get('notes')}")
             dl = r.get("diff-deleted", {})
-            check(failures, any("消した" in n for n in dl.get("notes", [])) and "~0" in dl.get("counts", "") and "+0" in dl.get("counts", ""),
+            check(failures, any(T("sd.right.deleted") in n for n in dl.get("notes", [])) and "~0" in dl.get("counts", "") and "+0" in dl.get("counts", ""),
                   f"{tag}: 退会 is deleted, its left all removed: {dl.get('notes')} {dl.get('counts')!r}")
             un = r.get("diff-unavailable", {})
-            check(failures, any("元が取れません" in b and "分かれた所が見つからない" in b for b in un.get("band", [])),
+            check(failures, any(T("sd.unavailable", why=T("sd.reason.no-merge-base")) in b for b in un.get("band", [])),
                   f"{tag}: room2's base cannot be read, and why: {un.get('band')}")
             lst = r.get("list", {})
-            check(failures, lst.get("gone") == ["退会"] and lst.get("marks", {}).get("注文") == "新規" and lst.get("marks", {}).get("プロフィール") == "差なし"
+            check(failures, lst.get("gone") == ["退会"] and lst.get("marks", {}).get("注文") == T("sd.mark.new") and lst.get("marks", {}).get("プロフィール") == T("sd.mark.same")
                   and lst.get("marks", {}).get("ログイン") == "+5−2~2", f"{tag}: the list's marks and the deleted card: {lst}")
             check(failures, r.get("room-button") is True, f"{tag}: the room's own spec has no button")
             if tag.startswith("390"):

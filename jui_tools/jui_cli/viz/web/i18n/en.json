@@ -962,7 +962,7 @@
   "hist.denied": "Denied",
   "hist.denied.title": "Denied by auto mode: {why}",
   "hist.error": "Error",
-  "hist.running": "Waiting for the result",
+  "hist.running": "Running",
   "hist.img.count": {
     "one": "{n} image",
     "other": "{n} images"
@@ -1038,7 +1038,7 @@
   "hist.attach.sending": "Sending…",
   "hist.attach.remove": "Remove {name}",
   "hist.cards.aria": "This session's permissions, questions and denied calls",
-  "hist.fold.close": "▼ Close to one line and read the history above ({what})",
+  "hist.fold.close": "▼ Close to one line ({what})",
   "hist.fold.open": "▲ Open and answer ({what})",
   "hist.fold.q": "{n} question(s)",
   "hist.fold.p": "{n} permission(s)",

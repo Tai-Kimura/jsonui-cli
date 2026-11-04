@@ -55,8 +55,11 @@ LOW = """() => { const rb = document.getElementById('rb').getBoundingClientRect(
     cardsScroll: c.scrollHeight - c.clientHeight, cardsHeight: c.clientHeight, sendIn: send.height > 0 && send.top >= rb.top && send.bottom <= rb.bottom + 0.5,
     cardsBelowHist: c.getBoundingClientRect().top >= document.querySelector('[data-rb-hist]').getBoundingClientRect().bottom - 0.5,
     histHeight: Math.round(document.querySelector('[data-rb-hist]').getBoundingClientRect().height),
-    answeredIn: (() => { const r = c.getBoundingClientRect(), xs = [...c.querySelectorAll('[data-qcard]:not(.q-open), [data-dcard]:not(.q-open)')];
-      return xs.length > 0 && xs.every((x) => { const b = x.getBoundingClientRect(); return b.top >= r.top - 0.5 && b.bottom <= r.bottom + 0.5; }); })(),
+    answeredIn: (() => { const r = c.getBoundingClientRect(), bar = c.querySelector('[data-h-fold]'), top = bar ? bar.getBoundingClientRect().bottom : r.top, xs = [...c.querySelectorAll('[data-qcard]:not(.q-open), [data-dcard]:not(.q-open)')];
+      return xs.length > 0 && xs.every((x) => { const b = x.getBoundingClientRect(); return b.top >= top - 0.5 && b.bottom <= r.bottom + 0.5; }); })(),
+    sideways: c.scrollWidth - c.clientWidth, bar: (c.querySelector('[data-h-fold]') || { textContent: '' }).textContent,
+    labelCut: b.scrollWidth > b.clientWidth + 1,
+    barCut: (() => { const w = c.querySelector('[data-h-fold] .h-fold-count'); return !!w && w.scrollWidth > w.clientWidth + 1; })(),
     rows: getComputedStyle(document.getElementById('rb')).gridTemplateRows,
     kids: [...document.getElementById('rb').children].filter((k) => k.getClientRects().length).map((k) => `${k.className.split(' ')[0]}:${Math.round(k.getBoundingClientRect().height)}`) }; }"""
 OFF = """() => ({ hist: [...document.querySelectorAll('#rb [data-h-cards] [data-h-off]')].map((b) => b.dataset.hOff),
@@ -169,7 +172,7 @@ async def run_hist_cards(pw, out, failures):
         look = """() => {
           const c=document.querySelector('#rb [data-h-cards]'), b=c.querySelector('[data-h-fold]');
           return {folded:window.__dbg.histFold().folded, how:b&&b.dataset.hFold, expanded:b&&b.getAttribute('aria-expanded'),
-            word:b?b.textContent:'', height:c.clientHeight, bar:b?b.getBoundingClientRect().height:0,
+            word:b?b.textContent:'', sideways:c.scrollWidth-c.clientWidth, height:c.clientHeight, bar:b?b.getBoundingClientRect().height:0,
             cardVisible:c.querySelector('.tbd-perm').getClientRects().length>0, sw:document.documentElement.scrollWidth};
         }"""
         def agrees(st, folded, width):
@@ -177,8 +180,8 @@ async def run_hist_cards(pw, out, failures):
                 return (st['folded'] and st['how'] == 'open' and st['expanded'] == 'false' and st['word'].startswith('▲')
                         and not st['cardVisible'] and st['height'] <= 55 and st['bar'] <= 30 and st['sw'] <= width)
             return (not st['folded'] and st['how'] == 'close' and st['expanded'] == 'true' and st['word'].startswith('▼')
-                    and '許可 1 件' in st['word'] and '質問' not in st['word'] and st['cardVisible'] and st['height'] > st['bar'] + 60
-                    and st['sw'] <= width)
+                    and T('hist.fold.p', n=1) in st['word'] and T('hist.fold.q', n=1) not in st['word'] and st['cardVisible'] and st['height'] > st['bar'] + 60
+                    and st['sw'] <= width and st['sideways'] <= 0)
         await wait(page, "() => !!document.querySelector('#rb [data-h-fold]')", label="the permission's bar")
         for width in (1440, 390):
             await page.set_viewport_size({"width": width, "height": 1000})
@@ -228,6 +231,16 @@ async def run_hist_cards(pw, out, failures):
         check(failures, off["hist"] == [] and off["elsewhere"] == 0, f"no × on a card that waits on an answer: {off}")
         # 下を広げる: the four cards scroll in their box at first (the control), then all show with 送信 inside the card
         lo = res["lowBefore"] = await page.evaluate(LOW)
+        # the longest bar, all three kinds (in Japanese too): its words set no column, so the box does not slide sideways
+        check(failures, lo["sideways"] <= 0 and T("hist.fold.d", n=2) in lo["bar"] and not lo["labelCut"] and not lo["barCut"], f"the cards box does not slide sideways under a bar of all three kinds, its words and the handle's whole: {lo}")
+        # the same bar folded: one line, so its words are cut inside it and set no column
+        await page.click('#rb [data-h-fold]')
+        await wait(page, "() => window.__dbg.histFold().folded", label="all three kinds folded")
+        fb = res["foldedThree"] = await page.evaluate("""() => { const c = document.querySelector('#rb [data-h-cards]'), r = c.getBoundingClientRect(), b = c.querySelector('[data-h-fold]').getBoundingClientRect();
+          return { barRight: b.right, boxRight: r.right, barH: b.height, word: c.querySelector('[data-h-fold]').textContent }; }""")
+        check(failures, fb["barRight"] <= fb["boxRight"] + 0.5 and fb["barH"] <= 30, f"all three kinds folded: the bar is one line inside its box: {fb}")
+        await page.click('#rb [data-h-fold]')
+        await wait(page, "() => !window.__dbg.histFold().folded", label="all three kinds open again")
         check(failures, not lo["on"] and lo["pressed"] == "false" and lo["label"] == T("hist.low.on") and lo["edge"] and lo["cardsScroll"] > 0,
               f"before 下を広げる the cards box scrolls (the control), its handle on the box's top edge: {lo}")
         check(failures, lo["cardsBelowHist"] and lo["histHeight"] >= 119, f"the history keeps 120 px and does not run under the cards: {lo}")
@@ -313,13 +326,19 @@ async def run_hist_cards(pw, out, failures):
               and off["panelQ"] == 2 and off["panelD"] == 2,
               f"× takes its own card off the history's cards, the other of its kind stays, the panel keeps both: {off}")
         # 下を広げる with the two answered cards (the requester's case): all of them and 送信 at once
+        # 1000 px high: a language's longer chips can take a line of the header, and the page's height is not what this measures
+        await page.set_viewport_size({"width": DESKTOP["viewport"]["width"], "height": 1000})
+        await page.wait_for_timeout(300)
         lo = res["lowAnsweredBefore"] = await page.evaluate(LOW)
         await press_low(page)
+        await page.wait_for_timeout(300)
         lo2 = res["lowAnswered"] = await page.evaluate(LOW)
         check(failures, not lo["answeredIn"], f"before 下を広げる the two answered cards do not show whole (the control): {lo}")
+        check(failures, lo2["sideways"] <= 0 and not lo2["labelCut"], f"the cards box does not slide sideways, the handle's words whole: {lo2}")
         check(failures, lo2["on"] and lo2["answeredIn"] and lo2["sendIn"] and lo2["cardsBelowHist"],
               f"下を広げる with the two answered cards: both whole and 送信 at once, the history above: {lo2}")
         await page.screenshot(path=str(out / "low-answered.png"))
+        await page.set_viewport_size(DESKTOP["viewport"])
         await page.reload()
         await ready(page)
         await wait(page, "() => document.querySelectorAll('#denied [data-dcard]').length === 2", label="the panel's stopped calls after the reload")

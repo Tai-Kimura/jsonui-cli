@@ -1011,14 +1011,17 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .h-newer { position: sticky; bottom: 0; justify-self: center; padding: 5px 14px; border: 0; border-radius: 999px; background: var(--info); color: var(--bg); font: 700 12px/1.4 var(--font-body); box-shadow: 0 2px 8px rgba(0, 0, 0, .25); cursor: pointer; }
 .h-newer[hidden] { display: none; }
 /* the session's cards on the 応答の履歴 tab (55-history.js histCardsPaint): over the prompt box, a scroll of their own */
-.h-cards { display: grid; gap: 8px; max-height: min(30vh, 260px); overflow-y: auto; padding: 8px 14px; border-top: 1px solid var(--line); background: var(--panel); }
+.h-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; max-height: min(30vh, 260px); overflow-y: auto; padding: 8px 14px; border-top: 1px solid var(--line); background: var(--panel); }
 .h-cards[hidden] { display: none; }
 .h-fold { position: sticky; top: -8px; z-index: 1; display: flex; flex-wrap: nowrap; align-items: center; gap: 2px 8px; width: 100%; margin: 0; padding: 4px 10px; border: 1px dashed #7a4b00; border-radius: 8px; background: var(--warn-bg); color: var(--ink); font: 700 12px/1.5 var(--font-body); text-align: left; cursor: pointer; }
 .h-fold:hover, .h-fold:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .h-fold-count { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .h-fold-text { flex: 1; min-width: 0; overflow: hidden; color: var(--ink-soft); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+/* minmax(0, 1fr): the bar's words no longer set the column. A long one (three kinds, or English) widened it and the box slid
+   sideways, cutting the cards' left. Open, the bar wraps so its counts are read; folded it stays one line. */
+.h-fold[data-h-fold="close"] .h-fold-count { white-space: normal; }
 .h-cards.h-folded { overflow: hidden; padding-bottom: 8px; }
-.h-cards:has(> .h-fold) { scroll-padding-top: 44px; }   /* a field scrolled to or clicked lands under the bar, never behind it */
+.h-cards:has(> .h-fold) { scroll-padding-top: 62px; }   /* a field scrolled to or clicked lands under the bar, never behind it */
 .h-cards.h-folded > :not(.h-fold) { display: none; }   /* folded: the cards stay in the page, what was typed in them too */
 @keyframes h-fold-new { 0% { box-shadow: inset 0 0 0 0 rgba(255, 176, 32, 0.9); } 50% { box-shadow: inset 0 0 0 3px rgba(255, 176, 32, 0.9); } 100% { box-shadow: none; } }
 .h-fold.h-fold-new { animation: h-fold-new 0.8s ease-out 1; }
@@ -1116,14 +1119,17 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .h-item .h-at, .h-who > *, .h-tool summary > .h-err, .h-tool summary > .h-run { flex: none; white-space: nowrap; overflow-wrap: normal; }
 .h-who { white-space: nowrap; overflow-wrap: normal; }   /* 依頼者 is a bare text node in the row: the row itself keeps it whole */
 .h-tool summary > b, .h-harness summary > b, .h-peer summary > b { flex: 0 1 auto; min-width: 3em; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
-.h-item summary > .h-head { flex: 1 1 0; }   /* the body narrows first: the labels get their own width before it */
+.h-item summary > .h-head { flex: 1 1 0; min-width: 3em; }   /* the body narrows first: the labels get their own width before it */
 /* A message from another session reads top to bottom (requester 10-19, issue #34): the sender, then the body, then
    the time, each on its own line. The sender takes the row's width (cut with … if longer still); the body wraps, up to
    three lines folded — the whole text is in the opened item. */
 .h-peer summary { flex-direction: column; align-items: stretch; gap: 2px; }
 .h-peer summary > b { max-width: none; }
 /* SendMessage's recipient and a received message's sender (2.3.6): a robot here is a link-like button */
-.h-tool summary > .h-to { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-soft); }
+.h-tool summary > .h-to { display: inline-flex; align-items: baseline; gap: 0.3em; flex: 0 1 auto; min-width: 5em; max-width: 45%; overflow: hidden; white-space: nowrap; color: var(--ink-soft); }
+/* The name gives way before the summary vanishes, and a long name is cut inside its own link: a button cannot be split by the
+   line's ellipsis, so the whole link used to turn into "…" with nothing to press. */
+.h-tool summary > .h-to > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .h-peerlink { padding: 0; border: 0; background: none; font: inherit; color: var(--info); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .h-peerlink:hover { text-decoration-thickness: 2px; }
 .h-peerlink:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; border-radius: 3px; }

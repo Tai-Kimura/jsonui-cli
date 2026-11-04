@@ -161,7 +161,7 @@ async def run_callbell(pw, out, failures):
             got = run_line(shell, line, scratch)
             res.setdefault("argv", {})[shell] = got
             check(failures, len(got) == 5 and got[0] == os.path.realpath(folder) and got[1:4] == ["--channels", "plugin:jui-viz@jsonui", f"--name={name}"]
-                  and got[4].endswith(f"セッション名: {name}\n{role}"), f"{shell}: the folder and four arguments: {got}")
+                  and got[4].startswith(T("srv.call.preface")) and got[4].endswith(f"{T('srv.call.session', name=name)}\n{role}"), f"{shell}: the folder and four arguments: {got}")
         check(failures, not list(out.rglob("PWNED")), "a name, a role or the folder ran a command")
 
         # copy: the clipboard holds that line

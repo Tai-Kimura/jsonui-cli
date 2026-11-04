@@ -34,7 +34,9 @@ ROWS = """() => [...document.querySelectorAll('[data-rb-hist] details.h-tool')].
   const head = s.querySelector('.h-head');
   return { to: to ? to.textContent : null, link: link ? link.dataset.hGo : null, linkTag: link ? link.tagName : null,
     plain: name ? { tag: name.tagName, tabIndex: name.tabIndex, title: name.title } : null, head: head ? head.textContent : null,
-    headCut: head ? head.scrollWidth > head.clientWidth + 1 : null, open: d.open }; })"""
+    headCut: head ? head.scrollWidth > head.clientWidth + 1 : null, headW: head ? Math.round(head.getBoundingClientRect().width) : 0, linkW: to && to.lastElementChild ? Math.round(to.lastElementChild.getBoundingClientRect().width) : 0,
+    linkOut: to && to.lastElementChild ? to.lastElementChild.getBoundingClientRect().right > to.getBoundingClientRect().right + 1 : false,
+    over: s.scrollWidth > s.clientWidth + 1, open: d.open }; })"""
 FROM = """() => [...document.querySelectorAll('[data-rb-hist] details.h-peer')].map((d) => { const b = d.querySelector('summary > b');
   const l = b.querySelector('[data-h-go]'); return { text: b.textContent, link: l ? l.dataset.hGo : null, tag: l ? l.tagName : null }; })"""
 CARD = "() => ({ id: window.__dbg.focus().id, tab: document.querySelector('#rb [data-rb-tab=\"history\"]').getAttribute('aria-selected'), text: document.querySelector('[data-rb-hist]').textContent.slice(0, 80) })"
@@ -95,6 +97,15 @@ async def run_hist_peers(pw, out, failures):
                   and far["plain"]["title"] == T("hist.peer.unseen"), f"{scheme}: an unmatched name is plain and not focusable: {far}")
             # the long summary: cut, whole in the tag on hover
             check(failures, byname["headCut"], f"{scheme}: the long summary is cut to one line: {byname}")
+            # a row keeps its summary in sight, in either language, on the card's width and a phone's: the words beside it
+            # (結果待ち / its English) took the whole row and left it 0 px wide (ticket 2026-11-04-viz-e2e-live-half-red-in-english)
+            check(failures, all(x["headW"] >= 30 and x["linkW"] >= 30 and not x["linkOut"] and not x["over"] for x in rows), f"{scheme}: every row keeps its summary, 1440 px: {[(x['headW'], x['linkW'], x['linkOut'], x['over']) for x in rows]}")
+            await page.set_viewport_size({"width": 390, "height": 844})
+            await page.wait_for_timeout(300)
+            phone_rows = await page.evaluate(ROWS)
+            check(failures, all(x["headW"] >= 30 and x["linkW"] >= 30 and not x["linkOut"] and not x["over"] for x in phone_rows), f"{scheme}: every row keeps its summary, 390 px: {[(x['headW'], x['linkW'], x['linkOut'], x['over']) for x in phone_rows]}")
+            await page.set_viewport_size({"width": 1440, "height": 900})
+            await page.wait_for_timeout(300)
             head = page.locator("[data-rb-hist] details.h-tool .h-to:has([data-h-go]) ~ .h-head").first
             await head.scroll_into_view_if_needed()
             await head.hover()
