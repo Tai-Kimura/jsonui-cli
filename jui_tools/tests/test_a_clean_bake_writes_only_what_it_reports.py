@@ -2,7 +2,7 @@
 
 THE DEFECT THIS EXISTS FOR
 
-`baseline update --fail-on-moved` passed with `moved 0` and still rewrote the
+A bake with `--fail-on-moved` passed with `moved 0` and still rewrote the
 manifest through the wholesale path. Measured 2026-11-05 on v2.5.4 with run
 42011943298's artifacts, with the README's ci recipe: ios took 13 insertions /
 16 deletions (unstable hashes, ink of pictures that did not move, and
@@ -171,17 +171,6 @@ class NothingMoved(Bake):
         for key in ("hashes", "vhashes", "ink"):
             self.assertEqual(after[key], self.committed[key], key)
 
-    def test_a_dropped_entry_goes_out_and_the_committed_ones_stay(self) -> None:
-        del self.h[OTHER], self.v[OTHER], self.i[OTHER]
-        summary = self._bake(refuse_if_moved=True)
-        self.assertEqual(summary.dropped, (OTHER,))
-        after = self._after()
-        self.assertNotIn(OTHER, after["hashes"])
-        self.assertNotIn(OTHER, after["vhashes"])
-        self.assertNotIn(OTHER, after["ink"])
-        self.assertEqual(after["hashes"][INDICATOR], self.committed["hashes"][INDICATOR])
-        self.assertEqual(after["ink"][STABLE], 30)
-
     def test_a_missing_vertical_hash_is_filled_only_where_the_hash_matches(self) -> None:
         """The README's "the next bake writes them", without pairing two renders."""
         self.committed["vhashes"] = {}
@@ -201,12 +190,150 @@ class NothingMoved(Bake):
         self.assertFalse(summary.unchanged)
         self.assertEqual(self._after()["hashes"], self.h)
 
+    def test_two_os_buckets_of_one_name_keep_their_own_values(self) -> None:
+        """`prior_ink` and `prior_v` hold this OS's values, so another OS's bucket
+        must not be read through them."""
+        self.committed["hashes"].pop(INDICATOR)
+        self.committed["vhashes"].pop(INDICATOR)
+        self.committed["ink"].pop(INDICATOR)
+        self.committed["hashes_by_os"] = {"26": {INDICATOR: _digest(0b1111)}, "18": {INDICATOR: _digest(3)}}
+        self.committed["vhashes_by_os"] = {"26": {INDICATOR: _digest(1)}, "18": {INDICATOR: _digest(5)}}
+        self.committed["ink_by_os"] = {"26": {INDICATOR: 10}, "18": {INDICATOR: 6}}
+        self._commit()
+        with mock.patch.object(baseline, "os_dependent_screenshots_for", return_value={INDICATOR}):
+            summary = self._bake(refuse_if_moved=True, os_key="26")
+        self.assertTrue(summary.unchanged)
+        self.assertEqual(self.path.read_bytes(), self.before)
+
     def test_the_cli_says_it_did_not_write(self) -> None:
         rc, out = self._cli("--fail-on-moved")
         self.assertEqual(rc, 0, out)
         self.assertIn("baseline not written, nothing to change", out)
         self.assertNotIn("baseline written to", out)
         self.assertEqual(self.path.read_bytes(), self.before)
+
+
+class DroppedEntries(Bake):
+    """One fixture is gone from the run. Measured: one iOS shard alone gave
+    same 483 / moved 0 / dropped 488, and the flag let it through."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        del self.h[OTHER], self.v[OTHER], self.i[OTHER]
+
+    def test_the_flag_refuses_and_names_them(self) -> None:
+        with self.assertRaises(baseline.BaselineMoved) as caught:
+            self._bake(refuse_if_moved=True)
+        self.assertEqual(caught.exception.moved, ())
+        self.assertEqual(caught.exception.dropped, (OTHER,))
+        self.assertEqual(self.path.read_bytes(), self.before)
+
+    def test_the_same_bake_twice_reports_the_same_count(self) -> None:
+        counts = []
+        for _ in range(2):
+            with self.assertRaises(baseline.BaselineMoved) as caught:
+                self._bake(refuse_if_moved=True)
+            counts.append(len(caught.exception.dropped))
+        self.assertEqual(counts, [1, 1])
+
+    def test_drop_removes_only_the_named_entry(self) -> None:
+        summary = self._bake(refuse_if_moved=True, drop=[OTHER])
+        self.assertEqual(summary.removed, (OTHER,))
+        for key in ("hashes", "vhashes", "ink"):
+            del self.committed[key][OTHER]
+        self.assertEqual(self._after(), self.committed, "anything but the named entry moved")
+
+    def test_a_dropped_entry_not_named_still_refuses(self) -> None:
+        del self.h[STABLE], self.v[STABLE], self.i[STABLE]
+        with self.assertRaises(baseline.BaselineMoved) as caught:
+            self._bake(refuse_if_moved=True, drop=[OTHER])
+        self.assertEqual(caught.exception.dropped, (STABLE,))
+        self.assertEqual(self.path.read_bytes(), self.before)
+
+    def test_a_moved_entry_not_named_still_refuses(self) -> None:
+        self.h[STABLE] = _digest(0xABC)
+        with self.assertRaises(baseline.BaselineMoved) as caught:
+            self._bake(refuse_if_moved=True, drop=[OTHER])
+        self.assertEqual([n for n, _ in caught.exception.moved], [STABLE])
+        self.assertEqual(self.path.read_bytes(), self.before)
+
+    def test_without_the_flag_a_dropped_entry_not_named_stays(self) -> None:
+        del self.h[STABLE], self.v[STABLE], self.i[STABLE]
+        self._bake(drop=[OTHER])
+        after = self._after()
+        self.assertNotIn(OTHER, after["hashes"])
+        self.assertEqual(after["hashes"][STABLE], self.committed["hashes"][STABLE])
+
+    def test_the_wholesale_bake_still_removes_it(self) -> None:
+        self._bake()
+        self.assertNotIn(OTHER, self._after()["hashes"])
+
+    def test_a_new_entry_not_named_is_not_written(self) -> None:
+        name = "New_fixture__static.png"
+        self.h[name], self.v[name], self.i[name] = _digest(7), _digest(8), 99
+        self._bake(refuse_if_moved=True, drop=[OTHER])
+        self.assertNotIn(name, self._after()["hashes"])
+
+    def test_a_rename_takes_the_new_name_and_drops_the_old(self) -> None:
+        name = "New_fixture__static.png"
+        self.h[name], self.v[name], self.i[name] = _digest(7), _digest(8), 99
+        self._bake(refuse_if_moved=True, drop=[OTHER], take=[name])
+        after = self._after()
+        self.assertNotIn(OTHER, after["hashes"])
+        self.assertEqual(after["hashes"][name], _digest(7))
+        self.assertEqual(after["ink"][name], 99)
+        self.assertEqual(after["ink"][INDICATOR], 10)
+
+    def test_a_name_not_in_the_baseline_is_refused(self) -> None:
+        with self.assertRaisesRegex(baseline.BaselineError, "--drop: not in"):
+            self._bake(drop=["Typo.png"])
+        self.assertEqual(self.path.read_bytes(), self.before)
+
+    def test_a_name_the_run_still_drew_is_refused(self) -> None:
+        with self.assertRaisesRegex(baseline.BaselineError, "still drew"):
+            self._bake(drop=[STABLE])
+        self.assertEqual(self.path.read_bytes(), self.before)
+
+    def test_the_same_name_on_both_is_refused(self) -> None:
+        with self.assertRaisesRegex(baseline.BaselineError, "name the same"):
+            self._bake(drop=[STABLE], take=[STABLE])
+        self.assertEqual(self.path.read_bytes(), self.before)
+
+    def test_it_does_not_combine_with_the_other_doors(self) -> None:
+        for other in ({"only_new": True}, {"rehash": True}):
+            with self.assertRaisesRegex(baseline.BaselineError, "do not combine"):
+                self._bake(drop=[OTHER], **other)
+        self.assertEqual(self.path.read_bytes(), self.before)
+
+    def test_an_entry_in_this_os_bucket_goes_out_and_another_os_stays(self) -> None:
+        self.committed["hashes"].pop(OTHER)
+        self.committed["vhashes"].pop(OTHER)
+        self.committed["ink"].pop(OTHER)
+        self.committed["hashes_by_os"] = {"26": {OTHER: _digest(9)}, "18": {OTHER: _digest(10)}}
+        self.committed["vhashes_by_os"] = {"26": {OTHER: _digest(9)}, "18": {OTHER: _digest(10)}}
+        self.committed["ink_by_os"] = {"26": {OTHER: 5}, "18": {OTHER: 6}}
+        self._commit()
+        self._bake(refuse_if_moved=True, drop=[OTHER], os_key="26")
+        after = self._after()
+        self.assertEqual(after["hashes_by_os"]["26"], {})
+        self.assertEqual(after["ink_by_os"]["26"], {})
+        self.assertEqual(after["vhashes_by_os"]["26"], {})
+        self.assertEqual(after["hashes_by_os"]["18"], {OTHER: _digest(10)})
+        self.assertEqual(after["ink_by_os"]["18"], {OTHER: 6})
+
+    def test_the_cli_refuses_and_prints_the_line(self) -> None:
+        rc, out = self._cli("--fail-on-moved")
+        self.assertEqual(rc, 1, out)
+        self.assertIn(f"DROPPED  {OTHER}  -> NOT WRITTEN", out)
+        self.assertIn("1 dropped", out)
+        self.assertIn("--drop <name>.png", out)
+        self.assertEqual(self.path.read_bytes(), self.before)
+
+    def test_the_cli_reaches_drop(self) -> None:
+        rc, out = self._cli("--drop", OTHER, "--fail-on-moved")
+        self.assertEqual(rc, 0, out)
+        self.assertIn(f"DROPPED  {OTHER}  -> REMOVED", out)
+        self.assertNotIn(OTHER, self._after()["hashes"])
 
 
 class TakeNamedEntries(Bake):
@@ -257,7 +384,7 @@ class TakeNamedEntries(Bake):
 
     def test_it_does_not_combine_with_the_other_doors(self) -> None:
         for other in ({"only_new": True}, {"rehash": True}):
-            with self.assertRaisesRegex(baseline.BaselineError, "does not combine"):
+            with self.assertRaisesRegex(baseline.BaselineError, "do not combine"):
                 self._bake(take=[STABLE], **other)
         self.assertEqual(self.path.read_bytes(), self.before)
 
