@@ -226,9 +226,29 @@ def test_the_read_is_never_on_the_calling_thread(tmp_path, monkeypatch):
     user = tmp_path / "prices.json"
     user.write_text(json.dumps({"models": {"m-1": OPUS}}))
     book = prices.PriceBook(user=user)
+    other = tmp_path / "other.json"
+    other.write_text("{}")
     seen = []
+    other_seen = []
     real = prices._read_user
-    monkeypatch.setattr(prices, "_read_user", lambda p: (seen.append(threading.current_thread().name), real(p))[1])
+
+    def spy(p):
+        (seen if p == user else other_seen).append(threading.current_thread().name)
+        return real(p)
+
+    # Another book's read that arrives while this test is patched, every time. In a full run it is the job the
+    # previous test's last poll left on its World's pool: late under load, it finds its tmp_path gone, so it reads.
+    # It says nothing about this book, so it counts apart; this book's reads must all be on this book's worker.
+    gate = threading.Event()
+    late_pool = ThreadPoolExecutor(1, thread_name_prefix="jui-viz-prices")
+    late_pool.submit(gate.wait, 10)
+    late_book = prices.PriceBook(user=other)
+    late_book.poll(late_pool)
+    monkeypatch.setattr(prices, "_read_user", spy)
+    gate.set()
+    late_book._job.result(timeout=10)
+    late_pool.shutdown()
+    assert "jui-viz-prices_0" in other_seen     # it did arrive under the patch (a real leftover may arrive too)
     with ThreadPoolExecutor(1, thread_name_prefix="price-worker") as pool:
         book.poll(pool)
         assert seen == [] or seen[0].startswith("price-worker")
