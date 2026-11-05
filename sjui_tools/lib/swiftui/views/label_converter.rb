@@ -428,6 +428,7 @@ module SjuiTools
 
           # Apply frame constraints (minWidth, maxWidth, minHeight, maxHeight)
           apply_frame_constraints
+          apply_label_wrap_height
 
           # Apply background and corner radius AFTER padding
           # This ensures the background includes the padding area
