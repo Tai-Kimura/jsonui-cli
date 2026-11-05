@@ -114,17 +114,24 @@ DEFAULT_THRESHOLD = 8
 
 
 class BaselineMoved(RuntimeError):
-    """Raised INSTEAD OF writing, when entries moved and the caller refused that.
+    """Raised INSTEAD OF writing, when entries moved or dropped and the caller refused that.
 
-    Carries the classification so the caller can print every MOVED line — the
-    reading the flag exists to force — without the file having changed.
+    Carries the classification so the caller can print every MOVED and DROPPED
+    line — the reading the flag exists to force — without the file having changed.
     """
 
-    def __init__(self, out_path: "Path", moved: "tuple[tuple[str, int], ...]"):
+    def __init__(
+        self,
+        out_path: "Path",
+        moved: "tuple[tuple[str, int], ...]",
+        dropped: "tuple[str, ...]" = (),
+    ):
         self.out_path = out_path
         self.moved = moved
+        self.dropped = dropped
         super().__init__(
-            f"{len(moved)} entr(y/ies) moved; {out_path} was NOT written"
+            f"{len(moved)} entr(y/ies) moved, {len(dropped)} dropped; "
+            f"{out_path} was NOT written"
         )
 
 
@@ -564,6 +571,13 @@ class BaselineUpdateSummary:
     #: under the new identity would be the mixed file the field exists to rule
     #: out. Named so the loss of coverage is visible.
     dropped_os_buckets: tuple[str, ...] = ()
+    #: Set by a ``take`` bake: the entries it wrote from this run.
+    taken: tuple[str, ...] = ()
+    #: Set by a ``drop`` bake: the entries it removed.
+    removed: tuple[str, ...] = ()
+    #: The run asked for nothing the committed file does not already say, so
+    #: the file was not written.
+    unchanged: bool = False
 
     @property
     def written(self) -> int:
@@ -581,6 +595,8 @@ def update_baseline(
     only_new: bool = False,
     refuse_if_moved: bool = False,
     rehash: bool = False,
+    take: tuple[str, ...] | list[str] | None = None,
+    drop: tuple[str, ...] | list[str] | None = None,
 ) -> BaselineUpdateSummary:
     """Hash every PNG under the platform's artifacts dir into the manifest.
 
@@ -610,6 +626,19 @@ def update_baseline(
     wholesale bake whose committed entries are listed as ``rehashed`` rather
     than classified. It is refused when the hasher did NOT change, because
     there it would only be a way around *refuse_if_moved*.
+
+    *refuse_if_moved* refuses on a moved entry and on a dropped one: a partial
+    artifact directory reports `moved 0` and would otherwise remove what it did
+    not draw. With neither, every committed entry stays as it is and only new
+    entries are written; with no new entry the file is not written. Unstable
+    wobble and a re-measured ink are not a change anyone reviewed, and with no
+    *rendered_by* a wholesale write would also blank the provenance, so a bake
+    that reports `moved 0` used to leave a diff the reader could not attribute.
+
+    *take* names the entries to write from this run (hash, vertical hash, ink)
+    and *drop* the entries to remove; everything else stays as committed. With
+    *refuse_if_moved*, an entry that moved or dropped and was not named still
+    refuses.
     """
     conformance_dir = Path(conformance_dir)
     # The os-dependent carve-out below reads the SSoT beside conformance/. On a
@@ -653,6 +682,20 @@ def update_baseline(
         raise BaselineError(
             "--rehash and --only-new do not combine: only-new keeps the committed "
             "hashes, and a rehash exists because they were made by another library"
+        )
+    take_names = tuple(sorted(set(take or ())))
+    drop_names = tuple(sorted(set(drop or ())))
+    named_bake = bool(take_names or drop_names)
+    if named_bake and (only_new or rehash):
+        raise BaselineError(
+            "--take and --drop do not combine with --only-new or --rehash: each of "
+            "them already decides which entries are written"
+        )
+    both_names = sorted(set(take_names) & set(drop_names))
+    if both_names:
+        raise BaselineError(
+            f"--take and --drop name the same entries: {', '.join(both_names)} — "
+            f"{label} was NOT written"
         )
     if rehash and not hasher_changed:
         raise BaselineError(
@@ -728,10 +771,53 @@ def update_baseline(
         rehashed_names = sorted(n for n in measured if n in prior)
         same_names, moved_pairs, tolerated_pairs = [], (), ()
 
-    if only_new:
-        # Existing entries keep their committed hash; nothing is removed.
+    missing_names = [n for n in take_names if n not in measured]
+    if missing_names:
+        raise BaselineError(
+            f"--take: not in this run's artifacts: {', '.join(missing_names)} — {label} was NOT written"
+        )
+    unchanged_names = [n for n in take_names if n in prior and not _changed(n)]
+    if unchanged_names:
+        raise BaselineError(
+            f"--take: these already match {label}, so there is nothing to take: "
+            f"{', '.join(unchanged_names)} — {label} was NOT written"
+        )
+    unknown_drops = [n for n in drop_names if n not in prior]
+    if unknown_drops:
+        raise BaselineError(
+            f"--drop: not in {label}: {', '.join(unknown_drops)} — {label} was NOT written"
+        )
+    drawn_drops = [n for n in drop_names if n in measured]
+    if drawn_drops:
+        raise BaselineError(
+            f"--drop: this run still drew these: {', '.join(drawn_drops)} — {label} was NOT written"
+        )
+
+    refused_moved = tuple(pair for pair in moved_pairs if pair[0] not in take_names)
+    refused_dropped = tuple(n for n in dropped_names if n not in drop_names)
+    # Passed the review with nothing moved or dropped: the committed entries stand.
+    clean_bake = (
+        refuse_if_moved
+        and not refused_moved
+        and not refused_dropped
+        and not rehash
+        and not named_bake
+        and not only_new
+        and previous_has_entries
+    )
+    keep_committed = only_new or named_bake or clean_bake
+    # The entries this run writes when the committed ones are kept.
+    fresh = set(take_names) if named_bake else set(new_names)
+    # Hash identical to this render, so a missing ink or vertical hash can be
+    # filled from it without pairing two different renders.
+    fillable = set(same_names) if clean_bake else set()
+
+    if keep_committed:
+        # Existing entries keep their committed hash.
         hashes = dict(prior)
-        hashes.update({n: measured[n] for n in new_names})
+        hashes.update({n: measured[n] for n in fresh})
+        for n in drop_names:
+            hashes.pop(n, None)
         hashes = {k: hashes[k] for k in sorted(hashes)}
     else:
         hashes = measured
@@ -743,6 +829,8 @@ def update_baseline(
     # different axis). Keying the whole file by OS would assert the stronger
     # thing and make every re-bake answer a question it did not ask.
     by_os = {k: dict(v) for k, v in previous_by_os.items()}
+    if drop_names and os_key in by_os:
+        by_os[os_key] = {k: v for k, v in by_os[os_key].items() if k not in drop_names}
     dropped_os_buckets: tuple[str, ...] = ()
     if rehash:
         dropped_os_buckets = tuple(sorted(k for k in by_os if k != os_key))
@@ -786,20 +874,32 @@ def update_baseline(
     def _ink_for(names) -> dict[str, int]:
         out: dict[str, int] = {}
         for n in sorted(names):
-            if only_new and n not in new_names:
+            if keep_committed and n not in fresh:
                 # This entry kept its COMMITTED hash, so it may only keep its
                 # COMMITTED ink. If there is none, it stays ABSENT and is
                 # reported as uncovered — never re-measured against a hash
                 # from a different render.
                 if baseline_records_ink and n in prior_ink:
                     out[n] = int(prior_ink[n])
+                elif n in fillable and n in measured_ink:
+                    out[n] = measured_ink[n]
             elif n in measured_ink:
                 out[n] = measured_ink[n]
             # else: no measurement and nothing committed — left ABSENT, which
             # the comparison reports as uncovered rather than as zero ink.
         return out
 
-    ink_by_os = {k: _ink_for(v) for k, v in by_os.items()}
+    def _bucket(names_by_os: dict, committed_by_os: dict, measure) -> dict:
+        """Another OS's bucket is not this run's to read: `prior_ink` and `prior_v`
+        hold THIS OS's values, so a kept bucket keeps its own committed map."""
+        return {
+            k: dict(committed_by_os.get(k) or {})
+            if keep_committed and k != os_key
+            else measure(v)
+            for k, v in names_by_os.items()
+        }
+
+    ink_by_os = _bucket(by_os, previous.get("ink_by_os") or {}, _ink_for)
 
     # Vertical hashes follow the same key sets by the same rule as ink, for
     # the same reason: in only-new mode an entry that kept its committed
@@ -811,14 +911,16 @@ def update_baseline(
     def _v_for(names) -> dict[str, str]:
         out: dict[str, str] = {}
         for n in sorted(names):
-            if only_new and n not in new_names:
+            if keep_committed and n not in fresh:
                 if baseline_records_v and n in prior_v:
                     out[n] = prior_v[n]
+                elif n in fillable and n in measured_v:
+                    out[n] = measured_v[n]
             elif n in measured_v:
                 out[n] = measured_v[n]
         return out
 
-    vhashes_by_os = {k: _v_for(v) for k, v in by_os.items()}
+    vhashes_by_os = _bucket(by_os, previous.get("vhashes_by_os") or {}, _v_for)
 
     out_path = baseline_path(conformance_dir, platform, env)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -832,7 +934,13 @@ def update_baseline(
         # What computed the hashes below — see HASHER_FIELD. Compared before
         # anything else is, by every reader of these hashes.
         HASHER_FIELD: current_hasher,
-        "threshold": DEFAULT_THRESHOLD if threshold is None else int(threshold),
+        "threshold": (
+            int(threshold)
+            if threshold is not None
+            else int(previous.get("threshold", DEFAULT_THRESHOLD))
+            if keep_committed
+            else DEFAULT_THRESHOLD
+        ),
         # Which library drew these pixels. The manifest already recorded how
         # the measurement was taken (platform, env, algorithm, threshold) and
         # nothing about what was measured: conformance-mobile checks the
@@ -853,7 +961,7 @@ def update_baseline(
             dict(sorted(rendered_by.items()))
             if rendered_by
             else dict(sorted((previous.get("rendered_by") or {}).items()))
-            if only_new
+            if keep_committed
             else {}
         ),
         "hashes": hashes,
@@ -886,12 +994,14 @@ def update_baseline(
     # run against the already-baked set reported `moved 0`, and that was read
     # as "it fires on the thing and not on everything". It is evidence the
     # FIRST run wrote. A flag that refused would report the same N twice.
-    if refuse_if_moved and moved_pairs:
-        raise BaselineMoved(out_path, moved_pairs)
-    out_path.write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=False) + "\n",
-        encoding="utf-8",
-    )
+    if refuse_if_moved and (refused_moved or refused_dropped):
+        raise BaselineMoved(out_path, refused_moved, refused_dropped)
+    unchanged = clean_bake and payload == previous
+    if not unchanged:
+        out_path.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=False) + "\n",
+            encoding="utf-8",
+        )
     return BaselineUpdateSummary(
         out_path=out_path,
         platform=platform,
@@ -908,6 +1018,9 @@ def update_baseline(
         rehashed_from=previous_hasher if rehash else None,
         rehashed=tuple(rehashed_names),
         dropped_os_buckets=dropped_os_buckets,
+        taken=take_names,
+        removed=drop_names,
+        unchanged=unchanged,
     )
 
 

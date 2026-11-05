@@ -204,7 +204,7 @@ jui conformance baseline update --platform ios --env ci --fail-on-moved \
   --artifacts <downloaded>/artifacts/ios
 ```
 
-**When it exits non-zero** (`ERROR: --fail-on-moved and N entr(y/ies) moved`):
+**When it exits non-zero** (`ERROR: --fail-on-moved and N entr(y/ies) moved, M dropped`):
 
 **On 1.8.85 and later, do nothing to the file.** It was not written. Go straight
 to reading the MOVED lines.
@@ -225,9 +225,11 @@ entry whether that picture SHOULD have changed. `unstable` lines are a different
 list and never enter `N`. Only then write, choosing deliberately:
 
 - **new entries only** — `--only-new` (leaves every moved entry at its committed hash)
-- **a few named entries** — edit those hashes by hand and assert the count
-  (`changed=N / added=0 / removed=0` against `HEAD`); this is the only way to take
-  two entries and leave 786 alone
+- **a few named entries** — `--take <screenshot>.png`, repeatable. It writes those
+  entries' hash, vertical hash and ink from the run and leaves everything else as
+  committed. `--drop <screenshot>.png`, also repeatable, removes an entry the run no
+  longer draws. With `--fail-on-moved`, an entry that moved or dropped and was not named
+  still refuses
 - **wholesale** — re-run without the flag, knowing it absorbs *every* moved entry
 
 ⚠️ **`N` IS NOT THE NUMBER THAT GETS WRITTEN.** `N` counts entries over the visual
@@ -243,6 +245,18 @@ truly refused would report the same `N` both times, because nothing would have
 changed between them. The observation was correct and the inference was backwards.
 ⭐ That comparison is therefore the right arm for the fix: **run the same bake twice
 and require the same `N`.**
+
+**A `dropped` entry refuses too.** A partial artifact directory reports `moved 0`:
+measured on run 42011943298, one iOS shard alone gave `same 483 / moved 0 / dropped 488`
+and took 1467 deletions. To remove a fixture, name it with `--drop`.
+
+**When it exits 0 with the flag**, the committed entries stay as they are: `new`
+entries are added, and with none the file is not written (`baseline not written, nothing
+to change`). `unstable` wobble and re-measured ink stay out, and `rendered_by` changes
+only when `--rendered-by` is passed. Measured on run 42011943298's ci artifacts before
+this rule: `moved 0` left 13 insertions / 16 deletions on ios and blanked `rendered_by`
+on ios and web. An entry with no committed ink or vertical hash is filled when its hash
+matches this run.
 
 ## Workflow
 
@@ -529,7 +543,11 @@ Measured noise ceiling = **0**. Threshold stays at the cross-platform **8**
 emulator image / GPU driver drift between machines while remaining ~4x below
 the smallest genuine change measured on the 64x64 grid).
 
-### Android **ci-env** calibration (2026-08-02) — threshold 12
+### Android **ci-env** calibration (2026-08-02) — threshold 12, since returned to 8
+
+`ci/android.hashes.json` stores **threshold 8** today. The 12 below held from 97513af66
+until 366c8beaa (2026-08-04) excluded the android system chrome from the hash and baked
+the set at 8. This section records why it was 12.
 
 The local numbers above are one quiet AVD talking to itself. CI is a fresh
 emulator instance per run, and cross-**instance** variance was measured over
@@ -545,10 +563,9 @@ The 9–11 band is not the renderer: the API-34 tablet **taskbar** (drawn over
 every capture) shows recents whose order depends on instrumentation-attempt
 relaunches — two stable orders, so any fixture range can flap by ~9–11 when
 an attempt boundary moves between runs. `ci/android.hashes.json` therefore
-stores **threshold 12** (measured noise ceiling 11 + 1, still 1.5x below the
-smallest genuine change measured on this host: 18). The root fix is
-host-side — hide/exclude the taskbar from capture — and drops the threshold
-back to 8 when it lands. `CheckBox_isOn__true.png` stays excluded from the
+stored threshold 12 (measured noise ceiling 11 + 1, still 1.5x below the
+smallest genuine change measured on this host: 18) until the root fix, excluding
+the taskbar from the hash, landed. `CheckBox_isOn__true.png` stays excluded from the
 manifest entirely (fixture-swap race, see gate_ratchet.json).
 
 The committed `android.hashes.json` was recorded from a verified-good run:
