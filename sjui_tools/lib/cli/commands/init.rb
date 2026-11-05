@@ -122,8 +122,9 @@ module SjuiTools
               'data_directory' => 'Data',  # Directory for data binding structs
               'viewmodel_directory' => 'ViewModel',  # Directory for ViewModels
               'resource_manager_directory' => 'ResourceManager',  # Directory for resource managers
+              # Read from source_directory (StringManager), so not under its name again.
               'string_files' => [
-                "#{project_name}/Localizable.strings"
+                'Localizable.strings'
               ],
               'use_network' => true  # SwiftUI mode can use network for API calls
             }

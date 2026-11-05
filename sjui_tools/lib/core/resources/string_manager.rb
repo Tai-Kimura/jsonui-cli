@@ -113,7 +113,7 @@ module SjuiTools
               Core::Logger.info "Caching strings file: #{file_path}"
               cache_strings_file(full_path)
             else
-              Core::Logger.warn "Strings file not found: #{full_path}"
+              Core::Logger.warn "Strings file not found: #{full_path}#{source_directory_hint(file_path)}"
             end
 
             # Sibling .stringsdict (plural keys). Cached separately so
@@ -242,7 +242,7 @@ module SjuiTools
               Core::Logger.info "Updating strings file: #{file_path}"
               update_strings_file(full_path, strings_data)
             else
-              Core::Logger.warn "Strings file not found: #{full_path}"
+              Core::Logger.warn "Strings file not found: #{full_path}#{source_directory_hint(file_path)}"
             end
 
             # Plural keys compile to a sibling .stringsdict (Apple's standard
@@ -385,6 +385,16 @@ module SjuiTools
           end
         rescue => e
           Core::Logger.warn "Failed to parse stringsdict #{dict_path}: #{e.message}"
+        end
+
+        # A string_files entry that names source_directory again: what `jui init`
+        # wrote for a SwiftUI project through 2.5.5. Said, and read as it is written.
+        def source_directory_hint(file_path)
+          source_directory = @config['source_directory'].to_s
+          return '' if source_directory.empty? || !file_path.start_with?("#{source_directory}/")
+
+          " (string_files are read from source_directory '#{source_directory}': " \
+            "this one would be '#{file_path.delete_prefix("#{source_directory}/")}')"
         end
 
         # Write the sibling .stringsdict for a configured .strings file.
