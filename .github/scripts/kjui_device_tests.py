@@ -204,8 +204,60 @@ def _results(kjui: Path, module: str) -> list[Path]:
     return sorted(root.rglob("TEST-*.xml")) if root.is_dir() else []
 
 
+# ----------------------------------------------------------------- focus
+# Runs 37650134866 (10-07) and 42011943298 (11-05): the input layer stopped
+# taking window focus for good, with system_server alive. WindowManager asked on
+# (`Focus request`, 1084 and 1121 times) and nothing entered, the IME never showed
+# and no touch reached an app's window. Library's and library-dynamic's 16 keyboard
+# cases went red in both, and on 11-05 the probes that read a real tap's effect too.
+# Compose's own performClick does not go through this, so the other cases passed.
+# Nine runs that did not stop never had more than 4 requests between two entries.
+# So this says the device stopped, by name, instead of leaving 30 library cases to
+# be read one by one. Why the layer stops is not known; the next run's input.txt
+# and surfaceflinger.txt are there to say.
+FOCUS_STOP_REQUESTS = 50
+
+
+def focus_stop(events: Path) -> dict | None:
+    """The longest run of focus requests with no entry, from a logcat of the events buffer.
+
+    None when the file is missing or holds no focus line: not read, which is not "no stall".
+    """
+    try:
+        lines = events.read_text(errors="replace").splitlines()
+    except OSError:
+        return None
+    requests = entered = run = longest = 0
+    last_entered = since = ""
+    for line in lines:
+        if " input_focus" not in line:
+            continue
+        if "Focus request" in line:
+            requests += 1
+            run += 1
+            if run > longest:
+                longest, since = run, last_entered
+        elif "Focus entering" in line:
+            entered += 1
+            run = 0
+            last_entered = " ".join(line.split()[:2])
+    if not requests and not entered:
+        return None
+    return {"requests": requests, "entered": entered, "longest": longest, "since": since}
+
+
 def judge(kjui: Path, probes_raised: bool = False) -> int:
     problems: list[str] = []
+    focus = focus_stop(kjui / "device-evidence" / "logcat-events.txt")
+    if focus is None:
+        print("== device input: window focus not read (no focus line in device-evidence/logcat-events.txt)")
+    else:
+        print(f"== device input: {focus['requests']} window focus request(s), {focus['entered']} entered, "
+              f"at most {focus['longest']} in a row with no entry")
+        if focus["longest"] >= FOCUS_STOP_REQUESTS:
+            problems.append(f"the device stopped taking window focus: {focus['longest']} requests in a row with no "
+                            f"entry, the last entry at {focus['since'] or 'none in the log'}. The keyboard cases and "
+                            "the cases that read a real tap measured the device there, not the library")
     for key, entry in RAISED_SKIPS.items():
         if not (entry.get("why") or "").strip() or not (entry.get("when") or "").strip():
             problems.append(f"RAISED_SKIPS {key}: declares no why or no when")
@@ -312,6 +364,9 @@ SNAPSHOT = (
     ("input_method.txt", ["shell", "dumpsys", "input_method"]),
     ("window.txt", ["shell", "dumpsys", "window"]),
     ("activities.txt", ["shell", "dumpsys", "activity", "activities"]),
+    # What the input layer holds and what SurfaceFlinger last gave it (focus_stop).
+    ("input.txt", ["shell", "dumpsys", "input"]),
+    ("surfaceflinger.txt", ["shell", "dumpsys", "SurfaceFlinger"]),
     ("logcat.txt", ["logcat", "-d", "-v", "threadtime"]),
     # am_anr is written here, not to main.
     ("logcat-events.txt", ["logcat", "-d", "-b", "events", "-v", "threadtime"]),
