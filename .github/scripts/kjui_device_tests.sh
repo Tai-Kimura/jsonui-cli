@@ -87,6 +87,8 @@ collect_evidence() {
   adb shell dumpsys activity exit-info >"$evidence/exit-info-all.txt" 2>&1 || true
   adb shell dumpsys input_method >"$evidence/input_method.txt" 2>&1 || true
   adb shell dumpsys window >"$evidence/window.txt" 2>&1 || true
+  adb shell dumpsys input >"$evidence/input.txt" 2>&1 || true
+  adb shell dumpsys SurfaceFlinger >"$evidence/surfaceflinger.txt" 2>&1 || true
   adb exec-out screencap -p >"$evidence/screen.png" 2>/dev/null || true
   adb shell cat /proc/meminfo >"$evidence/meminfo-device.txt" 2>&1 || true
   free -m >"$evidence/meminfo-host.txt" 2>&1 || true

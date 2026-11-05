@@ -103,6 +103,31 @@ class KjuiDeviceTestsJudge(unittest.TestCase):
             self.tree.source(module, cls, TEST_CLASS.format(name=cls))
             self.tree.results(module, "\n".join([_case(cls, "one"), _case(cls, "two")]))
 
+    # -- the device stopped taking window focus (test_kjui_device_tests_focus.py) ----
+
+    def _events(self, lines: list[str]) -> None:
+        (self.tree.root / "device-evidence").mkdir()
+        (self.tree.root / "device-evidence" / "logcat-events.txt").write_text("\n".join(lines) + "\n")
+
+    def test_a_stopped_device_is_red_though_every_case_passed(self):
+        # A tap that went nowhere passes a probe that only prints what it saw.
+        self._green_tree()
+        self._events(["I input_focus: [Focus request 1 x,reason=UpdateInputWindows]"] * K.FOCUS_STOP_REQUESTS)
+        rc, text = self._judge()
+        self.assertEqual(1, rc)
+        self.assertIn("stopped taking window focus", text)
+
+    def test_a_device_one_short_of_stopping_stays_green(self):
+        self._green_tree()
+        self._events(["I input_focus: [Focus request 1 x,reason=UpdateInputWindows]"] * (K.FOCUS_STOP_REQUESTS - 1))
+        self.assertEqual(0, self._judge()[0])
+
+    def test_events_that_were_not_read_change_no_verdict(self):
+        self._green_tree()
+        rc, text = self._judge()
+        self.assertEqual(0, rc)
+        self.assertIn("window focus not read", text)
+
     # -- ownership ----------------------------------------------------------
 
     def test_a_nested_helper_above_the_tests_does_not_take_them(self):
