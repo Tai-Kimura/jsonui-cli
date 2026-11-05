@@ -325,9 +325,24 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         dest="fail_on_moved",
         action="store_true",
         help=(
-            "Exit non-zero if any existing entry's picture changed. For "
-            "scripted bakes that must stop and let a person look, rather than "
-            "deciding on their own that the drift was noise."
+            "Exit non-zero if any existing entry's picture changed, without "
+            "writing. For scripted bakes that must stop and let a person look, "
+            "rather than deciding on their own that the drift was noise. With "
+            "nothing moved, committed entries stay as they are: only new and "
+            "dropped entries are written, and with neither the file is not "
+            "touched."
+        ),
+    )
+    baseline_update.add_argument(
+        "--take",
+        dest="take",
+        action="append",
+        metavar="SCREENSHOT.png",
+        help=(
+            "Write only this entry from the run (hash, vertical hash, ink); "
+            "repeatable. Everything else stays as committed. With "
+            "--fail-on-moved, an entry that moved and was not named still "
+            "refuses."
         ),
     )
     baseline_update.add_argument(
@@ -1435,6 +1450,7 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
             # meant checking it after the file had already been replaced.
             refuse_if_moved=fail_on_moved and not only_new,
             rehash=bool(getattr(args, "rehash", False)),
+            take=getattr(args, "take", None),
         )
     except BaselineMoved as e:
         # Every MOVED line, because reading them is what the flag is for — and
@@ -1446,7 +1462,7 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
               f"{e.out_path} was NOT written")
         print("  Decide per entry, then choose deliberately:")
         print("    --only-new            insert new entries, leave moved ones committed")
-        print("    edit named entries    for a few, and assert changed=N/added=0/removed=0")
+        print("    --take <name>.png     write only the named entries, repeatable")
         print("    drop the flag         wholesale, absorbing EVERY moved entry")
         return 1
     except BaselineError as e:
@@ -1470,7 +1486,10 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
     for name in summary.new:
         print(f"    NEW      {name}")
     for name, dist in summary.moved:
-        verb = "kept (only-new)" if only_new else "REWRITTEN"
+        if summary.taken:
+            verb = "TAKEN" if name in summary.taken else "kept (not named)"
+        else:
+            verb = "kept (only-new)" if only_new else "REWRITTEN"
         print(f"    MOVED    {name}  hamming={dist}  -> {verb}")
     total = getattr(summary, "unstable_total", 0)
     if total:
@@ -1487,17 +1506,23 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
         # match, because the fixture declares an unstable picture.
         print(f"    unstable {name}  hamming={dist}  (not exact-checked: {reason})")
     for name in summary.dropped:
-        verb = "kept (only-new)" if only_new else "REMOVED"
+        if summary.taken:
+            verb = "kept (not named)"
+        else:
+            verb = "kept (only-new)" if only_new else "REMOVED"
         print(f"    DROPPED  {name}  -> {verb}")
 
-    if summary.moved and not only_new:
+    if summary.moved and not only_new and not summary.taken:
         print(
             "  ⚠️  a wholesale bake rewrote the moved entries above — every one of them "
             "is now the baseline, including any that were regressions. Use --only-new "
             "to insert the new entries and leave the rest alone."
         )
 
-    print(f"baseline written to {summary.out_path}")
+    if summary.unchanged:
+        print(f"baseline not written, nothing to change: {summary.out_path}")
+    else:
+        print(f"baseline written to {summary.out_path}")
     print(
         f"  platform: {summary.platform}, env: {summary.env}, "
         f"screenshots hashed: {summary.hashed}, hashed with: {summary.hashed_with}"

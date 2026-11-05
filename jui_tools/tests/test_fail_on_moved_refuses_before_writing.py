@@ -109,12 +109,13 @@ class TheFlagRefusesInsteadOfReporting(unittest.TestCase):
             self.baseline.read_bytes(), self.before, "a wholesale bake must still write"
         )
 
-    def test_a_clean_bake_writes_even_with_the_flag(self) -> None:
-        """Nothing moved, so there is nothing to refuse."""
+    def test_a_clean_bake_leaves_the_file_alone(self) -> None:
+        """Nothing moved, so there is nothing to refuse and nothing to write."""
         self._bake()  # absorb the move
         stable = self.baseline.read_bytes()
         summary = self._bake(refuse_if_moved=True)
         self.assertEqual(summary.moved, ())
+        self.assertTrue(summary.unchanged)
         self.assertEqual(self.baseline.read_bytes(), stable)
 
     def test_only_new_is_a_different_door(self) -> None:

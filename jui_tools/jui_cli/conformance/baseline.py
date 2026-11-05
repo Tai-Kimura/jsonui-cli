@@ -564,6 +564,11 @@ class BaselineUpdateSummary:
     #: under the new identity would be the mixed file the field exists to rule
     #: out. Named so the loss of coverage is visible.
     dropped_os_buckets: tuple[str, ...] = ()
+    #: Set by a ``take`` bake: the entries it wrote from this run.
+    taken: tuple[str, ...] = ()
+    #: The run asked for nothing the committed file does not already say, so
+    #: the file was not written.
+    unchanged: bool = False
 
     @property
     def written(self) -> int:
@@ -581,6 +586,7 @@ def update_baseline(
     only_new: bool = False,
     refuse_if_moved: bool = False,
     rehash: bool = False,
+    take: tuple[str, ...] | list[str] | None = None,
 ) -> BaselineUpdateSummary:
     """Hash every PNG under the platform's artifacts dir into the manifest.
 
@@ -610,6 +616,17 @@ def update_baseline(
     wholesale bake whose committed entries are listed as ``rehashed`` rather
     than classified. It is refused when the hasher did NOT change, because
     there it would only be a way around *refuse_if_moved*.
+
+    *refuse_if_moved* with nothing moved leaves every committed entry as it is
+    and writes only what the run classified: new entries in, dropped entries
+    out. A run with neither does not write. Unstable wobble and a re-measured
+    ink are not a change anyone reviewed, and with no *rendered_by* a wholesale
+    write would also blank the provenance, so a bake that reports `moved 0`
+    used to leave a diff the reader could not attribute.
+
+    *take* names the entries to write from this run (hash, vertical hash, ink);
+    everything else stays as committed. With *refuse_if_moved*, an entry that
+    moved and was not named still refuses.
     """
     conformance_dir = Path(conformance_dir)
     # The os-dependent carve-out below reads the SSoT beside conformance/. On a
@@ -653,6 +670,12 @@ def update_baseline(
         raise BaselineError(
             "--rehash and --only-new do not combine: only-new keeps the committed "
             "hashes, and a rehash exists because they were made by another library"
+        )
+    take_names = tuple(sorted(set(take or ())))
+    if take_names and (only_new or rehash):
+        raise BaselineError(
+            "--take does not combine with --only-new or --rehash: each of them "
+            "already decides which entries are written"
         )
     if rehash and not hasher_changed:
         raise BaselineError(
@@ -728,10 +751,41 @@ def update_baseline(
         rehashed_names = sorted(n for n in measured if n in prior)
         same_names, moved_pairs, tolerated_pairs = [], (), ()
 
-    if only_new:
-        # Existing entries keep their committed hash; nothing is removed.
+    missing_names = [n for n in take_names if n not in measured]
+    if missing_names:
+        raise BaselineError(
+            f"--take: not in this run's artifacts: {', '.join(missing_names)} — {label} was NOT written"
+        )
+    unchanged_names = [n for n in take_names if n in prior and not _changed(n)]
+    if unchanged_names:
+        raise BaselineError(
+            f"--take: these already match {label}, so there is nothing to take: "
+            f"{', '.join(unchanged_names)} — {label} was NOT written"
+        )
+
+    # Passed the review with nothing moved: the committed entries stand.
+    clean_bake = (
+        refuse_if_moved
+        and not moved_pairs
+        and not rehash
+        and not take_names
+        and not only_new
+        and previous_has_entries
+    )
+    keep_committed = only_new or bool(take_names) or clean_bake
+    # The entries this run writes when the committed ones are kept.
+    fresh = set(take_names) if take_names else set(new_names)
+    # Hash identical to this render, so a missing ink or vertical hash can be
+    # filled from it without pairing two different renders.
+    fillable = set(same_names) if clean_bake else set()
+
+    if keep_committed:
+        # Existing entries keep their committed hash.
         hashes = dict(prior)
-        hashes.update({n: measured[n] for n in new_names})
+        hashes.update({n: measured[n] for n in fresh})
+        if clean_bake:
+            for n in dropped_names:
+                hashes.pop(n, None)
         hashes = {k: hashes[k] for k in sorted(hashes)}
     else:
         hashes = measured
@@ -786,13 +840,15 @@ def update_baseline(
     def _ink_for(names) -> dict[str, int]:
         out: dict[str, int] = {}
         for n in sorted(names):
-            if only_new and n not in new_names:
+            if keep_committed and n not in fresh:
                 # This entry kept its COMMITTED hash, so it may only keep its
                 # COMMITTED ink. If there is none, it stays ABSENT and is
                 # reported as uncovered — never re-measured against a hash
                 # from a different render.
                 if baseline_records_ink and n in prior_ink:
                     out[n] = int(prior_ink[n])
+                elif n in fillable and n in measured_ink:
+                    out[n] = measured_ink[n]
             elif n in measured_ink:
                 out[n] = measured_ink[n]
             # else: no measurement and nothing committed — left ABSENT, which
@@ -811,9 +867,11 @@ def update_baseline(
     def _v_for(names) -> dict[str, str]:
         out: dict[str, str] = {}
         for n in sorted(names):
-            if only_new and n not in new_names:
+            if keep_committed and n not in fresh:
                 if baseline_records_v and n in prior_v:
                     out[n] = prior_v[n]
+                elif n in fillable and n in measured_v:
+                    out[n] = measured_v[n]
             elif n in measured_v:
                 out[n] = measured_v[n]
         return out
@@ -832,7 +890,13 @@ def update_baseline(
         # What computed the hashes below — see HASHER_FIELD. Compared before
         # anything else is, by every reader of these hashes.
         HASHER_FIELD: current_hasher,
-        "threshold": DEFAULT_THRESHOLD if threshold is None else int(threshold),
+        "threshold": (
+            int(threshold)
+            if threshold is not None
+            else int(previous.get("threshold", DEFAULT_THRESHOLD))
+            if keep_committed
+            else DEFAULT_THRESHOLD
+        ),
         # Which library drew these pixels. The manifest already recorded how
         # the measurement was taken (platform, env, algorithm, threshold) and
         # nothing about what was measured: conformance-mobile checks the
@@ -853,7 +917,7 @@ def update_baseline(
             dict(sorted(rendered_by.items()))
             if rendered_by
             else dict(sorted((previous.get("rendered_by") or {}).items()))
-            if only_new
+            if keep_committed
             else {}
         ),
         "hashes": hashes,
@@ -886,12 +950,15 @@ def update_baseline(
     # run against the already-baked set reported `moved 0`, and that was read
     # as "it fires on the thing and not on everything". It is evidence the
     # FIRST run wrote. A flag that refused would report the same N twice.
-    if refuse_if_moved and moved_pairs:
-        raise BaselineMoved(out_path, moved_pairs)
-    out_path.write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=False) + "\n",
-        encoding="utf-8",
-    )
+    refused = tuple(pair for pair in moved_pairs if pair[0] not in take_names)
+    if refuse_if_moved and refused:
+        raise BaselineMoved(out_path, refused)
+    unchanged = clean_bake and payload == previous
+    if not unchanged:
+        out_path.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=False) + "\n",
+            encoding="utf-8",
+        )
     return BaselineUpdateSummary(
         out_path=out_path,
         platform=platform,
@@ -908,6 +975,8 @@ def update_baseline(
         rehashed_from=previous_hasher if rehash else None,
         rehashed=tuple(rehashed_names),
         dropped_os_buckets=dropped_os_buckets,
+        taken=take_names,
+        unchanged=unchanged,
     )
 
 
