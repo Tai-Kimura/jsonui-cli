@@ -199,6 +199,42 @@ RSpec.describe 'StringManager plural emit' do
     end
   end
 
+  describe 'language codes with a script or a region' do
+    # Ticket jui-strings-language-code-with-script-subtag-lost.
+    def languages_config(languages)
+      base_config(ts: false).merge('languages' => languages)
+    end
+
+    def generated(config)
+      File.read(File.join(config['generated_directory'], 'StringManager.js'))
+    end
+
+    it 'gives an output the other spelling of its script, and the same rule as the two mobile faces' do
+      config = languages_config(%w[en zh-TW])
+      write_resources_strings(config, { 'home' => { 'k' => { 'en' => 'EN', 'zh-Hant' => 'HANT' } } })
+      run_update(config)
+      expect(generated(config)).to match(/"zh-TW": \{\s*"home_k": "HANT"/)
+    end
+
+    it 'says so when a language has no text of its own' do
+      config = languages_config(%w[en ja])
+      write_resources_strings(config, { 'home' => { 'k' => { 'en' => 'EN' } } })
+      expect(RjuiTools::Core::Logger).to receive(:warn).once.with(/languages\[ja\]: 1 key\(s\) have no ja text.*home_k/)
+      allow(RjuiTools::Core::Logger).to receive(:info)
+      run_update(config)
+    end
+
+    it 'does not say so for a key a legacy per-language file holds' do
+      config = languages_config(%w[en ja])
+      write_resources_strings(config, { 'home' => { 'k' => { 'en' => 'EN' } } })
+      FileUtils.mkdir_p(config['strings_directory'])
+      File.write(File.join(config['strings_directory'], 'ja.json'), JSON.generate({ 'home_k' => 'けー' }))
+      expect(RjuiTools::Core::Logger).not_to receive(:warn)
+      allow(RjuiTools::Core::Logger).to receive(:info)
+      run_update(config)
+    end
+  end
+
   describe 'copy consistency' do
     it 'stays byte-identical to the canonical shared/core copy' do
       tool_copy = File.expand_path('../../../lib/core/plural_validator.rb', __dir__)

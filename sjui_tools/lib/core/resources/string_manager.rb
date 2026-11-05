@@ -394,13 +394,7 @@ module SjuiTools
           dict_path = strings_file_path.sub(/\.strings\z/, '.stringsdict')
           return if dict_path == strings_file_path
 
-          # Detect language from file path (same rule as update_strings_file)
-          lang_code = if strings_file_path =~ /(\w+)\.lproj/
-                        lang = $1
-                        (lang == 'Base' || lang == 'en') ? 'en' : lang
-                      else
-                        'en'
-                      end
+          lang_code = JsonUIShared::LanguageCode.of_lproj(strings_file_path)
 
           plural_entries = {}
           strings_data.each do |file_name, keys|
@@ -687,13 +681,8 @@ module SjuiTools
         end
 
         def update_strings_file(file_path, strings_data)
-          # Detect language from file path (e.g., "ja.lproj" -> "ja", "en.lproj" or "Base.lproj" -> "en")
-          lang_code = if file_path =~ /(\w+)\.lproj/
-                        lang = $1
-                        (lang == 'Base' || lang == 'en') ? 'en' : lang
-                      else
-                        'en'
-                      end
+          lang_code = JsonUIShared::LanguageCode.of_lproj(file_path)
+          fell_back = []
 
           # Build the set of valid keys from strings_data
           valid_keys = {}
@@ -703,13 +692,16 @@ module SjuiTools
             file_strings = []
             keys.each do |key, value|
               full_key = "#{file_name}_#{key}"
+              if value.is_a?(Hash) && JsonUIShared::LanguageCode.spelling_in(value, lang_code).nil?
+                fell_back << full_key
+              end
               # Plural entries compile to .stringsdict, never to .strings
               # (an obsolete flat entry with the same key gets pruned below
               # because it is absent from valid_keys).
               next if JsonUIShared::PluralValidator.plural_value?(value)
               # Resolve multi-language Hash values
               resolved = if value.is_a?(Hash)
-                           value[lang_code] || value['en'] || value.values.first || ''
+                           JsonUIShared::LanguageCode.resolve(value, lang_code) || ''
                          else
                            value.to_s
                          end
@@ -720,6 +712,8 @@ module SjuiTools
             end
             strings_by_file[file_name] = file_strings if file_strings.any?
           end
+          warning = JsonUIShared::LanguageCode.fallback_warning(File.basename(File.dirname(file_path)), lang_code, fell_back)
+          Core::Logger.warn(warning) if warning
 
           # Read existing file and split into manual section and auto-generated keys
           manual_section = ""

@@ -1040,6 +1040,7 @@ module RjuiTools
             plurals_data[lang] = {}
           end
           plural_errors = []
+          fell_back = Hash.new { |missing, lang| missing[lang] = [] }
 
           # Source 1: Layouts/Resources/strings.json (sjui/kjui shared format)
           # Format: { "screen_name": { "key": { "en": "Hello", "ja": "こんにちは" } } }
@@ -1063,6 +1064,11 @@ module RjuiTools
 
                 keys.each do |key, value|
                   full_key = "#{file_prefix}_#{key}"
+                  if value.is_a?(Hash)
+                    languages.each do |lang|
+                      fell_back[lang] << full_key if JsonUIShared::LanguageCode.spelling_in(value, lang).nil?
+                    end
+                  end
                   if JsonUIShared::PluralValidator.plural_value?(value)
                     languages.each do |lang|
                       forms = JsonUIShared::PluralValidator.plural_forms(value, lang, default_language)
@@ -1071,7 +1077,7 @@ module RjuiTools
                   elsif value.is_a?(Hash)
                     # Multi-language: { "en": "Hello", "ja": "こんにちは" }
                     languages.each do |lang|
-                      resolved = value[lang] || value[default_language] || value.values.first || ''
+                      resolved = JsonUIShared::LanguageCode.resolve(value, lang, default_language) || ''
                       strings_data[lang][full_key] = resolved
                     end
                   else
@@ -1102,6 +1108,7 @@ module RjuiTools
                   lang_strings.delete(key)
                 end
                 strings_data[lang].merge!(lang_strings)
+                fell_back[lang] -= lang_strings.keys
               end
             end
           end
@@ -1110,6 +1117,11 @@ module RjuiTools
             plural_errors.each { |e| Core::Logger.error(e) }
             raise JsonUIShared::PluralValidator::ValidationError,
                   "strings.json plural validation failed (#{plural_errors.length} error(s))"
+          end
+
+          languages.each do |lang|
+            warning = JsonUIShared::LanguageCode.fallback_warning("languages[#{lang}]", lang, fell_back[lang])
+            Core::Logger.warn(warning) if warning
           end
 
           # Skip if no strings from any source

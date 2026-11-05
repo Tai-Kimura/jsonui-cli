@@ -386,11 +386,16 @@ module KjuiTools
         # sections, then each section's keys.
         def generated_string_elements(lang_dir)
           holder = REXML::Element.new('resources')
+          lang_code = JsonUIShared::LanguageCode.of_values_dir(lang_dir)
+          fell_back = []
           @strings_data.each do |file_prefix, file_strings|
             next unless file_strings.is_a?(Hash)
 
             file_strings.each do |key, value|
               full_key = "#{file_prefix}_#{key}"
+              if value.is_a?(Hash) && JsonUIShared::LanguageCode.spelling_in(value, lang_code).nil?
+                fell_back << full_key
+              end
               # An Android resource cannot start with a digit (a layout whose
               # path does) — Core::KotlinIdentifier. Translations are looked up
               # by full_key, the strings.json spelling.
@@ -417,6 +422,8 @@ module KjuiTools
               holder.add_element(string_elem)
             end
           end
+          warning = JsonUIShared::LanguageCode.fallback_warning(lang_dir, lang_code, fell_back)
+          Core::Logger.warn(warning) if warning
           holder.elements.to_a.each { |elem| holder.delete_element(elem) }
         end
 
@@ -437,7 +444,7 @@ module KjuiTools
         # are rebuilt in place (stable element position) in CLDR category
         # order; `{count}` becomes %d (%1$d when it appears more than once).
         def upsert_plurals_element(resources, existing_plurals, full_key, value, lang_dir)
-          lang_code = lang_dir =~ /values-(\w+)/ ? $1 : 'en'
+          lang_code = JsonUIShared::LanguageCode.of_values_dir(lang_dir)
           forms = JsonUIShared::PluralValidator.plural_forms(value, lang_code)
           return unless forms
 
@@ -482,14 +489,7 @@ module KjuiTools
         def get_translated_value(key, default_value, lang_dir)
           # If value is a Hash with language keys (e.g., {"en": "Hello", "ja": "こんにちは"})
           if default_value.is_a?(Hash)
-            # Extract language code from lang_dir (e.g., "values-ja" -> "ja", "values" -> "en")
-            lang_code = if lang_dir =~ /values-(\w+)/
-                          $1
-                        else
-                          'en'  # default language for "values"
-                        end
-            # Return the value for this language, fall back to "en", then first available
-            default_value[lang_code] || default_value['en'] || default_value.values.first || ''
+            JsonUIShared::LanguageCode.resolve(default_value, JsonUIShared::LanguageCode.of_values_dir(lang_dir)) || ''
           else
             default_value.to_s
           end

@@ -6,6 +6,7 @@ require 'json'
 # (resolved at call time, not load time), and this require guarantees it is
 # defined for callers that load the validator alone (build_command does).
 require_relative 'string_manager_core'
+require_relative 'language_code'
 
 module JsonUIShared
   # Build-time validation + shared helpers for CLDR-cardinal plural entries
@@ -84,7 +85,7 @@ module JsonUIShared
     def plural_forms(value, lang, default_language = 'en')
       return nil unless value.is_a?(Hash)
 
-      entry = value[lang] || value[default_language] || value.values.first
+      entry = LanguageCode.resolve(value, lang, default_language)
       return nil unless entry.is_a?(Hash)
 
       forms = entry['plural']
