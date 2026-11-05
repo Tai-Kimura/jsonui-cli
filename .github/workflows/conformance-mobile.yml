@@ -379,6 +379,9 @@ jobs:
           cp conformance/results/ios.results.json "$out/results/ios.results.json" || true
           [ -d conformance/artifacts/ios ] && cp -R conformance/artifacts/ios/. "$out/artifacts/ios/" || true
           cp /tmp/jsonui-conformance-ios.ci/xctests.txt /tmp/jsonui-conformance-ios.ci/tap_timing.txt "$out/" 2>/dev/null || true
+          # The probes' retaps are lines of this log, which leaves the runner only on a failure. No record reads as
+          # "not counted", which is red in the report: never as no retaps.
+          python3 .github/scripts/ios_retaps.py scan /tmp/jsonui-conformance-ios.ci/xcodebuild.log "$out/probe_retaps.json" --attempt "$GITHUB_RUN_ATTEMPT" || true
           printf '{"library_sha": "%s", "toolchain": "%s"}\n' "${{ steps.library_sha.outputs.sha }}" "${{ steps.toolchain.outputs.spec }}" > "$out/meta.json"
       - name: Upload this shard's results
         if: always()
@@ -499,6 +502,8 @@ jobs:
           cp conformance/codegen/ios.results.json "$out/codegen/ios.results.json" || true
           [ -d conformance/artifacts/ios-codegen ] && cp -R conformance/artifacts/ios-codegen/. "$out/artifacts/ios-codegen/" || true
           cp /tmp/jsonui-conformance-ios-codegen.ci/xctests.txt /tmp/jsonui-conformance-ios-codegen.ci/tap_timing.txt "$out/" 2>/dev/null || true
+          # As the ios job: the probes' retaps, from a log that leaves the runner only on a failure.
+          python3 .github/scripts/ios_retaps.py scan /tmp/jsonui-conformance-ios-codegen.ci/xcodebuild.log "$out/probe_retaps.json" --attempt "$GITHUB_RUN_ATTEMPT" || true
       - name: Upload this shard's results
         if: always()
         uses: actions/upload-artifact@v4
@@ -563,12 +568,14 @@ jobs:
             --out merged shards/ios-shard-*
           python3 .github/scripts/ios_shards.py meta shards/ios-shard-* | tee -a "$GITHUB_OUTPUT"
       # A fixture that passed only on a second tap names it (SwiftJsonUI results[].retap; ticket
-      # 2026-10-24-ios-conformance-tap-not-delivered-recurred, the requester's choice B). Every retap is printed here,
-      # and the run's list is kept 90 days: the report's next run reads it to fail the same fixture twice in a row.
-      - name: Name the retaps (fixtures that passed on a second tap)
+      # 2026-10-24-ios-conformance-tap-not-delivered-recurred, the requester's choice B), and so does a probe that
+      # touched once more (its lines in each shard's log). Every retap is printed here, and the run's list is kept
+      # 90 days: the report counts it, and the next run reads it to fail the same one twice in a row.
+      - name: Name the retaps (fixtures and probes that needed a second touch)
         run: >-
           python3 .github/scripts/ios_retaps.py write merged/results/ios.results.json merged/retaps.json
           --run-id "${{ github.run_id }}" --attempt "${{ github.run_attempt }}" --sha "${{ github.sha }}"
+          --face ios --shard-dirs shards/ios-shard-*
       - name: Upload the retaps record
         uses: actions/upload-artifact@v4
         with:
@@ -629,6 +636,19 @@ jobs:
             --uitests SwiftJsonUI/ConformanceHost/UITests --manifest conformance/manifest.json \
             --out merged shards/ios-codegen-shard-*
           python3 .github/scripts/ios_shards.py meta shards/ios-codegen-shard-* | tee -a "$GITHUB_OUTPUT"
+      # As ios-merge: this face's retaps, on the same count in the report.
+      - name: Name the retaps (fixtures and probes that needed a second touch)
+        run: >-
+          python3 .github/scripts/ios_retaps.py write merged/codegen/ios.results.json merged/retaps.json
+          --run-id "${{ github.run_id }}" --attempt "${{ github.run_attempt }}" --sha "${{ github.sha }}"
+          --face ios-codegen --shard-dirs shards/ios-codegen-shard-*
+      - name: Upload the retaps record
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-codegen-retaps-a${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90
+          path: merged/retaps.json
       - name: Every probe whose switch was raised ran
         if: ${{ !cancelled() && (inputs.ios_probes || github.event_name == 'schedule') }}
         run: python3 .github/scripts/ios_probe_gates.py check merged/xctests.txt SwiftJsonUI/ConformanceHost/UITests
@@ -1086,7 +1106,7 @@ jobs:
     if: ${{ always() && !inputs.tap_repro && !inputs.android_library_only }}
     permissions:
       contents: read
-      # ios_retaps.py reads the run before's ios-retaps record (GET /actions/runs, /artifacts)
+      # ios_retaps.py reads the run before's retaps records (GET /actions/runs, /artifacts)
       actions: read
     steps:
       - uses: actions/checkout@v4
@@ -1199,22 +1219,27 @@ jobs:
           [ "${{ needs.web.result }}" = success ] && args+=(--rendered-by "rjui.src=${{ needs.web.outputs.library_sha }}" --rendered-by "chromium=${{ needs.web.outputs.chromium }}")
           printf 'gate args:'; printf ' %s' "${args[@]}"; printf '\n'
           python3 -c "import sys; from jui_cli.cli import main; sys.exit(main(sys.argv[1:]))" "${args[@]}"
-      - name: Download the retaps record
+      - name: Download the retaps records
+        # By pattern, not by this attempt's name: re-running failed jobs does not re-run a merge that passed, so an
+        # attempt 2 may hold only ios-retaps-a1 (runs 41016959345 and 41352149749 went red on this step for that).
+        # Each lands in retaps/<name>/; the judge takes each face's latest.
         if: ${{ always() && contains(steps.faces.outputs.judged, 'ios') }}
         uses: actions/download-artifact@v4
         with:
-          name: ios-retaps-a${{ github.run_attempt }}
+          pattern: ios*-retaps-a*
           path: retaps
-      - name: Retaps — more than two in the run, or the same fixture on the run before
+      - name: Retaps — more than two touches in the run, or the same fixture or probe on the run before
         # A retap is a pass that names itself, not a fix (ticket 2026-10-24-ios-conformance-tap-not-delivered-
-        # recurred): red when this run retapped more than two fixtures, or a fixture the run before (this run's
-        # attempt before, else the last earlier run that left a record) retapped too. A run before that cannot be
-        # read is said and not counted. A second tap that did not pass either is the fixture's own error above.
+        # recurred): red when this run retapped more than two, fixtures and probes together over both faces, or a
+        # fixture or probe the run before (this run's attempt before, else the last earlier run that left a record)
+        # retapped too. A run before that cannot be read is said and not counted; a shard's log that was not read is
+        # red. A second tap that did not pass either is the fixture's or the probe's own error above. The count and the
+        # names go to the job summary.
         if: ${{ always() && contains(steps.faces.outputs.judged, 'ios') }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          python3 .github/scripts/ios_retaps.py judge retaps/retaps.json --repo "${{ github.repository }}"
+          python3 .github/scripts/ios_retaps.py judge retaps/*/retaps.json --repo "${{ github.repository }}"
           --run-id "${{ github.run_id }}" --attempt "${{ github.run_attempt }}" --workflow conformance-mobile.yml
       - name: Verdict — an incomplete run is NOT a pass
         # 🔴 THE STEP THAT STOPS "4/5 GREEN" FROM EXISTING. The gate above now
