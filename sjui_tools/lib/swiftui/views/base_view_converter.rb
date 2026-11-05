@@ -99,9 +99,9 @@ module SjuiTools
         # `parent_orientation`: a converter sees only its own hash.
         SCROLLING_ANCESTOR_KEY = '_scrolling_ancestor'
 
-        # Set on a node under one that bounds the height, with no vertical
-        # ScrollView in between (JsonToSwiftUIConverter#mark_height_bounds).
-        UNDER_HEIGHT_BOUND_KEY = '_under_height_bound'
+        # Set on a node inside a vertical ScrollView, with no node between that
+        # bounds the height (JsonToSwiftUIConverter#mark_open_scroll).
+        IN_OPEN_SCROLL_KEY = '_in_open_scroll'
         # Set on the ROOT of a layout that some Collection renders as a cell
         # / header / footer (CollectionCellIndex). Not propagated.
         COLLECTION_CELL_ROOT_KEY = '_collection_cell_root'

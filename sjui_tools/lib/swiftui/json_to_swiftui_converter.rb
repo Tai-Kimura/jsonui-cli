@@ -128,7 +128,7 @@ module SjuiTools
       # here: its cells are other layout files, not `child` nodes, so a
       # Collection never has in-tree descendants to mark.
       SCROLLING_ANCESTOR_KEY = Views::BaseViewConverter::SCROLLING_ANCESTOR_KEY
-      UNDER_HEIGHT_BOUND_KEY = Views::BaseViewConverter::UNDER_HEIGHT_BOUND_KEY
+      IN_OPEN_SCROLL_KEY = Views::BaseViewConverter::IN_OPEN_SCROLL_KEY
       COLLECTION_CELL_ROOT_KEY = Views::BaseViewConverter::COLLECTION_CELL_ROOT_KEY
 
       # Mark every node that has a scrolling ancestor in THIS tree. The
@@ -201,24 +201,25 @@ module SjuiTools
         children.each { |child| mark_scrolling_ancestors(child, inside) }
       end
 
-      # Marks every node under one that bounds the height: a declared height or
-      # maxHeight (in any responsive branch too), or a weight along a vertical
-      # stack. A vertical ScrollView ends it: its content has no height to run
-      # out of. A Label so marked stays inside its bound (apply_label_wrap_height).
+      # Marks every node inside a vertical ScrollView with no node between that
+      # bounds the height: a declared height or maxHeight (in any responsive
+      # branch too), or a weight along a vertical stack. A Label so marked keeps
+      # its lines (apply_label_wrap_height). A Collection's cells and an Embed's
+      # screen are other layout files, so they start unmarked.
       # Dynamic: LabelHeightFit.swift, the same rule through the environment.
-      def mark_height_bounds(component, bounded = false, parent_orientation = nil)
+      def mark_open_scroll(component, open = false, parent_orientation = nil)
         return unless component.is_a?(Hash)
         return if component.key?('data') && !component.key?('type')
 
-        component[UNDER_HEIGHT_BOUND_KEY] = true if bounded
-        inner = bounded || bounds_height?(component, parent_orientation)
+        component[IN_OPEN_SCROLL_KEY] = true if open
+        inner = open && !bounds_height?(component, parent_orientation)
         if DrawnTypes.scroll_view?(component['type']) &&
            component['orientation'] != 'horizontal' && component['horizontalScroll'] != true
-          inner = false
+          inner = true
         end
         child_data = component['child'] || component['children']
         children = child_data.is_a?(Array) ? child_data : [child_data]
-        children.each { |child| mark_height_bounds(child, inner, component['orientation']) }
+        children.each { |child| mark_open_scroll(child, inner, component['orientation']) }
       end
 
       def bounds_height?(component, parent_orientation)
@@ -240,7 +241,7 @@ module SjuiTools
       def convert_component(json_data, indent_level = 0)
         @indent_level = indent_level
         mark_scrolling_ancestors(json_data)
-        mark_height_bounds(json_data)
+        mark_open_scroll(json_data)
         converter = @converter_factory.create_converter(json_data, @indent_level, @action_manager)
 
         # Skip if converter is nil (e.g., data definition objects)
