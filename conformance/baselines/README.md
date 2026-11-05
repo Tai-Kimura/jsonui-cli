@@ -225,9 +225,9 @@ entry whether that picture SHOULD have changed. `unstable` lines are a different
 list and never enter `N`. Only then write, choosing deliberately:
 
 - **new entries only** — `--only-new` (leaves every moved entry at its committed hash)
-- **a few named entries** — edit those hashes by hand and assert the count
-  (`changed=N / added=0 / removed=0` against `HEAD`); this is the only way to take
-  two entries and leave 786 alone
+- **a few named entries** — `--take <screenshot>.png`, repeatable. It writes those
+  entries' hash, vertical hash and ink from the run and leaves everything else as
+  committed. With `--fail-on-moved`, an entry that moved and was not named still refuses
 - **wholesale** — re-run without the flag, knowing it absorbs *every* moved entry
 
 ⚠️ **`N` IS NOT THE NUMBER THAT GETS WRITTEN.** `N` counts entries over the visual
@@ -243,6 +243,14 @@ truly refused would report the same `N` both times, because nothing would have
 changed between them. The observation was correct and the inference was backwards.
 ⭐ That comparison is therefore the right arm for the fix: **run the same bake twice
 and require the same `N`.**
+
+**When it exits 0 with `moved 0`**, the committed entries stay as they are: `new`
+entries are added, `dropped` entries are removed, and with neither the file is not
+written (`baseline not written, nothing to change`). `unstable` wobble and re-measured
+ink stay out, and `rendered_by` changes only when `--rendered-by` is passed. Measured
+on run 42011943298's ci artifacts before this rule: `moved 0` left 13 insertions / 16
+deletions on ios and blanked `rendered_by` on ios and web. An entry with no committed
+ink or vertical hash is filled when its hash matches this run.
 
 ## Workflow
 
