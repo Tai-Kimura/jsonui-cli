@@ -325,11 +325,11 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         dest="fail_on_moved",
         action="store_true",
         help=(
-            "Exit non-zero if any existing entry's picture changed, without "
-            "writing. For scripted bakes that must stop and let a person look, "
-            "rather than deciding on their own that the drift was noise. With "
-            "nothing moved, committed entries stay as they are: only new and "
-            "dropped entries are written, and with neither the file is not "
+            "Exit non-zero, without writing, if any existing entry's picture "
+            "changed or is missing from the run. For scripted bakes that must "
+            "stop and let a person look, rather than deciding on their own that "
+            "the drift was noise. With neither, committed entries stay as they "
+            "are: only new entries are written, and with none the file is not "
             "touched."
         ),
     )
@@ -341,8 +341,19 @@ def register_conformance_command(subparsers: argparse._SubParsersAction) -> None
         help=(
             "Write only this entry from the run (hash, vertical hash, ink); "
             "repeatable. Everything else stays as committed. With "
-            "--fail-on-moved, an entry that moved and was not named still "
-            "refuses."
+            "--fail-on-moved, an entry that moved or dropped and was not named "
+            "still refuses."
+        ),
+    )
+    baseline_update.add_argument(
+        "--drop",
+        dest="drop",
+        action="append",
+        metavar="SCREENSHOT.png",
+        help=(
+            "Remove only this entry, which the run no longer draws; repeatable. "
+            "Everything else stays as committed. With --fail-on-moved, an entry "
+            "that moved or dropped and was not named still refuses."
         ),
     )
     baseline_update.add_argument(
@@ -1451,18 +1462,22 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
             refuse_if_moved=fail_on_moved and not only_new,
             rehash=bool(getattr(args, "rehash", False)),
             take=getattr(args, "take", None),
+            drop=getattr(args, "drop", None),
         )
     except BaselineMoved as e:
         # Every MOVED line, because reading them is what the flag is for — and
         # now the file on disk is still the committed one while you read.
-        print(f"  moved {len(e.moved)}")
+        print(f"  moved {len(e.moved)}  dropped {len(e.dropped)}")
         for name, dist in e.moved:
             print(f"    MOVED    {name}  hamming={dist}  -> NOT WRITTEN")
-        print(f"ERROR: --fail-on-moved and {len(e.moved)} entr(y/ies) moved; "
-              f"{e.out_path} was NOT written")
+        for name in e.dropped:
+            print(f"    DROPPED  {name}  -> NOT WRITTEN")
+        print(f"ERROR: --fail-on-moved and {len(e.moved)} entr(y/ies) moved, "
+              f"{len(e.dropped)} dropped; {e.out_path} was NOT written")
         print("  Decide per entry, then choose deliberately:")
         print("    --only-new            insert new entries, leave moved ones committed")
         print("    --take <name>.png     write only the named entries, repeatable")
+        print("    --drop <name>.png     remove only the named entries, repeatable")
         print("    drop the flag         wholesale, absorbing EVERY moved entry")
         return 1
     except BaselineError as e:
@@ -1483,10 +1498,14 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
         )
         for key in summary.dropped_os_buckets:
             print(f"    DROPPED  hashes_by_os.{key}  -> not in this run's artifacts, cannot be rehashed")
+    named_bake = bool(summary.taken or summary.removed)
     for name in summary.new:
-        print(f"    NEW      {name}")
+        if named_bake and name not in summary.taken:
+            print(f"    NEW      {name}  -> not written (not named)")
+        else:
+            print(f"    NEW      {name}")
     for name, dist in summary.moved:
-        if summary.taken:
+        if named_bake:
             verb = "TAKEN" if name in summary.taken else "kept (not named)"
         else:
             verb = "kept (only-new)" if only_new else "REWRITTEN"
@@ -1506,13 +1525,13 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
         # match, because the fixture declares an unstable picture.
         print(f"    unstable {name}  hamming={dist}  (not exact-checked: {reason})")
     for name in summary.dropped:
-        if summary.taken:
-            verb = "kept (not named)"
+        if named_bake:
+            verb = "REMOVED" if name in summary.removed else "kept (not named)"
         else:
             verb = "kept (only-new)" if only_new else "REMOVED"
         print(f"    DROPPED  {name}  -> {verb}")
 
-    if summary.moved and not only_new and not summary.taken:
+    if summary.moved and not only_new and not named_bake:
         print(
             "  ⚠️  a wholesale bake rewrote the moved entries above — every one of them "
             "is now the baseline, including any that were regressions. Use --only-new "
