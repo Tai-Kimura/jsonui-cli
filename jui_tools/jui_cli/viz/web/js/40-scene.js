@@ -1510,6 +1510,7 @@ const gitLaid = (R) => { const rm = PROJECT[R.def.room]; return `${rm ? rectOf(r
 function gitArrive(R, nowSec) {
   if (R.git && R.git.phase === 'going' && !R.path.length && nowSec !== undefined) { R.git.phase = 'at'; R.git.until = nowSec + GITBOX.atSec; }
 }
+const gitSaw = (R, trip) => { R.gitSeen = trip.id; R.gitSeenAt = trip.at || 0; };
 function gitTick(nowSec) {
   for (const R of robots) {
     const st = robotState[R.def.id] || { state: 'idle' }, trip = st.git;
@@ -1531,16 +1532,18 @@ function gitTick(nowSec) {
       if (R.git.phase === 'back' && !R.path.length) R.git = null;   // home
       continue;
     }
-    if (!trip || trip.id === R.gitSeen) continue;
-    if (trip.stopped) { R.gitSeen = trip.id; continue; }               // an instruction came before it could start
+    // one older than the last it saw has been passed: it starts nothing (only the debug poke brings one back: a push's two
+    // hooks in two frames under load walked the floor's push in the room, and the push itself replaced it on the way)
+    if (!trip || trip.id === R.gitSeen || (trip.at || 0) < (R.gitSeenAt || 0)) continue;
+    if (trip.stopped) { gitSaw(R, trip); continue; }               // an instruction came before it could start
     const deskHere = PROPS.gitDesk && PROPS.room === R.def.room && !R.def.standing;
     // an old one (a reload) or no box in sight: its line only, never later, counted or not (one still being counted on
     // the floor started in the room once its count came: docs/bugs/2026-10-21-jui-viz-git-trip-counted-late-starts-in-the-room.md);
     // being counted, or busy now (walking to a new desk, playing, a call, a question, a break, the shredder): it waits —
     // still fresh, the trip starts once it is counted and the robot is free
-    if (vizNow() - (trip.at || 0) > GITBOX.freshMs || !deskHere) { R.gitSeen = trip.id; continue; }
+    if (vizNow() - (trip.at || 0) > GITBOX.freshMs || !deskHere) { gitSaw(R, trip); continue; }
     if (trip.pending || R.play || R.playBack || R.brk || R.shred || R.solo || R.path.length || LIVE.leaving[R.def.id] || R.robot.call || st.state === 'waiting') continue;
-    R.gitSeen = trip.id;
+    gitSaw(R, trip);
     const sp = PROPS.place.git;
     R.git = { trip, phase: 'going', desk: sp.desk, sheets: trip.kind === 'push' ? gitSheets(trip) : 0, t0: nowSec, room: R.def.room, laid: gitLaid(R) };
     R.path = [sp.stand];
