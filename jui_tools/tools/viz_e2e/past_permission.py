@@ -7,7 +7,8 @@ call beside it (so its robot no longer says waiting: the state the sessions' fil
 header, the card's bar, the waits beside the card and the sessions' filter all say 1, and the end of the other call
 closes nothing. Then the safety check's result, with no hook: all 0, the card gone. A second child's card: its
 SubagentStop, no result: all 0. Stop with background work leaves a third child's card that waits. Past the stale time
-(JUI_VIZ_STALE_MS here, 10 minutes in use) a card and a question stay, counted, and say they are old. Shown narrowed to one
+(JUI_VIZ_STALE_MS here, 10 minutes in use) a card and a question stay, counted, say they are old and can be closed by hand:
+nothing goes to the receiver, what comes later finds no card, a reload and a restart bring none back, a phone has the buttons. Shown narrowed to one
 project, the header's number stays all the projects' and its words say how many lie outside, on a phone too."""
 from __future__ import annotations
 
@@ -24,7 +25,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from common import DESKTOP, ISOLATE, LAUNCH_ARGS, PHONE, T, Watch, dump, ready  # noqa: E402
 
 SID = "e2e00000-0000-4000-8000-0000000000f9"
-KIDS = ("a0411e1b020482601", "a0411e1b020482602", "a0411e1b020482603", "a0411e1b020482604")
+KIDS = ("a0411e1b020482601", "a0411e1b020482602", "a0411e1b020482603", "a0411e1b020482604", "a0411e1b020482605")
 OTHER = "e2e00000-0000-4000-8000-0000000000fa"
 OTHER_CWD = "/work/other-app"
 STALE_MS = 25_000
@@ -43,7 +44,9 @@ COUNTS = """() => {
 
 
 STALE = """() => { const chip = document.getElementById('chip-perm'), has = (sel, w) => [...document.querySelectorAll(sel)].some((n) => n.textContent.includes(w));
-  return { perm: has('#tasks [data-perm-box]', %s), question: has('#questions', %s), header: chip.hidden ? '' : chip.textContent }; }""" % (json.dumps(T("panel.perm.stale")), json.dumps(T("panel.q.stale")))
+  return { perm: has('#tasks [data-perm-box]', %s), question: has('#questions', %s), permNote: has('#tasks [data-perm-box]', %s), questionNote: has('#questions', %s),
+           permButtons: document.querySelectorAll('#tasks [data-dismiss="perm"]').length, questionButtons: document.querySelectorAll('#questions [data-dismiss="q"]').length,
+           header: chip.hidden ? '' : chip.textContent }; }""" % tuple(json.dumps(T(k)) for k in ("panel.perm.stale", "panel.q.stale", "panel.perm.dismiss.note", "panel.q.dismiss.note"))
 
 
 def check(failures, cond, text):
@@ -65,6 +68,7 @@ async def run_past_permission(pw, out, failures):
     home = out / "home"
     state = home / ".local" / "state" / "jui-viz"
     state.mkdir(parents=True, exist_ok=True)
+    (state / "config.json").write_text(json.dumps({"decideWaitSec": 180}))   # a hook still waits when the card is closed
     jt = pathlib.Path(__file__).resolve().parents[2]
     forward = jt / "jui_cli" / "viz" / "forward.py"
     port = free_port()
@@ -179,24 +183,125 @@ async def run_past_permission(pw, out, failures):
         await wait(page, "() => document.getElementById('chip-perm').hidden", label="the last Stop closes it")
 
         # 5. time alone closes nothing: past the stale time (shortened here) a card and a question stay, and say so
-        # (ticket 2026-11-05-viz-ten-minute-expiry-removes-a-permission-still-waiting)
+        # (ticket 2026-11-05-viz-ten-minute-expiry-removes-a-permission-still-waiting), and can be closed by hand (the
+        # requester, 11-05: 残して手で閉じる): nothing goes to the receiver
         asks(KIDS[3], "toolu_F")
+        request_f = {"session_id": SID, "cwd": CWD, "transcript_path": str(main), "permission_mode": "default", "hook_event_name": "PermissionRequest", "tool_name": "Bash",
+                     "tool_input": {"command": 'rm -rf "$OUT"/toolu_F', "description": "一時の絵を消す"}, "agent_id": KIDS[3], "agent_type": "critic"}
+        decide = subprocess.Popen([sys.executable, "-I", "-S", str(forward), "--decide"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=dict(base_env, HOME=str(home)))
+        decide.stdin.write(json.dumps(request_f).encode())
+        decide.stdin.close()
+        decide.stdin = None
+        asks(KIDS[4], "toolu_H")
         hook(hook_event_name="PreToolUse", tool_name="AskUserQuestion", tool_use_id="q-1", tool_input=QUESTION)
-        await wait(page, "() => !document.getElementById('chip-perm').hidden && !document.getElementById('chip-ask').hidden", label="a card and a question")
+        await wait(page, "() => !document.getElementById('chip-ask').hidden && document.getElementById('chip-perm').textContent === %s" % json.dumps(T("panel.count.waiting", n=2)), label="two cards and a question")
         c = await page.evaluate(STALE)
-        check(failures, not c["perm"] and not c["question"], f"a new card and question say nothing of their age: {c}")
+        check(failures, not c["perm"] and not c["question"] and c["permButtons"] == 0 and c["questionButtons"] == 0, f"a new card and question: no word of their age, no 閉じる: {c}")
         await wait(page, f"() => ({STALE})().perm", timeout=STALE_MS + 20000, label="the card on the task board says it is old")
         await wait(page, f"() => ({STALE})().question", timeout=20000, label="the question's card says it is old")
         c = res["stale"] = await page.evaluate(STALE)
         s = snap()
-        check(failures, c["perm"] and c["question"] and c["header"] == one and {x["status"] for x in s["perms"] if x["agentId"] == KIDS[3]} == {"pending"}
-              and [x["status"] for x in s["questions"]] == ["pending"], f"old, still there, still counted: {c}")
+        two = T("panel.count.waiting", n=2)
+        check(failures, c["perm"] and c["question"] and c["permButtons"] > 0 and c["questionButtons"] > 0 and c["header"] == two and {x["status"] for x in s["perms"]} >= {"pending"}
+              and [x["status"] for x in s["questions"]] == ["pending"], f"old, still there, still counted, 閉じる on each: {c}")
+        check(failures, c["permNote"] and c["questionNote"], f"the words say nothing goes to the receiver: {c}")
         await page.screenshot(path=str(out / "stale.png"))
-        hook(hook_event_name="SubagentStop", agent_id=KIDS[3], agent_type="critic")
-        hook(hook_event_name="Stop", background_tasks=[], last_assistant_message="終わり")
-        await wait(page, "() => document.getElementById('chip-perm').hidden && document.getElementById('chip-ask').hidden", label="the old card and question end with the turn")
+        await page.locator("#tasks [data-perm-box]").first.screenshot(path=str(out / "stale-perm-box.png"))
+        await page.locator("#questions [data-qcard]").first.screenshot(path=str(out / "stale-question.png"))
+        phone = await browser.new_context(**PHONE)
+        pp = await phone.new_page()
+        watch.attach(pp, "past-perm-phone")
+        await pp.goto(url + "/")
+        await ready(pp)
+        await wait(pp, """() => !!document.querySelector('#questions [data-dismiss="q"]') && !!document.querySelector('#tasks [data-dismiss="perm"]')""", label="the buttons on a phone")
+        for sel, name in (("#tasks [data-perm-box]", "phone-perm"), ("#questions [data-qcard]", "phone-question")):
+            await pp.locator(sel).first.scroll_into_view_if_needed()
+            await pp.locator(sel).first.screenshot(path=str(out / f"stale-{name}.png"))
+        fit = res["phoneButtons"] = await pp.evaluate("""() => { const r = (s) => { const b = document.querySelector(s).getBoundingClientRect(); return [b.left, b.right, b.height]; };
+          return { perm: r('#tasks [data-dismiss="perm"]'), q: r('#questions [data-dismiss="q"]'), width: innerWidth, sideways: document.documentElement.scrollWidth > document.documentElement.clientWidth }; }""")
+        check(failures, all(0 <= b[0] and b[1] <= fit["width"] and b[2] >= 20 for b in (fit["perm"], fit["q"])) and not fit["sideways"], f"on a phone the buttons are on the page: {fit}")
+        await phone.close()
 
-        # 6. the header counts all the projects, the list the one shown: the words say so, the number stays
+        # 閉じる on the first card: gone, the other stays (the control), the waiting hook prints nothing
+        first = next(x for x in snap()["perms"] if x["agentId"] == KIDS[3])
+        check(failures, decide.poll() is None, "the --decide hook still waits before 閉じる")
+        await page.click(f"#tasks [data-dismiss-id='{first['id']}']")
+        await wait(page, "(w) => document.getElementById('chip-perm').textContent === w", arg=one, label="the header counts one less")
+        got = decide.communicate(timeout=10)[0]
+        check(failures, got == b"", f"the receiver's hook prints nothing, neither allow nor deny: {got!r}")
+        c = res["closedOne"] = await page.evaluate(COUNTS)
+        check(failures, c["header"] == one and first["id"] not in [x["id"] for x in snap()["perms"]], f"closed: out of the counts and the server: {c}")
+        await page.reload()
+        await ready(page)
+        await wait(page, "(id) => !!window.__dbg.dazed(id)", arg=label, timeout=30000, label="the main robot after a reload")
+        await page.evaluate("(id) => window.__dbg.openRobot(id)", label)
+        await page.click('#rb [data-rb-tab="history"]')
+        await wait(page, "(w) => document.getElementById('chip-perm').textContent === w", arg=one, label="after a reload the other card is there, the closed one is not")
+        check(failures, await page.locator(f"[data-dismiss-id='{first['id']}']").count() == 0, "the closed card does not come back on a reload")
+        # what comes later: the real result and the hook find no card
+        result(KIDS[3], "toolu_F", SAFETY)
+        hook(hook_event_name="PostToolUse", tool_name="Bash", tool_use_id="toolu_F", tool_input=request_f["tool_input"], agent_id=KIDS[3], agent_type="critic")
+        await page.wait_for_timeout(3000)
+        check(failures, first["id"] not in [x["id"] for x in snap()["perms"]] and await page.evaluate("() => document.getElementById('chip-perm').textContent") == one, "a result that comes later brings nothing back")
+        # the last card and the question: every count is 0, and the robots no longer wait
+        second = next(x for x in snap()["perms"] if x["agentId"] == KIDS[4])
+        await page.click(f"#tasks [data-dismiss-id='{second['id']}']")
+        await wait(page, "() => document.getElementById('chip-perm').hidden", label="the last card closed")
+        question = snap()["questions"][0]
+        await page.click(f"#questions [data-dismiss-id='{question['id']}']")
+        await wait(page, "() => document.getElementById('chip-ask').hidden", label="the question closed")
+        await page.wait_for_timeout(800)
+        c = res["closedAll"] = await page.evaluate(COUNTS)
+        s = snap()
+        check(failures, c["filter"] == "0" and not c["bar"] and not c["waits"] and T("status.waiting") not in c["listed"], f"nothing counts them any more: {c}")
+        still = [x["id"] for x in s["perms"] + s["questions"] if x["status"] in ("pending", "sent")]
+        check(failures, not still and not [a["id"] for a in s["agents"] if a["state"] == "waiting"], f"no open card, no robot waiting: {still} {[(a['id'], a['state']) for a in s['agents']]}")
+        await page.screenshot(path=str(out / "closed.png"))
+        await page.reload()
+        await ready(page)
+        await page.wait_for_timeout(1500)
+        check(failures, await page.evaluate("() => document.getElementById('chip-perm').hidden && document.getElementById('chip-ask').hidden"), "after a reload nothing is back")
+        hook(hook_event_name="SubagentStop", agent_id=KIDS[3], agent_type="critic")
+        hook(hook_event_name="SubagentStop", agent_id=KIDS[4], agent_type="critic")
+
+        # a question a hook waits on: not old, no 閉じる, whatever the time (a page reports itself visible every 5 s)
+        await page.wait_for_timeout(6000)
+        ask = subprocess.Popen([sys.executable, "-I", "-S", str(forward), "--ask"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=dict(base_env, HOME=str(home)))
+        ask.stdin.write(json.dumps({"session_id": SID, "cwd": CWD, "transcript_path": str(main), "permission_mode": "default", "hook_event_name": "PreToolUse", "tool_name": "AskUserQuestion", "tool_use_id": "q-hook", "tool_input": QUESTION}).encode())
+        ask.stdin.close()
+        ask.stdin = None
+        res["hookQuestion"] = None
+        try:
+            await wait(page, "() => !!document.querySelector('#questions [data-qsend]')", label="the question a hook waits on")
+        finally:
+            res["hookQuestion"] = snap()["questions"][-1:]
+        await page.wait_for_timeout(STALE_MS + 3000)
+        c = res["hookWaits"] = await page.evaluate(STALE)
+        q = snap()["questions"][-1]
+        check(failures, q["hookWaiting"] and not q.get("stale") and c["questionButtons"] == 0 and ask.poll() is None, f"a question a hook waits on has no 閉じる: {q.get('stale')} {c}")
+        hook(hook_event_name="Stop", background_tasks=[], last_assistant_message="終わり")
+        ask.communicate(timeout=10)
+
+        # 6. a restart: cards live in the server's memory, none comes back, the closed ones with them
+        srv.terminate()
+        srv.wait(timeout=10)
+        srv = subprocess.Popen([sys.executable, str(jt / "bin" / "jui"), "viz", "serve", "--port", str(port)], stdout=log, stderr=subprocess.STDOUT,
+                               env=dict(base_env, HOME=str(home), JUI_VIZ_E2E="1", JUI_VIZ_STALE_MS=str(STALE_MS)))
+        for _ in range(400):
+            try:
+                urllib.request.urlopen(f"{url}/health", timeout=1).read()
+                break
+            except OSError:
+                time.sleep(0.1)
+        s = res["restarted"] = {"perms": snap()["perms"], "questions": snap()["questions"]}
+        check(failures, s == {"perms": [], "questions": []}, f"after a restart no closed card is back: {s}")
+        hook(hook_event_name="SessionStart", source="resume")
+        await page.goto(url + "/")
+        await ready(page)
+        await page.wait_for_timeout(1000)
+        check(failures, await page.evaluate("() => document.getElementById('chip-perm').hidden"), "the page after a restart says none waits")
+
+        # 7. the header counts all the projects, the list the one shown: the words say so, the number stays
         # (ticket 2026-11-05-viz-header-permission-count-spans-all-projects)
         hook(OTHER, cwd=OTHER_CWD, hook_event_name="SessionStart", source="startup")
         hook(OTHER, cwd=OTHER_CWD, hook_event_name="PreToolUse", tool_name="Bash", tool_use_id="toolu_G", tool_input={"command": "make"})

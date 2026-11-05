@@ -1740,6 +1740,38 @@ class World:
             self._dirty.add("perms")
         return error
 
+    def dismiss_perm(self, perm_id: str, at: int) -> str | None:
+        card = self.perms.perms.get(perm_id)
+        error = self.perms.dismiss(perm_id, at)
+        if error is None:
+            self.state.add_event({"at": at, "sessionId": card["sessionId"], "agentId": card["agentId"], "kind": "PermissionDismissed",
+                                  "cat": "perm", "text": i18n.tl("ev.perm.dismissed", summary=card["summary"])})
+            self._dirty.add("perms")
+            self._after_dismiss(card, at)
+        return error
+
+    def dismiss_question(self, card_id: str, at: int) -> str | None:
+        card = self.questions.cards.get(card_id)
+        error = self.questions.dismiss(card_id)
+        if error is None:
+            self.state.add_event({"at": at, "sessionId": card["sessionId"], "agentId": card["agentId"], "kind": "QuestionDismissed",
+                                  "cat": "perm", "text": i18n.tl("ev.question.dismissed", summary=" / ".join(q.get("header") or q["question"] for q in card["questions"]))})
+            self._dirty.add("questions")
+            self._after_dismiss(card, at)
+        return error
+
+    def _after_dismiss(self, card: dict, at: int) -> None:
+        """The robot and the session stop saying they wait, unless another open card of theirs says so; a call that goes
+        on brings its own state with its next hook."""
+        sid, aid = card["sessionId"], card["agentId"]
+        still = [c for c in self.perms.perms.values() if c["sessionId"] == sid and c["status"] in ("pending", "sent")]
+        still += [c for c in self.questions.cards.values() if c["sessionId"] == sid and c["status"] == "pending"]
+        agent, session = self.agents.get(aid), self.sessions.get(sid)
+        if agent is not None and agent.get("state") == "waiting" and not any(c["agentId"] == aid for c in still):
+            self._set(agent, at, "idle", i18n.tl("act.dismissed"), waitingOn=None)
+        if session is not None and session.get("status") == "waiting" and not still:
+            self._status(session, "busy", at)
+
     # ---------------------------------------------------------------- Codex (sources/codex_app_server.py)
 
     def apply_codex(self, payloads: list[dict], titles: dict, at: int) -> None:

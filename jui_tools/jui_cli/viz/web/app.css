@@ -478,6 +478,10 @@ body:not([data-scope="all"]) .scope-btn[data-scope-btn] { border-color: var(--in
 .qfoot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .qfoot .pa:disabled { opacity: 0.45; cursor: default; }
 .qnote { margin: 0; color: var(--ink-soft); font-size: 12px; }
+.card-dismiss { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; margin: 6px 0 0; }
+.card-dismiss-note { flex: 1 1 180px; margin: 0; color: var(--ink-soft); font-size: 12px; line-height: 1.5; }
+.pa-dismiss { border-color: var(--line); background: var(--panel); color: var(--ink); }
+.pa-dismiss:disabled { opacity: 0.45; cursor: default; }
 .qnote.qwhy { padding: 6px 8px; border-radius: 6px; background: var(--chip); color: var(--ink); font-size: 13px; font-weight: 700; }
 /* a call stopped by auto mode (51-denials.js) */
 .dcard .dtag { padding: 1px 6px; border-radius: 6px; background: var(--chip); color: var(--ink); font: 700 11px/1.5 var(--font-body); }

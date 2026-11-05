@@ -8,6 +8,7 @@ of it. Nothing here starts claude.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from pathlib import Path
@@ -303,7 +304,132 @@ def test_a_mains_open_question_ends_with_stop_as_before(world):
 # ---------------------------------------------------------------- the words
 
 
-@pytest.mark.parametrize("key", ["panel.perm.stale", "panel.q.stale", "panel.count.waiting.elsewhere", "panel.chip.ask.elsewhere"])
+@pytest.mark.parametrize("key", ["panel.perm.stale", "panel.q.stale", "panel.count.waiting.elsewhere", "panel.chip.ask.elsewhere",
+                                 "panel.card.dismiss", "panel.card.dismissed", "panel.perm.dismiss.note", "panel.q.dismiss.note",
+                                 "ev.perm.dismissed", "ev.question.dismissed", "act.dismissed"])
 def test_every_word_is_in_both_languages(key):
     ja, en = i18n.bundled("ja"), i18n.bundled("en")
     assert ja.get(key) and en.get(key) and ja[key] != en[key], key
+
+
+# ---------------------------------------------------------------- closing an old card by hand (the requester, 11-05: 残して手で閉じる)
+
+
+def test_a_card_under_ten_minutes_cannot_be_closed_and_stays(world):
+    _asks(world, "toolu_A")
+    (card,) = world.perms.items()
+    assert world.dismiss_perm(card["id"], 2_000) == "only a card over 10 minutes old can be closed"
+    assert _statuses(world) == [(KID, "pending")]
+    assert world.dismiss_perm("nope", 2_000) == "unknown permission"
+
+
+def test_closing_an_old_card_sends_nothing_and_a_waiting_hook_prints_nothing(world):
+    _asks(world, "toolu_A")
+    channel = world.perms.hello(SID, 1_000)
+    raw = next(iter(world.perms.perms.values()))
+    raw["_channel"], raw["_requestId"] = channel.id, "r1"
+    channel.open["r1"] = {"request_id": "r1"}
+    loop = asyncio.new_event_loop()
+    future = raw["_future"] = loop.create_future()
+    raw["stale"] = True   # the channel still polling: _old's clock would have dropped it
+    assert world.dismiss_perm(raw["id"], 700_000) is None
+    assert future.result() == {}, "the hook prints nothing: neither allow nor deny"
+    assert world.perms.items() == [] and channel.open == {} and channel.verdicts == []
+    assert world.perms.take_verdicts(channel.id, 700_001) == []
+    assert world.perms.take_prompts(channel.id) == [], "no words go to the session either"
+    loop.close()
+
+
+def test_a_verdict_not_yet_taken_is_dropped_with_the_card(world):
+    _asks(world, "toolu_A")
+    channel = world.perms.hello(SID, 1_000)
+    raw = next(iter(world.perms.perms.values()))
+    raw["_channel"], raw["_requestId"], raw["can"]["allowDeny"] = channel.id, "r1", True
+    channel.open["r1"] = {"request_id": "r1"}
+    assert world.perms.decide(raw["id"], "allow", 2_000) is None
+    assert len(channel.verdicts) == 1
+    raw["stale"] = True
+    assert world.dismiss_perm(raw["id"], 700_000) is None
+    assert channel.verdicts == [] and world.perms.items() == []
+
+
+def test_what_comes_after_closing_finds_no_card_and_brings_none_back(world):
+    _asks(world, "toolu_A")
+    _old(world)
+    card = world.perms.items()[0]
+    assert world.dismiss_perm(card["id"], 700_000) is None
+    who = {"agent_id": KID, "agent_type": "critic"}
+    _result(world.kid, "toolu_A", SAFETY)
+    world._poll_sub_usage(700_001)
+    world.apply_hook(_hook("PostToolUse", tool_name="Bash", tool_use_id="toolu_A", tool_input=CMD, **who), 700_002)
+    world.apply_hook(_hook("PermissionDenied", tool_name="Bash", tool_use_id="toolu_A", tool_input=CMD, reason="x", **who), 700_003)
+    assert world.perms.items() == []
+    assert world.dismiss_perm(card["id"], 700_004) == "unknown permission", "twice: refused, nothing breaks"
+    assert world.perms.decide(card["id"], "allow", 700_005) == "unknown permission", "a late answer from an old page"
+    world.publish()
+    assert world.state.slices["perms"] == []
+
+
+def test_the_robot_stops_waiting_unless_another_card_of_its_own_is_open(world):
+    _asks(world, "toolu_A")
+    _asks(world, "toolu_B", tool_input={"command": "other"}, at=1_100)
+    world.perms.tick(1_101 + STALE_MS)
+    a, b = world.perms.items()
+    assert world.agents[KID]["state"] == "waiting"
+    assert world.dismiss_perm(a["id"], 700_000) is None
+    assert world.agents[KID]["state"] == "waiting", "the other card still waits"
+    assert world.dismiss_perm(b["id"], 700_001) is None
+    assert world.agents[KID]["state"] == "idle"
+    kinds = [e["kind"] for e in world.state.events]
+    assert kinds.count("PermissionDismissed") == 2
+
+
+def test_closing_a_childs_card_leaves_the_mains_and_the_session_waiting(world):
+    _asks(world, "toolu_M", aid=None, tool_input={"command": "main"})
+    _asks(world, "toolu_A", at=1_100)
+    world.perms.tick(1_101 + STALE_MS)
+    mine = next(c for c in world.perms.items() if c["agentId"] == KID)
+    world.sessions[SID]["status"] = "waiting"
+    assert world.dismiss_perm(mine["id"], 700_000) is None
+    assert world.agents[SID]["state"] == "waiting" and world.sessions[SID]["status"] == "waiting"
+    other = world.perms.items()[0]
+    assert world.dismiss_perm(other["id"], 700_001) is None
+    assert world.sessions[SID]["status"] == "busy"
+
+
+def test_a_question_under_ten_minutes_or_with_a_hook_waiting_cannot_be_closed():
+    book = QuestionBook()
+    card = book.from_hook("s1", "s1", QUESTION, "u", 0)
+    assert book.dismiss(card["id"]) == "only a card over 10 minutes old can be closed"
+    card["_future"] = object()
+    card["hookWaiting"] = True
+    book.tick(STALE_MS)
+    assert book.dismiss(card["id"]) == "a hook waits on this question" and card["status"] == "pending"
+    card["stale"] = True   # even so
+    assert book.dismiss(card["id"]) == "a hook waits on this question"
+    del card["_future"]
+    assert book.dismiss(card["id"]) == "a hook waits on this question", "hookWaiting: not given up yet"
+    card["waitEnded"] = True
+    assert book.dismiss(card["id"]) is None and book.items() == []
+
+
+def test_an_old_question_closed_finds_nothing_later(world):
+    world.apply_hook(_hook("PreToolUse", tool_name="AskUserQuestion", tool_use_id="q1", tool_input=QUESTION), 1_000)
+    assert world.agents[SID]["state"] == "waiting"
+    world.questions.tick(1_000 + STALE_MS)
+    card = world.questions.items()[0]
+    assert world.dismiss_question(card["id"], 700_000) is None
+    assert world.questions.items() == [] and world.agents[SID]["state"] == "idle" and world.sessions[SID]["status"] == "busy"
+    world.apply_hook(_hook("PostToolUse", tool_name="AskUserQuestion", tool_use_id="q1", tool_input={**QUESTION, "answers": {"どちら?": "A"}}), 700_001)
+    assert world.questions.items() == []
+    assert world.dismiss_question(card["id"], 700_002) == "unknown question"
+    (event,) = [e for e in world.state.events if e["kind"] == "QuestionDismissed"]
+    assert event["text"].endswith(" H") and "?" not in event["text"], event["text"]
+
+
+def test_the_words_say_nothing_goes_to_the_receiver():
+    ja, en = i18n.bundled("ja"), i18n.bundled("en")
+    for key, ja_says, en_says in (("panel.perm.dismiss.note", ("何も送りません", "許可も拒否もしません"), ("Nothing goes to the receiver", "neither allowed nor denied")),
+                                  ("panel.q.dismiss.note", ("何も送りません", "答えません"), ("Nothing goes to the receiver", "no answer is given"))):
+        assert all(w in ja[key] for w in ja_says), key
+        assert all(w in en[key] for w in en_says), key

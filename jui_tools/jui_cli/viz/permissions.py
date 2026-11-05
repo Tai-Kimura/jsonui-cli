@@ -16,6 +16,11 @@ Life of a card:
 
 Time alone closes nothing: 10 minutes on a card says stale (it may still wait, this server cannot tell), and it can
 still be answered. Ticket 2026-11-05-viz-ten-minute-expiry-removes-a-permission-still-waiting.
+
+A stale card can be closed by hand (the requester, 11-05: 残して手で閉じる): it is removed here and nothing goes to the
+receiver, neither an allow nor a deny; a hook still waiting gets nothing to print, a verdict not yet taken is dropped.
+A result that comes later finds no card. Cards live in this server's memory only: a closed one comes back neither on
+a reload nor after a restart (no card does after a restart).
 """
 from __future__ import annotations
 
@@ -330,6 +335,19 @@ class PermissionBook:
         for card in cards:
             self._turn_ended(card, at)
         return bool(cards)
+
+    def dismiss(self, perm_id: str, at: int) -> str | None:
+        """閉じる on a stale card: gone from the page, nothing sent. None when done, or why it was refused."""
+        card = self.perms.get(perm_id)
+        if card is None:
+            return "unknown permission"
+        if card["status"] not in ("pending", "sent"):
+            return f"already {card['status']}"
+        if not card.get("stale"):
+            return "only a card over 10 minutes old can be closed"
+        self._resolve(card, "dismissed", at)
+        del self.perms[perm_id]
+        return None
 
     def link_use_id(self, card: dict, use_id: str) -> None:
         card["_useId"] = use_id

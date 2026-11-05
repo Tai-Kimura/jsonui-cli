@@ -18,7 +18,8 @@ Life of a card:
      \\--Stop, SessionEnd, the session's next question or prompt--> expired
 
 Time alone closes nothing (this machine's records, 10-18..11-05: 51 of 333 questions were answered after more than 10
-minutes, the longest after 12.9 hours): 10 minutes on a card says stale, as a permission's does.
+minutes, the longest after 12.9 hours): 10 minutes on a card says stale, as a permission's does, and it can be closed by
+hand as a permission's can (permissions.py). A question a hook waits on is neither.
 
 A question declined in the terminal ("User declined to answer questions", measured 10-18) sends neither
 PostToolUse nor PostToolUseFailure, so the session's next question, its next prompt and Stop close a card left open.
@@ -245,6 +246,21 @@ class QuestionBook:
                 self.hook_gave_up(card, "session", at)
                 changed = True
         return changed
+
+    def dismiss(self, card_id: str) -> str | None:
+        """閉じる on a stale card: gone from the page, no answer sent. None when done, or why it was refused."""
+        card = self.cards.get(card_id)
+        if card is None:
+            return "unknown question"
+        if card["status"] != "pending":
+            return f"already {card['status']}"
+        if card.get("_future") or card.get("hookWaiting") and not card.get("waitEnded") and not card.get("released"):
+            return "a hook waits on this question"
+        if not card.get("stale"):
+            return "only a card over 10 minutes old can be closed"
+        self._by_use.pop(card.get("useId") or "", None)
+        del self.cards[card_id]
+        return None
 
     def tick(self, at: int) -> bool:
         changed = False

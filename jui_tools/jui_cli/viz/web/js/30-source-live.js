@@ -351,6 +351,8 @@ const SOURCE = {
   releaseQuestion(id) {
     netRequest('question.release', { questionId: id }).then((ack) => showToast(ack.ok ? tl('live.q.released') : tl('live.q.release.failed', { error: ack.error || tl('live.unknown') })));
   },
+  /* 閉じる on a card over 10 minutes old: removed on the server, nothing goes to the receiver. Resolves the ack. */
+  dismissCard(kind, id) { return netRequest(kind === 'q' ? 'question.dismiss' : 'perm.dismiss', { id }); },
   answerQuestion(id, picks) {
     netRequest('question.answer', { questionId: id, answers: picks }).then((ack) => showToast(ack.ok
       ? tl('live.q.sent') : tl('live.send.failed', { error: ack.error || tl('live.unknown') })));

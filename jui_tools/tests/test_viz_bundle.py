@@ -180,7 +180,7 @@ BUILDERS = {
     "20-core.js": {"pill"},
     "50-panel.js": {
         "roleVar", "robotWho", "actAttr", "chipCls", "wfElement", "li", "tr", "projectTag", "rowHTML", "noteHTML",
-        "permButtons", "permButtonsLive", "permButtonsDemo", "permStale", "permBox", "permDetail", "permDetailLive", "permDetailDemo",
+        "permButtons", "permButtonsLive", "permButtonsDemo", "permStale", "questionStale", "cardDismissHTML", "permBox", "permDetail", "permDetailLive", "permDetailDemo",
         "permSubject", "permSubjectLive", "livePermHow", "rawDetails", "suggestionHTML", "recentHTML",
         "liveTestsHTML", "questionHTML", "robotTestsHTML", "robotRunHTML",
         "histOffHTML",   # 2.3.12: × on an answered card under the history (ticket 2026-10-21-jui-viz-hist-answered-card-dismiss-and-expand)
