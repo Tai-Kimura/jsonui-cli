@@ -1428,6 +1428,14 @@
   "panel.case.retrying": "1 回目は失敗 · 再実行中 · ",
   "panel.case.branch": "分岐: {branch}",
   "panel.case.flaky": " · 1 回目は失敗、再実行で通過",
+  "panel.count.waiting.elsewhere": "許可待ち {n}（他のプロジェクト {m}）",
+  "panel.card.dismiss": "閉じる",
+  "panel.card.dismissed": "閉じました。受け手には何も送っていません",
+  "panel.perm.dismiss.note": "閉じても viz から消えるだけで、受け手には何も送りません（許可も拒否もしません）",
+  "panel.q.dismiss.note": "閉じても viz から消えるだけで、受け手には何も送りません（答えません）",
+  "ev.perm.dismissed": "カードを閉じた（受け手には何も送っていない）{summary}",
+  "ev.question.dismissed": "質問のカードを閉じた（受け手には何も送っていない）{summary}",
+  "act.dismissed": "カードを閉じた（受け手はまだ待っているかもしれない）",
   "panel.count.waiting": "許可待ち {n}",
   "panel.task.session": "{id} セッション",
   "panel.task.perm.outside": "タスクの外で許可を求めている",
@@ -1500,7 +1508,9 @@
   "panel.q.release": "ターミナルで答える",
   "panel.q.note.a": "待っている間はターミナルに質問が出ない · ",
   "panel.q.note.b": "（操作すると延びる）",
+  "panel.q.stale": "10 分以上たっています。まだ待っているかは、ここからは分かりません。",
   "panel.q.why": "{why}。ターミナルで答えてください（ここでは選べません）",
+  "panel.chip.ask.elsewhere": {"other": "質問 {n}（他のプロジェクト {m}）"},
   "panel.chip.ask": {
     "other": "質問 {n}"
   },
@@ -1688,6 +1698,7 @@
   "panel.pc.details": "› 詳細",
   "panel.rules.added": "このデモで足した常時許可: ",
   "panel.rules.reset": "取り消す",
+  "panel.perm.stale": "10 分以上たっています。まだ待っているかは、ここからは分かりません（受け手の画面で確かめられます）",
   "panel.perm.elsewhere": {
     "other": "ほかのプロジェクトでも {n} 件が許可を待っている"
   },

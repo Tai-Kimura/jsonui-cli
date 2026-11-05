@@ -1145,6 +1145,9 @@ class World:
             text = i18n.tl("ev.subagent.in", agent=agent_type or aid)
         elif kind == "SubagentStop":
             message = _head(payload.get("last_assistant_message"), MESSAGE_MAX)
+            self._read_sub_transcript(agent["id"], agent, at)   # its last results say how its cards ended, when they do
+            if self.perms.agent_stopped(sid, agent["id"], at):
+                self._dirty.add("perms")
             self._set(agent, at, "done", i18n.tl("status.done"), lastMessage=message, leftAt=at, skill=None)
             self._until[agent["id"]] = (at + SUBAGENT_LINGER_MS, "gone")
             text = i18n.tl("ev.subagent.out", agent=agent_type or aid)
@@ -1216,7 +1219,7 @@ class World:
         """The robot's turn has ended: by its Stop / StopFailure hook, or by the page's 停止 (no Stop hook comes then)."""
         sid = session["id"]
         if agent["kind"] == "main":
-            self.perms.session_stopped(sid, at)
+            self.perms.session_stopped(sid, at, subagents_at_work=busy)
             self._dirty.add("perms")
             if self.questions.session_stopped(sid, at):
                 self._dirty.add("questions")
@@ -1736,6 +1739,38 @@ class World:
             })
             self._dirty.add("perms")
         return error
+
+    def dismiss_perm(self, perm_id: str, at: int) -> str | None:
+        card = self.perms.perms.get(perm_id)
+        error = self.perms.dismiss(perm_id, at)
+        if error is None:
+            self.state.add_event({"at": at, "sessionId": card["sessionId"], "agentId": card["agentId"], "kind": "PermissionDismissed",
+                                  "cat": "perm", "text": i18n.tl("ev.perm.dismissed", summary=card["summary"])})
+            self._dirty.add("perms")
+            self._after_dismiss(card, at)
+        return error
+
+    def dismiss_question(self, card_id: str, at: int) -> str | None:
+        card = self.questions.cards.get(card_id)
+        error = self.questions.dismiss(card_id)
+        if error is None:
+            self.state.add_event({"at": at, "sessionId": card["sessionId"], "agentId": card["agentId"], "kind": "QuestionDismissed",
+                                  "cat": "perm", "text": i18n.tl("ev.question.dismissed", summary=" / ".join(q.get("header") or q["question"] for q in card["questions"]))})
+            self._dirty.add("questions")
+            self._after_dismiss(card, at)
+        return error
+
+    def _after_dismiss(self, card: dict, at: int) -> None:
+        """The robot and the session stop saying they wait, unless another open card of theirs says so; a call that goes
+        on brings its own state with its next hook."""
+        sid, aid = card["sessionId"], card["agentId"]
+        still = [c for c in self.perms.perms.values() if c["sessionId"] == sid and c["status"] in ("pending", "sent")]
+        still += [c for c in self.questions.cards.values() if c["sessionId"] == sid and c["status"] == "pending"]
+        agent, session = self.agents.get(aid), self.sessions.get(sid)
+        if agent is not None and agent.get("state") == "waiting" and not any(c["agentId"] == aid for c in still):
+            self._set(agent, at, "idle", i18n.tl("act.dismissed"), waitingOn=None)
+        if session is not None and session.get("status") == "waiting" and not still:
+            self._status(session, "busy", at)
 
     # ---------------------------------------------------------------- Codex (sources/codex_app_server.py)
 
@@ -2377,24 +2412,29 @@ class World:
                     self._tails.pop(key, None)
                     self._billed.pop(aid, None)
                 continue
-            tail = self._tails.get(key)
-            if tail is None:
-                cwd, given = self._paths.get(agent["sessionId"], (None, None))
-                try:
-                    path = self.transcript_path(agent["sessionId"], cwd, given, aid, self._agent_paths.get(aid))
-                except TypeError:          # a finder that knows no subagents (a test's)
-                    path = None
-                if path is None:
-                    continue
-                from .sources.transcripts import UsageTail
-                tail = self._tails[key] = UsageTail(path)
-            got = tail.read()
-            self._bill(aid, agent["sessionId"], got.get("bills"), at)
-            self._denied_records(agent["sessionId"], aid, got.get("denials"), at)
-            self._call_results(agent["sessionId"], aid, got.get("results"), at)
+            self._read_sub_transcript(aid, agent, at)
         for key in [k for k in self._tails if isinstance(k, str) and k.startswith("sub:") and k[4:] not in self.agents]:
             self._tails.pop(key, None)
             self._billed.pop(key[4:], None)
+
+    def _read_sub_transcript(self, aid: str, agent: dict, at: int) -> None:
+        """What a subagent's transcript has added: its bills, its denials, how its calls ended."""
+        key = f"sub:{aid}"
+        tail = self._tails.get(key)
+        if tail is None:
+            cwd, given = self._paths.get(agent["sessionId"], (None, None))
+            try:
+                path = self.transcript_path(agent["sessionId"], cwd, given, aid, self._agent_paths.get(aid))
+            except TypeError:          # a finder that knows no subagents (a test's)
+                path = None
+            if path is None:
+                return
+            from .sources.transcripts import UsageTail
+            tail = self._tails[key] = UsageTail(path)
+        got = tail.read()
+        self._bill(aid, agent["sessionId"], got.get("bills"), at)
+        self._denied_records(agent["sessionId"], aid, got.get("denials"), at)
+        self._call_results(agent["sessionId"], aid, got.get("results"), at)
 
     def _denied_records(self, sid: str, agent_id: str, got, at: int) -> None:
         """Auto mode denials read from a transcript (sources/transcripts.denial_of): the same cards as the hook's."""

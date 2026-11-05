@@ -15,7 +15,11 @@ question's text, valued by the chosen option's label; multiple choices are label
 Life of a card:
   pending --browser answer--> sent --PostToolUse--> answered (browser)
      |--PostToolUse first (the terminal answered)--> answered_in_terminal
-     \\--Stop, SessionEnd, the session's next question or prompt / 10 min--> expired
+     \\--Stop, SessionEnd, the session's next question or prompt--> expired
+
+Time alone closes nothing (this machine's records, 10-18..11-05: 51 of 333 questions were answered after more than 10
+minutes, the longest after 12.9 hours): 10 minutes on a card says stale, as a permission's does, and it can be closed by
+hand as a permission's can (permissions.py). A question a hook waits on is neither.
 
 A question declined in the terminal ("User declined to answer questions", measured 10-18) sends neither
 PostToolUse nor PostToolUseFailure, so the session's next question, its next prompt and Stop close a card left open.
@@ -33,6 +37,8 @@ from __future__ import annotations
 
 import itertools
 import secrets
+
+from .permissions import stale_ms
 
 EXPIRE_MS = 10 * 60_000
 #: Longer than this, a text is not shown in full, and the card gets no answer buttons: an answer cannot be chosen
@@ -241,11 +247,26 @@ class QuestionBook:
                 changed = True
         return changed
 
+    def dismiss(self, card_id: str) -> str | None:
+        """閉じる on a stale card: gone from the page, no answer sent. None when done, or why it was refused."""
+        card = self.cards.get(card_id)
+        if card is None:
+            return "unknown question"
+        if card["status"] != "pending":
+            return f"already {card['status']}"
+        if card.get("_future") or card.get("hookWaiting") and not card.get("waitEnded") and not card.get("released"):
+            return "a hook waits on this question"
+        if not card.get("stale"):
+            return "only a card over 10 minutes old can be closed"
+        self._by_use.pop(card.get("useId") or "", None)
+        del self.cards[card_id]
+        return None
+
     def tick(self, at: int) -> bool:
         changed = False
         for card in list(self.cards.values()):
-            if card["status"] == "pending" and at - card["createdAt"] >= EXPIRE_MS and not card.get("_future"):
-                card["status"], card["doneAt"] = "expired", at
+            if card["status"] == "pending" and not card.get("stale") and at - card["createdAt"] >= stale_ms() and not card.get("_future"):
+                card["stale"] = True
                 changed = True
             if card["status"] != "pending" and at - card.get("doneAt", at) >= EXPIRE_MS:
                 self._by_use.pop(card.get("useId") or "", None)
@@ -255,5 +276,5 @@ class QuestionBook:
 
     def items(self) -> list[dict]:
         keep = ("id", "sessionId", "agentId", "createdAt", "status", "questions", "tooLongToShow", "hookWaiting",
-                "waitUntil", "waitEnded", "waitEndReason", "waitEndedAt", "released", "sentAt", "sentAnswers", "doneAt", "gotAnswers")
+                "waitUntil", "waitEnded", "waitEndReason", "waitEndedAt", "released", "sentAt", "sentAnswers", "doneAt", "gotAnswers", "stale")
         return [{k: c[k] for k in keep if k in c} for c in sorted(self.cards.values(), key=lambda c: c["createdAt"])]

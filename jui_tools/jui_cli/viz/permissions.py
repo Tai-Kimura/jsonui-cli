@@ -11,16 +11,27 @@ Life of a card:
      |                             \\--PermissionDenied--> deny (browser)
      |--PostToolUse / PermissionDenied first--> answered_in_terminal
      |--the transcript's tool_result of the call, when no hook said so (call_result)--> as the hook would, or expired
-     \\--Stop, SessionEnd, 10 min--> expired
+     |--its subagent's SubagentStop--> expired: a turn that is over has no call waiting
+     \\--Stop (a subagent's card only when no background work goes on), SessionEnd, the session's process gone--> expired
+
+Time alone closes nothing: 10 minutes on a card says stale (it may still wait, this server cannot tell), and it can
+still be answered. Ticket 2026-11-05-viz-ten-minute-expiry-removes-a-permission-still-waiting.
+
+A stale card can be closed by hand (the requester, 11-05: 残して手で閉じる): it is removed here and nothing goes to the
+receiver, neither an allow nor a deny; a hook still waiting gets nothing to print, a verdict not yet taken is dropped.
+A result that comes later finds no card. Cards live in this server's memory only: a closed one comes back neither on
+a reload nor after a restart (no card does after a restart).
 """
 from __future__ import annotations
 
 import itertools
 import json
+import os
 import re
 import secrets
 
-EXPIRE_MS = 10 * 60_000
+EXPIRE_MS = 10 * 60_000   # how long a settled card stays
+STALE_MS = 10 * 60_000
 LINK_WINDOW_MS = 15_000
 HOOK_WAIT_MS = 2_000
 CHANNEL_DEAD_MS = 60_000
@@ -43,6 +54,13 @@ NOT_PERMISSIONS = frozenset({"AskUserQuestion"})
 SAFETY_CHECK = "Permission for this command was denied by a built-in Claude Code safety check"
 REFUSED = ("The user doesn't want to proceed with this tool use", "The user doesn't want to take this action",
            "Permission for this action was denied by the Claude Code auto mode classifier.")
+
+
+def stale_ms() -> int:
+    """STALE_MS; a browser test does not wait 10 minutes (JUI_VIZ_STALE_MS, read only under JUI_VIZ_E2E=1)."""
+    if os.environ.get("JUI_VIZ_E2E") == "1" and os.environ.get("JUI_VIZ_STALE_MS", "").isdigit():
+        return int(os.environ["JUI_VIZ_STALE_MS"])
+    return STALE_MS
 
 
 def outcome_of(is_error: bool, head: str) -> str:
@@ -294,17 +312,42 @@ class PermissionBook:
             self._finish(card, outcome == "ran", at)
         return card
 
-    def session_stopped(self, sid: str, at: int) -> None:
+    def _turn_ended(self, card: dict, at: int) -> None:
+        # A refusal sends no PostToolUse and no PermissionDenied (live
+        # check, 10-18), so a sent deny has nothing to settle it but
+        # the end of the turn. Had the terminal allowed first, PostToolUse would
+        # have settled the card before the turn ended.
+        if card["status"] == "sent" and card.get("sentBehavior") == "deny":
+            self._resolve(card, "deny", at, by="browser")
+        else:
+            self._resolve(card, "expired", at)
+
+    def session_stopped(self, sid: str, at: int, subagents_at_work: bool = False) -> None:
+        """The session's turn is over, or the session is. With subagents_at_work (its Stop while background work goes
+        on) only the main session's own cards: a subagent in the background still waits on its own."""
         for card in self.perms.values():
-            if card["sessionId"] == sid and card["status"] in ("pending", "sent"):
-                # A refusal sends no PostToolUse and no PermissionDenied (live
-                # check, 10-18), so a sent deny has nothing to settle it but
-                # this Stop. Had the terminal allowed first, PostToolUse would
-                # have settled the card before the turn ended.
-                if card["status"] == "sent" and card.get("sentBehavior") == "deny":
-                    self._resolve(card, "deny", at, by="browser")
-                else:
-                    self._resolve(card, "expired", at)
+            if card["sessionId"] == sid and card["status"] in ("pending", "sent") and not (subagents_at_work and card["agentId"] != sid):
+                self._turn_ended(card, at)
+
+    def agent_stopped(self, sid: str, aid: str, at: int) -> bool:
+        """A subagent's turn is over (SubagentStop): none of its calls can still be waiting. Only its own cards."""
+        cards = [c for c in self.perms.values() if c["sessionId"] == sid and c["agentId"] == aid and c["status"] in ("pending", "sent")]
+        for card in cards:
+            self._turn_ended(card, at)
+        return bool(cards)
+
+    def dismiss(self, perm_id: str, at: int) -> str | None:
+        """閉じる on a stale card: gone from the page, nothing sent. None when done, or why it was refused."""
+        card = self.perms.get(perm_id)
+        if card is None:
+            return "unknown permission"
+        if card["status"] not in ("pending", "sent"):
+            return f"already {card['status']}"
+        if not card.get("stale"):
+            return "only a card over 10 minutes old can be closed"
+        self._resolve(card, "dismissed", at)
+        del self.perms[perm_id]
+        return None
 
     def link_use_id(self, card: dict, use_id: str) -> None:
         card["_useId"] = use_id
@@ -473,8 +516,8 @@ class PermissionBook:
                                can={"allowDeny": True, "always": False, "reason": False})
                     changed = True
         for card in self.perms.values():
-            if card["status"] in ("pending", "sent") and at - card["createdAt"] >= EXPIRE_MS:
-                self._resolve(card, "expired", at)
+            if card["status"] in ("pending", "sent") and not card.get("stale") and at - card["createdAt"] >= stale_ms():
+                card["stale"] = True
                 changed = True
         for cid, channel in list(self.channels.items()):
             if at - channel.last_seen >= CHANNEL_DEAD_MS:

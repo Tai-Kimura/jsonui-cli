@@ -57,6 +57,8 @@ function robotBadgeKind(id) {
   const s = robotState[id].state;
   // a question waits for the person too, but it is no permission: its own badge and filter (requester, 10-18)
   if (s === 'waiting') return robotState[id].asking ? 'asking' : 'waiting';
+  // an open permission card counts wherever it is counted: a subagent that has gone leaves its card to the main robot, which works on
+  if (latestModel && latestModel.pending.some((p) => p.who === id)) return 'waiting';
   return ['done', 'idle', 'thinking', 'background', 'limited'].includes(s) ? s : 'busy';
 }
 const badgeOf = (kind) => [BADGES[kind][0], tl(BADGES[kind][1])];
@@ -88,7 +90,7 @@ const roleVar = (s) => (s.by ? ` style="--c:${ROLES[DEF[s.by].role].color}"` : '
    four-times-a-second refresh; the changing text and bars inside are updated in place. */
 /* Everything a permission card shows that can change while it waits: its state, what the hooks allow (the async
    forward reports first with nothing allowed; --decide comes a moment later and allows the buttons), what was sent. */
-const permSig = (p) => (p ? JSON.stringify([p.id, p.status, p.can, p.tooLongToShow, p.sentBy, p.sentRules, p.sentReason, p.input && p.input.command, p.task]) : '');
+const permSig = (p) => (p ? JSON.stringify([p.id, p.status, p.stale, p.can, p.tooLongToShow, p.sentBy, p.sentRules, p.sentReason, p.input && p.input.command, p.task]) : '');
 function keyed(el, sig, build) {
   if (el._sig === sig) return;
   const a = document.activeElement, fk = el.contains(a) ? a.dataset.fk : undefined;
@@ -231,7 +233,9 @@ function renderPanel(model) {
 
   const chip = $('chip-perm');
   chip.hidden = model.pending.length === 0;
-  setText(chip, tl('panel.count.waiting', { n: model.pending.length }));
+  // the count is all the projects', so none is missed; shown narrowed to one project, the words say what lies outside it
+  const permElsewhere = model.pending.filter((p) => !inScope(projectOfRobot(p.who))).length;
+  setText(chip, permElsewhere ? tl('panel.count.waiting.elsewhere', { n: model.pending.length, m: permElsewhere }) : tl('panel.count.waiting', { n: model.pending.length }));
   renderQuestions();
   renderDenials();
   paintSince($('denied'), model.t, tl('panel.since.elapsed'));
@@ -268,7 +272,23 @@ function permSubjectLive(p) {
   return `<span class="perm-exact" tabindex="0">${partsHTML.join('')}</span>`;
 }
 const permSubject = (p) => (SOURCE.mode === 'live' ? permSubjectLive(p) : `<code>${esc(permSummary(p))}</code>`);
-const permBox = (p, where = 's') => `<div class="perm-box" data-perm-box="${esc(p.id)}"><p class="perm-q"><b>${esc(p.tool)}</b> ${permSubject(p)}</p><div class="perm-acts">${permButtons(p, where)}</div></div>`;
+/* 10 minutes on a card: it may still wait, or its receiver may have moved on without a word. It stays, says so, and can
+   be closed by hand (the requester, 11-05: 残して手で閉じる): nothing goes to the receiver, and the words say that. */
+const cardDismissHTML = (kind, id, fk, note) => `<div class="card-dismiss"><p class="card-dismiss-note">${esc(tl(note))}</p><button type="button" class="pa pa-dismiss" data-dismiss="${esc(kind)}" data-dismiss-id="${esc(id)}" data-fk="${esc(fk)}">${esc(tl('panel.card.dismiss'))}</button></div>`;
+const permStale = (p, where = '') => (p.stale ? `<p class="perm-relay perm-stale">${esc(tl('panel.perm.stale'))}</p>${cardDismissHTML('perm', p.id, where + 'pd-' + p.id, 'panel.perm.dismiss.note')}` : '');
+const questionStale = (q, where) => (q.stale ? `<p class="qnote qwhy" role="note">${esc(tl('panel.q.stale'))}</p>${cardDismissHTML('q', q.id, where + 'qd-' + q.id, 'panel.q.dismiss.note')}` : '');
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-dismiss]');
+  if (!b) return;
+  const isQ = b.dataset.dismiss === 'q', id = b.dataset.dismissId;
+  b.disabled = true;
+  dropDrafts(isQ ? `q:${id}:` : `perm:${id}:`);
+  SOURCE.dismissCard(isQ ? 'q' : 'perm', id).then((ack) => {
+    if (ack.ok) showToast(tl('panel.card.dismissed'));
+    else { b.disabled = false; showToast(tl('live.send.failed', { error: ack.error || tl('live.unknown') })); }
+  });
+});
+const permBox = (p, where = 's') => `<div class="perm-box" data-perm-box="${esc(p.id)}"><p class="perm-q"><b>${esc(p.tool)}</b> ${permSubject(p)}</p>${permStale(p, where)}<div class="perm-acts">${permButtons(p, where)}</div></div>`;
 function recentHTML(id) {
   const items = logItems.filter((e) => e.who === id).slice(0, 6);
   return items.length ? items.map((e) => `<li><time>${fmtClock(BASE_CLOCK + e.abs)}</time><span><b>${esc(e.kind)}</b> ${esc(e.what)}</span></li>`).join('') : `<li><span>${esc(tl('panel.recent.none'))}</span></li>`;
@@ -443,7 +463,7 @@ function questionHTML(q, where = '') {   // where: '' in the panel, 'b' on the b
   // While the hook waits the terminal shows no question (measured 10-18): the time left, and the way to the terminal.
   const footHTML = open ? `<div class="qfoot"><button type="button" class="pa pa-allow" data-qsend="${esc(q.id)}" data-fk="${esc(where)}qs-${esc(q.id)}" disabled>${esc(tl('panel.q.send'))}</button><button type="button" class="pa pa-deny" data-qrelease="${esc(q.id)}" data-fk="${esc(where)}qr-${esc(q.id)}">${esc(tl('panel.q.release'))}</button></div><p class="qnote">${esc(tl('panel.q.note.a'))}<span data-quntil="${esc(q.id)}"></span>${esc(tl('panel.q.note.b'))}</p>`
     : closed ? '' : `<p class="qnote qdone">${esc(qState(q))}</p>`;
-  const whyHTML = closed ? `<p class="qnote qwhy" role="note">${esc(tl('panel.q.why', { why: qWhy(q) }))}</p>` : '';
+  const whyHTML = closed ? `<p class="qnote qwhy" role="note">${esc(tl('panel.q.why', { why: qWhy(q) }))}</p>${questionStale(q, where)}` : '';
   return `<article class="qcard${open ? ' q-open' : ''}${closed ? ' q-closed' : ''}" data-qcard="${esc(q.id)}"><header class="qwho">${pill(q.who, DEF[q.who].role)}<span>${esc(DEF[q.who].agent)}</span><span class="pc-wait" data-since="${q.at}"></span>${histOffHTML(where, 'q', q.id, q.status !== 'pending')}</header>${whyHTML}${itemsHTML}${footHTML}</article>`;
 }
 /* The question cards the panel shows and the board shows (2.3.5): one list from QUESTIONS, oldest first. */
@@ -455,14 +475,15 @@ function questionsShown(now = Date.now()) {
    the first and says how many of the second (as its permission strip does), so the chip = cards in scope + elsewhere. */
 const questionsWaiting = () => QUESTIONS.filter((q) => q.status === 'pending');
 const questionsElsewhere = () => questionsWaiting().filter((q) => !inScope(projectOfRobot(q.who))).length;
-const questionsSig = (shown) => JSON.stringify([NAMES.rev, ...shown.map((q) => [q.id, q.status, q.hookWaiting, q.tooLongToShow, q.waitEnded, q.waitEndReason, q.waitEndedAt, q.released, q.sentAnswers, q.gotAnswers])]);
+const questionsSig = (shown) => JSON.stringify([NAMES.rev, ...shown.map((q) => [q.id, q.status, q.stale, q.hookWaiting, q.tooLongToShow, q.waitEnded, q.waitEndReason, q.waitEndedAt, q.released, q.sentAnswers, q.gotAnswers])]);
 function renderQuestions() {
   const now = Date.now();
   const shown = questionsShown(now);
   const waiting = questionsWaiting().length;
   const chip = $('chip-ask');
   chip.hidden = waiting === 0;
-  setText(chip, tl('panel.chip.ask', { n: waiting }));
+  const askElsewhere = questionsElsewhere();   // as the permission chip's
+  setText(chip, askElsewhere ? tl('panel.chip.ask.elsewhere', { n: waiting, m: askElsewhere }) : tl('panel.chip.ask', { n: waiting }));
   $('questions-sec').hidden = shown.length === 0;
   keyed($('questions'), questionsSig(shown), () => shown.map((q) => questionHTML(q)).join(''));
   for (const el of document.querySelectorAll('#questions [data-quntil], #q-strip [data-quntil], [data-h-cards] [data-quntil]')) {   // the countdown, in place (inputs keep their state)
@@ -1488,7 +1509,7 @@ ${sample ? rawDetails(sample) : ''}`;
   detailEl.querySelectorAll('[data-recent]').forEach((el) => setHTML(el, recentHTML(el.dataset.recent)));
 }
 const permDetail = (p, where) => (SOURCE.mode === 'live' ? permDetailLive(p, where) : permDetailDemo(p, where));
-const permDetailLive = (p, where) => `<div class="tbd-perm"><h4>${esc(tl('panel.perm.asking'))}</h4><p>${pill(p.who, DEF[p.who].role)} ${esc(DEF[p.who].agent)} ${esc(tl('panel.perm.wants.pre'))}<b>${esc(p.tool)}</b>${esc(tl('panel.perm.wants.post'))}<span class="tbd-wait" data-since="${p.at}"></span></p><div class="tbd-cmd">${permSubjectLive(p)}</div>${p.can.reason ? `<label class="tbd-reason">${esc(tl('panel.perm.reason'))}<input type="text" id="${esc(where)}-reason" autocomplete="off" data-keep="${esc(`perm:${p.id}:reason`)}"></label>` : ''}<div class="perm-acts">${permButtons(p, where)}</div><p class="tbd-note">${PERM_NOTE}${p.relayOnly ? esc(tl('panel.perm.relayonly')) : ''}</p></div>`;
+const permDetailLive = (p, where) => `<div class="tbd-perm"><h4>${esc(tl('panel.perm.asking'))}</h4><p>${pill(p.who, DEF[p.who].role)} ${esc(DEF[p.who].agent)} ${esc(tl('panel.perm.wants.pre'))}<b>${esc(p.tool)}</b>${esc(tl('panel.perm.wants.post'))}<span class="tbd-wait" data-since="${p.at}"></span></p><div class="tbd-cmd">${permSubjectLive(p)}</div>${permStale(p, where)}${p.can.reason ? `<label class="tbd-reason">${esc(tl('panel.perm.reason'))}<input type="text" id="${esc(where)}-reason" autocomplete="off" data-keep="${esc(`perm:${p.id}:reason`)}"></label>` : ''}<div class="perm-acts">${permButtons(p, where)}</div><p class="tbd-note">${PERM_NOTE}${p.relayOnly ? esc(tl('panel.perm.relayonly')) : ''}</p></div>`;
 const permDetailDemo = (p, where) => `<div class="tbd-perm"><h4>${esc(tl('panel.perm.asking'))}</h4><p>${pill(p.who, DEF[p.who].role)} ${esc(DEF[p.who].agent)} ${esc(tl('panel.perm.wants.pre'))}<b>${esc(p.tool)}</b>${esc(tl('panel.perm.wants.post'))}<span class="tbd-wait" data-since="${p.at}"></span></p><pre class="tbd-cmd">${esc(permSummary(p))}</pre><label class="tbd-reason">${esc(tl('panel.perm.reason'))}<input type="text" id="${esc(where)}-reason" placeholder="${esc(tl('panel.perm.reason.example'))}" autocomplete="off" data-keep="${esc(`perm:${p.id}:reason`)}"></label><div class="perm-acts">${permButtons(p, where)}</div><p class="tbd-note">${PERM_NOTE}${tlHTML('panel.perm.demo.note', { rule: p.rule })}</p></div>`;
 /* The relay's request id: five lowercase letters without "l". */
 const relayId = (p) => [...`${p.id}${p.who}xyz`].slice(0, 5).map((ch, k) => 'abcdefghijkmnopqrstuvwxyz'[(ch.charCodeAt(0) * 7 + k * 11) % 25]).join('');

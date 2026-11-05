@@ -1521,6 +1521,19 @@ async def _handle_browser_message(ctx: ServerContext, sock, message: dict) -> No
         if error:
             reply["error"] = error
         await sock.send_json(reply)
+    elif kind in ("perm.dismiss", "question.dismiss"):
+        # 閉じる on a stale card (the requester, 11-05): nothing goes to the receiver
+        card_id = message.get("id")
+        if ctx.world is None or not isinstance(card_id, str):
+            await sock.send_json({"type": "ack", "reqId": req_id, "ok": False, "error": "id is required"})
+            return
+        error = ctx.world.dismiss_perm(card_id, now_ms()) if kind == "perm.dismiss" else ctx.world.dismiss_question(card_id, now_ms())
+        if ctx.publish:
+            ctx.publish()
+        reply = {"type": "ack", "reqId": req_id, "ok": error is None}
+        if error:
+            reply["error"] = error
+        await sock.send_json(reply)
     elif kind in ("question.hold", "question.release"):
         card_id = message.get("questionId")
         if ctx.world is None or not isinstance(card_id, str):
