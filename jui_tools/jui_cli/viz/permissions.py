@@ -12,16 +12,21 @@ Life of a card:
      |--PostToolUse / PermissionDenied first--> answered_in_terminal
      |--the transcript's tool_result of the call, when no hook said so (call_result)--> as the hook would, or expired
      |--its subagent's SubagentStop--> expired: a turn that is over has no call waiting
-     \\--Stop (a subagent's card only when no background work goes on), SessionEnd, 10 min--> expired
+     \\--Stop (a subagent's card only when no background work goes on), SessionEnd, the session's process gone--> expired
+
+Time alone closes nothing: 10 minutes on a card says stale (it may still wait, this server cannot tell), and it can
+still be answered. Ticket 2026-11-05-viz-ten-minute-expiry-removes-a-permission-still-waiting.
 """
 from __future__ import annotations
 
 import itertools
 import json
+import os
 import re
 import secrets
 
-EXPIRE_MS = 10 * 60_000
+EXPIRE_MS = 10 * 60_000   # how long a settled card stays
+STALE_MS = 10 * 60_000
 LINK_WINDOW_MS = 15_000
 HOOK_WAIT_MS = 2_000
 CHANNEL_DEAD_MS = 60_000
@@ -44,6 +49,13 @@ NOT_PERMISSIONS = frozenset({"AskUserQuestion"})
 SAFETY_CHECK = "Permission for this command was denied by a built-in Claude Code safety check"
 REFUSED = ("The user doesn't want to proceed with this tool use", "The user doesn't want to take this action",
            "Permission for this action was denied by the Claude Code auto mode classifier.")
+
+
+def stale_ms() -> int:
+    """STALE_MS; a browser test does not wait 10 minutes (JUI_VIZ_STALE_MS, read only under JUI_VIZ_E2E=1)."""
+    if os.environ.get("JUI_VIZ_E2E") == "1" and os.environ.get("JUI_VIZ_STALE_MS", "").isdigit():
+        return int(os.environ["JUI_VIZ_STALE_MS"])
+    return STALE_MS
 
 
 def outcome_of(is_error: bool, head: str) -> str:
@@ -486,8 +498,8 @@ class PermissionBook:
                                can={"allowDeny": True, "always": False, "reason": False})
                     changed = True
         for card in self.perms.values():
-            if card["status"] in ("pending", "sent") and at - card["createdAt"] >= EXPIRE_MS:
-                self._resolve(card, "expired", at)
+            if card["status"] in ("pending", "sent") and not card.get("stale") and at - card["createdAt"] >= stale_ms():
+                card["stale"] = True
                 changed = True
         for cid, channel in list(self.channels.items()):
             if at - channel.last_seen >= CHANNEL_DEAD_MS:

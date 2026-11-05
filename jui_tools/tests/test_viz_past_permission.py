@@ -14,7 +14,10 @@ from pathlib import Path
 
 import pytest
 
+from jui_cli.viz import i18n
 from jui_cli.viz.ingest import World
+from jui_cli.viz.permissions import EXPIRE_MS, HOOK_WAIT_MS, STALE_MS, PermissionBook, stale_ms
+from jui_cli.viz.questions import QuestionBook
 from jui_cli.viz.sources.transcripts import transcript_path
 from jui_cli.viz.state import VizState
 from tests.test_viz_perm_call_result import CLASSIFIER, SAFETY, USER_NO
@@ -187,10 +190,120 @@ def test_session_end_closes_everything(world):
     assert _statuses(world) == [(KID, "expired")]
 
 
-def test_the_ten_minutes_are_still_the_last_word(world):
-    from jui_cli.viz.permissions import EXPIRE_MS
+# ---------------------------------------------------------------- time alone closes nothing
+# ticket 2026-11-05-viz-ten-minute-expiry-removes-a-permission-still-waiting
+
+
+def _old(world, at=1_001):
+    world.perms.tick(at + STALE_MS - 1)
+    assert not world.perms.items()[0].get("stale")
+    assert world.perms.tick(at + STALE_MS) is True
+    assert world.perms.tick(at + STALE_MS + 1) is False, "said once"
+
+
+def test_ten_minutes_say_stale_and_the_card_stays_and_can_be_answered(world):
     _asks(world, "toolu_A")
-    world.perms.tick(1_001 + EXPIRE_MS - 1)
-    assert _statuses(world) == [(KID, "pending")]
-    world.perms.tick(1_001 + EXPIRE_MS)
+    _old(world)
+    (card,) = world.perms.items()
+    assert card["status"] == "pending" and card["stale"] is True
+    channel = world.perms.hello(SID, 1_000)
+    raw = next(iter(world.perms.perms.values()))
+    raw["_channel"], raw["_requestId"], raw["can"]["allowDeny"] = channel.id, "r1", True
+    channel.open["r1"] = {"request_id": "r1"}
+    assert world.perms.decide(card["id"], "allow", 1_001 + STALE_MS + 2) is None, "a late answer still goes"
+    assert world.perms.items()[0]["status"] == "sent"
+
+
+@pytest.mark.parametrize("ending", [
+    lambda w: w.apply_hook(_hook("SessionEnd"), 900_000),
+    lambda w: w.apply_hook(_hook("Stop", background_tasks=[]), 900_000),
+    lambda w: w.apply_hook(_hook("SubagentStop", agent_id=KID, agent_type="critic"), 900_000),
+    lambda w: (_result(w.kid, "toolu_A", SAFETY), w._poll_sub_usage(900_000)),
+    lambda w: (w.session_proc.__setitem__(SID, (1, None, "cli")), w.end_vanished(set(), set(), 900_000)),
+], ids=["session-end", "stop", "child-end", "its-result", "process-gone"])
+def test_a_stale_card_ends_as_any_card_does(world, ending):
+    _asks(world, "toolu_A")
+    _old(world)
+    ending(world)
     assert _statuses(world) == [(KID, "expired")]
+
+
+def test_a_process_still_listed_closes_nothing(world):
+    _asks(world, "toolu_A")
+    world.session_proc[SID] = (1, None, "cli")
+    assert world.end_vanished({SID}, set(), 900_000) == [] and world.end_vanished(set(), {SID}, 900_000) == []
+    assert _statuses(world) == [(KID, "pending")]
+
+
+def test_a_channel_only_card_says_stale_too_and_ends_with_the_turn():
+    book = PermissionBook()
+    channel = book.hello("s1", 0)
+    assert book.channel_request(channel.id, {"request_id": "r1", "tool_name": "Bash", "description": "x", "input_preview": "{}"}, 0)
+    book.tick(HOOK_WAIT_MS)
+    (card,) = book.items()
+    assert card["relayOnly"] is True
+    book.tick(HOOK_WAIT_MS + STALE_MS)
+    assert book.items()[0]["status"] == "pending" and book.items()[0]["stale"] is True
+    assert book.items()[0]["can"]["allowDeny"] is False, "its channel has been silent: no buttons, as before"
+    book.session_stopped("s1", HOOK_WAIT_MS + STALE_MS + 1)
+    assert book.items()[0]["status"] == "expired"
+
+
+def test_a_settled_card_still_goes_after_its_keeping_time():
+    book = PermissionBook()
+    book.from_hook("s1", "s1", "Bash", {"command": "x"}, "u", None, 0)
+    book.session_stopped("s1", 5)
+    book.tick(5 + EXPIRE_MS - 1)
+    assert len(book.items()) == 1
+    book.tick(5 + EXPIRE_MS)
+    assert book.items() == []
+
+
+def test_the_test_only_override_is_read_only_under_the_e2e(monkeypatch):
+    monkeypatch.setenv("JUI_VIZ_STALE_MS", "5")
+    monkeypatch.delenv("JUI_VIZ_E2E", raising=False)
+    assert stale_ms() == STALE_MS
+    monkeypatch.setenv("JUI_VIZ_E2E", "1")
+    assert stale_ms() == 5
+
+
+QUESTION = {"questions": [{"question": "どちら?", "header": "H", "options": [{"label": "A", "description": ""}, {"label": "B", "description": ""}]}]}
+
+
+def test_a_question_says_stale_and_stays_until_the_session_moves_on():
+    book = QuestionBook()
+    card = book.from_hook("s1", "s1", QUESTION, "u", 0)
+    book.tick(STALE_MS - 1)
+    assert not card.get("stale")
+    assert book.tick(STALE_MS) is True and book.tick(STALE_MS + 1) is False
+    assert card["status"] == "pending" and book.items()[0]["stale"] is True
+    book.tick(46_635_000)   # the longest this machine has waited
+    assert card["status"] == "pending"
+    assert book.session_stopped("s1", 46_635_001) and card["status"] == "expired"
+
+
+def test_a_question_a_hook_waits_on_is_not_stale():
+    book = QuestionBook()
+    card = book.from_hook("s1", "s1", QUESTION, "u", 0)
+    card["_future"] = object()
+    book.tick(STALE_MS)
+    assert not card.get("stale")
+
+
+# ---------------------------------------------------------------- what the question's ticket measured
+# ticket 2026-11-05-viz-question-card-closes-on-stop-with-background-work: nothing to fix, no child has ever asked
+
+
+def test_a_mains_open_question_ends_with_stop_as_before(world):
+    world.apply_hook(_hook("PreToolUse", tool_name="AskUserQuestion", tool_use_id="q1", tool_input=QUESTION), 1_000)
+    world.apply_hook(_hook("Stop", background_tasks=[{"id": "b"}]), 2_000)
+    assert [c["status"] for c in world.questions.items()] == ["expired"]
+
+
+# ---------------------------------------------------------------- the words
+
+
+@pytest.mark.parametrize("key", ["panel.perm.stale", "panel.q.stale", "panel.count.waiting.elsewhere", "panel.chip.ask.elsewhere"])
+def test_every_word_is_in_both_languages(key):
+    ja, en = i18n.bundled("ja"), i18n.bundled("en")
+    assert ja.get(key) and en.get(key) and ja[key] != en[key], key

@@ -1451,6 +1451,7 @@
   "panel.case.retrying": "First try failed · retrying · ",
   "panel.case.branch": "Branch: {branch}",
   "panel.case.flaky": " · failed the first time, passed on retry",
+  "panel.count.waiting.elsewhere": "Waiting for permission {n} (other projects: {m})",
   "panel.count.waiting": "Waiting for permission {n}",
   "panel.task.session": "Session {id}",
   "panel.task.perm.outside": "Asking for permission outside a task",
@@ -1526,7 +1527,9 @@
   "panel.q.release": "Answer in the terminal",
   "panel.q.note.a": "The terminal shows no question while this waits · ",
   "panel.q.note.b": " (acting here extends it)",
+  "panel.q.stale": "Over 10 minutes old. Whether it still waits cannot be told from here.",
   "panel.q.why": "{why}. Please answer in the terminal (nothing can be picked here)",
+  "panel.chip.ask.elsewhere": {"one": "{n} question (other projects: {m})", "other": "{n} questions (other projects: {m})"},
   "panel.chip.ask": {
     "one": "{n} question",
     "other": "{n} questions"
@@ -1727,6 +1730,7 @@
   "panel.pc.details": "› Details",
   "panel.rules.added": "Always-allow rules added in this demo: ",
   "panel.rules.reset": "Undo",
+  "panel.perm.stale": "Over 10 minutes old. Whether it still waits cannot be told from here (the receiver's own screen shows it)",
   "panel.perm.elsewhere": {
     "one": "{n} more is waiting for permission in other projects",
     "other": "{n} more are waiting for permission in other projects"

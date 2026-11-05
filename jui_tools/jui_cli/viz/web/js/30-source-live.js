@@ -631,7 +631,7 @@ function rebuildPerms() {
       at: secOfDay(x.createdAt || Date.now()), end: x.decidedAt ? secOfDay(x.decidedAt) : null,
       status: PERM_STATUS[x.status] || 'pending', decidedBy: x.decidedBy || null, sentBehavior: x.sentBehavior || null,
       sentBy: x.sentBy || null, sentRules: Array.isArray(x.sentRules) ? x.sentRules : null, sentReason: x.sentReason ? String(x.sentReason) : '',
-      terminalBehavior: x.terminalBehavior || null, relayOnly: !!x.relayOnly,
+      terminalBehavior: x.terminalBehavior || null, relayOnly: !!x.relayOnly, stale: !!x.stale,
       decided: x.decidedAt ? { at: secOfDay(x.decidedAt), behavior: x.status === 'deny' || x.terminalBehavior === 'deny' ? 'deny' : 'allow' } : null,
       can: { allowDeny: !!can.allowDeny, always: !!can.always, reason: !!can.reason },
       raw: { id: x.id, toolName: x.toolName, summary: x.summary, exact: x.exact, tooLongToShow: !!x.tooLongToShow, preview: x.preview, suggestions: x.suggestions, status: x.status, relayOnly: !!x.relayOnly },

@@ -6,7 +6,9 @@ subagents/workflows/<run>/agent-<id>.jsonl as the CLI writes it. A workflow's ch
 call beside it (so its robot no longer says waiting: the state the sessions' filter read). While it really waits: the
 header, the card's bar, the waits beside the card and the sessions' filter all say 1, and the end of the other call
 closes nothing. Then the safety check's result, with no hook: all 0, the card gone. A second child's card: its
-SubagentStop, no result: all 0. Stop with background work leaves a third child's card that waits."""
+SubagentStop, no result: all 0. Stop with background work leaves a third child's card that waits. Past the stale time
+(JUI_VIZ_STALE_MS here, 10 minutes in use) a card and a question stay, counted, and say they are old. Shown narrowed to one
+project, the header's number stays all the projects' and its words say how many lie outside, on a phone too."""
 from __future__ import annotations
 
 import http.client
@@ -19,10 +21,14 @@ import time
 import urllib.request
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from common import DESKTOP, ISOLATE, LAUNCH_ARGS, T, Watch, dump, ready  # noqa: E402
+from common import DESKTOP, ISOLATE, LAUNCH_ARGS, PHONE, T, Watch, dump, ready  # noqa: E402
 
 SID = "e2e00000-0000-4000-8000-0000000000f9"
-KIDS = ("a0411e1b020482601", "a0411e1b020482602", "a0411e1b020482603")
+KIDS = ("a0411e1b020482601", "a0411e1b020482602", "a0411e1b020482603", "a0411e1b020482604")
+OTHER = "e2e00000-0000-4000-8000-0000000000fa"
+OTHER_CWD = "/work/other-app"
+STALE_MS = 25_000
+QUESTION = {"questions": [{"question": "どちらにしますか?", "header": "案", "multiSelect": False, "options": [{"label": "A", "description": "a"}, {"label": "B", "description": "b"}]}]}
 CWD = "/work/past-app"
 SAFETY = ("Permission for this command was denied by a built-in Claude Code safety check, not by the user. Only a person may approve "
           "such a removal, and no person did (the permission prompt timed out, or none was shown).")
@@ -34,6 +40,10 @@ COUNTS = """() => {
   return { header: chip.hidden ? '' : chip.textContent, filter, bar: bar ? bar.textContent : '', waits: waits.hidden ? '' : waits.textContent,
            listed: [...document.querySelectorAll('#sessions [data-sst]')].map((n) => n.textContent) };
 }"""
+
+
+STALE = """() => { const chip = document.getElementById('chip-perm'), has = (sel, w) => [...document.querySelectorAll(sel)].some((n) => n.textContent.includes(w));
+  return { perm: has('#tasks [data-perm-box]', %s), question: has('#questions', %s), header: chip.hidden ? '' : chip.textContent }; }""" % (json.dumps(T("panel.perm.stale")), json.dumps(T("panel.q.stale")))
 
 
 def check(failures, cond, text):
@@ -61,7 +71,7 @@ async def run_past_permission(pw, out, failures):
     base_env = {k: v for k, v in os.environ.items() if k not in ISOLATE}
     log = open(out / "serve.log", "w")
     srv = subprocess.Popen([sys.executable, str(jt / "bin" / "jui"), "viz", "serve", "--port", str(port)], stdout=log, stderr=subprocess.STDOUT,
-                           env=dict(base_env, HOME=str(home), JUI_VIZ_E2E="1"))
+                           env=dict(base_env, HOME=str(home), JUI_VIZ_E2E="1", JUI_VIZ_STALE_MS=str(STALE_MS)))
     url = f"http://127.0.0.1:{port}"
     main = home / ".claude" / "projects" / "-work-past-app" / f"{SID}.jsonl"
     main.parent.mkdir(parents=True, exist_ok=True)
@@ -71,7 +81,7 @@ async def run_past_permission(pw, out, failures):
     res: dict = {}
 
     def hook(sid=SID, **payload):
-        body = {"session_id": sid, "cwd": CWD, "transcript_path": str(main), "permission_mode": "default", **payload}
+        body = {"session_id": sid, "cwd": CWD, "transcript_path": str(main) if sid == SID else "", "permission_mode": "default", **payload}
         subprocess.run([sys.executable, "-I", "-S", str(forward)], input=json.dumps(body).encode(), capture_output=True,
                        env=dict(base_env, HOME=str(home)), timeout=10)
 
@@ -167,6 +177,55 @@ async def run_past_permission(pw, out, failures):
         check(failures, card_statuses().get(KIDS[2]) == "pending" and c["header"] == one and c["filter"] == "1", f"Stop with background work leaves the card: {card_statuses()} {c}")
         hook(hook_event_name="Stop", background_tasks=[], last_assistant_message="終わり")
         await wait(page, "() => document.getElementById('chip-perm').hidden", label="the last Stop closes it")
+
+        # 5. time alone closes nothing: past the stale time (shortened here) a card and a question stay, and say so
+        # (ticket 2026-11-05-viz-ten-minute-expiry-removes-a-permission-still-waiting)
+        asks(KIDS[3], "toolu_F")
+        hook(hook_event_name="PreToolUse", tool_name="AskUserQuestion", tool_use_id="q-1", tool_input=QUESTION)
+        await wait(page, "() => !document.getElementById('chip-perm').hidden && !document.getElementById('chip-ask').hidden", label="a card and a question")
+        c = await page.evaluate(STALE)
+        check(failures, not c["perm"] and not c["question"], f"a new card and question say nothing of their age: {c}")
+        await wait(page, f"() => ({STALE})().perm", timeout=STALE_MS + 20000, label="the card on the task board says it is old")
+        await wait(page, f"() => ({STALE})().question", timeout=20000, label="the question's card says it is old")
+        c = res["stale"] = await page.evaluate(STALE)
+        s = snap()
+        check(failures, c["perm"] and c["question"] and c["header"] == one and {x["status"] for x in s["perms"] if x["agentId"] == KIDS[3]} == {"pending"}
+              and [x["status"] for x in s["questions"]] == ["pending"], f"old, still there, still counted: {c}")
+        await page.screenshot(path=str(out / "stale.png"))
+        hook(hook_event_name="SubagentStop", agent_id=KIDS[3], agent_type="critic")
+        hook(hook_event_name="Stop", background_tasks=[], last_assistant_message="終わり")
+        await wait(page, "() => document.getElementById('chip-perm').hidden && document.getElementById('chip-ask').hidden", label="the old card and question end with the turn")
+
+        # 6. the header counts all the projects, the list the one shown: the words say so, the number stays
+        # (ticket 2026-11-05-viz-header-permission-count-spans-all-projects)
+        hook(OTHER, cwd=OTHER_CWD, hook_event_name="SessionStart", source="startup")
+        hook(OTHER, cwd=OTHER_CWD, hook_event_name="PreToolUse", tool_name="Bash", tool_use_id="toolu_G", tool_input={"command": "make"})
+        hook(OTHER, cwd=OTHER_CWD, hook_event_name="PermissionRequest", tool_name="Bash", tool_input={"command": "make"})
+        hook(OTHER, cwd=OTHER_CWD, hook_event_name="PreToolUse", tool_name="AskUserQuestion", tool_use_id="q-2", tool_input=QUESTION)
+        await wait(page, "(w) => document.getElementById('chip-perm').textContent === w", arg=one, label="all the projects shown: the plain words")
+        pid = next(x["projectId"] for x in snap()["sessions"] if x["id"] == SID)
+        await page.click("[data-scope-btn]")
+        await page.click(f"#pop [data-pick-project='{pid}']")
+        words = T("panel.count.waiting.elsewhere", n=1, m=1)
+        await wait(page, "(w) => document.getElementById('chip-perm').textContent === w", arg=words, label="the other project's permission said in the chip")
+        c = res["elsewhere"] = await page.evaluate(COUNTS)
+        ask = await page.evaluate("() => document.getElementById('chip-ask').textContent")
+        res["elsewhereAsk"] = ask
+        check(failures, c["filter"] == "0" and words == c["header"], f"the number stays, the list's is the project's, the words say why: {c}")
+        check(failures, ask == T("panel.chip.ask.elsewhere", n=1, m=1), f"the question chip too: {ask!r}")
+        await page.screenshot(path=str(out / "elsewhere.png"))
+        phone = await browser.new_context(**PHONE)
+        pp = await phone.new_page()
+        watch.attach(pp, "past-perm-phone")
+        await pp.goto(url + "/")
+        await ready(pp)
+        await pp.click("[data-scope-btn]")
+        await pp.click(f"#pop [data-pick-project='{pid}']")
+        await wait(pp, "(w) => document.getElementById('chip-perm').textContent === w", arg=words, label="the words on a phone")
+        fit = res["phone"] = await pp.evaluate("() => { const r = document.getElementById('chip-perm').getBoundingClientRect(); return { left: r.left, right: r.right, width: innerWidth, sideways: document.documentElement.scrollWidth > document.documentElement.clientWidth }; }")
+        check(failures, fit["left"] >= 0 and fit["right"] <= fit["width"] and not fit["sideways"], f"on a phone the chip stays on the page: {fit}")
+        await pp.screenshot(path=str(out / "elsewhere-phone.png"))
+        await phone.close()
         await ctx.close()
     finally:
         (out / "past-perm-results.json").write_text(dump(res) + "\n")
