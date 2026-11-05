@@ -138,6 +138,28 @@ module SjuiTools
           end
         end
 
+        # A Label of height wrapContent keeps all its lines. A stack divides a
+        # finite height among its children: a child whose text needs more than
+        # its share shrinks, even with room left at the end of the screen
+        # (ticket sjui-label-matchparent-wrapcontent-truncates-in-scroll: a
+        # 2-line question next to its buttons drew 1 line and "…"). Under a node
+        # that bounds the height (mark_height_bounds) the text stays inside it
+        # as before, and `lines` limits it as before. A node with a min or max
+        # already went through apply_frame_constraints' fixedSize; a vertical
+        # weight gets its height from the stack.
+        # Dynamic: LabelHeightFit.swift, the same rule.
+        def apply_label_wrap_height
+          return if @component[BaseViewConverter::UNDER_HEIGHT_BOUND_KEY]
+          return if @component['minWidth'] || @component['maxWidth'] || @component['minHeight'] || @component['maxHeight']
+          return if @component['heightWeight']
+          return if @component['weight'] && @component['parent_orientation'] == 'vertical'
+
+          height = @component['height']
+          return unless height.nil? || %w[wrapcontent wrap_content].include?(height.to_s.downcase)
+
+          @modifier_bag.register(:fixed_size, '.fixedSize(horizontal: false, vertical: true)')
+        end
+
         # A max that caps a wrapContent axis: a number or a binding, not
         # matchParent (which fills).
         def content_cap?(value)
