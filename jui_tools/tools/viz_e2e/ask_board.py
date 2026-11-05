@@ -257,7 +257,8 @@ async def run_ask_board(pw, out, failures):
         await page.keyboard.press("Escape")
         await wait(page, "() => document.getElementById('tb').hidden", label="closed before the projects")
         ask("a", "ask-a2"), ask("b", "ask-b2")
-        await wait(page, f"() => document.getElementById('chip-ask').textContent === {json.dumps(T('panel.chip.ask', n=2))}", timeout=20000, label="two questions in two projects")
+        # Space on c's chip above chose c's project, so both questions lie outside it and the chip's words say so (44c0e1c6)
+        await wait(page, f"() => document.getElementById('chip-ask').textContent === {json.dumps(T('panel.chip.ask.elsewhere', n=2, m=2))}", timeout=20000, label="two questions in two projects, both outside c's")
 
         async def pick(name):
             await page.click("#scope-top")
@@ -273,9 +274,9 @@ async def run_ask_board(pw, out, failures):
         scoped = res["scoped"] = await page.evaluate("""() => { const n = document.querySelector('#q-strip [data-q-elsewhere]');
           return { chip: document.getElementById('chip-ask').textContent, pend: document.querySelectorAll('#q-strip [data-qcard].q-open').length,
                    elsewhere: n ? Number(n.dataset.qElsewhere) : 0, note: n ? n.textContent : '', button: !!(n && n.querySelector('[data-set-all]')) }; }""")
-        check(failures, scoped["chip"] == T("panel.chip.ask", n=2) and scoped["pend"] == 1 and scoped["elsewhere"] == 1 and scoped["button"]
+        check(failures, scoped["chip"] == T("panel.chip.ask.elsewhere", n=2, m=1) and scoped["pend"] == 1 and scoped["elsewhere"] == 1 and scoped["button"]
               and T("panel.q.elsewhere", n=1) in scoped["note"], f"one project picked: the card in scope and the count elsewhere: {scoped}")
-        check(failures, scoped["chip"] == T("panel.chip.ask", n=scoped['pend'] + scoped['elsewhere']), f"the chip = the cards in scope + elsewhere: {scoped}")
+        check(failures, scoped["chip"] == T("panel.chip.ask.elsewhere", n=scoped['pend'] + scoped['elsewhere'], m=scoped['elsewhere']), f"the chip = the cards in scope + elsewhere: {scoped}")
         await page.click("#q-strip [data-set-all]")
         await wait(page, "() => document.querySelectorAll('#q-strip [data-qcard].q-open').length === 2", timeout=10000, label="all projects: both cards")
         allp = res["allProjects"] = await page.evaluate("() => ({ chip: document.getElementById('chip-ask').textContent, pend: document.querySelectorAll('#q-strip [data-qcard].q-open').length, note: !!document.querySelector('#q-strip [data-q-elsewhere]') })")
@@ -298,6 +299,8 @@ async def run_ask_board(pw, out, failures):
         await page.keyboard.press("Escape")
         await wait(page, "() => document.getElementById('tb').hidden", label="closed before the one-project chip")
         await pick("board-b")
+        narrowed = res["chipNarrowedToB"] = await page.evaluate("() => document.getElementById('chip-ask').textContent")
+        check(failures, narrowed == T("panel.chip.ask.elsewhere", n=1, m=1), f"from board-b, a's question is said to lie elsewhere: {narrowed!r}")
         await page.click("#chip-ask")
         await wait(page, "() => { const tb = document.getElementById('tb'); return !tb.hidden && tb.classList.contains('show'); }", label="the 質問 chip's board, one project")
         one = res["chipOneProject"] = await page.evaluate("(sid) => ({ project: window.__dbg.project(), a: window.__dbg.robotProject(window.__dbg.labelOfSession(sid)), "

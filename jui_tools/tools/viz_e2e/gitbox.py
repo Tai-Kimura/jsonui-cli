@@ -176,6 +176,20 @@ async def run_gitbox(pw, out, failures):
         await page.wait_for_timeout(800)
         fl = res["floorCounted"] = await page.evaluate("(id) => ({ trip: window.__dbg.gitBox().trips[id] || null, why: window.__dbg.gitBox().why[id] })", rid)
         check(failures, fl["trip"] is None and fl["why"]["seen"] == "poke-floor", f"counted later in the room, still no trip: {fl}")
+        # the server's next word brings the floor push back over the poke. It has been passed, so it starts nothing. Under
+        # load the two hooks of a push land in two frames, so this came just before the small push below, which replaced
+        # it on the way and was itself replaced by the big one: three reds in the full run of 2.5.4 (ticket
+        # 2026-11-05-viz-e2e-ask-board-gitbox-red-at-2.5.4.md). Here it comes on purpose, so the race is not left to the load
+        hook({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_use_id": "toolu_boxquiet", "tool_input": {"command": "ls"}})
+        await wait(page, "([id, poke]) => { const t = window.__dbg.gitBox().why[id].trip; return !!t && t.id !== poke; }", arg=[rid, "poke-floor"], label="the server's word: the floor push is back")
+        back = res["floorBack"] = await page.evaluate("(id) => window.__dbg.gitBox().why[id].trip", rid)
+        ghost = []
+        for _ in range(12):
+            ghost.append((await page.evaluate("(id) => (window.__dbg.gitBox().trips[id] || {}).id || null", rid)))
+            await page.wait_for_timeout(100)
+        res["floorBackTrips"] = ghost
+        check(failures, not any(ghost), f"the floor push, come back after the poke, starts no trip: {back} {ghost}")
+        hook({"hook_event_name": "PostToolUse", "tool_name": "Bash", "tool_use_id": "toolu_boxquiet", "tool_input": {"command": "ls"}, "tool_response": {"stdout": "", "stderr": ""}})
         g = res["desk"] = await page.evaluate("() => window.__dbg.gitBox()")
         ov = g["overlaps"]
         check(failures, ov and ov["inRoom"] and ov["overlaps"] == [], f"the desk stands in the room and overlaps nothing: {ov}")
