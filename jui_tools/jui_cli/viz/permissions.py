@@ -11,7 +11,8 @@ Life of a card:
      |                             \\--PermissionDenied--> deny (browser)
      |--PostToolUse / PermissionDenied first--> answered_in_terminal
      |--the transcript's tool_result of the call, when no hook said so (call_result)--> as the hook would, or expired
-     \\--Stop, SessionEnd, 10 min--> expired
+     |--its subagent's SubagentStop--> expired: a turn that is over has no call waiting
+     \\--Stop (a subagent's card only when no background work goes on), SessionEnd, 10 min--> expired
 """
 from __future__ import annotations
 
@@ -294,17 +295,29 @@ class PermissionBook:
             self._finish(card, outcome == "ran", at)
         return card
 
-    def session_stopped(self, sid: str, at: int) -> None:
+    def _turn_ended(self, card: dict, at: int) -> None:
+        # A refusal sends no PostToolUse and no PermissionDenied (live
+        # check, 10-18), so a sent deny has nothing to settle it but
+        # the end of the turn. Had the terminal allowed first, PostToolUse would
+        # have settled the card before the turn ended.
+        if card["status"] == "sent" and card.get("sentBehavior") == "deny":
+            self._resolve(card, "deny", at, by="browser")
+        else:
+            self._resolve(card, "expired", at)
+
+    def session_stopped(self, sid: str, at: int, subagents_at_work: bool = False) -> None:
+        """The session's turn is over, or the session is. With subagents_at_work (its Stop while background work goes
+        on) only the main session's own cards: a subagent in the background still waits on its own."""
         for card in self.perms.values():
-            if card["sessionId"] == sid and card["status"] in ("pending", "sent"):
-                # A refusal sends no PostToolUse and no PermissionDenied (live
-                # check, 10-18), so a sent deny has nothing to settle it but
-                # this Stop. Had the terminal allowed first, PostToolUse would
-                # have settled the card before the turn ended.
-                if card["status"] == "sent" and card.get("sentBehavior") == "deny":
-                    self._resolve(card, "deny", at, by="browser")
-                else:
-                    self._resolve(card, "expired", at)
+            if card["sessionId"] == sid and card["status"] in ("pending", "sent") and not (subagents_at_work and card["agentId"] != sid):
+                self._turn_ended(card, at)
+
+    def agent_stopped(self, sid: str, aid: str, at: int) -> bool:
+        """A subagent's turn is over (SubagentStop): none of its calls can still be waiting. Only its own cards."""
+        cards = [c for c in self.perms.values() if c["sessionId"] == sid and c["agentId"] == aid and c["status"] in ("pending", "sent")]
+        for card in cards:
+            self._turn_ended(card, at)
+        return bool(cards)
 
     def link_use_id(self, card: dict, use_id: str) -> None:
         card["_useId"] = use_id

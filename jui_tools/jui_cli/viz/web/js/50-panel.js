@@ -57,6 +57,8 @@ function robotBadgeKind(id) {
   const s = robotState[id].state;
   // a question waits for the person too, but it is no permission: its own badge and filter (requester, 10-18)
   if (s === 'waiting') return robotState[id].asking ? 'asking' : 'waiting';
+  // an open permission card counts wherever it is counted: a subagent that has gone leaves its card to the main robot, which works on
+  if (latestModel && latestModel.pending.some((p) => p.who === id)) return 'waiting';
   return ['done', 'idle', 'thinking', 'background', 'limited'].includes(s) ? s : 'busy';
 }
 const badgeOf = (kind) => [BADGES[kind][0], tl(BADGES[kind][1])];

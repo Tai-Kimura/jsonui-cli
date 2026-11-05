@@ -423,9 +423,9 @@ def test_a_session_badge_is_the_same_in_every_language(locale, table):
     blob = json.dumps({"language": locale[:2], "locale": locale, "strings": words})
     prelude = f"globalThis.document = {{ getElementById: () => ({{ textContent: {json.dumps(blob)} }}) }};\n"
     robots = {"t": {"state": "thinking"}, "b": {"state": "busy"}, "d": {"state": "done"}, "q": {"state": "waiting", "asking": True},
-              "w": {"state": "waiting"}, "g": {"state": "background"}}
-    cases = [["t", "b"], ["t"], ["d"], ["g", "t"], ["q", "b"], ["q", "w"], ["g", "d"]]
-    script = (prelude + (WEB_JS / "05-i18n.js").read_text(encoding="utf-8") + f"\nconst robotState = {json.dumps(robots)};\n" + code
+              "w": {"state": "waiting"}, "g": {"state": "background"}, "p": {"state": "busy"}}   # p: busy, with an open permission card
+    cases = [["t", "b"], ["t"], ["d"], ["g", "t"], ["q", "b"], ["q", "w"], ["g", "d"], ["p"]]
+    script = (prelude + (WEB_JS / "05-i18n.js").read_text(encoding="utf-8") + f"\nconst robotState = {json.dumps(robots)};\nconst latestModel = {{ pending: [{{ who: 'p' }}] }};\n" + code
               + f"\nprocess.stdout.write(JSON.stringify({json.dumps(cases)}.map((r) => sessionBadge({{ robots: r }}))));")
     out = subprocess.run([node, "-"], input=script, capture_output=True, text=True, timeout=30)
     assert out.returncode == 0, out.stderr
@@ -433,7 +433,7 @@ def test_a_session_badge_is_the_same_in_every_language(locale, table):
     assert json.loads(out.stdout) == [
         ["st-busy", w["status.busy"]], ["st-busy", w["status.thinking"]], ["st-idle", w["status.idle"]],
         ["st-busy", w["status.thinking"]], ["st-asking", w["status.asking"]], ["st-waiting", w["status.waiting"]],
-        ["st-bg", w["status.background"]],
+        ["st-bg", w["status.background"]], ["st-waiting", w["status.waiting"]],
     ]
 
 

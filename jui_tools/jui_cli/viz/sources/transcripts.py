@@ -279,8 +279,10 @@ class UsageTail:
 
 def transcript_path(projects: Path) -> Callable[..., Path | None]:
     """find(session_id, cwd, given, agent_id=None, agent_given=None): the session's transcript, or with agent_id its
-    subagent's (the hook's agent_transcript_path, else <session folder>/subagents/agent-<id>.jsonl), a regular .jsonl
-    under the projects folder reached through no symlink — or None."""
+    subagent's (the hook's agent_transcript_path, else <session folder>/subagents/agent-<id>.jsonl, a workflow's child
+    at <session folder>/subagents/workflows/<run>/agent-<id>.jsonl), a regular .jsonl under the projects folder reached
+    through no symlink — or None. The hook's path comes only with SubagentStop (the CLI's 2.1.318, measured 11-05), so
+    while a child works its folder is all there is to go by."""
     root = projects.resolve() if quiet_fs.exists(projects) else projects
 
     def agent_paths(session_id, cwd, given, agent_id, agent_given) -> list[Path]:
@@ -289,7 +291,13 @@ def transcript_path(projects: Path) -> Callable[..., Path | None]:
             out.append(Path(agent_given).expanduser())
         if re.fullmatch(r"[A-Za-z0-9_-]{1,80}", agent_id):
             for main in candidates(projects, session_id, cwd, given):
-                out.append(main.parent / session_id / "subagents" / f"agent-{agent_id}.jsonl")
+                folder = main.parent / session_id / "subagents"
+                out.append(folder / f"agent-{agent_id}.jsonl")
+                try:
+                    with os.scandir(folder / "workflows") as runs:
+                        out.extend(folder / "workflows" / run.name / f"agent-{agent_id}.jsonl" for run in runs)
+                except OSError:
+                    pass
         return out
 
     def find(session_id: str, cwd: str | None, given: str | None = None, agent_id: str | None = None,
