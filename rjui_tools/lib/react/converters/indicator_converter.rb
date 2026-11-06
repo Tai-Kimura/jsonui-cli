@@ -58,7 +58,13 @@ module RjuiTools
 
           # Border width
           border_width = attributes['strokeWidth'] || attributes['borderWidth'] || 2
-          classes << "border-#{border_width}"
+          if (width_expr = bound_value_expr(border_width))
+            # As the bound colour does: a class is fixed at build.
+            @dynamic_styles['--jui-indicator-width'] = "`${#{width_expr}}px`"
+            classes << '[border-width:var(--jui-indicator-width)]'
+          else
+            classes << "border-#{border_width}"
+          end
 
           classes << 'border-transparent'
 

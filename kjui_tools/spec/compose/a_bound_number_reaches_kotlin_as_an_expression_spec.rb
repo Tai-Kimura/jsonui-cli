@@ -90,6 +90,14 @@ RSpec.describe 'a bound number reaches Kotlin as an expression' do
     expect(builder.send(:generate_component, node.merge('locations' => [0, 1]), 0)).to match(/0f to .*1f to /m)
   end
 
+  it 'writes a bound padding on a SelectBox as its content padding' do
+    builder = KjuiTools::Compose::ComposeBuilder.new
+    expect(builder.send(:generate_component, { 'type' => 'SelectBox', 'id' => 'p', 'padding' => BOUND }, 0))
+      .to match(/contentPadding = PaddingValues\(.*data\.v/)
+    expect(builder.send(:generate_component, { 'type' => 'SelectBox', 'id' => 'p', 'padding' => 4 }, 0))
+      .to include('contentPadding = PaddingValues(4.dp)')
+  end
+
   STUBS = <<~KOTLIN
     class Dp
     val Int.dp: Dp get() = Dp()

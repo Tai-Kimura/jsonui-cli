@@ -372,7 +372,7 @@ module KjuiTools
               code += ",\n" + indent("contentPadding = PaddingValues(horizontal = #{Helpers::BoundValue.dp(paddings[1])}, vertical = #{Helpers::BoundValue.dp(paddings[0])})", depth + 1)
             elsif paddings.is_a?(Array) && paddings.length == 1
               code += ",\n" + indent("contentPadding = PaddingValues(#{Helpers::BoundValue.dp(paddings[0])})", depth + 1)
-            elsif paddings.is_a?(Numeric)
+            elsif paddings.is_a?(Numeric) || Helpers::BoundValue.bound?(paddings)
               code += ",\n" + indent("contentPadding = PaddingValues(#{Helpers::BoundValue.dp(paddings)})", depth + 1)
             end
           end
