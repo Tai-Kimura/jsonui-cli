@@ -16,6 +16,7 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import load_hold
 from children import children, stop_children_since
 
 # ---- the times a fixture writes (2.3.5; ticket 2026-10-20-jui-viz-hist-wide-robot-margin-red-on-integrate) ----
@@ -125,6 +126,8 @@ def suite_guard(name: str, failures: list, out: Path | None = None):
     timeout in props ended the whole run with a traceback, no FAIL line, and no later suite ran). The traceback is
     kept in <out>/<name>-traceback.txt. KeyboardInterrupt still stops the run. However it ends, the processes the suite
     started and left running are stopped (stop_children_since)."""
+    if load_hold.enabled():
+        load_hold.hold(name, say=lambda line: print(line, flush=True))
     before = children()
     print(f"  {name}: load at the start {load_text()}", flush=True)
     try:
