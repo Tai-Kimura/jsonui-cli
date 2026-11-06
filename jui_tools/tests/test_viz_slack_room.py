@@ -1180,3 +1180,12 @@ def test_every_reason_the_real_world_gives_has_its_words():
         table = i18n.bundled(lang)
         for key in ("gone", "full", "no_channel", "no_relay", "old_plugin", "codex", "other"):
             assert len(table[f"sf.forward.why.{key}"]) < 60
+
+
+@pytest.mark.parametrize("lang", ["ja", "en"])
+@pytest.mark.parametrize("key", ["gone", "full", "no_channel", "no_relay", "old_plugin", "codex", "other"])
+def test_the_note_for_a_reply_that_could_not_go_stays_short(lang, key):
+    table = i18n.bundled(lang)
+    said = table["sf.note.forward_failed"].replace("{n}", "99").replace("{why}", table[f"sf.forward.why.{key}"])
+    assert "{" not in said and table[f"sf.forward.why.{key}"] in said
+    assert len(said) < 60, said
