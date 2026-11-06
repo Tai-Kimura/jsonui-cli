@@ -2361,6 +2361,18 @@
       "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
     },
     {
+      "fixture": "SelectBox/doneButtonText__static",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+    },
+    {
       "fixture": "SelectBox/fontColor__static",
       "id": "target",
       "outliers": [
