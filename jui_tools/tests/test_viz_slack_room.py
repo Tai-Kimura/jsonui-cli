@@ -1143,3 +1143,40 @@ def test_the_mark_is_on_disk_before_the_send(home, factory):
     world.submit_prompt = look
     run(room.forward_replies(LONG_AGO))
     assert seen[rel]["state"] == "sending"
+
+
+@pytest.mark.parametrize("status,why,kind", [
+    (404, "no such session", "gone"),
+    (429, "earlier prompts have not been taken yet", "full"),
+    (409, "this session was not started with the channel named (no-flag): claude ...", "no_channel"),
+    (409, "this session has no relay (relay: false)", "no_relay"),
+    (409, "this session's jui-viz plugin is older than 1.2.0 and cannot receive prompts", "old_plugin"),
+    (409, "this Codex session is not connected", "codex"),
+    (500, "RuntimeError: no", "other"),
+    (409, "", "other"),
+    (None, None, "other"),
+])
+def test_a_refusal_has_a_short_reason(status, why, kind):
+    assert slack_room.refusal_kind(status, why) == kind
+
+
+def test_the_note_keeps_the_short_reason_and_the_whole_sentence(home, factory):
+    world = forward_world(home, factory)
+    world.no_channel.add("dev")
+    reply(factory)
+    room = room_for(world)
+    run(room.forward_replies(LONG_AGO))
+    row = json.loads((factory / "tasks" / "T-0001.json").read_text())["forwardFailed"][0]
+    assert row["kind"] == "other" and row["why"] == "no channel"
+
+
+def test_every_reason_the_real_world_gives_has_its_words():
+    from jui_cli.viz import ingest
+    src = open(ingest.__file__, encoding="utf-8").read()
+    body = src[src.index("def prompt_refusal"):src.index("request_stop")]
+    for text in ("no such session", "not connected", "has no relay", "is older than", "not started with the channel named"):
+        assert text in body       # the sentences refusal_kind looks for are still the server's
+    for lang in ("ja", "en"):
+        table = i18n.bundled(lang)
+        for key in ("gone", "full", "no_channel", "no_relay", "old_plugin", "codex", "other"):
+            assert len(table[f"sf.forward.why.{key}"]) < 60

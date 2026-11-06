@@ -773,8 +773,9 @@ async def run_sorting_factory(pw, out, failures):
         check(poll(channels[DEV], within=1) == [], "nothing went to DEV for another session's task")
         check(read_task(orch, "T-0021")["forwardFailed"][0]["path"] == late, "the note keeps why it could not go")
         await wait(page, "() => { const n = document.querySelector('#sf-wb [data-sf-task=\"T-0021\"]'); return !!n && !!n.querySelector('.sf-mark-late'); }", label="the note says it could not go")
-        said = await page.evaluate("() => [...document.querySelectorAll('#sf-wb [data-sf-task=\"T-0021\"] .sf-mark-late')].map((m) => m.textContent)")
-        check(len(said) == 1 and said[0] == T("sf.note.forward_failed", n=1, why=read_task(orch, "T-0021")["forwardFailed"][0]["why"]), f"the note's words: {said}")
+        said = await page.evaluate("() => [...document.querySelectorAll('#sf-wb [data-sf-task=\"T-0021\"] .sf-mark-forward-failed')].map((m) => [m.textContent, m.title])")
+        full = read_task(orch, "T-0021")["forwardFailed"][0]["why"]
+        check(said == [[T("sf.note.forward_failed", n=1, why=T("sf.forward.why.no_channel")), full]] and len(said[0][0]) < 60, f"the note says why in a few words, the whole sentence in its title: {said}")
         await shot(page, "slack-room-forwarded", out, failures)
         await page.locator('#sf-wb [data-sf-task="T-0021"]').scroll_into_view_if_needed()
         await page.wait_for_timeout(300)

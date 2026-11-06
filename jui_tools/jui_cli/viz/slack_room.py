@@ -331,6 +331,24 @@ def _attr(value, limit: int = 200) -> str:
     return re.sub(r'[\s"<>]+', " ", str(value or "")).strip()[:limit]
 
 
+def refusal_kind(status, why) -> str:
+    """Which of the note's short reasons a refusal is (the page words it; the server's whole sentence stays in ``why``)."""
+    text = str(why or "")
+    if status == 404:
+        return "gone"
+    if status == 429:
+        return "full"
+    if "not started with the channel" in text:
+        return "no_channel"
+    if "no relay" in text:
+        return "no_relay"
+    if "plugin is older" in text:
+        return "old_plugin"
+    if "Codex" in text:
+        return "codex"
+    return "other"
+
+
 def reply_block(row: dict, text: str) -> str:
     """One Slack reply for the session, wrapped. The text cannot close the wrapper: a person in the thread writes it."""
     cut = len(text) > FORWARD_TEXT_MAX
@@ -708,7 +726,7 @@ class SlackRoom:
             self.board["forwarded"][p] = {"task": task["id"], "at": at, "state": "failed", "why": str(refused[1])[:200]}
         self._save_board()
         self.held -= set(batch)
-        task["forwardFailed"] = (task.get("forwardFailed") if isinstance(task.get("forwardFailed"), list) else []) + [{"path": p, "at": at, "why": str(refused[1])[:200]} for p in batch]
+        task["forwardFailed"] = (task.get("forwardFailed") if isinstance(task.get("forwardFailed"), list) else []) + [{"path": p, "at": at, "kind": refusal_kind(*refused), "why": str(refused[1])[:200]} for p in batch]
         self._write_task(path, task)
         return True
 
