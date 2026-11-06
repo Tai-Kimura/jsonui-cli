@@ -1,0 +1,34 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/SelectBox/cancelButtonText__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance SelectBox.cancelButtonText (static)",
+    "description": "Conformance fixture for 'cancelButtonText' on SelectBox (section: SelectBox, class: visual). Value under test: \"sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "SelectBox"
+    ]
+  },
+  "platform": [
+    "android"
+  ],
+  "cases": [
+    {
+      "name": "cancelButtonText__static",
+      "description": "Conformance fixture for 'cancelButtonText' on SelectBox (section: SelectBox, class: visual). Value under test: \"sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "SelectBox_cancelButtonText__static"
+        }
+      ]
+    }
+  ]
+}

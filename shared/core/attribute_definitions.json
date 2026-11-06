@@ -3262,6 +3262,23 @@
       "description": "Text colour of the picker dialog's cancel button (kjui selectbox_component).",
       "platform": "kotlin",
       "warn_outside_mode": true
+    },
+    "sheetTitle": {
+      "type": "string",
+      "description": "The picker sheet's title (kjui). A strings.json key or a text. Absent: the library's word in the app's language, which an app can also replace by declaring kjui_sheet_select_option (a list) or kjui_sheet_select_date (a date) in its own values.",
+      "platform": "kotlin",
+      "warn_outside_mode": true
+    },
+    "cancelButtonText": {
+      "type": "string",
+      "description": "The picker sheet's cancel button (kjui). A strings.json key or a text. Absent: the library's word in the app's language (kjui_sheet_cancel).",
+      "platform": "kotlin",
+      "warn_outside_mode": true
+    },
+    "doneButtonText": {
+      "type": "string",
+      "description": "The button that closes the picker sheet with the choice: Done on iOS, a date sheet's confirm on Android. A strings.json key or a text. Absent: the app's own Done key in Localizable.strings (iOS) or kjui_sheet_confirm (Android), else the library's word in the app's language.",
+      "platform": ["swift", "kotlin"]
     }
   },
   "Switch": {

@@ -229,6 +229,15 @@ module KjuiTools
             resolved = Helpers::ResourceResolver.process_text(prompt_value, required_imports)
             code += "\n" + indent("placeholder = #{resolved},", depth + 1)
           end
+
+          # The sheet's words: the same reading as `prompt`, a strings.json key or a text. Absent: the
+          # library's word in the app's language. A list's sheet has no confirm button, so doneButtonText is a date's.
+          sheet_words = { 'sheetTitle' => json_data['sheetTitle'], 'cancelButtonText' => json_data['cancelButtonText'] }
+          sheet_words['doneButtonText'] = json_data['doneButtonText'] if is_date_picker
+          sheet_words.compact.each do |attribute, text|
+            resolved = Helpers::ResourceResolver.process_text(text, required_imports)
+            code += "\n" + indent("#{attribute} = #{resolved},", depth + 1)
+          end
           
           # Add enabled state if specified. The declared `enabled` only:
           # SelectBox declares no `disabled`, and no other platform draws it

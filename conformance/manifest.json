@@ -8,11 +8,11 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "ac1723b67beb6c47976acb75009b5f586727dfa5bf64a30d67a03cebb57ea913",
+  "generatedFrom": "722cbb1d191cd14c29429758bc0eb34b41065740714a9137a021ecb8f48c5798",
   "counts": {
-    "fixtures": 1282,
+    "fixtures": 1285,
     "assertable": 54,
-    "visual": 976,
+    "visual": 979,
     "interactive": 41,
     "control": 133,
     "declarationOnly": 77,
@@ -17449,6 +17449,73 @@
       "promotedFrom": null,
       "peerGroup": null,
       "control": "__control/SelectBox"
+    },
+    {
+      "id": "SelectBox/sheetTitle__static",
+      "component": "SelectBox",
+      "attribute": "sheetTitle",
+      "case": "static",
+      "class": "visual",
+      "host": "SelectBox",
+      "writtenKey": "sheetTitle",
+      "aliasOf": null,
+      "value": "sample",
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SelectBox/sheetTitle__static.layout.json",
+      "test": "fixtures/SelectBox/sheetTitle__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/SelectBox"
+    },
+    {
+      "id": "SelectBox/cancelButtonText__static",
+      "component": "SelectBox",
+      "attribute": "cancelButtonText",
+      "case": "static",
+      "class": "visual",
+      "host": "SelectBox",
+      "writtenKey": "cancelButtonText",
+      "aliasOf": null,
+      "value": "sample",
+      "platforms": [
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SelectBox/cancelButtonText__static.layout.json",
+      "test": "fixtures/SelectBox/cancelButtonText__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/SelectBox"
+    },
+    {
+      "id": "SelectBox/doneButtonText__static",
+      "component": "SelectBox",
+      "attribute": "doneButtonText",
+      "case": "static",
+      "class": "visual",
+      "host": "SelectBox",
+      "writtenKey": "doneButtonText",
+      "aliasOf": null,
+      "value": "sample",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SelectBox/doneButtonText__static.layout.json",
+      "test": "fixtures/SelectBox/doneButtonText__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/SelectBox__selectItemType-Date"
     },
     {
       "id": "Switch/accessibilityLabel__static",

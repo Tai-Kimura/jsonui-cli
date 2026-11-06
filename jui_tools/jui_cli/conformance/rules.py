@@ -2166,6 +2166,8 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # IS a date picker; without this the fixture renders the ordinary
     # options list and the attribute is never consulted.
     "SelectBox.datePickerStyle": {"selectItemType": "Date"},
+    # A list's sheet on Android has no button that takes a word: only a date's confirm does.
+    "SelectBox.doneButtonText": {"selectItemType": "Date"},
     # `dateStringFormat` is the shape the VIEWMODEL holds, so it is only
     # consulted while converting a BOUND value in and out of the input's ISO
     # spelling (rjui select_box_converter.rb:391 `if format` — inside the

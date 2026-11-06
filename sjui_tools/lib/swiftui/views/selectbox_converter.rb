@@ -39,6 +39,16 @@ module SjuiTools
               end
             end
 
+            # The Done button's word: the same reading as prompt. Absent: the view's own default.
+            done_text = @component['doneButtonText']
+            if done_text
+              if is_binding?(done_text)
+                add_line "doneButtonText: data.#{extract_binding_property(done_text)},"
+              else
+                add_line "doneButtonText: #{get_text_with_string_manager("\"#{done_text}\"")},"
+              end
+            end
+
             # `labelAttributes` styles the closed-state label; its keys win
             # over the component-level ones (the precedence the web and
             # Compose converters use).
