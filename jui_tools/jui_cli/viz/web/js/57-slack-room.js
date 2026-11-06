@@ -243,7 +243,11 @@ function sfSourcesHTML(t, s) {
   const atEdit = new Set(Array.isArray(t.sourcesAtEdit) ? t.sourcesAtEdit : []);
   const late = t.promptEditedByUser === true ? paths.filter((p) => !atEdit.has(p)).length : 0;
   const threads = Array.isArray(t.threads) ? t.threads.length : 0;
+  const sent = Array.isArray(t.forwarded) ? t.forwarded.length : 0;
+  const failed = Array.isArray(t.forwardFailed) ? t.forwardFailed : [];
   return (late ? `<p class="sf-mark sf-mark-late">${esc(tl('sf.note.late', { n: late }))}</p>` : '')
+    + (sent ? `<p class="sf-mark sf-mark-forwarded">${esc(tl('sf.note.forwarded', { n: sent }))}</p>` : '')
+    + (failed.length ? `<p class="sf-mark sf-mark-late">${esc(tl('sf.note.forward_failed', { n: failed.length, why: String((failed[failed.length - 1] || {}).why || '') }))}</p>` : '')
     + `<button type="button" class="sf-src-open" data-sf-chat${paths.length ? '' : ' disabled'}>${esc(tl('sf.note.sources', { n: paths.length }))}${threads > 1 ? esc(tl('sf.note.threads', { n: threads })) : ''}</button>`;
 }
 /* The other notes this one is tied to: a later message about it made a new task (relatedTaskId), or it is that task. */

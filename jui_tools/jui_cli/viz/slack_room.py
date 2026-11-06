@@ -30,10 +30,12 @@ The scan reads files only (no network, nothing run) in a worker thread; the loop
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 from . import i18n
@@ -62,6 +64,16 @@ NOTIFY_FILES_MAX = 40          # files named in one prompt to the robot
 NOTIFY_GAP_MS = 20_000         # the robot is told again no sooner than this after a prompt to it
 PROMPT_MAX = 20_000            # characters of one prompt kept from the board
 LAUNCH_COMMAND = launch.START_CHANNELS
+# What the robot may read of the session a task went to (ticket 2026-11-06-viz-slack-robot-reads-the-assigned-sessions-talk).
+CONTEXT_DIR = ".state/context"
+CONTEXT_MAX = 16_000           # characters of one excerpt; the newest are kept
+CONTEXT_ITEM_MAX = 2_000       # characters of one turn in it
+# A reply in the thread of a task whose session is settled goes to that session (the same ticket, the requester's addition).
+FORWARD_QUIET_MS = 5_000       # a run of replies goes as one prompt: nothing new in the thread for this long
+FORWARD_QUIET_MAX_MS = 30_000  # ... but no reply waits longer than this for the thread to go quiet
+FORWARD_FULL_WAIT_MS = 600_000 # the session's queue is full (429): tried again this long, then the robot gets it
+FORWARD_TEXT_MAX = 4_000       # characters of one reply in the prompt
+FORWARD_BATCH_CHARS = 12_000   # characters of replies in one prompt; the rest go in the next
 #: A started task's session not known at all is taken as gone only this long after the room first looked (a server just
 #: started has not heard from every session yet); one known to have ended ends its task at once.
 GONE_GRACE_MS = 60_000
@@ -264,6 +276,71 @@ def _head(text) -> str:
     return one if len(one) <= HEAD else one[: HEAD - 1] + "…"
 
 
+def write_text(path: Path, text: str) -> None:
+    """A private text file, written whole: a temporary file renamed over the old one, 0600 in a 0700 folder."""
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp-")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
+def excerpt_rows(items, since, until) -> list[tuple[str, int, str]]:
+    """(who, when, text) of the person's prompts and the session's words between since and until. Tool calls, thoughts,
+    other sessions' messages and the harness's texts are left out, and so is a turn with no time."""
+    rows = []
+    for item in items or []:
+        at = item.get("at")
+        if not isinstance(at, (int, float)) or at < since or (until is not None and at >= until):
+            continue
+        kind = item.get("kind")
+        text = item.get("text")
+        if not isinstance(text, str) or not text.strip() or kind not in ("user", "channel", "assistant"):
+            continue
+        if kind == "channel" and "jui-viz" not in str(item.get("server") or ""):
+            continue
+        rows.append(("session" if kind == "assistant" else "person", int(at), text))
+    return rows
+
+
+def excerpt_text(task_id: str, title: str, rows: list[tuple[str, int, str]]) -> str:
+    """The excerpt's file: the note first, then the turns, oldest first, the newest kept up to CONTEXT_MAX."""
+    head = i18n.tl("srv.slack.context_head", id=task_id, title=_head(title))
+    note = i18n.tl("srv.slack.context_cut") + "\n"
+    kept, room = [], CONTEXT_MAX - len(head) - len(note)
+    for who, at, text in reversed(rows):
+        body = text if len(text) <= CONTEXT_ITEM_MAX else text[:CONTEXT_ITEM_MAX] + "\n…"
+        when = datetime.fromtimestamp(at / 1000).strftime("%m-%d %H:%M")
+        label = i18n.tl("srv.slack.context_session") if who == "session" else i18n.tl("srv.slack.context_person")
+        block = f"\n## {label} {when}\n{body}\n"
+        if len(block) > room:
+            break
+        kept.append(block)
+        room -= len(block)
+    cut = len(kept) < len(rows)
+    return head + (note if cut else "") + "".join(reversed(kept))
+
+
+def _attr(value, limit: int = 200) -> str:
+    """A value in the wrapper's opening tag: one line, nothing that could close the tag."""
+    return re.sub(r'[\s"<>]+', " ", str(value or "")).strip()[:limit]
+
+
+def reply_block(row: dict, text: str) -> str:
+    """One Slack reply for the session, wrapped. The text cannot close the wrapper: a person in the thread writes it."""
+    cut = len(text) > FORWARD_TEXT_MAX
+    body = text[:FORWARD_TEXT_MAX] + ("\n…" if cut else "")
+    body = re.sub(r"</?\s*slack-reply", "(slack-reply", body, flags=re.I)
+    link = row.get("permalink") if str(row.get("permalink") or "").startswith("https://") else ""
+    return (f'<slack-reply user="{_attr(row.get("user"))}" channel="{_attr(row.get("channel"))}" ts="{_attr(row.get("ts"))}"'
+            f'{f" permalink={chr(34)}{_attr(link, 500)}{chr(34)}" if link else ""}>\n{body}\n</slack-reply>')
+
+
 class Scanner:
     """Reads the folder; a file is read again only when its size or mtime changed."""
 
@@ -307,6 +384,7 @@ class Scanner:
                     return {**row, "workspace": str(data.get("workspace") or ""), "channel": str(data.get("channel") or ""),
                             "user": str(data.get("user") or ""), "ts": str(data.get("ts") or ""), "head": _head(plain_text(data)),
                             "threadTs": str(data.get("threadTs") or data.get("ts") or ""),
+                            "permalink": str(data.get("permalink") or ""),
                             "confidence": router.get("confidence") if isinstance(router.get("confidence"), (int, float)) else None}
                 row = self._cached(f, read)
                 if row:
@@ -345,12 +423,15 @@ class SlackRoom:
         self.cfg_why: str | None = "missing"
         self.root: Path = factory_dir({})
         self.scanned: dict = {"exists": False, "arrivals": [], "tasks": [], "unsorted": 0, "broken": 0}
-        self.board: dict = {"notified": [], "sawBusy": {}, "started": {}}   # started: tasks 開始 sent (only these are followed)
+        # started: tasks 開始 sent (only these are followed); forwarded: a reply's path -> {task, at, state} (forward_replies)
+        self.board: dict = {"notified": [], "sawBusy": {}, "started": {}, "forwarded": {}}
+        self.held: set[str] = set()      # replies waiting to go to their session: the robot is not told of them
         self._board_read_for: str | None = None
         self.last_told_at = 0
         self.last_told: list[str] = []
         self.note: str | None = None     # why the robot was not told (no robot, it cannot take a prompt...)
         self.first_follow_at: int | None = None
+        self.contexts: set[str] = set()  # the excerpts on disk (paths from the folder), read again before each notice
 
     # -- reading
     def load(self) -> None:
@@ -362,7 +443,13 @@ class SlackRoom:
             got, _ = read_json_file(self.root / ".state" / "board.json")
             self.board = {"notified": [p for p in got.get("notified", []) if isinstance(p, str)],
                           "sawBusy": {k: v for k, v in (got.get("sawBusy") or {}).items() if isinstance(v, int)},
-                          "started": {k: v for k, v in (got.get("started") or {}).items() if isinstance(v, int)}}
+                          "started": {k: v for k, v in (got.get("started") or {}).items() if isinstance(v, int)},
+                          "forwarded": {k: v for k, v in (got.get("forwarded") or {}).items() if isinstance(v, dict)}}
+            for row in self.board["forwarded"].values():
+                if row.get("state") == "sending":
+                    # The server stopped between marking it and hearing back: it may have gone. It is not sent again, and
+                    # it does not vanish: the robot gets it (2 度送らない, 黙って落とさない).
+                    row.update(state="failed", why="the server stopped while it was being sent")
         self.scanned = self.scanner.scan(self.root)
 
     def _save_board(self) -> None:
@@ -415,7 +502,8 @@ class SlackRoom:
     def pending(self) -> list[str]:
         told = set(self.board["notified"])
         named = {p for t in self.scanned["tasks"] for p in (t.get("sources") or []) if isinstance(p, str)}
-        return [a["path"] for a in self.scanned["arrivals"] if a["path"] not in told and a["path"] not in named and not a.get("broken")]
+        gone_on = {p for p, row in self.board["forwarded"].items() if row.get("state") != "failed"} | self.held
+        return [a["path"] for a in self.scanned["arrivals"] if a["path"] not in told and a["path"] not in named and a["path"] not in gone_on and not a.get("broken")]
 
     def notify_text(self, files: list[str]) -> str:
         prompts = prompts_of(self.cfg)
@@ -426,7 +514,8 @@ class SlackRoom:
         open_rows = [t for t in self.scanned["tasks"] if not t.get("broken") and t.get("status") != "done"][:OPEN_SHOWN]
         tasks = "\n".join(f"- {t['id']} [{t.get('status') if t.get('status') in STATUSES else 'draft'}] {_head(t.get('title') or '')}"
                           f" threads={','.join(str(x) for x in t.get('threads') or [])}"
-                          f"{' promptEditedByUser' if t.get('promptEditedByUser') else ''}" for t in open_rows) or i18n.tl("srv.slack.no_sessions")
+                          f"{' promptEditedByUser' if t.get('promptEditedByUser') else ''}"
+                          f"{' context=' + self.context_rel(t['id']) if self.context_rel(t['id']) in self.contexts else ''}" for t in open_rows) or i18n.tl("srv.slack.no_sessions")
         return i18n.tl("srv.slack.notify", prompt=task_prompt, dir=tilde(str(self.root)), files=listed, sessions=sessions,
                        launch=with_home(LAUNCH_COMMAND), tasks=tasks, next=self.next_id())
 
@@ -453,6 +542,7 @@ class SlackRoom:
             self.note = "busy"
             return False
         batch = files[:NOTIFY_FILES_MAX]
+        await asyncio.get_running_loop().run_in_executor(None, self.refresh_contexts)
         refused = await self.world.submit_prompt(sid, self.notify_text(batch), at)
         if refused is not None:
             self.note = "refused"
@@ -462,6 +552,168 @@ class SlackRoom:
         self.board["notified"] = (self.board["notified"] + batch)[-5000:]
         self._save_board()
         return True
+
+    # -- what the robot may read: the settled session's talk
+    @staticmethod
+    def context_rel(task_id: str) -> str:
+        return f"{CONTEXT_DIR}/{task_id}.md"
+
+    def _settled_session(self, task: dict) -> str | None:
+        """The session a person settled this task on: 開始 sent it there, and it is still working or ended. A status moved
+        by hand sends nothing, so the robot's guess at a target is not settled by it."""
+        target = task.get("target") if isinstance(task.get("target"), dict) else {}
+        sid = target.get("sessionId")
+        if task.get("broken") or task.get("status") not in ("working", "ended") or not task.get("assignedAt") or not isinstance(sid, str):
+            return None
+        return sid
+
+    def refresh_contexts(self) -> None:
+        """Write each settled task's excerpt (run off the loop: it reads transcripts), and remove the excerpt of a task that
+        has none. A session the World cannot read any more keeps the excerpt it had."""
+        folder = self.root / CONTEXT_DIR
+        settled = [t for t in self.scanned["tasks"] if self._settled_session(t)]
+        live = {t["id"] for t in settled} | {t["id"] for t in self.scanned["tasks"] if not t.get("broken") and t.get("status") == "done"}
+        history = getattr(self.world, "history", None)
+        for t in settled:
+            sid = self._settled_session(t)
+            since = t.get("assignedAt")
+            later = [o.get("assignedAt") for o in settled if o["id"] != t["id"] and self._settled_session(o) == sid
+                     and isinstance(o.get("assignedAt"), (int, float)) and o["assignedAt"] > since]
+            until = min(later) if later else None    # the session's next task: from there it is that task's talk
+            got = history(sid, stop=0) if history is not None else None
+            if got is None:
+                continue
+            path = folder / f"{t['id']}.md"
+            text = excerpt_text(t["id"], t.get("title") or "", excerpt_rows(got.get("items"), since, until))
+            try:
+                if not path.is_file() or path.read_text(encoding="utf-8") != text:
+                    write_text(path, text)
+            except OSError:
+                continue
+        self.contexts = set()
+        for f in folder.glob("*.md") if folder.is_dir() else []:
+            if f.stem in live:
+                self.contexts.add(self.context_rel(f.stem))
+            else:
+                f.unlink(missing_ok=True)
+
+    # -- a reply in a settled thread goes to its session
+    def forward_on(self) -> bool:
+        """slack.json autoForwardReplies; on unless it says false (the requester's addition, 11-06)."""
+        return self.cfg.get("autoForwardReplies") is not False
+
+    def _reply_task(self, arrival: dict, by_path: dict) -> dict | None:
+        """The settled task this message is a reply to: the same thread in the same channel. A thread some open task also
+        holds stays the robot's (a thread always goes in one task); of two settled tasks, the one started last."""
+        ts = arrival.get("threadTs")
+        if not ts:
+            return None
+        place = (arrival.get("workspace"), arrival.get("channel"))
+        def holds(t):
+            if ts not in [str(x) for x in t.get("threads") or []]:
+                return False
+            return place in {(by_path[p].get("workspace"), by_path[p].get("channel")) for p in t.get("sources") or [] if isinstance(p, str) and p in by_path}
+        tasks = [t for t in self.scanned["tasks"] if not t.get("broken") and holds(t)]
+        if any(t.get("status") in EDITABLE for t in tasks):
+            return None
+        settled = [t for t in tasks if self._settled_session(t)]
+        return max(settled, key=lambda t: t["assignedAt"]) if settled else None
+
+    async def forward_replies(self, at: int) -> bool:
+        """Send the new replies of settled threads to their sessions, wrapped, a run of them as one prompt. A reply is
+        marked before it is sent and never sent twice, also across a restart. One that cannot go is not lost: it goes back
+        to the robot (a new task with relatedTaskId) and the note says so. True when a file changed."""
+        self.held = set()
+        if not self.forward_on():
+            return False
+        told = set(self.board["notified"])
+        named = {p for t in self.scanned["tasks"] for p in (t.get("sources") or []) if isinstance(p, str)}
+        by_path = {a["path"]: a for a in self.scanned["arrivals"]}
+        waiting: dict[str, list[dict]] = {}
+        for a in self.scanned["arrivals"]:
+            p = a["path"]
+            if p in told or p in named or p in self.board["forwarded"] or a.get("broken"):
+                continue
+            task = self._reply_task(a, by_path)
+            if task:
+                waiting.setdefault(task["id"], []).append(a)
+                self.held.add(p)
+        changed = False
+        for task_id, rows in waiting.items():
+            newest, oldest = max(r["mtime"] for r in rows), min(r["mtime"] for r in rows)
+            if at - newest < FORWARD_QUIET_MS and at - oldest < FORWARD_QUIET_MAX_MS:
+                continue
+            changed = await self._forward(task_id, sorted(rows, key=lambda r: r["ts"]), at) or changed
+        return changed
+
+    async def _forward(self, task_id: str, rows: list[dict], at: int) -> bool:
+        try:
+            path, task = self._task(task_id)
+        except Refused:
+            return False
+        sid = self._settled_session(task)
+        if sid is None:
+            self.held -= {r["path"] for r in rows}   # moved on since the scan: the robot's again
+            return False
+        blocks, batch, used = [], [], 0
+        for r in rows:
+            full = self.root / r["path"]
+            try:
+                data = _read_small(full, full.stat())
+            except OSError:
+                data = None
+            if data is None:
+                continue
+            block = reply_block(r, plain_text(data))
+            if batch and used + len(block) > FORWARD_BATCH_CHARS:
+                break
+            blocks.append(block)
+            batch.append(r["path"])
+            used += len(block)
+        if not batch:
+            return False
+        refused = self.world.prompt_refusal(sid)
+        if refused is not None:
+            return self._forward_failed(path, task, batch, refused, at)
+        for p in batch:
+            self.board["forwarded"][p] = {"task": task_id, "at": at, "state": "sending"}
+        self._save_board()
+        text = i18n.tl("srv.slack.forward", id=task_id, title=_head(task.get("title") or ""), replies="\n".join(blocks))
+        try:
+            refused = await self.world.submit_prompt(sid, text, at)
+        except Exception as exc:
+            refused = (500, f"{type(exc).__name__}: {exc}")
+        if refused is not None:
+            for p in batch:
+                self.board["forwarded"].pop(p, None)
+            self._save_board()
+            return self._forward_failed(path, task, batch, refused, at)
+        for p in batch:
+            self.board["forwarded"][p]["state"] = "sent"
+        self.board["forwarded"] = dict(list(self.board["forwarded"].items())[-5000:])
+        self._save_board()
+        self.held -= set(batch)
+        task["sources"] = [p for p in task.get("sources") or [] if isinstance(p, str)] + batch
+        task["forwarded"] = (task.get("forwarded") if isinstance(task.get("forwarded"), list) else []) + [{"path": p, "at": at, "sessionId": sid} for p in batch]
+        self._write_task(path, task)
+        return True
+
+    def _forward_failed(self, path: Path, task: dict, batch: list[str], refused: tuple[int, str], at: int) -> bool:
+        """The session cannot take it. A full queue passes, so that is tried again for a while; anything else, or a queue
+        full too long, goes to the robot, and the note says why."""
+        first = min((self.scanned_mtime(p) for p in batch), default=at)
+        if refused[0] == 429 and at - first < FORWARD_FULL_WAIT_MS:
+            return False
+        for p in batch:
+            self.board["forwarded"][p] = {"task": task["id"], "at": at, "state": "failed", "why": str(refused[1])[:200]}
+        self._save_board()
+        self.held -= set(batch)
+        task["forwardFailed"] = (task.get("forwardFailed") if isinstance(task.get("forwardFailed"), list) else []) + [{"path": p, "at": at, "why": str(refused[1])[:200]} for p in batch]
+        self._write_task(path, task)
+        return True
+
+    def scanned_mtime(self, rel: str) -> int:
+        return next((a["mtime"] for a in self.scanned["arrivals"] if a["path"] == rel), 0)
 
     # -- the started tasks
     def follow(self, at: int) -> bool:
@@ -533,6 +785,8 @@ class SlackRoom:
                 if full.is_relative_to(top) and full.is_file():
                     full.unlink(missing_ok=True)
             path.unlink(missing_ok=True)
+            (self.root / self.context_rel(t["id"])).unlink(missing_ok=True)
+            self.contexts.discard(self.context_rel(t["id"]))
             self.scanner._cache.pop(str(path), None)
             removed.append(t["id"])
         for t in tasks:
@@ -581,6 +835,8 @@ class SlackRoom:
                 task["doneAt"] = at
             else:
                 task.pop("doneAt", None)
+            if want in EDITABLE:
+                task.pop("assignedAt", None)   # back before 開始: nobody is settled on it any more
             self.board["sawBusy"].pop(task["id"], None)
             self.board["started"].pop(task["id"], None)
             self._save_board()
@@ -608,7 +864,7 @@ class SlackRoom:
             refused = await self.world.submit_prompt(sid, text, at)
             if refused is not None:
                 raise Refused(refused[0], refused[1])
-            task.update(status="working", startedAt=at, target=target)
+            task.update(status="working", startedAt=at, target=target, assignedAt=at)
             self.board["sawBusy"].pop(task["id"], None)
             self.board["started"][task["id"]] = at
             self._save_board()
@@ -694,7 +950,8 @@ class SlackRoom:
         tasks = []
         for t in self.scanned["tasks"]:
             row = {k: t.get(k) for k in ("id", "title", "projectId", "sources", "threads", "prompt", "target", "launchCommand", "status",
-                                         "relatedTaskId", "promptEditedByUser", "sourcesAtEdit", "createdAt", "startedAt", "endedAt", "doneAt", "broken")}
+                                         "relatedTaskId", "promptEditedByUser", "sourcesAtEdit", "createdAt", "startedAt", "endedAt", "doneAt", "broken",
+                                         "forwarded", "forwardFailed")}
             row["status"] = row["status"] if row["status"] in STATUSES else "draft"
             if row["status"] == "done" and isinstance(row.get("doneAt"), (int, float)):
                 row["purgeAt"] = int(row["doneAt"] + self.retention_ms())
