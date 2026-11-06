@@ -29,7 +29,7 @@ import sys
 import time
 
 from common import DESKTOP, ISOLATE, LAUNCH_ARGS, Watch, desk_pins_js, new_page, ready
-from waits import settled, until
+from waits import read_until, settled, until
 
 SID = "e2e00000-0000-4000-8000-0000000003{:02x}"
 PROPS = "() => window.__dbg.props()"
@@ -160,8 +160,8 @@ async def run_crowded_props(pw, out, failures):
             raise
         await page.evaluate("() => window.__dbg.propsMax(2)")
         await wait(page, "() => !window.__dbg.props().fun", label="the looks gone under the limit")
-        await page.wait_for_timeout(300)
-        b = res["limitBrk"] = await page.evaluate("() => { const b = window.__dbg.brk(); return { ends: b.ends, on: b.robots.filter((x) => x.kind).map((x) => x.id), built: b.built }; }")
+        b = res["limitBrk"] = await read_until(page, "() => { const b = window.__dbg.brk(); return { ends: b.ends, on: b.robots.filter((x) => x.kind).map((x) => x.id), built: b.built }; }",
+                                               lambda b: any(e.get("reason") == "props" for e in b["ends"]) and not b["on"] and not b["built"]["booth"])
         pl = res["limitProps"] = await page.evaluate(PROPS)
         fl = res["floorAfter"] = await page.evaluate(floor_of)
         check(failures, any(e.get("reason") == "props" for e in b["ends"]) and not b["on"] and not b["built"]["booth"],

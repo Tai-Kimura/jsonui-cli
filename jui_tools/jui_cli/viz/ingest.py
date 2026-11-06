@@ -2588,7 +2588,11 @@ class World:
                     session["prompt"] = ready
                     self._dirty.add("sessions")
                 continue
-            how = self.launch_of(sid) if sid in prompt else None
+            # an IDE's session says so without a channel: it cannot be started naming one, so "connect the relay" would send
+            # its reader the wrong way
+            entry = self.session_proc.get(sid)
+            ide = entry is not None and entry[2] in launch.IDE_ENTRYPOINTS
+            how = self.launch_of(sid) if sid in prompt or ide else None
             if session["relay"] != (sid in relay) or session.get("prompt") != (sid in prompt) or session.get("launch") != how:
                 session["relay"] = sid in relay
                 session["prompt"] = sid in prompt   # relay true and prompt false: a jui-viz plugin older than 1.2.0

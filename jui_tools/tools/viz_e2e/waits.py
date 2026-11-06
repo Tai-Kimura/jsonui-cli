@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 
 # A forced timeout for the runner's arm (2026-10-20-jui-viz-e2e-one-suite-exception-stops-the-run): a wait whose name
 # contains this text times out at once, so one suite stops on a WaitTimeout and the next must still run and report.
@@ -59,6 +60,18 @@ async def settled(page, name: str, ids=None, timeout: int = 30000):
                 why="(ids) => window.__dbg.settleInfo(ids)")
     return await page.evaluate("(ids) => window.__dbg.settleInfo(ids)", ids)
 
+
+
+async def read_until(page, read: str, ok, arg=None, timeout: int = 20000):
+    """Read `read` (a JS function of `arg`) until the Python check `ok` holds, and return the last reading. For what the
+    page gets to by itself a pass or two later, in place of a fixed wait before one read. It never raises on time: the
+    arm's own check then runs on what the page held and says so, so a page that never gets there stays red."""
+    t0 = time.monotonic()
+    while True:
+        got = await page.evaluate(read, arg)
+        if ok(got) or time.monotonic() - t0 > timeout / 1000:
+            return got
+        await page.wait_for_timeout(100)
 
 
 def frame_log_js(row: str, stop: str) -> str:

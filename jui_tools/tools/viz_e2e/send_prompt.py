@@ -24,6 +24,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import threading
 import time
 
 from common import DESKTOP, ISOLATE, LAUNCH_ARGS, PHONE, T, T_head, T_pattern, Watch, dump, new_page, ready, stamp
@@ -33,7 +34,8 @@ S_OLD = "e2e00000-0000-4000-8000-0000000000d2"
 S_NONE = "e2e00000-0000-4000-8000-0000000000d3"
 S_PLAIN = "e2e00000-0000-4000-8000-0000000000d4"
 S_IDE = "e2e00000-0000-4000-8000-0000000000d5"
-CWDS = {S_OK: "/work/prompt-ok", S_OLD: "/work/prompt-old", S_NONE: "/work/prompt-none", S_PLAIN: "/work/prompt-plain", S_IDE: "/work/prompt-ide"}
+S_IDE_NO_RELAY = "e2e00000-0000-4000-8000-0000000000d6"
+CWDS = {S_OK: "/work/prompt-ok", S_OLD: "/work/prompt-old", S_NONE: "/work/prompt-none", S_PLAIN: "/work/prompt-plain", S_IDE: "/work/prompt-ide", S_IDE_NO_RELAY: "/work/prompt-idegone"}
 DEV = "--dangerously-load-development-channels"
 LINE1 = "一行目のテスト依頼"
 LINE2 = '二行目 <b>太字ではない</b> "引用" ' + "続く" * 20 + " 末尾TAILX"
@@ -90,6 +92,25 @@ async def run_send_prompt(pw, out, failures):
         subprocess.run([sys.executable, "-I", "-S", str(forward)], timeout=10, capture_output=True, env=dict(base_env, HOME=str(home)),
                        input=json.dumps({"session_id": sid, "cwd": CWDS[sid], "transcript_path": str(transcripts[sid]), "permission_mode": "default", **payload}).encode())
 
+    # What channel.py does: poll all the time. A channel not polled for 60 s is dead (permissions.CHANNEL_DEAD_MS), and on
+    # a slow machine this suite takes longer than that: the card then rightly said "no relay" where the arm asked another reason
+    polling = threading.Event()
+    got: dict = {}
+    pollers: list = []
+
+    def keep_polling(channel):
+        got[channel] = []
+        def go():
+            while not polling.is_set():
+                try:
+                    _, r = local("GET", f"/channel/poll?channelId={channel}", timeout=40)
+                except (OSError, ValueError):   # the server going down at the end; a 404's text is not JSON
+                    continue
+                got[channel].extend(r.get("prompts") or [])
+        t = threading.Thread(target=go, daemon=True)
+        t.start()
+        pollers.append(t)
+
     def local(method, path, body=None, timeout=5):
         """The stand-in for channel.py: token, no Origin."""
         token = json.loads((state / "server.json").read_text())["token"]
@@ -142,20 +163,23 @@ async def run_send_prompt(pw, out, failures):
         session_process(S_OLD, DEV, "plugin:jui-viz@jsonui")
         session_process(S_PLAIN)                                            # `claude` as typed
         session_process(S_IDE, "--output-format", "stream-json", entrypoint="claude-vscode")
+        session_process(S_IDE_NO_RELAY, "--output-format", "stream-json", entrypoint="claude-vscode")   # no channel at all
         for sid in (S_PLAIN, S_IDE):
-            local("POST", "/channel/hello", {"ppid": 1, "cwd": "/", "sessionId": sid, "version": "2", "accepts": ["prompt"], "via": "plugin"})
+            _, h = local("POST", "/channel/hello", {"ppid": 1, "cwd": "/", "sessionId": sid, "version": "2", "accepts": ["prompt"], "via": "plugin"})
+            keep_polling(h["channelId"])
         status, hello = local("POST", "/channel/hello", {"ppid": 1, "cwd": "/", "sessionId": S_OK, "version": "2", "accepts": ["prompt"], "via": "plugin"})
         check(status == 200, f"hello: {status}")
         ok_channel = hello["channelId"]
-        local("POST", "/channel/hello", {"ppid": 1, "cwd": "/", "sessionId": S_OLD})
+        keep_polling(ok_channel)
+        keep_polling(local("POST", "/channel/hello", {"ppid": 1, "cwd": "/", "sessionId": S_OLD})[1]["channelId"])
         for _ in range(100):
             _, snap = local("GET", "/api/snapshot")
             launches = {s["id"]: s.get("launch") for s in snap["slices"]["sessions"]}
-            if launches.get(S_OK) == "dev" and launches.get(S_PLAIN) == "no-flag" and launches.get(S_IDE) == "vscode":
+            if launches.get(S_OK) == "dev" and launches.get(S_PLAIN) == "no-flag" and launches.get(S_IDE) == "vscode" and launches.get(S_IDE_NO_RELAY) == "vscode":
                 break
             time.sleep(0.1)
         res["launches"] = {CWDS[k].rsplit("-", 1)[1]: v for k, v in launches.items()}
-        check(res["launches"] == {"ok": "dev", "old": None, "none": None, "plain": "no-flag", "ide": "vscode"}, f"the launches: {res['launches']}")
+        check(res["launches"] == {"ok": "dev", "old": None, "none": None, "plain": "no-flag", "ide": "vscode", "idegone": "vscode"}, f"the launches: {res['launches']}")
         watch = Watch(origin=url)
         page = await new_page(browser, watch, "send-prompt", **DESKTOP)
         await page.goto(url + "/")
@@ -186,8 +210,8 @@ async def run_send_prompt(pw, out, failures):
         await page.click("[data-h-back]")
         r = res["back"] = await page.evaluate(COMPOSE)
         check(not r["confirm"] and r["value"] == TEXT, f"やめる closes it and keeps the text: {r}")
-        _, polled = local("GET", f"/channel/poll?channelId={ok_channel}", timeout=30)
-        check(polled["prompts"] == [], f"nothing was sent before the confirmation: {polled}")
+        await page.wait_for_timeout(1500)
+        check(got[ok_channel] == [], f"nothing was sent before the confirmation: {got[ok_channel]}")
         # Ctrl+Enter opens it too; only its button sends
         await page.focus("[data-h-text]")
         await page.keyboard.press("Control+Enter")
@@ -199,8 +223,12 @@ async def run_send_prompt(pw, out, failures):
         r = res["sent"] = await page.evaluate(COMPOSE)
         check(r["value"] == "" and not r["confirm"] and T_pattern("hist.state.sending").fullmatch(r["state"]) and not T_pattern("hist.state.arrived").search(r["state"]),
               f"sent: the box is empty again, and the page says 送信中, not arrived: {r}")
-        _, polled = local("GET", f"/channel/poll?channelId={ok_channel}", timeout=30)
-        check(polled["prompts"] == [{"text": TEXT}], f"the channel got the text exactly: {polled}")
+        for _ in range(150):
+            if got[ok_channel]:
+                break
+            await page.wait_for_timeout(200)
+        await page.wait_for_timeout(1000)   # a second copy would come now
+        check(got[ok_channel] == [{"text": TEXT}], f"the channel got the text exactly, once: {got[ok_channel]}")
         await page.screenshot(path=str(out / "sent.png"))
         # the event log: when, to whom, the head
         sent_log = T_head("ev.prompt.sent", "label").strip()
@@ -238,7 +266,6 @@ async def run_send_prompt(pw, out, failures):
         check(bool(T_pattern("hist.state.missing").fullmatch(res["missing"]["state"])), f"届いていない names the likely causes: {res['missing']}")
         await page.screenshot(path=str(out / "missing.png"))
         await page.evaluate("() => { window.__dbg.promptWait.notArrivedMs = 60000; window.__dbg.promptWait.quietMs = 30000; }")
-        local("GET", f"/channel/poll?channelId={ok_channel}", timeout=30)   # the stand-in takes it
         # started without the flag, or in the VS Code extension: disabled, with the reason and how to start
         await open_robot(page, S_PLAIN)
         r = res["plain"] = await page.evaluate(COMPOSE)
@@ -248,6 +275,11 @@ async def run_send_prompt(pw, out, failures):
         await open_robot(page, S_IDE)
         r = res["ide"] = await page.evaluate(COMPOSE)
         check(r["disabled"] and T("hist.launch.vscode") in r["why"] and r["sendDisabled"], f"the VS Code extension: disabled, with the reason: {r}")
+        # no channel at all: still why it cannot be reached, not how to connect a channel it cannot be started with
+        await open_robot(page, S_IDE_NO_RELAY)
+        r = res["ideNoRelay"] = await page.evaluate(COMPOSE)
+        check(r["disabled"] and T("hist.launch.vscode") in r["why"] and T("hist.why.norelay") not in r["why"] and r["sendDisabled"],
+              f"the VS Code extension with no relay: the extension's reason, not the relay's: {r}")
         # the old plugin and the relay-less session: disabled, with the reason
         await open_robot(page, S_OLD)
         r = res["old"] = await page.evaluate(COMPOSE)
@@ -282,6 +314,7 @@ async def run_send_prompt(pw, out, failures):
     except Exception as e:
         failures.append(f"send-prompt: {type(e).__name__}: {str(e).splitlines()[0]}")
     finally:
+        polling.set()
         for proc in stand_ins:   # the session stand-ins this suite started
             proc.kill()
             proc.wait()

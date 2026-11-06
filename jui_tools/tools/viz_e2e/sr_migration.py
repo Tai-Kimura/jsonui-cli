@@ -214,9 +214,9 @@ async def run_sr_migration(pw, out, failures, flat=False):
         # built again while the light draws the edge (a theme or an environment changed then): no frame in other colours
         # (a new renderer per build drew that first frame washed out — floors white, models pale: the video, 10-22)
         await page.evaluate("() => window.__dbg.srPixTrail(true)")
-        await page.wait_for_timeout(150)
+        await until(page, "() => window.__dbg.srPixCount() >= 3", "three frames before the build", timeout=20000)
         await page.evaluate("() => window.__dbg.srRebuildHere()")
-        await page.wait_for_timeout(300)
+        await until(page, "() => window.__dbg.srPixCount() >= 11", "frames after the build", timeout=20000)
         pix = await page.evaluate("() => window.__dbg.srPixTrail(false)")
         jumps = [i for i in range(1, len(pix)) if max(abs(a - b) for a, b in zip(pix[i], pix[i - 1])) > 15]
         check(failures, len(pix) > 10 and not jumps, f"built again mid-step, every frame keeps its colours: {len(pix)} frames, jumps {[(i, pix[i - 1], pix[i]) for i in jumps[:3]]}")
@@ -333,9 +333,9 @@ async def run_sr_migration(pw, out, failures, flat=False):
 
         # built again where it stands: no frame in other colours (a new renderer per build drew its first frame washed out)
         await page.evaluate("() => window.__dbg.srPixTrail(true)")
-        await page.wait_for_timeout(300)
+        await until(page, "() => window.__dbg.srPixCount() >= 3", "three frames before the build", timeout=20000)
         await page.evaluate("() => window.__dbg.srRebuildHere()")
-        await page.wait_for_timeout(500)
+        await until(page, "() => window.__dbg.srPixCount() >= 11", "frames after the build", timeout=20000)
         pix = await page.evaluate("() => window.__dbg.srPixTrail(false)")
         jumps = [i for i in range(1, len(pix)) if max(abs(a - b) for a, b in zip(pix[i], pix[i - 1])) > 15]
         check(failures, len(pix) > 10 and not jumps, f"a build where it stands keeps every frame's colours: {len(pix)} frames, jumps {[(i, pix[i - 1], pix[i]) for i in jumps[:3]]}")

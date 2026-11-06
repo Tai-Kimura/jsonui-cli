@@ -638,6 +638,8 @@ function composeTarget(id) {
   if (location.hostname !== '127.0.0.1') return { why: tl('hist.why.local', { port: location.port }) };
   if (!sess || sess.status === 'ended') return { why: tl('hist.why.ended') };
   if (sess.cli === 'codex') return sess.prompt ? { why: '', name, note: '' } : { why: tl('hist.why.codex') };
+  const ide = sess.launch === 'vscode' || sess.launch === 'desktop';
+  if (ide) return { why: tl('hist.why.launch', { why: LAUNCH_WHY[sess.launch][1], dev: PROMPT_START, channels: PROMPT_START_CHANNELS }) };
   if (!sess.relay) return { why: tl('hist.why.norelay') + RELAY_HOW_TEXT };
   if (!sess.prompt) return { why: tl('hist.why.old') };
   const L = LAUNCH_WHY[sess.launch] || LAUNCH_WHY.unreadable;
