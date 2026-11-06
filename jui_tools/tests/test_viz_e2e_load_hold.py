@@ -82,6 +82,60 @@ def test_a_load_that_stays_up_starts_after_the_most_and_says_so_beside_the_reds(
     assert load_hold.summary() == ["load hold: waited 600s in all", "load hold: started over the limit: breaks (120.0)"]
 
 
+def test_thirty_minutes_in_all_and_every_later_suite_starts_as_it_is_with_one_line():
+    m = Machine(120.0)
+    for i in range(6):
+        m.hold(f"s{i}")
+    assert 1800.0 <= m.t < 1801.0   # 3 suites of 10 minutes; the rest not a second of it
+    assert len(m.sleeps) == 120
+    assert sum(load_hold.BUDGET_USED in line for line in m.lines) == 1
+    assert not any(f"s{i}:" in line for line in m.lines for i in (3, 4, 5))
+    assert load_hold.summary() == ["load hold: waited 1800s in all", "load hold budget used, every later suite starts as it is",
+                                   "load hold: started over the limit: s0 (120.0), s1 (120.0), s2 (120.0), s3 (120.0), s4 (120.0), s5 (120.0)"]
+
+
+def test_a_budget_that_runs_out_in_a_suite_cuts_that_suites_wait_short():
+    m = Machine(120.0)
+    def hold(name):
+        load_hold.hold(name, read=m.read, cores=CORES, sleep=m.sleep, now=lambda: m.t, say=m.lines.append, max_wait=100.0, poll=15.0, total_wait=150.0)
+    hold("a")
+    hold("b")
+    assert m.t == 150.0
+    assert "  b: started at load 120.0, still over 54 after 50s (every check as it is)" in m.lines
+    assert m.lines[-1] == "  load hold budget used, every later suite starts as it is"
+
+
+def test_the_last_wait_ending_as_the_load_falls_can_use_the_budget_too():
+    m = Machine(120.0, 10.0)
+    load_hold.hold("a", read=m.read, cores=CORES, sleep=m.sleep, now=lambda: m.t, say=m.lines.append, poll=15.0, total_wait=15.0)
+    assert m.lines[-1] == "  load hold budget used, every later suite starts as it is" and load_hold.summary()[1] == m.lines[-1].strip()
+
+
+def test_after_the_budget_a_calm_suite_says_nothing_and_an_unreadable_load_is_no_trouble():
+    m = Machine(120.0)
+    for i in range(3):
+        m.hold(f"s{i}")
+    n = len(m.lines)
+    c = Machine(10.0)
+    c.hold("calm")
+    bad = Machine(OSError("gone"))
+    bad.hold("bad")
+    assert (c.sleeps, c.lines, bad.sleeps, bad.lines) == ([], [], [], []) and len(m.lines) == n
+    assert "calm" not in load_hold.summary()[-1] and "bad" not in load_hold.summary()[-1]
+
+
+def test_a_new_run_has_the_whole_budget_again():
+    m = Machine(120.0)
+    for i in range(3):
+        m.hold(f"s{i}")
+    assert load_hold.summary()
+    load_hold.configure(args())
+    assert load_hold.summary() == []
+    m2 = Machine(120.0, 10.0)
+    m2.hold("again")
+    assert m2.sleeps == [15.0]
+
+
 def test_the_last_sleep_ends_at_the_most_and_not_past_it():
     m = Machine(120.0)
     load_hold.hold("x", read=m.read, cores=CORES, sleep=m.sleep, now=lambda: m.t, say=m.lines.append, max_wait=20.0, poll=15.0)
