@@ -278,6 +278,31 @@ def _queued_items(d: dict) -> list[dict]:
     return [_text_item(text, at, d["kind"] != "human")]
 
 
+def _queued_pictures(rec: dict, off, at) -> list[dict]:
+    """The pictures of a prompt sent while the session worked: the rows its waiting form makes, named the same way.
+    Its text alone showed until 2.5.5 (measured on the real records: 0 of 10 such pictures showed, 29 of 29 waiting).
+    The picture comes first, as in the records (image, then text: 10 of 10)."""
+    out = []
+    for n, b in enumerate(_image_blocks(_picture_content(rec))):
+        item = {"kind": "image", "at": at}
+        ref = _image_ref(b, off, n)
+        if ref:
+            item["img"] = ref
+        out.append(item)
+    return out
+
+
+def _picture_content(rec) -> object:
+    """The blocks a record's pictures are in: a user record's content, or a queued_command's prompt."""
+    if not isinstance(rec, dict):
+        return None
+    if rec.get("type") == "user":
+        msg = rec.get("message")
+        return msg.get("content") if isinstance(msg, dict) else None
+    att = rec.get("attachment") if rec.get("type") == "attachment" else None
+    return att.get("prompt") if isinstance(att, dict) and att.get("type") == "queued_command" else None
+
+
 def _unsourced_queued(rec: dict) -> list[dict]:
     """A queued_command with no ``origin`` (ticket 2026-10-29-viz-history-misses-messages-shown-in-terminal, E: measured
     2 in 14 days, both a <task-notification>): delivery() has nothing to read, so its prompt is the harness's text, at
@@ -298,7 +323,7 @@ def items_of(rec, results: dict, off: int | None = None) -> list[dict]:
         d = delivery(rec)
         if d is None:
             return _unsourced_queued(rec)
-        return _queued_items(d) if d["queued"] else []
+        return _queued_pictures(rec, off, d["at"]) + _queued_items(d) if d["queued"] else []
     if not isinstance(rec, dict) or rec.get("type") not in ("user", "assistant"):
         return []
     msg = rec.get("message")
@@ -580,7 +605,7 @@ def image_at(fd: int, off, n) -> tuple[int, str | bytes]:
     """The n-th picture of the record whose line starts at byte off of the transcript open on fd.
 
     (200, media type) with the bytes as a third value is returned as (200, (media, data)); otherwise (status, reason):
-    404 when off is not the start of a line, the line is not a user record, or it has no n-th picture; 415 when the
+    404 when off is not the start of a line, the line is neither a user record nor a queued_command, or it has no n-th picture; 415 when the
     picture is not base64, its media type is not allowed, or its bytes do not start as that type does; 413 when the
     line or the decoded picture is over the cap. Only this transcript, only this line: nothing else is read."""
     if not isinstance(off, int) or isinstance(off, bool) or not isinstance(n, int) or isinstance(n, bool) or off < 0 or n < 0:
@@ -605,8 +630,7 @@ def image_at(fd: int, off, n) -> tuple[int, str | bytes]:
         rec = json.loads(line)
     except ValueError:
         return 404, "no such image"
-    msg = rec.get("message") if isinstance(rec, dict) and rec.get("type") == "user" else None
-    blocks = _image_blocks(msg.get("content") if isinstance(msg, dict) else None)
+    blocks = _image_blocks(_picture_content(rec))
     if n >= len(blocks):
         return 404, "no such image"
     src = blocks[n].get("source")

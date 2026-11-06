@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import os
 import socket
 import struct
 import zlib
@@ -105,6 +106,66 @@ def test_a_picture_is_named_by_its_place_and_its_base64_is_never_in_the_items(tm
     assert B64 not in dumped and B64[:40] not in dumped
     user = next(i for i in got["items"] if i["kind"] == "user" and "この画面" in i["text"])
     assert user["gone"] == ["/nonexistent-viz-test/images/1.png"]
+
+
+def _queued(blocks, uuid="q-1", ts="2026-10-19T09:00:00Z"):
+    return {"type": "attachment", "timestamp": ts, "uuid": uuid,
+            "attachment": {"type": "queued_command", "prompt": blocks, "commandMode": "prompt", "delivery_id": f"d-{uuid}",
+                           "source_uuid": f"src-{uuid}", "origin": {"kind": "human"}}}
+
+
+def test_a_picture_sent_while_the_session_worked_is_the_row_its_waiting_form_makes(tmp_path):
+    """Ticket 2026-11-06-cc-dependency-watch-red: on the real records 0 of 10 showed, the words alone; waiting 29 of 29."""
+    data = png()
+    path = _path(tmp_path)
+    _write(path, [_queued([img(data, "image/png"), {"type": "text", "text": "今これ"}]),
+                  _user([img(data, "image/png"), {"type": "text", "text": "今これ"}], ts="2026-10-19T09:00:00Z")])
+    starts = _line_starts(path)
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        for line, off in enumerate(starts[:2]):
+            rec = json.loads(path.read_text().splitlines()[line])
+            items = H.items_of(rec, {}, off)
+            assert [i["kind"] for i in items] == ["image", "user"]
+            assert items[0]["img"] == {"off": off, "n": 0, "type": "image/png"}
+            assert items[1]["text"] == "今これ"
+            assert H.image_at(fd, off, 0) == (200, ("image/png", data))
+            assert H.image_at(fd, off, 1)[0] == 404
+    finally:
+        os.close(fd)
+
+
+def test_every_picture_of_a_queued_prompt_is_counted_in_order(tmp_path):
+    first, second = png(rgb=(1, 2, 3)), png(rgb=(4, 5, 6))
+    path = _path(tmp_path)
+    _write(path, [_queued([img(first, "image/png"), img(second, "image/png"), {"type": "text", "text": "2 枚"}])])
+    off = _line_starts(path)[0]
+    items = H.items_of(json.loads(path.read_text().splitlines()[0]), {}, off)
+    assert [i.get("img", {}).get("n") for i in items] == [0, 1, None]
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        assert H.image_at(fd, off, 1) == (200, ("image/png", second))
+    finally:
+        os.close(fd)
+
+
+def test_a_queued_prompt_written_twice_is_one_picture_and_one_row(tmp_path):
+    rec = _queued([img(png(), "image/png"), {"type": "text", "text": "今これ"}])
+    path = _path(tmp_path)
+    _write(path, [_user("その前の指示"), rec, rec])     # read_tail drops a mark with nothing before it, either form
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        items = H.read_tail(fd)["items"]
+    finally:
+        os.close(fd)
+    assert [i["kind"] for i in items] == ["user", "image", "user"]
+    assert items[1]["img"]["off"] == _line_starts(path)[1]       # in the first copy's place, as a row's is
+
+
+def test_a_string_prompt_and_another_attachment_have_no_picture(tmp_path):
+    assert H._picture_content({"type": "attachment", "attachment": {"type": "queued_command", "prompt": "x"}}) == "x"
+    assert H._image_blocks("x") == []
+    assert H._picture_content({"type": "attachment", "attachment": {"type": "other", "prompt": [{"type": "image"}]}}) is None
 
 
 def test_a_picture_file_that_still_exists_is_not_marked_gone(tmp_path):

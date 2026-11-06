@@ -213,3 +213,39 @@ def test_the_two_sides_pair_on_every_msg_id_of_the_window(tmp_path, monkeypatch)
     # the matching receipt between two others: neither the oldest kept nor the newest kept is it
     projects = _files(tmp_path, [[other], [r["send"], r["result"]], [r["peer"]], [other]])
     assert P.talk_msg_id(_ctx(projects))["both_sides"] is True
+
+
+def _queued_shape(tmp_path, attachment):
+    """talk_origin's queued_command over the green records and one more."""
+    recs = records()
+    recs["extra"] = {"type": "attachment", "attachment": {"type": "queued_command", **attachment}}
+    return shapes(folder(tmp_path, recs))["talk_origin"]["queued_command"]
+
+
+IMAGE = {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "aGk="}}
+WORDS = {"type": "text", "text": "今これ"}
+
+
+def test_the_requesters_prompt_with_a_picture_is_a_form_viz_reads(tmp_path):
+    """Ticket 2026-11-06-cc-dependency-watch-red: 215 such records in 45 days; the day the newest 40 held one, it read as a change."""
+    assert _queued_shape(tmp_path, {"prompt": [IMAGE, WORDS], "origin": {"kind": "human"}}) == "all"
+
+
+@pytest.mark.parametrize("name, attachment", [
+    ("a list on another session's message", {"prompt": [WORDS], "origin": {"kind": "peer", "msg_id": MID, "from": "uds:/tmp/s/1.sock",
+                                                                            "name": "peer-a", "body": "本文"}}),
+    ("a list on the parent's message: the talk view reads only a string", {"prompt": [WORDS], "origin": {"kind": "coordinator"}}),
+    ("a block viz does not read", {"prompt": [IMAGE, {"type": "document"}], "origin": {"kind": "human"}}),
+    ("something that is not a block", {"prompt": ["今これ"], "origin": {"kind": "human"}}),
+    ("an empty list", {"prompt": [], "origin": {"kind": "human"}}),
+    ("no prompt", {"origin": {"kind": "human"}}),
+    ("a prompt of another type", {"prompt": {"text": "x"}, "origin": {"kind": "human"}}),
+])
+def test_any_other_form_is_still_a_change(tmp_path, name, attachment):
+    assert _queued_shape(tmp_path, attachment) == "some", name
+
+
+def test_a_prompt_with_no_origin_is_not_read_whatever_it_holds():
+    """The scan keeps only records with an origin; this says so of the test on its own."""
+    assert P._queued_prompt_is_read({"prompt": "x"}) is False
+    assert P._queued_prompt_is_read({"prompt": "x", "origin": "human"}) is False
