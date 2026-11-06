@@ -9,12 +9,14 @@ from __future__ import annotations
 import contextlib
 import datetime
 import json
+import os
 import re
 import traceback
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import load_hold
 from children import children, stop_children_since
 
 # ---- the times a fixture writes (2.3.5; ticket 2026-10-20-jui-viz-hist-wide-robot-margin-red-on-integrate) ----
@@ -109,6 +111,14 @@ def progress_grew(suite: str, before: dict[str, int], folder: Path = REAL_PROGRE
 STOP_WAIT_S = 10.0
 
 
+def load_text() -> str:
+    """The machine's load, so a red in the log can be read beside it (ticket 2026-11-06-viz-e2e-full-run-red-under-load)."""
+    try:
+        return " ".join(f"{x:.1f}" for x in os.getloadavg())
+    except OSError:
+        return "?"
+
+
 @contextlib.contextmanager
 def suite_guard(name: str, failures: list, out: Path | None = None):
     """Run one suite's block in run.py: an exception out of it (a wait's WaitTimeout, a crash) becomes one FAIL line
@@ -116,7 +126,10 @@ def suite_guard(name: str, failures: list, out: Path | None = None):
     timeout in props ended the whole run with a traceback, no FAIL line, and no later suite ran). The traceback is
     kept in <out>/<name>-traceback.txt. KeyboardInterrupt still stops the run. However it ends, the processes the suite
     started and left running are stopped (stop_children_since)."""
+    if load_hold.enabled():
+        load_hold.hold(name, say=lambda line: print(line, flush=True))
     before = children()
+    print(f"  {name}: load at the start {load_text()}", flush=True)
     try:
         yield
     except Exception as e:  # noqa: BLE001 - every exception, so the next suite runs
@@ -173,6 +186,10 @@ class Watch:
 async def new_page(browser, watch: Watch, label: str, **opts):
     page = await browser.new_page(**opts)
     watch.attach(page, label)
+    slow = os.environ.get("JUI_VIZ_E2E_CPU_SLOW", "")
+    if slow.isdigit() and int(slow) > 1:   # run.py --slow: this page's CPU, so a run can be made slow without loading the machine
+        cdp = await page.context.new_cdp_session(page)
+        await cdp.send("Emulation.setCPUThrottlingRate", {"rate": int(slow)})
     await page.add_init_script(CANVAS_TEXT_JS)   # the canvas's words, for screen_check (defined below)
     return page
 

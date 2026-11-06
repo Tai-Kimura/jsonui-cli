@@ -24,6 +24,7 @@ import asyncio
 import json
 import os
 import pathlib
+import shutil
 import socket
 import subprocess
 import sys
@@ -35,6 +36,7 @@ sys.path.insert(0, str(HERE))
 from playwright.async_api import async_playwright  # noqa: E402
 
 import demo  # noqa: E402
+import load_hold  # noqa: E402
 from common import E2E_MARKS, ISOLATE, LAUNCH_ARGS, Watch, dump, expect_demo_file, progress_count, progress_grew, suite_guard  # noqa: E402
 
 EXPECT_DEMO = HERE / "expect_demo.json"
@@ -208,6 +210,11 @@ def main(argv=None) -> int:
                     help="the language every server of the run shows (JUI_VIZ_LANGUAGE; default: ja, which the checks were "
                          "written on). The gate's English step: --lang en --only en-reps --group-ok")
     ap.add_argument("--suite", action="append", help="demo suite(s) to run (default: all)")
+    ap.add_argument("--slow", type=int, metavar="N", help="make this run slow on purpose, without loading the machine: each page's CPU N times "
+                    "slower, and the run at background priority where the OS has taskpolicy (a race that a loaded machine shows now and then, every time)")
+    ap.add_argument("--no-load-hold", action="store_true",
+                    help="a whole run (no --only, no --suite) waits before each suite while the load is over three times the "
+                         "cores, ten minutes at most (load_hold.py): this starts each one at once")
     ap.add_argument("--group-ok", action="store_true",
                     help="run an --only that is a group (live, demo: most of the e2e); without it such a name stops "
                          "the run, after saying the suites it holds (only_groups.py)")
@@ -217,6 +224,11 @@ def main(argv=None) -> int:
     ap.add_argument("--record-demo", metavar="URL",
                     help="run the demo suites against URL (the prototype's agent-test.html) and write expect_demo.json")
     a = ap.parse_args(argv)
+    if a.slow:
+        os.environ["JUI_VIZ_E2E_CPU_SLOW"] = str(a.slow)
+        if shutil.which("taskpolicy") and not os.environ.get("JUI_VIZ_E2E_POLICY"):
+            os.environ["JUI_VIZ_E2E_POLICY"] = "background"
+            os.execvp("taskpolicy", ["taskpolicy", "-c", "background", sys.executable, *sys.argv])
     import only_groups
     lines, stop = only_groups.check(a.only, a.group_ok)   # before the line: a group is said, and stops without --group-ok
     for line in lines:
@@ -636,9 +648,12 @@ def main(argv=None) -> int:
     import e2e_lock
     # one viz e2e at a time on the machine, in the order asked; let go when this process exits (e2e_lock.py)
     held = e2e_lock.hold(only=a.only or [], priority=True if a.priority else None)
+    load_hold.configure(a)
     asyncio.run(go())
     if a.record_demo:
         return 0
+    for line in load_hold.summary():
+        print(line)
     for f in failures:
         print("FAIL", f)
     print("ok" if not failures else f"{len(failures)} failure(s)")

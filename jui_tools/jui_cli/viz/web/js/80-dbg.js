@@ -336,6 +336,7 @@ window.__dbg = {
     const out = V.camera.position.toArray().concat(V.controls.target.toArray()); V.camera.position.copy(p); V.controls.target.copy(q); V.controls.update(); return out; },
   // the room built again where it stands (what a theme or an environment does, with nothing to look different)
   srRebuildHere: () => { const V = SR.view; if (!V) return null; srBuild(srCamKeep(V)); return SR.builds; },
+  srPixCount: () => (SR.pixTrail || []).length,
   srPixTrail: (on) => { const got = SR.pixTrail || []; SR.pixTrail = on ? [] : null; return got; },
   srCamTrail: (on) => { const got = SR.camTrail || []; SR.camTrail = on ? [] : null; return got; },   // the cost view's own money format (the e2e compares the engine's numbers as shown)
   srMigSpeed: (s) => { SR_MIG.speed = s; srMigRenderBar(); return SR_MIG.speed; },

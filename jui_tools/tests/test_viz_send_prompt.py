@@ -39,6 +39,7 @@ S_OLD = "e2e00000-0000-4000-8000-00000000a002"    # relay, jui-viz 1.1.0: cannot
 S_NONE = "e2e00000-0000-4000-8000-00000000a003"   # relay: false
 S_PLAIN = "e2e00000-0000-4000-8000-00000000a005"  # relay, 1.2.0, started without the channels flag (2.3.4)
 S_IDE = "e2e00000-0000-4000-8000-00000000a006"    # relay, 1.2.0, the VS Code extension's session (2.3.4)
+S_IDE_NO_RELAY = "e2e00000-0000-4000-8000-00000000a00f"
 DEV = "--dangerously-load-development-channels"
 #: The cap the requester named (10-19: "例: 8 KB"), written out here so a change of the constant shows.
 PROMPT_MAX_BODY = 8192
@@ -167,13 +168,14 @@ def viz(tmp_path, monkeypatch):
     v = Viz(home)
     assert paths.viz_home() == home / ".local" / "state" / "jui-viz"
     try:
-        for sid in (S_NEW, S_OLD, S_NONE, S_PLAIN, S_IDE):
+        for sid in (S_NEW, S_OLD, S_NONE, S_PLAIN, S_IDE, S_IDE_NO_RELAY):
             assert v.local("POST", "/hook", {"hook_event_name": "SessionStart", "session_id": sid, "cwd": f"/work/{sid[-4:]}", "source": "startup"})[0] == 204
         v.session_process(S_NEW, DEV, "plugin:jui-viz@jsonui", "server:jui-viz")
         v.session_process(S_OLD, DEV, "plugin:jui-viz@jsonui")
         v.session_process(S_PLAIN)                                   # `claude` as typed: no flag
         v.session_process(S_IDE, "--output-format", "stream-json", entrypoint="claude-vscode")
-        v.wait(lambda: {S_NEW, S_OLD, S_NONE, S_PLAIN, S_IDE} <= set(v.sessions()), "the sessions")
+        v.session_process(S_IDE_NO_RELAY, "--output-format", "stream-json", entrypoint="claude-vscode")   # says no hello
+        v.wait(lambda: {S_NEW, S_OLD, S_NONE, S_PLAIN, S_IDE, S_IDE_NO_RELAY} <= set(v.sessions()), "the sessions")
         ok, new = v.local("POST", "/channel/hello", {"ppid": 1, "cwd": "/", "sessionId": S_NEW, "version": "2", "accepts": ["prompt"]})
         assert ok == 200
         ok, old = v.local("POST", "/channel/hello", {"ppid": 1, "cwd": "/", "sessionId": S_OLD})   # what 1.1.0 says
@@ -435,7 +437,7 @@ def test_doctor_names_the_sessions_whose_plugin_cannot_receive_and_those_started
     out = subprocess.run([sys.executable, str(JUI), "viz", "doctor", "--json"], env=_env(viz.home), capture_output=True, text=True, timeout=60).stdout
     (check,) = [c for c in json.loads(out)["checks"] if c["name"] == "prompt"]
     s = viz.sessions()
-    assert "1 session(s) reached (4 with the relay / 5 in all)" in check["detail"], check
+    assert "1 session(s) reached (4 with the relay / 6 in all)" in check["detail"], check
     assert "1 session(s) with a jui-viz plugin older than 1.2.0" in check["detail"] and s[S_OLD]["label"] in check["detail"]
     assert f"1 not reached ({s[S_PLAIN]['label']}): started naming no channel" in check["detail"]
     assert f"1 not reached ({s[S_IDE]['label']}): a VS Code extension session" in check["detail"]
@@ -607,3 +609,14 @@ def test_a_failed_read_of_the_argv_is_tried_again_and_a_good_one_kept():
         world.launch_of("s1")
         now[0] += 0.5
     assert len(calls) - before == 6, len(calls) - before                      # read at 0, 1, 3, 7, 15 and 31 s: 6 in a minute
+
+
+def test_an_ide_session_with_no_channel_says_it_is_an_ide(viz):
+    """It cannot be started naming a channel, so the page must not tell its reader to connect one: launch comes from its
+    entrypoint, with or without a relay. The prompt itself is still refused."""
+    session = viz.sessions()[S_IDE_NO_RELAY]
+    assert session["relay"] is False and session["prompt"] is False and session.get("launch") == "vscode"
+
+
+def test_a_session_with_no_channel_and_no_ide_has_no_launch(viz):
+    assert viz.sessions()[S_NONE].get("launch") is None

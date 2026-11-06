@@ -380,8 +380,9 @@ async def run_history_scroll(pw, out, failures):
         r = res["reopened"] = await page.evaluate(SCROLL_STATE)
         check_(r["atBottom"], f"1. the tab opened again shows the bottom: {r}")
         await page.emulate_media(color_scheme="dark")
-        await page.evaluate("() => { const p = document.querySelector('[data-rb-hist]'); p.scrollTop = 0; }")
-        await page.wait_for_timeout(300)
+        # read back after two frames: the page takes the scroll in a frame, and the theme's rebuild can move it (a time here lost that race)
+        await wait(page, """() => new Promise((res) => { const p = document.querySelector('[data-rb-hist]'); p.scrollTop = 0;
+          requestAnimationFrame(() => requestAnimationFrame(() => res(p.scrollTop === 0))); })""", timeout=20000, label="scrolled up in the dark")
         with open(transcript, "a") as f:
             for rec in scroll_records(2, start=44):
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")

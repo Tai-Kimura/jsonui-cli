@@ -428,6 +428,9 @@ async def scenario_floors(browser, srv, out, failures, res):
                 await page.click("#btn-side")
             for view in ("floor", "building"):
                 await page.evaluate("(on) => window.__dbg.tower(on)", view == "building")
+                # the view has come (a frame draws the legend), not a time: a page behind its frames read the floor before it
+                await wait(page, "(on) => window.__dbg.floors().tower === on && (!on || !document.getElementById('tower-legend').hidden)", arg=view == "building",
+                           label=f"the {view} view at {width}px")
                 await page.wait_for_timeout(500)
                 o = await page.evaluate(OVERLAP_JS)
                 res["overlap"][f"{width}-{side}-{view}"] = o
@@ -633,8 +636,10 @@ async def scenario_demo_show(browser, srv, out, failures, res):
 
     # The demo's clock advances 0.05 s a frame at most, so on a slow renderer (7 fps here) it runs slow: wait on the
     # script's own time, not on seconds. at(t, lead) jumps to t - lead and plays until t + 0.4.
-    async def at(t, lead=1.0, after=0.4, settle=700):
+    async def at(t, lead=1.0, after=0.4, settle=700, touch=None):
         await page.evaluate("(t) => window.__dbg.setSim(t)", t - lead)
+        if touch:
+            await touch()
         # between the target and two seconds past it: right after a jump back the model still holds the old time
         await page.wait_for_function("(t) => { const m = window.__dbg.model().t; return m >= t && m < t + 2; }", arg=t + after, timeout=60000)
         await page.wait_for_timeout(settle)
@@ -687,8 +692,8 @@ async def scenario_demo_show(browser, srv, out, failures, res):
     box = await page.evaluate("() => { const r = document.getElementById('scene-canvas').getBoundingClientRect(); return [r.left + r.width / 3, r.top + r.height / 2]; }")
     # a small wheel toward the office: a touch that opens nothing (a click hit a board and held the camera for that)
     await page.mouse.move(box[0], box[1])
-    await page.mouse.wheel(0, -60)
-    await at(B["towerOut"])
+    # the touch holds it for 8 s of real time (DIRECTOR.userAt): touched after the jump, so a page behind its frames still crosses within them
+    await at(B["towerOut"], touch=lambda: page.mouse.wheel(0, -60))
     show["touchOpened"] = await page.evaluate("() => !document.getElementById('wb').hidden || !document.getElementById('rb').hidden")
     show["heldBack"] = not (await page.evaluate("() => window.__dbg.floors()"))["tower"]
     check(failures, show["night"] and show["heldBack"] and not show["touchOpened"], f"demo: the building at night; a touch holds the camera back {show}")

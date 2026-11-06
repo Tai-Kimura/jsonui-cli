@@ -41,7 +41,7 @@ import time
 from common import LAUNCH_ARGS, PHONE, Watch, new_page, ready
 from data_server import _room
 from server_room import _examples, _write
-from waits import until
+from waits import read_until, until
 
 SUB = "agent-roster-sub-1"
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
@@ -379,10 +379,11 @@ async def run_room_roster(pw, out, failures, jt=None):
             await page.click(f"#roster-list [data-roster-check='{SID[i]}']")
 
         async def placed(pg, label, card=False):
-            await pg.wait_for_timeout(600)   # rosterPlace runs each quarter second
-            s = res[f"place-{label}"] = await pg.evaluate(RO)
-            check(failures, s["shown"] and s["hits"] == [] and _apart(s["rect"], s["err"]) and _apart(s["rect"], s["soloBox"]) and _apart(s["rect"], s["floorNav"])
-                  and _apart(s["rect"], s["waits"]) and _inside(s["rect"], s["scene"]) and (not card or s["card"]),
+            def clear(s):
+                return s["shown"] and s["hits"] == [] and _apart(s["rect"], s["err"]) and _apart(s["rect"], s["soloBox"]) and _apart(s["rect"], s["floorNav"]) \
+                    and _apart(s["rect"], s["waits"]) and _inside(s["rect"], s["scene"]) and (not card or s["card"])
+            s = res[f"place-{label}"] = await read_until(pg, RO, clear)   # rosterPlace runs each quarter second of a page that has the time
+            check(failures, clear(s),
                   f"{label}: the list on no control, off the error line and the waits, inside the 3D: rect {s['rect']} hits {s['hits']} floors {s['floorNav']} "
                   f"name {s['soloBox']} err {s['err']} waits {s['waits']} card {s['card']}")
             return s

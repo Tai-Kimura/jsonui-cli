@@ -25,6 +25,7 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from common import DESKTOP, LAUNCH_ARGS, T, T_pattern, Watch, dump, new_page, ready
+from waits import read_until
 
 ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI_TEST_RESULTS_DIR")
 LAT, LON = 35.681236, 139.767125
@@ -114,11 +115,11 @@ async def run_weather(pw, out, failures):
         await wait(page, "() => document.querySelector('.chip.demo').dataset.net === 'connected'", label="connected")
         await wait(page, "() => window.__dbg.floors().floors.length >= 2", label="two floors")
         await page.evaluate("() => window.__dbg.tower(true)")
-        await page.wait_for_timeout(2500)
+        await page.wait_for_timeout(2500)   # the time a page that asked would have asked in; not what the switch waits on
         # 1. opened: no position asked, nothing outside, the switch off
-        r = res["opened"] = await page.evaluate("""() => ({ geo: window.__geoCalls, shown: !document.getElementById('tower-weather').hidden,
+        r = res["opened"] = await read_until(page, """() => ({ geo: window.__geoCalls, shown: !document.getElementById('tower-weather').hidden,
           checked: document.getElementById('weather-switch').getAttribute('aria-checked'), note: document.getElementById('weather-note').textContent,
-          outside: window.__dbg.outside() })""")
+          outside: window.__dbg.outside() })""", lambda r: r["shown"])
         check(failures, r["geo"] == 0, f"opening the page asks for no position: {r['geo']} call(s)")
         check(failures, r["shown"] and r["checked"] == "false" and T("scene.weather.off") in r["note"], f"the switch shows, off: {r}")
         check(failures, r["outside"]["weather"] is None, f"no weather while off: {r['outside']}")

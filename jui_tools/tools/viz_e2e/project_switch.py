@@ -34,6 +34,7 @@ import sys
 import time
 
 from common import DESKTOP, ISOLATE, LAUNCH_ARGS, Watch, dump, new_page, ready
+from waits import read_until
 
 SIDS = {"a1": "e2e00000-0000-4000-8000-0000000000a1", "b1": "e2e00000-0000-4000-8000-0000000000b1",
         "b2": "e2e00000-0000-4000-8000-0000000000b2", "b3": "e2e00000-0000-4000-8000-0000000000b3"}
@@ -110,13 +111,13 @@ async def run_project_switch(pw, out, failures):
             await wait(page, "(l) => window.__dbg.board().robot === l && !document.getElementById('rb').hidden", arg=who[k], label=f"{k}'s card")
 
         async def state(step, want_robot, want_project):
-            got = await page.evaluate(STATE)
+            want = {"robot": who[want_robot] if want_robot else None, "project": want_project, "card": bool(want_robot)}
+            got = await read_until(page, STATE, lambda g: g == want)
             # the card and the 3D agree (ticket 2026-10-21-jui-viz-3d-zoom-lost-after-project-switch): a card open is the
             # camera on its robot; none is the camera back on the room (or the floor) shown, not on the last one
             await wait(page, "() => { const c = window.__dbg.camOn(); return !c.tween && !c.waitFor; }", label=f"{step}: the camera settled")
             cam = await page.evaluate("() => window.__dbg.camOn()")
             res["steps"].append({"step": step, **got, "cam": cam})
-            want = {"robot": who[want_robot] if want_robot else None, "project": want_project, "card": bool(want_robot)}
             check(got == want, f"{step}: {want} expected, got {got}")
             if want_robot:
                 check(cam["zoomed"] and cam["inScene"] and cam["toRobot"] is not None and cam["toRobot"] < 1.5,
