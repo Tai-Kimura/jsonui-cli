@@ -128,6 +128,35 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
         expect(result).to include('placeholder = "Choose one"')
       end
 
+      it "passes a list sheet's words, and no doneButtonText: a list's sheet has no such button" do
+        result = described_class.generate({ 'type' => 'SelectBox', 'id' => 's', 'sheetTitle' => 'Pick a store',
+                                             'cancelButtonText' => 'Back', 'doneButtonText' => 'Apply' }, 0, required_imports)
+        expect(result).to include('sheetTitle = "Pick a store"', 'cancelButtonText = "Back"')
+        expect(result).not_to include('doneButtonText')
+      end
+
+      it "passes a date sheet's three words" do
+        result = described_class.generate({ 'type' => 'SelectBox', 'id' => 's', 'selectItemType' => 'Date', 'sheetTitle' => 'When',
+                                             'cancelButtonText' => 'Back', 'doneButtonText' => 'Apply' }, 0, required_imports)
+        expect(result).to include('DateSelectBox(', 'sheetTitle = "When"', 'cancelButtonText = "Back"', 'doneButtonText = "Apply"')
+      end
+
+      it 'reads a strings.json key as prompt does: the two words come out the same' do
+        allow(KjuiTools::Compose::Helpers::ResourceResolver).to receive(:process_text).and_call_original
+        allow(KjuiTools::Compose::Helpers::ResourceResolver).to receive(:process_text)
+          .with('pick_a_store', anything).and_return('stringResource(R.string.pick_a_store)')
+        result = described_class.generate({ 'type' => 'SelectBox', 'id' => 's', 'prompt' => 'pick_a_store',
+                                             'sheetTitle' => 'pick_a_store', 'cancelButtonText' => 'pick_a_store' }, 0, required_imports)
+        expect(result).to include('placeholder = stringResource(R.string.pick_a_store)',
+                                  'sheetTitle = stringResource(R.string.pick_a_store)',
+                                  'cancelButtonText = stringResource(R.string.pick_a_store)')
+      end
+
+      it 'says nothing of the words when they are absent: the library has its own' do
+        result = described_class.generate({ 'type' => 'SelectBox', 'id' => 's' }, 0, required_imports)
+        expect(result).not_to match(/sheetTitle|cancelButtonText|doneButtonText/)
+      end
+
       it 'prefers prompt over hint and placeholder when multiple are present' do
         json_data = {
           'type' => 'SelectBox',

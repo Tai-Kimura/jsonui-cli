@@ -12,6 +12,30 @@ RSpec.describe SjuiTools::SwiftUI::Views::SelectBoxConverter do
   end
 
   describe '#convert' do
+    context 'with doneButtonText' do
+      def code_of(component)
+        described_class.new({ 'type' => 'SelectBox' }.merge(component)).convert
+      end
+
+      it 'passes a text, in the place the view declares it' do
+        code = code_of('prompt' => 'Pick', 'doneButtonText' => 'Apply')
+        expect(code).to include('doneButtonText: "Apply"')
+        expect(code.index('prompt:')).to be < code.index('doneButtonText:')
+      end
+
+      it 'is passed with no prompt too' do
+        expect(code_of('doneButtonText' => 'Apply')).to include('doneButtonText: "Apply"')
+      end
+
+      it 'passes a binding' do
+        expect(code_of('doneButtonText' => '@{doneWord}')).to include('doneButtonText: data.doneWord')
+      end
+
+      it 'says nothing when absent: the view has its own word' do
+        expect(code_of('prompt' => 'Pick')).not_to include('doneButtonText')
+      end
+    end
+
     context 'with basic selectbox' do
       let(:component) do
         {
