@@ -238,12 +238,24 @@ function sfTargetHTML(t, s) {
 }
 /* The messages a task was made from, oldest first: who, where, the head (the server's sourceHeads). Folded on a note
    that has a prompt; open on a talking one (the exchange so far is what it shows). */
+/* The note says why in a few words; the server's whole sentence is in the title. */
+function sfForwardFailedHTML(failed) {
+  const last = failed[failed.length - 1] || {};
+  const words = { gone: () => tl('sf.forward.why.gone'), full: () => tl('sf.forward.why.full'), no_channel: () => tl('sf.forward.why.no_channel'),
+    no_relay: () => tl('sf.forward.why.no_relay'), old_plugin: () => tl('sf.forward.why.old_plugin'), codex: () => tl('sf.forward.why.codex') };
+  const why = (Object.hasOwn(words, last.kind) ? words[last.kind] : () => tl('sf.forward.why.other'))();
+  return `<p class="sf-mark sf-mark-late sf-mark-forward-failed" title="${esc(String(last.why || ''))}">${esc(tl('sf.note.forward_failed', { n: failed.length, why }))}</p>`;
+}
 function sfSourcesHTML(t, s) {
   const paths = Array.isArray(t.sources) ? t.sources.filter((p) => typeof p === 'string') : [];
   const atEdit = new Set(Array.isArray(t.sourcesAtEdit) ? t.sourcesAtEdit : []);
   const late = t.promptEditedByUser === true ? paths.filter((p) => !atEdit.has(p)).length : 0;
   const threads = Array.isArray(t.threads) ? t.threads.length : 0;
+  const sent = Array.isArray(t.forwarded) ? t.forwarded.length : 0;
+  const failed = Array.isArray(t.forwardFailed) ? t.forwardFailed : [];
   return (late ? `<p class="sf-mark sf-mark-late">${esc(tl('sf.note.late', { n: late }))}</p>` : '')
+    + (sent ? `<p class="sf-mark sf-mark-forwarded">${esc(tl('sf.note.forwarded', { n: sent }))}</p>` : '')
+    + (failed.length ? sfForwardFailedHTML(failed) : '')
     + `<button type="button" class="sf-src-open" data-sf-chat${paths.length ? '' : ' disabled'}>${esc(tl('sf.note.sources', { n: paths.length }))}${threads > 1 ? esc(tl('sf.note.threads', { n: threads })) : ''}</button>`;
 }
 /* The other notes this one is tied to: a later message about it made a new task (relatedTaskId), or it is that task. */

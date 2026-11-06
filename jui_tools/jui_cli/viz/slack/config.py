@@ -53,6 +53,7 @@ DEFAULT: dict = {
         },
     },
     "taskPrompt": "",
+    "autoForwardReplies": True,
 }
 
 
