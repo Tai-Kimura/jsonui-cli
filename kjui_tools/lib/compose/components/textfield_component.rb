@@ -685,7 +685,13 @@ module KjuiTools
           # and `onSubmit`.
           # `nextFocus` is the declared attribute (and what the iOS converter
           # reads); the legacy `nextFocusId` is retired (2.3.22).
+          # It names a field's id at generation time; a binding has no value yet,
+          # and pasted into `focusRequester_` it does not compile.
           next_focus_id = json_data['nextFocus']
+          if Helpers::BoundValue.bound?(next_focus_id)
+            Core::Logger.warn("TextField #{json_data['id'].inspect}: 'nextFocus' names a field and does not take a binding (#{next_focus_id}); ignored.")
+            next_focus_id = nil
+          end
           on_submit = json_data['onSubmit']
 
           # KeyboardActions for focus chain / submit

@@ -68,8 +68,9 @@ RSpec.describe 'kjui codegen: bound values reach the Kotlin' do
   # lists, class names, a user agent, a comment's flag. A binding is not their
   # declared form; kept here by name so a new leak is red and a fixed one says
   # so.
+  # (TextField's nextFocus left this list when a bound one became a warning
+  # and no focus jump: it names a field's id at generation time.)
   not_numbers = {
-    'TextField' => %w[nextFocus],
     'TextView' => %w[hideOnFocused], 'Radio' => %w[group],
     'WebView' => %w[userAgent], 'Web' => %w[userAgent]
   }

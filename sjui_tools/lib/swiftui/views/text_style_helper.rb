@@ -176,7 +176,7 @@ module SjuiTools
 
           args = ["lineStyle: #{DECORATION_LINE_STYLES[JsonUIShared::EnumSpelling.lowered(face['lineStyle'], 'Label', %w[underline lineStyle]).to_s] || '.single'}"]
           args << "color: #{get_swiftui_color(face['color'])}" if face['color']
-          args << "lineOffset: #{face['lineOffset']}" if line_offset && face['lineOffset']
+          args << "lineOffset: #{number_slot(face['lineOffset'])}" if line_offset && face['lineOffset']
 
           "TextDecoration(#{args.join(', ')})"
         end

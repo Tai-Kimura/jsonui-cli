@@ -19,6 +19,11 @@ module RjuiTools
       class EmbedConverter < BaseConverter
         def convert(indent = 2)
           screen = attributes['screen']
+          if has_binding?(screen)
+            # It names a screen at build; a binding has no value yet.
+            Core::Logger.warn("Embed #{attributes['id'].inspect}: 'screen' names a screen and does not take a binding (#{screen}); ignored.")
+            screen = nil
+          end
           if screen.nil? || screen.to_s.empty?
             return "#{indent_str(indent)}{/* Embed: missing required `screen` attribute */}"
           end

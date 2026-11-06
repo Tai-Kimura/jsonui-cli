@@ -100,15 +100,15 @@ module SjuiTools
               end
 
               if hint_attrs['fontSize']
-                add_line "hintFontSize: #{hint_attrs['fontSize']},"
+                add_line "hintFontSize: #{number_slot(hint_attrs['fontSize'])},"
               elsif @component['hintFontSize']
-                add_line "hintFontSize: #{@component['hintFontSize']},"
+                add_line "hintFontSize: #{number_slot(@component['hintFontSize'])},"
               end
 
               if hint_attrs['lineHeightMultiple']
-                add_line "hintLineHeightMultiple: #{hint_attrs['lineHeightMultiple']},"
+                add_line "hintLineHeightMultiple: #{number_slot(hint_attrs['lineHeightMultiple'])},"
               elsif @component['hintLineHeightMultiple']
-                add_line "hintLineHeightMultiple: #{@component['hintLineHeightMultiple']},"
+                add_line "hintLineHeightMultiple: #{number_slot(@component['hintLineHeightMultiple'])},"
               end
 
               # その他のhintAttributesはコメントとして記録
@@ -127,12 +127,12 @@ module SjuiTools
 
               # hintFontSize (個別属性)
               if @component['hintFontSize']
-                add_line "hintFontSize: #{@component['hintFontSize']},"
+                add_line "hintFontSize: #{number_slot(@component['hintFontSize'])},"
               end
 
               # hintLineHeightMultiple (個別属性)
               if @component['hintLineHeightMultiple']
-                add_line "hintLineHeightMultiple: #{@component['hintLineHeightMultiple']},"
+                add_line "hintLineHeightMultiple: #{number_slot(@component['hintLineHeightMultiple'])},"
               end
             end
 
@@ -173,7 +173,7 @@ module SjuiTools
 
             # cornerRadius
             if @component['cornerRadius']
-              add_line "cornerRadius: #{@component['cornerRadius']},"
+              add_line "cornerRadius: #{number_slot(@component['cornerRadius'])},"
             end
 
             # containerInset (also accept paddings as containerInset for TextView).
@@ -184,8 +184,8 @@ module SjuiTools
             # through getPadding, and it is the element's own spacing. Read by
             # neither the inset nor an outer `.padding` here, a TextView's
             # `padding` was dropped (ticket ios-a-textviews-id-box-shrinks-by-
-            # its-container-inset). A bound `padding` is not folded in.
-            uniform_padding = @component['padding'] if @component['padding'].is_a?(Numeric)
+            # its-container-inset). A bound `padding` is folded in the same way.
+            uniform_padding = @component['padding'] if @component['padding'].is_a?(Numeric) || is_binding?(@component['padding'])
             inset = @component['containerInset'] || @component['edgeInset'] ||
                     @component['paddings'] || uniform_padding
             # A four-value `paddings` is [top, right, bottom, left] (the SSoT's
@@ -195,6 +195,7 @@ module SjuiTools
             # paddings was read as containerInset is.
             from_paddings = !@component['containerInset'] && !@component['edgeInset'] && @component['paddings']
             if inset
+              inset = inset.is_a?(Array) ? inset.map { |v| number_slot(v) } : number_slot(inset)
               if inset.is_a?(Array)
                 case inset.length
                 when 1
@@ -225,7 +226,7 @@ module SjuiTools
 
             # maxHeight
             if @component['maxHeight']
-              add_line "maxHeight: #{@component['maxHeight']},"
+              add_line "maxHeight: #{number_slot(@component['maxHeight'])},"
             end
 
             # Focus-state binding — TextField parity: every TextView with an id
@@ -334,11 +335,11 @@ module SjuiTools
             # growth floor (see flexible_floor).
             floor = flexible_floor
             if floor && @component['maxHeight']
-              @modifier_bag.append(:frame_size, ".frame(minHeight: #{floor}, maxHeight: #{@component['maxHeight']})")
+              @modifier_bag.append(:frame_size, ".frame(minHeight: #{floor}, maxHeight: #{number_slot(@component['maxHeight'])})")
             elsif floor
               @modifier_bag.append(:frame_size, ".frame(minHeight: #{floor})")
             elsif @component['maxHeight']
-              @modifier_bag.append(:frame_size, ".frame(maxHeight: #{@component['maxHeight']})")
+              @modifier_bag.append(:frame_size, ".frame(maxHeight: #{number_slot(@component['maxHeight'])})")
             end
           else
             # paddings is used as containerInset for TextView, so don't apply external padding
@@ -363,9 +364,7 @@ module SjuiTools
 
           # Apply other modifiers
           alpha_value = attr_with_alias('opacity', 'alpha')
-          if alpha_value
-            @modifier_bag.register(:opacity, ".opacity(#{alpha_value})")
-          end
+          @modifier_bag.register(:opacity, opacity_modifier(alpha_value)) if alpha_value
 
           # hidden — visibility:"invisible" shorthand: keep layout space,
           # hide drawing + accessibility (never collapse)
@@ -394,8 +393,9 @@ module SjuiTools
         # grows past it, never shrinks below it (android is the reference).
         # Non-numeric heights (wrapContent/matchParent) don't participate.
         def flexible_floor
-          return @component['minHeight'] unless @component['flexible'] == true
-          return @component['minHeight'] if @component['minHeight']
+          floor = @component['minHeight'] && number_slot(@component['minHeight'])
+          return floor unless @component['flexible'] == true
+          return floor if floor
 
           height = @component['height']
           height.is_a?(Numeric) ? height : nil

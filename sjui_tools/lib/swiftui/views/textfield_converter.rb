@@ -172,8 +172,8 @@ module SjuiTools
             style_args = []
             style_args << "hintColor: #{get_swiftui_color(hint_color)}" if hint_color
             style_args << "hintFont: \"#{@component['hintFont']}\"" if @component['hintFont']
-            style_args << "hintFontSize: #{@component['hintFontSize']}" if @component['hintFontSize']
-            style_args << "fontSize: #{@component['fontSize']}" if @component['fontSize']
+            style_args << "hintFontSize: #{number_slot(@component['hintFontSize'])}" if @component['hintFontSize']
+            style_args << "fontSize: #{number_slot(@component['fontSize'])}" if @component['fontSize']
             alignment = text_alignment_to_swiftui(@component['textAlign'] || 'left')
             add_modifier_line ".styledPlaceholder(#{hint_literal}, text: #{display_binding}, " \
                               "style: TextFieldPlaceholderStyle(#{style_args.join(', ')}), " \
@@ -236,7 +236,7 @@ module SjuiTools
 
           # textPaddingLeft（テキストの左パディング）
           if @component['textPaddingLeft']
-            @modifier_bag.append(:padding, ".padding(.leading, #{@component['textPaddingLeft']})")
+            @modifier_bag.append(:padding, ".padding(.leading, #{number_slot(@component['textPaddingLeft'])})")
           end
 
           # Text change handler: wired into the field's binding above. It was
@@ -322,10 +322,11 @@ module SjuiTools
           # single SwiftUI .onSubmit closure (SwiftUI does not expose
           # per-return-key slots like Compose's KeyboardActions).
           on_submit_body = []
-          if @component['id'] && @component['nextFocus']
+          next_focus = name_slot('nextFocus', @component['nextFocus'])
+          if @component['id'] && next_focus
             field_id = to_camel_case(@component['id'])
             focus_var = "#{field_id}IsFocused"
-            next_field = to_camel_case(@component['nextFocus'])
+            next_field = to_camel_case(next_focus)
             next_focus_var = "#{next_field}IsFocused"
             on_submit_body << "data.#{focus_var} = false"
             on_submit_body << "data.#{next_focus_var} = true"
@@ -384,9 +385,7 @@ module SjuiTools
 
           # Apply opacity
           alpha_value = attr_with_alias('opacity', 'alpha')
-          if alpha_value
-            @modifier_bag.register(:opacity, ".opacity(#{alpha_value})")
-          end
+          @modifier_bag.register(:opacity, opacity_modifier(alpha_value)) if alpha_value
 
           # Apply shadow if needed
           if @component['shadow']
@@ -561,7 +560,7 @@ module SjuiTools
           end
 
           if (padding = @component['fieldPadding'])
-            @modifier_bag.append(:padding, ".padding(#{padding})")
+            @modifier_bag.append(:padding, ".padding(#{number_slot(padding)})")
           end
 
           apply_max_length

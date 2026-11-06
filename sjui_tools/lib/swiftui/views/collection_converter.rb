@@ -698,9 +698,10 @@ module SjuiTools
         # container, mirroring ScrollViewConverter's mappings.
         def apply_scroll_container_attrs
           inset = @component['containerInset']
-          if inset.is_a?(Numeric)
-            @modifier_bag.append(:component_specific, ".contentMargins(.all, #{inset}, for: .scrollContent)")
+          if inset.is_a?(Numeric) || is_binding?(inset)
+            @modifier_bag.append(:component_specific, ".contentMargins(.all, #{number_slot(inset)}, for: .scrollContent)")
           elsif inset.is_a?(Array)
+            inset = inset.map { |v| number_slot(v) }
             edge = case inset.length
                    when 1 then "EdgeInsets(top: #{inset[0]}, leading: #{inset[0]}, bottom: #{inset[0]}, trailing: #{inset[0]})"
                    when 2 then "EdgeInsets(top: #{inset[0]}, leading: #{inset[1]}, bottom: #{inset[0]}, trailing: #{inset[1]})"

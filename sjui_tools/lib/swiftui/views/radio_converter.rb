@@ -109,7 +109,7 @@ module SjuiTools
             # option's identity within the group (the web converter submits
             # it); the node id is the fallback identity.
             radio_value = @component['value'] || id
-            group = @component['group'] || 'defaultGroup'
+            group = name_slot('group', @component['group']) || 'defaultGroup'
             
             # Create @State variable name for selection (グループごとに管理)
             state_var = "selected#{group.split('_').map(&:capitalize).join}"
@@ -301,7 +301,7 @@ module SjuiTools
           # asset unrendered (d=166, 32 parity).
           icon = @component['icon']
           selected_icon = @component['selectedIcon'] || @component['selected_icon']
-          size = @component['iconSize']
+          size = @component['iconSize'] && number_slot(@component['iconSize'])
           icon_color = @component['iconColor'] ? get_swiftui_color(@component['iconColor']) : nil
 
           if icon || selected_icon
@@ -364,7 +364,9 @@ module SjuiTools
             return unless node.is_a?(Hash)
 
             if JsonUIShared::TypeSynonyms.drawn_type(node['type'].to_s) == 'Radio' && !node.key?('items')
-              group = node['group'] || 'defaultGroup'
+              # The node's converter says a bound group is ignored (name_slot).
+              group = node['group']
+              group = 'defaultGroup' if group.nil? || Binding::BindingExpression.binding?(group)
               var = "selected#{group.to_s.split('_').map(&:capitalize).join}"
               entry = (seeds[var] ||= { groups: [], seed: nil, selected: nil, checked: nil })
               entry[:groups] << group unless entry[:groups].include?(group)

@@ -72,7 +72,8 @@ module RjuiTools
 
           # Shadow
           shadow = attributes['shadow']
-          if shadow.is_a?(Hash)
+          # A bound one is already the base's style; two boxShadow keys do not compile.
+          if shadow.is_a?(Hash) && shadow.values.none? { |value| has_binding?(value) }
             shadow_color = shadow['color'] || 'rgba(0,0,0,0.25)'
             shadow_x = shadow['x'] || shadow['offsetX'] || 0
             shadow_y = shadow['y'] || shadow['offsetY'] || 2

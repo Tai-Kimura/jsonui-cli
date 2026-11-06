@@ -178,8 +178,8 @@ module SjuiTools
           id_part = @component['id'] ? to_camel_case(@component['id']) : position_name('image')
           state_var = "#{id_part}ZoomScale"
           @state_variables << "@State private var #{state_var}: CGFloat = 1.0"
-          lower = min_zoom || 1.0
-          upper = max_zoom || 'CGFloat.greatestFiniteMagnitude'
+          lower = number_slot(min_zoom || 1.0)
+          upper = number_slot(max_zoom || 'CGFloat.greatestFiniteMagnitude')
           @modifier_bag.append(:component_specific, ".scaleEffect(#{state_var})")
           @modifier_bag.register(:on_pinch, [
             ".simultaneousGesture(",

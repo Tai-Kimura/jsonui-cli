@@ -97,20 +97,20 @@ module SjuiTools
               case margins.length
               when 1
                 # 全方向同じマージン
-                @modifier_bag.append(:margin, ".padding(.all, #{margins[0].to_i})")
+                @modifier_bag.append(:margin, ".padding(.all, #{padding_value(margins[0])})")
               when 2
                 # 縦横のマージン
-                @modifier_bag.append(:margin, ".padding(.vertical, #{margins[0].to_i})")
-                @modifier_bag.append(:margin, ".padding(.horizontal, #{margins[1].to_i})")
+                @modifier_bag.append(:margin, ".padding(.vertical, #{padding_value(margins[0])})")
+                @modifier_bag.append(:margin, ".padding(.horizontal, #{padding_value(margins[1])})")
               when 4
                 # 上、右、下、左の順
-                @modifier_bag.append(:margin, ".padding(.top, #{margins[0].to_i})")
-                @modifier_bag.append(:margin, ".padding(.trailing, #{margins[1].to_i})")
-                @modifier_bag.append(:margin, ".padding(.bottom, #{margins[2].to_i})")
-                @modifier_bag.append(:margin, ".padding(.leading, #{margins[3].to_i})")
+                @modifier_bag.append(:margin, ".padding(.top, #{padding_value(margins[0])})")
+                @modifier_bag.append(:margin, ".padding(.trailing, #{padding_value(margins[1])})")
+                @modifier_bag.append(:margin, ".padding(.bottom, #{padding_value(margins[2])})")
+                @modifier_bag.append(:margin, ".padding(.leading, #{padding_value(margins[3])})")
               end
             else
-              @modifier_bag.append(:margin, ".padding(.all, #{margins.to_i})")
+              @modifier_bag.append(:margin, ".padding(.all, #{padding_value(margins)})")
             end
           else
             # 個別のマージン設定（バインディング対応）
@@ -278,20 +278,20 @@ module SjuiTools
             if insets.is_a?(Array)
               case insets.length
               when 1
-                @modifier_bag.append(:padding, ".padding(#{insets[0].to_i})")
+                @modifier_bag.append(:padding, ".padding(#{padding_value(insets[0])})")
               when 2
                 # 縦横のinsets
-                @modifier_bag.append(:padding, ".padding(.vertical, #{insets[0].to_i})")
-                @modifier_bag.append(:padding, ".padding(.horizontal, #{insets[1].to_i})")
+                @modifier_bag.append(:padding, ".padding(.vertical, #{padding_value(insets[0])})")
+                @modifier_bag.append(:padding, ".padding(.horizontal, #{padding_value(insets[1])})")
               when 4
                 # 上、右、下、左の順
-                @modifier_bag.append(:padding, ".padding(.top, #{insets[0].to_i})")
-                @modifier_bag.append(:padding, ".padding(.trailing, #{insets[1].to_i})")
-                @modifier_bag.append(:padding, ".padding(.bottom, #{insets[2].to_i})")
-                @modifier_bag.append(:padding, ".padding(.leading, #{insets[3].to_i})")
+                @modifier_bag.append(:padding, ".padding(.top, #{padding_value(insets[0])})")
+                @modifier_bag.append(:padding, ".padding(.trailing, #{padding_value(insets[1])})")
+                @modifier_bag.append(:padding, ".padding(.bottom, #{padding_value(insets[2])})")
+                @modifier_bag.append(:padding, ".padding(.leading, #{padding_value(insets[3])})")
               end
             else
-              @modifier_bag.append(:padding, ".padding(#{insets.to_i})")
+              @modifier_bag.append(:padding, ".padding(#{padding_value(insets)})")
             end
           end
 

@@ -55,7 +55,7 @@ module SjuiTools
             label_attrs = @component['labelAttributes'].is_a?(Hash) ? @component['labelAttributes'] : {}
             label_size = label_attrs['fontSize'] || @component['fontSize']
             if label_size
-              add_line "fontSize: #{label_size},"
+              add_line "fontSize: #{number_slot(label_size)},"
             end
 
             label_color = label_attrs['fontColor'] || @component['fontColor']
@@ -87,7 +87,7 @@ module SjuiTools
             end
 
             if @component['cornerRadius']
-              add_line "cornerRadius: #{@component['cornerRadius']},"
+              add_line "cornerRadius: #{number_slot(@component['cornerRadius'])},"
             end
 
             # caretAttributes — the closed-state caret. The object was
@@ -265,6 +265,7 @@ module SjuiTools
             # paddings - should come after selectItemType and items（UIKitに合わせてpaddingsに統一）
             if @component['paddings']
               padding = @component['paddings']
+              padding = padding.is_a?(Array) ? padding.map { |v| number_slot(v) } : number_slot(padding)
               if padding.is_a?(Array)
                 case padding.length
                 when 1
@@ -282,10 +283,10 @@ module SjuiTools
             elsif @component['paddingTop'] || @component['paddingBottom'] ||
                   @component['paddingLeft'] || @component['paddingRight']
               # UIKitに合わせてpaddingTop形式に統一
-              top = @component['paddingTop'] || 0
-              bottom = @component['paddingBottom'] || 0
-              left = @component['paddingLeft'] || 0
-              right = @component['paddingRight'] || 0
+              top = number_slot(@component['paddingTop'] || 0)
+              bottom = number_slot(@component['paddingBottom'] || 0)
+              left = number_slot(@component['paddingLeft'] || 0)
+              right = number_slot(@component['paddingRight'] || 0)
               add_line "padding: EdgeInsets(top: #{top}, leading: #{left}, bottom: #{bottom}, trailing: #{right})"
             end
 
@@ -342,9 +343,7 @@ module SjuiTools
 
           # Apply other modifiers
           alpha_value = attr_with_alias('opacity', 'alpha')
-          if alpha_value
-            @modifier_bag.register(:opacity, ".opacity(#{alpha_value})")
-          end
+          @modifier_bag.register(:opacity, opacity_modifier(alpha_value)) if alpha_value
 
           # hidden — visibility:"invisible" shorthand: keep layout space,
           # hide drawing + accessibility (never collapse)
@@ -428,11 +427,11 @@ module SjuiTools
         def caret_literal(attrs)
           args = []
           args << "src: \"#{attrs['src']}\"" if attrs['src']
-          args << "width: #{attrs['width']}" if attrs['width']
-          args << "height: #{attrs['height']}" if attrs['height']
+          args << "width: #{number_slot(attrs['width'])}" if attrs['width']
+          args << "height: #{number_slot(attrs['height'])}" if attrs['height']
           args << "tintColor: #{get_swiftui_color(attrs['tintColor'])}" if attrs['tintColor']
           args << "background: #{get_swiftui_color(attrs['background'])}" if attrs['background']
-          args << "rightMargin: #{attrs['rightMargin']}" if attrs['rightMargin']
+          args << "rightMargin: #{number_slot(attrs['rightMargin'])}" if attrs['rightMargin']
           "SelectBoxView.CaretAttributes(#{args.join(', ')})"
         end
 

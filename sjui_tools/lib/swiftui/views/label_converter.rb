@@ -367,16 +367,16 @@ module SjuiTools
             if edge_inset.is_a?(Array)
               case edge_inset.length
               when 1
-                @modifier_bag.append(:padding, ".padding(#{edge_inset[0].to_i})")
+                @modifier_bag.append(:padding, ".padding(#{padding_value(edge_inset[0])})")
               when 2
-                @modifier_bag.append(:padding, ".padding(.vertical, #{edge_inset[0].to_i})")
-                @modifier_bag.append(:padding, ".padding(.horizontal, #{edge_inset[1].to_i})")
+                @modifier_bag.append(:padding, ".padding(.vertical, #{padding_value(edge_inset[0])})")
+                @modifier_bag.append(:padding, ".padding(.horizontal, #{padding_value(edge_inset[1])})")
               when 3
-                @modifier_bag.append(:padding, ".padding(.top, #{edge_inset[0].to_i})")
-                @modifier_bag.append(:padding, ".padding(.horizontal, #{edge_inset[1].to_i})")
-                @modifier_bag.append(:padding, ".padding(.bottom, #{edge_inset[2].to_i})")
+                @modifier_bag.append(:padding, ".padding(.top, #{padding_value(edge_inset[0])})")
+                @modifier_bag.append(:padding, ".padding(.horizontal, #{padding_value(edge_inset[1])})")
+                @modifier_bag.append(:padding, ".padding(.bottom, #{padding_value(edge_inset[2])})")
               when 4
-                @modifier_bag.append(:padding, ".padding(EdgeInsets(top: #{edge_inset[0].to_i}, leading: #{edge_inset[1].to_i}, bottom: #{edge_inset[2].to_i}, trailing: #{edge_inset[3].to_i}))")
+                @modifier_bag.append(:padding, ".padding(EdgeInsets(top: #{padding_value(edge_inset[0])}, leading: #{padding_value(edge_inset[1])}, bottom: #{padding_value(edge_inset[2])}, trailing: #{padding_value(edge_inset[3])}))")
               end
             elsif edge_inset.is_a?(String) && edge_inset.include?('|')
               # パイプ区切り形式もサポート (UIKit互換)
@@ -395,7 +395,7 @@ module SjuiTools
                 @modifier_bag.append(:padding, ".padding(EdgeInsets(top: #{parts[0]}, leading: #{parts[1]}, bottom: #{parts[2]}, trailing: #{parts[3]}))")
               end
             else
-              @modifier_bag.append(:padding, ".padding(#{edge_inset.to_i})")
+              @modifier_bag.append(:padding, ".padding(#{padding_value(edge_inset)})")
             end
           end
 
@@ -463,11 +463,7 @@ module SjuiTools
           # Opacity (alpha/opacity)
           alpha_value = attr_with_alias('opacity', 'alpha')
           if alpha_value
-            if is_binding?(alpha_value)
-              @modifier_bag.register(:opacity, ".opacity(#{binding_data_expr(alpha_value)})")
-            else
-              @modifier_bag.register(:opacity, ".opacity(#{alpha_value})")
-            end
+            @modifier_bag.register(:opacity, opacity_modifier(alpha_value))
           end
 
           # Hidden — visibility:"invisible" shorthand: keep layout space,
@@ -575,9 +571,9 @@ module SjuiTools
           return unless shadow.is_a?(Hash)
 
           color = shadow['color'] ? get_swiftui_color(shadow['color']) : 'Color.black.opacity(0.3)'
-          blur = shadow['blur'] || 1
+          blur = number_slot(shadow['blur'] || 1)
           offset = shadow['offset']
-          x, y = offset.is_a?(Array) && offset.length >= 2 ? [offset[0], offset[1]] : [0, 1]
+          x, y = offset.is_a?(Array) && offset.length >= 2 ? [number_slot(offset[0]), number_slot(offset[1])] : [0, 1]
           @modifier_bag.append(
             :component_specific,
             ".shadow(color: #{color}, radius: #{blur}, x: #{x}, y: #{y})"
