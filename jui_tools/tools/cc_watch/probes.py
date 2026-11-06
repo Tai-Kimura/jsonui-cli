@@ -411,6 +411,24 @@ def talk_msg_id(ctx: Context):
             "both_sides": bool(ctx._talk["sent_ids"] & ctx._talk["seen_ids"]) if sent and seen else "unseen"}
 
 
+#: The blocks a queued prompt holds when it is not a string, and viz reads (history.py: the words and the pictures).
+QUEUED_PROMPT_BLOCKS = ("text", "image")
+
+
+def _queued_prompt_is_read(a: dict) -> bool:
+    """A queued_command viz reads: its origin, and its prompt as a string; or the requester's prompt with a picture,
+    which is a list of blocks (measured 11-06: 215 in 45 days, since 2.1.286, every one human, image then text; no peer,
+    channel or coordinator). The talk view takes a coordinator's body only from a string, so a list on another kind, or
+    a block viz does not read, is still a change."""
+    if not isinstance(a.get("origin"), dict):
+        return False
+    prompt = a.get("prompt")
+    if isinstance(prompt, str):
+        return True
+    return (isinstance(prompt, list) and bool(prompt) and a["origin"].get("kind") == "human"
+            and all(isinstance(b, dict) and b.get("type") in QUEUED_PROMPT_BLOCKS for b in prompt))
+
+
 def talk_origin(ctx: Context):
     """The receiver's record of a message read: origin {kind peer: msg_id, from, verifiedPeerPid, name, body} on an
     isMeta user record or a queued_command attachment; a subagent's send to main (senderTaskId); the parent's send to
@@ -424,7 +442,7 @@ def talk_origin(ctx: Context):
                      for k in PEER_ORIGIN_KEYS},
             "child": {k: _all_any(ctx._talk["child"], lambda o, k=k: k in o) for k in CHILD_ORIGIN_KEYS},
             "coordinator": "seen" if ctx._talk["coordinator"] or any(a["origin"].get("kind") == "coordinator" for a in queued) else "unseen",
-            "queued_command": _all_any(queued, lambda a: isinstance(a.get("prompt"), str) and isinstance(a.get("origin"), dict))}
+            "queued_command": _all_any(queued, _queued_prompt_is_read)}
 
 
 def talk_envelope(ctx: Context):

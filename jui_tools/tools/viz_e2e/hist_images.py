@@ -138,6 +138,25 @@ async def run_hist_images(pw, out, failures):
         await page.keyboard.press("Escape")
         await wait(page, "() => !document.querySelector('.h-light')", label="the sent picture closed")
 
+        # ---- a picture sent while the session worked (ticket 2026-11-06-cc-dependency-watch-red): a queued_command whose
+        # prompt is blocks; on the real records its words showed and its picture did not. A thumbnail like a waiting
+        # prompt's, the bytes from the same route, the large view counts it, and the words next to it are one row
+        pic_q = png(150, 90, (40, 160, 200))
+        with open(st.paths[A], "a") as f:
+            f.write(json.dumps({"type": "attachment", "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "uuid": "q-img-1", "attachment": {
+                "type": "queued_command", "commandMode": "prompt", "delivery_id": "d-img-1", "source_uuid": "src-img-1", "origin": {"kind": "human"},
+                "prompt": [{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": base64.b64encode(pic_q).decode()}},
+                           {"type": "text", "text": "作業中に送った見本"}]}}) + "\n")
+        QUEUED = """() => { const t = [...document.querySelectorAll('[data-rb-hist] .h-thumb img')].find((i) => i.naturalWidth === 150);
+          const words = [...document.querySelectorAll('[data-rb-hist] *')].filter((n) => n.children.length === 0 && n.textContent.trim() === '作業中に送った見本');
+          return { w: t ? t.naturalWidth : 0, h: t ? t.naturalHeight : 0, words: words.length }; }"""
+        await wait(page, "() => [...document.querySelectorAll('[data-rb-hist]')].some((n) => n.textContent.includes('作業中に送った見本'))", timeout=20000, label="the words sent while working")
+        await page.evaluate("() => { const b = [...document.querySelectorAll('[data-rb-hist] .h-thumb')].pop(); if (b) b.scrollIntoView({ block: 'center' }); }")
+        await wait(page, "() => [...document.querySelectorAll('[data-rb-hist] .h-thumb img')].some((i) => i.naturalWidth === 150)", timeout=15000, label="the thumbnail of the picture sent while working")
+        q = res["queuedPicture"] = await page.evaluate(QUEUED)
+        check(failures, q == {"w": 150, "h": 90, "words": 1}, f"a picture sent while the session worked: its thumbnail, its words once: {q}")
+        await page.screenshot(path=str(out / "queued-picture.png"))
+
         # ---- a closed tool row with a picture in its OUT (2.3.12, requester 10-21: 「閉じてる時でも画像があるってわかるように」;
         # ticket 2026-10-21-jui-viz-hist-tool-row-shows-no-image-when-closed): its head shows the first picture's small
         # thumbnail and 画像 N, read while the row stays closed; a press on it opens the large view, the row stays closed;
