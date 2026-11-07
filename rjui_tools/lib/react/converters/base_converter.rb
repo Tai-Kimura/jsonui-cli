@@ -1225,7 +1225,7 @@ module RjuiTools
           end
 
           literal = value.to_s
-          return "'#{literal}'" if literal.match?(CSS_COLOR_LITERAL)
+          return "'#{TailwindMapper.css_hex(literal)}'" if literal.match?(CSS_COLOR_LITERAL)
 
           "ColorManager.resolveColor('#{literal}')"
         end
@@ -1485,10 +1485,10 @@ module RjuiTools
         def text_shadow_style(shadow)
           if shadow.is_a?(Hash) && shadow['color'] && shadow['blur'] && shadow['offset'].is_a?(Array)
             color = shadow['color'].to_s
-            css_color = color.start_with?('#') || has_binding?(color) ? color : "var(--color-#{color})"
+            css_color = has_binding?(color) ? color : color.start_with?('#') ? TailwindMapper.css_hex(color) : "var(--color-#{color})"
             css_style_value("#{shadow['offset'][0]}px #{shadow['offset'][1]}px #{shadow['blur']}px #{css_color}")
           elsif shadow.is_a?(String) && !shadow.empty?
-            has_binding?(shadow) ? bound_value_expr(shadow) : "'#{shadow}'"
+            has_binding?(shadow) ? bound_value_expr(shadow) : "'#{TailwindMapper.css_hex(shadow)}'"
           end
         end
 
@@ -1534,7 +1534,7 @@ module RjuiTools
             elsif !opacity.nil? && !has_binding?(opacity)
               TailwindMapper.shadow_color_with_alpha(raw, opacity)
             else
-              raw.to_s
+              TailwindMapper.css_hex(raw.to_s)
             end
           unless opacity.nil? || (!has_binding?(opacity) && !has_binding?(raw) && !colour_key?(raw))
             color = "color-mix(in srgb, #{color} calc(#{opacity} * 100%), transparent)"

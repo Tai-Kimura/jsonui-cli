@@ -77,8 +77,9 @@ module RjuiTools
             classes << 'border-t-[color:var(--jui-indicator-color)]'
             classes << 'border-r-[color:var(--jui-indicator-color)]' if attributes['halfSpinner']
           elsif color.start_with?('#')
-            classes << "border-t-[#{color}]"
-            classes << "border-r-[#{color}]" if attributes['halfSpinner']
+            css = TailwindMapper.css_hex(color)
+            classes << "border-t-[#{css}]"
+            classes << "border-r-[#{css}]" if attributes['halfSpinner']
           else
             classes << "border-t-#{color}"
             classes << "border-r-#{color}" if attributes['halfSpinner']

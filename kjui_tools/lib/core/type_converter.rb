@@ -353,7 +353,7 @@ module KjuiTools
         end
 
         # Convert color value (hex or color name) to Kotlin Color
-        # @param value [String] hex string (#RRGGBB or #RRGGBBAA) or color name
+        # @param value [String] hex string (#RRGGBB or #AARRGGBB, alpha first) or color name
         # @param mode [String] the mode (compose, xml)
         # @return [String] Kotlin color code
         def convert_color_default_value(value, mode = nil)

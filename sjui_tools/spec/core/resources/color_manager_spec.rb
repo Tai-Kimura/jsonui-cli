@@ -324,7 +324,7 @@ RSpec.describe SjuiTools::Core::Resources::ColorManager do
     end
 
     describe '#is_transparent_color?' do
-      it 'returns true for fully transparent color (alpha = 00) in RRGGBBAA format' do
+      it 'returns true for fully transparent color (alpha = 00, #AARRGGBB)' do
         expect(manager.send(:is_transparent_color?, '#00000000')).to be true
       end
 

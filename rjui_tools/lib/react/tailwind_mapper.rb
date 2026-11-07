@@ -28,6 +28,18 @@ module RjuiTools
       SHADOW_DEFAULT_RADIUS = 5
       SHADOW_DEFAULT_COLOR = 'rgba(0,0,0,0.33)'
 
+      # JsonUI's 8-digit hex is alpha-FIRST (#AARRGGBB), as iOS and Android read
+      # it and as theme.css writes a colors.json value (rgba). CSS reads an
+      # 8-digit hex alpha-LAST (#RRGGBBAA), so a JsonUI one handed to CSS as
+      # written drew another colour — #80FF0000 (red at 50%) as a transparent
+      # (128, 255, 0). Every literal colour the web emits goes through this
+      # (ticket 2026-11-07-eight-digit-hex-alpha-order); the generated
+      # ColorManager reorders what it resolves at run time the same way.
+      def self.css_hex(color)
+        match = color.is_a?(String) && color.strip.match(/\A#(\h{2})(\h{6})\z/)
+        match ? "##{match[2]}#{match[1]}" : color
+      end
+
       SHADOW_MAP = {
         'sm' => 'shadow-sm',
         'md' => 'shadow-md',
@@ -176,7 +188,7 @@ module RjuiTools
         def map_color(color, prefix = 'bg')
           return '' unless color
 
-          return "#{prefix}-[#{color}]" if color.start_with?('#')
+          return "#{prefix}-[#{css_hex(color)}]" if color.start_with?('#')
 
           # Unconfigured (direct helper use / older callers): legacy behavior.
           return "#{prefix}-#{color}" if @theme_safe_colors.nil? || @theme_safe_colors.include?(color)
@@ -184,7 +196,7 @@ module RjuiTools
           hex = @color_fallbacks&.[](color)
           if hex
             warn_off_palette(color, "resolving to #{hex}")
-            "#{prefix}-[#{hex}]"
+            "#{prefix}-[#{css_hex(hex)}]"
           else
             # Name outside colors.json entirely (custom Tailwind class?):
             # keep it, but flag it — a dead class here is on the author.
@@ -273,8 +285,8 @@ module RjuiTools
             radius = shadow['radius'] || SHADOW_DEFAULT_RADIUS
             offset_x = shadow['offsetX'] || 0
             offset_y = shadow['offsetY'] || 0
-            color = shadow['color'] || SHADOW_DEFAULT_COLOR
-            color = shadow_color_with_alpha(color, shadow['opacity']) if shadow['opacity'] && shadow['color']
+            color = css_hex(shadow['color'] || SHADOW_DEFAULT_COLOR)
+            color = shadow_color_with_alpha(shadow['color'], shadow['opacity']) if shadow['opacity'] && shadow['color']
             "[box-shadow:#{offset_x}px_#{offset_y}px_#{radius}px_#{color}]"
           elsif shadow.is_a?(String) && shadow.include?('|')
             # The pipe form is the UIKit contract
@@ -326,7 +338,11 @@ module RjuiTools
         def shadow_color_with_alpha(color, opacity)
           alpha = (opacity.to_f.clamp(0.0, 1.0) * 255).round
           h = color.to_s.strip
-          if h =~ /\A#([0-9a-fA-F]{6})\z/
+          if h =~ /\A#([0-9a-fA-F]{2})([0-9a-fA-F]{6})\z/
+            # A JsonUI #AARRGGBB: its own alpha times the opacity.
+            m = Regexp.last_match
+            format('#%s%02X', m[2], (m[1].to_i(16) * opacity.to_f.clamp(0.0, 1.0)).round)
+          elsif h =~ /\A#([0-9a-fA-F]{6})\z/
             format('#%s%02X', Regexp.last_match(1), alpha)
           elsif h =~ /\A#([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])\z/
             m = Regexp.last_match
