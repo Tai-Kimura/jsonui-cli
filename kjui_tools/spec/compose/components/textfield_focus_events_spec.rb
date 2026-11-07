@@ -53,7 +53,8 @@ RSpec.describe 'TextField focus events (kjui)' do
       #{ComposeStubUniverse.common_stages(code)}
       class Data(val t: String = "", val fIsFocused: Boolean = false,
                  val h: (() -> Unit)? = null, val g: ((String) -> Unit)? = null)
-      class ViewModel { fun updateData(values: Map<String, Any?>) {} }
+      class DataFlow { val value = Data(); suspend fun first(predicate: (Data) -> Boolean): Data = value }
+      class ViewModel { val data = DataFlow(); fun updateData(values: Map<String, Any?>) {} }
       fun focusEvents(data: Data, viewModel: ViewModel) {
       #{code}
       }

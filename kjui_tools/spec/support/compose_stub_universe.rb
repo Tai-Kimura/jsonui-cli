@@ -373,9 +373,8 @@ module ComposeStubUniverse
       class TextFieldBuffer { val length: Int = 0; fun replace(start: Int, end: Int, text: CharSequence) {} }
       class TextFieldState { val text: CharSequence = ""; fun edit(block: TextFieldBuffer.() -> Unit) {} }
       fun rememberTextFieldState(initialText: String = ""): TextFieldState = TextFieldState()
-      interface HeldState<T> { val value: T }
-      fun <T> rememberUpdatedState(value: T): HeldState<T> = object : HeldState<T> { override val value: T = value }
-      suspend fun <R> withFrameNanos(onFrame: (Long) -> R): R = onFrame(0L)
+      class TextChanges { suspend fun collectLatest(action: suspend (String) -> Unit) {} }
+      fun snapshotFlow(block: () -> String): TextChanges = TextChanges()
       fun LaunchedEffect(key1: Any?, block: suspend () -> Unit) {}
       class SoftwareKeyboardController { fun show() {} }
       object LocalSoftwareKeyboardController { val current: SoftwareKeyboardController? = null }

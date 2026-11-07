@@ -320,7 +320,8 @@ RSpec.describe 'kjui codegen: onAppear / onDisappear at every exit' do
           val appeared: (() -> Unit)? = null, val left: (() -> Unit)? = null, val vis: String? = null,
           val t: String = "", val nIsFocused: Boolean = false
       )
-      class ViewModel { fun updateData(values: Map<String, Any?>) {} }
+      class DataFlow { val value = Data(); suspend fun first(predicate: (Data) -> Boolean): Data = value }
+      class ViewModel { val data = DataFlow(); fun updateData(values: Map<String, Any?>) {} }
       #{emitted}
     KOTLIN
   end
