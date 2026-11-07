@@ -19,7 +19,10 @@ fixture, and per probe whatever its row: the rows of one probe are one test's to
 
   scan <xcodebuild.log> <probe_retaps.json> --attempt N
       A shard's lines, written beside its results. It records how many test cases the log held: a log that cannot be
-      read is not a run without retaps.
+      read is not a run without retaps. Each row names the test case it was printed in, and the log's lines around it
+      are written beside it (probe_retap_context.txt): a green job's xcodebuild.log does not leave the runner, and
+      without XCUITest's own lines (when the touch was synthesized, how long the app took to idle, what was read after)
+      a lost touch cannot be told from a slow one (ticket 2026-11-07-ios-conformance-anchortap-retap-twice).
 
   write <ios.results.json> <retaps.json> --run-id N --attempt N --sha SHA [--face FACE --shard-dirs DIR ...]
       Prints every retap (fixture, tap, when, screenshot; probe, what) and writes {"run_id", "run_attempt", "head_sha",
@@ -53,6 +56,11 @@ ARTIFACT = "{face}-retaps-a{attempt}"
 FACES = ("ios", "ios-codegen")
 LOOK_BACK = 30   # runs of the workflow read when looking for the one before
 SCAN_FILE = "probe_retaps.json"
+CONTEXT_FILE = "probe_retap_context.txt"
+CONTEXT_BEFORE = 60   # lines of the log before a retap line at least: the touch, the idle wait, the reads of its effect
+CONTEXT_REACH = 200   # and back to the last touch XCUITest printed before it, when that is further, up to this many
+CONTEXT_AFTER = 20    # and after it: the second touch and what it showed
+CONTEXT_WIDTH = 400   # characters kept of one line
 NAMED_AT_MOST = 30   # names in an ::error line or the summary; every one is printed in the step's log
 
 # What a probe prints (SwiftJsonUI ConformanceHost/UITests/ProbeRetap.swift, InteractionGateProbeUITests.tapControl,
@@ -61,9 +69,10 @@ NAMED_AT_MOST = 30   # names in an ::error line or the summary; every one is pri
 _PROBE_LINE = re.compile(r"^PROBE_RETAP (\S+) (.+?): (no effect.*|the second touch.*)$")
 _OLD_LINE = re.compile(r"^(GATE_PROBE|CANTAP_PROBE) retap (\S+): (.*)$")
 _OLD_NAMES = {"GATE_PROBE": "InteractionGate", "CANTAP_PROBE": "CanTapGate"}
-_TEST_CASE = re.compile(r"^Test Case '-\[\S+\.\w+ \w+\]' started")
+_TEST_CASE = re.compile(r"^Test Case '-\[\S+\.(\w+) (\w+)\]' started")
 _PROBE_RAN = re.compile(r"^Test Case '-\[\S+\.\w+ProbeUITests \w+\]' (?:passed|failed)")   # a skipped one did not run
 COUNTED = ("retap", "refused")
+_TOUCH = re.compile(r"^\s*t = +[\d.]+s +(?:Tap|Double tap|Press|Swipe)\b")   # XCUITest's line for a touch it sends
 
 
 def retaps_of(results: dict) -> list[dict]:
@@ -100,12 +109,23 @@ def write(results_path: Path, out_path: Path, run_id: str, attempt: str, sha: st
 def probe_rows(log: str) -> tuple[list[dict], int, int]:
     """The retap lines of one xcodebuild.log, the test cases it started, and how many probe tests ran."""
     rows, cases, probes = [], 0, 0
+    for row, _ in _rows_at(log):
+        rows.append(row)
     for line in log.splitlines():
         if _TEST_CASE.match(line):
             cases += 1
-            continue
-        if _PROBE_RAN.match(line):
+        elif _PROBE_RAN.match(line):
             probes += 1
+    return rows, cases, probes
+
+
+def _rows_at(log: str) -> list[tuple[dict, int]]:
+    """Each retap row with the index of its line; a row names the test case it was printed in."""
+    out, test = [], None
+    for at, line in enumerate(log.splitlines()):
+        started = _TEST_CASE.match(line)
+        if started:
+            test = f"{started.group(1)}/{started.group(2)}"
             continue
         if "PROBE_RETAP " not in line and " retap " not in line:
             continue
@@ -113,17 +133,37 @@ def probe_rows(log: str) -> tuple[list[dict], int, int]:
         if new:
             said = new.group(3)
             kind = "nothing" if said.startswith("the second touch") else "refused" if "not tapped again" in said else "retap"
-            rows.append({"probe": new.group(1), "what": new.group(2), "kind": kind, "said": said})
+            row = {"probe": new.group(1), "what": new.group(2), "kind": kind, "said": said}
         elif old:
-            rows.append({"probe": _OLD_NAMES[old.group(1)], "what": old.group(2), "kind": "retap", "said": old.group(3)})
+            row = {"probe": _OLD_NAMES[old.group(1)], "what": old.group(2), "kind": "retap", "said": old.group(3)}
         elif "PROBE_RETAP " in line:   # a wording this does not know is still a retap: counted and named, never dropped
-            rows.append({"probe": "unparsed", "what": line.strip()[:200], "kind": "retap", "said": line.strip()[:200]})
-    return rows, cases, probes
+            row = {"probe": "unparsed", "what": line.strip()[:200], "kind": "retap", "said": line.strip()[:200]}
+        else:
+            continue
+        row["test"] = test
+        out.append((row, at))
+    return out
+
+
+def contexts(log: str) -> str:
+    """The log's lines around each retap line, one block per row, for the shard's artifact."""
+    lines = log.splitlines()
+    blocks = []
+    for row, at in _rows_at(log):
+        start = next((i for i in range(at - 1, -1, -1) if _TEST_CASE.match(lines[i])), 0)
+        touch = next((i for i in range(at - 1, max(start, at - CONTEXT_REACH) - 1, -1) if _TOUCH.match(lines[i])), at)
+        lo = max(start, min(at - CONTEXT_BEFORE, touch), 0)   # never another test's lines
+        hi = min(len(lines), at + CONTEXT_AFTER + 1)
+        head = f"=== {row['probe']} {row['what']} ({row['kind']}) in {row['test'] or 'no test case'}, log lines {lo + 1}-{hi}"
+        blocks.append("\n".join([head] + [("> " if i == at else "  ") + lines[i][:CONTEXT_WIDTH] for i in range(lo, hi)]))
+    return "\n\n".join(blocks) + ("\n" if blocks else "")
 
 
 def scan(log_path: Path, out_path: Path, attempt: str) -> int:
+    log = ""
     try:
-        rows, cases, probes = probe_rows(log_path.read_text(errors="replace"))
+        log = log_path.read_text(errors="replace")
+        rows, cases, probes = probe_rows(log)
     except OSError as exc:
         print(f"[retaps] {log_path} could not be read ({exc})")
         rows, cases, probes = [], 0, 0
@@ -131,6 +171,9 @@ def scan(log_path: Path, out_path: Path, attempt: str) -> int:
         row["attempt"] = str(attempt)
         print(f"PROBE_RETAP {row['probe']} {row['what']}: {row['said']}")
     print(f"[retaps] {len(rows)} probe retap line(s) in {cases} test case(s), {probes} probe test(s) ran")
+    if rows:
+        (out_path.parent / CONTEXT_FILE).write_text(contexts(log))
+        print(f"[retaps] the log around each: {out_path.parent / CONTEXT_FILE}")
     out_path.write_text(json.dumps({"attempt": str(attempt), "test_cases": cases, "probe_cases": probes, "rows": rows}, indent=1) + "\n")
     return 0
 
