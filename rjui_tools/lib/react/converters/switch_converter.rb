@@ -90,14 +90,14 @@ module RjuiTools
               track_style['backgroundColor'] = color_style_expr(off_tint_color)
               nil
             else
-              "bg-[#{off_tint_color}]"
+              "bg-[#{TailwindMapper.css_hex(off_tint_color)}]"
             end
           on_class =
             if has_binding?(tint_color)
               track_style['--jui-switch-on'] = color_style_expr(tint_color)
               'peer-checked:bg-[var(--jui-switch-on)]'
             else
-              "peer-checked:bg-[#{tint_color}]"
+              "peer-checked:bg-[#{TailwindMapper.css_hex(tint_color)}]"
             end
 
           knob_style = {}
@@ -106,7 +106,7 @@ module RjuiTools
               knob_style['backgroundColor'] = color_style_expr(thumb_color)
               nil
             else
-              "bg-[#{thumb_color}]"
+              "bg-[#{TailwindMapper.css_hex(thumb_color)}]"
             end
 
           track_classes = ['absolute inset-0', off_class, 'rounded-full transition-colors duration-200', on_class].compact.join(' ')

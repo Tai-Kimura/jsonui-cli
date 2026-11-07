@@ -744,11 +744,12 @@ RSpec.describe RjuiTools::Core::Resources::ColorManager do
         content = File.read(File.join(source_path, 'src', 'generated', 'ColorManager.js'))
         expect(content).to include('resolveColor(value)')
         # token -> current mode, then the fallback mode
-        expect(content).to include('if (p && p[value] !== undefined) return p[value];')
-        expect(content).to include('if (fb && fb[value] !== undefined) return fb[value];')
+        # (an 8-digit #AARRGGBB is reordered for CSS on the way out: cssHex)
+        expect(content).to include('if (p && p[value] !== undefined) return cssHex(p[value]);')
+        expect(content).to include('if (fb && fb[value] !== undefined) return cssHex(fb[value]);')
         # anything else is handed back untouched, and without a warning:
         # a caller cannot tell a typo from a valid CSS color name
-        expect(content).to include('    return value;')
+        expect(content).to include('    return cssHex(value);')
         resolve_body = content[/resolveColor\(value\).*?\n  \}/m]
         expect(resolve_body).not_to include('console.warn')
       end

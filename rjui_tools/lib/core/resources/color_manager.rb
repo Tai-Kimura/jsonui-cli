@@ -177,6 +177,12 @@ module RjuiTools
 
           # --- Config ---
           lines << "const FALLBACK_MODE = '#{@fallback_mode}';"
+          lines << ''
+          # JsonUI's 8-digit hex is alpha-FIRST (#AARRGGBB), as iOS, Android and
+          # theme.css read it; CSS reads one alpha-LAST. What this hands to CSS
+          # is reordered (ticket 2026-11-07-eight-digit-hex-alpha-order).
+          lines << "const cssHex = (value#{typescript ? ': string' : ''})#{typescript ? ': string' : ''} =>"
+          lines << '  /^#[0-9A-Fa-f]{8}$/.test(value) ? `#${value.slice(3)}${value.slice(1, 3)}` : value;'
           # Same TS7053 story as _rawPalettes above: with a single-mode
           # colors.json the frozen literal infers as e.g. { light: 'light' }
           # and indexing it with `'light' | 'dark'` fails under strict. A
@@ -264,10 +270,10 @@ module RjuiTools
           lines << '    }'
           lines << '    const m = this._currentMode;'
           lines << '    const p = _rawPalettes[m];'
-          lines << '    if (p && p[key] !== undefined) return p[key];'
+          lines << '    if (p && p[key] !== undefined) return cssHex(p[key]);'
           lines << '    const fb = _rawPalettes[FALLBACK_MODE];'
-          lines << '    if (fb && fb[key] !== undefined) return fb[key];'
-          lines << '    if (this.isHexColor(key)) return key;'
+          lines << '    if (fb && fb[key] !== undefined) return cssHex(fb[key]);'
+          lines << '    if (this.isHexColor(key)) return cssHex(key);'
           lines << '    console.warn(`[ColorManager] Warning: Color key "${key}" not found in any palette`);'
           lines << '    return undefined;'
           lines << '  }'
@@ -290,10 +296,10 @@ module RjuiTools
           lines << "    if (value.startsWith('@{') && value.endsWith('}')) return undefined;"
           lines << '    const m = this._currentMode;'
           lines << '    const p = _rawPalettes[m];'
-          lines << '    if (p && p[value] !== undefined) return p[value];'
+          lines << '    if (p && p[value] !== undefined) return cssHex(p[value]);'
           lines << '    const fb = _rawPalettes[FALLBACK_MODE];'
-          lines << '    if (fb && fb[value] !== undefined) return fb[value];'
-          lines << '    return value;'
+          lines << '    if (fb && fb[value] !== undefined) return cssHex(fb[value]);'
+          lines << '    return cssHex(value);'
           lines << '  }'
           lines << ''
 

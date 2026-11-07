@@ -66,13 +66,19 @@ RSpec.describe 'a bound number reaches Kotlin as an expression' do
     expect(shadow('radius' => BOUND)).to include('radius = data.v?.dp ?: 0.dp').or include('radius = (data.v')
     expect(shadow('radius' => 3, 'offsetX' => BOUND)).to match(/offset = DpOffset\(.*data\.v.*\.dp.*, 0\.0\.dp\)/)
     expect(shadow('radius' => 3, 'offsetY' => BOUND)).to match(/offset = DpOffset\(0\.0\.dp, .*data\.v/)
-    expect(shadow('radius' => 3, 'opacity' => BOUND)).to include('alpha = (data.v?.toFloat() ?: 1.0f)')
+    expect(shadow('radius' => 3, 'color' => '@{c}', 'opacity' => BOUND)).to include('alpha = (data.v?.toFloat() ?: 1.0f)')
+  end
+
+  it "holds the shadow's declared defaults" do
+    declared = JSON.parse(File.read(File.expand_path('../../../shared/core/attribute_definitions.json', __dir__)))['common']['shadow']['properties']
+    expect(KjuiTools::Compose::Helpers::ModifierBuilder::SHADOW_DEFAULT_RADIUS).to eq(declared['radius']['default'])
   end
 
   it 'keeps the bytes of a written shadow' do
+    # No colour: the declared default (black at 33%), and the opacity is not applied to it.
     expect(shadow('radius' => 3, 'offsetX' => 1, 'offsetY' => 2, 'opacity' => 0.4))
-      .to eq('.dropShadow(shape = RectangleShape, shadow = Shadow(radius = 3.dp, offset = DpOffset(1.0.dp, 2.0.dp), alpha = 0.4f))')
-    expect(shadow({})).to include('radius = 4.dp')
+      .to eq('.dropShadow(shape = RectangleShape, shadow = Shadow(radius = 3.dp, color = Color.Black.copy(alpha = 0.33f), offset = DpOffset(1.0.dp, 2.0.dp)))')
+    expect(shadow({})).to include('radius = 5.dp')
   end
 
   it 'says nextFocus and screen do not take a binding, and pastes them nowhere' do
@@ -104,7 +110,8 @@ RSpec.describe 'a bound number reaches Kotlin as an expression' do
     val Float.dp: Dp get() = Dp()
     val Double.dp: Dp get() = Dp()
     class DpOffset(val x: Dp, val y: Dp)
-    class Shadow(val radius: Dp, val offset: DpOffset? = null, val alpha: Float = 1f)
+    class Color(val value: Long) { fun copy(alpha: Float): Color = this; companion object { val Black = Color(0L) } }
+    class Shadow(val radius: Dp, val color: Color = Color.Black, val offset: DpOffset? = null, val alpha: Float = 1f)
     object RectangleShape
     class Modifier { fun dropShadow(shape: Any, shadow: Shadow): Modifier = this }
   KOTLIN

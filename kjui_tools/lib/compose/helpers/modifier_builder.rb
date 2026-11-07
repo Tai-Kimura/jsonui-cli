@@ -616,6 +616,10 @@ module KjuiTools
         # draws its default rounded shape when no cornerRadius is declared. A
         # RectangleShape shadow would sit square behind either. Everything
         # else about the shadow is this one builder.
+        # The declared shadow defaults (attribute_definitions common.shadow).
+        SHADOW_DEFAULT_RADIUS = 5
+        SHADOW_DEFAULT_COLOR = 'Color.Black.copy(alpha = 0.33f)'
+
         def self.build_shadow(json_data, required_imports = nil, shape: nil)
           modifiers = []
 
@@ -643,9 +647,16 @@ module KjuiTools
               end
             elsif json_data['shadow'].is_a?(Hash)
               shadow = json_data['shadow']
-              args = ["radius = #{BoundValue.dp(shadow['radius'] || 4)}"]
+              # A field left out takes its declared default (attribute_definitions
+              # common.shadow; iOS's, which the other platforms were aligned to):
+              # radius 5, offsets 0, opacity 1, and no colour is black at 33%
+              # (SwiftUI's default shadow colour) with the opacity not applied.
+              args = ["radius = #{BoundValue.dp(shadow['radius'] || SHADOW_DEFAULT_RADIUS)}"]
               if shadow['color']
                 args << "color = #{ResourceResolver.process_color(shadow['color'], required_imports)}"
+              else
+                required_imports&.add(:color)
+                args << "color = #{SHADOW_DEFAULT_COLOR}"
               end
               if shadow['offsetX'] || shadow['offsetY']
                 required_imports&.add(:dp_offset)
@@ -655,7 +666,7 @@ module KjuiTools
                 end
                 args << "offset = DpOffset(#{offset_x}, #{offset_y})"
               end
-              if shadow['opacity']
+              if shadow['opacity'] && shadow['color']
                 args << "alpha = #{BoundValue.bound?(shadow['opacity']) ? BoundValue.float(shadow['opacity'], fallback: 1) : "#{shadow['opacity'].to_f}f"}"
               end
               shadow_args = args.join(', ')

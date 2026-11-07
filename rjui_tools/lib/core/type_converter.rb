@@ -260,7 +260,7 @@ module RjuiTools
         end
 
         # Convert color value (hex or color name) to CSS color string
-        # @param value [String] hex string (#RRGGBB or #RRGGBBAA) or color name
+        # @param value [String] hex string (#RRGGBB or #AARRGGBB, alpha first; ColorManager reorders it for CSS) or color name
         # @return [String] CSS color string (quoted)
         def convert_color_default_value(value)
           # Already formatted as quoted string

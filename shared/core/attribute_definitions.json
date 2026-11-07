@@ -207,7 +207,7 @@
         "string",
         "binding"
       ],
-      "description": "Background color - hex string (#RRGGBB or #RRGGBBAA) or color name from colors.json (can be data binding). `backgroundColor` folds here: the genuine layout reads of that spelling all chain with `background` (kjui blurview_component.rb:42 `background || backgroundColor`, kjui segment_component.rb:55 `backgroundColor || background`, rjui blur_converter.rb:58 and circle_view_converter.rb:55). Note the two kjui sites read the pair in OPPOSITE order, so a layout setting both drew two different colours until the normalizer began folding them — the same defect shape as CheckBox's accent chain (plan 51-E). When a `gradient` is also declared on the same view, the GRADIENT wins and this is the fallback fill — not a layer underneath it. Full ruling in attribute_semantics.json -> backgroundFill; do not restate it in toolchain comments."
+      "description": "Background color - hex string (#RRGGBB, or #AARRGGBB with the alpha FIRST, as iOS and Android read it and the web reorders for CSS) or color name from colors.json (can be data binding). `backgroundColor` folds here: the genuine layout reads of that spelling all chain with `background` (kjui blurview_component.rb:42 `background || backgroundColor`, kjui segment_component.rb:55 `backgroundColor || background`, rjui blur_converter.rb:58 and circle_view_converter.rb:55). Note the two kjui sites read the pair in OPPOSITE order, so a layout setting both drew two different colours until the normalizer began folding them — the same defect shape as CheckBox's accent chain (plan 51-E). When a `gradient` is also declared on the same view, the GRADIENT wins and this is the fallback fill — not a layer underneath it. Full ruling in attribute_semantics.json -> backgroundFill; do not restate it in toolchain comments."
     },
     "tapBackground": {
       "type": [
@@ -658,29 +658,48 @@
         "string",
         "object"
       ],
-      "description": "Shadow configuration (string 'color|offsetX|offsetY|opacity|radius' or object)",
+      "description": "Shadow configuration (string 'color|offsetX|offsetY|opacity|radius' or object). In the object form every field may be a binding, and a field left out takes its declared default on every platform (the defaults are iOS's, which the other platforms were aligned to; 2026-11-07).",
       "properties": {
         "color": {
-          "type": "string",
-          "description": "Shadow color (hex)"
+          "type": [
+            "string",
+            "binding"
+          ],
+          "description": "Shadow color: hex or a color name from colors.json (can be data binding). Left out: black at 33% opacity (SwiftUI's default shadow colour), and `opacity` is not applied to it. A bound colour that does not resolve casts no shadow."
         },
         "offsetX": {
-          "type": "number",
-          "description": "Shadow X offset"
+          "type": [
+            "number",
+            "binding"
+          ],
+          "default": 0,
+          "description": "Shadow X offset (can be data binding)"
         },
         "offsetY": {
-          "type": "number",
-          "description": "Shadow Y offset"
+          "type": [
+            "number",
+            "binding"
+          ],
+          "default": 0,
+          "description": "Shadow Y offset (can be data binding)"
         },
         "opacity": {
-          "type": "number",
+          "type": [
+            "number",
+            "binding"
+          ],
           "min": 0,
           "max": 1,
-          "description": "Shadow opacity (0-1)"
+          "default": 1,
+          "description": "Shadow opacity (0-1, can be data binding), applied to `color`: left out, the colour at its own strength"
         },
         "radius": {
-          "type": "number",
-          "description": "Shadow blur radius"
+          "type": [
+            "number",
+            "binding"
+          ],
+          "default": 5,
+          "description": "Shadow blur radius (can be data binding)"
         }
       }
     },

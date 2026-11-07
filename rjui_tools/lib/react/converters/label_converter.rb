@@ -145,7 +145,7 @@ module RjuiTools
             # still becomes a real value instead of reaching CSS as a token.
             parts << "color: #{color_style_expr(color)}"
           elsif color
-            css = color.to_s.start_with?('#') ? color : "var(--color-#{color})"
+            css = color.to_s.start_with?('#') ? TailwindMapper.css_hex(color) : "var(--color-#{color})"
             parts << "color: '#{css}'"
           end
           parts << "fontSize: '#{TailwindMapper.rem(attrs['fontSize'])}'" if attrs['fontSize']
