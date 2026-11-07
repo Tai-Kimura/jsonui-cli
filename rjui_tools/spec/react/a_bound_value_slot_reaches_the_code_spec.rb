@@ -33,7 +33,7 @@ RSpec.describe 'a bound value slot on the web build path' do
     ensure
       $stderr = orig
     end
-    yield jsx
+    yield jsx, err.string
   end
 
   # [node without the slot, slot, what the binding reaches, what a written 'w_name' reaches]
@@ -88,9 +88,18 @@ RSpec.describe 'a bound value slot on the web build path' do
 
   # The lowercase onclick takes the bare selector name only (binding_semantics
   # contexts.nameRef): a binding there stays refused, and only the Data changes.
-  it 'a bound onclick is still refused' do
+  it 'a bound onclick is no call' do
     built({ 'type' => 'View', 'id' => 'x', 'onclick' => '@{tap}' }) do |jsx|
-      expect(jsx).to include('ERROR: onclick requires selector format')
+      expect(jsx).not_to include('data.tap')
+      expect(jsx).not_to include('onClick={')
+    end
+  end
+
+  it 'in the array face only the bound name goes, with one warning' do
+    built({ 'type' => 'View', 'id' => 'x', 'onclick' => ['confPush', '@{tap}'] }) do |jsx, err|
+      expect(jsx).to include('data.confPush?.()')
+      expect(jsx).not_to include('data.tap')
+      expect(err.scan("'onclick' takes a bare handler name, not a binding (@{tap})").size).to eq(1)
     end
   end
 
