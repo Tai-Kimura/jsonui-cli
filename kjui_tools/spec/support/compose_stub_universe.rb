@@ -383,7 +383,9 @@ module ComposeStubUniverse
                           maxLines: Int = 1, singleLine: Boolean = true, enabled: Boolean = true,
                           // KotlinJsonUI CustomTextField.kt:48-51 (rel/2.43.1)
                           onFocus: (() -> Unit)? = null, onBlur: (() -> Unit)? = null,
-                          onBeginEditing: (() -> Unit)? = null, onEndEditing: (() -> Unit)? = null) {}
+                          onBeginEditing: (() -> Unit)? = null, onEndEditing: (() -> Unit)? = null,
+                          // KotlinJsonUI CustomTextField.kt (fix/textfield-border-width)
+                          borderWidth: Dp? = null) {}
       fun CustomTextFieldWithMargins(state: TextFieldState, boxModifier: Modifier = Modifier,
                           placeholder: (() -> Unit)? = null,
                                      textFieldModifier: Modifier = Modifier, shape: Shape = RectangleShape,
@@ -393,7 +395,8 @@ module ComposeStubUniverse
                                      enabled: Boolean = true,
                                      // KotlinJsonUI CustomTextField.kt:231-234 (rel/2.43.1)
                                      onFocus: (() -> Unit)? = null, onBlur: (() -> Unit)? = null,
-                                     onBeginEditing: (() -> Unit)? = null, onEndEditing: (() -> Unit)? = null) {}
+                                     onBeginEditing: (() -> Unit)? = null, onEndEditing: (() -> Unit)? = null,
+                                     borderWidth: Dp? = null) {}
     KOTLIN
   end
 

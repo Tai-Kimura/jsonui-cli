@@ -162,7 +162,9 @@ module RjuiTools
 
           # Type based on input attribute
           input_type = determine_input_type
-          attrs << " type=\"#{input_type}\""
+          # A bound secure follows the data: as written, a binding is truthy.
+          secure_expr = bound_value_expr(attributes['secure'])
+          attrs << (secure_expr ? " type={(#{secure_expr}) ? 'password' : '#{input_type}'}" : " type=\"#{input_type}\"")
 
           # Name attribute
           attrs << " name=\"#{attributes['name']}\"" if attributes['name']
@@ -283,7 +285,7 @@ module RjuiTools
 
         def determine_input_type
           # Secure field takes precedence
-          return 'password' if attributes['secure'] || JsonUIShared::EnumSpelling.lowered(attributes['input'], 'TextField', 'input') == 'password'
+          return 'password' if (attributes['secure'] && !has_binding?(attributes['secure'])) || JsonUIShared::EnumSpelling.lowered(attributes['input'], 'TextField', 'input') == 'password'
 
           case JsonUIShared::EnumSpelling.lowered(attributes['input'], 'TextField', 'input')
           when 'email'
