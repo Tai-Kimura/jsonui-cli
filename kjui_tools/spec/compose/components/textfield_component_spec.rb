@@ -485,6 +485,14 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
         expect(result).not_to include('KeyboardType.Email')
       end
 
+      # A Compose field takes no Credential Manager request; usernameWebauthn
+      # is drawn as `username` (no keyboard of its own, not masked).
+      it 'draws usernameWebauthn as a username field' do
+        result = described_class.generate({ 'type' => 'TextField', 'contentType' => 'usernameWebauthn' }, 0, required_imports)
+        expect(result).not_to include('KeyboardType.')
+        expect(result).not_to include('PasswordVisualTransformation')
+      end
+
       it 'yields to contentType' do
         result = described_class.generate(
           { 'type' => 'TextField', 'contentType' => 'emailAddress', 'inputType' => 'phone' },

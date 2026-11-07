@@ -331,6 +331,9 @@ module RjuiTools
         # (a duplicated vocabulary drifts).
         CONTENT_TYPE_AUTOCOMPLETE = {
           'username' => 'username',
+          # A username field that also offers passkeys (WebAuthn conditional
+          # mediation): `webauthn` after `username`, the order Chrome reads.
+          'usernamewebauthn' => 'username webauthn',
           'password' => 'current-password',
           'newpassword' => 'new-password',
           'email' => 'email',
