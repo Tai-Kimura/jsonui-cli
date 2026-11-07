@@ -999,10 +999,13 @@ function srBuild(keep) {
     V.last = t;
     controls.update();
     if (SR.camTrail) SR.camTrail.push(camera.position.toArray().concat(controls.target.toArray()));   // the e2e: each frame's camera
-    srLod(V);
+    if (!V.blank) srLod(V);
     srFlowTick(V, dt);
     srMigTick(V, dt);
-    if (t - V.labelAt > 100) { V.labelAt = t; srPlaceLabels(V); }
+    if (!V.blank && t - V.labelAt > 100) { V.labelAt = t; srPlaceLabels(V); }
+    // V.blank (the e2e, srBlank): the same loop with nothing in it drawn or placed — the frames an empty room takes on
+    // this machine at this moment, the yardstick of a large room's frames (ticket 2026-11-06-viz-e2e-full-run-red-under-load)
+    scene.visible = !V.blank;
     renderer.render(scene, camera);
     if (SR.pixTrail) SR.pixTrail.push(srPixMean(renderer));   // the e2e: each frame's colour, read as it was drawn
   };
