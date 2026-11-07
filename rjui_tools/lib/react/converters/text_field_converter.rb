@@ -136,16 +136,15 @@ module RjuiTools
           end
 
           # Shadow
-          if attributes['shadow']
-            if attributes['shadow'].is_a?(Hash)
-              radius = attributes['shadow']['radius'] || 5
-              x = attributes['shadow']['offsetX'] || 0
-              y = attributes['shadow']['offsetY'] || 0
-              color = attributes['shadow']['color'] || 'rgba(0,0,0,0.2)'
-              @dynamic_styles['boxShadow'] = css_style_value("#{x}px #{y}px #{radius}px #{color}")
-            else
-              @dynamic_styles['boxShadow'] = "'0 2px 4px rgba(0,0,0,0.1)'"
-            end
+          # The one shadow value every web path writes (shadow_css_expr): its
+          # opacity and a colors.json key were dropped here before. The pipe
+          # form is the class (or the style) the common path wrote; this style
+          # overrode it with a fixed shadow, so it never drew on a TextField.
+          shadow = attributes['shadow']
+          if shadow.is_a?(Hash)
+            @dynamic_styles['boxShadow'] = shadow_css_expr({ 'offsetY' => 0, 'color' => 'rgba(0,0,0,0.2)' }.merge(shadow))
+          elsif shadow && !(shadow.is_a?(String) && shadow.include?('|'))
+            @dynamic_styles['boxShadow'] = "'0 2px 4px rgba(0,0,0,0.1)'"
           end
 
           # One renderer for every converter (BaseConverter#style_attr_for):

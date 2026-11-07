@@ -411,7 +411,7 @@ module RjuiTools
           classes << TailwindMapper.map_orientation(attributes['orientation']) if lays_out_children?
 
           # Shadow
-          classes << TailwindMapper.map_shadow(attributes['shadow']) if attributes['shadow'] && !bound_shadow_style(attributes['shadow'])
+          classes << TailwindMapper.map_shadow(attributes['shadow']) if attributes['shadow'] && !shadow_style(attributes['shadow'])
 
           # Border — both-attributes guard. **The PAIR is what requests a
           # border**; neither half requests one on its own, and there is no
@@ -1492,27 +1492,53 @@ module RjuiTools
           end
         end
 
-        # A bound shadow cannot be a Tailwind class, which is fixed at build: it
-        # is a style. True when the style took it; a written one stays the class.
-        def bound_shadow_style(shadow)
-          if shadow.is_a?(String) && shadow.include?('|') && has_binding?(shadow)
+        # A shadow a Tailwind class cannot carry is a style: a bound one (the
+        # class is fixed at build), and one whose colour is a colors.json key —
+        # inside an arbitrary `[box-shadow:…]` the key is no CSS colour, and the
+        # browser drops the whole shadow (a build turns every hex in a layout
+        # into a key). True when the style took it; a written hex one stays the
+        # class.
+        def shadow_style(shadow)
+          if shadow.is_a?(String) && shadow.include?('|')
             parts = shadow.split('|', -1)
             return false unless parts.length == 5
 
             shadow = { 'color' => parts[0], 'offsetX' => parts[1], 'offsetY' => parts[2], 'opacity' => parts[3], 'radius' => parts[4] }
           end
-          return false unless shadow.is_a?(Hash) && shadow.values.any? { |value| has_binding?(value) }
+          return false unless shadow.is_a?(Hash)
+          return false unless shadow.values.any? { |value| has_binding?(value) } || colour_key?(shadow['color'])
 
-          color = shadow['color'] || 'rgba(0,0,0,0.1)'
+          dynamic_styles['boxShadow'] = shadow_css_expr(shadow)
+          true
+        end
+
+        # A colors.json key: a written colour that is no CSS colour of its own.
+        def colour_key?(color)
+          color.is_a?(String) && !color.empty? && !has_binding?(color) && !color.match?(CSS_COLOR_LITERAL)
+        end
+
+        # One box-shadow value, as a style expression, for every shadow a style
+        # carries (shadow_style, TextField's). Its colour as every colour
+        # attribute's style takes it (color_style_expr): a key or a binding is
+        # ColorManager.resolveColor at run time, a CSS colour as written. The
+        # opacity folds into the colour: a hex one as its alpha byte, any other
+        # through color-mix — box-shadow has no opacity of its own.
+        def shadow_css_expr(shadow)
+          raw = shadow['color'] || 'rgba(0,0,0,0.1)'
           opacity = shadow['opacity']
-          if opacity && (has_binding?(opacity) || has_binding?(color))
+          color =
+            if has_binding?(raw) || colour_key?(raw)
+              "${#{color_style_expr(raw)} ?? 'transparent'}"
+            elsif !opacity.nil? && !has_binding?(opacity)
+              TailwindMapper.shadow_color_with_alpha(raw, opacity)
+            else
+              raw.to_s
+            end
+          unless opacity.nil? || (!has_binding?(opacity) && !has_binding?(raw) && !colour_key?(raw))
             color = "color-mix(in srgb, #{color} calc(#{opacity} * 100%), transparent)"
-          elsif opacity
-            color = TailwindMapper.shadow_color_with_alpha(color, opacity)
           end
           written = "#{shadow['offsetX'] || 0}px #{shadow['offsetY'] || 2}px #{shadow['radius'] || 5}px #{color}"
-          dynamic_styles['boxShadow'] = "`#{css_template(written)}`"
-          true
+          written.include?('${') || has_binding?(written) ? "`#{css_template(written)}`" : "'#{written}'"
         end
 
         # A `margins` array holding a binding: a style, for the class is fixed at

@@ -44,7 +44,7 @@ RSpec.describe 'a bound number reaches the style as an expression' do
     { 'type' => 'Label', 'shadow' => { 'offsetX' => BOUND, 'color' => '#000000' } } => 'boxShadow: `${data.v}px 2px 5px #000000`',
     { 'type' => 'Label', 'shadow' => { 'opacity' => BOUND, 'color' => '#000000' } } => 'color-mix(in srgb, #000000 calc(${data.v} * 100%), transparent)',
     { 'type' => 'Label', 'shadow' => "#{BOUND}|1|2|0.5|3" } => 'boxShadow: `1px 2px 3px color-mix',
-    { 'type' => 'TextField', 'shadow' => { 'color' => BOUND } } => 'boxShadow: `0px 0px 5px ${data.v}`',
+    { 'type' => 'TextField', 'shadow' => { 'color' => BOUND } } => "boxShadow: `0px 0px 5px ${ColorManager.resolveColor(data.v) ?? 'transparent'}`",
     { 'type' => 'CircleView', 'shadow' => { 'radius' => BOUND } } => 'boxShadow: `0px 2px ${data.v}px rgba(0,0,0,0.1)`',
     { 'type' => 'Label', 'textShadow' => BOUND } => 'textShadow: data.v',
     { 'type' => 'Label', 'textShadow' => { 'color' => '#000000', 'blur' => BOUND, 'offset' => [1, 2] } } => 'textShadow: `1px 2px ${data.v}px #000000`',
@@ -99,6 +99,7 @@ RSpec.describe 'a bound number reaches the style as an expression' do
   it 'writes what it draws so that it compiles', :typescript_compile do
     drawn = DRAWS.keys.reject { |node| %w[Image TabView].include?(node['type']) }.each_with_index.map { |node, i| emit(node.merge('id' => "p#{i}")) }
     source = "const data = {} as { v: any; [key: string]: any };\nconst refs: any = {};\nexport const view = (\n  <div>\n#{drawn.join("\n")}\n  </div>\n);\n"
-    expect(source.gsub(/ ref=\{\w+\}/, '').gsub(/ on\w+=\{[^}]*\}\}?/, '')).to compile_as_typescript.with_ambient('declare namespace React { type CSSProperties = Record<string, unknown>; }')
+    expect(source.gsub(/ ref=\{\w+\}/, '').gsub(/ on\w+=\{[^}]*\}\}?/, '')).to compile_as_typescript.with_ambient('declare namespace React { type CSSProperties = Record<string, unknown>; }; ' \
+                                                                                                                   'declare const ColorManager: { resolveColor(value: unknown): string | undefined };')
   end
 end
