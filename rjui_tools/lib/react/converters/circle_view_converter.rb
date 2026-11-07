@@ -76,7 +76,7 @@ module RjuiTools
           # style (bound, or a colors.json key) is not written twice: two
           # boxShadow keys do not compile.
           shadow = attributes['shadow']
-          if shadow.is_a?(Hash) && !dynamic_styles.key?('boxShadow')
+          if shadow.is_a?(Hash) && !dynamic_styles.include?('boxShadow') # a style key, not an attribute read
             circle = { 'color' => shadow['color'], 'opacity' => shadow['opacity'],
                        'offsetX' => shadow['x'] || shadow['offsetX'], 'offsetY' => shadow['y'] || shadow['offsetY'],
                        'radius' => shadow['blur'] || shadow['radius'] }.compact
