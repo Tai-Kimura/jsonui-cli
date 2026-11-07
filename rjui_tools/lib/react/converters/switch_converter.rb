@@ -84,20 +84,27 @@ module RjuiTools
           # `peer-checked:` — a pseudo-class no inline declaration can be
           # scoped to — so it rides a custom property that the variant reads
           # back on the same element.
+          #
+          # A written colour goes through TailwindMapper.map_color, as every
+          # other converter's does: a hex is the arbitrary class it was, a
+          # colors.json name the theme class (`bg-primary`). Put in brackets
+          # (`bg-[primary]`) a name is no CSS colour, and Tailwind drew
+          # nothing — also for a hex `jui build` had already turned into its
+          # colors.json name (tint, tintColor).
           track_style = {}
           off_class =
             if has_binding?(off_tint_color)
               track_style['backgroundColor'] = color_style_expr(off_tint_color)
               nil
             else
-              "bg-[#{TailwindMapper.css_hex(off_tint_color)}]"
+              TailwindMapper.map_color(off_tint_color, 'bg')
             end
           on_class =
             if has_binding?(tint_color)
               track_style['--jui-switch-on'] = color_style_expr(tint_color)
               'peer-checked:bg-[var(--jui-switch-on)]'
             else
-              "peer-checked:bg-[#{TailwindMapper.css_hex(tint_color)}]"
+              TailwindMapper.map_color(tint_color, 'peer-checked:bg')
             end
 
           knob_style = {}
@@ -106,7 +113,7 @@ module RjuiTools
               knob_style['backgroundColor'] = color_style_expr(thumb_color)
               nil
             else
-              "bg-[#{TailwindMapper.css_hex(thumb_color)}]"
+              TailwindMapper.map_color(thumb_color, 'bg')
             end
 
           track_classes = ['absolute inset-0', off_class, 'rounded-full transition-colors duration-200', on_class].compact.join(' ')
