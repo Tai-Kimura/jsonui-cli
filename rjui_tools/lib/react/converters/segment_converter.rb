@@ -87,6 +87,8 @@ module RjuiTools
 
         def build_class_name
           classes = [super]
+          # After super, which starts @dynamic_styles afresh.
+          register_bound_segment_colours
 
           # The declared width wins (super maps it). `w-full` used to be added
           # unconditionally and, later in the stylesheet, beat the declared
@@ -195,14 +197,14 @@ module RjuiTools
           # label's fallback while the unselected one was hardcoded, so a dark
           # tint left the label unreadable with no way to declare otherwise.
           font_color = attributes['fontColor']
-          unselected_text = font_color ? TailwindMapper.map_color(font_color, 'text') : 'text-gray-500 hover:text-gray-700'
+          unselected_text = font_color ? segment_colour_class(font_color, 'text', '--jui-segment-font') : 'text-gray-500 hover:text-gray-700'
           selected_font = attributes['selectedFontColor'] || font_color
-          selected_text = selected_font ? TailwindMapper.map_color(selected_font, 'text') : 'text-gray-900'
+          selected_text = selected_font ? segment_colour_class(selected_font, 'text', '--jui-segment-selected-font') : 'text-gray-900'
 
           # tintColor is the selected-segment background accent
           # (UISegmentedControl heritage — sjui/kjui already render it).
           tint = attributes['tintColor']
-          selected_bg = tint ? TailwindMapper.map_color(tint, 'bg') : 'bg-white'
+          selected_bg = tint ? segment_colour_class(tint, 'bg', '--jui-segment-tint') : 'bg-white'
 
           base_classes = "flex-1 px-4 #{padding_class} #{font_size_class} font-medium rounded-md transition-colors cursor-pointer"
           disabled_class = attributes['enabled'] == false ? ' cursor-not-allowed' : ''
@@ -222,6 +224,28 @@ module RjuiTools
                                  unselected_text
                                end
             "#{base_classes}#{disabled_class} #{selected_classes}"
+          end
+        end
+
+        # A segment's colour as its class. A bound one reads the custom property
+        # the container sets (register_bound_segment_colours); in the class
+        # itself it was `bg-@{v}` / `text-@{v}`, which is no class.
+        def segment_colour_class(value, prefix, property)
+          return "#{prefix}-[var(#{property})]" if has_binding?(value)
+
+          TailwindMapper.map_color(value, prefix)
+        end
+
+        # The bound segment colours, as custom properties on the container the
+        # buttons inherit. Called before the container's style is written.
+        def register_bound_segment_colours
+          font = attributes['fontColor']
+          selected = attributes['selectedFontColor'] || font
+          {
+            '--jui-segment-font' => font, '--jui-segment-selected-font' => selected,
+            '--jui-segment-tint' => attributes['tintColor']
+          }.each do |property, value|
+            @dynamic_styles[property] = color_style_expr(value) if has_binding?(value)
           end
         end
 
