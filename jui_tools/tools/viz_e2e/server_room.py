@@ -43,6 +43,15 @@ SPEC_SECRET = "postgres://orders@db-prod.internal:5432/orders"
 MARKUP = '<b>x</b><img src=x onerror="window.__srMarkup=1">' 
 #: a frame of the large model must come within this (ms; the slowest tenth of the frames, software GL)
 FRAME_P90_MAX_MS = 250
+#: ... or within this many times an empty room's, measured in the same page just after (srBlank): a busy machine draws
+#: every frame later, an empty room's too, and the large room's frames read as a stall of the room's own (ticket
+#: 2026-11-06-viz-e2e-full-run-red-under-load). What the large room adds to a frame is still bounded.
+FRAME_P90_EMPTY_TIMES = 5   # measured (11-08): 3.2 at most normally, 3.8 at --slow 4; a frame a large room makes 300 ms slower is red
+
+
+def _frame_budget(r):
+    """The p90 a large room's frames may reach: FRAME_P90_MAX_MS, or FRAME_P90_EMPTY_TIMES an empty room's at that moment."""
+    return max(FRAME_P90_MAX_MS, FRAME_P90_EMPTY_TIMES * (r.get("emptyP90") or 0))
 #: the same arms in 2D (ticket 2026-10-23-viz-server-room-2d-mode, requester: 「機能は3Dと一緒」): every room opened from straight
 #: above (the page's own choice per project, '*' for all); an arm the 2D cannot share says so where it is skipped
 FLAT = {"on": False}
@@ -1638,11 +1647,19 @@ async def run_server_room(pw, out, failures, flat=False):
             s = await page.evaluate(SR)
             fr = sorted(s["frames"])
             heap = {m["name"]: m["value"] for m in (await cdp.send("Performance.getMetrics"))["metrics"]}
+            # the same loop with the room drawn empty, at once after: the frames this machine gives any room now
+            await page.evaluate("() => { window.__dbg.srBlank(true); window.__dbg.srFramesReset(); }")
+            try:
+                await until(page, "() => window.__dbg.sr().frames.length >= 60", f"60 empty frames ({where})", timeout=60000)
+                em = sorted((await page.evaluate(SR))["frames"])
+            finally:   # drawn again, two frames, before anything is read or shot
+                await page.evaluate("() => { window.__dbg.srBlank(false); return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); }")
             return s, {"lod": s["lod"], "cellPx": s["cellPx"], "frameMedian": round(statistics.median(fr), 1), "frameP90": round(fr[int(len(fr) * 0.9)], 1),
+                       "emptyMedian": round(statistics.median(em), 1), "emptyP90": round(em[int(len(em) * 0.9)], 1),
                        "labels": s["labels"], "gpu": s["gpu"], "jsHeapUsedMB": round(heap.get("JSHeapUsedSize", 0) / 1e6, 1)}
         s, first = await frames("fit")
         res["large"] = {"stats": s["stats"], "fit": first}
-        check(failures, s["stats"]["nodes"] >= 1500 and first["frameP90"] < FRAME_P90_MAX_MS, f"the large model is drawn and does not stall: {res['large']}")
+        check(failures, s["stats"]["nodes"] >= 1500 and first["frameP90"] < _frame_budget(first), f"the large model is drawn and does not stall: {res['large']}")
         # fit-all on the large room draws what it drew before the models (§3: 「引きになったら負荷が大きいので今の表示で」): the far
         # boxes only — 3 draw calls, 12 triangles, as on 2.3.19 — and no model is made
         fit_models = (await page.evaluate("() => window.__dbg.srDetail()"))["models"]
@@ -1678,7 +1695,7 @@ async def run_server_room(pw, out, failures, flat=False):
         overlaps = sum(1 for i, a_ in enumerate(rects) for b_ in rects[i + 1:] if a_[0] < b_[2] - 1 and b_[0] < a_[2] - 1 and a_[1] < b_[3] - 1 and b_[1] < a_[3] - 1)
         res["labelOverlaps"] = [len(rects), overlaps]
         check(failures, len(rects) > 10 and overlaps == 0, f"no label covers another up close: {res['labelOverlaps']}")   # E12
-        check(failures, max(res["large"]["far"]["frameP90"], res["large"]["near"]["frameP90"]) < FRAME_P90_MAX_MS, f"far and near do not stall: {res['large']}")
+        check(failures, all(res["large"][k]["frameP90"] < _frame_budget(res["large"][k]) for k in ("far", "near")), f"far and near do not stall: {res['large']}")
         await page.screenshot(path=str(out / "large-near-light.png"))
         # up close (§5): many in view, the simple shapes; moved in on one Lambda, the shapes by service and tags with the
         # service; between the two thresholds it stays as it was; the whole view, simple again
