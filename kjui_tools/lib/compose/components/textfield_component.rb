@@ -592,8 +592,19 @@ module KjuiTools
             code += "\n" + indent("isOutlined = true,", depth + 1)
           end
 
+          # The outline's width. 0 is the no-outline above; a bound one with no value yet is Material's 1.
+          border_width = json_data['borderWidth']
+          unless border_width.nil? || border_width == 0 || border_width == '0' ||
+                 JsonUIShared::EnumSpelling.lowered(json_data['borderStyle'], 'TextField', 'borderStyle') == 'none'
+            code += "\n" + indent("borderWidth = #{Helpers::BoundValue.dp(border_width, fallback: 1)},", depth + 1)
+          end
+
           if is_secure
             code += "\n" + indent("isSecure = true,", depth + 1)
+          elsif Helpers::BoundValue.bound?(json_data['secure'])
+            # A bound secure follows the data. It was left out, so the text showed.
+            required_imports&.add(:secure_text_field)
+            code += "\n" + indent("isSecure = #{Helpers::BoundValue.bool(json_data['secure'])},", depth + 1)
           end
           
           
