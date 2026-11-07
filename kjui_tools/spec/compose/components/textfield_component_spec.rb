@@ -493,6 +493,38 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
         expect(result).not_to include('PasswordVisualTransformation')
       end
 
+      # The Autofill framework is told what the field holds (Compose's
+      # semantics contentType); until 2.5.11 only the keyboard was.
+      {
+        'username' => 'ContentType.Username', 'usernameWebauthn' => 'ContentType.Username',
+        'password' => 'ContentType.Password', 'newPassword' => 'ContentType.NewPassword',
+        'oneTimeCode' => 'ContentType.SmsOtpCode', 'email' => 'ContentType.EmailAddress',
+        'telephoneNumber' => 'ContentType.PhoneNumber', 'postalCode' => 'ContentType.PostalCode'
+      }.each do |value, hint|
+        it "gives the Autofill framework #{hint} for contentType #{value}" do
+          result = described_class.generate({ 'type' => 'TextField', 'contentType' => value }, 0, required_imports)
+          expect(result).to include(".semantics { contentType = #{hint} }")
+          expect(required_imports).to include(:autofill_content_type)
+        end
+      end
+
+      it 'gives no autofill hint for URL, which has no autofill type' do
+        result = described_class.generate({ 'type' => 'TextField', 'contentType' => 'URL' }, 0, required_imports)
+        expect(result).not_to include('contentType =')
+      end
+
+      it 'looks a bound contentType up at run time, with no hint for an unknown value' do
+        result = described_class.generate({ 'type' => 'TextField', 'contentType' => '@{kind}' }, 0, required_imports)
+        expect(result).to include('.semantics { (when (data.kind')
+        expect(result).to include('"usernameWebauthn" -> ContentType.Username')
+        expect(result).to include('else -> null })?.let { contentType = it } }')
+      end
+
+      it 'gives the hint to the field inside a margined box' do
+        result = described_class.generate({ 'type' => 'TextField', 'contentType' => 'username', 'topMargin' => 8 }, 0, required_imports)
+        expect(result).to match(/textFieldModifier = Modifier[^,]*\.semantics \{ contentType = ContentType\.Username \}/m)
+      end
+
       it 'yields to contentType' do
         result = described_class.generate(
           { 'type' => 'TextField', 'contentType' => 'emailAddress', 'inputType' => 'phone' },

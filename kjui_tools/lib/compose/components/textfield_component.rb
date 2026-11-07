@@ -30,6 +30,53 @@ module KjuiTools
           'postalcode' => 'KeyboardType.Number'
         }.freeze
 
+        # The declared `contentType` vocabulary as Compose's autofill hint
+        # (androidx.compose.ui.autofill.ContentType). Until 2.5.11 the Android
+        # faces wrote the keyboard only, so the Autofill framework never knew a
+        # field was a username or a password and filled nothing from it, while
+        # iOS (.textContentType) and the web (autoComplete) said so.
+        # `usernameWebauthn` is a username to the framework: a Compose field
+        # takes no Credential Manager request, the app offers passkeys through
+        # CredentialManager.getCredential. `URL` has no autofill type.
+        CONTENT_TYPE_AUTOFILL = {
+          'username' => 'ContentType.Username',
+          'usernamewebauthn' => 'ContentType.Username',
+          'password' => 'ContentType.Password',
+          'newpassword' => 'ContentType.NewPassword',
+          'onetimecode' => 'ContentType.SmsOtpCode',
+          'email' => 'ContentType.EmailAddress',
+          'emailaddress' => 'ContentType.EmailAddress',
+          'name' => 'ContentType.PersonFullName',
+          'givenname' => 'ContentType.PersonFirstName',
+          'familyname' => 'ContentType.PersonLastName',
+          'telephonenumber' => 'ContentType.PhoneNumber',
+          'tel' => 'ContentType.PhoneNumber',
+          'phone' => 'ContentType.PhoneNumber',
+          'streetaddress' => 'ContentType.AddressStreet',
+          'postalcode' => 'ContentType.PostalCode',
+          'country' => 'ContentType.AddressCountry',
+          'creditcardnumber' => 'ContentType.CreditCardNumber'
+        }.freeze
+
+        # The `.semantics { contentType = … }` modifier for a declared
+        # contentType, or [] when it names nothing the framework fills. A bound
+        # one is looked up at run time; a value with no autofill type sets none.
+        def self.autofill_modifiers(json_data, required_imports)
+          value = json_data['contentType']
+          return [] if value.nil? || value == ''
+
+          hint = Helpers::BoundValue.enum(value, CONTENT_TYPE_AUTOFILL,
+                                          bound_default: 'null', declared: %w[TextField contentType])
+          return [] if hint.nil?
+
+          required_imports&.add(:autofill_content_type)
+          if Helpers::BindingExpression.whole_binding?(value)
+            [".semantics { (#{hint})?.let { contentType = it } }"]
+          else
+            [".semantics { contentType = #{hint} }"]
+          end
+        end
+
         # `default` is deliberately absent from both tables. It means "the
         # platform's own keyboard", i.e. no opinion — and emitting
         # `KeyboardType.Text` for it made `input: "default"` and
@@ -398,6 +445,7 @@ module KjuiTools
               textfield_modifiers << ".onFocusChanged { if (it.isFocused != data.#{focus_prop}) viewModel.updateData(mapOf(\"#{focus_prop}\" to it.isFocused)) }"
             end
             textfield_modifiers << ".focusRequester(focusRequester_#{focus_requester_name})" if focus_requester_name
+            textfield_modifiers.concat(autofill_modifiers(json_data, required_imports))
             if textfield_modifiers.any?
               code += "\n" + indent("textFieldModifier = Modifier", depth + 1)
               textfield_modifiers.each do |mod|
@@ -439,6 +487,7 @@ module KjuiTools
               modifiers << ".onFocusChanged { if (it.isFocused != data.#{focus_prop}) viewModel.updateData(mapOf(\"#{focus_prop}\" to it.isFocused)) }"
             end
             modifiers << ".focusRequester(focusRequester_#{focus_requester_name})" if focus_requester_name
+            modifiers.concat(autofill_modifiers(json_data, required_imports))
 
             if modifiers.any?
               code += "\n" + indent("modifier = Modifier", depth + 1)
