@@ -104,7 +104,8 @@ RSpec.describe 'kjui codegen: viewId by position' do
     expect(<<~KOTLIN).to compile_as_kotlin
       #{ComposeStubUniverse.common_stages(code)}
       class Data(val a: String = "", val b: String = "")
-      class ViewModel { fun updateData(values: Map<String, Any?>) {} }
+      class DataFlow { val value = Data(); suspend fun first(predicate: (Data) -> Boolean): Data = value }
+      class ViewModel { val data = DataFlow(); fun updateData(values: Map<String, Any?>) {} }
       fun screen(data: Data, viewModel: ViewModel) {
       #{code}
       }

@@ -511,7 +511,8 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
           val t: String = "", val nIsFocused: Boolean = false,
           val sel: String = "", val selectedRadiogroup: String = "", val gate: Boolean? = null
       )
-      class ViewModel { fun updateData(values: Map<String, Any?>) {} }
+      class DataFlow { val value = Data(); suspend fun first(predicate: (Data) -> Boolean): Data = value }
+      class ViewModel { val data = DataFlow(); fun updateData(values: Map<String, Any?>) {} }
       #{emitted}
     KOTLIN
   end

@@ -99,7 +99,8 @@ RSpec.describe 'kjui codegen: the type-synonym dispatch' do
     expect(<<~KOTLIN).to compile_as_kotlin
       #{ComposeStubUniverse.common_stages(emitted)}
       class Data(val t: String = "", val nIsFocused: Boolean = false)
-      class ViewModel { fun updateData(values: Map<String, Any?>) {} }
+      class DataFlow { val value = Data(); suspend fun first(predicate: (Data) -> Boolean): Data = value }
+      class ViewModel { val data = DataFlow(); fun updateData(values: Map<String, Any?>) {} }
       #{emitted}
     KOTLIN
   end

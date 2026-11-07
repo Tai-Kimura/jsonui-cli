@@ -143,7 +143,8 @@ RSpec.describe 'kjui codegen: bound values reach the Kotlin' do
       #{ComposeStubUniverse.common_stages(functions)}
       class Data(val n: Int? = null, val i: Int = 1, val f: Float? = null, val t: String = "",
                  val p: Map<String, Any> = emptyMap(), val rows: List<Any> = emptyList())
-      class ViewModel { fun updateData(values: Map<String, Any?>) {} }
+      class DataFlow { val value = Data(); suspend fun first(predicate: (Data) -> Boolean): Data = value }
+      class ViewModel { val data = DataFlow(); fun updateData(values: Map<String, Any?>) {} }
       #{functions}
     KOTLIN
   end
@@ -177,7 +178,8 @@ RSpec.describe 'kjui codegen: bound values reach the Kotlin' do
     expect(<<~KOTLIN).to compile_as_kotlin
       #{ComposeStubUniverse.common_stages(functions)}
       class Data(val on: Boolean? = null, val b: Boolean = false, val f: Float = 0f, val i: Int = 0, val t: String = "")
-      class ViewModel { fun updateData(values: Map<String, Any?>) {} }
+      class DataFlow { val value = Data(); suspend fun first(predicate: (Data) -> Boolean): Data = value }
+      class ViewModel { val data = DataFlow(); fun updateData(values: Map<String, Any?>) {} }
       #{functions}
     KOTLIN
     expect(emit.call(enabled_nodes['Switch'].merge('enabled' => false))).to include('enabled = false')
@@ -196,7 +198,8 @@ RSpec.describe 'kjui codegen: bound values reach the Kotlin' do
     expect(<<~KOTLIN).to compile_as_kotlin
       #{ComposeStubUniverse.common_stages(functions)}
       class Data(val on: Boolean = false, val changed: ((String, Boolean) -> Unit)? = null)
-      class ViewModel { fun updateData(values: Map<String, Any?>) {} }
+      class DataFlow { val value = Data(); suspend fun first(predicate: (Data) -> Boolean): Data = value }
+      class ViewModel { val data = DataFlow(); fun updateData(values: Map<String, Any?>) {} }
       #{functions}
     KOTLIN
   end
@@ -225,7 +228,8 @@ RSpec.describe 'kjui codegen: bound values reach the Kotlin' do
     expect(<<~KOTLIN).to compile_as_kotlin
       #{ComposeStubUniverse.common_stages(functions)}
       class Data
-      class ViewModel { fun updateData(values: Map<String, Any?>) {} }
+      class DataFlow { val value = Data(); suspend fun first(predicate: (Data) -> Boolean): Data = value }
+      class ViewModel { val data = DataFlow(); fun updateData(values: Map<String, Any?>) {} }
       #{functions}
     KOTLIN
   end

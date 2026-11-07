@@ -9,6 +9,7 @@ require_relative '../helpers/resource_resolver'
 require_relative '../helpers/font_spec_helper'
 require_relative '../../core/string_literals'
 require_relative '../../core/enum_spelling'
+require_relative '../helpers/text_input_write_back'
 
 module KjuiTools
   module Compose
@@ -135,18 +136,16 @@ module KjuiTools
           if has_data_binding
             variable = extract_variable_name(json_data['text'])
             view_id = Helpers::ModifierBuilder.view_id(json_data)
-            # Sync external → state
-            code += indent("LaunchedEffect(#{value}) { if (#{state_var}.text.toString() != #{value}) #{state_var}.edit { replace(0, length, #{value}) } }", depth) + "\n"
             # Sync state → external
-            if json_data['onTextChange']
-              if Helpers::ModifierBuilder.is_binding?(json_data['onTextChange'])
-                handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(json_data['onTextChange'], view_id, 'newValue')
-                code += indent("LaunchedEffect(#{state_var}.text) { val newValue = #{state_var}.text.toString(); if (newValue != #{value}) { viewModel.updateData(mapOf(\"#{variable}\" to newValue)); #{handler_call} } }", depth) + "\n"
-              else
-                code += indent("LaunchedEffect(#{state_var}.text) { val newValue = #{state_var}.text.toString(); if (newValue != #{value}) { viewModel.updateData(mapOf(\"#{variable}\" to newValue)); #{Helpers::ModifierBuilder.get_event_handler_invocation("@{#{json_data['onTextChange']}}", view_id, 'newValue')} } }", depth) + "\n"
-              end
+            write = "viewModel.updateData(mapOf(\"#{variable}\" to newValue))"
+            handler_calls = if json_data['onTextChange']
+              handler = Helpers::ModifierBuilder.is_binding?(json_data['onTextChange']) ? json_data['onTextChange'] : "@{#{json_data['onTextChange']}}"
+              [Helpers::ModifierBuilder.get_event_handler_invocation(handler, view_id, 'newValue')]
             else
-              code += indent("LaunchedEffect(#{state_var}.text) { val newValue = #{state_var}.text.toString(); if (newValue != #{value}) viewModel.updateData(mapOf(\"#{variable}\" to newValue)) }", depth) + "\n"
+              []
+            end
+            Helpers::TextInputWriteBack.lines(state_var, value, [write] + handler_calls, required_imports).each do |line|
+              code += indent(line, depth) + "\n"
             end
           elsif json_data['onTextChange']
             view_id = Helpers::ModifierBuilder.view_id(json_data)
