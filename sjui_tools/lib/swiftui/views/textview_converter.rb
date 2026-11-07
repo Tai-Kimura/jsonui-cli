@@ -93,10 +93,10 @@ module SjuiTools
               end
 
               if hint_attrs['font']
-                add_line "hintFont: \"#{hint_attrs['font']}\","
+                add_line "hintFont: #{name_operand(hint_attrs['font'])},"
               elsif @component['hintFont']
                 # 個別のhintFont属性も引き続きサポート
-                add_line "hintFont: \"#{@component['hintFont']}\","
+                add_line "hintFont: #{name_operand(@component['hintFont'])},"
               end
 
               if hint_attrs['fontSize']
@@ -122,7 +122,7 @@ module SjuiTools
 
               # hintFont (個別属性)
               if @component['hintFont']
-                add_line "hintFont: \"#{@component['hintFont']}\","
+                add_line "hintFont: #{name_operand(@component['hintFont'])},"
               end
 
               # hintFontSize (個別属性)

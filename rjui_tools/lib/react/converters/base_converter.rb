@@ -661,7 +661,11 @@ module RjuiTools
 
           # Additional className from JSON — on a still box, without the
           # classes that scroll (still_box_pass?)
-          if attributes['className']
+          # A bound className is the data's classes at run time
+          # (bound_class_names): pasted in, it was the class "@{v}".
+          if (bound_classes = bound_class_names(attributes['className']))
+            classes << bound_classes
+          elsif attributes['className']
             classes << (still_box_pass? ? split_scroll_class_name[:outside].join(' ') : attributes['className'])
           end
 
@@ -2756,6 +2760,11 @@ module RjuiTools
         # when nothing in it is special there, else ` name={"…"}` with the
         # string literal from StringLiterals.ts.
         def jsx_attr_text(name, text)
+          # A binding is the data's value at run time: pasted between the
+          # quotes it was the text "@{v}" (data-testid, a Link's href, an
+          # image's src, an iframe's title, an input's pattern).
+          return " #{name}={#{bound_value_expr(text)}}" if has_binding?(text) && bound_value_expr(text)
+
           text = text.to_s
           return " #{name}={#{JsonUIShared::StringLiterals.ts(text)}}" if text.match?(JSX_ATTR_SPECIAL)
 
@@ -3169,6 +3178,16 @@ module RjuiTools
         #   means "unresolved" and is dropped.
         # Non-canonical expressions keep the legacy passthrough (prefix
         # only) so the validator's business-logic warnings stay the signal.
+        # A bound className as class-list text holding a `${…}`: the whole
+        # binding's classes, or the written text with its bindings in place.
+        # The JSX attribute becomes a template literal around it
+        # (ReactGenerator.template_bound_class_names). nil when not bound.
+        def bound_class_names(value)
+          return nil unless has_binding?(value) && (expr = bound_value_expr(value))
+
+          expr.start_with?('`') ? expr[1..-2] : "${#{expr} ?? ''}"
+        end
+
         def add_viewmodel_data_prefix(prop)
           expr = prop.to_s.strip
           # Legacy viewModel spellings normalize to data.

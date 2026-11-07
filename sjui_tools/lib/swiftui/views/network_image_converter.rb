@@ -31,7 +31,7 @@ module SjuiTools
             # `placeholder` the alias (kjui reads hint first; parity).
             hint_value = @component['hint'] || @component['placeholder']
             if hint_value
-              add_line "placeholder: #{swift_string_literal(hint_value)},"
+              add_line "placeholder: #{name_operand(hint_value)},"
             end
 
             # defaultImage / loadingImage / errorImage.
@@ -43,13 +43,13 @@ module SjuiTools
             # built-in ProgressView and the built-in broken-photo glyph instead,
             # on the SwiftUI path only; the UIKit runtime honours all three.
             if @component['defaultImage']
-              add_line "defaultImage: \"#{@component['defaultImage']}\","
+              add_line "defaultImage: #{name_operand(@component['defaultImage'])},"
             end
             if @component['loadingImage']
-              add_line "loadingImage: \"#{@component['loadingImage']}\","
+              add_line "loadingImage: #{name_operand(@component['loadingImage'])},"
             end
             if @component['errorImage']
-              add_line "errorImage: \"#{@component['errorImage']}\","
+              add_line "errorImage: #{name_operand(@component['errorImage'])},"
             end
 
             # contentMode. A BOUND spelling resolves at run time through the

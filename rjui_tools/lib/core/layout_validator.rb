@@ -161,6 +161,10 @@ module JsonUIShared
         overrides = node['responsive'].is_a?(Hash) ? node['responsive'].values.select { |o| o.is_a?(Hash) } : []
         [node, *overrides].each do |attrs|
           attrs.keys.each do |name|
+            if name == 'onclick'
+              drop_bound_onclick!(node, attrs, warnings, source_path)
+              next
+            end
             next unless binding_string?(attrs[name])
 
             noun = name_slot_noun(node['type'], name)
@@ -178,6 +182,30 @@ module JsonUIShared
         end
       end
       warnings
+    end
+
+    #: The lowercase `onclick` is the UIKit selector legacy and takes a bare
+    #: handler name only (binding_semantics.json contexts.nameRef); a binding
+    #: is written as `onClick`. iOS and Android called a bound one and the web
+    #: refused it, and its Data declared a property named `@{tap}`, which did
+    #: not parse. Every face now reads it as absent and says so once. In the
+    #: array face only the bound names go; the bare ones are still called.
+    def drop_bound_onclick!(node, attrs, warnings, source_path)
+      value = attrs['onclick']
+      bound = Array(value).select { |name| binding_string?(name) }
+      return if bound.empty?
+
+      component_id = node['id'] ? " (id=#{node['id']})" : ''
+      bound.each do |name|
+        warnings << {
+          level: :warning,
+          message: "#{node['type']}#{component_id}: 'onclick' takes a bare handler name, not a binding " \
+                   "(#{name}); write a binding as onClick. Ignored.",
+          location: source_path
+        }
+      end
+      rest = value.is_a?(Array) ? value - bound : []
+      rest.empty? ? attrs.delete('onclick') : attrs['onclick'] = rest
     end
 
     #: Component-specific declaration first, then `common`. Mirrors how the

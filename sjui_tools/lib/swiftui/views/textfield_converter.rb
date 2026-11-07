@@ -171,7 +171,7 @@ module SjuiTools
             hint_color = @component['hintColor'] || @component['placeholderColor']
             style_args = []
             style_args << "hintColor: #{get_swiftui_color(hint_color)}" if hint_color
-            style_args << "hintFont: \"#{@component['hintFont']}\"" if @component['hintFont']
+            style_args << "hintFont: #{name_operand(@component['hintFont'])}" if @component['hintFont']
             style_args << "hintFontSize: #{number_slot(@component['hintFontSize'])}" if @component['hintFontSize']
             style_args << "fontSize: #{number_slot(@component['fontSize'])}" if @component['fontSize']
             alignment = text_alignment_to_swiftui(@component['textAlign'] || 'left')

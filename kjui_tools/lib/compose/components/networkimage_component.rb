@@ -73,7 +73,7 @@ module KjuiTools
           if placeholder
             required_imports&.add(:painter_resource)
             required_imports&.add(:r_class)
-            code += "\n" + indent("placeholder = painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(placeholder)}),", depth + 1)
+            code += "\n" + indent("placeholder = #{state_painter(placeholder, required_imports) || "painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(placeholder)})"},", depth + 1)
           end
 
           # renderingMode — declared for swift and kotlin, and only Image read
@@ -160,8 +160,8 @@ module KjuiTools
           error_image = json_data['errorImage'] || default_image
           fallback_image = default_image
           state_args = []
-          state_args << "error = painterResource(R.drawable.#{drawable_for(error_image)})" if error_image
-          state_args << "fallback = painterResource(R.drawable.#{drawable_for(fallback_image)})" if fallback_image
+          state_args << "error = #{state_painter(error_image, required_imports) || "painterResource(R.drawable.#{drawable_for(error_image)})"}" if error_image
+          state_args << "fallback = #{state_painter(fallback_image, required_imports) || "painterResource(R.drawable.#{drawable_for(fallback_image)})"}" if fallback_image
           unless state_args.empty?
             required_imports&.add(:painter_resource)
             required_imports&.add(:r_class)
@@ -176,6 +176,14 @@ module KjuiTools
 
         # Drawable identifier for a state image, with the file extension the
         # layout may carry stripped first.
+        # A bound state image, looked up by name at run time; nil for a written
+        # one. The slot is Optional, so a name no drawable carries is null.
+        def self.state_painter(name, required_imports)
+          return nil unless Helpers::BindingExpression.whole_binding?(name)
+
+          Helpers::ResourceResolver.drawable_painter(name, required_imports, empty: 'null')
+        end
+
         def self.drawable_for(name)
           Helpers::ResourceResolver.drawable_name(name.gsub('.png', '').gsub('.jpg', ''))
         end

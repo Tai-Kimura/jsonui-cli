@@ -32,11 +32,11 @@ module SjuiTools
             
             # icons
             if iconOn
-              add_line "iconOn: \"#{iconOn}\","
+              add_line "iconOn: #{name_operand(iconOn)},"
             end
             
             if iconOff
-              add_line "iconOff: \"#{iconOff}\","
+              add_line "iconOff: #{name_operand(iconOff)},"
             end
             
             # iconPosition
@@ -95,7 +95,7 @@ module SjuiTools
             font_value = @component['font'].to_s
             font_weight = font_value.downcase if %w[bold semibold medium].include?(font_value.downcase)
             if @component['font'] && !font_weight
-              add_line "fontName: \"#{@component['font']}\","
+              add_line "fontName: #{name_operand(@component['font'])},"
             end
 
             # selected — the state that chooses icon_on over icon_off and

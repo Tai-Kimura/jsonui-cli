@@ -112,7 +112,11 @@ module RjuiTools
           # first, then the convenience flags top it up — a policy is a token
           # list, so the union is well-formed and nothing an author asked for
           # gets dropped.
-          if attributes['allow'].is_a?(String) && !attributes['allow'].empty?
+          # A bound policy is the data's string at run time, ahead of the flags.
+          bound_allow = has_binding?(attributes['allow']) && bound_value_expr(attributes['allow'])
+          if bound_allow
+            allows << (bound_allow.start_with?('`') ? bound_allow[1..-2] : "${#{bound_allow} ?? ''}")
+          elsif attributes['allow'].is_a?(String) && !attributes['allow'].empty?
             allows.concat(attributes['allow'].split(';').map(&:strip).reject(&:empty?))
           end
 
@@ -131,6 +135,8 @@ module RjuiTools
 
           allows = allows.uniq
           return '' if allows.empty?
+
+          return " allow={`#{allows.join('; ')}`}" if bound_allow
 
           " allow=\"#{allows.join('; ')}\""
         end

@@ -3,6 +3,7 @@
 require_relative '../../spec_helper'
 require_relative '../../support/typescript_compiler'
 require 'react/react_generator'
+require 'stringio'
 
 # Handler NAME references — canon: shared/core/binding_semantics.json
 # → contexts.nameRef.
@@ -41,10 +42,19 @@ RSpec.describe 'handler name spelling (web)' do
     expect(button_line('onclick', 'handleTap')).to include('onClick={() => data.handleTap?.()}')
   end
 
-  it 'lowercase onclick with the binding form is not a call' do
-    line = button_line('onclick', '@{handleTap}')
+  # On the build path a bound onclick is taken off before the converter reads
+  # it (LayoutValidator.drop_bound_onclick!): no call, one warning.
+  it 'lowercase onclick with the binding form is not a call, and says so once' do
+    err = StringIO.new
+    orig = $stderr
+    $stderr = err
+    begin
+      line = button_line('onclick', '@{handleTap}')
+    ensure
+      $stderr = orig
+    end
     expect(line).not_to include('onClick={')
-    expect(line).to include('ERROR: onclick requires selector format')
+    expect(err.string.scan("'onclick' takes a bare handler name, not a binding (@{handleTap}); write a binding as onClick. Ignored.").size).to eq(1)
   end
 
   # The whole generated file, imports cut, under --strict — each spelling,

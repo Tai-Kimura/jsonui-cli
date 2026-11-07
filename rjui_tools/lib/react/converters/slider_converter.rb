@@ -105,7 +105,10 @@ module RjuiTools
           # accepts one (and does NOT need `appearance: none`, which would
           # take the thumb with it).
           track_tint = attributes['trackTintColor']
-          if track_tint
+          if track_tint && (bound_tint = bound_state_color_class(track_tint, custom_property: '--jui-track-tint',
+                                                                       prefix: '[&::-webkit-slider-runnable-track]:bg'))
+            classes << bound_tint
+          elsif track_tint
             classes << TailwindMapper.map_color(
               track_tint, '[&::-webkit-slider-runnable-track]:bg'
             )

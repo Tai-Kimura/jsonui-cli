@@ -307,7 +307,7 @@ module SjuiTools
           if icon || selected_icon
             on_name = selected_icon || icon
             off_name = icon || selected_icon
-            add_line "Image(#{selected_expr} ? \"#{on_name}\" : \"#{off_name}\")"
+            add_line "Image(#{selected_expr} ? #{name_operand(on_name)} : #{name_operand(off_name)})"
             add_modifier_line ".renderingMode(.template)" if icon_color
             add_modifier_line ".resizable()"
             add_modifier_line ".aspectRatio(contentMode: .fit)"

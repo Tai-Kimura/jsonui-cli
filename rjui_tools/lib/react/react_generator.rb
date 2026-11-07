@@ -231,12 +231,20 @@ module RjuiTools
         # there (NestedTaps, BaseConverter#can_tap_gated_click).
         json = NestedTaps.stamp!(JsonUIShared::TapAccessibility.annotate!(JSON.parse(JSON.generate(json))))
 
-        jsx_content = convert_component(json)
+        jsx_content = self.class.template_bound_class_names(convert_component(json))
 
         generate_component_file(component_name, jsx_content, json,
                                 subdir: subdir, variants: variants,
                                 data_type: data_type, source_rel: source_rel,
                                 screen_id: screen_id)
+      end
+
+      # A className whose text holds a `${…}` (a bound className,
+      # BaseConverter#bound_class_names) is a template literal: written as
+      # "…" React shows the expression as its own text. One pass here covers
+      # every converter that writes `className="…"` itself.
+      def self.template_bound_class_names(jsx)
+        jsx.gsub(/className="([^"]*\$\{[^"]*)"/) { "className={`#{::Regexp.last_match(1)}`}" }
       end
 
       private

@@ -41,10 +41,10 @@ module SjuiTools
 
             # Custom icons
             if icon
-              add_line "icon: \"#{icon}\","
+              add_line "icon: #{name_operand(icon)},"
             end
             if selected_icon
-              add_line "selectedIcon: \"#{selected_icon}\","
+              add_line "selectedIcon: #{name_operand(selected_icon)},"
             end
 
             # Icon size

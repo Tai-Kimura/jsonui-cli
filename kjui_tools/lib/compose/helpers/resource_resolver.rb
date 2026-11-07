@@ -27,6 +27,43 @@ module KjuiTools
             name
           end
 
+          # Drawn when a bound name is no drawable: getIdentifier answers 0,
+          # and painterResource(0) throws. Spelled in full, so no import.
+          NO_DRAWABLE = 'androidx.compose.ui.graphics.painter.ColorPainter(androidx.compose.ui.graphics.Color.Transparent)'
+
+          # A drawable the layout names, as a Painter. A written name is
+          # `painterResource(id = R.drawable.<name>)`, as it always was. A
+          # binding is the name the data holds, looked up at run time; it was
+          # frozen into a drawable name (`R.drawable.img___icon_`), which no
+          # app carries, and the build stopped. *empty* is what an unknown
+          # name draws: nothing by default, `null` where the slot is Optional.
+          def drawable_painter(raw, required_imports, empty: NO_DRAWABLE)
+            required_imports&.add(:painter_resource)
+            unless BindingExpression.whole_binding?(raw)
+              required_imports&.add(:r_class)
+              return "painterResource(id = R.drawable.#{drawable_name(raw)})"
+            end
+
+            required_imports&.add(:local_context)
+            name = bound_string_value(raw)
+            "LocalContext.current.let { ctx -> ctx.resources.getIdentifier(#{name}, \"drawable\", ctx.packageName) }" \
+              ".let { id -> if (id != 0) painterResource(id = id) else #{empty} }"
+          end
+
+          # A whole binding in a String slot, as a non-null Kotlin String
+          # (`data.x`, or `(data.x ?: "")` for a property with no default);
+          # nil for anything that is not a whole binding.
+          def bound_string_value(raw)
+            return nil unless BindingExpression.whole_binding?(raw)
+
+            inner = BindingExpression.extract_inner(raw)
+            value = BindingExpression.value_access(inner)
+            return value unless value.start_with?('data.') &&
+                                BindingExpression.property_nullable?(BindingExpression.parse(inner).path)
+
+            "(#{value} ?: \"\")"
+          end
+
           # Thread-local storage for data definitions during build
           def data_definitions
             Thread.current[:kjui_data_definitions] || {}
