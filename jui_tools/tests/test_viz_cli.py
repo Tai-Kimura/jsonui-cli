@@ -357,10 +357,13 @@ def _serve_as(home: Path, port: int, patch: str = "", claude_sleep: float = 0) -
     raise AssertionError(f"serve did not start: rc={proc.returncode}\n{out}\n{err}")
 
 
-def _term_ends_it(proc: subprocess.Popen, err_out: list | None = None) -> float:
-    """TERM; it must end with 0 within TERM_WITHIN_SEC, its files cleared. How long it took (its stderr into err_out)."""
+def _term_ends_it(proc: subprocess.Popen, err_out: list | None = None, after_term=None) -> float:
+    """TERM; it must end with 0 within TERM_WITHIN_SEC, its files cleared. How long it took (its stderr into err_out).
+    after_term runs right after the TERM is sent (a held step let go)."""
     start = time.monotonic()
     proc.terminate()  # our own child
+    if after_term is not None:
+        after_term()
     try:
         rc = proc.wait(timeout=TERM_WITHIN_SEC)
     except subprocess.TimeoutExpired:
@@ -422,11 +425,23 @@ def test_term_while_a_pool_job_runs_ends_it(home, where):
 def test_term_while_it_still_starts_ends_it_with_its_files_cleared(home):
     """server.json is written before the rest of the start (the readers, the loops): a TERM in between is a stop like any
     other. Until 2.3.21 the handler came last and such a TERM ended the process outright (-15), its files left."""
-    # the session files' watcher is set up after server.json and before the old place of the handler
-    patch = "import time; from jui_cli.viz.sources import session_files as S; o = S.watch\ndef slow(*a, **k):\n    time.sleep(2); return o(*a, **k)\nS.watch = slow"
+    # the session files' watcher is set up after server.json and before the old place of the handler. It is held there
+    # until the TERM is sent: the TERM lands while the start is under way, and the bound is the stop's alone. (It slept
+    # 2 s, the TERM sent 0.3 s in: 1.7 s of the 3 s bound went to the sleep, and a loaded CI runner took the rest once,
+    # run 42375228484.)
+    inside, go = home / "held-in-watch", home / "let-watch-go"
+    patch = ("import os, time; from jui_cli.viz.sources import session_files as S; o = S.watch\n"
+             "def held(*a, **k):\n"
+             f"    open({str(inside)!r}, 'w').close(); end = time.monotonic() + 30\n"
+             f"    while not os.path.exists({str(go)!r}) and time.monotonic() < end: time.sleep(0.01)\n"
+             "    return o(*a, **k)\n"
+             "S.watch = held")
     proc = _serve_as(home, _free_port(), patch=patch)
-    time.sleep(0.3)   # server.json is there; the start is still under way
-    _term_ends_it(proc)
+    deadline = time.monotonic() + 15
+    while not inside.exists() and proc.poll() is None and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert inside.exists(), "the start did not reach the session files' watcher"
+    _term_ends_it(proc, after_term=go.touch)
 
 
 def test_a_stop_held_somewhere_ends_within_its_bound_and_names_the_step(home):

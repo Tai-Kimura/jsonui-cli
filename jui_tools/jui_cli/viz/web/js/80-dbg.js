@@ -230,7 +230,7 @@ window.__dbg = {
   // a flow playing (59-sr-flows.js): what it is at, what it said, what it waits for
   srFlow: () => { const P = SR_FLOW.player, V = SR.view; return { starts: V && V.flowStarts ? V.flowStarts.slice() : [], speed: SR_FLOW.speed, auto: SR_FLOW.auto,
     playing: P ? P.flow.id : null, state: P ? P.state : null, pos: P ? P.pos : null, log: P ? P.log.slice() : [], arrivals: P ? P.arrivals.slice() : [],
-    reached: P ? P.reached.slice() : [],
+    reached: P ? P.reached.slice() : [], ticks: P ? P.ticks.slice() : [],
     // the lights moving in their cables (a draining tail is not one), and what they are made of: the e2e holds that no
     // ball travels (no sphere in the flow's layer) and that the light is the cable's own shader
     lights: P ? P.lights.filter((o) => o.userData.flowLight && o.userData.moving).length : 0, chosen: P ? P.chosen.slice() : [],

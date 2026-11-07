@@ -60,9 +60,19 @@ function sample() {
       }
     }
     last.set(R, { at: here, jumps: R.jumps || 0, trail });
-    const room = (window.__dbg.walls && (() => { for (const k of Object.keys(window.__dbg.live3d().rooms)) { const r = window.__dbg.room(k); if (r && r.shown && p.x > r.x0 && p.x < r.x1 && p.z > r.z0 && p.z < r.z1) return k; } return null; })());
+    // the rooms it was in, along the path since the last sample (each 0.2 m of it), not at the frames alone: on a busy
+    // machine a frame is a second or more, and a walk through the room next door fell between two (ticket
+    // 2026-11-06-viz-e2e-full-run-red-under-load)
+    const roomAt = (x, z) => { for (const k of Object.keys(window.__dbg.live3d().rooms)) { const r = window.__dbg.room(k); if (r && r.shown && x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1) return k; } return null; };
     const seen = window.__walk.rooms[id] || (window.__walk.rooms[id] = []);
-    if (room && seen[seen.length - 1] !== room) seen.push(room);
+    const along = prev && prev.jumps === (R.jumps || 0) ? [prev.at, ...(trail && trail !== prev.trail ? trail : []), here] : [here];
+    for (let i = 0; i < along.length; i++) {
+      const a = along[Math.max(0, i - 1)], b = along[i], n = i ? Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.2)) : 1;
+      for (let k = 1; k <= n; k++) {
+        const room = roomAt(a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n);
+        if (room && seen[seen.length - 1] !== room) seen.push(room);
+      }
+    }
   }
   requestAnimationFrame(sample);
 }

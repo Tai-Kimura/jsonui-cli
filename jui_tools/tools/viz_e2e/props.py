@@ -65,6 +65,10 @@ SLOW_RAF = """(() => { const raf = window.requestAnimationFrame.bind(window);
   window.requestAnimationFrame = (cb) => { const ms = window.__slowFrameMs || 0; return ms ? setTimeout(() => raf(cb), ms) : raf(cb); }; })()"""
 SLOW_MS = 3000
 TEN_MAX_SEC = 20
+# The same bound in frames: a busy machine draws the 3 s frames later still, and the seconds went past 20 with the walk
+# as many frames long (ticket 2026-11-06-viz-e2e-full-run-red-under-load). A per-frame step takes ten and more.
+TEN_MAX_FRAMES = TEN_MAX_SEC * 1000 // SLOW_MS
+FRAMES_JS = "() => window.__dbg.live3d().frames || 0"
 # Two animation frames: the page's own frame has run once after this was called.
 NEXT_FRAME = "() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))"
 
@@ -202,12 +206,15 @@ async def run_props(pw, out, failures, jt=None, shots_only=False):
         # covers the exit and the walk out alone
         await settled(page, "eleven seated before one leaves", timeout=60000)
         await page.evaluate(f"() => {{ window.__slowFrameMs = {SLOW_MS}; }}")   # the walk out, with frames 3 s apart
-        t_ten = time.monotonic()
+        t_ten, n_ten = time.monotonic(), await page.evaluate(FRAMES_JS)
         hook(SID.format(10), hook_event_name="SessionEnd", reason="exit")
         await wait(page, f"() => window.__dbg.props().room === '{room_id}' && window.__dbg.props().fun", timeout=30000, label="ten again: props back")
         res["tenSec"] = round(time.monotonic() - t_ten, 1)
+        res["tenFrames"] = await page.evaluate(FRAMES_JS) - n_ten
         await page.evaluate("() => { window.__slowFrameMs = 0; }")
-        check(failures, res["tenSec"] < TEN_MAX_SEC, f"with frames {SLOW_MS} ms apart, the walk out takes about its real time: {res['tenSec']} s")
+        check(failures, 0 < res["tenFrames"] <= TEN_MAX_FRAMES,
+              f"with frames {SLOW_MS} ms apart, the walk out takes about its real time: {res['tenFrames']} frames"
+              f" (at most {TEN_MAX_FRAMES}), {res['tenSec']} s")
         await page.click("#room-back")
         await wait(page, "() => window.__dbg.props().room === null", label="out")
         for i in range(3, 10):

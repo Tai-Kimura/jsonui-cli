@@ -105,7 +105,7 @@ function srFlowPlay(id) {
   srFlowStop();
   // departs / reached / chose: where and when (the e2e reads the pace and the rests from them)
   const P = SR_FLOW.player = { flow, frames: [{ steps: flow.steps, i: 0 }], pos: flow.start, state: 'play', anim: null, history: [],
-    chosen: [], lights: [], branch: null, arrivals: [], reached: [], departs: [], chose: [], log: [], dirty: true,
+    chosen: [], lights: [], branch: null, arrivals: [], reached: [], departs: [], chose: [], ticks: [], log: [], dirty: true,
     all: srFlowNodesOf(flow), seen: new Set([flow.start]) };
   const t = SR_TRIGGERS[flow.trigger] || SR_TRIGGERS.user;
   $('sr-route-list').replaceChildren();
@@ -561,6 +561,9 @@ function srFlowFollow(V, P, dt) {
 function srFlowTick(V, dt) {
   const P = SR_FLOW.player;
   if (!P) return;
+  // each frame it was stepped in: when, the step taken (ms) and the real time since the frame before (the e2e reads a
+  // move's or a rest's time to the frame it ended in, give or take that frame)
+  if (P.ticks.length < 6000) P.ticks.push([srNow(), dt, V.gap === undefined ? dt : V.gap]);
   const step = dt * SR_FLOW.speed;      // the speed is read every frame: changed while it plays, it applies at once
   const run = P.state === 'play';
   const advance = (A) => {

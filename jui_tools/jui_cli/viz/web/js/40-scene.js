@@ -1203,6 +1203,7 @@ function liveUpdateRobots(nowSec, dt) {
   if (SOURCE.layoutRev !== LIVE3D.rev) liveSync();   // a robot walked out this frame: the room counts it out now
   propsTick(nowSec, dt);
   shredBits(nowSec, dt);
+  LIVE3D.frames = (LIVE3D.frames || 0) + 1;   // the frames the rooms were updated in (the e2e counts a walk's frames)
   if (LIVE3D.afterFrame) LIVE3D.afterFrame(nowSec);   // a test's recorder of the frame's outcome (80-dbg.js), else none
 }
 /* One room at a time (requester, 10-18): a project picked (its room's tag, its floor in 3D, the menu) lays out only
