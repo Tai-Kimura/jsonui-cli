@@ -230,7 +230,7 @@ window.__dbg = {
   // a flow playing (59-sr-flows.js): what it is at, what it said, what it waits for
   srFlow: () => { const P = SR_FLOW.player, V = SR.view; return { starts: V && V.flowStarts ? V.flowStarts.slice() : [], speed: SR_FLOW.speed, auto: SR_FLOW.auto,
     playing: P ? P.flow.id : null, state: P ? P.state : null, pos: P ? P.pos : null, log: P ? P.log.slice() : [], arrivals: P ? P.arrivals.slice() : [],
-    reached: P ? P.reached.slice() : [],
+    reached: P ? P.reached.slice() : [], ticks: P ? P.ticks.slice() : [],
     // the lights moving in their cables (a draining tail is not one), and what they are made of: the e2e holds that no
     // ball travels (no sphere in the flow's layer) and that the light is the cable's own shader
     lights: P ? P.lights.filter((o) => o.userData.flowLight && o.userData.moving).length : 0, chosen: P ? P.chosen.slice() : [],
@@ -395,6 +395,9 @@ window.__dbg = {
       price: ($('sr-cost').querySelector('[data-src-price]') || {}).textContent || '' } : null }),
   srCostPlayMs: (ms) => { SRC.playMs = ms; return ms; },
   srFramesReset: () => { if (SR.view) SR.view.frames = []; return !!SR.view; },
+  // the room drawn empty (nothing drawn, no tag placed) or as it is: the frames of an empty room, measured between a large
+  // room's (56-server-room.js V.blank)
+  srBlank: (on) => { const V = SR.view; if (!V) return false; V.blank = !!on; $('sr-labels').hidden = !!on; return true; },
   // the box (2.3.11 item 6): the nodes on the page now (client px; null behind the camera), the camera, what the last box held
   srScreen: () => { const V = SR.view; if (!V) return null; V.camera.updateMatrixWorld(); const r = V.renderer.domElement.getBoundingClientRect();
     return { rect: [r.left, r.top, r.right, r.bottom], lod: V.lod, nodes: srBoxPoints(V).map(([id, v]) => { const s = srScreenAt(V, v, r.width, r.height); return [id, s ? [r.left + s[0], r.top + s[1]] : null]; }) }; },

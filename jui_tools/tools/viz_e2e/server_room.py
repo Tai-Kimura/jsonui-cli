@@ -43,6 +43,15 @@ SPEC_SECRET = "postgres://orders@db-prod.internal:5432/orders"
 MARKUP = '<b>x</b><img src=x onerror="window.__srMarkup=1">' 
 #: a frame of the large model must come within this (ms; the slowest tenth of the frames, software GL)
 FRAME_P90_MAX_MS = 250
+#: ... or within this many times an empty room's, measured in the same page just after (srBlank): a busy machine draws
+#: every frame later, an empty room's too, and the large room's frames read as a stall of the room's own (ticket
+#: 2026-11-06-viz-e2e-full-run-red-under-load). What the large room adds to a frame is still bounded.
+FRAME_P90_EMPTY_TIMES = 5   # measured (11-08): 3.2 at most normally, 3.8 at --slow 4; a frame a large room makes 300 ms slower is red
+
+
+def _frame_budget(r):
+    """The p90 a large room's frames may reach: FRAME_P90_MAX_MS, or FRAME_P90_EMPTY_TIMES an empty room's at that moment."""
+    return max(FRAME_P90_MAX_MS, FRAME_P90_EMPTY_TIMES * (r.get("emptyP90") or 0))
 #: the same arms in 2D (ticket 2026-10-23-viz-server-room-2d-mode, requester: 「機能は3Dと一緒」): every room opened from straight
 #: above (the page's own choice per project, '*' for all); an arm the 2D cannot share says so where it is skipped
 FLAT = {"on": False}
@@ -122,30 +131,68 @@ DRAWN = "() => window.__dbg.srFlowDrawn()"
 SEARCH_NODES = {"browser", "web", "api", "kv", "d1", "queue", "r2"}
 
 
-def _moves(f, lengths):
-    """Each move of a flow played to its end: [from, to, length, ms], a depart paired with the first arrival at its end after it."""
+UNITS_PER_SEC = 10   # the light's pace at 1.0 the requester asked for (「距離/sで設定して」), ~10 units a second
+FRAME_DT_MAX_MS = 1000
+
+
+def _frame_of(ticks, te):
+    """The index of the frame an event at te fell in (the last frame stepped at or before it)."""
+    k = -1
+    for i, (t, _dt, _gap) in enumerate(ticks):
+        if t > te:
+            break
+        k = i
+    return k
+
+
+def _played(f, t0, t1):
+    """The flow's own time between two events (ms): the steps of the frames after the one t0 fell in, up to the one t1
+    fell in, and that last frame's step. An end is seen in the frame it falls in, so the time asked for lies in
+    (played - last step, played]: on a busy machine a frame is 200 ms and more, and a 183 ms move read as one frame or two
+    (ticket 2026-11-06-viz-e2e-full-run-red-under-load)."""
+    ticks = f["ticks"]
+    i0, i1 = _frame_of(ticks, t0), _frame_of(ticks, t1)
+    steps = [dt for _t, dt, _gap in ticks[i0 + 1:i1 + 1]]
+    return (sum(steps), steps[-1]) if steps else (t1 - t0, 0)
+
+
+def _within(want, played, last):
+    """The time read for an interval: the one asked for when the frames allow it, else the nearest the frames allow."""
+    return min(max(want, played - last), played)
+
+
+def _moves(f, lengths, speed):
+    """Each move of a flow played to its end: [from, to, length, ms], a depart paired with the first arrival at its end after it;
+    ms is the flow's own time, read to the frames (_played)."""
     out, used = [], set()
     for frm, to, t0 in f["departs"]:
         k = next((i for i, (at, t1) in enumerate(f["reached"]) if i not in used and at == to and t1 >= t0), None)
         if k is None:
             continue
         used.add(k)
-        out.append([frm, to, lengths.get(f"{frm}>{to}", lengths.get(f"{to}>{frm}")), f["reached"][k][1] - t0])
+        ln = lengths.get(f"{frm}>{to}", lengths.get(f"{to}>{frm}"))
+        played, last = _played(f, t0, f["reached"][k][1])
+        out.append([frm, to, ln, _within(ln / (UNITS_PER_SEC * speed) * 1000, played, last) if ln else played])
     return out
 
 
-def _rests(f):
+def _rests(f, speed, rest_ms=400, branch_rest=2):
     """How long the light stayed before each move: at a node (from the last arrival before it) or at a branch (from the
-    choice, when one came between)."""
+    choice, when one came between); the flow's own time, read to the frames (_played)."""
     node, branch = [], []
     for frm, to, t0 in f["departs"][1:]:
         last = max((t for _, t in f["reached"] if t <= t0), default=None)
         chose = [t for _, _, t in f["chose"] if (last is None or t >= last) and t <= t0]
         if chose:
-            branch.append(t0 - chose[-1])
+            branch.append(_within(rest_ms * branch_rest / speed, *_played(f, chose[-1], t0)))
         elif last is not None:
-            node.append(t0 - last)
+            node.append(_within(rest_ms / speed, *_played(f, last, t0)))
     return node, branch
+
+
+def _steps_real(f):
+    """Frames whose step was not the real time since the frame before (up to FRAME_DT_MAX_MS): [gap, step]."""
+    return [[round(gap), round(dt)] for _t, dt, gap in f["ticks"][1:] if abs(dt - min(gap, FRAME_DT_MAX_MS)) > 0.5]
 
 
 def _median(xs):
@@ -182,13 +229,20 @@ async def run_flow_pace(page, out, failures, res):
           f"the speed is 0.5 to 3.0 by 0.25: {fp['speeds']}")
     # the pace: each move's time is its cable's length at one speed (world units a second), at 1.0 and at 3.0
     lengths = (await page.evaluate(FLOW))["lengths"]
-    pace, rests = {}, {}
+    pace, rests, unreal, gaps = {}, {}, [], []
     for speed in (1.0, 3.0):
         f = await _play_search(page, speed)
-        mv = _moves(f, lengths)
+        mv = _moves(f, lengths, speed)
         pace[speed] = [[a, b, ln, round(ms), round(ln / ms * 1000, 2) if ln and ms > 0 else None] for a, b, ln, ms in mv]
-        rests[speed] = _rests(f)
+        rests[speed] = _rests(f, speed)
+        unreal += _steps_real(f)
+        gaps += [g for _t, _dt, g in f["ticks"][1:]]
+    gaps.sort()
+    fp["frames"] = {"n": len(gaps), "median": round(gaps[len(gaps) // 2]) if gaps else None,
+                    "p90": round(gaps[int(len(gaps) * 0.9)]) if gaps else None, "max": round(gaps[-1]) if gaps else None}
     fp["pace"] = pace
+    check(failures, gaps and not unreal,
+          f"each frame steps the flow by the real time since the frame before, up to {FRAME_DT_MAX_MS} ms: {unreal[:8]} {fp['frames']}")
     fp["rests"] = {k: [[round(x) for x in v] for v in r] for k, r in rests.items()}
     u1 = [m[4] for m in pace[1.0] if m[4]]
     lens = [m[2] for m in pace[1.0] if m[2]]
@@ -640,9 +694,11 @@ async def run_flows(page, out, failures, res):
         await page.evaluate("(s) => window.__dbg.srFlowSpeed(s)", speed)
         await page.click("#sr-board [data-sr-flow='search']")
         f = await until(page, f"() => {{ const f = ({FLOW})(); return f.arrivals.length >= 2 ? f : null; }}", f"two arrivals at {speed}", timeout=30000, why=FLOW)
-        gaps[speed] = f["arrivals"][1] - f["arrivals"][0]
-    fl["gaps"] = gaps
-    ratio = gaps[1.0] / gaps[2.0] if gaps[2.0] else 0
+        gaps[speed] = _played(f, f["arrivals"][0], f["arrivals"][1])   # the flow's own time, give or take the last frame's step
+    fl["gaps"] = {k: [round(p), round(d)] for k, (p, d) in gaps.items()}
+    (p1, d1), (p2, d2) = gaps[1.0], gaps[2.0]
+    # the ratio nearest 2 that the two ends' last frames allow
+    ratio = min(max(2.0, (p1 - d1) / p2), p1 / max(p2 - d2, 1e-3)) if p2 else 0
     check(failures, 1.5 <= ratio <= 2.6, f"twice the speed, half the time between two steps: {gaps} (ratio {ratio:.2f})")
     await page.click("#sr-player [data-sr-fp='stop']")
     await page.evaluate("() => window.__dbg.srFlowSpeed(3)")
@@ -1591,11 +1647,19 @@ async def run_server_room(pw, out, failures, flat=False):
             s = await page.evaluate(SR)
             fr = sorted(s["frames"])
             heap = {m["name"]: m["value"] for m in (await cdp.send("Performance.getMetrics"))["metrics"]}
+            # the same loop with the room drawn empty, at once after: the frames this machine gives any room now
+            await page.evaluate("() => { window.__dbg.srBlank(true); window.__dbg.srFramesReset(); }")
+            try:
+                await until(page, "() => window.__dbg.sr().frames.length >= 60", f"60 empty frames ({where})", timeout=60000)
+                em = sorted((await page.evaluate(SR))["frames"])
+            finally:   # drawn again, two frames, before anything is read or shot
+                await page.evaluate("() => { window.__dbg.srBlank(false); return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); }")
             return s, {"lod": s["lod"], "cellPx": s["cellPx"], "frameMedian": round(statistics.median(fr), 1), "frameP90": round(fr[int(len(fr) * 0.9)], 1),
+                       "emptyMedian": round(statistics.median(em), 1), "emptyP90": round(em[int(len(em) * 0.9)], 1),
                        "labels": s["labels"], "gpu": s["gpu"], "jsHeapUsedMB": round(heap.get("JSHeapUsedSize", 0) / 1e6, 1)}
         s, first = await frames("fit")
         res["large"] = {"stats": s["stats"], "fit": first}
-        check(failures, s["stats"]["nodes"] >= 1500 and first["frameP90"] < FRAME_P90_MAX_MS, f"the large model is drawn and does not stall: {res['large']}")
+        check(failures, s["stats"]["nodes"] >= 1500 and first["frameP90"] < _frame_budget(first), f"the large model is drawn and does not stall: {res['large']}")
         # fit-all on the large room draws what it drew before the models (§3: 「引きになったら負荷が大きいので今の表示で」): the far
         # boxes only — 3 draw calls, 12 triangles, as on 2.3.19 — and no model is made
         fit_models = (await page.evaluate("() => window.__dbg.srDetail()"))["models"]
@@ -1631,7 +1695,7 @@ async def run_server_room(pw, out, failures, flat=False):
         overlaps = sum(1 for i, a_ in enumerate(rects) for b_ in rects[i + 1:] if a_[0] < b_[2] - 1 and b_[0] < a_[2] - 1 and a_[1] < b_[3] - 1 and b_[1] < a_[3] - 1)
         res["labelOverlaps"] = [len(rects), overlaps]
         check(failures, len(rects) > 10 and overlaps == 0, f"no label covers another up close: {res['labelOverlaps']}")   # E12
-        check(failures, max(res["large"]["far"]["frameP90"], res["large"]["near"]["frameP90"]) < FRAME_P90_MAX_MS, f"far and near do not stall: {res['large']}")
+        check(failures, all(res["large"][k]["frameP90"] < _frame_budget(res["large"][k]) for k in ("far", "near")), f"far and near do not stall: {res['large']}")
         await page.screenshot(path=str(out / "large-near-light.png"))
         # up close (§5): many in view, the simple shapes; moved in on one Lambda, the shapes by service and tags with the
         # service; between the two thresholds it stays as it was; the whole view, simple again

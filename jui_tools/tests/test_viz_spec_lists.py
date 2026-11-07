@@ -257,6 +257,34 @@ def test_an_edit_to_a_shared_texts_file_another_spec_names_reads_that_spec_again
     assert sheet_for(project, sid)["metadata"]["description"] == {"markdown": "書き直した共通の説明"}
 
 
+def test_the_watcher_names_a_change_by_the_folder_it_was_given_through_a_link(tmp_path):
+    """A room opened through a symlink (macOS's /var is one, to /private/var): a spec created there is passed on under
+    the folder the watcher was given. FSEvents tells the real path, and a change read under it went unseen — the
+    'omitted' events that made the macOS watcher poll every folder each second (10-28), at a core's worth of CPU on a
+    large room (ticket 2026-11-06-viz-e2e-full-run-red-under-load)."""
+    import time
+    real = tmp_path / 'real'
+    real.mkdir()
+    make_project(real)
+    link = tmp_path / 'link'
+    link.symlink_to(real, target_is_directory=True)
+    project = JsonUIProject(link, 'p')
+    seen = []
+    observer = jsonui_project.watch(project, seen.append)
+    assert observer is not None
+    path = link / 'docs/screens/json/new.spec.json'
+    try:
+        time.sleep(0.3)   # FSEvents takes its stream a moment after start
+        (real / 'docs/screens/json/new.spec.json').write_text('{}')
+        deadline = time.monotonic() + 5
+        while str(path) not in seen and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert str(path) in seen, seen
+    finally:
+        observer.stop()
+        observer.join(timeout=2)
+
+
 def test_the_watcher_detects_a_spec_created_after_it_started(tmp_path):
     import time
     project = JsonUIProject(make_project(tmp_path), 'p')

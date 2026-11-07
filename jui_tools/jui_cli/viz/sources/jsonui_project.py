@@ -1067,18 +1067,25 @@ def watch(project: JsonUIProject, on_change):
     if not folders:
         return None
     from watchdog.events import FileSystemEventHandler
-    if sys.platform == 'darwin':
-        # Match session_files: FSEvents may omit changes in a worktree/scratch folder.
-        from watchdog.observers.polling import PollingObserver as Observer
-    else:
-        from watchdog.observers import Observer
+    from watchdog.observers import Observer
+    # FSEvents (macOS) tells a change under the folder's real path: a room reached through a symlink (/var is one, to
+    # /private/var) had its changes named under a path nothing looked for, and read as omitted. That made this watcher
+    # poll every folder each second (10-28), a core's worth of CPU on a large room (90 000 entries, its tests' outputs;
+    # ticket 2026-11-06-viz-e2e-full-run-red-under-load). A change is named under the folder it was asked for.
+    given = [(str(f), os.path.realpath(f)) for f in folders]
+
+    def as_given(path: str) -> str:
+        for asked, real in given:
+            if asked != real and (path == real or path.startswith(real + os.sep)):
+                return asked + path[len(real):]
+        return path
 
     class Handler(FileSystemEventHandler):
         def on_any_event(self, event):
             if event.is_directory or event.event_type not in ("created", "modified", "moved", "deleted"):
                 return
             raw = getattr(event, "dest_path", "") or event.src_path
-            path = raw if isinstance(raw, str) else raw.decode()
+            path = as_given(raw if isinstance(raw, str) else raw.decode())
             if not path.endswith((".json", TEXTS_SUFFIX)) or SKIP_DIRS.intersection(Path(path).parts):
                 return
             on_change(path)

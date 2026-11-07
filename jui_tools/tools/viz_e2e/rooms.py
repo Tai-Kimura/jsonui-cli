@@ -40,7 +40,7 @@ window.__segHits = (a, b, walls, pad) => {
   }
   return hits;
 };
-window.__walk = { hits: [], steps: 0, rooms: {}, doorPass: {} };
+window.__walk = { hits: [], steps: 0, metres: 0, rooms: {}, doorPass: {} };
 const PAD = 0.15;
 const last = new Map();
 function sample() {
@@ -55,14 +55,26 @@ function sample() {
         // array each walking frame), not one straight line, which cuts a door's corner when a frame passes several
         // points (ticket 2026-10-20-jui-viz-e2e-wall-watch-joins-frames-not-the-path)
         const pts = [prev.at, ...(trail && trail !== prev.trail ? trail : []), here];
-        for (let i = 1; i < pts.length; i++)
+        for (let i = 1; i < pts.length; i++) {
+          window.__walk.metres += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);   // the path checked, in metres
           for (const w of window.__segHits(pts[i - 1], pts[i], walls, PAD)) window.__walk.hits.push({ id, from: pts[i - 1], to: pts[i], wall: w, frameFrom: prev.at, frameTo: here });
+        }
       }
     }
     last.set(R, { at: here, jumps: R.jumps || 0, trail });
-    const room = (window.__dbg.walls && (() => { for (const k of Object.keys(window.__dbg.live3d().rooms)) { const r = window.__dbg.room(k); if (r && r.shown && p.x > r.x0 && p.x < r.x1 && p.z > r.z0 && p.z < r.z1) return k; } return null; })());
+    // the rooms it was in, along the path since the last sample (each 0.2 m of it), not at the frames alone: on a busy
+    // machine a frame is a second or more, and a walk through the room next door fell between two (ticket
+    // 2026-11-06-viz-e2e-full-run-red-under-load)
+    const roomAt = (x, z) => { for (const k of Object.keys(window.__dbg.live3d().rooms)) { const r = window.__dbg.room(k); if (r && r.shown && x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1) return k; } return null; };
     const seen = window.__walk.rooms[id] || (window.__walk.rooms[id] = []);
-    if (room && seen[seen.length - 1] !== room) seen.push(room);
+    const along = prev && prev.jumps === (R.jumps || 0) ? [prev.at, ...(trail && trail !== prev.trail ? trail : []), here] : [here];
+    for (let i = 0; i < along.length; i++) {
+      const a = along[Math.max(0, i - 1)], b = along[i], n = i ? Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.2)) : 1;
+      for (let k = 1; k <= n; k++) {
+        const room = roomAt(a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n);
+        if (room && seen[seen.length - 1] !== room) seen.push(room);
+      }
+    }
   }
   requestAnimationFrame(sample);
 }
@@ -70,6 +82,8 @@ requestAnimationFrame(sample);
 """
 
 
+#: metres of path the wall check must have followed (measured 11-08: 149.9 m in a run; a third of it)
+WALK_MIN_M = 50
 NEXT_FRAME = "() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))"
 
 
@@ -130,7 +144,10 @@ async def run_rooms(pw, out, failures, RealServer):
         await wait(page, SETTLED_JS, label="everyone seated")
         walk = await page.evaluate("() => window.__walk")
         res["walk"] = {"steps": walk["steps"], "hits": walk["hits"][:5], "rooms": {k: v for k, v in walk["rooms"].items() if len(v) > 1}}
-        check(failures, walk["steps"] > 50, f"the wall check saw robots walk ({walk['steps']} steps)")
+        # in metres of path checked, not in samples: on a busy machine a frame is a second or more and the same walks gave
+        # 27 samples (ticket 2026-11-06-viz-e2e-full-run-red-under-load)
+        res["walk"]["metres"] = round(walk["metres"], 1)
+        check(failures, walk["metres"] >= WALK_MIN_M, f"the wall check saw robots walk ({res['walk']['metres']} m of path, {walk['steps']} samples)")
         check(failures, not walk["hits"], f"a robot walked through a wall: {walk['hits'][:3]}")
         moved = {k: v for k, v in walk["rooms"].items() if len(v) > 1}
         check(failures, {"04", "05"} <= set(moved), f"04 and 05 changed rooms on foot: {moved}")
