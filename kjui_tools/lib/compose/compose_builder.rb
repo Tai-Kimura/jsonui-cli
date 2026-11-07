@@ -236,6 +236,9 @@ module KjuiTools
           # Declared attribute aliases read as their canonical names, for a
           # layout `jui build` did not canonicalize (Core::AttributeAliasFold).
           Core::AttributeAliasFold.fold!(json_data, source: File.basename(json_file)).each { |w| Core::Logger.warn(w) }
+          JsonUIShared::LayoutValidator.print_warnings(
+            JsonUIShared::LayoutValidator.drop_name_slot_bindings!(json_data, source_path: File.basename(json_file))
+          )
 
           shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
             json_data, source_path: File.basename(json_file),
@@ -1956,6 +1959,9 @@ module KjuiTools
         # Expanded first, as the base is: the checks read the drawn tree.
         json_data = IncludeExpander.process_includes(json_data, File.dirname(variant_file), nil, @layouts_dir)
         Core::AttributeAliasFold.fold!(json_data, source: File.basename(variant_file)).each { |w| Core::Logger.warn(w) }
+        JsonUIShared::LayoutValidator.print_warnings(
+          JsonUIShared::LayoutValidator.drop_name_slot_bindings!(json_data, source_path: File.basename(variant_file))
+        )
 
         shared_warnings = JsonUIShared::LayoutValidator.validate_layout(
           json_data, source_path: File.basename(variant_file),

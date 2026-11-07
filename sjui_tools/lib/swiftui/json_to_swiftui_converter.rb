@@ -82,6 +82,9 @@ module SjuiTools
 
         # includeを処理
         json_data = process_includes(json_data, File.dirname(json_file_path))
+        JsonUIShared::LayoutValidator.print_warnings(
+          JsonUIShared::LayoutValidator.drop_name_slot_bindings!(json_data, source_path: File.basename(json_file_path))
+        )
         return nil if refused_drawn_tree?(json_data, json_file_path)
         annotate_image_roles(json_data, json_file_path)
         JsonUIShared::TapAccessibility.annotate!(json_data)
@@ -284,6 +287,9 @@ module SjuiTools
 
         # Process includes
         json_data = process_includes(json_data, File.dirname(json_file_path))
+        JsonUIShared::LayoutValidator.print_warnings(
+          JsonUIShared::LayoutValidator.drop_name_slot_bindings!(json_data, source_path: File.basename(json_file_path))
+        )
         return nil if refused_drawn_tree?(json_data, json_file_path)
         annotate_image_roles(json_data, json_file_path)
         JsonUIShared::TapAccessibility.annotate!(json_data)

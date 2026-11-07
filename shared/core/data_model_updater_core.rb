@@ -426,7 +426,12 @@ module JsonUIShared
         if JsonUIShared::TypeSynonyms.drawn_type(json_data['type']) == 'Radio'
           selected_value = json_data['selectedValue']
           unless selected_value.is_a?(String) && selected_value.start_with?('@{')
-            group = (json_data['group'] || 'default').to_s
+            # A bound group names nothing at generation time: the converters
+            # read it as absent (LayoutValidator.drop_name_slot_bindings!). Here
+            # it wrote `var selected@{v}` into the Data.
+            group = json_data['group']
+            group = nil if group.is_a?(String) && group.strip.start_with?('@{')
+            group = (group || 'default').to_s
             prop = group.downcase == 'default' ? 'selectedRadiogroup' : "selected#{group.capitalize}"
             unless properties.any? { |p| p['name'] == prop }
               properties << { 'name' => prop, 'class' => 'String', 'defaultValue' => '' }

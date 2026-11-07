@@ -39,6 +39,9 @@ module SjuiTools
           screen = name_slot('screen', @component['screen'])
           if screen.nil? || screen.empty?
             add_line '// Embed: missing required `screen` attribute'
+            # A view, not only the comment: the node's modifiers are written
+            # after this, and on a comment `.overlay` has no base to read.
+            add_line 'EmptyView()'
             return generated_code
           end
 

@@ -115,6 +115,71 @@ module JsonUIShared
       end
     end
 
+    #: Attributes whose value the GENERATOR has to know: the view another is
+    #: placed against, the field focus moves to, the group a Radio shares, the
+    #: screen an Embed imports, a mode or an anchor written into the code. A
+    #: binding has no value at generation time. Pasted in, it stopped the build
+    #: (`top.linkTo(@{v}.bottom)`, `var selected@{v}`, `import @{v} from`,
+    #: `navigationMode: .@{v}`) or became a name of its own (`name="@{v}"`), and
+    #: each face answered differently. `{ drawn type => { attribute => noun } }`;
+    #: `:any` is every type.
+    NAME_SLOTS = {
+      any: %w[
+        alignTopOfView alignBottomOfView alignLeftOfView alignRightOfView
+        alignTopView alignBottomView alignLeftView alignRightView
+        alignCenterHorizontalView alignCenterVerticalView
+      ].each_with_object({}) { |name, nouns| nouns[name] = 'a view' }.freeze,
+      'Embed' => { 'screen' => 'a screen', 'navigationMode' => 'a mode' }.freeze,
+      'Radio' => { 'group' => 'a radio group' }.freeze,
+      'TextField' => { 'nextFocus' => 'a field' }.freeze,
+      'ScrollView' => { 'defaultScrollAnchor' => 'an anchor' }.freeze,
+      'Collection' => { 'defaultScrollAnchor' => 'an anchor' }.freeze
+    }.freeze
+
+    def binding_string?(value)
+      return false unless value.is_a?(String)
+
+      stripped = value.strip
+      stripped.start_with?('@{') && stripped.end_with?('}')
+    end
+
+    #: What the attribute names on this type, or nil when it is no name slot.
+    def name_slot_noun(type, name)
+      drawn = JsonUIShared::TypeSynonyms.drawn_type(type.to_s)
+      NAME_SLOTS[:any][name] || (NAME_SLOTS[drawn] || {})[name]
+    end
+
+    #: Every face reads a bound name slot as an absent attribute: the binding
+    #: is taken off the tree the generator draws, and reported once. Run on the
+    #: drawn tree (styles merged, includes expanded), before anything reads it.
+    #: Returns warnings for print_warnings.
+    def drop_name_slot_bindings!(tree, source_path:)
+      warnings = []
+      walk(tree) do |node|
+        next unless node.is_a?(Hash) && node['type'].is_a?(String)
+
+        overrides = node['responsive'].is_a?(Hash) ? node['responsive'].values.select { |o| o.is_a?(Hash) } : []
+        [node, *overrides].each do |attrs|
+          attrs.keys.each do |name|
+            next unless binding_string?(attrs[name])
+
+            noun = name_slot_noun(node['type'], name)
+            next unless noun
+
+            component_id = node['id'] ? " (id=#{node['id']})" : ''
+            warnings << {
+              level: :warning,
+              message: "#{node['type']}#{component_id}: '#{name}' names #{noun} and does not take " \
+                       "a binding (#{attrs[name]}); ignored.",
+              location: source_path
+            }
+            attrs.delete(name)
+          end
+        end
+      end
+      warnings
+    end
+
     #: Component-specific declaration first, then `common`. Mirrors how the
     #: attribute validator resolves a key, so both agree about which
     #: declaration governs an attribute.

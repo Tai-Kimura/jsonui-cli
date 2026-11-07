@@ -176,20 +176,15 @@ module SjuiTools
           end
 
           # defaultScrollAnchor プロパティの処理
-          default_anchor = @component['defaultScrollAnchor']
+          default_anchor = name_slot('defaultScrollAnchor', @component['defaultScrollAnchor'])
           if default_anchor
-            if default_anchor.is_a?(String) && is_binding?(default_anchor)
-              prop = extract_property_name(default_anchor)
-              add_modifier_line ".defaultScrollAnchor(data.#{prop} == \"bottom\" ? .bottom : data.#{prop} == \"center\" ? .center : .top)"
-            else
-              anchor = case default_anchor
-                       when 'top' then '.top'
-                       when 'center' then '.center'
-                       when 'bottom' then '.bottom'
-                       else '.top'
-                       end
-              add_modifier_line ".defaultScrollAnchor(#{anchor})"
-            end
+            anchor = case default_anchor
+                     when 'top' then '.top'
+                     when 'center' then '.center'
+                     when 'bottom' then '.bottom'
+                     else '.top'
+                     end
+            add_modifier_line ".defaultScrollAnchor(#{anchor})"
           end
 
           # maxZoom プロパティの処理（ズーム可能なScrollView）

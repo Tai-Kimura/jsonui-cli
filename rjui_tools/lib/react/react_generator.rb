@@ -37,6 +37,7 @@ require_relative 'converters/select_box_converter'
 require_relative 'converters/include_converter'
 require_relative 'converters/tab_view_converter'
 require_relative 'converters/embed_converter'
+require_relative '../core/layout_validator'
 require_relative 'converters/icon_label_converter'
 require_relative 'converters/circle_view_converter'
 require_relative 'converters/web_converter'
@@ -200,6 +201,11 @@ module RjuiTools
         # BaseConverter#layout_normalized? to take the canonical-only
         # attribute lookup path for L1-normalized layouts.
         @config['_layout_normalized'] = Core::Normalization.canonicalized?(json)
+        # A binding on an attribute the generator has to know reads as absent,
+        # before anything reads it: the Embed import below took it for a screen.
+        JsonUIShared::LayoutValidator.print_warnings(
+          JsonUIShared::LayoutValidator.drop_name_slot_bindings!(json, source_path: source_rel || component_name)
+        )
         # Each node's position, for the name its handlers are handed when the
         # layout gives it no id (JsonUIShared::LayoutPath.view_id) — the rule
         # the sjui and kjui codegen stamp too. An include is its own
