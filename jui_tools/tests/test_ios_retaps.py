@@ -200,6 +200,67 @@ def test_every_kind_of_line_is_read():
     ]
 
 
+def test_each_row_names_the_test_case_it_was_printed_in():
+    rows, _, _ = R.probe_rows(PROBE_LOG)
+    assert [r["test"] for r in rows] == ["StateNamesProbeUITests/testIdlessControlsKeepAStateEach"] * 8 + [
+        "OnClickProbeUITests/testA"]
+    assert R.probe_rows("PROBE_RETAP X y: no effect 3.0s after one touch (touch not delivered) — touched once more\n")[0][0]["test"] is None
+
+
+# A green job's xcodebuild.log, as XCUITest prints a touch: the touch, its idle wait, the reads, the retap.
+TOUCH_LOG = """Test Case '-[ConformanceHostUITests.AnchorTapProbeUITests testTheTapReachesTheButtonGenerated]' started.
+    t =     5.17s Tap "at_measure" Any
+    t =     5.21s     Synthesize event
+    t =     5.61s     Wait for com.swiftjsonui.ConformanceHost to idle
+    t =     5.62s Checking existence of `"at_ax" Any`
+""" + "".join(f"    t =     {6 + i * 0.2:.2f}s Checking existence of `\"at_ax\" Any`\n" for i in range(70)) + """PROBE_RETAP AnchorTap at_measure: no effect 3.0s after one touch (touch not delivered) — touched once more
+    t =    20.10s retap at_measure (touch not delivered)
+    t =    20.11s     Tap "at_measure" Any
+Test Case '-[ConformanceHostUITests.AnchorTapProbeUITests testTheTapReachesTheButtonGenerated]' passed (30.0 seconds).
+"""
+
+
+def test_scan_writes_the_log_around_each_retap_beside_its_record(tmp_path):
+    shard = _shard(tmp_path, "s1", TOUCH_LOG)
+    record = json.loads((shard / R.SCAN_FILE).read_text())
+    assert [(r["what"], r["test"]) for r in record["rows"]] == [
+        ("at_measure", "AnchorTapProbeUITests/testTheTapReachesTheButtonGenerated")]
+    said = (shard / R.CONTEXT_FILE).read_text().splitlines()
+    assert said[0].startswith("=== AnchorTap at_measure (retap) in AnchorTapProbeUITests/testTheTapReachesTheButtonGenerated")
+    marked = [l for l in said if l.startswith("> ")]
+    assert marked == ["> PROBE_RETAP AnchorTap at_measure: no effect 3.0s after one touch (touch not delivered) — touched once more"]
+    body = said[1:]
+    # The touch is 74 lines up, past the 60: the block reaches back to it, and not into the test case's start.
+    assert body[0] == '    t =     5.17s Tap "at_measure" Any'.join(["  ", ""])
+    assert len(body) == 74 + 1 + 3   # from the touch, the line, and the 3 lines the log has after it
+    assert any("Synthesize event" in l for l in body) and any("retap at_measure" in l for l in body)
+
+
+def test_the_context_keeps_at_least_its_window_and_stops_at_the_test_case():
+    log = TOUCH_LOG.replace('    t =     5.17s Tap "at_measure" Any\n', "")
+    assert len(R.contexts(log).splitlines()) == 1 + R.CONTEXT_BEFORE + 1 + 3   # no touch to reach back to: the 60
+    before = "Test Case '-[A.ZProbeUITests testZ]' started.\n" + "build line\n" * 300
+    short = R.contexts(before + "Test Case '-[A.BProbeUITests testC]' started.\n" + "x\n" * 10
+                       + "PROBE_RETAP B b: no effect 3.0s after one touch (touch not delivered) — touched once more\n").splitlines()
+    assert short[1] == "  Test Case '-[A.BProbeUITests testC]' started." and len(short) == 1 + 1 + 10 + 1   # not another test's lines
+    near = R.contexts("Test Case '-[A.BProbeUITests testC]' started.\n" + "x\n" * 100 + '    t = 1.00s Tap "b" Any\n'
+                      + "PROBE_RETAP B b: no effect 3.0s after one touch (touch not delivered) — touched once more\n")
+    assert len(near.splitlines()) == 1 + R.CONTEXT_BEFORE + 1   # a touch close by does not shorten the 60
+    far = R.contexts("Test Case '-[A.BProbeUITests testC]' started.\n" + '    t = 1.00s Tap "b" Any\n' + "x\n" * (R.CONTEXT_REACH + 5)
+                     + "PROBE_RETAP B b: no effect 3.0s after one touch (touch not delivered) — touched once more\n")
+    assert len(far.splitlines()) == 1 + R.CONTEXT_BEFORE + 1   # a touch further than the reach is not chased
+
+
+def test_scan_with_no_retap_writes_no_context(tmp_path):
+    shard = _shard(tmp_path, "s1", _log())
+    assert not (shard / R.CONTEXT_FILE).exists()
+
+
+def test_the_record_carries_the_test_case_to_the_judge(tmp_path):
+    out, _ = _write(tmp_path, _shard(tmp_path, "s1", TOUCH_LOG))
+    assert json.loads(out.read_text())["probe_retaps"][0]["test"] == "AnchorTapProbeUITests/testTheTapReachesTheButtonGenerated"
+
+
 def _shard(tmp_path, name, log, attempt="1"):
     shard = tmp_path / name
     shard.mkdir()
