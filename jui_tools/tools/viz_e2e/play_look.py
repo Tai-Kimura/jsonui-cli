@@ -99,6 +99,18 @@ def check(failures, cond, text):
         failures.append(f"play-look: {text}")
 
 
+def frames_floor(samples, at_60fps):
+    """A floor of frames set at 60 fps, for the frames the page drew in the same window (the median gap between two
+    samples): on a busy machine a frame is 200 ms and more, and 6 s of a game gave fewer than 30 (ticket
+    2026-11-06-viz-e2e-full-run-red-under-load). At 60 fps it is the floor itself; never under 3."""
+    ts = [s["t"] for s in samples]
+    gaps = sorted(b - a for a, b in zip(ts, ts[1:]))
+    if not gaps:
+        return at_60fps
+    g = max(gaps[len(gaps) // 2], 1000 / 60)
+    return max(min(at_60fps, 3), min(at_60fps, int(at_60fps * (1000 / 60) / g)))
+
+
 async def wait(page, js, timeout=20000, label=""):
     try:
         await page.wait_for_function(js, timeout=timeout, polling=100)
@@ -211,19 +223,21 @@ async def run_play_look(pw, out, failures):
             samples = await page.evaluate(SAMPLER, 9000 if kind == "rps" else 6000)
             on = [s for s in samples if s["started"] and s.get("bots")]
             r["n"] = len(on)
+            r["floor30"] = floor30 = frames_floor(samples, 30)   # 30 at 60 fps
+            floor5 = frames_floor(samples, 5)
             tags = sorted({s["tags"].get(i, "") for s in on for i in players})
             r["tags"] = tags
-            check(failures, len(on) > 30 and tags == [T(f"scene.play.{kind}")], f"{kind}: the name tag says {T(f'scene.play.{kind}')} while they play: {tags} ({len(on)} frames)")
+            check(failures, len(on) > floor30 and tags == [T(f"scene.play.{kind}")], f"{kind}: the name tag says {T(f'scene.play.{kind}')} while they play: {tags} ({len(on)} frames, more than {floor30} wanted)")
             if kind == "ball":
                 pxs = [s["ballPx"] for s in on if "ballPx" in s]
                 r["ballPx"] = {"min": min(pxs) if pxs else None, "max": max(pxs) if pxs else None, "n": len(pxs)}
-                check(failures, len(pxs) > 30 and min(pxs) >= BALL_PX, f"ball: {BALL_PX} px or more in the default view (one room): {r['ballPx']}")
+                check(failures, len(pxs) > floor30 and min(pxs) >= BALL_PX, f"ball: {BALL_PX} px or more in the default view (one room): {r['ballPx']}")
                 ys = [s["ballY"] for s in on if "ballY" in s]
                 check(failures, ys and max(ys) - min(ys) > 0.3, f"ball: it flies: {min(ys) if ys else None}..{max(ys) if ys else None}")
                 # the catcher: both hands out in front (forward of the body, near each other)
                 both = [b for s in on for b in s["bots"] if b["l"][2] >= 0.38 and b["r"][2] >= 0.38 and abs(b["l"][0] - b["r"][0]) <= 0.7]
                 r["catchFrames"] = len(both)
-                check(failures, len(both) > 5, f"ball: the catcher holds both hands out ({len(both)} frames)")
+                check(failures, len(both) > floor5, f"ball: the catcher holds both hands out ({len(both)} frames, more than {floor5} wanted)")
             elif kind == "highfive":
                 hands = [s["hand"] for s in on]
                 centers = [s["center"] for s in on]
@@ -251,7 +265,7 @@ async def run_play_look(pw, out, failures):
                 r["winFrames"], r["winArmsUp"] = len(won), len(up)
                 r["results"] = sorted({res_of(b) for s in on for b in s["bots"]})
                 r["rounds"] = sorted({b["st"]["k"] for s in on for b in s["bots"] if b["st"]})
-                check(failures, len(won) > 5 and len(up) >= len(won) * 0.8, f"rps: a winner and a loser are shown, the winner's both arms up: {len(up)} of {len(won)} frames")
+                check(failures, len(won) > floor5 and len(up) >= len(won) * 0.8, f"rps: a winner and a loser are shown, the winner's both arms up: {len(up)} of {len(won)} frames")
                 tie = r["tie"] = await page.evaluate(RPS_TIE)
                 check(failures, tie.get("len") is not None and tie["len"] < tie["decided"] and tie["nextK"] == 1 and tie["nextW"] < tie["shake"],
                       f"rps: あいこ plays again at once (the next round's pumps follow the tie): {tie}")
@@ -303,7 +317,8 @@ async def run_play_look(pw, out, failures):
             if kind == "ball":
                 pxs = [s["ballPx"] for s in on if "ballPx" in s]
                 r["ballPx"] = {"min": min(pxs) if pxs else None, "max": max(pxs) if pxs else None, "n": len(pxs)}
-                check(failures, len(pxs) > 15 and min(pxs) >= BALL_PX, f"ball: {BALL_PX} px or more in the default view (six rooms): {r['ballPx']}")
+                floor15 = r["floor15"] = frames_floor(samples, 15)   # 15 at 60 fps
+                check(failures, len(pxs) > floor15 and min(pxs) >= BALL_PX, f"ball: {BALL_PX} px or more in the default view (six rooms): {r['ballPx']}, more than {floor15} frames wanted")
             await pictures(kind, ("floor6",), r)
             # the building: the window says the game
             if res["has"]["towerPlay"]:

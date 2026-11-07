@@ -122,30 +122,68 @@ DRAWN = "() => window.__dbg.srFlowDrawn()"
 SEARCH_NODES = {"browser", "web", "api", "kv", "d1", "queue", "r2"}
 
 
-def _moves(f, lengths):
-    """Each move of a flow played to its end: [from, to, length, ms], a depart paired with the first arrival at its end after it."""
+UNITS_PER_SEC = 10   # the light's pace at 1.0 the requester asked for (「距離/sで設定して」), ~10 units a second
+FRAME_DT_MAX_MS = 1000
+
+
+def _frame_of(ticks, te):
+    """The index of the frame an event at te fell in (the last frame stepped at or before it)."""
+    k = -1
+    for i, (t, _dt, _gap) in enumerate(ticks):
+        if t > te:
+            break
+        k = i
+    return k
+
+
+def _played(f, t0, t1):
+    """The flow's own time between two events (ms): the steps of the frames after the one t0 fell in, up to the one t1
+    fell in, and that last frame's step. An end is seen in the frame it falls in, so the time asked for lies in
+    (played - last step, played]: on a busy machine a frame is 200 ms and more, and a 183 ms move read as one frame or two
+    (ticket 2026-11-06-viz-e2e-full-run-red-under-load)."""
+    ticks = f["ticks"]
+    i0, i1 = _frame_of(ticks, t0), _frame_of(ticks, t1)
+    steps = [dt for _t, dt, _gap in ticks[i0 + 1:i1 + 1]]
+    return (sum(steps), steps[-1]) if steps else (t1 - t0, 0)
+
+
+def _within(want, played, last):
+    """The time read for an interval: the one asked for when the frames allow it, else the nearest the frames allow."""
+    return min(max(want, played - last), played)
+
+
+def _moves(f, lengths, speed):
+    """Each move of a flow played to its end: [from, to, length, ms], a depart paired with the first arrival at its end after it;
+    ms is the flow's own time, read to the frames (_played)."""
     out, used = [], set()
     for frm, to, t0 in f["departs"]:
         k = next((i for i, (at, t1) in enumerate(f["reached"]) if i not in used and at == to and t1 >= t0), None)
         if k is None:
             continue
         used.add(k)
-        out.append([frm, to, lengths.get(f"{frm}>{to}", lengths.get(f"{to}>{frm}")), f["reached"][k][1] - t0])
+        ln = lengths.get(f"{frm}>{to}", lengths.get(f"{to}>{frm}"))
+        played, last = _played(f, t0, f["reached"][k][1])
+        out.append([frm, to, ln, _within(ln / (UNITS_PER_SEC * speed) * 1000, played, last) if ln else played])
     return out
 
 
-def _rests(f):
+def _rests(f, speed, rest_ms=400, branch_rest=2):
     """How long the light stayed before each move: at a node (from the last arrival before it) or at a branch (from the
-    choice, when one came between)."""
+    choice, when one came between); the flow's own time, read to the frames (_played)."""
     node, branch = [], []
     for frm, to, t0 in f["departs"][1:]:
         last = max((t for _, t in f["reached"] if t <= t0), default=None)
         chose = [t for _, _, t in f["chose"] if (last is None or t >= last) and t <= t0]
         if chose:
-            branch.append(t0 - chose[-1])
+            branch.append(_within(rest_ms * branch_rest / speed, *_played(f, chose[-1], t0)))
         elif last is not None:
-            node.append(t0 - last)
+            node.append(_within(rest_ms / speed, *_played(f, last, t0)))
     return node, branch
+
+
+def _steps_real(f):
+    """Frames whose step was not the real time since the frame before (up to FRAME_DT_MAX_MS): [gap, step]."""
+    return [[round(gap), round(dt)] for _t, dt, gap in f["ticks"][1:] if abs(dt - min(gap, FRAME_DT_MAX_MS)) > 0.5]
 
 
 def _median(xs):
@@ -182,13 +220,20 @@ async def run_flow_pace(page, out, failures, res):
           f"the speed is 0.5 to 3.0 by 0.25: {fp['speeds']}")
     # the pace: each move's time is its cable's length at one speed (world units a second), at 1.0 and at 3.0
     lengths = (await page.evaluate(FLOW))["lengths"]
-    pace, rests = {}, {}
+    pace, rests, unreal, gaps = {}, {}, [], []
     for speed in (1.0, 3.0):
         f = await _play_search(page, speed)
-        mv = _moves(f, lengths)
+        mv = _moves(f, lengths, speed)
         pace[speed] = [[a, b, ln, round(ms), round(ln / ms * 1000, 2) if ln and ms > 0 else None] for a, b, ln, ms in mv]
-        rests[speed] = _rests(f)
+        rests[speed] = _rests(f, speed)
+        unreal += _steps_real(f)
+        gaps += [g for _t, _dt, g in f["ticks"][1:]]
+    gaps.sort()
+    fp["frames"] = {"n": len(gaps), "median": round(gaps[len(gaps) // 2]) if gaps else None,
+                    "p90": round(gaps[int(len(gaps) * 0.9)]) if gaps else None, "max": round(gaps[-1]) if gaps else None}
     fp["pace"] = pace
+    check(failures, gaps and not unreal,
+          f"each frame steps the flow by the real time since the frame before, up to {FRAME_DT_MAX_MS} ms: {unreal[:8]} {fp['frames']}")
     fp["rests"] = {k: [[round(x) for x in v] for v in r] for k, r in rests.items()}
     u1 = [m[4] for m in pace[1.0] if m[4]]
     lens = [m[2] for m in pace[1.0] if m[2]]
@@ -640,9 +685,11 @@ async def run_flows(page, out, failures, res):
         await page.evaluate("(s) => window.__dbg.srFlowSpeed(s)", speed)
         await page.click("#sr-board [data-sr-flow='search']")
         f = await until(page, f"() => {{ const f = ({FLOW})(); return f.arrivals.length >= 2 ? f : null; }}", f"two arrivals at {speed}", timeout=30000, why=FLOW)
-        gaps[speed] = f["arrivals"][1] - f["arrivals"][0]
-    fl["gaps"] = gaps
-    ratio = gaps[1.0] / gaps[2.0] if gaps[2.0] else 0
+        gaps[speed] = _played(f, f["arrivals"][0], f["arrivals"][1])   # the flow's own time, give or take the last frame's step
+    fl["gaps"] = {k: [round(p), round(d)] for k, (p, d) in gaps.items()}
+    (p1, d1), (p2, d2) = gaps[1.0], gaps[2.0]
+    # the ratio nearest 2 that the two ends' last frames allow
+    ratio = min(max(2.0, (p1 - d1) / p2), p1 / max(p2 - d2, 1e-3)) if p2 else 0
     check(failures, 1.5 <= ratio <= 2.6, f"twice the speed, half the time between two steps: {gaps} (ratio {ratio:.2f})")
     await page.click("#sr-player [data-sr-fp='stop']")
     await page.evaluate("() => window.__dbg.srFlowSpeed(3)")

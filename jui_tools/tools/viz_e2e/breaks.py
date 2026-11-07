@@ -116,12 +116,15 @@ REAL_JS = """() => {
 }"""
 
 # the vacuum against the three props' boxes (each grown by its radius), every 100 ms
-VAC_JS = """(ms) => new Promise((done) => {
+# The vacuum's place every 100 ms for at least `ms` and until `n` samples are in (at most `cap` ms): on a busy machine
+# the 100 ms timer came late, and 6 s gave 29 (ticket 2026-11-06-viz-e2e-full-run-red-under-load).
+VAC_JS = """({ ms, n, cap }) => new Promise((done) => {
   const out = { samples: 0, hits: [] }, t0 = performance.now();
   const tick = () => {
     const p = window.__dbg.props(), M = window.__dbg.brk().meshBoxes;
     if (p.vac) { out.samples++; for (const [n, b] of Object.entries(M)) if (b && p.vac[0] > b[0] - p.radius && p.vac[0] < b[1] + p.radius && p.vac[1] > b[2] - p.radius && p.vac[1] < b[3] + p.radius) out.hits.push([n, p.vac]); }
-    if (performance.now() - t0 < ms) setTimeout(tick, 100); else done(out);
+    const at = performance.now() - t0;
+    if ((at < ms || out.samples < n) && at < cap) setTimeout(tick, 100); else { out.ms = Math.round(at); done(out); }
   };
   tick();
 })"""
@@ -150,6 +153,9 @@ SLOW_MS = 3000
 # The way out of this room is longer than props' (about 17 m: 2.5 s at the desk, then about 10 s of walking); with frames
 # 3 s apart a hand-off or two between frames adds up to two gaps: 18-21 s measured. The old walk took 30 s and more.
 TEN_MAX_SEC = 25
+# The same bound in frames: a busy machine draws the 3 s frames later still (ticket 2026-11-06-viz-e2e-full-run-red-under-load).
+TEN_MAX_FRAMES = TEN_MAX_SEC * 1000 // SLOW_MS
+FRAMES_JS = "() => window.__dbg.live3d().frames || 0"
 
 
 # One row a frame (waits.frame_log_js, at the end of each frame's update), frames SLOW_MS apart:
@@ -293,8 +299,8 @@ async def run_breaks(pw, out, failures, jt=None, shots_only=False):
         r = res["realOne"] = await page.evaluate(REAL_JS)
         check(failures, not r["bad"] and r["desks"] == 1, f"1 robot: the built props clear of the desk and each other: {r}")
         res["framesRoom"] = await page.evaluate(FRAMES_JS, 3000)
-        v = res["vacOne"] = await page.evaluate(VAC_JS, 6000)
-        check(failures, v["samples"] >= 30 and not v["hits"], f"the vacuum keeps clear of the booth, the server and the machine: {v['samples']} samples {v['hits'][:3]}")
+        v = res["vacOne"] = await page.evaluate(VAC_JS, {"ms": 6000, "n": 30, "cap": 30000})
+        check(failures, v["samples"] >= 30 and not v["hits"], f"the vacuum keeps clear of the booth, the server and the machine: {v['samples']} samples in {v.get('ms')} ms {v['hits'][:3]}")
         await page.evaluate("() => window.__dbg.play({ idleMs: 1000 })")
         await page.evaluate("() => window.__dbg.brk({ p: { smoke: 1, vend: 0 }, smokeMinSec: 10, smokeMaxSec: 10, restMinSec: 0, restMaxSec: 0 })")
         await wait(page, f"() => window.__dbg.brk().robots.some((x) => x.id === '{one_id}' && x.kind === 'smoke' && x.at)", timeout=40000, label="the lone robot smokes")
@@ -470,13 +476,14 @@ async def run_breaks(pw, out, failures, jt=None, shots_only=False):
         await settled(page, "eleven seated before one leaves", timeout=60000)
         await page.evaluate(f"() => {{ window.__slowFrameMs = {SLOW_MS}; }}")   # the walk out, with frames 3 s apart
         await page.evaluate(CHAIN_JS, None)
-        t_ten = time.monotonic()
+        t_ten, n_ten = time.monotonic(), await page.evaluate(FRAMES_JS)
         hook(EXTRA[-1], CWD_MANY, hook_event_name="SessionEnd", reason="exit")
         try:
             await wait(page, "() => window.__dbg.brk().built.booth && window.__dbg.brk().built.vend", timeout=30000, label="ten again: booth and machine back")
         finally:
             res["tenChain"] = await page.evaluate("() => window.__frameRows")
         res["tenSec"] = round(time.monotonic() - t_ten, 1)
+        res["tenFrames"] = await page.evaluate(FRAMES_JS) - n_ten
         rows = res["tenChain"] or []
         # the first frame that saw it leave: its walk out set for 2.5 s after the event, or for that frame if it came later
         # (the old count began at that frame: 2.5 s plus the gap)
@@ -486,7 +493,9 @@ async def run_breaks(pw, out, failures, jt=None, shots_only=False):
               f"with frames {SLOW_MS} ms apart, the 2.5 s at the desk count from the event (walk out {first and first[3]} ms after it, first seen {first and first[4]} ms after)"
               f" and the props are back in the frame it is gone ({len(late)} frames between)")
         await page.evaluate("() => { window.__slowFrameMs = 0; }")
-        check(failures, res["tenSec"] < TEN_MAX_SEC, f"with frames {SLOW_MS} ms apart, the walk out takes about its real time: {res['tenSec']} s")
+        check(failures, 0 < res["tenFrames"] <= TEN_MAX_FRAMES,
+              f"with frames {SLOW_MS} ms apart, the walk out takes about its real time: {res['tenFrames']} frames"
+              f" (at most {TEN_MAX_FRAMES}), {res['tenSec']} s")
         r = res["realTen"] = await page.evaluate(REAL_JS)
         await page.evaluate("() => window.__dbg.brk({ p: { smoke: 0, vend: 0 }, endAll: true })")
         await back()

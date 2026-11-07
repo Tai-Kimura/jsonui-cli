@@ -991,7 +991,10 @@ function srBuild(keep) {
     if (SR.paused) { V.raf = 0; return; }
     V.raf = requestAnimationFrame(loop);
     const t = srNow();
-    const dt = V.last ? Math.min(t - V.last, 100) : 16;
+    // the real time between two frames, up to 1 s, as on the floor (70-main.js FRAME_DT_MAX): capped at 0.1 s, a flow
+    // played slower than its speed whenever the frames came further apart (ticket 2026-11-06-viz-e2e-full-run-red-under-load)
+    const gap = V.last ? t - V.last : 16, dt = Math.min(gap, 1000);
+    V.gap = gap;
     if (V.last) { V.frames.push(t - V.last); if (V.frames.length > 240) V.frames.shift(); }
     V.last = t;
     controls.update();

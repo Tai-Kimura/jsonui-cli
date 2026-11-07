@@ -18,7 +18,7 @@
      session at the end), by name, by state (waiting first) or most recently active (pref roster-sort:<room>). A row
      moved while another order shows starts the person's own from the one shown. The card's ‹ › and ← → go in the
      list's order and skip the robots it hides (rosterCycle, robotCycle in a room's view). */
-const ROSTER = { off: new Map(), order: new Map(), sig: '', max: 200, placedAt: 0, placeMs: 250, shownFor: null, drag: null };
+const ROSTER = { off: new Map(), order: new Map(), sig: '', shape: '', writes: 0, max: 200, placedAt: 0, placeMs: 250, shownFor: null, drag: null };
 const ROSTER_SORTS = ['own', 'name', 'state', 'recent'];
 // the boards drawn over the 3D (each shown by showOverlay): the whiteboard (a spec, and ボードで全部見る), the task board,
 // the server room, the data server, the bills
@@ -126,6 +126,27 @@ function rosterRowHTML(r, current) {
     + (r.wait ? `<span class="roster-wait">${esc(WAIT.name[r.wait] || '')}</span>` : '')
     + '</li>';
 }
+/* One row written in place, as rosterRowHTML would write it (its key, robot, role and check unchanged). */
+function rosterRowUpdate(li, r) {
+  li.classList.toggle('roster-alert', !r.on && !!r.wait);
+  li.dataset.wait = r.wait || '';
+  const check = li.querySelector('.roster-check');
+  if (check) check.setAttribute('aria-label', r.on ? tl('roster.hide', { name: r.name }) : tl('roster.show', { name: r.name }));
+  const nm = li.querySelector('.roster-nm');
+  if (nm && nm.textContent !== r.name) nm.textContent = r.name;
+  const lamp = li.querySelector('.roster-lamp');
+  if (lamp) {
+    lamp.style.setProperty('--lamp', LAMP[r.lamp] || LAMP.idle);
+    lamp.title = LAMP_TEXT[r.lamp] || '';
+    lamp.setAttribute('aria-label', LAMP_TEXT[r.lamp] || '');
+  }
+  let w = li.querySelector('.roster-wait');
+  if (r.wait) {
+    if (!w) { w = document.createElement('span'); w.className = 'roster-wait'; li.append(w); }
+    const text = WAIT.name[r.wait] || '';
+    if (w.textContent !== text) w.textContent = text;
+  } else if (w) w.remove();
+}
 /* Called each frame from liveSoloSync: the list shown in a room's view, written again only when a row changed. */
 function rosterSync(solo) {
   const box = document.getElementById('roster');
@@ -133,7 +154,7 @@ function rosterSync(solo) {
   // kept while a robot is zoomed on: a card is opened from the list, and the next row is pressed from there
   const show = !!solo && has3D && !TOWER.on && !ds.open && !pr.open && !rosterUnderBoard();
   box.hidden = !show;
-  if (!show) { ROSTER.sig = ''; return; }
+  if (!show) { ROSTER.sig = ''; ROSTER.shape = ''; return; }
   const now = performance.now();
   if (now - ROSTER.placedAt > ROSTER.placeMs) { ROSTER.placedAt = now; rosterPlace(box); }
   if (ROSTER.drag) return;   // a row being dragged: written again when it is dropped
@@ -143,14 +164,26 @@ function rosterSync(solo) {
   const sig = `${solo}|${current}|${rows.map((r) => [r.key, r.id, r.name, r.lamp, r.wait, r.on].join(',')).join(';')}`;
   if (sig === ROSTER.sig) { rosterShowCurrent(current); return; }
   ROSTER.sig = sig;
-  // the focus kept on its row's check or name: a row moved with Alt+↑↓ is moved again with the next press
-  const list = document.getElementById('roster-list'), fo = document.activeElement, fRow = fo && list.contains(fo) ? fo.closest('.roster-row') : null;
-  const had = fRow && { key: fRow.dataset.rosterKey, part: fo.classList.contains('roster-check') ? '.roster-check' : '.roster-name' };
-  setHTML(list, rows.map((r) => rosterRowHTML(r, current)).join(''));
-  if (had) {
-    const again = [...list.querySelectorAll('.roster-row')].find((x) => x.dataset.rosterKey === had.key);
-    const el = again && again.querySelector(had.part);
-    if (el) { el.focus({ preventScroll: true }); el.scrollIntoView({ block: 'nearest' }); }
+  const list = document.getElementById('roster-list');
+  // the same rows in the same order, shown or not as before: a lamp, a wait or a name changed, written into the rows
+  // there. Written again whole, each lamp's change took the rows' checks and buttons out of the page, and a press that
+  // came between its down and up went nowhere (on a busy machine, all the time; ticket
+  // 2026-11-06-viz-e2e-full-run-red-under-load)
+  const shape = `${solo}|${current}|${rows.map((r) => [r.key, r.id, r.role, r.on].join(',')).join(';')}`;
+  const lis = list.children;
+  if (shape === ROSTER.shape && lis.length === rows.length) rows.forEach((r, i) => rosterRowUpdate(lis[i], r));
+  else {
+    ROSTER.shape = shape;
+    ROSTER.writes += 1;
+    // the focus kept on its row's check or name: a row moved with Alt+↑↓ is moved again with the next press
+    const fo = document.activeElement, fRow = fo && list.contains(fo) ? fo.closest('.roster-row') : null;
+    const had = fRow && { key: fRow.dataset.rosterKey, part: fo.classList.contains('roster-check') ? '.roster-check' : '.roster-name' };
+    setHTML(list, rows.map((r) => rosterRowHTML(r, current)).join(''));
+    if (had) {
+      const again = [...list.querySelectorAll('.roster-row')].find((x) => x.dataset.rosterKey === had.key);
+      const el = again && again.querySelector(had.part);
+      if (el) { el.focus({ preventScroll: true }); el.scrollIntoView({ block: 'nearest' }); }
+    }
   }
   setText(document.getElementById('roster-count'), tl('roster.count', { shown: rows.filter((r) => r.on).length, n: rows.length }));
   const alert = document.getElementById('roster-alert');

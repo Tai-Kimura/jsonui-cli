@@ -162,6 +162,21 @@ async def run_room_roster(pw, out, failures, jt=None):
         await page.wait_for_timeout(500)
         await page.screenshot(path=str(out / "1920-all.png"))
 
+        # a lamp that changes is written into its row: the rows' checks stay the same elements (written again whole, each
+        # lamp took them out of the page, and a press between its down and up went nowhere; on a busy machine the list was
+        # written again before a press could land: ticket 2026-11-06-viz-e2e-full-run-red-under-load)
+        lamp0 = next(r["lamp"] for r in s["rows"] if r["id"] == rid[0])
+        await page.evaluate("() => document.querySelectorAll('#roster-list .roster-check').forEach((e) => { e.__kept = true; })")
+        hook(0, hook_event_name="UserPromptSubmit", prompt="list")
+        hook(0, hook_event_name="PreToolUse", tool_name="Bash", tool_use_id="toolu_k0", tool_input={"command": "ls"})
+        lit = "(want) => { const r = window.__dbg.roster().rows.find((x) => x.id === %s); return r && (want == null ? r.lamp !== %s : r.lamp === want) ? r : null; }" % (
+            json.dumps(rid[0]), json.dumps(lamp0))
+        await until(page, lit, "a lamp lit in the list", arg=None, timeout=15000, why=RO)
+        kept = res["keptRows"] = await page.evaluate("() => [...document.querySelectorAll('#roster-list .roster-check')].map((e) => !!e.__kept)")
+        check(failures, len(kept) == N and all(kept), f"a lamp that changes leaves the rows' checks where they were (written in place): {kept}")
+        hook(0, hook_event_name="Stop")
+        await until(page, lit, "the lamp back to idle", arg=lamp0, timeout=15000, why=RO)
+
         def bot(st, i):
             return next(b for b in st["bots"] if b["id"] == rid[i])
 
