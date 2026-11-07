@@ -441,6 +441,14 @@ module KjuiTools
           # Set isOutlined flag (TextView usually wants outlined style)
           code += "\n" + indent("isOutlined = true,", depth + 1)
 
+          # The outline's width, as on a TextField. The outline stays on here, so
+          # a 0 is a width: the field draws no line for it. A bound one with no
+          # value yet is Material's 1.
+          border_width = json_data['borderWidth']
+          unless border_width.nil?
+            code += "\n" + indent("borderWidth = #{Helpers::BoundValue.dp(border_width, fallback: 1)},", depth + 1)
+          end
+
           # Max lines for TextView
           if json_data['maxLines']
             code += "\n" + indent("maxLines = #{Helpers::BoundValue.int_arg(json_data['maxLines'], fallback: 1)},", depth + 1)
