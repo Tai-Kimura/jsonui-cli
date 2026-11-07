@@ -136,8 +136,6 @@ module KjuiTools
           if has_data_binding
             variable = extract_variable_name(json_data['text'])
             view_id = Helpers::ModifierBuilder.view_id(json_data)
-            # Sync external → state
-            code += indent("LaunchedEffect(#{value}) { if (#{state_var}.text.toString() != #{value}) #{state_var}.edit { replace(0, length, #{value}) } }", depth) + "\n"
             # Sync state → external
             write = "viewModel.updateData(mapOf(\"#{variable}\" to newValue))"
             handler_calls = if json_data['onTextChange']

@@ -383,7 +383,8 @@ RSpec.describe 'kjui codegen: the common stages, follow-ups' do
           val t: String = "", val sel: String = "", val selectedRadiogroup: String = "",
           val list: List<Any> = emptyList()
       )
-      class ViewModel { fun updateData(values: Map<String, Any?>) {} }
+      class DataFlow { val value = Data(); suspend fun first(predicate: (Data) -> Boolean): Data = value }
+      class ViewModel { val data = DataFlow(); fun updateData(values: Map<String, Any?>) {} }
       #{emitted}
     KOTLIN
   end

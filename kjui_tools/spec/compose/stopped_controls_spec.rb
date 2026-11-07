@@ -204,7 +204,8 @@ RSpec.describe 'kjui a control a stop holds' do
           val idx: Int = 0, val v: Double = 0.0, val t: String = "", val selectedRadiogroup: String = "",
           val cIsFocused: Boolean = false
       )
-      class ViewModel { fun updateData(values: Map<String, Any?>) {} }
+      class DataFlow { val value = Data(); suspend fun first(predicate: (Data) -> Boolean): Data = value }
+      class ViewModel { val data = DataFlow(); fun updateData(values: Map<String, Any?>) {} }
       #{emitted}
     KOTLIN
   end
