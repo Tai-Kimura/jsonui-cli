@@ -320,7 +320,9 @@ module RjuiTools
           # dropped the array face, so the JSX called handlers no stub was
           # generated for.
           # An empty or blank name is no action (TapAccessibility.handler_values).
-          JsonUIShared::TapAccessibility.handler_values(json_data['onclick']).each { |a| actions.add(a) }
+          # A bound selector (`@{tap}`) is no selector (binding_semantics nameRef): no
+          # action, where it declared a property named `@{tap}`, which did not parse.
+          JsonUIShared::TapAccessibility.handler_values(json_data['onclick']).each { |a| actions.add(a) unless a.to_s.start_with?('@{') }
 
           child = json_data['child'] || json_data['children']
           if child

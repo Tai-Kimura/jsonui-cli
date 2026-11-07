@@ -262,7 +262,7 @@ module RjuiTools
           end
 
           # Name attribute
-          attrs << " name=\"#{attributes['name']}\"" if attributes['name']
+          attrs << jsx_attr_text('name', attributes['name']) if attributes['name']
 
           # Value handling depends on binding presence
           if attributes['text']
@@ -311,7 +311,13 @@ module RjuiTools
           # blocks form submission and still drives :invalid.
           attrs << ' required' if attributes['required'] == true || attributes['required'] == 'true'
           if attributes['pattern']
-            pattern = JsonUIShared::StringLiterals.ts_single("^(?:#{attributes['pattern']})$")
+            bound = has_binding?(attributes['pattern']) && bound_value_expr(attributes['pattern'])
+            pattern = if bound
+                        # The data's pattern at run time, anchored as a written one is.
+                        "`^(?:#{bound.start_with?('`') ? bound[1..-2] : "${#{bound}}"})$`"
+                      else
+                        JsonUIShared::StringLiterals.ts_single("^(?:#{attributes['pattern']})$")
+                      end
             # `currentTarget`, not `target`: React types onInput as a FormEvent,
             # whose `target` is a bare EventTarget — reading `.value` off it is
             # a type error in a strict consumer, and the file is @generated.

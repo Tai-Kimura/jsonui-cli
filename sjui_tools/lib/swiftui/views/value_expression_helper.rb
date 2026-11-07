@@ -119,6 +119,13 @@ module SjuiTools
           expr.nil? ? nil : "(#{expr})"
         end
 
+        # A name the view takes as a String: an image, a font. A binding is the
+        # bound String, a written name its Swift literal. Pasted into quotes, a
+        # binding became the name "@{icon}", which no asset or font carries.
+        def name_operand(value)
+          bound_string(value) || JsonUIShared::StringLiterals.swift(value.to_s)
+        end
+
         # A Bool slot: `(data.flag ?? false)`, already bracketed by the
         # canonical emitter for the optional case.
         def bound_bool(value)

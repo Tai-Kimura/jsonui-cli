@@ -88,7 +88,11 @@ module RjuiTools
           # unreachable from the inline style the rest of the font handling
           # uses — Tailwind's `placeholder:` variant with an arbitrary value is
           # the only surface that can carry it.
-          if (hint_font = attributes['hintFont'])
+          if (hint_font = attributes['hintFont']) && has_binding?(hint_font) && (font = bound_value_expr(hint_font))
+            # A bound font reaches the pseudo-element through a custom property.
+            dynamic_styles['--jui-hint-font'] = font
+            classes << 'placeholder:[font-family:var(--jui-hint-font)]'
+          elsif hint_font
             classes << "placeholder:[font-family:#{hint_font.to_s.gsub(/\s+/, '_')}]"
           end
           if (hint_font_size = attributes['hintFontSize'])
@@ -167,7 +171,7 @@ module RjuiTools
           attrs << (secure_expr ? " type={(#{secure_expr}) ? 'password' : '#{input_type}'}" : " type=\"#{input_type}\"")
 
           # Name attribute
-          attrs << " name=\"#{attributes['name']}\"" if attributes['name']
+          attrs << jsx_attr_text('name', attributes['name']) if attributes['name']
 
           # Placeholder (hint in SwiftJsonUI terminology)
           placeholder = attributes['hint'] || attributes['placeholder']

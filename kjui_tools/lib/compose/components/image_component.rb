@@ -162,10 +162,15 @@ module KjuiTools
           property_name = Helpers::ModifierBuilder.extract_binding_property(raw_src)
           camel_case_name = to_camel_case(property_name)
           required_imports&.add(:local_context)
-          fallback = Helpers::ResourceResolver.drawable_name(json_data['defaultImage'] || json_data['loadingImage'] || 'placeholder')
+          fallback_raw = json_data['defaultImage'] || json_data['loadingImage'] || 'placeholder'
+          fallback = if Helpers::BindingExpression.whole_binding?(fallback_raw)
+                       Helpers::ResourceResolver.drawable_painter(fallback_raw, required_imports)
+                     else
+                       "painterResource(id = R.drawable.#{Helpers::ResourceResolver.drawable_name(fallback_raw)})"
+                     end
           "\n" + indent("painter = LocalContext.current.let { ctx ->", depth + 1) +
             "\n" + indent("val resId = ctx.resources.getIdentifier(data.#{camel_case_name}, \"drawable\", ctx.packageName)", depth + 2) +
-            "\n" + indent("if (resId != 0) painterResource(id = resId) else painterResource(id = R.drawable.#{fallback})", depth + 2) +
+            "\n" + indent("if (resId != 0) painterResource(id = resId) else #{fallback}", depth + 2) +
             "\n" + indent("},", depth + 1)
         end
 

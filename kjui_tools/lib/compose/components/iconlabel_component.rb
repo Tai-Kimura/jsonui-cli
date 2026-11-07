@@ -138,11 +138,11 @@ module KjuiTools
           swaps = condition && condition != 'false' && selected != resting
           painter =
             if condition == 'true'
-              drawable(selected)
+              drawable(selected, required_imports)
             elsif swaps
-              "if (#{condition}) #{drawable(selected)} else #{drawable(resting)}"
+              "if (#{condition}) #{drawable(selected, required_imports)} else #{drawable(resting, required_imports)}"
             else
-              drawable(resting)
+              drawable(resting, required_imports)
             end
 
           # The label beside the icon names this control, so the icon itself
@@ -276,8 +276,9 @@ module KjuiTools
           WEIGHT_NAMES[raw.downcase]
         end
 
-        def self.drawable(name)
-          "painterResource(id = R.drawable.#{Helpers::ResourceResolver.drawable_name(name)})"
+        # A written name as it always was; a bound one looked up at run time.
+        def self.drawable(name, required_imports = nil)
+          Helpers::ResourceResolver.drawable_painter(name, required_imports)
         end
 
         # A Kotlin string literal — the one escaper (`$` included).

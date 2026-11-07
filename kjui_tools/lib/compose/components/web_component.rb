@@ -47,8 +47,12 @@ module KjuiTools
           # WebView settings
           code += "\n" + indent("settings.javaScriptEnabled = #{json_data['javaScriptEnabled'] != false}", depth + 3)
 
+          # A bound userAgent / html is the data's String: pasted into the
+          # literal it was the text "@{v}" (Helpers::ResourceResolver.bound_string_value).
+          user_agent = Helpers::ResourceResolver.bound_string_value(json_data['userAgent'])
+          html_bound = json_data['url'].nil? && Helpers::ResourceResolver.bound_string_value(json_data['html'])
           if json_data['userAgent']
-            code += "\n" + indent("settings.userAgentString = #{JsonUIShared::StringLiterals.kotlin(json_data['userAgent'])}", depth + 3)
+            code += "\n" + indent("settings.userAgentString = #{user_agent || JsonUIShared::StringLiterals.kotlin(json_data['userAgent'])}", depth + 3)
           end
 
           if json_data['allowZoom']
@@ -78,7 +82,9 @@ module KjuiTools
           if json_data['url'].nil? && json_data['html']
             # A base URL of null keeps the document in an opaque origin, which is
             # what loading an author-supplied string should do.
-            code += "\n" + indent("loadDataWithBaseURL(null, #{kotlin_string(json_data['html'])}, \"text/html\", \"utf-8\", null)", depth + 3)
+            # A bound html records what it loaded, as a bound url does.
+            code += "\n" + indent("tag = #{html_bound}", depth + 3) if html_bound
+            code += "\n" + indent("loadDataWithBaseURL(null, #{html_bound || kotlin_string(json_data['html'])}, \"text/html\", \"utf-8\", null)", depth + 3)
           else
             # A bound url records what it loaded on the view, so the first
             # `update` below is a no-op rather than a second load.
@@ -106,7 +112,7 @@ module KjuiTools
           # the url follow just below loads once — a token that moves together
           # with the url is served by that same load, not by a second one
           # that would cancel it (SwiftJsonUI's updateUIView does the same).
-          reload_call = if url_is_bound
+          reload_call = if url_is_bound || html_bound
                           'webView.tag = null'
                         elsif json_data['url'].nil? && json_data['html']
                           "webView.loadDataWithBaseURL(null, #{kotlin_string(json_data['html'])}, \"text/html\", \"utf-8\", null)"
@@ -119,6 +125,17 @@ module KjuiTools
             load_state.each { |line| code += "\n" + indent(line, depth + 2) }
           end
 
+          if user_agent
+            code += "\n" + indent("val userAgent = #{user_agent}", depth + 2)
+            code += "\n" + indent("if (webView.settings.userAgentString != userAgent) webView.settings.userAgentString = userAgent", depth + 2)
+          end
+          if html_bound
+            code += "\n" + indent("val html = #{html_bound}", depth + 2)
+            code += "\n" + indent("if (webView.tag != html) {", depth + 2)
+            code += "\n" + indent("webView.tag = html", depth + 3)
+            code += "\n" + indent("webView.loadDataWithBaseURL(null, html, \"text/html\", \"utf-8\", null)", depth + 3)
+            code += "\n" + indent("}", depth + 2)
+          end
           if url_is_bound
             code += "\n" + indent("val url = #{url}", depth + 2)
             code += "\n" + indent("if (webView.tag != url) {", depth + 2)

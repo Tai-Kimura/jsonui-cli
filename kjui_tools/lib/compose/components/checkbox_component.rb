@@ -309,7 +309,14 @@ module KjuiTools
 
           # Icon content - switch based on checked state
           code += "\n" + indent("Icon(", depth + 1)
-          code += "\n" + indent("painter = painterResource(id = if (#{checked}) #{selected_icon_res} else #{icon_res}),", depth + 2)
+          # A bound icon is looked up by its name at run time (ResourceResolver.drawable_painter).
+          if Helpers::BindingExpression.whole_binding?(icon) || Helpers::BindingExpression.whole_binding?(selected_icon)
+            on = Helpers::ResourceResolver.drawable_painter(selected_icon, required_imports)
+            off = Helpers::ResourceResolver.drawable_painter(icon, required_imports)
+            code += "\n" + indent("painter = if (#{checked}) #{on} else #{off},", depth + 2)
+          else
+            code += "\n" + indent("painter = painterResource(id = if (#{checked}) #{selected_icon_res} else #{icon_res}),", depth + 2)
+          end
           code += "\n" + indent("contentDescription = null", depth + 2)
 
           # Icon size. IconToggleButton keeps its own 48dp touch target, so this

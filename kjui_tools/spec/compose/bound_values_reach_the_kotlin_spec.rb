@@ -71,9 +71,10 @@ RSpec.describe 'kjui codegen: bound values reach the Kotlin' do
   # (TextField's nextFocus left this list when a bound one became a warning
   # and no focus jump: it names a field's id at generation time.)
   not_numbers = {
-    'TextView' => %w[hideOnFocused], 'Radio' => %w[group],
-    'WebView' => %w[userAgent], 'Web' => %w[userAgent]
+    'TextView' => %w[hideOnFocused], 'Radio' => %w[group]
   }
+  # (Web's and WebView's userAgent left this list when a bound one became the
+  # data's String, set again when it moves.)
   # (Collection's cellClasses / headerClasses / footerClasses left this list
   # when the class-list reader on rel stopped raising on a string;
   # SafeAreaView's edges / safeAreaInsetPositions when the words became what

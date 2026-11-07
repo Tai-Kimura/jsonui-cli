@@ -169,7 +169,8 @@ module RjuiTools
               end
           end
           default_image = attributes['defaultImage']
-          if default_image && !has_binding?(default_image)
+          # A bound one is the data's name (jsx_attr_text); it was dropped.
+          if default_image
             attr += jsx_attr_text('defaultImage', default_image)
           end
           attr

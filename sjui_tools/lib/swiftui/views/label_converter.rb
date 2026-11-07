@@ -94,7 +94,7 @@ module SjuiTools
 
                     # Add fontWeight
                     if partial['fontWeight']
-                      weight = font_weight_to_swiftui(partial['fontWeight'])
+                      weight = swift_weight_expr(partial['fontWeight']) || font_weight_to_swiftui(partial['fontWeight'])
                       add_line "fontWeight: #{weight},"
                     end
 
@@ -183,7 +183,12 @@ module SjuiTools
                           elsif weight_vocabulary.include?(@component['font'].to_s.downcase)
                             @component['font']
                           end
-            if weight_name
+            # A bound weight is resolved at run time from the same vocabulary
+            # (Button and CheckBox already did): pasted into the String
+            # initializer it was a weight literally named "@{weight}".
+            if weight_name && (bound_weight = swift_weight_expr(weight_name))
+              add_line "fontWeight: #{bound_weight},"
+            elsif weight_name
               # `fontWeight` is declared `["string", "number"]`, and `600` is
               # an example the declaration itself gives. The String
               # initializer resolves through `Font.Weight.from(string:)`,

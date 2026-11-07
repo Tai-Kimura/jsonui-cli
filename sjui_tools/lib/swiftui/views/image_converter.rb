@@ -43,7 +43,7 @@ module SjuiTools
             # (defaultImage first, the UIKit runtime honours the full
             # semantics). Better an intended asset than the photo glyph.
             fallback = @component['defaultImage'] || @component['errorImage'] || @component['loadingImage']
-            add_line "Image(\"#{fallback}\")"
+            add_line "Image(#{name_operand(fallback)})"
           else
             # デフォルトのシステムイメージ
             add_line "Image(systemName: \"photo\")"
