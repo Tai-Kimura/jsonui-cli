@@ -49,7 +49,7 @@ module SjuiTools
 
             # Icon size
             if @component['iconSize']
-              add_line "iconSize: #{@component['iconSize']},"
+              add_line "iconSize: #{number_slot(@component['iconSize'])},"
             end
 
             # Icon tint. Emitted after iconSize because Swift requires argument

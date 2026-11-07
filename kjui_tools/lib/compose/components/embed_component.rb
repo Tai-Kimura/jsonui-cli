@@ -19,6 +19,10 @@ module KjuiTools
       class EmbedComponent
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
           screen = json_data['screen']
+          if Helpers::BoundValue.bound?(screen)
+            Core::Logger.warn("Embed #{json_data['id'].inspect}: 'screen' names a screen and does not take a binding (#{screen}); ignored.")
+            screen = nil
+          end
           if screen.nil? || screen.to_s.empty?
             return indent('// Embed: missing required `screen` attribute', depth)
           end

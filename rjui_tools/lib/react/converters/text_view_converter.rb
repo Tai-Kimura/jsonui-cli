@@ -153,7 +153,7 @@ module RjuiTools
 
           # Corner radius
           if attributes['cornerRadius']
-            @dynamic_styles['borderRadius'] = "'#{attributes['cornerRadius']}px'"
+            px_style('borderRadius', attributes['cornerRadius'])
           end
 
           # tintColor is the cursor's colour here (the accent of the operable
@@ -196,24 +196,24 @@ module RjuiTools
             if inset.is_a?(Array)
               case inset.length
               when 1
-                @dynamic_styles['padding'] = "'#{TailwindMapper.rem(inset[0])}'"
+                @dynamic_styles['padding'] = rem_shorthand(inset[0])
               when 2
-                @dynamic_styles['padding'] = "'#{TailwindMapper.rem(inset[0])} #{TailwindMapper.rem(inset[1])}'"
+                @dynamic_styles['padding'] = rem_shorthand(inset[0], inset[1])
               when 4
-                @dynamic_styles['padding'] = "'#{TailwindMapper.rem(inset[0])} #{TailwindMapper.rem(inset[1])} #{TailwindMapper.rem(inset[2])} #{TailwindMapper.rem(inset[3])}'"
+                @dynamic_styles['padding'] = rem_shorthand(inset[0], inset[1], inset[2], inset[3])
               end
             else
-              @dynamic_styles['padding'] = "'#{TailwindMapper.rem(inset)}'"
+              @dynamic_styles['padding'] = rem_shorthand(inset)
             end
           end
 
           # Min/max height for flexible textareas
           if attributes['minHeight']
-            @dynamic_styles['minHeight'] = "'#{attributes['minHeight']}px'"
+            px_style('minHeight', attributes['minHeight'])
           end
 
           if attributes['maxHeight']
-            @dynamic_styles['maxHeight'] = "'#{attributes['maxHeight']}px'"
+            px_style('maxHeight', attributes['maxHeight'])
           end
 
           # Border. A bound width or colour is the base's

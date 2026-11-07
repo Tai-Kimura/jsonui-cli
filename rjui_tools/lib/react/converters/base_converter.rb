@@ -237,7 +237,7 @@ module RjuiTools
           end
 
           # Margin (array format)
-          classes << TailwindMapper.map_margin(attributes['margins'])
+          classes << TailwindMapper.map_margin(attributes['margins']) unless bound_margins_style(attributes['margins'])
 
           # Individual margins (topMargin, bottomMargin, leftMargin, rightMargin)
           classes << TailwindMapper.map_individual_margins(
@@ -411,7 +411,7 @@ module RjuiTools
           classes << TailwindMapper.map_orientation(attributes['orientation']) if lays_out_children?
 
           # Shadow
-          classes << TailwindMapper.map_shadow(attributes['shadow']) if attributes['shadow']
+          classes << TailwindMapper.map_shadow(attributes['shadow']) if attributes['shadow'] && !bound_shadow_style(attributes['shadow'])
 
           # Border — both-attributes guard. **The PAIR is what requests a
           # border**; neither half requests one on its own, and there is no
@@ -1463,6 +1463,76 @@ module RjuiTools
 
           interpolated = str.gsub(/@\{([^}]+)\}/) { "${#{add_viewmodel_data_prefix(::Regexp.last_match(1))}}" }
           "`#{interpolated}`"
+        end
+
+        # A px length a converter writes itself: a written value stays the
+        # literal it always was, a binding becomes the expression.
+        def px_style(css_property, value)
+          expr = bound_value_expr(value)
+          dynamic_styles[css_property] = expr ? "`${#{expr}}px`" : "'#{value}px'"
+        end
+
+        # A padding shorthand: each value is a written number or a binding.
+        def rem_shorthand(*values)
+          exprs = values.map { |value| bound_value_expr(value) }
+          return "'#{values.map { |value| TailwindMapper.rem(value) }.join(' ')}'" if exprs.none?
+
+          parts = values.zip(exprs).map { |value, expr| expr ? "${Number(#{expr}) / 16}rem" : TailwindMapper.rem(value) }
+          "`#{parts.join(' ')}`"
+        end
+
+        # textShadow, object or raw string. Nil when it draws nothing.
+        def text_shadow_style(shadow)
+          if shadow.is_a?(Hash) && shadow['color'] && shadow['blur'] && shadow['offset'].is_a?(Array)
+            color = shadow['color'].to_s
+            css_color = color.start_with?('#') || has_binding?(color) ? color : "var(--color-#{color})"
+            css_style_value("#{shadow['offset'][0]}px #{shadow['offset'][1]}px #{shadow['blur']}px #{css_color}")
+          elsif shadow.is_a?(String) && !shadow.empty?
+            has_binding?(shadow) ? bound_value_expr(shadow) : "'#{shadow}'"
+          end
+        end
+
+        # A bound shadow cannot be a Tailwind class, which is fixed at build: it
+        # is a style. True when the style took it; a written one stays the class.
+        def bound_shadow_style(shadow)
+          if shadow.is_a?(String) && shadow.include?('|') && has_binding?(shadow)
+            parts = shadow.split('|', -1)
+            return false unless parts.length == 5
+
+            shadow = { 'color' => parts[0], 'offsetX' => parts[1], 'offsetY' => parts[2], 'opacity' => parts[3], 'radius' => parts[4] }
+          end
+          return false unless shadow.is_a?(Hash) && shadow.values.any? { |value| has_binding?(value) }
+
+          color = shadow['color'] || 'rgba(0,0,0,0.1)'
+          opacity = shadow['opacity']
+          if opacity && (has_binding?(opacity) || has_binding?(color))
+            color = "color-mix(in srgb, #{color} calc(#{opacity} * 100%), transparent)"
+          elsif opacity
+            color = TailwindMapper.shadow_color_with_alpha(color, opacity)
+          end
+          written = "#{shadow['offsetX'] || 0}px #{shadow['offsetY'] || 2}px #{shadow['radius'] || 5}px #{color}"
+          dynamic_styles['boxShadow'] = "`#{css_template(written)}`"
+          true
+        end
+
+        # A `margins` array holding a binding: a style, for the class is fixed at
+        # build. True when the style took it.
+        def bound_margins_style(margins)
+          return false unless margins.is_a?(Array) && margins.any? { |value| has_binding?(value) }
+
+          dynamic_styles['margin'] = rem_shorthand(*margins)
+          true
+        end
+
+        # A CSS value a converter wrote out: a literal, or with a binding in it a
+        # template.
+        def css_style_value(written)
+          has_binding?(written) ? "`#{css_template(written)}`" : "'#{written}'"
+        end
+
+        # `@{x}` inside a CSS value, as a template literal's `${data.x}`.
+        def css_template(text)
+          text.gsub(/@\{[^}]+\}/) { |binding| "${#{bound_value_expr(binding)}}" }
         end
 
         # Length attribute: the CSS property takes px.

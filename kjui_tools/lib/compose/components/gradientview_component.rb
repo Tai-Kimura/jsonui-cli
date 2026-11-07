@@ -81,7 +81,7 @@ module KjuiTools
           required_imports&.add(:gradient)
           locations = json_data['locations']
           if locations.is_a?(Array) && locations.length == resolved_colors.length
-            stops = locations.zip(resolved_colors).map { |loc, color| "#{loc}f to #{color}" }.join(", ")
+            stops = locations.zip(resolved_colors).map { |loc, color| "#{Helpers::BoundValue.float(loc)} to #{color}" }.join(", ")
             modifiers << ".background(Brush.#{gradient_type}(#{stops}))"
           else
             modifiers << ".background(Brush.#{gradient_type}(listOf(#{resolved_colors.join(', ')})))"

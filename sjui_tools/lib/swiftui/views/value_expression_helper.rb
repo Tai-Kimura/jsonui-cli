@@ -55,6 +55,18 @@ module SjuiTools
           value[2..-2]
         end
 
+        # A slot that takes a written number or a binding: a written value is
+        # emitted as written, a binding as `bound_number`. Every converter that
+        # writes its own chain goes through here, so `@{x}` never reaches Swift.
+        def number_slot(value, cast: 'CGFloat')
+          bound_number(value, cast: cast) || value
+        end
+
+        # `.opacity` takes a Double, whichever converter writes it.
+        def opacity_modifier(value)
+          ".opacity(#{number_slot(value, cast: 'Double')})"
+        end
+
         # A number slot: `CGFloat(data.size ?? 0)`.
         #
         # The cast is not cosmetic. A bound number may be declared Int or

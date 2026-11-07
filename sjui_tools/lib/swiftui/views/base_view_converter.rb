@@ -205,6 +205,18 @@ module SjuiTools
           @binding_handler.is_binding?(value)
         end
 
+        # An attribute that NAMES something the generator has to know — the next
+        # field, a radio group, a screen. A binding has no value at generation
+        # time, and pasted into an identifier it stops the build in Xcode, so it
+        # is reported and the attribute reads as absent.
+        def name_slot(key, value)
+          return value unless is_binding?(value)
+
+          SjuiTools::Core::Logger.warn "[sjui] #{@component['type']} #{@component['id'].inspect}: '#{key}' names a " \
+                                       "field or screen and does not take a binding (#{value}); ignored."
+          nil
+        end
+
         # A handler named by an event attribute the SSoT declares with a
         # "string" type (onAppear, onTextChange, a Collection's / TabView's
         # onValueChange, onItemAppear): the binding '@{name}' or the bare
@@ -794,11 +806,7 @@ module SjuiTools
 
           alpha_value = attr_with_alias('opacity', 'alpha')
           if alpha_value
-            if is_binding?(alpha_value)
-              @modifier_bag.register_unless_exists(:opacity, ".opacity(#{binding_data_expr(alpha_value)})")
-            else
-              @modifier_bag.register_unless_exists(:opacity, ".opacity(#{alpha_value})")
-            end
+            @modifier_bag.register_unless_exists(:opacity, opacity_modifier(alpha_value))
           end
 
           # 影
@@ -898,7 +906,7 @@ module SjuiTools
 
           # コーナー半径（背景の直後に適用）
           if @component['cornerRadius']
-            @modifier_bag.register(:corner_radius, ".cornerRadius(#{@component['cornerRadius'].to_i})")
+            @modifier_bag.register(:corner_radius, ".cornerRadius(#{padding_value(@component['cornerRadius'])})")
           end
 
           # ボーダー（cornerRadiusの直後、marginsの前に適用）
@@ -940,7 +948,7 @@ module SjuiTools
 
           # tagプロパティの適用（TabViewなどで使用）
           if @component['tag']
-            @modifier_bag.register(:tag, ".tag(#{@component['tag']})")
+            @modifier_bag.register(:tag, ".tag(#{is_binding?(@component['tag']) ? binding_data_expr(@component['tag']) : @component['tag']})")
           end
 
           # classNameプロパティ（SwiftUIではスタイル識別子として記録）
@@ -1246,7 +1254,7 @@ module SjuiTools
         # array of them to call in order. A blank element is not called.
         def build_selector_click_lines(value)
           names = JsonUIShared::TapAccessibility.handler_values(value)
-          calls = names.map { |n| "    #{no_value_call(to_camel_case(n))}" }
+          calls = names.map { |n| "    #{no_value_call(to_camel_case(handler_property(n)))}" }
           gate = tap_gate_condition
           if gate
             return [".gesture(TapGesture().onEnded {"] + calls +
@@ -1329,7 +1337,7 @@ module SjuiTools
                       [get_event_handler_call(@component['onClick'])]
                     end
                   elsif tap.handler?(@component['onclick'])
-                    tap.handler_values(@component['onclick']).map { |n| no_value_call(to_camel_case(n)) }
+                    tap.handler_values(@component['onclick']).map { |n| no_value_call(to_camel_case(handler_property(n))) }
                   end
           return nil if calls.nil? || calls.empty?
 
@@ -1944,7 +1952,7 @@ module SjuiTools
           color = @component['borderColor']
           return nil if width.nil? || color.nil?
 
-          corner = (@component['cornerRadius'] || corner_default).to_i
+          corner = padding_value(@component['cornerRadius'] || corner_default)
           build_border_overlay(border_color_expr(color), corner,
                                border_width_operand(width), style_source)
         end
@@ -2233,11 +2241,11 @@ module SjuiTools
         # Build shadow modifier code
         def build_shadow_modifier(shadow)
           if shadow.is_a?(Hash)
-            radius = shadow['radius'] || 5
-            x = shadow['offsetX'] || 0
-            y = shadow['offsetY'] || 0
+            radius = number_slot(shadow['radius'] || 5)
+            x = number_slot(shadow['offsetX'] || 0)
+            y = number_slot(shadow['offsetY'] || 0)
             color_hex = shadow['color']
-            opacity = shadow['opacity']
+            opacity = shadow['opacity'] && number_slot(shadow['opacity'], cast: 'Double')
 
             if color_hex
               color = get_swiftui_color(color_hex)

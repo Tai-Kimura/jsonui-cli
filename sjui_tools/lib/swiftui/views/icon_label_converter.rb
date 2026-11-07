@@ -58,21 +58,21 @@ module SjuiTools
             # the dedicated parameters instead.
             if (icon_size = @component['iconSize'])
               if icon_size.is_a?(Array)
-                add_line "iconWidth: #{icon_size[0]}," if icon_size[0]
-                add_line "iconHeight: #{icon_size[1] || icon_size[0]}," if icon_size[0]
+                add_line "iconWidth: #{number_slot(icon_size[0])}," if icon_size[0]
+                add_line "iconHeight: #{number_slot(icon_size[1] || icon_size[0])}," if icon_size[0]
               else
-                add_line "iconSize: #{icon_size},"
+                add_line "iconSize: #{number_slot(icon_size)},"
               end
             end
             
             # iconMargin
             if @component['iconMargin']
-              add_line "iconMargin: #{@component['iconMargin']},"
+              add_line "iconMargin: #{number_slot(@component['iconMargin'])},"
             end
             
             # fontSize
             if @component['fontSize']
-              add_line "fontSize: #{@component['fontSize']},"
+              add_line "fontSize: #{number_slot(@component['fontSize'])},"
             end
             
             # fontColor
@@ -161,9 +161,9 @@ module SjuiTools
 
           if shadow.is_a?(Hash)
             color = shadow['color'] ? get_swiftui_color(shadow['color']) : 'Color.black.opacity(0.3)'
-            blur = shadow['blur'] || 1
+            blur = number_slot(shadow['blur'] || 1)
             offset = shadow['offset']
-            x, y = offset.is_a?(Array) && offset.length >= 2 ? [offset[0], offset[1]] : [0, 1]
+            x, y = offset.is_a?(Array) && offset.length >= 2 ? [number_slot(offset[0]), number_slot(offset[1])] : [0, 1]
           else
             color = get_swiftui_color(shadow)
             blur = 1

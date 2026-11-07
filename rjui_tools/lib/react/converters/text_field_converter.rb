@@ -119,7 +119,7 @@ module RjuiTools
 
           # Corner radius
           if attributes['cornerRadius']
-            @dynamic_styles['borderRadius'] = "'#{attributes['cornerRadius']}px'"
+            px_style('borderRadius', attributes['cornerRadius'])
           end
 
           # Hint/placeholder color is now handled via Tailwind class in build_class_name
@@ -142,7 +142,7 @@ module RjuiTools
               x = attributes['shadow']['offsetX'] || 0
               y = attributes['shadow']['offsetY'] || 0
               color = attributes['shadow']['color'] || 'rgba(0,0,0,0.2)'
-              @dynamic_styles['boxShadow'] = "'#{x}px #{y}px #{radius}px #{color}'"
+              @dynamic_styles['boxShadow'] = css_style_value("#{x}px #{y}px #{radius}px #{color}")
             else
               @dynamic_styles['boxShadow'] = "'0 2px 4px rgba(0,0,0,0.1)'"
             end

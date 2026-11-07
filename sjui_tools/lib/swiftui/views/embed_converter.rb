@@ -36,7 +36,7 @@ module SjuiTools
         end
 
         def convert_non_responsive
-          screen = @component['screen']
+          screen = name_slot('screen', @component['screen'])
           if screen.nil? || screen.empty?
             add_line '// Embed: missing required `screen` attribute'
             return generated_code

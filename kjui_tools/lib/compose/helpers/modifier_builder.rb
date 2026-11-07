@@ -643,15 +643,21 @@ module KjuiTools
               end
             elsif json_data['shadow'].is_a?(Hash)
               shadow = json_data['shadow']
-              args = ["radius = #{shadow['radius'] || 4}.dp"]
+              args = ["radius = #{BoundValue.dp(shadow['radius'] || 4)}"]
               if shadow['color']
                 args << "color = #{ResourceResolver.process_color(shadow['color'], required_imports)}"
               end
               if shadow['offsetX'] || shadow['offsetY']
                 required_imports&.add(:dp_offset)
-                args << "offset = DpOffset(#{(shadow['offsetX'] || 0).to_f}.dp, #{(shadow['offsetY'] || 0).to_f}.dp)"
+                # `.to_f` keeps a written offset's bytes; on a binding it is 0.0.
+                offset_x, offset_y = [shadow['offsetX'], shadow['offsetY']].map do |value|
+                  BoundValue.bound?(value) ? BoundValue.dp(value) : "#{(value || 0).to_f}.dp"
+                end
+                args << "offset = DpOffset(#{offset_x}, #{offset_y})"
               end
-              args << "alpha = #{shadow['opacity'].to_f}f" if shadow['opacity']
+              if shadow['opacity']
+                args << "alpha = #{BoundValue.bound?(shadow['opacity']) ? BoundValue.float(shadow['opacity'], fallback: 1) : "#{shadow['opacity'].to_f}f"}"
+              end
               shadow_args = args.join(', ')
             end
 

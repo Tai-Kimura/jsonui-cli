@@ -84,7 +84,7 @@ module RjuiTools
 
           if hint && raw.strip.empty?
             # Statically empty: the hint IS the content.
-            return "#{indent_str(indent)}<span#{id_attr}#{class_attr}#{hint_common}>#{line_spacing_wrap(escape_jsx_text(hint[:text]))}</span>"
+            return "#{indent_str(indent)}<span#{id_attr}#{class_attr}#{hint_common}>#{line_spacing_wrap(hint_child(hint[:text]))}</span>"
           end
 
           if hint && pure_binding_text?(raw)
@@ -97,13 +97,19 @@ module RjuiTools
               #{indent_str(indent)}{(#{expr}) ? (
               #{indent_str(indent + 2)}<span#{id_attr}#{class_attr}#{common}>#{line_spacing_wrap(text_node)}</span>
               #{indent_str(indent)}) : (
-              #{indent_str(indent + 2)}<span#{id_attr}#{class_attr}#{hint_common}>#{line_spacing_wrap(escape_jsx_text(hint[:text]))}</span>
+              #{indent_str(indent + 2)}<span#{id_attr}#{class_attr}#{hint_common}>#{line_spacing_wrap(hint_child(hint[:text]))}</span>
               #{indent_str(indent)})}
             JSX
           end
 
           text = convert_text_binding(raw)
           "#{indent_str(indent)}<span#{id_attr}#{class_attr}#{common}>#{line_spacing_wrap(text)}</span>"
+        end
+
+        # The hint as a JSX child: the text, or a bound hint's expression.
+        def hint_child(text)
+          expr = bound_value_expr(text)
+          expr ? "{#{expr}}" : escape_jsx_text(text)
         end
 
         def merged_hint_style(style_attr, hint)
@@ -641,14 +647,16 @@ module RjuiTools
             if edge_inset.is_a?(Array)
               case edge_inset.length
               when 1
-                @dynamic_styles['padding'] = "'#{TailwindMapper.rem(edge_inset[0])}'"
+                @dynamic_styles['padding'] = rem_shorthand(edge_inset[0])
               when 2
-                @dynamic_styles['padding'] = "'#{TailwindMapper.rem(edge_inset[0])} #{TailwindMapper.rem(edge_inset[1])}'"
+                @dynamic_styles['padding'] = rem_shorthand(edge_inset[0], edge_inset[1])
               when 3
-                @dynamic_styles['padding'] = "'#{TailwindMapper.rem(edge_inset[0])} #{TailwindMapper.rem(edge_inset[1])} #{TailwindMapper.rem(edge_inset[2])}'"
+                @dynamic_styles['padding'] = rem_shorthand(edge_inset[0], edge_inset[1], edge_inset[2])
               when 4
-                @dynamic_styles['padding'] = "'#{TailwindMapper.rem(edge_inset[0])} #{TailwindMapper.rem(edge_inset[1])} #{TailwindMapper.rem(edge_inset[2])} #{TailwindMapper.rem(edge_inset[3])}'"
+                @dynamic_styles['padding'] = rem_shorthand(edge_inset[0], edge_inset[1], edge_inset[2], edge_inset[3])
               end
+            elsif has_binding?(edge_inset)
+              @dynamic_styles['padding'] = rem_shorthand(edge_inset)
             elsif edge_inset.is_a?(String) && edge_inset.include?('|')
               parts = edge_inset.split('|').map(&:to_i)
               @dynamic_styles['padding'] = "'#{parts.map { |p| TailwindMapper.rem(p) }.join(' ')}'"
@@ -661,13 +669,8 @@ module RjuiTools
           # (UIKit SJUILabel requires all three; same contract here). Theme
           # colour names resolve through the generated --color-* variables.
           shadow = attributes['textShadow']
-          if shadow.is_a?(Hash) && shadow['color'] && shadow['blur'] && shadow['offset'].is_a?(Array)
-            css_color = shadow['color'].to_s.start_with?('#') ? shadow['color'] : "var(--color-#{shadow['color']})"
-            @dynamic_styles['textShadow'] = "'#{shadow['offset'][0]}px #{shadow['offset'][1]}px #{shadow['blur']}px #{css_color}'"
-          elsif shadow.is_a?(String) && !shadow.empty?
-            # A raw CSS string passes through untouched.
-            @dynamic_styles['textShadow'] = "'#{shadow}'"
-          end
+          shadow_style = text_shadow_style(shadow)
+          @dynamic_styles['textShadow'] = shadow_style if shadow_style
 
           # lineBreakMode (truncation)
           #

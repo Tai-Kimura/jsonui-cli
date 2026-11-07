@@ -165,7 +165,7 @@ module SjuiTools
               # (ticket sjui-button-onclick-selector-and-onlongpress-are-never-
               # called). camelCase wins when both are present, as on a View.
               calls = JsonUIShared::TapAccessibility.handler_values(@component['onclick'])
-                                                     .map { |n| no_value_call(to_camel_case(n)) }
+                                                     .map { |n| no_value_call(to_camel_case(handler_property(n))) }
               add_line "action: { #{gated_handler_call(calls.join('; '))} },"
             else
               add_line "action: { },"
@@ -173,7 +173,7 @@ module SjuiTools
 
             # Font properties
             if @component['fontSize']
-              add_line "fontSize: #{@component['fontSize'].to_i},"
+              add_line "fontSize: #{padding_value(@component['fontSize'])},"
             end
             # StateAwareButtonView takes the weight either as a Font.Weight or
             # as the String spelling (it has both initializers), and the
@@ -245,10 +245,10 @@ module SjuiTools
 
             # Corner radius and border - all applied inside StateAwareButtonView
             if @component['cornerRadius']
-              add_line "cornerRadius: #{@component['cornerRadius'].to_i},"
+              add_line "cornerRadius: #{padding_value(@component['cornerRadius'])},"
             end
             if @component['borderWidth']
-              add_line "borderWidth: #{@component['borderWidth'].to_i},"
+              add_line "borderWidth: #{padding_value(@component['borderWidth'])},"
             end
             if @component['borderColor']
               add_line "borderColor: #{get_swiftui_color(@component['borderColor'])},"

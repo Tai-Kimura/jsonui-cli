@@ -70,8 +70,8 @@ module RjuiTools
           classes = ['flex', 'flex-col', 'h-screen']
 
           # Width/Height
-          classes << TailwindMapper.map_width(attributes['width'])
-          classes << TailwindMapper.map_height(attributes['height'])
+          classes << TailwindMapper.map_width(bound_length_style('width', attributes['width']))
+          classes << TailwindMapper.map_height(bound_length_style('height', attributes['height']))
 
           # Background
           if attributes['background']

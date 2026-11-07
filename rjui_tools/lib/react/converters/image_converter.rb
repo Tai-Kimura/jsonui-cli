@@ -52,7 +52,11 @@ module RjuiTools
           elsif attributes['src']
             convert_src_value(attributes['src'], 'src')
           elsif attributes['defaultImage']
-            "/images/#{resolve_image_extension(attributes['defaultImage'])}"
+            if has_binding?(attributes['defaultImage'])
+              convert_src_value(attributes['defaultImage'], 'src')
+            else
+              "/images/#{resolve_image_extension(attributes['defaultImage'])}"
+            end
           else
             '/images/placeholder.png'
           end
