@@ -72,6 +72,9 @@ module SjuiTools
         #: `map_content_type` (autocomplete) and kjui's keyboard handling.
         CONTENT_TYPES = {
           'username' => '.username',
+          # Passkeys come to a .username field through the app's
+          # performAutoFillAssistedRequests; the field asks for nothing else.
+          'usernamewebauthn' => '.username',
           'password' => '.password',
           'newpassword' => '.newPassword',
           'onetimecode' => '.oneTimeCode',

@@ -154,9 +154,14 @@ STRING_SUFFIX = "Two"
 #: (bdbe81a4), so on web both emit what the control emits and C0 read the
 #: spelling as unread — the converter was right and the pair was blind.
 #: `equalSpacing` spaces the children apart, which declared widths do not stop.
+#: `contentType`'s primary is `username` and its next case is `usernameWebauthn`,
+#: which iOS (.username) and Android (no keyboard of its own) draw as `username`
+#: by the declaration — only the web tells them apart (autoComplete "username
+#: webauthn"). `password` moves on every platform.
 SECONDARY_CASE: dict[tuple[str, str], Any] = {
     ("View", "distribution"): "equalSpacing",
     ("common", "distribution"): "equalSpacing",
+    ("TextField", "contentType"): "password",
 }
 
 

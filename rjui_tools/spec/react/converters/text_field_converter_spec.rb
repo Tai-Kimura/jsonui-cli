@@ -309,6 +309,18 @@ RSpec.describe RjuiTools::React::Converters::TextFieldConverter do
       expect(result).to include('autoComplete="username"')
     end
 
+    # Passkey autofill (WebAuthn conditional mediation) reads `webauthn` after
+    # `username`; Chrome takes the pair in that order.
+    it 'maps usernameWebauthn to username webauthn' do
+      converter = create_converter({ 'type' => 'TextField', 'contentType' => 'usernameWebauthn' })
+      expect(converter.convert).to include('autoComplete="username webauthn"')
+    end
+
+    it 'maps a bound contentType through the same table, usernameWebauthn included' do
+      converter = create_converter({ 'type' => 'TextField', 'contentType' => '@{kind}' })
+      expect(converter.convert).to include("'usernameWebauthn': 'username webauthn'")
+    end
+
     it 'maps password to current-password' do
       converter = create_converter({ 'type' => 'TextField', 'contentType' => 'password' })
       result = converter.convert

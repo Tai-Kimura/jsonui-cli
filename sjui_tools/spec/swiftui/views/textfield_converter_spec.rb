@@ -276,6 +276,16 @@ RSpec.describe SjuiTools::SwiftUI::Views::TextFieldConverter do
       end
     end
 
+    context 'with contentType usernameWebauthn' do
+      # Passkeys reach a .username field through the app's
+      # performAutoFillAssistedRequests; the field asks for nothing else.
+      it 'adds the username textContentType' do
+        code = described_class.new({ 'type' => 'TextField', 'hint' => 'Username', 'contentType' => 'usernameWebauthn' }).convert
+        code = code.is_a?(Array) ? code.join("\n") : code
+        expect(code).to include('.textContentType(.username)')
+      end
+    end
+
     context 'with contentType username' do
       let(:component) do
         {

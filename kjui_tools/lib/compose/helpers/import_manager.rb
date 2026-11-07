@@ -258,6 +258,10 @@ module KjuiTools
             circle_shape: "import androidx.compose.foundation.shape.CircleShape",
             alpha: "import androidx.compose.ui.draw.alpha",
             semantics: "import androidx.compose.ui.semantics.semantics",
+            # A TextField's contentType as Compose's autofill hint.
+            autofill_content_type: ["import androidx.compose.ui.semantics.semantics",
+                                    "import androidx.compose.ui.semantics.contentType",
+                                    "import androidx.compose.ui.autofill.ContentType"],
             role: "import androidx.compose.ui.semantics.Role",
             semantics_disabled: ["import androidx.compose.ui.semantics.semantics",
                                  "import androidx.compose.ui.semantics.disabled"],
