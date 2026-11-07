@@ -199,9 +199,7 @@ module SjuiTools
           if children.empty?
             # 子要素がない場合
             # backgroundが設定されている場合はRectangleを使用（dividerなど）
-            if empty_content_is_always_empty_view?
-              add_line "EmptyView()"
-            elsif @component['background'] && !gradient_wins_over_background? && pressed_background_color
+            if @component['background'] && !gradient_wins_over_background? && pressed_background_color
               # The fill takes the pressed colour while the view is pressed
               # (base_view_converter#pressed_background_color).
               add_line "PressedFill(pressed: #{pressed_background_color}, base: #{disabled_aware_color(get_swiftui_color(@component['background']))})"
@@ -596,12 +594,11 @@ module SjuiTools
             gradient_wins_over_background?
         end
 
-        # Dynamic's emptyContent is reached by View only; an empty
-        # SafeAreaView is always EmptyView there (DynamicSafeAreaViewContainer).
-        # ConverterFactory hands both types to this class.
-        def empty_content_is_always_empty_view?
-          @component['type'] == 'SafeAreaView'
-        end
+        # An empty SafeAreaView takes the same rule (ConverterFactory hands both
+        # types to this class): it was always EmptyView, as Dynamic's was, and a
+        # sized one with a background drew nothing on iOS while Android and the
+        # web drew the box. Dynamic hands an empty SafeAreaView to the View
+        # container now (ticket 2026-11-08-ios-dynamic-empty-view-bound-background).
 
         def sized_axis?(value)
           case value

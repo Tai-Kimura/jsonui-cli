@@ -14,8 +14,10 @@ require_relative '../../support/emitted_swift'
 #   a margin                                      -> Color.clear, 0 x 0
 #   otherwise                                     -> EmptyView (0 x 0)
 #
-# and an empty SafeAreaView is EmptyView whatever it declares
-# (DynamicSafeAreaViewContainer). Until jsonui-cli 1.9.18 codegen made a
+# and an empty SafeAreaView is drawn as an empty View (it was EmptyView whatever
+# it declared, on both iOS paths, and drew nothing where Android and the web
+# drew the box — ticket 2026-11-08-ios-dynamic-empty-view-bound-background;
+# Dynamic hands it to the View container now). Until jsonui-cli 1.9.18 codegen made a
 # Color.clear for any width / height KEY — `"width": "wrapContent"` and
 # `"width": 0` included — and Color.clear takes all the space it is offered:
 # measured on iOS 26.5, an empty `wrapContent` View with margins drew
@@ -81,9 +83,12 @@ RSpec.describe 'sjui codegen: an empty View draws what Dynamic draws' do
     expect(out).to include('.padding(.top, 12)')
   end
 
-  it 'an empty SafeAreaView is EmptyView whatever it declares' do
-    expect(base({ 'type' => 'SafeAreaView', 'width' => 100, 'height' => 50 })).to eq('EmptyView()')
-    expect(base({ 'type' => 'SafeAreaView', 'background' => '#FF0000' })).to eq('EmptyView()')
+  it 'an empty SafeAreaView is drawn as an empty View' do
+    expect(base({ 'type' => 'SafeAreaView', 'width' => 100, 'height' => 50 })).to eq('Color.clear')
+    expect(base({ 'type' => 'SafeAreaView', 'background' => '#FF0000' })).to eq('Rectangle()')
+    expect(emit({ 'type' => 'SafeAreaView', 'width' => 100, 'height' => 50, 'background' => '@{c}' }))
+      .to include('.fill(SwiftJsonUIConfiguration.shared.getColor(for: data.c)')
+    expect(base({ 'type' => 'SafeAreaView' })).to eq('EmptyView()')
   end
 
   it 'a View with children is not touched (control)' do
@@ -94,8 +99,9 @@ RSpec.describe 'sjui codegen: an empty View draws what Dynamic draws' do
 
   it 'every case compiles' do
     nodes = CASES.values.map { |(attrs, _)| { 'type' => 'View' }.merge(attrs) } +
-            [{ 'type' => 'SafeAreaView', 'width' => 100 }, { 'type' => 'SafeAreaView', 'background' => '#FF0000' }]
+            [{ 'type' => 'SafeAreaView', 'width' => 100 }, { 'type' => 'SafeAreaView', 'background' => '#FF0000' },
+             { 'type' => 'SafeAreaView', 'width' => 100, 'height' => 50, 'background' => '@{c}' }]
     codes = nodes.map { |n| emit(n) }
-    expect(compilable_view("VStack {\n#{codes.join("\n")}\n}", data: ['var w: CGFloat = 10', 'var m: CGFloat = 4'])).to compile_as_swift
+    expect(compilable_view("VStack {\n#{codes.join("\n")}\n}", data: ['var w: CGFloat = 10', 'var m: CGFloat = 4', 'var c: String = "#FF0000"'])).to compile_as_swift
   end
 end
