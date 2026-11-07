@@ -23,6 +23,11 @@ module RjuiTools
       }.freeze
 
       # Shadow mapping
+      # The declared shadow defaults (attribute_definitions common.shadow):
+      # radius 5, offsets 0; no colour is black at 33%, SwiftUI's default.
+      SHADOW_DEFAULT_RADIUS = 5
+      SHADOW_DEFAULT_COLOR = 'rgba(0,0,0,0.33)'
+
       SHADOW_MAP = {
         'sm' => 'shadow-sm',
         'md' => 'shadow-md',
@@ -261,12 +266,15 @@ module RjuiTools
           return '' unless shadow
 
           if shadow.is_a?(Hash)
-            # Custom shadow: { radius: 5, offsetX: 0, offsetY: 2, color: "#000" }
-            radius = shadow['radius'] || 5
+            # A field left out takes its declared default (attribute_definitions
+            # common.shadow; iOS's, which the other platforms were aligned to):
+            # radius 5, offsets 0, and no colour is black at 33% (SwiftUI's
+            # default shadow colour) with the opacity not applied to it.
+            radius = shadow['radius'] || SHADOW_DEFAULT_RADIUS
             offset_x = shadow['offsetX'] || 0
-            offset_y = shadow['offsetY'] || 2
-            color = shadow['color'] || 'rgba(0,0,0,0.1)'
-            color = shadow_color_with_alpha(color, shadow['opacity']) if shadow['opacity']
+            offset_y = shadow['offsetY'] || 0
+            color = shadow['color'] || SHADOW_DEFAULT_COLOR
+            color = shadow_color_with_alpha(color, shadow['opacity']) if shadow['opacity'] && shadow['color']
             "[box-shadow:#{offset_x}px_#{offset_y}px_#{radius}px_#{color}]"
           elsif shadow.is_a?(String) && shadow.include?('|')
             # The pipe form is the UIKit contract

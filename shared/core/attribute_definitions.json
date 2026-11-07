@@ -658,29 +658,48 @@
         "string",
         "object"
       ],
-      "description": "Shadow configuration (string 'color|offsetX|offsetY|opacity|radius' or object)",
+      "description": "Shadow configuration (string 'color|offsetX|offsetY|opacity|radius' or object). In the object form every field may be a binding, and a field left out takes its declared default on every platform (the defaults are iOS's, which the other platforms were aligned to; 2026-11-07).",
       "properties": {
         "color": {
-          "type": "string",
-          "description": "Shadow color (hex)"
+          "type": [
+            "string",
+            "binding"
+          ],
+          "description": "Shadow color: hex or a color name from colors.json (can be data binding). Left out: black at 33% opacity (SwiftUI's default shadow colour), and `opacity` is not applied to it. A bound colour that does not resolve casts no shadow."
         },
         "offsetX": {
-          "type": "number",
-          "description": "Shadow X offset"
+          "type": [
+            "number",
+            "binding"
+          ],
+          "default": 0,
+          "description": "Shadow X offset (can be data binding)"
         },
         "offsetY": {
-          "type": "number",
-          "description": "Shadow Y offset"
+          "type": [
+            "number",
+            "binding"
+          ],
+          "default": 0,
+          "description": "Shadow Y offset (can be data binding)"
         },
         "opacity": {
-          "type": "number",
+          "type": [
+            "number",
+            "binding"
+          ],
           "min": 0,
           "max": 1,
-          "description": "Shadow opacity (0-1)"
+          "default": 1,
+          "description": "Shadow opacity (0-1, can be data binding), applied to `color`: left out, the colour at its own strength"
         },
         "radius": {
-          "type": "number",
-          "description": "Shadow blur radius"
+          "type": [
+            "number",
+            "binding"
+          ],
+          "default": 5,
+          "description": "Shadow blur radius (can be data binding)"
         }
       }
     },

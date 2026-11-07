@@ -142,7 +142,7 @@ module RjuiTools
           # overrode it with a fixed shadow, so it never drew on a TextField.
           shadow = attributes['shadow']
           if shadow.is_a?(Hash)
-            @dynamic_styles['boxShadow'] = shadow_css_expr({ 'offsetY' => 0, 'color' => 'rgba(0,0,0,0.2)' }.merge(shadow))
+            @dynamic_styles['boxShadow'] = shadow_css_expr(shadow)
           elsif shadow && !(shadow.is_a?(String) && shadow.include?('|'))
             @dynamic_styles['boxShadow'] = "'0 2px 4px rgba(0,0,0,0.1)'"
           end

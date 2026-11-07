@@ -261,7 +261,7 @@ module JsonUI
         { name: 'rightPadding', kind: :number, bindable: true }.freeze,
         # Script definitions
         { name: 'scripts', kind: :array }.freeze,
-        # Shadow configuration (string 'color|offsetX|offsetY|opacity|radius' or object) [accepts: string | object]
+        # Shadow configuration (string 'color|offsetX|offsetY|opacity|radius' or object). In the object form every field may be a binding, and a field left out takes its declared default on every platform (the defaults are iOS's, which the other platforms were aligned to; 2026-11-07). [accepts: string | object]
         { name: 'shadow', kind: :raw }.freeze,
         # On an include node: an object map laid over the including layout's data for the included layout, before `data` (`data` wins on a key both set). A key is a name the included layout binds; a value is a literal or a binding read in the including layout's scope (see `include`).
         { name: 'shared_data', kind: :object }.freeze,

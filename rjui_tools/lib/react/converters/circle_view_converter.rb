@@ -70,15 +70,17 @@ module RjuiTools
             style_parts << "border: '#{stroke_width}px #{stroke_style} #{stroke_color}'"
           end
 
-          # Shadow
+          # Shadow — the one value every web path writes (shadow_css_expr), with
+          # its declared defaults; the circle's own `x` / `y` / `blur` spellings
+          # read as offsetX / offsetY / radius. One the base already made a
+          # style (bound, or a colors.json key) is not written twice: two
+          # boxShadow keys do not compile.
           shadow = attributes['shadow']
-          # A bound one is already the base's style; two boxShadow keys do not compile.
-          if shadow.is_a?(Hash) && shadow.values.none? { |value| has_binding?(value) }
-            shadow_color = shadow['color'] || 'rgba(0,0,0,0.25)'
-            shadow_x = shadow['x'] || shadow['offsetX'] || 0
-            shadow_y = shadow['y'] || shadow['offsetY'] || 2
-            shadow_blur = shadow['blur'] || shadow['radius'] || 4
-            style_parts << "boxShadow: '#{shadow_x}px #{shadow_y}px #{shadow_blur}px #{shadow_color}'"
+          if shadow.is_a?(Hash) && !dynamic_styles.key?('boxShadow')
+            circle = { 'color' => shadow['color'], 'opacity' => shadow['opacity'],
+                       'offsetX' => shadow['x'] || shadow['offsetX'], 'offsetY' => shadow['y'] || shadow['offsetY'],
+                       'radius' => shadow['blur'] || shadow['radius'] }.compact
+            style_parts << "boxShadow: #{shadow_css_expr(circle)}"
           end
 
           return build_style_attr if style_parts.empty?

@@ -1524,8 +1524,10 @@ module RjuiTools
         # opacity folds into the colour: a hex one as its alpha byte, any other
         # through color-mix — box-shadow has no opacity of its own.
         def shadow_css_expr(shadow)
-          raw = shadow['color'] || 'rgba(0,0,0,0.1)'
-          opacity = shadow['opacity']
+          raw = shadow['color'] || TailwindMapper::SHADOW_DEFAULT_COLOR
+          # No colour declared: the default colour, and the opacity is not
+          # applied to it (attribute_definitions common.shadow).
+          opacity = shadow['color'] ? shadow['opacity'] : nil
           color =
             if has_binding?(raw) || colour_key?(raw)
               "${#{color_style_expr(raw)} ?? 'transparent'}"
@@ -1537,7 +1539,7 @@ module RjuiTools
           unless opacity.nil? || (!has_binding?(opacity) && !has_binding?(raw) && !colour_key?(raw))
             color = "color-mix(in srgb, #{color} calc(#{opacity} * 100%), transparent)"
           end
-          written = "#{shadow['offsetX'] || 0}px #{shadow['offsetY'] || 2}px #{shadow['radius'] || 5}px #{color}"
+          written = "#{shadow['offsetX'] || 0}px #{shadow['offsetY'] || 0}px #{shadow['radius'] || TailwindMapper::SHADOW_DEFAULT_RADIUS}px #{color}"
           written.include?('${') || has_binding?(written) ? "`#{css_template(written)}`" : "'#{written}'"
         end
 

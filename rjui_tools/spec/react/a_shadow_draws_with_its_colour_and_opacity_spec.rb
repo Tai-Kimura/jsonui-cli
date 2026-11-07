@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'json'
 require_relative '../spec_helper'
 require_relative '../support/typescript_compiler'
 require 'react/react_generator'
@@ -71,8 +72,37 @@ RSpec.describe 'a shadow draws with its colour and opacity' do
     expect(emit({ 'type' => 'TextField' }.merge(shadow(color: '#0000FF', opacity: 0.5)))).to include("boxShadow: '6px 6px 8px #0000FF80'")
   end
 
+  # The declared defaults (attribute_definitions common.shadow), iOS's: the web
+  # had offsetY 2, a 10% (TextField 20%, CircleView 25%) black, a CircleView radius 4.
+  DECLARED = JSON.parse(File.read(File.expand_path('../../../shared/core/attribute_definitions.json', __dir__)))['common']['shadow']['properties']
+
+  it 'holds the declared defaults' do
+    expect(RjuiTools::React::TailwindMapper::SHADOW_DEFAULT_RADIUS).to eq(DECLARED['radius']['default'])
+    expect([DECLARED['offsetX']['default'], DECLARED['offsetY']['default'], DECLARED['opacity']['default']]).to eq([0, 0, 1])
+  end
+
+  {
+    'View' => '[box-shadow:0px_0px_5px_rgba(0,0,0,0.33)]',
+    'TextField' => "boxShadow: '0px 0px 5px rgba(0,0,0,0.33)'",
+    'CircleView' => "boxShadow: '0px 0px 5px rgba(0,0,0,0.33)'"
+  }.each do |type, expected|
+    it "#{type}: a field left out takes its declared default" do
+      expect(emit({ 'type' => type, 'shadow' => { 'opacity' => 0.5 } })).to include(expected)
+    end
+  end
+
+  it 'writes one boxShadow on a CircleView whose colour is a key' do
+    code = emit({ 'type' => 'CircleView', 'shadow' => { 'color' => 'dark_blue', 'radius' => 3 } })
+    expect(code.scan('boxShadow').size).to eq(1)
+    expect(code).to include("ColorManager.resolveColor('dark_blue')")
+  end
+
+  it "reads a CircleView's own x / y / blur as the offsets and radius" do
+    expect(emit({ 'type' => 'CircleView', 'shadow' => { 'x' => 1, 'y' => 2, 'blur' => 3, 'color' => '#000000' } })).to include("boxShadow: '1px 2px 3px #000000'")
+  end
+
   it 'writes what it draws so that it compiles', :typescript_compile do
-    drawn = %w[View TextField].flat_map do |type|
+    drawn = %w[View TextField CircleView].flat_map do |type|
       SHADOW_DRAWS.values.map { |fields, _| emit({ 'type' => type }.merge(shadow(**fields.transform_keys(&:to_sym)))) }
     end
     source = "const data = {} as { [key: string]: any };\nconst refs: any = {};\nexport const view = (\n  <div>\n#{drawn.join("\n")}\n  </div>\n);\n"
