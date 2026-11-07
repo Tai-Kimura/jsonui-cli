@@ -40,7 +40,7 @@ window.__segHits = (a, b, walls, pad) => {
   }
   return hits;
 };
-window.__walk = { hits: [], steps: 0, rooms: {}, doorPass: {} };
+window.__walk = { hits: [], steps: 0, metres: 0, rooms: {}, doorPass: {} };
 const PAD = 0.15;
 const last = new Map();
 function sample() {
@@ -55,8 +55,10 @@ function sample() {
         // array each walking frame), not one straight line, which cuts a door's corner when a frame passes several
         // points (ticket 2026-10-20-jui-viz-e2e-wall-watch-joins-frames-not-the-path)
         const pts = [prev.at, ...(trail && trail !== prev.trail ? trail : []), here];
-        for (let i = 1; i < pts.length; i++)
+        for (let i = 1; i < pts.length; i++) {
+          window.__walk.metres += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);   // the path checked, in metres
           for (const w of window.__segHits(pts[i - 1], pts[i], walls, PAD)) window.__walk.hits.push({ id, from: pts[i - 1], to: pts[i], wall: w, frameFrom: prev.at, frameTo: here });
+        }
       }
     }
     last.set(R, { at: here, jumps: R.jumps || 0, trail });
@@ -80,6 +82,8 @@ requestAnimationFrame(sample);
 """
 
 
+#: metres of path the wall check must have followed (measured 11-08: 149.9 m in a run; a third of it)
+WALK_MIN_M = 50
 NEXT_FRAME = "() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))"
 
 
@@ -140,7 +144,10 @@ async def run_rooms(pw, out, failures, RealServer):
         await wait(page, SETTLED_JS, label="everyone seated")
         walk = await page.evaluate("() => window.__walk")
         res["walk"] = {"steps": walk["steps"], "hits": walk["hits"][:5], "rooms": {k: v for k, v in walk["rooms"].items() if len(v) > 1}}
-        check(failures, walk["steps"] > 50, f"the wall check saw robots walk ({walk['steps']} steps)")
+        # in metres of path checked, not in samples: on a busy machine a frame is a second or more and the same walks gave
+        # 27 samples (ticket 2026-11-06-viz-e2e-full-run-red-under-load)
+        res["walk"]["metres"] = round(walk["metres"], 1)
+        check(failures, walk["metres"] >= WALK_MIN_M, f"the wall check saw robots walk ({res['walk']['metres']} m of path, {walk['steps']} samples)")
         check(failures, not walk["hits"], f"a robot walked through a wall: {walk['hits'][:3]}")
         moved = {k: v for k, v in walk["rooms"].items() if len(v) > 1}
         check(failures, {"04", "05"} <= set(moved), f"04 and 05 changed rooms on foot: {moved}")
