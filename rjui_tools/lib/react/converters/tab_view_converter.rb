@@ -192,12 +192,15 @@ module RjuiTools
           # arrow — tabs would otherwise feel non-interactive on hover.
           base_classes = 'flex-1 flex flex-col items-center justify-center py-2 px-1 transition-colors cursor-pointer'
 
-          # Check if colors are bindings - use dynamic Tailwind class names
+          # A bound colour is the button's own `color` style
+          # (build_tab_button_style); the side that is written keeps its class.
+          # It was a class name built at run time (`'text-' + data.tint`):
+          # a hex made no class at all, and a name drew only when Tailwind had
+          # met that class somewhere else.
           if has_binding?(tint) || has_binding?(unselected)
-            tint_prop = has_binding?(tint) ? extract_binding_property(tint) : "'#{tint}'"
-            unselected_prop = has_binding?(unselected) ? extract_binding_property(unselected) : "'#{unselected}'"
-            # Generate dynamic Tailwind class: text-${colorName}
-            "${#{selected_binding} === #{index} ? '#{base_classes} text-' + #{tint_prop} : '#{base_classes} text-' + #{unselected_prop} + ' hover:opacity-80'}"
+            tint_class = has_binding?(tint) ? '' : " #{TailwindMapper.map_color(tint, 'text')}"
+            unselected_class = has_binding?(unselected) ? '' : " #{TailwindMapper.map_color(unselected, 'text')}"
+            "${#{selected_binding} === #{index} ? '#{base_classes}#{tint_class}' : '#{base_classes}#{unselected_class} hover:opacity-80'}"
           else
             tint_class = TailwindMapper.map_color(tint, 'text')
             unselected_class = TailwindMapper.map_color(unselected, 'text')
@@ -205,9 +208,18 @@ module RjuiTools
           end
         end
 
+        # The `color` of a tab whose colour is bound: the selected tab's tint,
+        # the others' unselectedColor, each resolved at run time
+        # (ColorManager.resolveColor: a colors.json name or a CSS colour). nil
+        # when neither is bound — both are classes then.
         def build_tab_button_style(index, selected_binding)
-          # No longer needed - using Tailwind classes instead
-          nil
+          tint = attributes['tintColor']
+          unselected = attributes['unselectedColor']
+          return nil unless has_binding?(tint) || has_binding?(unselected)
+
+          on = has_binding?(tint) ? color_style_expr(tint) : 'undefined'
+          off = has_binding?(unselected) ? color_style_expr(unselected) : 'undefined'
+          "{ color: #{selected_binding} === #{index} ? #{on} : #{off} }"
         end
 
         def build_icon(icon, selected_icon, index, selected_binding, icon_type = 'system')
