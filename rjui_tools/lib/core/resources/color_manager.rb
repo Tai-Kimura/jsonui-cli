@@ -37,7 +37,42 @@ module RjuiTools
           end.compact
           # A mode's own pictures ride in the same rule (React::ImageModes).
           decls += React::ImageModes.declarations(mode, image_modes)
-          decls.empty? ? '' : ":root:root:root{#{decls.join(';')}}"
+          # And the browser's own parts (form controls, scrollbars).
+          decls << "color-scheme:#{color_scheme(mode)}"
+          ":root:root:root{#{decls.join(';')}}"
+        end
+
+        # theme.css's color-scheme for the browser's own parts (form controls,
+        # scrollbars): each mode's (ColorManagerCore#color_scheme) under the
+        # selectors the colours use, so the parts are drawn light or dark with
+        # the colours. Without it they were light in every mode.
+        def color_scheme_css_lines
+          base = @fallback_mode || DEFAULT_MODE_NAME
+          lines = ["/* The browser's own parts (form controls, scrollbars) take the mode's color-scheme. */",
+                   ":root { color-scheme: #{color_scheme(base)}; }"]
+          (@modes - [base]).each do |mode|
+            lines << ":root[data-theme=\"#{mode}\"] { color-scheme: #{color_scheme(mode)}; }"
+          end
+          dark = (@system_mode_mapping || {})['dark']
+          if dark && dark != base && @modes.include?(dark)
+            lines << '@media (prefers-color-scheme: dark) {'
+            lines << "  :root:not([data-theme]) { color-scheme: #{color_scheme(dark)}; }"
+            lines << '}'
+          end
+          lines << ''
+          lines
+        end
+
+        # Said once a build: a mode light only because nothing says otherwise.
+        def announce_undeclared_color_schemes
+          undeclared = color_scheme_undeclared - [@fallback_mode || DEFAULT_MODE_NAME]
+          return if undeclared.empty?
+
+          Core::Logger.warn(
+            "colors.json: #{undeclared.map { |m| "'#{m}'" }.join(', ')} draw the browser's own parts " \
+            '(form controls, scrollbars) light — no OS appearance maps to them. ' \
+            'Say otherwise in colors.json: "colorSchemes": { "<mode>": "dark" }'
+          )
         end
 
         # jui build's image_modes.json beside colors.json; {} without one.
@@ -567,6 +602,7 @@ module RjuiTools
 
             lines << ''
           end
+          lines.concat(color_scheme_css_lines)
           lines.concat(image_mode_css_lines)
           lines.concat(static_utility_lines)
 
@@ -576,6 +612,7 @@ module RjuiTools
 
           File.write(output_file, lines.join("\n"))
           Core::Logger.info "✓ Generated theme.css (#{keys.size} tokens)"
+          announce_undeclared_color_schemes
 
           announce_theme_import(output_file)
         end

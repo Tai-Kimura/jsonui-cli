@@ -156,7 +156,8 @@ RSpec.describe 'the colour mode reaches the page (web)' do
       out.push({ theme: drawn(), html: attrs['data-theme'] ?? null, css: head[0] && head[0].textContent });
     JS
     expect(out.first.values_at('theme', 'html')).to eq(['dark', nil])
-    expect(out.first['css']).to eq(':root:root:root{--color-ink:#EEEEEE;--color-surface:#202020}')
+    # the browser's own parts take the mode's color-scheme in the same rule
+    expect(out.first['css']).to eq(':root:root:root{--color-ink:#EEEEEE;--color-surface:#202020;color-scheme:dark}')
   end
 
   it 'the TypeScript faces compile', :typescript_compile do

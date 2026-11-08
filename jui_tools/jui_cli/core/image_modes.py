@@ -25,15 +25,16 @@ import re
 from pathlib import Path
 
 TABLE_NAME = "image_modes.json"
-RESERVED_META_KEYS = ("fallback_mode", "systemModeMapping", "modes")
+RESERVED_META_KEYS = ("fallback_mode", "systemModeMapping", "modes", "colorSchemes")
 DEFAULT_MODE = "light"
 
 
 def read_modes(colors_file: Path) -> list[str]:
     """colors.json's modes, as the tools read them (shared/core/color_manager_core.rb).
 
-    A top-level key whose value is an object is a mode; a flat file or none is
-    the one mode ``light``.
+    A top-level key whose value is an object is a mode (settings such as
+    systemModeMapping and colorSchemes, and ``_`` notes, are not); a flat file
+    or none is the one mode ``light``.
     """
     try:
         raw = json.loads(colors_file.read_text(encoding="utf-8"))
@@ -41,7 +42,8 @@ def read_modes(colors_file: Path) -> list[str]:
         return [DEFAULT_MODE]
     if not isinstance(raw, dict):
         return [DEFAULT_MODE]
-    content = [k for k in raw if k not in RESERVED_META_KEYS]
+    # A `_` key (`_comment`) is a note, neither a colour nor a mode (ColorManagerCore.note_key?).
+    content = [k for k in raw if k not in RESERVED_META_KEYS and not (isinstance(k, str) and k.startswith("_"))]
     if not content or not isinstance(raw[content[0]], dict):
         return [DEFAULT_MODE]
     return [k for k in content if isinstance(raw[k], dict)]
