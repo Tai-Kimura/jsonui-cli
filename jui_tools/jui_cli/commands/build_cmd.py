@@ -1355,7 +1355,9 @@ def _normalized_style(src_file: Path, rel: Path, alias_table):
     them, drew as the default). A Style carries no ``type`` as a rule:
 
     - with a ``type``, it goes through the Layout canonicalizer (attribute,
-      value and component aliases);
+      value and component aliases), warned as a Layout's are: an attribute
+      alias is rewritten without a warning, a value or component alias with
+      one;
     - without one, only value aliases are rewritten. An attribute alias
       cannot be told without the type: ``contentDescription`` is ``alt`` on
       an Image and ``accessibilityLabel`` elsewhere, and ``value``, ``text``
@@ -1392,7 +1394,12 @@ def _normalized_style(src_file: Path, rel: Path, alias_table):
                 result[key] = canonical
     for warning in warnings:
         print(f"  WARNING [normalize]: {warning}")
-    return result if warnings else None
+    # Rewritten is what CHANGED, not what was warned. An attribute alias is
+    # rewritten without a warning, as in a Layout (`alpha` → `opacity` is an
+    # accepted spelling); deciding on the warnings dropped that rewrite, and a
+    # typed Style with attribute aliases only reached the converters as
+    # written — `Unknown attribute`, and the value was gone.
+    return result if result != data else None
 
 
 def _distribute_styles(config_mgr: ConfigManager, platforms: dict, args) -> None:
