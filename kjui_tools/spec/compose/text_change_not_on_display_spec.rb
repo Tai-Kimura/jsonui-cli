@@ -54,7 +54,7 @@ RSpec.describe 'kjui onTextChange without a text binding: an edit, not the displ
 
     it "#{type}: the bound form keeps its comparison (control)" do
       code, = emit(type, 'text' => '@{t}')
-      expect(code).to include('val data = viewModel.data.value; if (newValue != data.t)')
+      expect(code).to include('val data = textFieldState_f_data.value; if (newValue != (textFieldState_f_sent.lastOrNull() ?: data.t))')
     end
   end
 

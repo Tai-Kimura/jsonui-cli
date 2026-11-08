@@ -73,6 +73,8 @@ module ComposeStubUniverse
       operator fun <T> MutableState<T>.getValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>): T = value
       operator fun <T> MutableState<T>.setValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>, v: T) { value = v }
       fun <T> remember(calculation: () -> T): T = calculation()
+      // A bound field's passed data, read in its effects (TextInputWriteBack).
+      fun <T> rememberUpdatedState(newValue: T): MutableState<T> = MutableState(newValue)
       fun <T> mutableStateOf(value: T) = MutableState(value)
       // The effect a TabView's onValueChange is called from (on a change of
       // the selection, ruling 2026-10-02).
@@ -358,6 +360,8 @@ module ComposeStubUniverse
       operator fun <T> MutableState<T>.getValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>): T = value
       operator fun <T> MutableState<T>.setValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>, v: T) { value = v }
       fun <T> remember(calculation: () -> T): T = calculation()
+      // A bound field's passed data, read in its effects (TextInputWriteBack).
+      fun <T> rememberUpdatedState(newValue: T): MutableState<T> = MutableState(newValue)
       fun <T> mutableStateOf(value: T) = MutableState(value)
       // The view's map of unbound single-Radio groups (ComposeBuilder
       // RADIO_GROUP_SELECTIONS_DECLARATION, declared once per view file).

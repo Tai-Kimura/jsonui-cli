@@ -44,19 +44,21 @@ RSpec.describe 'TextField / TextView: the field follows the held value (kjui)' d
         code, = emit(component)
         expect(code).to include('val textFieldState_f_sent = remember { ArrayDeque<String>() }')
         expect(code).to include(
-          'LaunchedEffect(data.age) { val held = viewModel.data.value.age; ' \
+          'LaunchedEffect(data.age) { val held = data.age; ' \
           'val echo = textFieldState_f_sent.indexOf(held); ' \
           'if (echo >= 0) repeat(echo + 1) { textFieldState_f_sent.removeFirst() } ' \
-          'else if (textFieldState_f.text.toString() != held) textFieldState_f.edit { replace(0, length, held) } }'
+          'else if (textFieldState_f.text.toString() != held) { textFieldState_f_sent.clear(); ' \
+          'textFieldState_f_sent.addLast(held); textFieldState_f.edit { replace(0, length, held) } } }'
         )
       end
 
-      it 'waits on the value after sending, not on time, and compares with the view model, not composition' do
+      it 'waits on the value after sending, not on time, and compares with what the field said last, not composition' do
         code, = emit(component, 'onTextChange' => '@{onAgeChange}')
+        expect(code).to include('val textFieldState_f_data = rememberUpdatedState(data)')
         expect(edit_effect(code)).to include(
           'snapshotFlow { textFieldState_f.text.toString() }.collectLatest { newValue -> ' \
-          'val data = viewModel.data.value; ' \
-          'if (newValue != data.age) { textFieldState_f_sent.addLast(newValue); ' \
+          'val data = textFieldState_f_data.value; ' \
+          'if (newValue != (textFieldState_f_sent.lastOrNull() ?: data.age)) { textFieldState_f_sent.addLast(newValue); ' \
           'viewModel.updateData(mapOf("age" to newValue)); data.onAgeChange?.invoke(newValue); ' \
           'val held = viewModel.data.first { it.age != newValue }.age; textFieldState_f_sent.clear(); ' \
           'textFieldState_f_sent.addLast(held); ' \
@@ -81,9 +83,24 @@ RSpec.describe 'TextField / TextView: the field follows the held value (kjui)' d
       it 'asks for what it names' do
         _, imports = emit(component)
         map = KjuiTools::Compose::Helpers::ImportManager.get_imports_map
-        expect(imports).to include(:remember, :flow_first, :snapshot_flow, :flow_collect_latest)
+        expect(imports).to include(:remember, :remember_updated_state, :flow_first, :snapshot_flow, :flow_collect_latest)
+        expect(map[:remember_updated_state]).to eq('import androidx.compose.runtime.rememberUpdatedState')
         expect(map[:flow_collect_latest]).to eq('import kotlinx.coroutines.flow.collectLatest')
         expect(map[:flow_first]).to eq('import kotlinx.coroutines.flow.first')
+      end
+
+      # A screen hands a sheet its own data with the sheet's view model beside it
+      # (`XGeneratedView(data = screenData, viewModel = sheetVm)`): the value and the
+      # handler are the passed data's. 2.5.10 read both from viewModel.data, the sheet's,
+      # whose handler is null (ticket kjui-textfield-writeback-reads-handler-from-own-
+      # viewmodel). The view model is only written to, and waited on for a correction.
+      # Measured on a device by KotlinJsonUI TextFieldPassedDataTest.
+      it 'reads the value and the handler from the data it was passed, not from the view model' do
+        code, = emit(component, 'onTextChange' => '@{onAgeChange}')
+        expect(code).not_to include('viewModel.data.value')
+        expect(code.scan('viewModel.data').size).to eq(1)
+        expect(edit_effect(code)).to include('viewModel.data.first { it.age != newValue }')
+        expect(edit_effect(code)).to match(/val data = textFieldState_f_data\.value; .*data\.onAgeChange\?\.invoke\(newValue\)/)
       end
 
       it 'writes Kotlin a compiler accepts' do
