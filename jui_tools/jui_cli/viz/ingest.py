@@ -1447,6 +1447,10 @@ class World:
             self._end(self.sessions[sid], self._main(sid, at), at)
             self.state.add_event({"at": at, "sessionId": sid, "agentId": sid, "kind": "SessionEnd", "cat": "session",
                                   "text": i18n.tl("ev.clock_out", reason="(process gone)")})
+            # its process is gone by both lists: forgotten, so a session its hooks bring back is not ended again at
+            # every poll (the ENOSPC night: the same session ended dozens of times, a hook bringing it back each time;
+            # ticket 2026-11-06-viz-e2e-full-run-red-under-load). A list or an entry naming it again knows it again.
+            self.session_proc.pop(sid, None)
         return gone
 
     # ---------------------------------------------------------------- relay channel (08 §2)

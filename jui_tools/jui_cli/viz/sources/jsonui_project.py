@@ -512,6 +512,10 @@ class JsonUIProject:
         # worker, and ask the file system nothing on the loop. spec id -> JsonUIProject.facts_of.
         self.off_loop = False
         self.facts: dict[str, dict] = {}
+        # specs_touching off the loop: path -> spec ids, built from the specs and ``facts`` and built again when either
+        # changes (_specs_rev counts the specs' changes; facts is replaced whole when read again)
+        self._specs_rev = 0
+        self._touch_index: tuple | None = None   # (specs_rev, facts, {path: [spec id]})
         self.test_results: dict[str, dict] = {}  # spec id -> {passed, failed, running}
         self._tests_by_name: dict[str, list[tuple[Source, str]]] | None = None  # test file name -> (app, key)
 
@@ -597,6 +601,7 @@ class JsonUIProject:
         """worktree_plan's answer applied (on the loop). True when the apps changed."""
         if plan is None:
             return False
+        self._specs_rev += 1
         for source in self.sources:
             if source.base is not None and not any(source is k for k in plan["kept"]):
                 for sid in [sid for sid, e in self.specs.items() if e.source is source]:
@@ -642,6 +647,7 @@ class JsonUIProject:
     def apply_spec_read(self, path: Path, at: int, by: str | None, read: dict | None, initial: bool = False,
                         source: Source | None = None) -> list[str]:
         """reload_spec with the file already read (read_spec_file: the live server reads it in its worker)."""
+        self._specs_rev += 1
         source = source or self.source_of(path)
         sid = self.spec_id(path, source)
         entry = self.specs.get(sid) or SpecEntry(path=path, source=source)
@@ -854,6 +860,11 @@ class JsonUIProject:
         made where the last build found none belongs to its spec from the next build on, so the 書いている tag lights
         one beat late and nothing else shows it (ticket 2026-10-24-viz-serve-loop-stalls-in-spec-summaries-stat, C)."""
         target = Path(file_path)
+        if self.off_loop:
+            # looked up, not compared with every spec: a storm of changes (a build writing thousands of .json files
+            # under a watched folder) compared each with every spec, relatedFile and root on the loop, and held it for
+            # a minute (2026-11-09, the ENOSPC night; ticket 2026-11-06-viz-e2e-full-run-red-under-load)
+            return list(self._touching_index().get(target, ()))
         hits = []
         memo: dict = {}
         for sid, entry in self.specs.items():
@@ -875,6 +886,29 @@ class JsonUIProject:
             if (lp and target == lp) or any(target == (d if d.is_absolute() else r / d) for d in declared for r in roots):
                 hits.append(sid)
         return hits
+
+    def _touching_index(self) -> dict:
+        """specs_touching's table off the loop: every path a spec answers to (the spec itself, its Layout and its
+        relatedFiles under each of its roots, as the last build's facts have them) -> the spec ids, in the specs' order."""
+        cached = self._touch_index
+        if cached is not None and cached[0] == self._specs_rev and cached[1] is self.facts:
+            return cached[2]
+        table: dict = {}
+        for sid, entry in self.specs.items():
+            keys = {entry.path}
+            facts = self.facts.get(sid)
+            if facts is not None:
+                lp, roots = facts["layout"], facts["roots"]
+                if lp:
+                    keys.add(lp)
+                data = entry.data or {}
+                declared = [Path(item["path"]) for item in data.get("relatedFiles") or []
+                            if isinstance(item, dict) and isinstance(item.get("path"), str)]
+                keys.update(d if d.is_absolute() else r / d for d in declared for r in roots)
+            for key in keys:
+                table.setdefault(key, []).append(sid)
+        self._touch_index = (self._specs_rev, self.facts, table)
+        return table
 
     def impl(self, spec: dict, source: Source | None = None, spec_path: Path | None = None) -> dict:
         """What can be measured about a spec's implementation, and its sum.
@@ -1055,15 +1089,21 @@ def with_texts(data: dict, path: Path) -> dict:
         return data
 
 
+def watch_folders(project: JsonUIProject) -> list[Path]:
+    """The folders ``watch`` watches: the spec, layout and test folders that exist, and the data server's."""
+    from .. import data_docs
+    folders = [f for f in project.artifact_dirs() if quiet_fs.is_dir(f)]
+    folders += [d for _k, d, _r in data_docs.doc_dirs(project) if d not in folders]   # the data server's (2.3.5)
+    return folders
+
+
 def watch(project: JsonUIProject, on_change):
     """watchdog on the project's spec, layout and test folders; on_change(path) per file event.
 
     Returns the observer (call .stop() / .join()), or None when none of the
     folders exist. Folders in SKIP_DIRS are ignored.
     """
-    from .. import data_docs
-    folders = [f for f in project.artifact_dirs() if quiet_fs.is_dir(f)]
-    folders += [d for _k, d, _r in data_docs.doc_dirs(project) if d not in folders]   # the data server's (2.3.5)
+    folders = watch_folders(project)
     if not folders:
         return None
     from watchdog.events import FileSystemEventHandler
