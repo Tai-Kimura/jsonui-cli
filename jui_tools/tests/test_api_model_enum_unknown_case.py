@@ -191,9 +191,47 @@ def _bodies() -> list[tuple[str, str]]:
 _LIST_SCHEMA = {"type": "object", "required": ["items"], "properties": {"items": {"type": "array", "items": {"$ref": "#/components/schemas/Item"}}}}
 
 
+def _ref(name: str) -> dict:
+    return {"$ref": f"#/components/schemas/{name}"}
+
+
+# Every place the generated code switches on an enum: a oneOf dispatched on an enum discriminator whose every value is
+# mapped (the shape that failed to compile on 2.5.15: "switch must be exhaustive", ticket
+# sjui-api-model-union-decoder-switch-misses-unknown), one mapped in part, and a schema-level union.
+_UNIONS = {
+    "Progress": {"type": "object", "required": ["pct"], "properties": {"pct": {"type": "integer"}}},
+    "Done": {"type": "object", "required": ["score"], "properties": {"score": {"type": "integer"}}},
+    "Oops": {"type": "object", "required": ["message"], "properties": {"message": {"type": "string"}}},
+    "Event": {"type": "object", "required": ["type", "content"], "properties": {
+        "type": {"type": "string", "enum": ["progress", "result", "error"]},
+        "content": {"oneOf": [_ref("Progress"), _ref("Done"), _ref("Oops")], "discriminator": {"propertyName": "type", "mapping": {
+            "progress": "#/components/schemas/Progress", "result": "#/components/schemas/Done", "error": "#/components/schemas/Oops"}}}}},
+    "PartKind": {"type": "string", "enum": ["a", "b", "c"]},
+    "PartEvent": {"type": "object", "required": ["type", "content"], "properties": {
+        "type": _ref("PartKind"),
+        "content": {"oneOf": [_ref("Progress"), _ref("Done")], "discriminator": {"propertyName": "type", "mapping": {
+            "a": "#/components/schemas/Progress", "b": "#/components/schemas/Done"}}}}},
+    "Circle": {"type": "object", "required": ["kind", "r"], "properties": {"kind": {"type": "string"}, "r": {"type": "integer"}}},
+    "Square": {"type": "object", "required": ["kind", "side"], "properties": {"kind": {"type": "string"}, "side": {"type": "integer"}}},
+    "Shape": {"oneOf": [_ref("Circle"), _ref("Square")], "discriminator": {"propertyName": "kind", "mapping": {
+        "circle": "#/components/schemas/Circle", "square": "#/components/schemas/Square"}}},
+    "EventList": {"type": "object", "required": ["items", "parts", "shapes"], "properties": {
+        "items": {"type": "array", "items": _ref("Event")}, "parts": {"type": "array", "items": _ref("PartEvent")},
+        "shapes": {"type": "array", "items": _ref("Shape")}}},
+}
+EVENTS_KNOWN = json.dumps({"items": [{"type": "progress", "content": {"pct": 5}}, {"type": "error", "content": {"message": "m"}}],
+                           "parts": [{"type": "a", "content": {"pct": 1}}, {"type": "b", "content": {"score": 2}}],
+                           "shapes": [{"kind": "circle", "r": 1}, {"kind": "square", "side": 2}]})
+# the second of each a value the app does not know (and PartEvent's "c": known, mapped to nothing)
+EVENTS_UNKNOWN = json.dumps({"items": [{"type": "progress", "content": {"pct": 5}}, {"type": "warning", "content": {"text": "t"}}],
+                             "parts": [{"type": "a", "content": {"pct": 1}}, {"type": "c", "content": {}}],
+                             "shapes": [{"kind": "circle", "r": 1}, {"kind": "hexagon", "n": 6}]})
+
+
 def _spec_with_list() -> dict:
     spec = json.loads(json.dumps(fixture.SPEC))
     spec["components"]["schemas"]["ItemList"] = _LIST_SCHEMA
+    spec["components"]["schemas"].update(json.loads(json.dumps(_UNIONS)))
     return spec
 
 
@@ -224,6 +262,13 @@ nonisolated func check() throws {
     precondition(DeviceKind.allCases == [.phone, .tablet, .desktop] && Level.allCases.count == 3)
     let n = try JSONDecoder().decode(ItemListDto.self, from: bodies[6].1.data(using: .utf8)!).items[1]
     precondition(n.level == .unknown(9), "\(n.level)")
+    let known = try JSONDecoder().decode(EventListDto.self, from: __EVENTS_KNOWN__.data(using: .utf8)!)
+    precondition(known.items[1].type == .error && known.parts[1].type == .b && known.shapes.count == 2, "\(known)")
+    if case .error(let o) = known.items[1].content { precondition(o.message == "m") } else { preconditionFailure("\(known.items[1])") }
+    let events = try JSONDecoder().decode(EventListDto.self, from: __EVENTS_UNKNOWN__.data(using: .utf8)!)
+    precondition(events.items.count == 2 && events.items[1].type == .unknown("warning") && events.items[1].content == .unknown, "\(events.items[1])")
+    precondition(events.parts[1].type == .c && events.parts[1].content == .unknown, "\(events.parts[1])")
+    precondition(events.shapes[1] == .unknown, "\(events.shapes[1])")
 }
 try check()
 print("SWIFT_OPEN_ENUM_OK")
@@ -242,7 +287,12 @@ class SwiftCompilesAndReadsEveryPlaceTests(unittest.TestCase):
                               *((f"{s.name}Dto.swift", gen.generate_dto_source(s, doc)) for s in doc.schemas)]:
                 (d / name).write_text(src, encoding="utf-8")
                 paths.append(str(d / name))
-            (d / "main.swift").write_text(SWIFT_MAIN.replace("__BODIES__", _swift_bodies()), encoding="utf-8")
+            for u in doc.unions:
+                (d / f"{u.name}Dto.swift").write_text(gen.generate_union_source(u, doc), encoding="utf-8")
+                paths.append(str(d / f"{u.name}Dto.swift"))
+            main = (SWIFT_MAIN.replace("__BODIES__", _swift_bodies()).replace("__EVENTS_KNOWN__", json.dumps(EVENTS_KNOWN))
+                    .replace("__EVENTS_UNKNOWN__", json.dumps(EVENTS_UNKNOWN)))
+            (d / "main.swift").write_text(main, encoding="utf-8")
             # as an app builds: the main actor by default, the Swift 6 language mode, decoded off the main actor
             build = subprocess.run(["swiftc", "-swift-version", "6", "-default-isolation", "MainActor", "-o",
                                     str(d / "h"), *paths, str(d / "main.swift")], capture_output=True, text=True, timeout=300)
@@ -253,14 +303,40 @@ class SwiftCompilesAndReadsEveryPlaceTests(unittest.TestCase):
         self.assertIn("SWIFT_OPEN_ENUM_OK", run.stdout)
 
 
+class OffCompilesTests(unittest.TestCase):
+    """With the key false, the same unions (an enum discriminator mapped whole, in part, by $ref, and a schema-level
+    union) compile without a warning: the decoder's default stays out where the closed enum is mapped whole (Swift
+    warns "default will never be executed" otherwise)."""
+
+    @unittest.skipUnless(shutil.which("swiftc"), "swiftc not installed")
+    def test_swift(self):
+        doc = parse_swagger(_spec_with_list(), "spec.json")
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            gen = IosApiModelGenerator(IosApiPlatformConfig(sources_root=d, enum_unknown_case=False))
+            sources = [*((f"{e.name}.swift", gen.generate_enum_source(e, doc)) for e in doc.enums),
+                       *((f"{s.name}Dto.swift", gen.generate_dto_source(s, doc)) for s in doc.schemas),
+                       *((f"{u.name}Dto.swift", gen.generate_union_source(u, doc)) for u in doc.unions)]
+            for name, src in sources:
+                (d / name).write_text(src, encoding="utf-8")
+            r = subprocess.run(["swiftc", "-typecheck", "-swift-version", "6", "-default-isolation", "MainActor",
+                                *(str(d / n) for n, _ in sources)], capture_output=True, text=True, timeout=300)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("warning:", r.stderr)
+        self.assertNotIn("default:", dict(sources)["EventDto.swift"])   # mapped whole, closed: no default
+        self.assertIn("default:", dict(sources)["PartEventDto.swift"])
+
+
 def _swift_bodies() -> str:
     return "[" + ", ".join(f"({json.dumps(n)}, {json.dumps(b)})" for n, b in _bodies()) + "]"
 
 
+def _kotlin_lit(s: str) -> str:
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$") + '"'
+
+
 def _kotlin_bodies() -> str:
-    def lit(s: str) -> str:
-        return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$") + '"'
-    return "listOf(" + ", ".join(f"{lit(n)} to {lit(b)}" for n, b in _bodies()) + ")"
+    return "listOf(" + ", ".join(f"{_kotlin_lit(n)} to {_kotlin_lit(b)}" for n, b in _bodies()) + ")"
 
 
 KOTLINX_MAIN = """
@@ -290,6 +366,12 @@ fun main() {
     val out = Json.encodeToString(ItemListDto.serializer(), known)
     check(Json.decodeFromString(ItemListDto.serializer(), out) == known) { "known written back: $out" }   // defaults (null) are left out
     check(DeviceKind.fromWire("tablet") == DeviceKind.TABLET && DeviceKind.fromWire("watch") == DeviceKind.UNKNOWN)
+    val known2 = Json.decodeFromString(EventListDto.serializer(), __EVENTS_KNOWN__)
+    check(known2.items[1].content == EventDto.Content.Error(OopsDto("m")) && known2.shapes.size == 2) { "$known2" }
+    val ev = Json.decodeFromString(EventListDto.serializer(), __EVENTS_UNKNOWN__)
+    check(ev.items[1].type == EventType.UNKNOWN && ev.items[1].content == EventDto.Content.Unknown) { "${ev.items[1]}" }
+    check(ev.parts[1].type == PartKind.C && ev.parts[1].content == PartEventDto.Content.Unknown) { "${ev.parts[1]}" }
+    check(ev.shapes[1] == ShapeDto.Unknown) { "${ev.shapes[1]}" }
     println("KOTLINX_OPEN_ENUM_OK")
 }
 """
@@ -324,12 +406,16 @@ class KotlinCompilesAndReadsEveryPlaceTests(unittest.TestCase):
             setattr(self, key, getattr(self.android, key))
         self.android.setUp(self)
 
-    def _emit(self, out: Path, serializer: str) -> list[str]:
+    def _emit(self, out: Path, serializer: str, open_enums: bool = True) -> list[str]:
         doc = parse_swagger(_spec_with_list(), "spec.json")
-        gen = AndroidApiModelGenerator(AndroidApiPlatformConfig(sources_root=out, serializer=serializer))
+        gen = AndroidApiModelGenerator(AndroidApiPlatformConfig(sources_root=out, serializer=serializer,
+                                                                enum_unknown_case=open_enums))
         sources = {f"{e.name}.kt": gen.generate_enum_source(e, doc) for e in doc.enums}
         if serializer == "kotlinx":
             sources |= {f"{s.name}Dto.kt": gen.generate_dto_source(s, doc) for s in doc.schemas}
+            sources |= {f"{u.name}Dto.kt": gen.generate_union_source(u, doc) for u in doc.unions}
+        elif serializer == "none":   # no oneOf without kotlinx (the generator refuses it by design): the unions' schemas out
+            sources |= {f"{s.name}Dto.kt": gen.generate_dto_source(s, doc) for s in doc.schemas if s.name not in _UNIONS}
         out.mkdir(parents=True, exist_ok=True)
         for name, src in sources.items():
             (out / name).write_text(src, encoding="utf-8")
@@ -343,11 +429,25 @@ class KotlinCompilesAndReadsEveryPlaceTests(unittest.TestCase):
         target = [self.jars[n] for n in self.android.SERIALIZATION]
         with tempfile.TemporaryDirectory() as tmp:
             t = Path(tmp)
-            (t / "Main.kt").write_text(KOTLINX_MAIN.replace("__BODIES__", _kotlin_bodies()), encoding="utf-8")
+            main = (KOTLINX_MAIN.replace("__BODIES__", _kotlin_bodies()).replace("__EVENTS_KNOWN__", _kotlin_lit(EVENTS_KNOWN))
+                    .replace("__EVENTS_UNKNOWN__", _kotlin_lit(EVENTS_UNKNOWN)))
+            (t / "Main.kt").write_text(main, encoding="utf-8")
             self.android._compile(self, t, self._emit(t / "src", "kotlinx") + [str(t / "Main.kt")], target, plugin=True)
             run = self._run(t, target)
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
         self.assertIn("KOTLINX_OPEN_ENUM_OK", run.stdout)
+
+    def test_kotlinx_off_compiles(self):
+        target = [self.jars[n] for n in self.android.SERIALIZATION]
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            self.android._compile(self, t, self._emit(t / "src", "kotlinx", open_enums=False), target, plugin=True)
+
+    def test_none_compiles(self):
+        """The none serializer: the enums as before and the DTOs that hold them, against the stdlib alone."""
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp)
+            self.android._compile(self, t, self._emit(t / "src", "none"), [], plugin=False)
 
     def test_moshi_reads_an_unknown_value_and_refuses_to_write_it(self):
         from tests.test_android_api_model_generator import _pinned_jar_of
