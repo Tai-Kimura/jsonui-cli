@@ -50,6 +50,24 @@ RSpec.describe SjuiTools::SwiftUI::Views::ModifierHelper do
   describe '#apply_gradient' do
     let(:helper) { helper_class.new }
 
+    # The declared valueAliases draw as their canonical spelling: a Style
+    # reaches here without `jui build`'s normalizer, and LeftToRight /
+    # Diagonal fell into the vertical default until 2.5.13. On a Button too:
+    # gradientDirection is View's, which the Button section does not declare.
+    { 'LeftToRight' => 'Horizontal', 'TopToBottom' => 'Vertical', 'Diagonal' => 'Oblique' }.each do |alias_name, canonical|
+      it "draws #{alias_name} as #{canonical}" do
+        drawn = lambda do |direction, type|
+          h = helper_class.new
+          h.component = { 'type' => type, 'gradient' => ['#FF0000', '#0000FF'], 'gradientDirection' => direction }
+          h.send(:apply_gradient)
+          h.generated_code
+        end
+        %w[View Button].each do |type|
+          expect(drawn.call(alias_name, type)).to eq(drawn.call(canonical, type))
+        end
+      end
+    end
+
     context 'with vertical gradient' do
       it 'applies linear gradient with top to bottom' do
         helper.component = {

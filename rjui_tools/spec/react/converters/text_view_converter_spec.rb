@@ -455,4 +455,17 @@ RSpec.describe RjuiTools::React::Converters::TextViewConverter do
         .not_to include('select-none')
     end
   end
+
+  # A keyboardType alias draws as its canonical spelling (a Style reaches the
+  # converter without `jui build`'s normalizer). alphabet and numeric drew no
+  # inputMode until 2.5.13, and `text` drew inputMode="text" where `default`
+  # draws none.
+  describe 'keyboardType aliases' do
+    JSON.parse(File.read(File.expand_path('../../../../shared/core/attribute_definitions.json', __dir__)))['TextView']['keyboardType']['valueAliases'].each do |alias_name, canonical|
+      it "draws #{alias_name} as #{canonical}" do
+        draw = ->(v) { described_class.new({ 'type' => 'TextView', 'id' => 't', 'keyboardType' => v }, { 'use_tailwind' => true }).convert }
+        expect(draw.call(alias_name)).to eq(draw.call(canonical))
+      end
+    end
+  end
 end

@@ -512,4 +512,19 @@ RSpec.describe SjuiTools::SwiftUI::Views::TextViewConverter do
       expect(code).not_to include('accessibilityIdentifier')
     end
   end
+
+  # A keyboardType alias draws as its canonical spelling (a Style reaches the
+  # converter without `jui build`'s normalizer). numbersAndPunctuation, search
+  # and text drew no keyboard until 2.5.13.
+  describe 'keyboardType aliases' do
+    before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
+    after(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true }
+
+    JSON.parse(File.read(File.expand_path('../../../../shared/core/attribute_definitions.json', __dir__)))['TextView']['keyboardType']['valueAliases'].each do |alias_name, canonical|
+      it "draws #{alias_name} as #{canonical}" do
+        draw = ->(v) { described_class.new({ 'type' => 'TextView', 'id' => 't', 'keyboardType' => v }).convert }
+        expect(draw.call(alias_name)).to eq(draw.call(canonical))
+      end
+    end
+  end
 end

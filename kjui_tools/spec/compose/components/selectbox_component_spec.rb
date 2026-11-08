@@ -687,3 +687,20 @@ RSpec.describe 'kjui: an enum value is its declared spelling, case and all' do
     expect(select_box('date')).not_to include('DateSelectBox(')
   end
 end
+
+# The alias `datetime` reaches DateSelectBox by its canonical spelling, the
+# one it reads: until 2.5.13 it was passed as written and drew a date-only
+# picker (a Style reaches the converter without `jui build`'s normalizer).
+RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent, 'datePickerMode alias' do
+  before do
+    allow(KjuiTools::Core::ConfigManager).to receive(:load_config).and_return({})
+    allow(KjuiTools::Core::ProjectFinder).to receive(:get_full_source_path).and_return('/tmp')
+    KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {}
+  end
+
+  it 'passes datetime as dateAndTime' do
+    draw = ->(v) { described_class.generate({ 'type' => 'SelectBox', 'id' => 's', 'selectItemType' => 'Date', 'datePickerMode' => v }, 0, Set.new) }
+    expect(draw.call('datetime')).to include('datePickerMode = "dateAndTime"')
+    expect(draw.call('datetime')).to eq(draw.call('dateAndTime'))
+  end
+end

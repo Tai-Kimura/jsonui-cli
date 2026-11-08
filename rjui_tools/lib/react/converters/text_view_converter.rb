@@ -337,6 +337,10 @@ module RjuiTools
 
         # UIKeyboardType spellings -> the HTML inputmode vocabulary.
         def map_keyboard_type(value)
+          # An alias by its canonical spelling (`alphabet` -> asciiCapable,
+          # `numeric` -> phone, `text` -> default): a Style reaches here
+          # without `jui build`'s normalizer.
+          value = JsonUIShared::EnumSpelling.canonical(value, 'TextView', 'keyboardType')
           case JsonUIShared::EnumSpelling.lowered(value, 'TextView', 'keyboardType')
           when 'numberpad', 'number', 'numbersandpunctuation' then 'numeric'
           when 'decimalpad', 'decimal' then 'decimal'
