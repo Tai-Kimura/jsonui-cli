@@ -349,7 +349,10 @@ module RjuiTools
         }.freeze
 
         def map_content_type(type)
-          CONTENT_TYPE_AUTOCOMPLETE[JsonUIShared::EnumSpelling.lowered(type, 'TextField', 'contentType')]
+          # An alias (`emailAddress`, `phone`) by its canonical spelling: a
+          # Style reaches here as written, without `jui build`'s normalizer.
+          canonical = JsonUIShared::EnumSpelling.canonical(type, 'TextField', 'contentType')
+          CONTENT_TYPE_AUTOCOMPLETE[JsonUIShared::EnumSpelling.lowered(canonical, 'TextField', 'contentType')]
         end
 
 

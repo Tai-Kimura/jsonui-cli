@@ -115,7 +115,10 @@ module SjuiTools
         # Unknown values warn instead of silently degrading to `.none`
         # (sjui-textfield-contenttype-newpassword-not-mapped).
         def map_content_type(type)
-          mapped = CONTENT_TYPES[JsonUIShared::EnumSpelling.lowered(type, 'TextField', 'contentType')]
+          # An alias (`phone`) by its canonical spelling: a Style reaches here
+          # as written, without `jui build`'s normalizer.
+          canonical = JsonUIShared::EnumSpelling.canonical(type, 'TextField', 'contentType')
+          mapped = CONTENT_TYPES[JsonUIShared::EnumSpelling.lowered(canonical, 'TextField', 'contentType')]
           return mapped if mapped
 
           puts "Warning: unknown contentType '#{type}' — emitting .textContentType(.none); add a mapping if this is a canonical value"
