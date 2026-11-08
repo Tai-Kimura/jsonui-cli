@@ -54,5 +54,13 @@ RSpec.configure do |config|
 
       KjuiTools::Compose::Components.const_get(name, false).reset_counter!
     end
+
+    # What a build keeps per thread while it writes one layout (its data
+    # declarations, its strings sections) and for the whole run (the colours
+    # already warned of). A build sets the first two for each layout before
+    # it reads them; a spec that builds left them for the next file, and
+    # a_bound_number's shadow read another file's `v` as declared with a
+    # default (seed 41884).
+    %i[kjui_data_definitions kjui_string_namespaces kjui_warned_colors].each { |key| Thread.current[key] = nil }
   end
 end
