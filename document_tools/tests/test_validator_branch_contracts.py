@@ -324,8 +324,14 @@ class BranchWhenVocabulary(unittest.TestCase):
             _errors_at(_validate(self._spec({"arg.paymentType": "card"})),
                        "when.arg.paymentType"),
             [])
-        self.assertTrue(
+        # A list of plain scalars is an argument's value since 2.5.17
+        # (test_a_branch_arg_takes_a_list_of_scalars); an object is not.
+        self.assertEqual(
             _errors_at(_validate(self._spec({"arg.paymentType": ["a"]})),
+                       "when.arg.paymentType"),
+            [])
+        self.assertTrue(
+            _errors_at(_validate(self._spec({"arg.paymentType": {"k": "a"}})),
                        "when.arg.paymentType"))
 
     def test_api_scenario_string_passes(self):
