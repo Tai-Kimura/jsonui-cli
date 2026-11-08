@@ -51,6 +51,20 @@ RSpec.describe 'resource names from keys (kjui)' do
     class MutableState<T>(var value: T)
     fun <T> mutableStateOf(value: T): MutableState<T> = MutableState(value)
     class ComposeColor(val argb: Int)
+    annotation class Composable
+    interface SharedPreferences {
+        fun getString(key: String, defValue: String?): String?
+        fun edit(): Editor
+        interface Editor { fun putString(key: String, value: String?): Editor; fun apply() }
+    }
+    abstract class Context {
+        abstract val applicationContext: Context
+        abstract fun getSharedPreferences(name: String, mode: Int): SharedPreferences
+        companion object { const val MODE_PRIVATE = 0 }
+    }
+    object LocalContext { val current: Context get() = throw IllegalStateException() }
+    fun isSystemInDarkTheme(): Boolean = false
+    fun <T> remember(key1: Any?, key2: Any?, calculation: () -> T): T = calculation()
   KOTLIN
 
   it 'writes a ColorManager kotlinc accepts' do

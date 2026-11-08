@@ -12,6 +12,12 @@ module SjuiTools
     class ViewUpdater
       LINE_THRESHOLD = 100  # Split body into sub-functions when exceeding this line count
 
+      # true when the project has a generated ColorManager (sjui.config's
+      # resource_manager_directory): each generated view then hands its
+      # colorScheme to ColorManager and draws again when the mode changes
+      # (ticket rjui-color-mode-never-sets-data-theme).
+      attr_accessor :color_mode
+
       # Version-skew guard: generated code that carries a screen marker will
       # not compile against a library without the modifier, which is the
       # point — a silent "static has a marker, dynamic doesn't" split is far
@@ -72,6 +78,12 @@ module SjuiTools
            state_variables.none? { |sv| sv.include?('horizontalSizeClass') }
           state_variables = state_variables +
                             ['@Environment(\.horizontalSizeClass) private var horizontalSizeClass']
+        end
+        if color_mode
+          state_variables = state_variables + [
+            '@ObservedObject private var sjuiThemeMode = SwiftJsonUIConfiguration.shared',
+            '@Environment(\\.colorScheme) private var sjuiColorScheme'
+          ]
         end
         state_vars_block = ""
         if state_variables.any?
@@ -197,6 +209,15 @@ module SjuiTools
           ""
         end
 
+        # The OS appearance reaches ColorManager (a kept choice wins inside it);
+        # observing the theme mode draws this view again when the mode changes.
+        color_mode_line = if color_mode
+          "\n            .onAppear { ColorManager.applySystemMode(sjuiColorScheme) }" \
+          "\n            .onChange(of: sjuiColorScheme) { _, scheme in ColorManager.applySystemMode(scheme) }"
+        else
+          ""
+        end
+
         marker_header = SjuiTools::Core::GeneratedMarker.comment_header(
           source: "#{json_name}.json",
           generator: "sjui build",
@@ -227,7 +248,7 @@ module SjuiTools
         #endif
                 }
                 // Requires SwiftJsonUI >= 10.6.0 (embed init-params child-side wiring)
-                .receiveEmbedInitParams(to: viewModel)#{window_width_line}#{scroll_memory_line}#{screen_marker_line}
+                .receiveEmbedInitParams(to: viewModel)#{window_width_line}#{scroll_memory_line}#{color_mode_line}#{screen_marker_line}
             }
 
             @ViewBuilder
