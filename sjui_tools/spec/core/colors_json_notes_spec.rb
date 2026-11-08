@@ -45,7 +45,7 @@ RSpec.describe SjuiTools::Core::Resources::ColorManager do
   # swiftc against the iOS simulator SDK (as color_manager_empty_dictionary_spec
   # checks it) rather than through `compile_as_swift`, which type-checks for
   # the macOS host. `import SwiftJsonUI` is stood in for by what the file uses.
-  LIBRARY_STUB = <<~SWIFT
+  NOTES_LIBRARY_STUB = <<~SWIFT
     import UIKit
     extension UIColor {
         static func colorWithHexString(_ hex: String) -> UIColor { .black }
@@ -71,7 +71,7 @@ RSpec.describe SjuiTools::Core::Resources::ColorManager do
     Dir.mktmpdir do |dir|
       stub = File.join(dir, 'Stub.swift')
       file = File.join(dir, 'ColorManager.swift')
-      File.write(stub, LIBRARY_STUB)
+      File.write(stub, NOTES_LIBRARY_STUB)
       File.write(file, emitted.sub(/^import SwiftJsonUI\n/, ''))
       Open3.capture2e('xcrun', '--sdk', 'iphonesimulator', 'swiftc', '-typecheck',
                       '-target', 'arm64-apple-ios16.0-simulator', stub, file)
