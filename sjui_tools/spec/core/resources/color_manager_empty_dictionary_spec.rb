@@ -45,12 +45,17 @@ RSpec.describe 'ColorManager.swift with an empty dictionary' do
 
   # The file imports UIKit, so it type-checks against the iOS simulator SDK,
   # not the macOS one the SwiftUI-fragment arms use. `import SwiftJsonUI` is
-  # replaced by the one symbol the file takes from it; a new dependency on the
+  # replaced by the symbols the file takes from it (colorWithHexString,
+  # and setThemeMode, which a mode change calls so the views draw again); a new dependency on the
   # library would fail here by name rather than pass unnoticed.
   LIBRARY_STUB = <<~SWIFT
     import UIKit
     extension UIColor {
         static func colorWithHexString(_ hex: String) -> UIColor { .black }
+    }
+    public class SwiftJsonUIConfiguration: @unchecked Sendable {
+        public static let shared = SwiftJsonUIConfiguration()
+        public func setThemeMode(_ mode: String) {}
     }
   SWIFT
 

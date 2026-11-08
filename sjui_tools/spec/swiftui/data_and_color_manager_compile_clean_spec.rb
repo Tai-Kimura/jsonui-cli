@@ -46,6 +46,7 @@ RSpec.describe 'Data and ColorManager compile clean' do
     public class SwiftJsonUIConfiguration: ObservableObject {
         public static let shared = SwiftJsonUIConfiguration()
         public func getColor(for identifier: Any) -> Color? { nil }
+        public func setThemeMode(_ mode: String) {}
     }
     public extension UIColor {
         class func colorWithHexString(_ hex: String, alpha: CGFloat) -> UIColor { .clear }

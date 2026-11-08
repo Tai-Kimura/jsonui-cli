@@ -138,7 +138,7 @@ RSpec.describe RjuiTools::React::Converters::SliderConverter do
         # object through the Slider's own emitter.
         converter = create_converter({ 'class' => 'Slider', 'tintColor' => 'dark_red' })
         result = converter.convert
-        expect(result).to include("accentColor: ColorManager.resolveColor('dark_red')")
+        expect(result).to include("accentColor: ColorManager.cssColor('dark_red')")
         expect(result).not_to include("accentColor: 'dark_red'")
       end
 

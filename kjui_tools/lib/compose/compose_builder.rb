@@ -2362,6 +2362,9 @@ module KjuiTools
         # screen's ViewModel. No-op when the screen is not embedded.
         code += "#{indent_str}// Requires KotlinJsonUI >= 2.13.0 (embed init-params)\n"
         code += "#{indent_str}DriveEmbedInitParams(viewModel)\n"
+        # The OS appearance and the kept colour mode reach ColorManager here,
+        # before any colour of this screen is read.
+        code += "#{indent_str}com.kotlinjsonui.generated.ColorManager.compose.FollowSystem()\n"
         code += "#{indent_str}// Check if Dynamic Mode is active\n"
         code += "#{indent_str}if (DynamicModeManager.isActive()) {\n"
         code += "#{indent_str}    // Dynamic Mode - use SafeDynamicView for real-time updates\n"

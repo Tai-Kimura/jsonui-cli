@@ -25,14 +25,14 @@ RSpec.describe 'a shadow draws with its colour and opacity' do
 
   SHADOW_DRAWS = {
     'a key, as every colour style resolves one' =>
-      [{ 'color' => 'dark_blue' }, "boxShadow: `6px 6px 8px ${ColorManager.resolveColor('dark_blue') ?? 'transparent'}`"],
+      [{ 'color' => 'dark_blue' }, "boxShadow: `6px 6px 8px ${ColorManager.cssColor('dark_blue') ?? 'transparent'}`"],
     'a key with its opacity' =>
       [{ 'color' => 'dark_blue', 'opacity' => 0.5 },
-       "boxShadow: `6px 6px 8px color-mix(in srgb, ${ColorManager.resolveColor('dark_blue') ?? 'transparent'} calc(0.5 * 100%), transparent)`"],
+       "boxShadow: `6px 6px 8px color-mix(in srgb, ${ColorManager.cssColor('dark_blue') ?? 'transparent'} calc(0.5 * 100%), transparent)`"],
     'a key beside a bound radius' =>
-      [{ 'color' => 'dark_blue', 'radius' => '@{r}' }, "boxShadow: `6px 6px ${data.r}px ${ColorManager.resolveColor('dark_blue') ?? 'transparent'}`"],
+      [{ 'color' => 'dark_blue', 'radius' => '@{r}' }, "boxShadow: `6px 6px ${data.r}px ${ColorManager.cssColor('dark_blue') ?? 'transparent'}`"],
     'a bound colour, which may hold a key' =>
-      [{ 'color' => '@{c}' }, "boxShadow: `6px 6px 8px ${ColorManager.resolveColor(data.c) ?? 'transparent'}`"],
+      [{ 'color' => '@{c}' }, "boxShadow: `6px 6px 8px ${ColorManager.cssColor(data.c) ?? 'transparent'}`"],
     'a bound opacity on a key' =>
       [{ 'color' => 'dark_blue', 'opacity' => '@{o}' }, "calc(${data.o} * 100%)"]
   }.freeze
@@ -94,7 +94,7 @@ RSpec.describe 'a shadow draws with its colour and opacity' do
   it 'writes one boxShadow on a CircleView whose colour is a key' do
     code = emit({ 'type' => 'CircleView', 'shadow' => { 'color' => 'dark_blue', 'radius' => 3 } })
     expect(code.scan('boxShadow').size).to eq(1)
-    expect(code).to include("ColorManager.resolveColor('dark_blue')")
+    expect(code).to include("ColorManager.cssColor('dark_blue')")
   end
 
   it "reads a CircleView's own x / y / blur as the offsets and radius" do
@@ -108,6 +108,6 @@ RSpec.describe 'a shadow draws with its colour and opacity' do
     source = "const data = {} as { [key: string]: any };\nconst refs: any = {};\nexport const view = (\n  <div>\n#{drawn.join("\n")}\n  </div>\n);\n"
     expect(source.gsub(/ ref=\{\w+\}/, '').gsub(/ on\w+=\{[^}]*\}\}?/, ''))
       .to compile_as_typescript.with_ambient('declare namespace React { type CSSProperties = Record<string, unknown>; }; ' \
-                                             'declare const ColorManager: { resolveColor(value: unknown): string | undefined };')
+                                             'declare const ColorManager: { cssColor(value: unknown): string | undefined ; resolveColor(value: unknown): string | undefined };')
   end
 end

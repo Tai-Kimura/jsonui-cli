@@ -268,8 +268,11 @@ module KjuiTools
             color_key = find_color_key(color, config, source_path)
 
             if color_key
-              # Return colorResource reference
-              "colorResource(R.color.#{color_key})"
+              # Through ColorManager first, so a palette colour follows the mode
+              # setMode chose and the OS mode compose.FollowSystem() hands over;
+              # colorResource alone followed values-night only and never a
+              # chosen mode (ticket rjui-color-mode-never-sets-data-theme).
+              "(com.kotlinjsonui.generated.ColorManager.compose.color(#{quote(color_key)}) ?: colorResource(R.color.#{color_key}))"
             elsif parseable_color_literal?(color)
               # A hex string or one of the names android.graphics.Color knows.
               # These have always worked and keep their exact emitted form.

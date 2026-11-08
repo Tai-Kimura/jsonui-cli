@@ -96,14 +96,14 @@ RSpec.describe 'rjui bound colours reach a custom property, never a colour name 
 
   it 'the seven that did ride a custom property read by a class' do
     {
-      ['SelectBox', 'borderColor'] => ["'--jui-border-color': ColorManager.resolveColor(data.x)", 'border-[color:var(--jui-border-color)]'],
-      ['TextField', 'borderColor'] => ["'--jui-border-color': ColorManager.resolveColor(data.x)", 'border-[color:var(--jui-border-color)]'],
-      ['TextView', 'borderColor'] => ["'--jui-border-color': ColorManager.resolveColor(data.x)", 'border-[color:var(--jui-border-color)]'],
-      ['Indicator', 'color'] => ["'--jui-indicator-color': ColorManager.resolveColor(data.x)", 'border-t-[color:var(--jui-indicator-color)]'],
-      ['Indicator', 'tintColor'] => ["'--jui-indicator-color': ColorManager.resolveColor(data.x)", 'border-t-[color:var(--jui-indicator-color)]'],
-      ['CircleView', 'borderColor'] => ["'--jui-border-color': ColorManager.resolveColor(data.x)", 'after:border-[color:var(--jui-border-color)]'],
-      ['CircleView', 'background'] => ["'--jui-bg': ColorManager.resolveColor(data.x)", 'bg-[var(--jui-bg)]'],
-      ['Blur', 'background'] => ["'--jui-bg': ColorManager.resolveColor(data.x)", 'bg-[var(--jui-bg)]']
+      ['SelectBox', 'borderColor'] => ["'--jui-border-color': ColorManager.cssColor(data.x)", 'border-[color:var(--jui-border-color)]'],
+      ['TextField', 'borderColor'] => ["'--jui-border-color': ColorManager.cssColor(data.x)", 'border-[color:var(--jui-border-color)]'],
+      ['TextView', 'borderColor'] => ["'--jui-border-color': ColorManager.cssColor(data.x)", 'border-[color:var(--jui-border-color)]'],
+      ['Indicator', 'color'] => ["'--jui-indicator-color': ColorManager.cssColor(data.x)", 'border-t-[color:var(--jui-indicator-color)]'],
+      ['Indicator', 'tintColor'] => ["'--jui-indicator-color': ColorManager.cssColor(data.x)", 'border-t-[color:var(--jui-indicator-color)]'],
+      ['CircleView', 'borderColor'] => ["'--jui-border-color': ColorManager.cssColor(data.x)", 'after:border-[color:var(--jui-border-color)]'],
+      ['CircleView', 'background'] => ["'--jui-bg': ColorManager.cssColor(data.x)", 'bg-[var(--jui-bg)]'],
+      ['Blur', 'background'] => ["'--jui-bg': ColorManager.cssColor(data.x)", 'bg-[var(--jui-bg)]']
     }.each do |(type, attribute), wants|
       code = jsx(BoundColourFamily.node(type, attribute))
       expect(code).to include(*wants), "#{type}.#{attribute}: #{code}"
@@ -148,7 +148,7 @@ RSpec.describe 'rjui bound colours reach a custom property, never a colour name 
           return el;
         };
         const React = { Fragment: 'div' };
-        const ColorManager = { resolveColor: (c) => c };
+        const ColorManager = { resolveColor: (c) => c, cssColor: (c) => c };
         const data = { x: '#ff0000', s: '', w: 2, on: true, go: () => {} };
         const tfRef = null, tvRef = null;
         for (const el of [#{elements.join(",\n")}]) { const box = document.createElement('div'); box.style.margin = '12px'; box.append(el); document.body.append(box); }
@@ -228,7 +228,7 @@ RSpec.describe 'rjui bound colours reach a custom property, never a colour name 
                 %w[CircleView background], %w[Blur background]].map { |t, a| jsx(BoundColourFamily.node(t, a), typescript: true) }
     ambient = TypeScriptCompiler::AMBIENT + <<~TS
       declare const data: Record<string, any>;
-      declare const ColorManager: { resolveColor(c: unknown): string };
+      declare const ColorManager: { cssColor(c: unknown): string ; resolveColor(c: unknown): string };
       declare namespace React { type CSSProperties = { [property: string]: string | number | undefined } }
     TS
     expect(TypeScriptCompiler.component(*elements)).to compile_as_typescript.with_ambient(ambient)

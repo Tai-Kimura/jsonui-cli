@@ -128,7 +128,7 @@ RSpec.describe 'bound value emitters' do
       expect(out).not_to include('@{')
       expect(out).to include('hover:bg-[var(--jui-tap-bg)]')
       expect(out).to include('active:bg-[var(--jui-tap-bg)]')
-      expect(out).to include("'--jui-tap-bg': ColorManager.resolveColor(data.c)")
+      expect(out).to include("'--jui-tap-bg': ColorManager.cssColor(data.c)")
     end
 
     it 'asserts React.CSSProperties so a custom property does not fail the consumer tsc' do
@@ -149,7 +149,7 @@ RSpec.describe 'bound value emitters' do
                     RjuiTools::React::Converters::SwitchConverter)
       expect(out).not_to include('bg-[@{')
       expect(out).to include('peer-checked:bg-[var(--jui-switch-on)]')
-      expect(out).to include('backgroundColor: ColorManager.resolveColor(data.t)')
+      expect(out).to include('backgroundColor: ColorManager.cssColor(data.t)')
     end
   end
 

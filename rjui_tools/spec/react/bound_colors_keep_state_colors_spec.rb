@@ -85,7 +85,7 @@ RSpec.describe 'rjui bound colours keep their state colours (in a browser)' do
           for (const c of kids.flat()) if (c != null && c !== false) el.append(c.nodeType ? c : String(c));
           return el;
         };
-        const ColorManager = { resolveColor: (c) => c };
+        const ColorManager = { resolveColor: (c) => c, cssColor: (c) => c };
         const data = { bg: '#{BoundColoursKeepStates::BASE}', fg: '#{BoundColoursKeepStates::FG}', off: false, go: () => {} };
         for (const el of [#{elements.join(",\n")}]) { const box = document.createElement('div'); box.style.margin = '12px'; box.append(el); document.body.append(box); }
       JSX
@@ -158,7 +158,7 @@ RSpec.describe 'rjui bound colours keep their state colours (in a browser)' do
     elements = BoundColoursKeepStates::CASES.map { |id, (conv, json, _)| jsx(id, conv, json, typescript: true) }
     ambient = TypeScriptCompiler::AMBIENT + <<~TS
       declare const data: Record<string, any>;
-      declare const ColorManager: { resolveColor(c: unknown): string };
+      declare const ColorManager: { cssColor(c: unknown): string ; resolveColor(c: unknown): string };
       declare namespace React { type CSSProperties = { [property: string]: string | number | undefined } }
     TS
     expect(TypeScriptCompiler.component(*elements)).to compile_as_typescript.with_ambient(ambient)

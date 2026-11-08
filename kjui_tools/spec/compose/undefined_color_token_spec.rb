@@ -106,6 +106,9 @@ RSpec.describe 'an undefined colour token on Compose' do
     kotlin = emitted(dir)
 
     expect(kotlin).to include('colorResource(R.color.deep_slate)')
+    # asked of ColorManager first, so it follows the colour mode
+    # (ticket rjui-color-mode-never-sets-data-theme)
+    expect(kotlin).to include('(com.kotlinjsonui.generated.ColorManager.compose.color("deep_slate") ?: colorResource(R.color.deep_slate))')
     expect(kotlin).to include('parseColor("red")')
     expect(kotlin).not_to include('parseColor("#')
     expect(log).not_to include("Color 'deep_slate'"), log
@@ -134,7 +137,7 @@ RSpec.describe 'an undefined colour token on Compose' do
       dir = project
       build(dir)
       kotlin = emitted(dir)
-      exprs = kotlin.scan(/color = (Color\.Unspecified|colorResource\([^)]*\)|Color\(android\.graphics\.Color\.parseColor\("[^"]*"\)\))/)
+      exprs = kotlin.scan(/color = (Color\.Unspecified|\(com\.kotlinjsonui\.generated\.ColorManager\.compose\.color\("[^"]*"\) \?: colorResource\([^)]*\)\)|Color\(android\.graphics\.Color\.parseColor\("[^"]*"\)\))/)
                     .flatten.uniq
       expect(exprs.size).to be >= 3, "expected the fixture's colour shapes, got #{exprs.inspect}"
 
@@ -159,6 +162,9 @@ RSpec.describe 'an undefined colour token on Compose' do
         #{keys.map { |k| "    const val #{k}: Int = 1" }.join("\n")}
         } }
         fun colorResource(id: Int): Color = Color(0L)
+        object com { object kotlinjsonui { object generated { object ColorManager {
+            object compose { fun color(key: String): Color? = null }
+        } } } }
 
         fun emitted() {
         #{body}
