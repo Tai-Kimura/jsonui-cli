@@ -118,6 +118,19 @@ RSpec.describe KjuiTools::Compose::ComposeBuilder do
 
         expect(content).to include('import com.kotlinjsonui.embed.DriveEmbedInitParams')
       end
+
+      # The OS appearance and the kept colour mode reach ColorManager before
+      # any colour of the screen is read, in either mode (ticket
+      # rjui-color-mode-never-sets-data-theme).
+      it 'calls ColorManager.compose.FollowSystem() before the dynamic-mode switch' do
+        builder.build_file(File.join(layouts_dir, 'test_view.json'))
+
+        content = File.read(File.join(temp_dir, 'src/main/kotlin/com/example/app/views/test_view/TestViewGeneratedView.kt'))
+        body_block = content[/\/\/ >>> GENERATED_CODE_START.*?\/\/ >>> GENERATED_CODE_END/m]
+        expect(body_block.scan('com.kotlinjsonui.generated.ColorManager.compose.FollowSystem()').size).to eq(1)
+        expect(body_block.index('ColorManager.compose.FollowSystem()'))
+          .to be < body_block.index('DynamicModeManager.isActive()')
+      end
     end
 
     # Regression: kjui-view-responsive-helper-data-closure-scope-leak +
