@@ -742,6 +742,10 @@ function lookUpdate(r, t, dt) {
 }
 /* The browser tests' hook (80-dbg.js, force) sets a robot's causes or its tiredness; the page never does. */
 const forced = (r, key, value) => (r.force && key in r.force ? r.force[key] : value);
+/* The same hook's states (80-dbg.js setVisState): robot id -> the state a test set, kept over the server's next slices
+   (each slice rebuilds robotState from the server's word, and a slice that came in after a test set a state took it
+   back: hist-wide waited 30 s for a whistle on a robot gone back to idle under load). Empty outside the browser tests. */
+const VIS_HELD = {};
 /* Background work and heavy work: the heavy looks (lookUpdate, sweat) hold in HEAVY_OK's states (typing, reading, a
    command); a robot working in the background is in its own state, 'background', where the headset, the notes and the
    loose typing win over the red and the blue face (2.3.5 integration, 10-20). The whistle wins over the headset

@@ -201,6 +201,7 @@ async def run_workwear(pw, out, failures):
 
         # the headset over the cap (background work: a subagent never gets it from the hooks, so the page's state is set)
         await page.evaluate("(id) => window.__dbg.setVisState(id, 'background')", sub_id)
+        await page.evaluate("() => window.__dbg.sliceAgain()")   # a slice coming in now leaves the state set
         await wait(page, "(id) => window.__dbg.bgLook().find((x) => x.id === id).headset", arg=sub_id, label="the subagent in the headset")
         fit = res["fit"] = await page.evaluate("(id) => window.__dbg.wearFit(id)", sub_id)
         check(failures, fit and fit["arcTop"] - fit["crownTop"] >= 0.03 and fit["cupInnerX"] - fit["crownHalfW"] >= 0.03 and not fit["overlapCrownCups"],

@@ -178,6 +178,9 @@ async def camera_holds_still(page, ra, failures, res):
     for name, vis, force in CAM_STATES:
         await page.evaluate("(id) => window.__dbg.force(id, null)", ra)
         await page.evaluate("([id, s]) => window.__dbg.setVisState(id, s)", [ra, vis])
+        # a slice that comes in now (under load one did, and A went back to idle: the 30 s whistle wait ran out in 2.5.11's
+        # full run) leaves the state set
+        await page.evaluate("() => window.__dbg.sliceAgain()")
         if force:
             await page.evaluate("([id, o]) => window.__dbg.force(id, o)", [ra, force])
         await until(page, f"(id) => {{ const x = window.__dbg.looks([id])[0], b = window.__dbg.bgLook().find((y) => y.id === id); return ({CAM_SHOWS[name]})(x, b); }}",
@@ -210,7 +213,7 @@ async def camera_holds_still(page, ra, failures, res):
         check(failures, inside, f"{name}: the robot as posed stays inside the fixed box (the desk and its margin): robot {r['env']} box {fbox}")
         check(failures, box and box["x0"] >= 0 and box["x1"] <= margin, f"{name}: the robot is inside the left margin: {box} margin {margin}")
     await page.evaluate("(id) => window.__dbg.force(id, null)", ra)
-    await page.evaluate("([id, s]) => window.__dbg.setVisState(id, s)", [ra, "idle"])
+    await page.evaluate("(id) => { window.__dbg.setVisState(id, 'idle'); window.__dbg.setVisState(id, null); }", ra)
 
 
 # A subagent is drawn at 0.8 (2.3.5): the box the camera fits shrinks with it. focusExtent's width for the focused subagent,
