@@ -2819,6 +2819,66 @@ class SpecValidator:
     def _is_scalar(value: Any) -> bool:
         return value is None or isinstance(value, (str, int, float, bool))
 
+    def _validate_branch_arg_value(
+        self, value: Any, path: str, result: SpecValidationResult,
+    ) -> None:
+        """`when arg.<name>`: a scalar, or a list of plain scalars (empty
+        included) for a parameter that takes a list.
+
+        Until 2.5.17 only a scalar. branch-tests generation already passed a
+        list through on every face (web `vm.m(["a"])`, iOS
+        `h.invoke(m, args: [["a"]])`, Android `h.invoke(m, listOf<Any?>("a"))`),
+        so a method whose input IS a list (`types: [String]?`) generated a
+        passing test from a spec this gate refused, and the spec's HTML was not
+        written.
+
+        Why `arg.*` and not `data.*`: `when data.*` stays scalar on purpose —
+        a list pre-state goes in the branch's `baseline`, whole, because
+        partial overrides built states the implementation cannot reach. An
+        argument is one input per branch, with no baseline to put it in.
+
+        Still refused, with the reason:
+        - a `@` reference inside the list: the generators resolve references
+          only directly under a key, and in a list it is emitted as the
+          literal string (the request-leaf rule);
+        - a list of lists, an object, a list of objects: no consumer writes
+          one, and the iOS harness is hand-written — it casts each argument
+          with `as?`, and a dictionary never becomes the typed struct.
+        """
+        if self._is_scalar(value):
+            return
+        if isinstance(value, list):
+            for index, item in enumerate(value):
+                if isinstance(item, str) and item.startswith("@"):
+                    result.errors.append(SpecValidationMessage(
+                        path=f"{path}[{index}]",
+                        message=(
+                            f"'{item}' cannot be a list element — references "
+                            "resolve only directly under a key, and inside a "
+                            "list this is emitted as the literal string "
+                            f"'{item}'. Use a plain scalar."
+                        ),
+                    ))
+                elif not self._is_scalar(item):
+                    result.errors.append(SpecValidationMessage(
+                        path=f"{path}[{index}]",
+                        message=(
+                            "when arg.* list elements must be scalar literals "
+                            f"(string/number/bool/null), got {type(item).__name__}"
+                        ),
+                    ))
+            return
+        result.errors.append(SpecValidationMessage(
+            path=path,
+            message=(
+                "when arg.* value must be a scalar literal "
+                "(string/number/bool/null) or a list of them, got "
+                f"{type(value).__name__} — an object argument cannot be "
+                "arranged: the iOS harness casts each argument to its type, "
+                "and a dictionary is not the typed value"
+            ),
+        ))
+
     def _check_branch_data_field(
         self, field_name: str, path: str, data_fields: set[str],
         result: SpecValidationResult, *, allow_path: bool = False,
@@ -3026,7 +3086,9 @@ class SpecValidator:
                     path=entry_path,
                     message=(
                         "when data.* value must be a scalar literal "
-                        f"(string/number/bool/null), got {type(value).__name__}"
+                        f"(string/number/bool/null), got {type(value).__name__} "
+                        "— a list or object pre-state goes in the branch's "
+                        "'baseline', which states the whole value"
                     ),
                 ))
             return
@@ -3042,14 +3104,7 @@ class SpecValidator:
                     path=entry_path,
                     message=f"Argument name must be camelCase: '{arg}'",
                 ))
-            if not self._is_scalar(value):
-                result.errors.append(SpecValidationMessage(
-                    path=entry_path,
-                    message=(
-                        "when arg.* value must be a scalar literal "
-                        f"(string/number/bool/null), got {type(value).__name__}"
-                    ),
-                ))
+            self._validate_branch_arg_value(value, entry_path, result)
             return
         if key.startswith("harness."):
             # A precondition outside the ViewModel that the consumer's
