@@ -813,7 +813,7 @@ function updateRobotStates(simT, t, perms) {
     if (p && p.status === 'pending') st = { state: 'waiting', act: tl('demo.robot.waiting.permission', { tool: p.tool, what: permSummary(p) }) };
     else if (p && p.status === 'deny') st = { state: 'reading', act: tl('demo.robot.denied.so.thinking.another.way') };
     else if (p) { const next = planAt(d.plan, p.end); st = { state: next.state, act: tl('demo.robot.act.allowed', { act: next.act, how: p.status === 'rule' ? tl('demo.robot.allowed.rule') : tl('demo.robot.allowed.view') }) }; }
-    robotState[d.id] = VIS_HELD[d.id] ? { ...st, state: VIS_HELD[d.id] } : st;   // a browser test's state (10-robot-core.js VIS_HELD)
+    robotState[d.id] = VIS_HELD[d.id] && VIS_HELD[d.id].state ? { ...st, state: VIS_HELD[d.id].state } : st;   // a browser test's state (10-robot-core.js VIS_HELD)
   }
 }
 

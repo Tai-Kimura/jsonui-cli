@@ -288,6 +288,8 @@ async def run_gitbox(pw, out, failures):
             res["brkWhy"] = await page.evaluate("(id) => { const b = window.__dbg.brk(); return { ends: b.ends, me: b.robots.find((x) => x.id === id) }; }", rid)
             raise
         await page.evaluate("(id) => window.__dbg.gitPoke(id, { id: 'poke-1', branch: 'main', label: '↑ push main' })", rid)
+        # a slice coming in now (under load one did, and took a poke back: the 2.5.14 full run's trip 0) leaves it waiting
+        await page.evaluate("() => window.__dbg.sliceAgain()")
         bt = res["breakThenTrip"] = await page.evaluate(SAMPLE, [rid, 4000, False])
         check(failures, not bt["both"] and bt["trip"] == 0 and bt["brk"] > 30, f"a trip that comes during a break waits: {bt}")
         await page.evaluate("() => { window.__dbg.brk({ p: { smoke: 0, vend: 0 }, endAll: true }); window.__dbg.play({ idleMs: 60000 }); }")
@@ -331,6 +333,7 @@ async def run_gitbox(pw, out, failures):
         await wait(page, "(id) => window.__dbg.robotState()[id].state === 'idle' && window.__dbg.shred().robots.find((y) => y.id === id).phase !== null",
                    arg=rid, timeout=20000, label="idle, on the errand to the shredder")
         await page.evaluate("(id) => window.__dbg.gitPoke(id, { id: 'poke-2', branch: 'main', label: '↑ push main' })", rid)
+        await page.evaluate("() => window.__dbg.sliceAgain()")   # as above: the poke outlasts a slice
         st2 = res["shredThenTrip"] = await page.evaluate(SAMPLE2, [rid, 30000, "tripAfterShred"])
         check(failures, not st2["both"] and st2["shred"] > 0 and st2["tripAfterShred"] > 0,
               f"a trip on the way to the shredder waits for the errand, then goes: {st2}")
