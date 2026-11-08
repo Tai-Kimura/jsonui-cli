@@ -191,7 +191,7 @@ module JsonUIShared
       def flatten_colors_for_lookup(raw)
         return {} unless raw.is_a?(Hash) && !raw.empty?
 
-        meta_keys = %w[fallback_mode systemModeMapping modes]
+        meta_keys = %w[fallback_mode systemModeMapping modes colorSchemes]
         # A `_` key (`_comment`) is a note, not a colour or a mode — the rule
         # ColorManagerCore.note_key? keeps. At the top of a themed file it was
         # the first content key, the file read as flat, and every palette name

@@ -40,6 +40,17 @@ class TestTheModes:
         f.write_text(json.dumps(COLORS))
         assert image_modes.read_modes(f) == ["light", "dark", "sepia"]
 
+    def test_settings_and_notes_are_no_mode(self, tmp_path):
+        # colorSchemes (the web's color-scheme for a mode) is a setting like
+        # systemModeMapping, and a `_` key is a note: first in the file, neither
+        # made the file read as flat (light only).
+        f = tmp_path / "colors.json"
+        f.write_text(json.dumps({"colorSchemes": {"sepia": "dark"}, "_comment": "a note",
+                                 "light": {"ink": "#000000"}, "sepia": {"ink": "#4A3420"}}))
+        assert image_modes.read_modes(f) == ["light", "sepia"]
+        f.write_text(json.dumps({"_comment": "a note", "light": {"ink": "#000000"}, "dark": {"ink": "#FFFFFF"}}))
+        assert image_modes.read_modes(f) == ["light", "dark"]
+
     def test_a_flat_file_or_none_is_light_only(self, tmp_path):
         f = tmp_path / "colors.json"
         f.write_text(json.dumps({"ink": "#000000"}))

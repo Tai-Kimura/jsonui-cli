@@ -25,7 +25,7 @@ module SjuiTools
       # build cache calls unchanged, so a predicate hung off it would answer
       # from build history — the defect 1.8.45 removed from validation.
       module ColorPalette
-        META_KEYS = %w[fallback_mode systemModeMapping modes].freeze
+        META_KEYS = %w[fallback_mode systemModeMapping modes colorSchemes].freeze
 
         class << self
           # nil means "could not be determined" — NOT "empty". Callers must

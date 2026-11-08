@@ -39,7 +39,11 @@ module JsonUIShared
   class ColorManagerCore
     # Top-level keys in colors.json that are NOT color modes. Everything
     # else at the top level is a mode name whose value is a palette.
-    RESERVED_META_KEYS = %w[fallback_mode systemModeMapping modes].freeze
+    # colorSchemes: the CSS color-scheme a mode draws the browser's own parts
+    # with (form controls, scrollbars) — {"sepia": "light"}. A setting like
+    # systemModeMapping: neither a colour nor a mode.
+    RESERVED_META_KEYS = %w[fallback_mode systemModeMapping modes colorSchemes].freeze
+    COLOR_SCHEMES = %w[light dark].freeze
 
     # A key starting with `_` (`_comment`) is a note for the reader of
     # colors.json — not a colour and not a mode, at the top level or inside a
@@ -101,6 +105,25 @@ module JsonUIShared
 
     def load_failure_message
       @load_failure
+    end
+
+    # The CSS color-scheme *mode* draws the browser's own parts with: what
+    # colors.json's colorSchemes says, else the OS appearance systemModeMapping
+    # maps to it (the mode OS dark shows is dark), else light.
+    def color_scheme(mode)
+      declared = (@color_schemes || {})[mode]
+      return declared if COLOR_SCHEMES.include?(declared)
+
+      from_os = (@system_mode_mapping || {}).find { |os, m| m == mode && COLOR_SCHEMES.include?(os) }&.first
+      from_os || 'light'
+    end
+
+    # Modes whose color-scheme is light only because nothing says otherwise.
+    def color_scheme_undeclared
+      @modes.reject do |mode|
+        COLOR_SCHEMES.include?((@color_schemes || {})[mode]) ||
+          (@system_mode_mapping || {}).any? { |os, m| m == mode && COLOR_SCHEMES.include?(os) }
+      end
     end
 
     private
@@ -207,6 +230,7 @@ module JsonUIShared
       meta_modes_hint = raw['modes'].is_a?(Array) ? raw['modes'] : nil
       @fallback_mode = raw['fallback_mode'] if raw['fallback_mode'].is_a?(String)
       @system_mode_mapping = raw['systemModeMapping'] if raw['systemModeMapping'].is_a?(Hash)
+      @color_schemes = raw['colorSchemes'] if raw['colorSchemes'].is_a?(Hash)
 
       @notes = raw.select { |k, _| self.class.note_key?(k) }
       palette_keys = (raw.keys - RESERVED_META_KEYS).reject { |k| self.class.note_key?(k) }
@@ -353,6 +377,7 @@ module JsonUIShared
       out['modes'] = @modes if @modes.size > 1 || @migrated
       out['fallback_mode'] = @fallback_mode if @fallback_mode
       out['systemModeMapping'] = @system_mode_mapping if @system_mode_mapping && !@system_mode_mapping.empty?
+      out['colorSchemes'] = @color_schemes if @color_schemes && !@color_schemes.empty?
 
       @modes.each do |mode|
         out[mode] = ((@palette_notes || {})[mode] || {}).merge(@palettes[mode] || {})
