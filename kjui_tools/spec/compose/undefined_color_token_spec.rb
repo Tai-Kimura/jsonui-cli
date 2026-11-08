@@ -106,6 +106,9 @@ RSpec.describe 'an undefined colour token on Compose' do
     kotlin = emitted(dir)
 
     expect(kotlin).to include('colorResource(R.color.deep_slate)')
+    # asked of ColorManager first, so it follows the colour mode
+    # (ticket rjui-color-mode-never-sets-data-theme)
+    expect(kotlin).to include('(com.kotlinjsonui.generated.ColorManager.compose.color("deep_slate") ?: colorResource(R.color.deep_slate))')
     expect(kotlin).to include('parseColor("red")')
     expect(kotlin).not_to include('parseColor("#')
     expect(log).not_to include("Color 'deep_slate'"), log
