@@ -464,6 +464,9 @@ module SjuiTools
         # Shared spellings with TextField's `input` mapping; UIKit's
         # UIKeyboardType names on the left, SwiftUI's on the right.
         def keyboard_type_to_swiftui(value)
+          # An alias (`numbersAndPunctuation`, `search`, `text`) by its canonical
+          # spelling: a Style reaches here without `jui build`'s normalizer.
+          value = JsonUIShared::EnumSpelling.canonical(value, 'TextView', 'keyboardType')
           case JsonUIShared::EnumSpelling.lowered(value, 'TextView', 'keyboardType').to_s.gsub(/[^a-z]/, '')
           when 'default' then '.default'
           when 'number', 'numberpad', 'decimal', 'decimalpad' then '.decimalPad'

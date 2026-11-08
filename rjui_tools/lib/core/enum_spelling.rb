@@ -96,6 +96,14 @@ module JsonUIShared
         aliases = entry['valueAliases']
         return aliases.is_a?(Hash) && aliases.key?(value) ? aliases[value].to_s : value
       end
+      # Neither the section nor common declares it (a View attribute read on
+      # a Button, `gradientDirection`): the declaration that does, as
+      # `declared` falls back to every section.
+      definitions.each_value do |sec|
+        entry = entry_at(sec, path)
+        aliases = entry.is_a?(Hash) ? entry['valueAliases'] : nil
+        return aliases[value].to_s if aliases.is_a?(Hash) && aliases.key?(value)
+      end
       value
     end
 

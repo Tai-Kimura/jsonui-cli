@@ -163,7 +163,11 @@ module KjuiTools
           if is_date_picker
             # Date picker mode (date, time, dateAndTime)
             if json_data['datePickerMode']
-              code += "\n" + indent("datePickerMode = #{JsonUIShared::StringLiterals.kotlin(json_data['datePickerMode'])},", depth + 1)
+              # By its canonical spelling: DateSelectBox reads "dateAndTime", and
+              # the alias `datetime` (a Style reaches here without `jui build`'s
+              # normalizer) drew a date-only picker.
+              mode = JsonUIShared::EnumSpelling.canonical(json_data['datePickerMode'], 'SelectBox', 'datePickerMode')
+              code += "\n" + indent("datePickerMode = #{JsonUIShared::StringLiterals.kotlin(mode)},", depth + 1)
             end
             
             # Date picker style

@@ -22,7 +22,12 @@ module SjuiTools
         # one. See `gradient_wins_over_background?`.
         def gradient_expression
           colors = @component['gradient'].map { |color| get_swiftui_color(color) }
-          direction = @component['gradientDirection'] || 'Vertical'
+          # An alias (LeftToRight, TopToBottom, Diagonal) by its canonical
+          # spelling: a Style reaches here without `jui build`'s normalizer,
+          # and LeftToRight / Diagonal fell into the vertical default.
+          direction = JsonUIShared::EnumSpelling.canonical(
+            @component['gradientDirection'] || 'Vertical', @component['type'] || 'View', 'gradientDirection'
+          )
 
           # RightToLeft / BottomToTop are REVERSED directions, not aliases —
           # the declared enum keeps them distinct (valueAliases folds only

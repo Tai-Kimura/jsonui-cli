@@ -642,4 +642,18 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent, 'hintAttribute
       expect(result).not_to include('keyboardType =')
     end
   end
+
+  # A keyboardType alias draws as its canonical spelling (a Style reaches the
+  # converter without `jui build`'s normalizer). numberPad, decimalPad,
+  # phonePad, numeric, numbersAndPunctuation, emailAddress and webURL drew no
+  # keyboard until 2.5.13, and `text` drew KeyboardType.Text where `default`
+  # draws none.
+  describe 'keyboardType aliases' do
+    JSON.parse(File.read(File.expand_path('../../../../shared/core/attribute_definitions.json', __dir__)))['TextView']['keyboardType']['valueAliases'].each do |alias_name, canonical|
+      it "draws #{alias_name} as #{canonical}" do
+        draw = ->(v) { described_class.generate({ 'type' => 'TextView', 'id' => 't', 'keyboardType' => v }, 0, Set.new) }
+        expect(draw.call(alias_name)).to eq(draw.call(canonical))
+      end
+    end
+  end
 end
