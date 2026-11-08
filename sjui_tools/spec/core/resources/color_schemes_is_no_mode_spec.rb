@@ -4,6 +4,7 @@ require 'spec_helper'
 require 'json'
 require 'tmpdir'
 require 'fileutils'
+require 'open3'
 require_relative '../../../lib/core/resources/color_manager'
 require_relative '../../../lib/swiftui/views/color_palette'
 
@@ -29,6 +30,25 @@ RSpec.describe 'colorSchemes is a setting, not a mode (iOS)' do
       swift = File.read(File.join(dir, 'RM', 'ColorManager.swift'))
       expect(swift.scan(/^        case (\w+)/).flatten).to eq(%w[light sepia])
       expect(swift).not_to include('colorSchemes')
+      # and the file type-checks: it imports UIKit, so against the iOS simulator
+      # SDK (as colors_json_notes_spec checks it) rather than through
+      # `compile_as_swift`, which type-checks for the macOS host.
+      sdk, = Open3.capture2e('xcrun', '--sdk', 'iphonesimulator', '--show-sdk-path')
+      skip 'no iOS simulator SDK here; the macOS leg runs this' if sdk.strip.empty? || !File.directory?(sdk.strip)
+      stub = File.join(dir, 'Stub.swift')
+      File.write(stub, <<~SWIFT)
+        import UIKit
+        extension UIColor { static func colorWithHexString(_ hex: String) -> UIColor { .black } }
+        public class SwiftJsonUIConfiguration: @unchecked Sendable {
+            public static let shared = SwiftJsonUIConfiguration()
+            public func setThemeMode(_ mode: String) {}
+        }
+      SWIFT
+      file = File.join(dir, 'Checked.swift')
+      File.write(file, swift.sub(/^import SwiftJsonUI\n/, ''))
+      out, status = Open3.capture2e('xcrun', '--sdk', 'iphonesimulator', 'swiftc', '-typecheck',
+                                    '-target', 'arm64-apple-ios16.0-simulator', stub, file)
+      expect(status).to be_success, out
     end
   end
 

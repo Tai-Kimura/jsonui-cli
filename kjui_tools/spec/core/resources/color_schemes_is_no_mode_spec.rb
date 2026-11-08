@@ -4,6 +4,7 @@ require 'json'
 require 'tmpdir'
 require 'fileutils'
 require 'core/resources/color_manager'
+require_relative '../../support/kotlin_compiler'
 
 # colors.json's colorSchemes ({"sepia": "dark"}: the color-scheme the web
 # draws the browser's own parts with) is a setting like systemModeMapping:
@@ -30,6 +31,31 @@ RSpec.describe 'colorSchemes is a setting, not a mode (Android)' do
     kt = File.read(Dir.glob(File.join(dir, '**', 'ColorManager.kt')).first)
     expect(kt.scan(/^        ([A-Z_]+)\("/).flatten).to eq(%w[LIGHT SEPIA])
     expect(kt).not_to include('colorSchemes')
+    # and the file is Kotlin kotlinc takes (the names Android and Compose give, stood in for)
+    stubs = <<~KOTLIN
+      object Color { fun parseColor(value: String): Int = 0 }
+      object Log { fun w(tag: String, message: String): Int = 0 }
+      class MutableState<T>(var value: T)
+      fun <T> mutableStateOf(value: T): MutableState<T> = MutableState(value)
+      class ComposeColor(val argb: Int)
+      annotation class Composable
+      interface SharedPreferences {
+          fun getString(key: String, defValue: String?): String?
+          fun edit(): Editor
+          interface Editor { fun putString(key: String, value: String?): Editor; fun apply() }
+      }
+      abstract class Context {
+          abstract val applicationContext: Context
+          abstract fun getSharedPreferences(name: String, mode: Int): SharedPreferences
+          companion object { const val MODE_PRIVATE = 0 }
+      }
+      object LocalContext { val current: Context get() = throw IllegalStateException() }
+      fun isSystemInDarkTheme(): Boolean = false
+      fun <T> remember(key1: Any?, key2: Any?, calculation: () -> T): T = calculation()
+    KOTLIN
+    configuration = "package com.kotlinjsonui.core\nobject Configuration { fun setThemeMode(mode: String) {} }\n"
+    body = kt.lines.reject { |l| l.start_with?('package ', 'import ') }.join
+    expect("#{stubs}\n#{body}").to compile_as_kotlin.alongside('Configuration.kt' => configuration)
     manager.send(:save_colors_json)
     expect(JSON.parse(File.read(File.join(resources_dir, 'colors.json')))['colorSchemes']).to eq('sepia' => 'dark')
   end
