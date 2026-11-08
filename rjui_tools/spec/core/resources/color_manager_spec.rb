@@ -146,7 +146,7 @@ RSpec.describe RjuiTools::Core::Resources::ColorManager do
 
       expect(File.exist?(theme_file)).to be true
       css = File.read(theme_file)
-      expect(css).to include('@theme {')
+      expect(css).to include('@theme static {')
       expect(css).to include('--color-ink: #1C1C1A;')
       expect(css).to include('--color-surface: #FFFFFF;')
       expect(css).to include('--color-primary: #0E5A46;')
@@ -194,7 +194,7 @@ RSpec.describe RjuiTools::Core::Resources::ColorManager do
       run_process
 
       css = File.read(theme_file)
-      expect(css).to include('@theme {')
+      expect(css).to include('@theme static {')
       expect(css).to include('--color-surface: #FFFFFF;')
       expect(css).to include(':root[data-theme="dark"] {')
       expect(css).to include('--color-surface: #101010;')

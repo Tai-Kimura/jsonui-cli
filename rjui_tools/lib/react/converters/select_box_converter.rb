@@ -311,7 +311,9 @@ module RjuiTools
         # The fallbacks are the defaults the layer would have had anyway: the
         # glyph's default tint, and no paint for the box.
         def caret_color_parts(value, uri:, fallback:)
-          expr = color_style_expr(value)
+          # The glyph is an SVG data URI, which sees no custom property: its
+          # colour is the hex (it follows the mode at the next render only).
+          expr = color_style_expr(value, css_var: !uri)
           if expr.start_with?("'")
             literal = expr[1..-2]
             [[:lit, uri ? svg_uri_encode(literal) : literal]]

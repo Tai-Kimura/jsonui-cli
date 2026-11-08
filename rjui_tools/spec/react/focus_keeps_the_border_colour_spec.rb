@@ -68,7 +68,7 @@ RSpec.describe 'rjui: a focused input keeps its border colour (in a browser)' do
           for (const c of kids.flat()) if (c != null && c !== false) el.append(c.nodeType ? c : String(c));
           return el;
         };
-        const ColorManager = { resolveColor: (c) => c };
+        const ColorManager = { resolveColor: (c) => c, cssColor: (c) => c };
         const data = { c: '#{FocusKeepsTheBorder::RED}', v: 'a', t: '' };
         const boundFieldRef = null;
         for (const el of [#{(elements + [probe]).join(",\n")}]) { const box = document.createElement('div'); box.style.margin = '12px'; box.append(el); document.body.append(box); }
@@ -154,7 +154,7 @@ RSpec.describe 'rjui: a focused input keeps its border colour (in a browser)' do
       }
       declare namespace React { type CSSProperties = { [property: string]: string | number | undefined } }
       declare const data: { c: string; v: string; onVChange?: (value: string) => void };
-      declare const ColorManager: { resolveColor(c: unknown): string };
+      declare const ColorManager: { cssColor(c: unknown): string ; resolveColor(c: unknown): string };
     TS
     expect(TypeScriptCompiler.component(*elements)).to compile_as_typescript.with_ambient(ambient)
   end

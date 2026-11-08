@@ -36,7 +36,7 @@ RSpec.describe 'a bound colour is no class name' do
       out = segment(attr => '@{c}')
       expect(out).not_to include('-@{c}')
       expect(out).to include(klass)
-      expect(out).to include("'#{property}': ColorManager.resolveColor(data.c)")
+      expect(out).to include("'#{property}': ColorManager.cssColor(data.c)")
     end
   end
 
@@ -52,7 +52,7 @@ RSpec.describe 'a bound colour is no class name' do
       out = tabs(attr => '@{c}')
       expect(out).not_to match(/'[^']*text-'\s*\+/)
       expect(out).not_to include('-@{c}')
-      expect(out).to include('ColorManager.resolveColor(data.c)')
+      expect(out).to include('ColorManager.cssColor(data.c)')
       expect(out).to match(/style=\{\{ color: .* === 0 \? /)
     end
   end
@@ -60,7 +60,7 @@ RSpec.describe 'a bound colour is no class name' do
   it 'TabView: with one side bound, the written side keeps its class' do
     out = tabs('tintColor' => '@{c}', 'unselectedColor' => '#00FF00')
     expect(out).to include('text-[#00FF00]')
-    expect(out).to include('color: (data.selectedTabIndex ?? seeded) === 0 ? ColorManager.resolveColor(data.c) : undefined')
+    expect(out).to include('color: (data.selectedTabIndex ?? seeded) === 0 ? ColorManager.cssColor(data.c) : undefined')
   end
 
   it 'TabView: written colours are the classes they were' do

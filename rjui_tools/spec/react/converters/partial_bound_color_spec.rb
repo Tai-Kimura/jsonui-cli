@@ -48,7 +48,7 @@ RSpec.describe 'a bound colour in partialAttributes' do
     describe type do
       it 'resolves a bound fontColor at runtime instead of naming a class' do
         out = emit(klass, { 'range' => '@{r}', 'fontColor' => '@{c}' }, type)
-        expect(out).to include('color: ColorManager.resolveColor(data.c)')
+        expect(out).to include('color: ColorManager.cssColor(data.c)')
         expect(out).not_to include('text-@{')
       end
 
@@ -90,7 +90,7 @@ RSpec.describe 'a bound colour in partialAttributes' do
         out = emit(klass, { 'range' => '@{r}', 'fontColor' => '@{c}',
                             'fontSize' => 14 }, type)
         expect(out).to include("fontSize: '0.875rem'")
-        expect(out).to include('color: ColorManager.resolveColor(data.c)')
+        expect(out).to include('color: ColorManager.cssColor(data.c)')
       end
     end
   end
@@ -104,7 +104,7 @@ RSpec.describe 'a bound colour in partialAttributes' do
         'partialAttributes' => [{ 'range' => '@{r}', 'fontColor' => '@{c}' }] },
       config
     ).convert
-    expect(out.scan('ColorManager.resolveColor(data.c)').length).to eq(2)
+    expect(out.scan('ColorManager.cssColor(data.c)').length).to eq(2)
   end
   # The emitted TSX reaches a compiler, not just a string match. A `style`
   # key that the runtime's PartialSpec does not accept, or a resolveColor
@@ -124,7 +124,7 @@ RSpec.describe 'a bound colour in partialAttributes' do
       onClick?: () => void;
     };
     declare function partialText(text: string, partials: PartialSpec[]): JSX.Element;
-    declare const ColorManager: { resolveColor(name: string): string };
+    declare const ColorManager: { cssColor(name: string): string ; resolveColor(name: string): string };
     // NON-OPTIONAL on purpose: a `data` entry carrying `defaultValue` is
     // emitted as `bodyColor: string`, not `string | undefined` (checked
     // against a generated SampleData.ts). The first draft of this ambient

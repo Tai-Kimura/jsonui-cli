@@ -505,7 +505,8 @@ module RjuiTools
         # strings stage), and everything below the top level (components,
         # data, hooks, view model bases have their own prunes). Skipped when
         # generated_directory is also one of those output directories.
-        HELPER_OWNED_ELSEWHERE = %w[ColorManager StringManager theme].freeze
+        # colorModeScript is the colour stage's too (written with ColorManager).
+        HELPER_OWNED_ELSEWHERE = %w[ColorManager colorModeScript StringManager theme].freeze
         HELPER_GENERATOR_LINE = /Generator:\s+rjui build\s*$/.freeze
 
         def prune_stale_helpers

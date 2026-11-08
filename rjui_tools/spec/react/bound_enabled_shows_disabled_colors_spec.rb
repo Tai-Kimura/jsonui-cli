@@ -81,7 +81,7 @@ RSpec.describe 'rjui disabled colours follow a bound enabled (in a browser)' do
           for (const c of kids.flat()) if (c != null && c !== false) el.append(c.nodeType ? c : String(c));
           return el;
         };
-        const ColorManager = { resolveColor: (c) => c };
+        const ColorManager = { resolveColor: (c) => c, cssColor: (c) => c };
         for (const el of [#{renders.join(",\n")}]) { const box = document.createElement('div'); box.style.margin = '8px'; box.append(el); document.body.append(box); }
       JSX
       log, st = Open3.capture2e(File.join(node_modules, '.bin/esbuild'), File.join(dir, 'app.jsx'), '--bundle', '--jsx-factory=h', '--outfile=' + File.join(dir, 'app.js'))
@@ -127,7 +127,7 @@ RSpec.describe 'rjui disabled colours follow a bound enabled (in a browser)' do
   it 'gives the state to aria-disabled, the colour to an aria-disabled: class (no inline colour for it)' do
     out = jsx('l', BoundEnabledDisabledColours::CONV::LabelConverter, { 'type' => 'Label', 'text' => 'x', 'disabledFontColor' => '#555555', 'enabled' => false })
     expect(out).to include('aria-disabled="true"', 'aria-disabled:text-[#555555]')
-    expect(out).not_to include("color: ColorManager.resolveColor('#555555')")
+    expect(out).not_to include("color: ColorManager.cssColor('#555555')")
     plain = jsx('p', BoundEnabledDisabledColours::CONV::LabelConverter, { 'type' => 'Label', 'text' => 'x', 'disabledFontColor' => '#555555' })
     expect(plain).not_to include('aria-disabled')
   end
@@ -136,7 +136,7 @@ RSpec.describe 'rjui disabled colours follow a bound enabled (in a browser)' do
     elements = BoundEnabledDisabledColours::CASES.map { |id, (conv, json, _)| jsx(id, conv, json, typescript: true) }
     ambient = TypeScriptCompiler::AMBIENT + <<~TS
       declare const data: Record<string, any>;
-      declare const ColorManager: { resolveColor(c: unknown): string };
+      declare const ColorManager: { cssColor(c: unknown): string ; resolveColor(c: unknown): string };
       declare namespace React { type CSSProperties = { [property: string]: string | number | undefined } }
     TS
     expect(TypeScriptCompiler.component(*elements)).to compile_as_typescript.with_ambient(ambient)
