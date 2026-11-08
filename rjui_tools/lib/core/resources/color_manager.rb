@@ -22,6 +22,27 @@ module RjuiTools
         # localStorage key for an explicit colour mode ('system' = follow the OS),
         # shared by ColorManager and colorModeScript.
         COLOR_MODE_STORAGE_KEY = 'jsonui-color-mode'
+        # id of the <style> that holds a chosen mode's variables.
+        COLOR_MODE_STYLE_ID = 'jsonui-color-mode'
+
+        # One mode's mode-complete variables as a rule. `:root:root:root` so it
+        # outweighs theme.css's `:root:not([data-theme])` (the OS's dark) and
+        # `:root[data-theme=…]`: a chosen mode wins over both.
+        def mode_css(mode)
+          palette = @palettes[mode] || {}
+          decls = mode_complete_keys.sort.map do |key|
+            css = css_color_value(palette[key])
+            "--color-#{key}:#{css}" if css
+          end.compact
+          decls.empty? ? '' : ":root:root:root{#{decls.join(';')}}"
+        end
+
+        # The mode theme.css draws for the OS's dark, when it is not the base.
+        def css_dark_mode
+          mode = (@system_mode_mapping || {})['dark']
+          base = @fallback_mode || DEFAULT_MODE_NAME
+          mode && mode != base && @modes.include?(mode) ? mode : nil
+        end
 
         def initialize(config, source_path, resources_dir)
           @config = config
@@ -105,9 +126,10 @@ module RjuiTools
         # Kept out of ColorManager (a "use client" module) so a server layout
         # can render it: <script dangerouslySetInnerHTML={{ __html: colorModeScript }} />.
         def generate_color_mode_script(generated_dir, ext)
-          modes = @modes.map { |m| "'#{m}'" }.join(',')
-          body = "(function(){try{var m=window.localStorage.getItem('#{COLOR_MODE_STORAGE_KEY}');" \
-                 "if([#{modes}].indexOf(m)>=0){document.documentElement.setAttribute('data-theme',m);}}catch(e){}})();"
+          css = @modes.to_h { |m| [m, mode_css(m)] }.to_json
+          body = "(function(){try{var c=#{css};var m=window.localStorage.getItem('#{COLOR_MODE_STORAGE_KEY}');" \
+                 "if(c[m]){var s=document.createElement('style');s.id='#{COLOR_MODE_STYLE_ID}';s.textContent=c[m];" \
+                 "document.head.appendChild(s);}}catch(e){}})();"
           lines = []
           lines << Core::GeneratedMarker.comment_header(source: 'colorModeScript (colors from colors.json)', generator: 'rjui build')
           lines << ''
@@ -230,6 +252,15 @@ module RjuiTools
           # Where an explicit choice is kept (colorModeScript reads the same key
           # before the first paint); 'system' is following the OS.
           lines << "const STORAGE_KEY = '#{COLOR_MODE_STORAGE_KEY}';"
+          lines << "const STYLE_ID = '#{COLOR_MODE_STYLE_ID}';"
+          # Each mode's variables as CSS, put in <head> while that mode is chosen
+          # against what theme.css draws by itself; and the mode theme.css draws
+          # for the OS's dark (prefers-color-scheme), or null.
+          lines << "const MODE_CSS#{typescript ? ': Readonly<Record<string, string | undefined>>' : ''} = Object.freeze({"
+          @modes.each { |mode| lines << "  #{js_string_or_ident(mode)}: #{mode_css(mode).to_json}," }
+          lines << '});'
+          dark_css_mode = css_dark_mode
+          lines << "const CSS_DARK_MODE#{typescript ? ': string | null' : ''} = #{dark_css_mode ? "'#{dark_css_mode}'" : 'null'};"
           lines << ''
 
           # --- Class body ---
@@ -252,15 +283,16 @@ module RjuiTools
           end
           lines << ''
           # Bootstrap system-mode tracking if in browser.
-          # A kept explicit choice wins; otherwise the OS decides. Either way the
-          # mode is written to <html data-theme>, which theme.css reads — until
-          # 2.5.12 nothing wrote it, so a class colour never left the base mode.
+          # A kept explicit choice wins; otherwise the OS decides. Until 2.5.12
+          # nothing put the mode on the page, so a class colour never left the
+          # base mode (_writeTheme).
           lines << (typescript ? '  init(): void {' : '  init() {')
           lines << "    if (typeof window === 'undefined') return;"
           lines << '    const stored = this._readStored();'
           lines << "    if (typeof window.matchMedia === 'function') {"
           lines << "      this._mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');"
-          lines << '      this._mediaListener = () => { if (this._followSystemMode) this._applySystemMode(); };'
+          # An OS change also moves what theme.css draws, under an explicit choice too.
+          lines << '      this._mediaListener = () => { if (this._followSystemMode) this._applySystemMode(); this._writeTheme(); };'
           lines << "      this._mediaQuery.addEventListener('change', this._mediaListener);"
           lines << '    }'
           lines << "    if (stored && AVAILABLE_MODES.includes(stored#{typescript ? ' as ColorMode' : ''})) {"
@@ -269,7 +301,6 @@ module RjuiTools
           lines << '    } else {'
           lines << '      this._applySystemMode();'
           lines << '    }'
-          lines << '    this._writeTheme();'
           lines << '  }'
           lines << ''
           lines << "  get currentMode()#{typescript ? ': ColorMode' : ''} { return this._currentMode; }"
@@ -300,9 +331,21 @@ module RjuiTools
           lines << '    this._notify();'
           lines << '  }'
           lines << ''
+          # The mode on the page. theme.css already draws the base mode, and the OS's
+          # dark through prefers-color-scheme; where the mode is neither (an
+          # explicit choice against the OS), a <style> in <head> holds that mode's
+          # variables. Not an attribute on <html>: React renders <html>, and an
+          # attribute it did not render made every page that imports this module
+          # report a hydration mismatch (measured on a Next.js site); a <style>
+          # added to <head> by a script is outside what React compares.
           lines << "  _writeTheme()#{typescript ? ': void' : ''} {"
-          lines << "    if (typeof document === 'undefined' || !document.documentElement) return;"
-          lines << "    document.documentElement.setAttribute('data-theme', this._currentMode);"
+          lines << "    if (typeof document === 'undefined' || !document.head) return;"
+          lines << "    const osDark = !!(this._mediaQuery && this._mediaQuery.matches);"
+          lines << "    const cssMode = osDark && CSS_DARK_MODE ? CSS_DARK_MODE : FALLBACK_MODE;"
+          lines << "    let el = document.getElementById(STYLE_ID);"
+          lines << '    if (this._currentMode === cssMode || !MODE_CSS[this._currentMode]) { if (el) el.remove(); return; }'
+          lines << "    if (!el) { el = document.createElement('style'); el.id = STYLE_ID; document.head.appendChild(el); }"
+          lines << "    el.textContent = MODE_CSS[this._currentMode]#{typescript ? ' as string' : ''};"
           lines << '  }'
           lines << ''
           lines << "  _readStored()#{typescript ? ': string | null' : ''} {"

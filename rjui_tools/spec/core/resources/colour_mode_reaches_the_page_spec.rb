@@ -13,7 +13,10 @@ require_relative '../../support/typescript_compiler'
 # ColorManager.setMode changed its own mode only, so every class colour stayed
 # light whatever the OS or the user chose, while a bound colour took the mode
 # at its render and was not drawn again (getComputedStyle in Chromium, ticket
-# rjui-color-mode-never-sets-data-theme). Measured on the generated module run
+# rjui-color-mode-never-sets-data-theme). Now theme.css follows the OS itself,
+# and a mode chosen against it is a <style> in <head> holding that mode's
+# variables — not an attribute on <html>, which React renders and which made a
+# Next.js page report a hydration mismatch. Measured on the generated module run
 # in node, against a stand-in window, document, localStorage and matchMedia.
 RSpec.describe 'the colour mode reaches the page (web)' do
   let(:temp_dir) { Dir.mktmpdir('colour_mode') }
@@ -40,15 +43,23 @@ RSpec.describe 'the colour mode reaches the page (web)' do
     module_path = File.join(temp_dir, 'cm.mjs')
     FileUtils.cp(File.join(generated, 'ColorManager.js'), module_path)
     script = <<~JS
-      const store = {}; let dark = false; const listeners = []; const attrs = {};
+      const store = {}; let dark = false; const listeners = []; const attrs = {}; const head = [];
       globalThis.window = {
         localStorage: { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } },
         matchMedia: () => ({ get matches() { return dark; }, addEventListener: (_, cb) => listeners.push(cb) }),
       };
-      globalThis.document = { documentElement: { setAttribute: (k, v) => { attrs[k] = v; }, getAttribute: (k) => attrs[k] } };
+      globalThis.document = {
+        documentElement: { setAttribute: (k, v) => { attrs[k] = v; }, getAttribute: (k) => attrs[k] },
+        head: { appendChild: (el) => { head.push(el); } },
+        createElement: (tag) => ({ tag, id: '', textContent: '', remove() { head.splice(head.indexOf(this), 1); } }),
+        getElementById: (id) => head.find((el) => el.id === id) || null,
+      };
       const os = (d) => { dark = d; listeners.forEach((cb) => cb()); };
       const out = [];
-      const snap = (cm, label) => out.push({ label, mode: cm.currentMode, theme: attrs['data-theme'] ?? null, kept: store['jsonui-color-mode'] ?? null });
+      // what draws: the <style> a chosen mode put in <head>, else what theme.css draws for the OS
+      const drawn = () => { const el = head.find((e) => e.id === 'jsonui-color-mode');
+        return el ? (el.textContent.includes('#202020') ? 'dark' : 'light') : (dark ? 'dark' : 'light'); };
+      const snap = (cm, label) => out.push({ label, mode: cm.currentMode, theme: drawn(), html: attrs['data-theme'] ?? null, kept: store['jsonui-color-mode'] ?? null });
       const fresh = async (n) => (await import(#{module_path.to_json} + '?' + n)).ColorManager;
       #{steps}
       console.log(JSON.stringify(out));
@@ -61,14 +72,14 @@ RSpec.describe 'the colour mode reaches the page (web)' do
     JSON.parse(stdout.lines.last)
   end
 
-  it 'writes the mode to <html data-theme> at load, and follows the OS' do
+  it 'draws the OS mode at load and follows the OS, writing nothing on <html>' do
     build
     out = run_in_node(<<~JS)
       let cm = await fresh(1); snap(cm, 'load, light OS');
       os(true); snap(cm, 'the OS turns dark');
       os(false); snap(cm, 'and light again');
     JS
-    expect(out.map { |o| [o['mode'], o['theme']] }).to eq([%w[light light], %w[dark dark], %w[light light]])
+    expect(out.map { |o| [o['mode'], o['theme'], o['html']] }).to eq([['light', 'light', nil], ['dark', 'dark', nil], ['light', 'light', nil]])
   end
 
   it 'takes an explicit setMode over the OS, keeps it, and goes back to the OS on followSystemMode' do
@@ -77,11 +88,12 @@ RSpec.describe 'the colour mode reaches the page (web)' do
       let cm = await fresh(2);
       cm.setMode('dark'); snap(cm, 'chose dark');
       os(true); os(false); snap(cm, 'the OS moves');
+      cm.setMode('light'); os(true); snap(cm, 'chose light, the OS turns dark');
       cm.followSystemMode = true; snap(cm, 'back to the OS');
-      os(true); snap(cm, 'the OS turns dark');
+      os(false); snap(cm, 'the OS turns light');
     JS
     expect(out.map { |o| [o['mode'], o['theme'], o['kept']] }).to eq(
-      [%w[dark dark dark], %w[dark dark dark], %w[light light system], %w[dark dark system]]
+      [%w[dark dark dark], %w[dark dark dark], %w[light light light], %w[dark dark system], %w[light light system]]
     )
   end
 
@@ -134,16 +146,17 @@ RSpec.describe 'the colour mode reaches the page (web)' do
     expect(css).to match(/@media \(prefers-color-scheme: dark\) \{\n  :root:not\(\[data-theme\]\) \{\n    --color-ink: #EEEEEE;\n    --color-surface: #202020;\n  \}\n\}/)
   end
 
-  it 'colorModeScript puts the kept choice on <html> before the first paint' do
+  it 'colorModeScript puts the kept choice in <head> before the first paint, and nothing on <html>' do
     build
     src = File.read(File.join(generated, 'colorModeScript.js'))
     body = JSON.parse(src[/colorModeScript = (".*");/, 1])
     out = run_in_node(<<~JS)
       store['jsonui-color-mode'] = 'dark';
       #{body}
-      out.push({ theme: attrs['data-theme'] });
+      out.push({ theme: drawn(), html: attrs['data-theme'] ?? null, css: head[0] && head[0].textContent });
     JS
-    expect(out.first['theme']).to eq('dark')
+    expect(out.first.values_at('theme', 'html')).to eq(['dark', nil])
+    expect(out.first['css']).to eq(':root:root:root{--color-ink:#EEEEEE;--color-surface:#202020}')
   end
 
   it 'the TypeScript faces compile', :typescript_compile do
