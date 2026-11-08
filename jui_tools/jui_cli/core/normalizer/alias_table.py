@@ -348,6 +348,34 @@ class AliasTable:
                 out[attr] = table
         return out
 
+    def value_aliases_any_section(self) -> dict[str, dict[str, str]]:
+        """``{attribute: {alias value: canonical value}}`` across every section.
+
+        For a node whose type is not known -- a Style, which carries no
+        ``type`` as a rule and is merged into whichever component names it.
+        An alias value names one canonical spelling whatever section declares
+        it (measured over the SSoT, 2026-11-08: no attribute's alias maps to
+        two canonicals), so it can be rewritten without the type. A pair two
+        sections disagree on is left out: rewriting it would pick a side.
+        """
+        if getattr(self, "_any_value_aliases", None) is not None:
+            return self._any_value_aliases
+        merged: dict[str, dict[str, str]] = {}
+        conflicted: set[tuple[str, str]] = set()
+        for key in ["common", *[k for k in self._definitions if k != "common"]]:
+            if not isinstance(self._definitions.get(key), dict):
+                continue
+            for attr, table in self._value_alias_map_for_section(key).items():
+                into = merged.setdefault(attr, {})
+                for alias, canonical in table.items():
+                    if alias in into and into[alias] != canonical:
+                        conflicted.add((attr, alias))
+                    into[alias] = canonical
+        for attr, alias in conflicted:
+            merged[attr].pop(alias, None)
+        self._any_value_aliases = merged
+        return merged
+
     def _value_alias_map_for_section(self, key: str) -> dict[str, dict[str, str]]:
         out: dict[str, dict[str, str]] = {}
         for attr, spec in self._section(key).items():

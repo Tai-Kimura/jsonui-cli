@@ -1334,11 +1334,78 @@ def _distribute_layouts(config_mgr: ConfigManager, platforms: dict, args) -> Non
         print(f"Distributed {count} layout(s) → {platform}" + (f" (removed {removed} orphan(s))" if removed else ""))
 
 
+def _style_alias_table(config_mgr: ConfigManager):
+    """The alias table Styles are normalized with, or None when Layouts are
+    distributed raw (``normalizeLayouts: false``, or no definitions)."""
+    if not _normalize_layouts_enabled(config_mgr):
+        return None
+    from ..core.normalizer.alias_table import AliasTable
+
+    table = AliasTable.from_file()
+    return None if table.is_empty() else table
+
+
+def _normalized_style(src_file: Path, rel: Path, alias_table):
+    """The Style's distributed copy with its aliases rewritten, warned as a
+    Layout's are -- or None to copy the file as written (nothing to rewrite,
+    normalization off, or not a JSON object).
+
+    Until 2.5.13 Styles were copied as written, so an alias in a Style
+    reached the converters unwarned (and, before the converters resolved
+    them, drew as the default). A Style carries no ``type`` as a rule:
+
+    - with a ``type``, it goes through the Layout canonicalizer (attribute,
+      value and component aliases);
+    - without one, only value aliases are rewritten. An attribute alias
+      cannot be told without the type: ``contentDescription`` is ``alt`` on
+      an Image and ``accessibilityLabel`` elsewhere, and ``value``, ``text``
+      or ``tint`` are real attributes on other components.
+
+    No ``$jui`` marker: it is the root of a Layout's, and a Style's keys are
+    merged into the node that names it.
+    """
+    if alias_table is None:
+        return None
+    try:
+        data = json.loads(src_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    source = f"Styles/{rel.as_posix()}"
+    if isinstance(data.get("type"), str):
+        from ..core.normalizer import Canonicalizer
+
+        result, warnings = Canonicalizer(alias_table).canonicalize(
+            data, source=source, add_marker=False
+        )
+    else:
+        aliases = alias_table.value_aliases_any_section()
+        result, warnings = dict(data), []
+        for key, value in data.items():
+            canonical = aliases.get(key, {}).get(value) if isinstance(value, str) else None
+            if canonical is not None:
+                warnings.append(
+                    f"{source}: [style] '{key}: {value}' is an alias spelling of "
+                    f"'{canonical}' — rewrote the value"
+                )
+                result[key] = canonical
+    for warning in warnings:
+        print(f"  WARNING [normalize]: {warning}")
+    return result if warnings else None
+
+
 def _distribute_styles(config_mgr: ConfigManager, platforms: dict, args) -> None:
-    """Copy Styles/ to each platform at the same level as Layouts/."""
+    """Copy Styles/ to each platform at the same level as Layouts/.
+
+    Aliases are rewritten in the copies, warned, as in Layouts
+    (`_normalized_style`); a Style with nothing to rewrite is copied as
+    written.
+    """
     styles_src = config_mgr.styles_directory
     if not styles_src.exists():
         return
+    alias_table = _style_alias_table(config_mgr)
 
     for platform, pconfig in platforms.items():
         if args.ios_only and platform != "ios":
@@ -1363,7 +1430,13 @@ def _distribute_styles(config_mgr: ConfigManager, platforms: dict, args) -> None
             shared_rel_paths.add(rel)
             dest = styles_dest / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src_file, dest)
+            normalized = _normalized_style(src_file, rel, alias_table)
+            if normalized is None:
+                shutil.copy2(src_file, dest)
+            else:
+                with open(dest, "w", encoding="utf-8") as f:
+                    json.dump(normalized, f, indent=2, ensure_ascii=False)
+                    f.write("\n")
             count += 1
 
         removed = _prune_orphans(styles_dest, shared_rel_paths, set())
