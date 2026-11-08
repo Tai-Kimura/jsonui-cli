@@ -148,6 +148,7 @@ def plan_android(
             serializer=api_cfg["serializer"],
             format_mapping=fmt_enabled,
             format_excluded_docs=fmt_excluded,
+            enum_unknown_case=config_mgr.api_enum_unknown_case(),
         )
     )
 

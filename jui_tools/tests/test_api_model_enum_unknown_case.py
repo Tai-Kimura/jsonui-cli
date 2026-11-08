@@ -53,6 +53,58 @@ class OffIsTheOldOutputTests(unittest.TestCase):
                 (self.assertEqual if same else self.assertNotEqual)(on[name], off[name], f"{face}/{name}")
 
 
+class BuildPathTests(unittest.TestCase):
+    """The key read where jui build reads it (ticket 2026-11-08-enum-unknown-case-false-ignored-on-android: 2.5.15 gave
+    it to the iOS generator only, and Android kept UNKNOWN and its adapters with the key false). A project with the key
+    is planned through api_model_sync, as jui build plans it, and each face's enums and DTOs are the golden's, to the
+    byte; with the key left out, Android's enums are open."""
+
+    def _plan(self, api: dict, face: str) -> dict[str, str]:
+        from jui_cli.core.api_model_sync import collect_docs, plan_for
+        from jui_cli.core.config_manager import ConfigManager
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        platform = face.split("-", 1)[0]
+        android = {"model_package": "model", "dto_subpackage": "generated"}
+        if face.startswith("android-"):
+            android["serializer"] = face.split("-", 1)[1]
+        (root / "jui.config.json").write_text(json.dumps({
+            "api_directory": "docs/api",
+            "api": {**api, "platforms": {"android": android, "web": {"model_dir": "models", "dto_subdir": "generated"}}},
+            "platforms": {"ios": {"root": "ios"}, "android": {"root": "android"}, "web": {"root": "web"}},
+        }), encoding="utf-8")
+        (root / "ios").mkdir()
+        (root / "ios" / "sjui.config.json").write_text(json.dumps({"source_directory": ""}), encoding="utf-8")
+        (root / "android" / "app" / "src" / "main" / "kotlin").mkdir(parents=True)
+        (root / "android" / "kjui.config.json").write_text(
+            json.dumps({"package_name": "com.example", "source_directory": "app/src/main"}), encoding="utf-8")
+        (root / "web").mkdir()
+        (root / "docs" / "api").mkdir(parents=True)
+        (root / "docs" / "api" / "spec.json").write_text(json.dumps(fixture.SPEC), encoding="utf-8")
+        cfg = ConfigManager(root / "jui.config.json")
+        plan = plan_for(platform, cfg, {"root": platform}, collect_docs(cfg))
+        return {p.name: src for p, src in plan.expected_files.items()}
+
+    def test_the_key_false_writes_the_golden_on_every_face(self):
+        compared = 0
+        for face in fixture.FACES:
+            got = self._plan({"enum_unknown_case": False}, face)
+            for golden in sorted((GOLDEN / face).iterdir()):
+                with self.subTest(file=f"{face}/{golden.name}"):
+                    self.assertIn(golden.name, got, f"{face}: {sorted(got)}")
+                    self.assertEqual(got[golden.name], golden.read_text(encoding="utf-8"), f"{face}/{golden.name}")
+                    compared += 1
+        self.assertEqual(compared, 40)
+
+    def test_the_key_left_out_opens_the_enums(self):
+        for face in ("ios", "android-kotlinx", "android-moshi"):
+            got = self._plan({}, face)
+            name = "DeviceKind.swift" if face == "ios" else "DeviceKind.kt"
+            self.assertIn("unknown(String)" if face == "ios" else "UNKNOWN(\"\")", got[name], face)
+
+
 class DefaultTests(unittest.TestCase):
     def test_the_generators_default_on(self):
         self.assertTrue(IosApiPlatformConfig(sources_root=Path("/x")).enum_unknown_case)
