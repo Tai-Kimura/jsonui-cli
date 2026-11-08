@@ -137,7 +137,7 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
         )
         result = converter.convert
         expect(result).to include('[&:has(option:first-child:checked)]:text-[var(--jui-hint-color)]')
-        expect(result).to include('ColorManager.resolveColor(data.hintColor)')
+        expect(result).to include('ColorManager.cssColor(data.hintColor)')
       end
 
       # No placeholder row, nothing for the variant to match — and a list box
@@ -471,7 +471,7 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
         result = select_with('tintColor' => 'brand', 'background' => 'accent')
         expect(result).to include('backgroundImage: `url("data:image/svg+xml,')
         expect(result).to include("encodeURIComponent(ColorManager.resolveColor('brand') ?? '#000000')")
-        expect(result).to include("linear-gradient(${(ColorManager.resolveColor('accent') ?? 'transparent')}, ${(ColorManager.resolveColor('accent') ?? 'transparent')})")
+        expect(result).to include("linear-gradient(${(ColorManager.cssColor('accent') ?? 'transparent')}, ${(ColorManager.cssColor('accent') ?? 'transparent')})")
         expect(result).not_to include("encodeURIComponent(ColorManager.resolveColor('brand'))")
       end
 

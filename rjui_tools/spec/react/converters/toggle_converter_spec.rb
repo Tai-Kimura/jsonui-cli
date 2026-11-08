@@ -107,7 +107,7 @@ RSpec.describe RjuiTools::React::Converters::ToggleConverter do
         # `accent-color: primary` an invalid declaration the browser drops.
         converter = create_converter({ 'class' => 'CheckBox', 'tintColor' => 'primary' })
         result = converter.convert
-        expect(result).to include("accentColor: ColorManager.resolveColor('primary')")
+        expect(result).to include("accentColor: ColorManager.cssColor('primary')")
         expect(result).not_to include("accentColor: 'primary'")
       end
 
@@ -121,7 +121,7 @@ RSpec.describe RjuiTools::React::Converters::ToggleConverter do
           { 'type' => 'CheckBox', 'class' => 'CheckBox', 'checkedColor' => 'primary' }
         )
         result = converter.convert
-        expect(result).to include("accentColor: ColorManager.resolveColor('primary')")
+        expect(result).to include("accentColor: ColorManager.cssColor('primary')")
       end
     end
 

@@ -1223,15 +1223,20 @@ module RjuiTools
         #
         # Literal CSS values are emitted as-is so nothing pays for a runtime
         # call it does not need.
-        def color_style_expr(value)
-          if has_binding?(value)
-            return "ColorManager.resolveColor(#{unwrap_jsx_braces(convert_binding(value))})"
-          end
+        # *css_var*: the colour reaches CSS, which reads `var(--color-<name>)`
+        # (ColorManager.cssColor) and so follows the colour mode by itself —
+        # resolveColor's value was the mode at the render, and nothing rendered
+        # the node again when the mode moved. false where the value leaves the
+        # page's CSS, as a colour inside an SVG data URI does (it cannot see a
+        # custom property): the hex resolveColor gives.
+        def color_style_expr(value, css_var: true)
+          resolver = css_var ? 'cssColor' : 'resolveColor'
+          return "ColorManager.#{resolver}(#{unwrap_jsx_braces(convert_binding(value))})" if has_binding?(value)
 
           literal = value.to_s
           return "'#{TailwindMapper.css_hex(literal)}'" if literal.match?(CSS_COLOR_LITERAL)
 
-          "ColorManager.resolveColor('#{literal}')"
+          "ColorManager.#{resolver}('#{literal}')"
         end
 
         # Component type for typed attribute extraction when the node

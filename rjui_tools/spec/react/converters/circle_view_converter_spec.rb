@@ -36,7 +36,7 @@ RSpec.describe RjuiTools::React::Converters::CircleViewConverter do
       it 'generates dynamic background color' do
         converter = create_converter({ 'class' => 'CircleView', 'background' => '@{circleColor}' })
         result = converter.convert
-        expect(result).to include("'--jui-bg': ColorManager.resolveColor(data.circleColor)", 'bg-[var(--jui-bg)]')
+        expect(result).to include("'--jui-bg': ColorManager.cssColor(data.circleColor)", 'bg-[var(--jui-bg)]')
         expect(result).not_to include('backgroundColor:')
       end
     end

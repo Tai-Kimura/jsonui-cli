@@ -26,19 +26,19 @@ RSpec.describe 'inline color attributes resolve colors.json keys' do
     # (ticket rjui-bound-background-overrides-tap-background)
     it 'resolves a bound background' do
       out = label('background' => '@{bgColor}')
-      expect(out).to include("'--jui-bg': ColorManager.resolveColor(data.bgColor)")
+      expect(out).to include("'--jui-bg': ColorManager.cssColor(data.bgColor)")
       expect(out).to include('bg-[var(--jui-bg)]')
     end
 
     it 'resolves a bound fontColor' do
       out = label('fontColor' => '@{fgColor}')
-      expect(out).to include("'--jui-color': ColorManager.resolveColor(data.fgColor)")
+      expect(out).to include("'--jui-color': ColorManager.cssColor(data.fgColor)")
       expect(out).to include('text-[var(--jui-color)]')
     end
 
     it 'resolves a bound borderColor' do
       out = label('borderColor' => '@{lineColor}', 'borderWidth' => 1)
-      expect(out).to include("'--jui-border-color': ColorManager.resolveColor(data.lineColor)")
+      expect(out).to include("'--jui-border-color': ColorManager.cssColor(data.lineColor)")
     end
 
     it 'unwraps the JSX braces so the call is a valid argument' do
@@ -52,7 +52,7 @@ RSpec.describe 'inline color attributes resolve colors.json keys' do
       # borderWidth is bound, so the whole border goes inline — the static
       # colour key rides along and used to be emitted raw.
       out = label('borderColor' => 'warn_border', 'borderWidth' => '@{w}')
-      expect(out).to include("'--jui-border-color': ColorManager.resolveColor('warn_border')")
+      expect(out).to include("'--jui-border-color': ColorManager.cssColor('warn_border')")
     end
 
     it 'leaves CSS literals alone rather than paying for a runtime call' do
