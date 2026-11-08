@@ -42,6 +42,8 @@ require 'tmpdir'
 #   after(:context)  { ProcessStateGuard.put_back(@kept) }
 module ProcessStateGuard
   NAMESPACES = %w[KjuiTools JsonUIShared JsonUI].freeze
+  # Thread.current keys the tool's code sets (lib: `Thread.current[:kjui_…]`).
+  THREAD_PREFIXES = %w[kjui_].freeze
 
   # "Module.@ivar" => why it may be filled by whichever spec runs first.
   CACHES = {
@@ -78,7 +80,13 @@ module ProcessStateGuard
     'KjuiTools::Compose::Components::TextViewComponent.@counter' => 'reset_counter! at the start of every spec file',
     'KjuiTools::Compose::Components::ButtonComponent.@counter' => 'reset_counter! at the start of every spec file',
     'KjuiTools::Compose::Components::ButtonComponent.@interaction_names' => 'reset_counter! at the start of every spec file',
-    'KjuiTools::Compose::Components::ConstraintLayoutComponent.@counter' => 'reset_counter! at the start of every spec file'
+    'KjuiTools::Compose::Components::ConstraintLayoutComponent.@counter' => 'reset_counter! at the start of every spec file',
+    # Per thread: a build sets the first two for each layout before it reads
+    # them (ComposeBuilder#build_file, #build_variant_file, begin_layout);
+    # the third is one warning per colour for the whole run.
+    'Thread.current[:kjui_data_definitions]' => 'emptied at the start of every spec file, as a build sets it per layout',
+    'Thread.current[:kjui_string_namespaces]' => 'emptied at the start of every spec file, as a build sets it per layout',
+    'Thread.current[:kjui_warned_colors]' => 'emptied at the start of every spec file: a run warns of a colour once'
   }.freeze
 
   module_function
@@ -151,7 +159,31 @@ module ProcessStateGuard
         state[key] = fingerprint(value)
       end
     end
+    thread_keys.each do |name|
+      value = Thread.current[name]
+      next if value.nil? || (value.respond_to?(:empty?) && value.empty?)
+
+      key = thread_key(name)
+      values[key] = copy(value)
+      state[key] = fingerprint(value)
+    end
     [state, values]
+  end
+
+  # The tool keeps some state per thread, not in a module: what the layout
+  # being built declares (ResourceResolver.data_definitions), its strings
+  # sections, the colours already warned of. A value there outlived the
+  # build that set it, and the guard did not look: a_bound_value_slot's and
+  # a_bound_name_slot's builds left `v` declared with a default, and
+  # a_bound_number's shadow, which reads `v` as undeclared, wrote
+  # `data.v.dp` on seed 41884 and passed alone. Empty reads as unset — every
+  # reader does `|| {}`.
+  def thread_keys
+    Thread.current.keys.select { |name| name.to_s.start_with?(*THREAD_PREFIXES) }
+  end
+
+  def thread_key(name)
+    "Thread.current[:#{name}]"
   end
 
   def tmp_path?(value)
@@ -183,7 +215,8 @@ module ProcessStateGuard
       next if MANAGED.key?(key)
 
       owner = key.split('.').first
-      next if key.include?('.') && !loaded_before.include?(owner) && !tmp_path?(after_values[key])
+      next if !key.start_with?('Thread.current[') && key.include?('.') &&
+              !loaded_before.include?(owner) && !tmp_path?(after_values[key])
 
       is_new = !before_state.key?(key)
       # A listed cache may be filled, refilled or emptied (it reloads from
