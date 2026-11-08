@@ -8,6 +8,7 @@ require_relative '../../../lib/core/logger'
 require_relative '../../../lib/react/converters/image_converter'
 require_relative '../../../lib/react/converters/button_converter'
 require_relative '../../../lib/react/converters/select_box_converter'
+require_relative '../../support/typescript_compiler'
 
 # An image could not follow the colour mode: jui build copied one <name>.svg
 # and nothing chose another (ticket jui-images-no-per-color-mode-variants). Now
@@ -98,5 +99,18 @@ RSpec.describe 'an image follows the colour mode (web)' do
     select = convert(RjuiTools::React::Converters::SelectBoxConverter,
                      'type' => 'SelectBox', 'id' => 's', 'items' => %w[a b], 'caretAttributes' => { 'src' => 'ic_probe' })
     expect(select).to include('var(--image-ic_probe, url("/images/ic_probe.svg"))')
+  end
+
+  it 'the emit compiles as TypeScript', :typescript_compile do
+    with_table
+    cfg = config.merge('typescript' => true)
+    elements = [
+      RjuiTools::React::Converters::ImageConverter.new({ 'type' => 'Image', 'id' => 'a', 'srcName' => 'ic_probe' }, cfg.dup).convert,
+      RjuiTools::React::Converters::ImageConverter.new({ 'type' => 'Image', 'id' => 'b', 'srcName' => '@{icon}' }, cfg.dup).convert,
+      RjuiTools::React::Converters::ButtonConverter.new({ 'type' => 'Button', 'id' => 'c', 'image' => 'ic_probe' }, cfg.dup).convert,
+      RjuiTools::React::Converters::ButtonConverter.new({ 'type' => 'Button', 'id' => 'd', 'image' => 'ic_probe', 'tintColor' => '#FF0000' }, cfg.dup).convert
+    ]
+    expect(elements.join).to include("content: 'var(--image-ic_probe)'", 'maskImage: `var(--image-ic_probe')
+    expect("declare const data: { icon: string };\n#{TypeScriptCompiler.component(*elements)}").to compile_as_typescript
   end
 end

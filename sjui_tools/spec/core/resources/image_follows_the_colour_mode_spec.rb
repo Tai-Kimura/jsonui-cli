@@ -67,6 +67,26 @@ RSpec.describe 'an image follows the colour mode (iOS)' do
       expect(image('srcName' => '@{icon}')).to include('Image(ColorManager.image(data.icon))')
     end
 
+    it 'the lines it writes type-check against ColorManager.image(_:)' do
+      with_table
+      lines = [image('srcName' => 'ic_probe'), image('srcName' => '@{icon}')]
+              .flat_map(&:lines).map(&:strip).select { |l| l.start_with?('Image(ColorManager.image(') }
+      expect(lines.size).to eq(2)
+      expect(<<~SWIFT).to compile_as_swift
+        enum ColorManager { static func image(_ name: String) -> String { name } }
+        struct ProbeData { var icon: String = "ic_probe" }
+        @available(macOS 14, iOS 17, *)
+        struct ProbeView: View {
+            var data = ProbeData()
+            var body: some View {
+                VStack {
+                    #{lines.join("\n            ")}
+                }
+            }
+        }
+      SWIFT
+    end
+
     it 'names no ColorManager in a project without one' do
       with_table
       config.delete('resource_manager_directory')

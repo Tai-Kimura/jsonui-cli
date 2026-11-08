@@ -110,7 +110,13 @@ class ExitCountTests(unittest.TestCase):
         # reached it only through `jui g project`, which refuses to
         # overwrite. A hard failure there stops the build like its siblings,
         # so it exits through `_halt`.
-        self.assertEqual(8, len(exits), exits)
+        #
+        # 8 -> 9 (2026-11-08): `_distribute_images` stops the build on a
+        # colour mode's picture it cannot draw (a `<name>.<mode>.svg` with no
+        # `<name>.svg`, a suffix that is no mode, two pictures under one
+        # name — core/image_modes.py). It writes no picture before it stops,
+        # and it exits through `_halt` like the syncs.
+        self.assertEqual(9, len(exits), exits)
 
     def test_the_body_is_guarded_against_the_exits_that_are_not_returns(self):
         # An exception is an exit too, and it was the one that was missed.
