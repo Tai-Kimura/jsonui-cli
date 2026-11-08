@@ -1974,7 +1974,13 @@ module RjuiTools
           return map if JsonUIShared::EnumSpelling.definitions.empty?
 
           JsonUIShared::EnumSpelling.declared(enum_section, attribute)
-                                    .map { |spelling| map.key?(spelling.downcase) ? [spelling, map[spelling.downcase]] : nil }
+                                    .map do |spelling|
+                                      # A bound value never passes the normalizer, so an
+                                      # alias spelling takes its canonical one's entry.
+                                      key = spelling.downcase
+                                      key = JsonUIShared::EnumSpelling.canonical(spelling, enum_section, attribute).downcase unless map.key?(key)
+                                      map.key?(key) ? [spelling, map[key]] : nil
+                                    end
                                     .compact.to_h
         end
 

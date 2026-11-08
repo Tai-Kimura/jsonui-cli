@@ -78,6 +78,27 @@ module JsonUIShared
       (entry['enum'] + (entry['valueAliases'] || {}).keys).map(&:to_s).uniq
     end
 
+    # The canonical spelling of a declared value: a `valueAliases` key is its
+    # target (`phone` -> `telephoneNumber`), anything else is itself. `jui
+    # build` rewrites an alias in a Layout before a converter sees it, but a
+    # Style is distributed as written and a tool run on its own normalizes
+    # nothing, so a converter keyed by canonical spellings has to resolve the
+    # alias itself (sjui drew contentType `phone` as .none, rjui dropped
+    # `emailAddress` and `phone`'s autoComplete).
+    def canonical(value, section, attribute)
+      return value unless value.is_a?(String)
+
+      path = Array(attribute).map(&:to_s)
+      [section, 'common'].each do |name|
+        entry = entry_at(definitions[name.to_s], path)
+        next unless entry.is_a?(Hash) && entry['enum'].is_a?(Array)
+
+        aliases = entry['valueAliases']
+        return aliases.is_a?(Hash) && aliases.key?(value) ? aliases[value].to_s : value
+      end
+      value
+    end
+
     # Without the definitions no spelling can be judged: the value is read
     # as it was before 1.9.0, lowercased, rather than every enum in the
     # build falling to its default — the build already names the missing

@@ -276,6 +276,20 @@ RSpec.describe SjuiTools::SwiftUI::Views::TextFieldConverter do
       end
     end
 
+    # The declared valueAliases resolve here too: a Style reaches the
+    # converter as written, without `jui build`'s normalizer, and `phone`
+    # drew `.textContentType(.none)` with a warning until 2.5.12.
+    context 'with a contentType alias' do
+      { 'phone' => '.telephoneNumber', 'tel' => '.telephoneNumber', 'emailAddress' => '.emailAddress' }.each do |value, literal|
+        it "draws #{value} as its canonical spelling's #{literal}" do
+          code = described_class.new({ 'type' => 'TextField', 'contentType' => value }).convert
+          code = code.is_a?(Array) ? code.join("\n") : code
+          expect(code).to include(".textContentType(#{literal})")
+          expect(code).not_to include('.textContentType(.none)')
+        end
+      end
+    end
+
     context 'with contentType usernameWebauthn' do
       # Passkeys reach a .username field through the app's
       # performAutoFillAssistedRequests; the field asks for nothing else.

@@ -321,6 +321,19 @@ RSpec.describe RjuiTools::React::Converters::TextFieldConverter do
       expect(converter.convert).to include("'usernameWebauthn': 'username webauthn'")
     end
 
+    # The declared valueAliases resolve, written or bound: a Style reaches
+    # the converter as written (no `jui build` normalizer), and a bound value
+    # never passes it. `emailAddress` and `phone` emitted no autoComplete
+    # until 2.5.12.
+    { 'emailAddress' => 'email', 'tel' => 'tel', 'phone' => 'tel' }.each do |value, token|
+      it "maps the alias #{value} to #{token}, written or bound" do
+        expect(create_converter({ 'type' => 'TextField', 'contentType' => value }).convert)
+          .to include(%(autoComplete="#{token}"))
+        expect(create_converter({ 'type' => 'TextField', 'contentType' => '@{kind}' }).convert)
+          .to include("'#{value}': '#{token}'")
+      end
+    end
+
     it 'maps password to current-password' do
       converter = create_converter({ 'type' => 'TextField', 'contentType' => 'password' })
       result = converter.convert
