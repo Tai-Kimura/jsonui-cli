@@ -1055,7 +1055,14 @@ window.__dbg.wearFit = (id) => {
     cupInnerX: +Math.min(...cups.map((c) => Math.min(Math.abs(c.min.x), Math.abs(c.max.x)))).toFixed(3),
     overlapCrownCups: cups.some((c) => c.intersectsBox(crown)) };
 };
-window.__dbg.setVisState = (id, state) => { robotState[id] = { ...(robotState[id] || {}), state }; };
+// a robot's state, held over the server's next slices until set again; null lets it go (the next slice's word stands)
+window.__dbg.setVisState = (id, state) => {
+  if (state == null) { delete VIS_HELD[id]; return; }
+  VIS_HELD[id] = state; robotState[id] = { ...(robotState[id] || {}), state };
+};
+// the slices the page has, applied again as a slice that came in now is (live; the demo has none): a test's set state
+// must outlast one (hist-wide, workwear)
+window.__dbg.sliceAgain = () => { if (SOURCE.mode === 'live') liveApply({ agents: LIVE.slices.agents }, false); };
 window.__dbg.wearColors = () => ({ main: ROLES.main.color, overall: WEAR.overall, edge: WEAR.edge, rim: WEAR.rim, roles: Object.fromEntries(Object.entries(ROLES).map(([k, v]) => [k, v.color])) });
 // トーク (2.3.6, 58-talk.js): its state, the requests it sent and refused, and in the demo the stand-in server's hands
 window.__dbg.talk = () => ({ on: TALK.on, owner: TALK.owner, agent: TALK.agent, opened: TALK.opened, conv: TALK.conv, atEnd: TALK.atEnd, newer: TALK.newer,
