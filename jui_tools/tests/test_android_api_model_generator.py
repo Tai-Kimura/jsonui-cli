@@ -28,6 +28,7 @@ def _gen(
             domain_package=domain_package,
             dto_package=dto_package,
             serializer=serializer,
+            enum_unknown_case=False,   # the enums as through 2.5.14: these arms hold api.enum_unknown_case off to the old output (the open enums: test_api_model_enum_unknown_case.py)
         )
     )
 
@@ -1785,10 +1786,11 @@ class GeneratedKotlinCompilesTests(unittest.TestCase):
         # the plugin is the compiler's own version, or the compiler refuses it
         self.assertEqual(pinned[self.PLUGIN], self.version)
 
-    def _emit(self, out: Path, serializer: str, formats: bool, schemas: dict | None = None) -> list[str]:
+    def _emit(self, out: Path, serializer: str, formats: bool, schemas: dict | None = None,
+              open_enums: bool = False) -> list[str]:
         doc = parse_swagger(_doc(schemas or COMPILE_SCHEMAS), "test.json")
         gen = AndroidApiModelGenerator(AndroidApiPlatformConfig(
-            sources_root=out, serializer=serializer, format_mapping=formats))
+            sources_root=out, serializer=serializer, format_mapping=formats, enum_unknown_case=open_enums))
         sources: dict[str, str] = {}
         for schema in doc.schemas:
             if serializer == "moshi" and (schema.wrapped_type is not None or any(

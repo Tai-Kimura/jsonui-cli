@@ -328,6 +328,16 @@ class ConfigManager:
             exclude = []
         return enabled, frozenset(str(name) for name in exclude)
 
+    def api_enum_unknown_case(self) -> bool:
+        """``api.enum_unknown_case`` (default ``True``): generated iOS and Android enums take a value they do not know
+        (Swift ``case unknown(<raw>)``, Kotlin ``UNKNOWN``) instead of failing the whole response's decode, so a value
+        the server adds later does not break an app already out (ticket
+        jui-api-model-enum-unknown-value-fails-whole-decode). ``false``: the enums as before. Web is the same either
+        way (its enums are types only, read without a check)."""
+        config = self.load()
+        api_cfg = config.get("api", {}) or {}
+        return api_cfg.get("enum_unknown_case", True) is not False
+
     def api_schemas_config(self) -> dict[str, Any]:
         """Return the raw ``api.schemas`` block from ``jui.config.json``.
 

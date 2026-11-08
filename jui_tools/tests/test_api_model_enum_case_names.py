@@ -66,7 +66,8 @@ UNNAMEABLE = {
 
 
 def _generators(tmp: Path):
-    ios = IosApiModelGenerator(IosApiPlatformConfig(sources_root=tmp))
+    # the enums as through 2.5.14: these arms hold api.enum_unknown_case off to the old output (the open enums: test_api_model_enum_unknown_case.py)
+    ios = IosApiModelGenerator(IosApiPlatformConfig(sources_root=tmp, enum_unknown_case=False))
     android = AndroidApiModelGenerator(AndroidApiPlatformConfig(
         sources_root=tmp, domain_package="com.example.model",
         dto_package="com.example.model.generated", serializer="none"))

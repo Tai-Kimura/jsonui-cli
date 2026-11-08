@@ -18,6 +18,8 @@ See plan §2.2, §3.2, §4 for the full contract.
 """
 from __future__ import annotations
 
+import json
+
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -61,6 +63,10 @@ class IosApiPlatformConfig:
     model_dir: str = "Model"          # relative to sources_root
     dto_subdir: str = "Generated"     # relative to model_dir
     format_mapping: bool = False
+    # ``api.enum_unknown_case`` (default True; ticket jui-api-model-enum-unknown-value-fails-whole-decode): each enum
+    # gets ``case unknown(<raw>)`` and decodes a value it does not know into it, so a value the server added later does
+    # not fail the whole response. False: the enum as before (a raw-value enum whose decode throws on such a value).
+    enum_unknown_case: bool = True
     format_excluded_docs: frozenset[str] = frozenset()
 
 
@@ -415,7 +421,9 @@ class IosApiModelGenerator:
         )
         footer = comment_footer()
 
-        if enum.kind == PrimitiveKind.STRING:
+        if self._config.enum_unknown_case:
+            lines = _swift_open_enum_lines(enum, doc)
+        elif enum.kind == PrimitiveKind.STRING:
             raw_type = "String"
             value_pairs = list(zip(enum.case_names, enum.string_values))
             check_enum_case_identifiers(
@@ -1237,3 +1245,63 @@ def _emit_swift_wrapper_body(
         f"        try container.encode(self.{name})",
         "    }",
     ]
+
+
+def _swift_open_enum_lines(enum: EnumDef, doc: SwaggerDocument) -> list[str]:
+    """An enum that takes a value it does not know (``api.enum_unknown_case``): the known cases, and
+    ``case unknown(<raw>)`` holding the value as it came, written back as it came. ``init?(rawValue:)`` and
+    ``allCases`` are the known cases only, as for a raw-value enum. Its conformances are written out (an enum with an
+    associated value gets no raw value of its own), nonisolated as the DTOs are."""
+    string = enum.kind == PrimitiveKind.STRING
+    raw_type = "String" if string else "Int"
+    values = list(enum.string_values) if string else list(enum.integer_values)
+    cases = [escape_keyword(_swift_case_name(c), language="swift") for c in enum.case_names]
+    check_enum_case_identifiers(enum, cases, language="Swift", source=str(doc.source_path))
+    if "unknown" in [c.strip("`") for c in cases]:
+        raise ValueError(
+            f"{doc.source_path}: enum {enum.name} has a value named `unknown`, which api.enum_unknown_case keeps for a "
+            f"value the app does not know. Name that value otherwise with x-enum-varnames, or set "
+            f"api.enum_unknown_case to false."
+        )
+    lit = (lambda v: json.dumps(v, ensure_ascii=False)) if string else str
+    name = enum.name
+    lines = [f"nonisolated enum {name}: RawRepresentable, Codable, CaseIterable, Sendable, Equatable, Hashable {{"]
+    lines += [f"    case {c}" for c in cases]
+    lines += [
+        "    /// A value this app does not know (the server added it after the app was built): kept as it came, and",
+        "    /// written back as it came.",
+        f"    case unknown({raw_type})",
+        "",
+        f"    static let allCases: [{name}] = [{', '.join('.' + c for c in cases)}]",
+        "",
+        f"    init?(rawValue: {raw_type}) {{",
+        "        switch rawValue {",
+    ]
+    lines += [f"        case {lit(v)}: self = .{c}" for c, v in zip(cases, values)]
+    lines += [
+        "        default: return nil",
+        "        }",
+        "    }",
+        "",
+        f"    var rawValue: {raw_type} {{",
+        "        switch self {",
+    ]
+    lines += [f"        case .{c}: return {lit(v)}" for c, v in zip(cases, values)]
+    lines += [
+        "        case .unknown(let value): return value",
+        "        }",
+        "    }",
+        "",
+        "    init(from decoder: Decoder) throws {",
+        f"        let value = try decoder.singleValueContainer().decode({raw_type}.self)",
+        f"        self = {name}(rawValue: value) ?? .unknown(value)",
+        "    }",
+        "",
+        "    func encode(to encoder: Encoder) throws {",
+        "        var container = encoder.singleValueContainer()",
+        "        try container.encode(rawValue)",
+        "    }",
+        "}",
+    ]
+    return lines
+

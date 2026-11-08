@@ -25,6 +25,8 @@ See plan §2.2 Android section + §3.2 for the full contract.
 """
 from __future__ import annotations
 
+import json
+
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -82,6 +84,11 @@ class AndroidApiPlatformConfig:
     # ``api.format_mapping`` + the per-doc opt-out (swagger file basenames).
     format_mapping: bool = False
     format_excluded_docs: frozenset[str] = frozenset()
+    # ``api.enum_unknown_case`` (default True; ticket jui-api-model-enum-unknown-value-fails-whole-decode): with kotlinx
+    # or moshi each enum gets an ``UNKNOWN`` entry and a serializer that reads a value it does not know into it, so a
+    # value the server added later does not fail the whole response. Writing UNKNOWN throws, naming the enum; its
+    # ``wire`` is a value no entry has. False, or the ``none`` serializer: the enum as before.
+    enum_unknown_case: bool = True
 
 
 class AndroidApiModelGenerator:
@@ -296,9 +303,13 @@ class AndroidApiModelGenerator:
             return base
         return []
 
+    def _enum_open(self) -> bool:
+        """Whether enums take a value they do not know (``api.enum_unknown_case``, kotlinx and moshi)."""
+        return self._config.enum_unknown_case and self._config.serializer in ("kotlinx", "moshi")
+
     def _enum_imports(self, enum: EnumDef) -> list[str]:
         """An enum's imports: the DTO's, and for an integer enum what its serializer uses."""
-        numeric = enum.kind != PrimitiveKind.STRING
+        numeric = enum.kind != PrimitiveKind.STRING or self._enum_open()
         if self._config.serializer == "kotlinx" and numeric:
             return [
                 "import kotlinx.serialization.KSerializer",
@@ -326,7 +337,7 @@ class AndroidApiModelGenerator:
         """kotlinx: @Serializable (an integer enum with its serializer). moshi: none for a string enum (moshi's own
         EnumJsonAdapter reads it; its codegen refuses @JsonClass on an enum), and for an integer enum the adapter
         written beside it (generator = "jui": moshi's codegen leaves it alone, and moshi finds <Name>JsonAdapter)."""
-        numeric = enum.kind != PrimitiveKind.STRING
+        numeric = enum.kind != PrimitiveKind.STRING or self._enum_open()
         if self._config.serializer == "kotlinx":
             return [f"@Serializable(with = {enum.name}Serializer::class)"] if numeric else ["@Serializable"]
         if self._config.serializer == "moshi":
@@ -658,7 +669,9 @@ class AndroidApiModelGenerator:
         # rename annotation whenever the case identifier diverges from the
         # raw value.
         ser = self._config.serializer
-        if enum.kind == PrimitiveKind.STRING:
+        if self._enum_open():
+            lines.extend(_kotlin_open_enum_lines(enum, doc, ser, self._dto_package()))
+        elif enum.kind == PrimitiveKind.STRING:
             lines.append(f"enum class {enum.name}(val wire: String) {{")
             cases = list(zip(enum.case_names, enum.string_values))
             check_enum_case_identifiers(
@@ -1031,6 +1044,74 @@ def _moshi_int_enum_adapter(name: str) -> list[str]:
         "    }",
         "}",
     ]
+
+
+def _kotlin_open_enum_lines(enum: EnumDef, doc: SwaggerDocument, ser: str, package: str) -> list[str]:
+    """An enum that takes a value it does not know (``api.enum_unknown_case``): the known entries and ``UNKNOWN``,
+    read and written by a serializer beside it (kotlinx: ``<Name>Serializer``; moshi: ``<Name>JsonAdapter``, found by
+    moshi by name). A value no entry has reads as UNKNOWN. UNKNOWN holds no value of the wire's: writing it throws
+    and names the enum, so a value the app does not know is never sent as another. Its ``wire`` is ``""`` (an integer
+    enum's ``Int.MIN_VALUE``), a value no entry has, and does not throw: apps find an entry by
+    ``entries.firstOrNull { it.wire == s }``, which reaches UNKNOWN last when no entry matches."""
+    string = enum.kind == PrimitiveKind.STRING
+    wire_type = "String" if string else "Int"
+    values = list(enum.string_values) if string else list(enum.integer_values)
+    idents = [escape_keyword(_kotlin_enum_case(c), language="kotlin") for c in enum.case_names]
+    check_enum_case_identifiers(enum, idents, language="Kotlin", source=str(doc.source_path))
+    if "UNKNOWN" in [i.strip("`") for i in idents]:
+        raise ValueError(
+            f"{doc.source_path}: enum {enum.name} has a value named UNKNOWN, which api.enum_unknown_case keeps for a "
+            f"value the app does not know. Name that value otherwise with x-enum-varnames, or set "
+            f"api.enum_unknown_case to false."
+        )
+    lit = (lambda v: json.dumps(v, ensure_ascii=False).replace("$", "\\$")) if string else str
+    name = enum.name
+    sentinel, sentinel_words = ('""', "an empty string") if string else ("Int.MIN_VALUE", "Int.MIN_VALUE")
+    unknown = f'"{name}.UNKNOWN stands for a value this app does not know and has no value to send"'
+    lines = [f"enum class {name}(val wire: {wire_type}) {{"]
+    lines += [f"    {i}({lit(v)})," for i, v in zip(idents, values)]
+    lines += [
+        "    /** A value this app does not know (the server added it after the app was built). Writing it throws;",
+        f"     *  its [wire] is {sentinel_words}, a value no entry has. */",
+        f"    UNKNOWN({sentinel});",
+        "",
+        *(['    @Suppress("DEPRECATION")'] if enum.deprecated else []),
+        "    companion object {",
+        "        /** The entry for [wire], or UNKNOWN for a value this app does not know. */",
+        f"        fun fromWire(wire: {wire_type}): {name} = entries.firstOrNull {{ it != UNKNOWN && it.wire == wire }} ?: UNKNOWN",
+        "    }",
+        "}",
+        "",
+    ]
+    if enum.deprecated:   # the enum is deprecated; its own serializer naming it is no use of it
+        lines.append('@Suppress("DEPRECATION")')
+    if ser == "kotlinx":
+        kind = "STRING" if string else "INT"
+        lines += [
+            f"object {name}Serializer : KSerializer<{name}> {{",
+            f'    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("{package}.{name}", PrimitiveKind.{kind})',
+            "",
+            f"    override fun serialize(encoder: Encoder, value: {name}) {{",
+            f"        if (value == {name}.UNKNOWN) throw SerializationException({unknown})",
+            f"        encoder.encode{wire_type}(value.wire)",
+            "    }",
+            "",
+            f"    override fun deserialize(decoder: Decoder): {name} = {name}.fromWire(decoder.decode{wire_type}())",
+            "}",
+        ]
+    else:  # moshi
+        read = "nextString" if string else "nextInt"
+        lines += [
+            f"class {name}JsonAdapter : JsonAdapter<{name}>() {{",
+            f"    override fun fromJson(reader: JsonReader): {name}? = {name}.fromWire(reader.{read}())",
+            "",
+            f"    override fun toJson(writer: JsonWriter, value: {name}?) {{",
+            f"        if (value == {name}.UNKNOWN) throw JsonDataException({unknown})",
+            "        writer.value(value?.wire)",
+            "    }",
+            "}",
+        ]
+    return lines
 
 
 def _kotlin_enum_case(case_name: str) -> str:
