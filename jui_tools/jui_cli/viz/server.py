@@ -335,6 +335,11 @@ def make_app(ctx: ServerContext) -> web.Application:
             return web.Response(status=400, text="not json\n")
         if not isinstance(payload, dict):
             return web.Response(status=400, text="not an object\n")
+        # the claude process the hook came from (forward.py's parent; jui-viz 1.x+, an older one sends none): the
+        # session is known by its pid without ~/.claude/sessions (World._hook_names)
+        pid = request.headers.get("X-Jui-Viz-Claude-Pid", "")
+        if pid.isdigit() and 1 < int(pid) < 2**31:
+            payload["_claudePid"] = int(pid)
         if ctx.on_hook is not None:
             asyncio.get_running_loop().call_soon(_dispatch_hook, ctx, payload)
         return web.Response(status=204)
@@ -606,6 +611,11 @@ def make_app(ctx: ServerContext) -> web.Application:
             message_router = messaging.Router(ctx.world, ctx.talk)
         if request.path.endswith('/peers'):
             return web.json_response({'sessions': message_router.peers()})
+        if request.path.endswith('/whoami'):
+            try:
+                return web.json_response(message_router.whoami(body))
+            except messaging.Refused as exc:
+                return web.Response(status=exc.status, text=str(exc) + '\n')
         try:
             result = await message_router.send(body)
         except messaging.Refused as exc:
@@ -1250,6 +1260,7 @@ def make_app(ctx: ServerContext) -> web.Application:
     app.router.add_route("*", "/api/slack-room/messages", api_slack_room)
     app.router.add_route('*', '/api/messages/send', api_messages)
     app.router.add_route('*', '/api/messages/peers', api_messages)
+    app.router.add_route('*', '/api/messages/whoami', api_messages)
     app.router.add_route("*", "/api/attach", api_attach)
     app.router.add_route("*", "/api/attach-remove", api_attach_remove)
     app.router.add_route("*", "/api/attach-text", api_attach_text)

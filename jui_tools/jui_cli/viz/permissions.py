@@ -182,6 +182,9 @@ class Channel:
         # How the session connected it (channel.py's hello, 2.3.4): "plugin" (named plugin:jui-viz@jsonui at
         # launch) or "mcp" (claude mcp add: server:jui-viz); None from an older channel.py.
         self.via = via
+        # what its hello asked with (World.channel_hello): a channel not tied yet is tied once a hook names these
+        self.asked_pid: int | None = None
+        self.asked_session: str | None = None
 
 
 class PermissionBook:

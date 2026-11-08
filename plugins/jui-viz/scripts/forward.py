@@ -140,7 +140,10 @@ def main() -> int:
             f"POST /hook HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
             f"Content-Type: application/json\r\nContent-Length: {len(body)}\r\n"
             f"X-Jui-Viz-Token: {info['token']}\r\n"
-            f"X-Jui-Viz-Sent-At: {int(time.time() * 1000)}\r\nConnection: close\r\n\r\n"
+            f"X-Jui-Viz-Sent-At: {int(time.time() * 1000)}\r\n"
+            # the claude process this hook runs under (Claude Code starts it with no shell between): the server knows
+            # the session by its pid when ~/.claude/sessions has no entry for it. An older server ignores the header.
+            f"X-Jui-Viz-Claude-Pid: {os.getppid()}\r\nConnection: close\r\n\r\n"
         )
         with socket.create_connection(("127.0.0.1", port), timeout=1.0) as s:
             s.sendall(head.encode("ascii") + body)

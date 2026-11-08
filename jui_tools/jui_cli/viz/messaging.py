@@ -47,6 +47,19 @@ class Router:
             raise Refused(404, 'no such live session')
         return matches[0]
 
+    def whoami(self, body: dict) -> dict:
+        """The session a sender is, from the pids up its process chain (message_client, when ~/.claude/sessions has no
+        entry for it): the first pid the server knows, by the registry and the agents list or by the hooks."""
+        pids = body.get('pids') if set(body) == {'pids'} else None
+        if not isinstance(pids, list) or not 0 < len(pids) <= 32 or not all(
+                isinstance(p, int) and not isinstance(p, bool) and p > 1 for p in pids):
+            raise Refused(400, 'pids (1 to 32 process ids) are required')
+        for pid in pids:
+            sid = self.world.pid_session(pid)
+            if sid is not None:
+                return {'sessionId': sid}
+        raise Refused(404, 'no session is known for these processes')
+
     async def send(self, body: dict) -> dict:
         if set(body) != {'id', 'sender', 'recipient', 'text'}:
             raise Refused(400, 'id, sender, recipient and text are required')
