@@ -3796,6 +3796,19 @@
       "reason": "TextField control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (skinIdioms; TextField.borderStyle is a member) — triage K"
     },
     {
+      "fixture": "TextField/contentType__usernamewebauthn",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "TextField control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (skinIdioms; TextField.borderStyle is a member) — triage K"
+    },
+    {
       "fixture": "TextField/fontColor__binding",
       "id": "target",
       "outliers": [
