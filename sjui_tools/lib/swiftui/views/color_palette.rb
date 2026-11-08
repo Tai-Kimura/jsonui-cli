@@ -98,13 +98,17 @@ module SjuiTools
           end
 
           def union_of_modes(raw)
-            content = raw.reject { |k, _| META_KEYS.include?(k) }
+            # A `_` key (`_comment`) is a note, not a colour or a mode
+            # (ColorManagerCore.note_key?). At the top of a themed file it made
+            # the file read as flat, and every palette name was undefined.
+            note = ->(k) { k.is_a?(String) && k.start_with?('_') }
+            content = raw.reject { |k, _| META_KEYS.include?(k) || note.call(k) }
             # An empty palette really does define nothing; that is a different
             # answer from the unreadable file above, which returns nil.
             return [] if content.empty?
 
             if content.values.all? { |v| v.is_a?(Hash) }
-              content.values.flat_map(&:keys).uniq
+              content.values.flat_map(&:keys).reject { |k| note.call(k) }.uniq
             else
               content.keys
             end

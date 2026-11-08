@@ -40,6 +40,20 @@ module JsonUIShared
     # Top-level keys in colors.json that are NOT color modes. Everything
     # else at the top level is a mode name whose value is a palette.
     RESERVED_META_KEYS = %w[fallback_mode systemModeMapping modes].freeze
+
+    # A key starting with `_` (`_comment`) is a note for the reader of
+    # colors.json — not a colour and not a mode, at the top level or inside a
+    # palette. Until 2.5.14 it was neither: inside a palette (and at the top of
+    # a flat file, which migrates into one) it was a colour, and every face
+    # emitted a `Comment` accessor for its text, rjui's THEME_KEYS among them;
+    # at the top of a themed file it was the first content key, so the file
+    # read as FLAT — every palette was dropped and colors.json was written
+    # back holding the note alone. Notes are kept where they were when the
+    # file is written back.
+    def self.note_key?(key)
+      key.is_a?(String) && key.start_with?('_')
+    end
+
     DEFAULT_MODE_NAME = 'light'
     DEFAULT_DARK_MODE_NAME = 'dark'
 
@@ -110,6 +124,8 @@ module JsonUIShared
       @fallback_mode = nil
       @system_mode_mapping = nil
       @load_failure = nil
+      @notes = {}
+      @palette_notes = {}
 
       if File.exist?(@colors_file)
         # A FAILURE IS NOT AN EMPTY FILE. This used to hand `nil` to
@@ -177,7 +193,7 @@ module JsonUIShared
       return :empty unless raw.is_a?(Hash)
       return :empty if raw.empty?
 
-      content_keys = raw.keys - RESERVED_META_KEYS
+      content_keys = (raw.keys - RESERVED_META_KEYS).reject { |k| self.class.note_key?(k) }
       return :empty if content_keys.empty?
 
       case raw[content_keys.first]
@@ -192,12 +208,17 @@ module JsonUIShared
       @fallback_mode = raw['fallback_mode'] if raw['fallback_mode'].is_a?(String)
       @system_mode_mapping = raw['systemModeMapping'] if raw['systemModeMapping'].is_a?(Hash)
 
-      palette_keys = raw.keys - RESERVED_META_KEYS
+      @notes = raw.select { |k, _| self.class.note_key?(k) }
+      palette_keys = (raw.keys - RESERVED_META_KEYS).reject { |k| self.class.note_key?(k) }
       palette_keys.each do |mode_name|
         value = raw[mode_name]
         next unless value.is_a?(Hash)
 
+        notes = value.select { |k, _| self.class.note_key?(k) }
+        @palette_notes[mode_name] = notes unless notes.empty?
         @palettes[mode_name] = value.each_with_object({}) do |(k, v), acc|
+          next if self.class.note_key?(k)
+
           acc[k] = v if v.is_a?(String) || v.nil?
         end
       end
@@ -217,8 +238,10 @@ module JsonUIShared
       logger.info "Migrating colors.json from flat schema to themed (default mode: '#{DEFAULT_MODE_NAME}')"
       @migrated = true
 
+      # A flat file's notes describe the file, so they stay at its top level.
+      @notes = raw.select { |k, _| self.class.note_key?(k) }
       flat_palette = raw.each_with_object({}) do |(k, v), acc|
-        next if RESERVED_META_KEYS.include?(k)
+        next if RESERVED_META_KEYS.include?(k) || self.class.note_key?(k)
         acc[k] = v if v.is_a?(String) || v.nil?
       end
 
@@ -326,12 +349,13 @@ module JsonUIShared
       FileUtils.mkdir_p(@resources_dir)
 
       out = {}
+      (@notes || {}).each { |k, v| out[k] = v }
       out['modes'] = @modes if @modes.size > 1 || @migrated
       out['fallback_mode'] = @fallback_mode if @fallback_mode
       out['systemModeMapping'] = @system_mode_mapping if @system_mode_mapping && !@system_mode_mapping.empty?
 
       @modes.each do |mode|
-        out[mode] = @palettes[mode] || {}
+        out[mode] = ((@palette_notes || {})[mode] || {}).merge(@palettes[mode] || {})
       end
 
       File.write(@colors_file, JSON.pretty_generate(out))
