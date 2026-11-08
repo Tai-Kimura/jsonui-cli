@@ -1034,7 +1034,13 @@ function rebuildRobots(initial) {
     if (a.shred && typeof a.shred === 'object' && Number(a.shred.at) > 0) {
       st.shred = { at: Number(a.shred.at), ok: a.shred.ok === true, label: String(a.shred.label || ''), count: Math.max(1, Number(a.shred.count) || 1), folder: a.shred.folder === true };
     }
-    if (VIS_HELD[label]) st.state = VIS_HELD[label];   // a browser test's state (10-robot-core.js VIS_HELD)
+    const held = VIS_HELD[label];   // what a browser test set (10-robot-core.js VIS_HELD)
+    if (held && held.state) st.state = held.state;
+    if (held && held.git) {
+      // kept until the page has taken it (seen, and its trip over or never started) or the server's own trip moved on
+      const R = robots.find((x) => x.def.id === label), taken = !!R && R.gitSeen === held.git.id && !R.git;
+      if (taken || ((st.git && st.git.id) || null) !== held.gitBase) delete held.git; else st.git = held.git;
+    }
     if (LIVE.leaving[label]) st.state = 'done';
     robotState[label] = st;
     seen.add(label);

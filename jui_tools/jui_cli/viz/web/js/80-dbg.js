@@ -765,7 +765,14 @@ window.__dbg = {
     why: Object.fromEntries(robots.map((R) => { const st = robotState[R.def.id] || {}; return [R.def.id, { trip: st.git ? { id: st.git.id, pending: st.git.pending, at: st.git.at, kind: st.git.kind } : null,
       seen: R.gitSeen || null, git: R.git ? R.git.phase : null, path: R.path.length, pos: R.robot.root.position.toArray().map((v) => +v.toFixed(2)), desk: R.def.pos, play: !!(R.play || R.playBack || R.solo), standing: !!R.def.standing, room: R.def.room, propsRoom: PROPS.room, state: st.state }]; })) }),
   // a fresh trip on the page alone, as if the server had sent it (the trip-vs-break arm: a trip that comes during a break)
-  gitPoke: (id, trip) => { const st = robotState[id]; if (st) st.git = { at: vizNow(), pending: false, kind: 'push', status: 'pushed', ...trip }; return !!st; },
+  // a trip poked on the page, kept over the server's next slices until the server's own trip moves on (VIS_HELD)
+  gitPoke: (id, trip) => {
+    const st = robotState[id]; if (!st) return false;
+    const held = VIS_HELD[id] = VIS_HELD[id] || {};
+    if (!held.git) held.gitBase = (st.git && st.git.id) || null;
+    held.git = st.git = { at: vizNow(), pending: false, kind: 'push', status: 'pushed', ...trip };
+    return true;
+  },
   liveSeenSeq: () => LIVE.seenSeq,   // the last event the page took in (a hook that rings nothing leaves no other trace)
   gitLog: () => logItems.filter((e) => e.kind === 'GitPush' || e.kind === 'GitPull').map((e) => `${e.kind} ${e.what}`),
   gitSet: (o) => { Object.assign(GITBOX, o || {}); return { ...GITBOX, ends: undefined }; },
@@ -1057,8 +1064,9 @@ window.__dbg.wearFit = (id) => {
 };
 // a robot's state, held over the server's next slices until set again; null lets it go (the next slice's word stands)
 window.__dbg.setVisState = (id, state) => {
-  if (state == null) { delete VIS_HELD[id]; return; }
-  VIS_HELD[id] = state; robotState[id] = { ...(robotState[id] || {}), state };
+  const held = VIS_HELD[id] = VIS_HELD[id] || {};
+  if (state == null) { delete held.state; return; }
+  held.state = state; robotState[id] = { ...(robotState[id] || {}), state };
 };
 // the slices the page has, applied again as a slice that came in now is (live; the demo has none): a test's set state
 // must outlast one (hist-wide, workwear)
