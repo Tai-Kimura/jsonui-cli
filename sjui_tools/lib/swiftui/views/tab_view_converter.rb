@@ -2,6 +2,8 @@
 
 require_relative 'base_view_converter'
 
+require_relative 'image_modes'
+
 module SjuiTools
   module SwiftUI
     module Views
@@ -76,9 +78,9 @@ module SjuiTools
                   if @component['showLabels'] == false
                     if icon_type == 'resource'
                       if icon != selected_icon
-                        add_line "Image(#{selection_var} == #{index} ? \"#{selected_icon}\" : \"#{icon}\")"
+                        add_line "Image(#{selection_var} == #{index} ? #{ImageModes.operand("\"#{selected_icon}\"", literal: selected_icon)} : #{ImageModes.operand("\"#{icon}\"", literal: icon)})"
                       else
-                        add_line "Image(\"#{icon}\")"
+                        add_line "Image(#{ImageModes.operand("\"#{icon}\"", literal: icon)})"
                       end
                       add_line "    .renderingMode(.template)"
                     elsif icon != selected_icon
@@ -96,7 +98,7 @@ module SjuiTools
                       end
                       add_line "} icon: {"
                       indent do
-                        add_line "Image(#{selection_var} == #{index} ? \"#{selected_icon}\" : \"#{icon}\")"
+                        add_line "Image(#{selection_var} == #{index} ? #{ImageModes.operand("\"#{selected_icon}\"", literal: selected_icon)} : #{ImageModes.operand("\"#{icon}\"", literal: icon)})"
                         add_line "    .renderingMode(.template)"
                       end
                       add_line "}"
@@ -107,7 +109,7 @@ module SjuiTools
                       end
                       add_line "} icon: {"
                       indent do
-                        add_line "Image(\"#{icon}\")"
+                        add_line "Image(#{ImageModes.operand("\"#{icon}\"", literal: icon)})"
                         add_line "    .renderingMode(.template)"
                       end
                       add_line "}"

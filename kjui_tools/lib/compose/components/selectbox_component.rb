@@ -461,7 +461,7 @@ module KjuiTools
           if caret['src'].is_a?(String) && !caret['src'].strip.empty?
             required_imports&.add(:painter_resource)
             required_imports&.add(:r_class)
-            args << "painter = painterResource(id = R.drawable.#{Helpers::ResourceResolver.drawable_name(caret['src'])})"
+            args << "painter = painterResource(id = #{Helpers::ResourceResolver.drawable_id(caret['src'])})"
           end
           args << "width = #{caret['width'].to_i}" if caret['width'].is_a?(Numeric)
           args << "height = #{caret['height'].to_i}" if caret['height'].is_a?(Numeric)

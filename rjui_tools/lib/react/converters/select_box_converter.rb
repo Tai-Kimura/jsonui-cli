@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_converter'
+require_relative '../image_modes'
 require_relative '../../core/layout_path'
 
 module RjuiTools
@@ -281,7 +282,9 @@ module RjuiTools
         # between a plain string and a template literal.
         def caret_glyph_layer(caret)
           if caret['src']
-            return [[:lit, "url(\"/images/#{resolve_image_extension(caret['src'].to_s)}\")"]]
+            url = "url(\"/images/#{resolve_image_extension(caret['src'].to_s)}\")"
+            moded = ImageModes.name_with_modes(caret['src'].to_s)
+            return [[:lit, moded ? "var(#{ImageModes.variable(moded)}, #{url})" : url]]
           end
 
           head = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="'

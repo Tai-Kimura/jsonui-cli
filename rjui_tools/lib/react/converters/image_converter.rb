@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_converter'
+require_relative '../image_modes'
 
 module RjuiTools
   module React
@@ -14,6 +15,7 @@ module RjuiTools
 
         def convert(indent = 2)
           class_name = build_class_name
+          apply_mode_picture
           style_attr = build_style_attr
           src = build_src
           id_attr = build_id_attr
@@ -37,6 +39,26 @@ module RjuiTools
         end
 
         protected
+
+        # A name with a colour mode's own picture keeps its src and is
+        # replaced by the mode's picture through `content` (ImageModes). A
+        # bound name reads the variable of the name it holds; a name with no
+        # picture for any mode binds no variable, and its src is drawn.
+        def apply_mode_picture
+          return unless ImageModes.any?
+
+          name_attr = attributes['srcName'] || (attributes['src'].nil? ? attributes['defaultImage'] : nil)
+          return if name_attr.nil?
+
+          content = if has_binding?(name_attr)
+                      ImageModes.content_bound("String(#{attribute_expression(name_attr)}).replace(/\\.svg$/, '')")
+                    elsif (name = ImageModes.name_with_modes(name_attr))
+                      ImageModes.content_literal(name)
+                    end
+          return unless content
+
+          (@dynamic_styles ||= {})['content'] = content
+        end
 
         def build_src
           # Priority: srcName > src > url > defaultImage

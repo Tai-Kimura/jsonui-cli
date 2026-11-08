@@ -267,8 +267,8 @@ module KjuiTools
           # Resolve icon names to drawable resources
           required_imports&.add(:painter_resource)
           required_imports&.add(:r_class)
-          icon_res = "R.drawable.#{Helpers::ResourceResolver.drawable_name(icon)}"
-          selected_icon_res = "R.drawable.#{Helpers::ResourceResolver.drawable_name(selected_icon)}"
+          icon_res = "#{Helpers::ResourceResolver.drawable_id(icon)}"
+          selected_icon_res = "#{Helpers::ResourceResolver.drawable_id(selected_icon)}"
 
           code = indent("IconToggleButton(", depth)
           code += "\n" + indent("checked = #{checked},", depth + 1)

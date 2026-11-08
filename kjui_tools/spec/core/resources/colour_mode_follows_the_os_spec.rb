@@ -79,7 +79,10 @@ RSpec.describe 'the colour mode follows the OS and a kept choice (Android)', :ko
   end
 
   def run(kept, steps)
-    result = KotlinCompiler.run("#{stubs(kept)}\n#{color_manager_body}\nfun main() {\n#{steps}\n}\n")
+    # The library's mode label, which ColorManager hands every mode to.
+    configuration = "package com.kotlinjsonui.core\nobject Configuration { fun setThemeMode(mode: String) {} }\n"
+    result = KotlinCompiler.run("#{stubs(kept)}\n#{color_manager_body}\nfun main() {\n#{steps}\n}\n",
+                                files: { 'Configuration.kt' => configuration })
     raise "did not run: #{result.errors.join("\n")}" unless result.success?
 
     result.output.lines.map { |l| l.strip.split('|') }

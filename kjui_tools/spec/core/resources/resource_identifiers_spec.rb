@@ -71,7 +71,9 @@ RSpec.describe 'resource names from keys (kjui)' do
     kotlin = color_manager_kotlin(KRI_COLORS)
     body = kotlin.lines.reject { |l| l.start_with?('package ', 'import ') }.join
 
-    expect("#{KRI_STUBS}\n#{body}").to compile_as_kotlin
+    # The library's mode label, which ColorManager hands every mode to.
+    configuration = "package com.kotlinjsonui.core\nobject Configuration { fun setThemeMode(mode: String) {} }\n"
+    expect("#{KRI_STUBS}\n#{body}").to compile_as_kotlin.alongside('Configuration.kt' => configuration)
   end
 
   # A string resource is named after the layout that holds it, so it starts
