@@ -284,7 +284,8 @@ class IosApiModelGenerator:
         if needs_custom_codable:
             body_lines.extend(
                 _emit_swift_custom_init_from_decoder(
-                    schema, enum_names, enums_by_name, format_native=fmt
+                    schema, enum_names, enums_by_name, format_native=fmt,
+                    open_enums=self._config.enum_unknown_case,
                 )
             )
             body_lines.extend(
@@ -990,6 +991,7 @@ def _emit_swift_custom_init_from_decoder(
     enums_by_name: dict[str, EnumDef],
     *,
     format_native: bool = False,
+    open_enums: bool = False,
 ) -> list[str]:
     """Emit the single custom ``init(from decoder:)`` for a DTO.
 
@@ -1060,9 +1062,11 @@ def _emit_swift_custom_init_from_decoder(
         disc_field = _find_field_by_wire_name(schema, f.type.one_of.discriminator_property)
         disc_prop = _swift_property_name(disc_field) if disc_field else f.type.one_of.discriminator_property
         disc_enum = None
+        # an inline enum (is_enum_ref) or a component enum's $ref (is_object_ref, ticket
+        # sjui-api-model-union-decoder-switch-misses-unknown: the $ref form switched on string literals and did not compile)
         if (
             disc_field is not None
-            and disc_field.type.is_enum_ref
+            and (disc_field.type.is_enum_ref or disc_field.type.is_object_ref)
             and disc_field.type.ref_name in enums_by_name
         ):
             disc_enum = enums_by_name[disc_field.type.ref_name]
@@ -1107,8 +1111,12 @@ def _emit_swift_custom_init_from_decoder(
         # For a string-typed (open) discriminator, or an enum that is only
         # partially mapped, the default is reachable and still routes
         # unmapped values to ``.unknown``.
+        # An open enum (api.enum_unknown_case) has ``unknown(<raw>)`` besides its cases: a discriminator the app does
+        # not know decodes, and its item's oneOf is ``.unknown`` (the response is read whole), so the default stays
+        # (ticket sjui-api-model-union-decoder-switch-misses-unknown: 2.5.15 left it out, "switch must be exhaustive").
         enum_exhaustive = (
             disc_enum is not None
+            and not open_enums
             and set(disc_enum.case_names).issubset(covered_enum_cases)
         )
         if not enum_exhaustive:

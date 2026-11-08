@@ -1617,9 +1617,9 @@ def _emit_kotlin_oneof_serializer(
         # ``.wire`` raw-string property so the literal cases below still
         # type-check. ``.wire`` is unconditionally emitted by the enum
         # codegen so this is always safe when ``is_enum_ref`` is true.
-        disc_is_enum = (
+        disc_is_enum = (   # an inline enum or a component enum's $ref (that one compared the enum with strings)
             disc_field is not None
-            and disc_field.type.is_enum_ref
+            and (disc_field.type.is_enum_ref or disc_field.type.is_object_ref)
             and disc_field.type.ref_name in enum_names
         )
         when_arg = f"{disc_prop}.wire" if disc_is_enum else disc_prop
