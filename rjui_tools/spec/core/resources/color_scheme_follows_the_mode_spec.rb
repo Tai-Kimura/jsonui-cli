@@ -93,5 +93,8 @@ RSpec.describe "the browser's own parts follow the colour mode (web)" do
     expect(written['_comment']).to eq('a note')
     flat = JsonUIShared::TypeConverterCore.send(:flatten_colors_for_lookup, colors)
     expect(flat.keys).to eq(['surface'])
+    # a flat file too: first, it did not make the file read as themed, nor its modes as colour names
+    flat_file = { 'colorSchemes' => { 'sepia' => 'dark' }, 'ink' => '#000000', 'paper' => '#FFFFFF' }
+    expect(JsonUIShared::TypeConverterCore.send(:flatten_colors_for_lookup, flat_file).keys).to eq(%w[ink paper])
   end
 end
