@@ -114,7 +114,10 @@ RSpec.describe KjuiTools::Core::Resources::ColorManager do
     it "the generated file compiles (#{label})" do
       write_colors(body)
       kotlin = generated(manager).lines.reject { |l| l.start_with?('package ', 'import ') }.join
-      expect("#{NOTES_STUBS}\n#{kotlin}").to compile_as_kotlin
+      # The library's mode label, which ColorManager hands every mode to
+      # (as resource_identifiers_spec stands it in).
+      configuration = "package com.kotlinjsonui.core\nobject Configuration { fun setThemeMode(mode: String) {} }\n"
+      expect("#{NOTES_STUBS}\n#{kotlin}").to compile_as_kotlin.alongside('Configuration.kt' => configuration)
     end
     it "the name lookup answers ink and not the note (#{label})" do
       names = JsonUIShared::TypeConverterCore.flatten_colors_for_lookup(JSON.parse(JSON.generate(body)))
