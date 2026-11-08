@@ -196,24 +196,47 @@ module SjuiTools
           # The mode's state is not actor-protected (it never was): said so, or Swift 6 without
           # MainActor refuses the statics (ticket 2026-10-23-sjui-swift6-nonisolated-colormanager-and-binding-dict).
           # The default is the case itself — under MainActor isolation `fallbackMode` is main-actor state.
-          lines << "    nonisolated(unsafe) private static var _currentMode: ColorMode = .#{swift_enum_case(@fallback_mode)}"
-          lines << '    nonisolated(unsafe) private static var _followSystemMode: Bool = true'
+          # A choice is kept (UserDefaults) and wins over the OS until followSystemMode
+          # goes back to true; the OS reaches the mode through the generated views'
+          # colorScheme, and a mode change draws them again through
+          # SwiftJsonUIConfiguration's theme mode, which they observe (ticket
+          # rjui-color-mode-never-sets-data-theme: setMode changed this struct only,
+          # no view asked for its colour again, and nothing followed the OS).
+          # nonisolated: they feed the nonisolated(unsafe) state's defaults, which
+          # a main-actor default (Swift 6 + MainActor) cannot.
+          lines << '    nonisolated fileprivate static let storageKey = "jsonui-color-mode"'
+          lines << '    nonisolated fileprivate static var keptChoice: String? { UserDefaults.standard.string(forKey: storageKey) }'
+          lines << "    nonisolated(unsafe) private static var _currentMode: ColorMode = keptChoice.flatMap { ColorMode(rawValue: $0) } ?? .#{swift_enum_case(@fallback_mode)}"
+          lines << '    nonisolated(unsafe) private static var _followSystemMode: Bool = keptChoice.flatMap { ColorMode(rawValue: $0) } == nil'
           lines << '    nonisolated(unsafe) private static var _observers: [UUID: () -> Void] = [:]'
+          lines << '    nonisolated(unsafe) private static var _lastSystemStyle: UIUserInterfaceStyle?'
           lines << ''
           lines << '    public static var currentMode: ColorMode { _currentMode }'
           # Changing the mode reaches UIKit and the Observable: the main actor's (a colour lookup is not).
+          lines << '    /// true goes back to the OS (and keeps that); false keeps the current mode as the choice.'
           lines << '    @MainActor'
           lines << '    public static var followSystemMode: Bool {'
           lines << '        get { _followSystemMode }'
           lines << '        set {'
           lines << '            _followSystemMode = newValue'
-          lines << '            if newValue { applySystemMode() }'
+          lines << '            UserDefaults.standard.set(newValue ? "system" : _currentMode.rawValue, forKey: storageKey)'
+          lines << '            guard newValue else { return }'
+          lines << '            if let last = _lastSystemStyle, let mapped = systemModeMapping[last] { set(mapped) } else { applySystemMode() }'
           lines << '        }'
           lines << '    }'
           lines << ''
-          lines << '    /// Switch the active color mode and notify subscribers + Observable.'
+          lines << '    /// An explicit choice: kept, and the OS no longer changes it until followSystemMode = true.'
           lines << '    @MainActor'
           lines << '    public static func setMode(_ mode: ColorMode) {'
+          lines << '        _followSystemMode = false'
+          lines << '        UserDefaults.standard.set(mode.rawValue, forKey: storageKey)'
+          lines << '        set(mode)'
+          lines << '    }'
+          lines << ''
+          lines << '    @MainActor'
+          lines << '    private static func set(_ mode: ColorMode) {'
+          lines << '        // The generated views observe the theme mode: they draw again with this mode.'
+          lines << '        SwiftJsonUIConfiguration.shared.setThemeMode(mode.rawValue)'
           lines << '        guard _currentMode != mode else { return }'
           lines << '        _currentMode = mode'
           lines << '        Observable.shared.publish(mode)'
@@ -249,10 +272,22 @@ module SjuiTools
           lines << '    @MainActor'
           lines << '    public static func applySystemMode(from traits: UITraitCollection) {'
           lines << '        #if canImport(UIKit)'
+          lines << '        _lastSystemStyle = traits.userInterfaceStyle'
+          lines << '        guard _followSystemMode else { return }'
           lines << '        if let mapped = systemModeMapping[traits.userInterfaceStyle] {'
-          lines << '            setMode(mapped)'
+          lines << '            set(mapped)'
           lines << '        }'
           lines << '        #endif'
+          lines << '    }'
+          lines << ''
+          lines << '    /// The SwiftUI entry point: the generated views call it with their colorScheme.'
+          lines << '    @MainActor'
+          lines << '    public static func applySystemMode(_ scheme: ColorScheme) {'
+          lines << '        // A kept choice still reaches SwiftJsonUIConfiguration (Dynamic draws with it).'
+          lines << '        let style: UIUserInterfaceStyle = scheme == .dark ? .dark : .light'
+          lines << '        _lastSystemStyle = style'
+          lines << '        let os = systemModeMapping[style]'
+          lines << '        set(_followSystemMode ? (os ?? _currentMode) : _currentMode)'
           lines << '    }'
           lines << ''
 
@@ -262,7 +297,7 @@ module SjuiTools
           lines << '    @MainActor'
           lines << '    public final class Observable: ObservableObject {'
           lines << '        public static let shared = Observable()'
-          lines << '        @Published public private(set) var currentMode: ColorMode = ColorManager.fallbackMode'
+          lines << '        @Published public private(set) var currentMode: ColorMode = ColorManager.currentMode'
           lines << '        fileprivate init() {}'
           lines << '        fileprivate func publish(_ mode: ColorMode) { currentMode = mode }'
           lines << '    }'

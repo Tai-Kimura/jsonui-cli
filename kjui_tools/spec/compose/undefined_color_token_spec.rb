@@ -134,7 +134,7 @@ RSpec.describe 'an undefined colour token on Compose' do
       dir = project
       build(dir)
       kotlin = emitted(dir)
-      exprs = kotlin.scan(/color = (Color\.Unspecified|colorResource\([^)]*\)|Color\(android\.graphics\.Color\.parseColor\("[^"]*"\)\))/)
+      exprs = kotlin.scan(/color = (Color\.Unspecified|\(com\.kotlinjsonui\.generated\.ColorManager\.compose\.color\("[^"]*"\) \?: colorResource\([^)]*\)\)|Color\(android\.graphics\.Color\.parseColor\("[^"]*"\)\))/)
                     .flatten.uniq
       expect(exprs.size).to be >= 3, "expected the fixture's colour shapes, got #{exprs.inspect}"
 
@@ -159,6 +159,9 @@ RSpec.describe 'an undefined colour token on Compose' do
         #{keys.map { |k| "    const val #{k}: Int = 1" }.join("\n")}
         } }
         fun colorResource(id: Int): Color = Color(0L)
+        object com { object kotlinjsonui { object generated { object ColorManager {
+            object compose { fun color(key: String): Color? = null }
+        } } } }
 
         fun emitted() {
         #{body}

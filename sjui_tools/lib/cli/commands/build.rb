@@ -661,6 +661,7 @@ module SjuiTools
           # view): their views read the stop from the environment.
           converter.interaction_stoppable_ids = SjuiTools::SwiftUI::InteractionStopIndex.build(layouts_dir)
           updater = SjuiTools::SwiftUI::ViewUpdater.new
+          updater.color_mode = !Core::ConfigManager.load_config['resource_manager_directory'].to_s.empty?
 
           # Screen identity: only screens carry a marker (cells and partials
           # render inside a host and would each grow a false one). Built once

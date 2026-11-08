@@ -59,6 +59,10 @@ RSpec.describe 'generated Swift names from resource keys' do
     extension String {
         func localized(tableName: String? = nil, bundle: Bundle? = nil, value: String? = nil, comment: String = "") -> String { self }
     }
+    public class SwiftJsonUIConfiguration: @unchecked Sendable {
+        public static let shared = SwiftJsonUIConfiguration()
+        public func setThemeMode(_ mode: String) {}
+    }
     SWIFT
   end
 
