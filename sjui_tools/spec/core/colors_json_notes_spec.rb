@@ -95,6 +95,19 @@ RSpec.describe SjuiTools::Core::Resources::ColorManager do
     expect(written['light']).to eq('ink' => '#112233')
   end
 
+  # jui build copies the source over the platform copy each build, and the
+  # tool migrates it again: the note is written where the source has it (the
+  # top of a flat file), and the second build leaves it there.
+  it 'a flat file: the note stays on top across two builds' do
+    2.times do
+      write_colors(FLAT)
+      manager.apply_to_color_assets
+      written = JSON.parse(File.read(colors_path))
+      expect(written['_comment']).to eq('tokens.css, 1:1')
+      expect(written.values.grep(Hash).flat_map(&:keys)).not_to include('_comment')
+    end
+  end
+
   it 'a themed file: a note inside a palette is no colour, and is written back in that palette' do
     write_colors(IN_PALETTES)
     m = manager
