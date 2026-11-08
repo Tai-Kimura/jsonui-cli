@@ -791,32 +791,38 @@ module KjuiTools
           keyboard_options = []
 
 
-          # Input type / contentType - contentType takes priority
-          if json_data['contentType']
-            required_imports&.add(:keyboard_type)
-            # `contentType` is `["string", "binding"]` and the `case` below
-            # could never match a `"@{...}"`, so a bound contentType froze to
+          # The keyboard: `input` first, then `contentType`, then the migration
+          # spelling `inputType`. iOS and the web take the keyboard from
+          # `input` alone (contentType is .textContentType / autoComplete
+          # there), so a field declaring both got input's keyboard on those
+          # faces and contentType's here. Until 2.5.12 contentType came first,
+          # and a value with no keyboard (username, usernameWebauthn, name, ...)
+          # dropped `input`'s: `input: email` + `contentType: usernameWebauthn`
+          # lost the e-mail keyboard on Android only. contentType alone still
+          # picks a keyboard (declared: "Android to the keyboard type").
+          keyboard_type = nil
+          if json_data['input']
+            keyboard_type = Helpers::BoundValue.enum(
+              json_data['input'], input_keyboard_table,
+              bound_default: 'KeyboardType.Text', declared: %w[TextField input]
+            )
+          end
+          if keyboard_type.nil? && json_data['contentType']
+            # `contentType` is `["string", "binding"]` and a `case` could never
+            # match a `"@{...}"`, so a bound contentType froze to
             # KeyboardType.Text (plan 49 lane C: TextField.contentType).
             keyboard_type = Helpers::BoundValue.enum(
               json_data['contentType'], CONTENT_TYPE_KEYBOARD,
               bound_default: 'KeyboardType.Text', declared: %w[TextField contentType]
             )
-            keyboard_options << "keyboardType = #{keyboard_type}" if keyboard_type
-          elsif json_data['input']
-            required_imports&.add(:keyboard_type)
-            keyboard_type = Helpers::BoundValue.enum(
-              json_data['input'], input_keyboard_table,
-              bound_default: 'KeyboardType.Text', declared: %w[TextField input]
-            )
-            keyboard_options << "keyboardType = #{keyboard_type}" if keyboard_type
-          elsif json_data['inputType']
+          end
+          if keyboard_type.nil? && !json_data['input'] && !json_data['contentType'] && json_data['inputType']
             # inputType is the Android-XML spelling, and XML mode is the only
             # place it was ever read (xml/helpers/mappers/input_mapper.rb) — so a
             # layout migrated to Compose lost its keyboard silently. `input` is
             # the canonical attribute and wins; this is the migration fallback,
             # covering the XML mapper's own vocabulary plus the raw
             # `android:inputType` names it passes through untouched.
-            required_imports&.add(:keyboard_type)
             keyboard_type = case JsonUIShared::EnumSpelling.lowered(json_data['inputType'], 'TextField', 'inputType')
             when 'email', 'textemailaddress'
               'KeyboardType.Email'
@@ -831,6 +837,9 @@ module KjuiTools
             else
               'KeyboardType.Text'
             end
+          end
+          if keyboard_type
+            required_imports&.add(:keyboard_type)
             keyboard_options << "keyboardType = #{keyboard_type}"
           end
 

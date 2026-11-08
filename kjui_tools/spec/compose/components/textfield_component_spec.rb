@@ -485,6 +485,38 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
         expect(result).not_to include('KeyboardType.Email')
       end
 
+      # The keyboard comes from `input`, and from contentType only when input
+      # names none -- the order iOS and the web keep (they read `input` alone).
+      # Until 2.5.12 contentType came first, and a value with no keyboard
+      # dropped input's: `input: email` + `usernameWebauthn` lost the e-mail
+      # keyboard on Android only.
+      describe 'the keyboard: input first, contentType when input names none' do
+        let(:gen) { ->(j) { described_class.generate({ 'type' => 'TextField' }.merge(j), 0, required_imports) } }
+
+        %w[username usernameWebauthn name givenName familyName oneTimeCode streetAddress country].each do |ct|
+          it "keeps input's e-mail keyboard under contentType #{ct}" do
+            result = gen.call('input' => 'email', 'contentType' => ct)
+            expect(result).to include('keyboardType = KeyboardType.Email')
+          end
+        end
+
+        it 'lets input win over a contentType naming another keyboard' do
+          expect(gen.call('input' => 'number', 'contentType' => 'email')).to include('keyboardType = KeyboardType.Number')
+          expect(gen.call('input' => 'email', 'contentType' => 'URL')).to include('keyboardType = KeyboardType.Email')
+        end
+
+        it 'takes the keyboard from contentType when input is absent or default' do
+          expect(gen.call('contentType' => 'email')).to include('keyboardType = KeyboardType.Email')
+          expect(gen.call('input' => 'default', 'contentType' => 'tel')).to include('keyboardType = KeyboardType.Phone')
+        end
+
+        it 'keeps the autofill hint and the mask, which come from contentType alone' do
+          result = gen.call('input' => 'email', 'contentType' => 'usernameWebauthn')
+          expect(result).to include('.semantics { contentType = ContentType.Username }')
+          expect(gen.call('input' => 'text', 'contentType' => 'password')).to include('isSecure = true')
+        end
+      end
+
       # A Compose field takes no Credential Manager request; usernameWebauthn
       # is drawn as `username` (no keyboard of its own, not masked).
       it 'draws usernameWebauthn as a username field' do
