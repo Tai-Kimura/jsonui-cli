@@ -3,6 +3,7 @@
 require 'core/resources/color_manager'
 require 'core/type_converter_core'
 require 'json'
+require 'open3'
 require 'tmpdir'
 require 'fileutils'
 
@@ -38,6 +39,43 @@ RSpec.describe SjuiTools::Core::Resources::ColorManager do
   def generated(manager)
     manager.apply_to_color_assets
     File.read(File.join(temp_dir, 'gen', 'ColorManager.swift'))
+  end
+
+  # The compile arm: ColorManager.swift imports UIKit, so it type-checks with
+  # swiftc against the iOS simulator SDK (as color_manager_empty_dictionary_spec
+  # checks it) rather than through `compile_as_swift`, which type-checks for
+  # the macOS host. `import SwiftJsonUI` is stood in for by what the file uses.
+  LIBRARY_STUB = <<~SWIFT
+    import UIKit
+    extension UIColor {
+        static func colorWithHexString(_ hex: String) -> UIColor { .black }
+    }
+    public class SwiftJsonUIConfiguration: @unchecked Sendable {
+        public static let shared = SwiftJsonUIConfiguration()
+        public func setThemeMode(_ mode: String) {}
+    }
+  SWIFT
+
+  def ios_sdk
+    @ios_sdk ||= begin
+      out, status = Open3.capture2e('xcrun', '--sdk', 'iphonesimulator', '--show-sdk-path')
+      status.success? ? out.strip : ''
+    rescue Errno::ENOENT
+      ''
+    end
+  end
+
+  def ios_typecheck(emitted)
+    skip 'no iOS simulator SDK here (xcrun --sdk iphonesimulator); the macOS leg runs this' if ios_sdk.empty?
+
+    Dir.mktmpdir do |dir|
+      stub = File.join(dir, 'Stub.swift')
+      file = File.join(dir, 'ColorManager.swift')
+      File.write(stub, LIBRARY_STUB)
+      File.write(file, emitted.sub(/^import SwiftJsonUI\n/, ''))
+      Open3.capture2e('xcrun', '--sdk', 'iphonesimulator', 'swiftc', '-typecheck',
+                      '-target', 'arm64-apple-ios16.0-simulator', stub, file)
+    end
   end
 
   FLAT = { '_comment' => 'tokens.css, 1:1', 'ink' => '#112233' }.freeze
@@ -86,6 +124,11 @@ RSpec.describe SjuiTools::Core::Resources::ColorManager do
       expect(out).to include('ink')
     end
 
+    it "the generated file type-checks for iOS (#{label})", :swift_compile do
+      write_colors(body)
+      output, status = ios_typecheck(generated(manager))
+      expect(status.success?).to be(true), output
+    end
     it "the name lookup answers ink and not the note (#{label})" do
       names = JsonUIShared::TypeConverterCore.flatten_colors_for_lookup(JSON.parse(JSON.generate(body)))
       expect(names.keys).to eq(['ink'])

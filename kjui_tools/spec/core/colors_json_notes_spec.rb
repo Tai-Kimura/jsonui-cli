@@ -41,6 +41,30 @@ RSpec.describe KjuiTools::Core::Resources::ColorManager do
     File.read(File.join(temp_dir, 'gen', 'ColorManager.kt'))
   end
 
+  # The generated file, as kotlinc reads it: its Android / Compose imports are
+  # stood in for by the members it uses (as resource_identifiers_spec does).
+  NOTES_STUBS = <<~KOTLIN
+    object Color { fun parseColor(value: String): Int = 0 }
+    object Log { fun w(tag: String, message: String): Int = 0 }
+    class MutableState<T>(var value: T)
+    fun <T> mutableStateOf(value: T): MutableState<T> = MutableState(value)
+    class ComposeColor(val argb: Int)
+    annotation class Composable
+    interface SharedPreferences {
+        fun getString(key: String, defValue: String?): String?
+        fun edit(): Editor
+        interface Editor { fun putString(key: String, value: String?): Editor; fun apply() }
+    }
+    abstract class Context {
+        abstract val applicationContext: Context
+        abstract fun getSharedPreferences(name: String, mode: Int): SharedPreferences
+        companion object { const val MODE_PRIVATE = 0 }
+    }
+    object LocalContext { val current: Context get() = throw IllegalStateException() }
+    fun isSystemInDarkTheme(): Boolean = false
+    fun <T> remember(key1: Any?, key2: Any?, calculation: () -> T): T = calculation()
+  KOTLIN
+
   FLAT = { '_comment' => 'tokens.css, 1:1', 'ink' => '#112233' }.freeze
   IN_PALETTES = {
     'light' => { '_comment' => 'light note', 'ink' => '#112233' },
@@ -87,6 +111,11 @@ RSpec.describe KjuiTools::Core::Resources::ColorManager do
       expect(out).to include('ink')
     end
 
+    it "the generated file compiles (#{label})" do
+      write_colors(body)
+      kotlin = generated(manager).lines.reject { |l| l.start_with?('package ', 'import ') }.join
+      expect("#{NOTES_STUBS}\n#{kotlin}").to compile_as_kotlin
+    end
     it "the name lookup answers ink and not the note (#{label})" do
       names = JsonUIShared::TypeConverterCore.flatten_colors_for_lookup(JSON.parse(JSON.generate(body)))
       expect(names.keys).to eq(['ink'])

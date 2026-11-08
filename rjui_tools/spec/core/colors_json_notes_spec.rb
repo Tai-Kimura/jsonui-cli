@@ -5,6 +5,7 @@ require 'core/type_converter_core'
 require 'json'
 require 'tmpdir'
 require 'fileutils'
+require_relative '../support/typescript_compiler'
 
 # A `_` key in colors.json (`_comment`) is a note, not a colour or a mode.
 #
@@ -88,6 +89,10 @@ RSpec.describe RjuiTools::Core::Resources::ColorManager do
       expect(out).to include("const THEME_KEYS: ReadonlySet<string> = new Set(['ink']);")
     end
 
+    it "the generated file type-checks (#{label})" do
+      write_colors(body)
+      expect("#{generated(manager)}\nconst _uses = [ColorManager.ink];\n").to compile_as_typescript
+    end
     it "the name lookup answers ink and not the note (#{label})" do
       names = JsonUIShared::TypeConverterCore.flatten_colors_for_lookup(JSON.parse(JSON.generate(body)))
       expect(names.keys).to eq(['ink'])
