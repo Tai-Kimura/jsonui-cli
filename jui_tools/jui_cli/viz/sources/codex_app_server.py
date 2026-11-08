@@ -522,7 +522,8 @@ class CodexLink:
         self._calls[rid] = fut
         try:
             await self._ws.send_str(json.dumps({"jsonrpc": "2.0", "id": rid, "method": method, "params": params}))
-            msg = await asyncio.wait_for(fut, CALL_TIMEOUT_SEC)
+            async with asyncio.timeout(CALL_TIMEOUT_SEC):
+                msg = await fut
         finally:
             self._calls.pop(rid, None)
         if "error" in msg:

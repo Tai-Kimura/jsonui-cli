@@ -41,7 +41,10 @@ async def poll_once(claude: str) -> list[dict] | None:
         start_new_session=True,
     )
     try:
-        stdout, _ = await asyncio.wait_for(proc.communicate(), TIMEOUT_SEC)
+        # asyncio.timeout, not wait_for: on 3.11 wait_for dropped the stop's cancel when it landed as the answer came
+        # in, and run() went on to its next poll, holding the stop (tests/test_viz_sources.py)
+        async with asyncio.timeout(TIMEOUT_SEC):
+            stdout, _ = await proc.communicate()
     except asyncio.TimeoutError:
         try:
             os.killpg(proc.pid, signal.SIGKILL)  # the group started just above
@@ -54,7 +57,8 @@ async def poll_once(claude: str) -> list[dict] | None:
         if transport is not None:
             transport.close()
         try:
-            await asyncio.wait_for(proc.wait(), 1.0)
+            async with asyncio.timeout(1.0):
+                await proc.wait()
         except asyncio.TimeoutError:
             pass
         return None

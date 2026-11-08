@@ -895,9 +895,31 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     # its files left). Once taken, the stop ends within STOP_MAX_SEC whatever holds it, naming the step it was in.
     stop = asyncio.Event()
     stop_step = ["starting"]
+    held_task: list = [None]   # the task the stop's tasks step waits on
+
+    def where(task) -> str:
+        """Where a task waits: each coroutine down the await chain, at its line (read from another thread, for the log
+        only)."""
+        out, coro = [], task.get_coro()
+        for _ in range(12):
+            frame = getattr(coro, "cr_frame", None) or getattr(coro, "gi_frame", None)
+            if frame is None:
+                if coro is not None:
+                    out.append(type(coro).__name__)
+                break
+            out.append(f"{frame.f_code.co_qualname if hasattr(frame.f_code, 'co_qualname') else frame.f_code.co_name}"
+                       f" ({Path(frame.f_code.co_filename).name}:{frame.f_lineno})")
+            coro = getattr(coro, "cr_await", None) or getattr(coro, "gi_yieldfrom", None)
+        return " > ".join(out)
 
     def stop_held() -> None:
         log(f"stop held in {stop_step[0]} for {STOP_MAX_SEC:g} s; ending without it")
+        task = held_task[0]
+        if task is not None and not task.done():
+            try:
+                log(f"the task held: {where(task)}")
+            except Exception as exc:  # noqa: BLE001 — the log line only
+                log(f"the task held: not read ({type(exc).__name__})")
         try:
             _clear_runtime_files(pid)
         finally:
@@ -1381,6 +1403,10 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
         for task in tasks:
             task.cancel()
         for task in tasks:
+            # which one, when it holds the stop: a task that does not end when cancelled is named in the log
+            coro = task.get_coro()
+            stop_step[0] = f"the tasks ({getattr(coro, '__qualname__', None) or task.get_name()})"
+            held_task[0] = task
             try:
                 await task
             except (asyncio.CancelledError, Exception):  # noqa: BLE001

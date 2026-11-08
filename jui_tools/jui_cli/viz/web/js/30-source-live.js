@@ -1034,6 +1034,7 @@ function rebuildRobots(initial) {
     if (a.shred && typeof a.shred === 'object' && Number(a.shred.at) > 0) {
       st.shred = { at: Number(a.shred.at), ok: a.shred.ok === true, label: String(a.shred.label || ''), count: Math.max(1, Number(a.shred.count) || 1), folder: a.shred.folder === true };
     }
+    if (VIS_HELD[label]) st.state = VIS_HELD[label];   // a browser test's state (10-robot-core.js VIS_HELD)
     if (LIVE.leaving[label]) st.state = 'done';
     robotState[label] = st;
     seen.add(label);

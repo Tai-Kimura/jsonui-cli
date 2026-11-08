@@ -732,6 +732,7 @@ LIVE_ONLY = {
     "sinceOf", "heavyOf",                         # 40-scene: liveUpdateRobots (tiredness and heavy work of a live session)
     "renderUsage",                                # 70-main: liveChrome (the usage limits in the header, 10-18)
     "seatArea", "seatPos", "seatsClear",          # 80-dbg: tagPinsOver (behind SOURCE.mode === 'live', 2.3.10)
+    "liveApply",                                  # 80-dbg: sliceAgain (behind SOURCE.mode === 'live', 2.5.13)
 }
 # Calls in the live bundle to functions only the demo script defines: each sits in a demo branch (the demo's update
 # in update3D, demoDirector, the demo clock in 70-main) and never runs live.

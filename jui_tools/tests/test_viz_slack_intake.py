@@ -594,8 +594,15 @@ def test_the_service_fetches_when_a_slot_is_due_and_by_hand_once_at_a_time(tmp_p
     slack = FakeSlack(history=[[{"ts": recent, "user": "U1", "text": "x"}]])
     route = FakeRoute([{"choice": "shop", "confidence": 0.9}])
     snaps = []
+
+    def slow_route(message, router_cfg):
+        # the inbox is sorted after lastRun is on disk, and the fetch runs until it is done: a sort that takes a while
+        # (a loaded runner, run 42454156041) is still the scheduled fetch's, and a press then is refused (409)
+        time.sleep(0.4)
+        return route(message, router_cfg)
+
     svc = I.Service(snaps.append, watch_sec=0.05, loader=lambda: cfg,
-                    work_kw={"get": slack, "route": route})
+                    work_kw={"get": slack, "route": slow_route})
 
     async def go():
         task = asyncio.create_task(svc.run())
@@ -606,9 +613,9 @@ def test_the_service_fetches_when_a_slot_is_due_and_by_hand_once_at_a_time(tmp_p
         st.save()
         for _ in range(100):
             await asyncio.sleep(0.05)
-            if "lastRun" in I.Status(root).data:
+            if "lastRun" in I.Status(root).data and not svc.running:   # the scheduled fetch has ended, its sort too
                 break
-        assert I.Status(root).data["lastRun"]["trigger"] == "schedule"
+        assert I.Status(root).data["lastRun"]["trigger"] == "schedule" and not svc.running
         assert svc.start_fetch()[0] == 202
         assert svc.start_fetch() == (409, {"error": "a fetch is running"})
         await svc._task

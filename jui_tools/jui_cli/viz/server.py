@@ -435,7 +435,8 @@ def make_app(ctx: ServerContext) -> web.Application:
                 if left <= 0 or not ctx.browser_present():
                     break
                 try:
-                    answer = await asyncio.wait_for(asyncio.shield(future), min(left, PRESENCE_POLL_SEC))
+                    async with asyncio.timeout(min(left, PRESENCE_POLL_SEC)):
+                        answer = await asyncio.shield(future)
                     break
                 except asyncio.TimeoutError:
                     continue
@@ -492,7 +493,8 @@ def make_app(ctx: ServerContext) -> web.Application:
                     pinged = now   # waiting on a hidden page: it says again that its notifications are on
                     await _send_all(ctx, {"type": "notify.ping"})
                 try:
-                    answer = await asyncio.wait_for(asyncio.shield(future), min(left, PRESENCE_POLL_SEC))
+                    async with asyncio.timeout(min(left, PRESENCE_POLL_SEC)):
+                        answer = await asyncio.shield(future)
                     break
                 except asyncio.TimeoutError:
                     continue
@@ -1418,7 +1420,8 @@ async def _reveal(path: str) -> bool:
     except OSError:
         return False
     try:
-        return await asyncio.wait_for(proc.wait(), 10) == 0
+        async with asyncio.timeout(10):
+            return await proc.wait() == 0
     except asyncio.TimeoutError:
         proc.kill()
         await proc.wait()
