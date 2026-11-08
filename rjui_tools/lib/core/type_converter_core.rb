@@ -192,6 +192,12 @@ module JsonUIShared
         return {} unless raw.is_a?(Hash) && !raw.empty?
 
         meta_keys = %w[fallback_mode systemModeMapping modes]
+        # A `_` key (`_comment`) is a note, not a colour or a mode — the rule
+        # ColorManagerCore.note_key? keeps. At the top of a themed file it was
+        # the first content key, the file read as flat, and every palette name
+        # was "not defined".
+        note = ->(k) { k.is_a?(String) && k.start_with?('_') }
+        raw = raw.reject { |k, _| note.call(k) }
         content_keys = raw.keys - meta_keys
         return {} if content_keys.empty?
 
@@ -203,7 +209,7 @@ module JsonUIShared
           fallback ||= 'light' if raw['light'].is_a?(Hash)
           fallback ||= content_keys.first
           palette = raw[fallback]
-          palette.is_a?(Hash) ? palette.reject { |_, v| !(v.is_a?(String) || v.nil?) } : {}
+          palette.is_a?(Hash) ? palette.reject { |k, v| note.call(k) || !(v.is_a?(String) || v.nil?) } : {}
         else
           raw.reject { |k, _| meta_keys.include?(k) }
         end

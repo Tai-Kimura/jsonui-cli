@@ -7,7 +7,9 @@ converters silently (and, before they resolved aliases themselves, drew as
 the default). A Style carries no `type` as a rule, so:
 
 - with a `type`, it takes the Layout canonicalizer (attribute, value and
-  component aliases);
+  component aliases), warned as a Layout is: an attribute alias without a
+  warning. Whether a copy is rewritten is what changed, not what was warned
+  (2.5.14: a typed Style with attribute aliases only went out as written);
 - without one, only value aliases are rewritten. An attribute alias depends
   on the component: `contentDescription` is `alt` on an Image and
   `accessibilityLabel` elsewhere, and `value` is a real attribute on a Slider.
@@ -28,6 +30,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from jui_cli.commands.build_cmd import _distribute_styles
+from jui_cli.core.normalizer import Canonicalizer
 from jui_cli.core.normalizer.alias_table import AliasTable
 
 from test_build_sync_e2e import _build_fixture_project, _load_config, _make_args, _set_normalize
@@ -39,6 +42,10 @@ STYLES = {
     "email_field.json": {"type": "TextField", "contentType": "emailAddress", "value": "x"},
     # nothing to rewrite: copied as written, formatting and all
     "plain.json": {"fontSize": 12},
+    # typed, attribute aliases only: rewritten, and (as in a Layout) unwarned
+    "hint_field.json": {"type": "TextField", "placeholderColor": "ink", "alpha": 0.5},
+    # typed, warned but nothing to rewrite (deprecated): copied as written
+    "boxed_field.json": {"type": "TextField", "hasContainer": True},
 }
 
 
@@ -89,6 +96,28 @@ class AStyleAliasIsWarnedAndRewritten(unittest.TestCase):
             self.assertNotIn("value", copy)
             self.assertNotIn("$jui", copy)
             self.assertIn("email_field.json", said)
+
+    def test_a_typed_style_with_attribute_aliases_only_is_rewritten_as_a_layout_is(self):
+        # Until 2.5.14 the rewrite was kept only when something was warned,
+        # and an attribute alias is rewritten without a warning: the copy
+        # went out as written and the converters dropped both attributes.
+        with tempfile.TemporaryDirectory() as d:
+            root = _project(d)
+            said = _distribute(root)
+            copy = json.loads(_copy(root, "hint_field.json"))
+            node = STYLES["hint_field.json"]
+            layout, _ = Canonicalizer(AliasTable.from_file()).canonicalize(node, add_marker=False)
+            self.assertEqual(copy, layout)
+            self.assertEqual(copy, {"type": "TextField", "hintColor": "ink", "opacity": 0.5})
+            self.assertNotIn("hint_field.json", said)
+
+    def test_a_typed_style_only_warned_is_copied_as_written(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = _project(d)
+            said = _distribute(root)
+            self.assertEqual(_copy(root, "boxed_field.json"), json.dumps(STYLES["boxed_field.json"]))
+            self.assertIn("boxed_field.json", said)
+            self.assertIn("hasContainer", said)
 
     def test_every_face_gets_the_rewritten_copy_and_the_source_is_untouched(self):
         with tempfile.TemporaryDirectory() as d:
