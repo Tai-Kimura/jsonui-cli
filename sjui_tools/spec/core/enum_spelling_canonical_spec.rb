@@ -19,6 +19,15 @@ RSpec.describe 'JsonUIShared::EnumSpelling.canonical' do
     expect(spelling.canonical(nil, 'TextField', 'contentType')).to be_nil
   end
 
+  it 'reads the declaring section for an attribute neither the section nor common declares' do
+    expect(spelling.canonical('LeftToRight', 'Button', 'gradientDirection')).to eq('Horizontal')
+  end
+
+  it "keeps a section's own declaration, aliases or not" do
+    # GradientView declares gradientDirection with three values and no alias.
+    expect(spelling.canonical('LeftToRight', 'GradientView', 'gradientDirection')).to eq('LeftToRight')
+  end
+
   it 'reads common for an attribute the section does not declare' do
     expect(spelling.canonical('systemMaterial', 'View', 'effectStyle')).to eq('Regular')
   end

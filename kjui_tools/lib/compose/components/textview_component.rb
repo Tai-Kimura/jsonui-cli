@@ -513,6 +513,12 @@ module KjuiTools
           if json_data['keyboardType'] || json_data['input']
             required_imports&.add(:keyboard_type)
             input_type = json_data['keyboardType'] || json_data['input']
+            # A keyboardType alias (`numberPad`, `emailAddress`, `text`, ...) by
+            # its canonical spelling: a Style reaches here without `jui
+            # build`'s normalizer, and the table is keyed by canonical names.
+            if json_data['keyboardType']
+              input_type = JsonUIShared::EnumSpelling.canonical(input_type, 'TextView', 'keyboardType')
+            end
             keyboard_type = Helpers::BoundValue.enum(
               # Through the accessor, not the constant: TextView emits the
               # same member names from the same table, so it is under the same
