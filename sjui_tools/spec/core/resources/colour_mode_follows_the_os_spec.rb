@@ -136,6 +136,24 @@ RSpec.describe 'the colour mode follows the OS and a kept choice (iOS)' do
                                    '@Environment(\.colorScheme) private var sjuiColorScheme',
                                    '.onAppear { ColorManager.applySystemMode(sjuiColorScheme) }',
                                    '.onChange(of: sjuiColorScheme) { _, scheme in ColorManager.applySystemMode(scheme) }')
+        # The four lines, as written, in a view: they type-check against
+        # ColorManager.applySystemMode(ColorScheme) and the library's
+        # ObservableObject configuration (the harness's stand-in).
+        lines = content.lines.map(&:strip)
+        state = lines.select { |l| l.include?('sjuiThemeMode =') || l.include?('var sjuiColorScheme') }
+        mods = lines.select { |l| l.start_with?('.onAppear { ColorManager', '.onChange(of: sjuiColorScheme)') }
+        expect([state.size, mods.size]).to eq([2, 2])
+        expect(<<~SWIFT).to compile_as_swift
+          enum ColorManager { @MainActor static func applySystemMode(_ scheme: ColorScheme) {} }
+          @available(macOS 14, iOS 17, *)
+          struct HomeGeneratedView: View {
+              #{state.join("\n    ")}
+              var body: some View {
+                  Group { Text("base") }
+                  #{mods.join("\n        ")}
+              }
+          }
+        SWIFT
         # on the outer Group, as the screen marker: both rendering modes carry it
         expect(content.index('.onAppear { ColorManager')).to be < content.index('.jsonUIScreenMarker("home")')
         expect(content.index('.onAppear { ColorManager')).to be < content.index('private var generatedBody')

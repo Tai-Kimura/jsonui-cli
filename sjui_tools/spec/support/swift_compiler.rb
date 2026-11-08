@@ -123,7 +123,9 @@ module SwiftCompiler
         struct PartialAttribute {
             init(range: Range<Int>? = nil, textPattern: String? = nil, fontColor: Color? = nil, fontSize: CGFloat? = nil, fontWeight: Font.Weight? = nil, underline: Bool = false, strikethrough: Bool = false, backgroundColor: Color? = nil, onClick: (() -> Void)? = nil) {}
         }
-        struct SwiftJsonUIConfiguration {
+        // A class and an ObservableObject, as the library's: a generated view
+        // of a project with a ColorManager observes it (the theme mode).
+        final class SwiftJsonUIConfiguration: ObservableObject {
             static let shared = SwiftJsonUIConfiguration()
             func getColor(for hex: String) -> Color? { Color.black }
             // SwiftJsonUIConfiguration.colors (a class, `placeholder: UIColor`);

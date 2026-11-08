@@ -79,6 +79,7 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
                         fallback: () -> Unit = {}, onError: (Throwable) -> Unit = {}, onLoading: () -> Unit = {},
                         content: (Any) -> Unit = {}) {}
     fun DriveEmbedInitParams(viewModel: Any) {}
+    object com { object kotlinjsonui { object generated { object ColorManager { object compose { fun FollowSystem() {} } } } } }
     fun ScreenMarker(name: String, bridge: String? = null) {}
     class RejectedKey(val key: String, val reason: String)
     fun rememberTestBridge(screenId: String, snapshot: () -> Map<String, Any?>,
