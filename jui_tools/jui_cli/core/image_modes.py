@@ -41,7 +41,10 @@ def read_modes(colors_file: Path) -> list[str]:
         return [DEFAULT_MODE]
     if not isinstance(raw, dict):
         return [DEFAULT_MODE]
-    content = [k for k in raw if k not in RESERVED_META_KEYS]
+    # A `_` key (`_comment`) is a note, not a mode (ColorManagerCore.note_key?).
+    # At the top of a themed file it was the first content key, the file read
+    # as flat, and every mode's picture was an ERROR.
+    content = [k for k in raw if k not in RESERVED_META_KEYS and not str(k).startswith("_")]
     if not content or not isinstance(raw[content[0]], dict):
         return [DEFAULT_MODE]
     return [k for k in content if isinstance(raw[k], dict)]

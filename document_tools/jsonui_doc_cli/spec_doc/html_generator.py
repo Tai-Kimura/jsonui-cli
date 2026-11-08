@@ -1306,7 +1306,40 @@ def _load_colors_map(layouts_dir: Path | None) -> dict[str, str]:
         data = _json.loads(candidate.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
-    return {k: v for k, v in data.items() if isinstance(v, str)}
+    return _colors_lookup(data)
+
+
+_COLORS_META_KEYS = ("fallback_mode", "systemModeMapping", "modes")
+
+
+def _colors_lookup(data) -> dict[str, str]:
+    """colors.json (flat or themed) as token → hex, read as the tools read it.
+
+    A ``_`` key (``_comment``) is a note, not a colour or a mode
+    (ColorManagerCore.note_key?), and the meta keys are no colours. A themed
+    file is the palette type_converter_core picks: ``fallback_mode``, then the
+    first of ``modes``, then ``light``, then the first mode. Until 2.5.15 only
+    the top level's strings were read: a themed file gave no colour at all,
+    and ``fallback_mode`` and a top note were tokens. Kept beside the doc tool
+    (it runs without jui_cli).
+    """
+    if not isinstance(data, dict):
+        return {}
+
+    def is_note(key) -> bool:
+        return isinstance(key, str) and key.startswith("_")
+
+    content = [k for k in data if k not in _COLORS_META_KEYS and not is_note(k)]
+    if not content:
+        return {}
+    if isinstance(data[content[0]], dict):
+        modes = data.get("modes") if isinstance(data.get("modes"), list) else []
+        candidates = [data.get("fallback_mode"), modes[0] if modes else None, "light", content[0]]
+        palette = next((data[m] for m in candidates if isinstance(m, str) and isinstance(data.get(m), dict)), {})
+        source = palette
+    else:
+        source = {k: data[k] for k in content}
+    return {k: v for k, v in source.items() if isinstance(v, str) and not is_note(k)}
 
 
 def _css_color_from_token(token: str, colors: dict[str, str]) -> tuple[str, str] | None:

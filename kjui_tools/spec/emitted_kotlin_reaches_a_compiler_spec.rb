@@ -117,6 +117,7 @@ RSpec.describe 'emitted Kotlin reaches a compiler' do
     'cli/commands/init_spec.rb' => "p3 — #{UNCONVERTED}",
     'compose/blocking_layout_not_generated_spec.rb' => "p1 — #{UNCONVERTED}",
     'compose/collection_cell_classes_spec.rb' => "p1 — #{UNCONVERTED}",
+    'compose/colour_note_is_no_colour_key_spec.rb' => '— asserts which colors.json key find_color_key answers, not the Kotlin that names it',
     'compose/components/blurview_component_spec.rb' => "p3 — #{UNCONVERTED}",
     'compose/components/box_gravity_unnamed_axis_spec.rb' => "p3 — #{UNCONVERTED}",
     'compose/components/button_image_spec.rb' => "p2 — #{UNCONVERTED}",

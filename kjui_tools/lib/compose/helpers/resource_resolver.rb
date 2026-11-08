@@ -532,8 +532,10 @@ module KjuiTools
           def find_color_key(color, config, source_path)
             colors_data = cached_colors_data
             
-            # First check if the color itself is a key in colors.json
-            if colors_data.has_key?(color)
+            # First check if the color itself is a key in colors.json. A `_`
+            # key (`_comment`) is a note, not a colour
+            # (ColorManagerCore.note_key?).
+            if colors_data.has_key?(color) && !color.start_with?('_')
               return color
             end
             
