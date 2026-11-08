@@ -188,6 +188,49 @@ module KjuiTools
           Core::Logger.info "✓ Generated ColorManager.kt"
         end
 
+        # A colour mode's own pictures (jui build's image_modes.json beside
+        # colors.json: {"images": {name: {mode: picture}}}). Only a project
+        # that has one gets these lines; any other ColorManager.kt is what
+        # it was.
+        def image_modes
+          file = File.join(@resources_dir, 'image_modes.json')
+          return {} unless File.exist?(file)
+
+          images = JSON.parse(File.read(file))['images']
+          images.is_a?(Hash) ? images.select { |_, by_mode| by_mode.is_a?(Hash) && !by_mode.empty? } : {}
+        rescue JSON::ParserError
+          {}
+        end
+
+        def image_mode_lines
+          images = image_modes
+          return [] if images.empty?
+
+          entries = images.sort.map do |name, by_mode|
+            modes = by_mode.sort.map { |mode, picture| "#{mode.to_json} to #{picture.to_s.downcase.gsub(/[^a-z0-9_]/, '_').to_json}" }
+            "            #{name.to_s.downcase.gsub(/[^a-z0-9_]/, '_').to_json} to mapOf(#{modes.join(', ')}),"
+          end
+          [
+            '        /**',
+            '         * The drawable a written image draws in the current mode: the',
+            "         * mode's own picture (<name>.<mode>.svg), else *base*. Reading it",
+            '         * from @Composable code recomposes on a mode change.',
+            '         */',
+            '        fun drawable(base: Int, vararg byMode: Pair<String, Int>): Int {',
+            '            val mode = currentMode.raw',
+            '            return byMode.firstOrNull { it.first == mode }?.second ?: base',
+            '        }',
+            '',
+            "        /** A bound image's drawable name in the current mode: its mode's picture's, else *name*. */",
+            '        fun drawableName(name: String): String = imageModes[name]?.get(currentMode.raw) ?: name',
+            '',
+            '        private val imageModes: Map<String, Map<String, String>> = mapOf(',
+            *entries,
+            '        )',
+            ''
+          ]
+        end
+
         def deep_clone_palettes
           @palettes.each_with_object({}) { |(m, p), acc| acc[m] = p.dup }
         end
@@ -313,6 +356,10 @@ module KjuiTools
           lines << '    }'
           lines << ''
           lines << '    private fun set(mode: ColorMode) {'
+          # The library's own mode label: Dynamic's drawables (and an app's
+          # Configuration.themedColorParser) read it. A no-op when it holds
+          # the mode already.
+          lines << '        com.kotlinjsonui.core.Configuration.setThemeMode(mode.raw)'
           lines << '        if (_currentMode.value == mode) return'
           lines << '        _currentMode.value = mode'
           lines << '        observers.values.forEach { it.invoke() }'
@@ -406,6 +453,7 @@ module KjuiTools
           lines << '            }'
           lines << '        }'
           lines << ''
+          image_mode_lines.each { |line| lines << line }
           lines << '        /** Reading this from @Composable code triggers recomposition on mode change. */'
           lines << '        fun color(key: String): ComposeColor? {'
           lines << '            val int = views.color(key) ?: return null'

@@ -7,6 +7,7 @@ require_relative '../logger'
 require_relative '../generated_marker'
 require_relative '../color_manager_core'
 require_relative '../frameworks'
+require_relative '../../react/image_modes'
 
 module RjuiTools
   module Core
@@ -34,7 +35,43 @@ module RjuiTools
             css = css_color_value(palette[key])
             "--color-#{key}:#{css}" if css
           end.compact
+          # A mode's own pictures ride in the same rule (React::ImageModes).
+          decls += React::ImageModes.declarations(mode, image_modes)
           decls.empty? ? '' : ":root:root:root{#{decls.join(';')}}"
+        end
+
+        # jui build's image_modes.json beside colors.json; {} without one.
+        def image_modes
+          @image_modes ||= React::ImageModes.table(File.dirname(@resources_dir))
+        end
+
+        # theme.css's lines for the pictures: the base mode's under :root, each
+        # other mode's under :root[data-theme], the OS's dark mode's under the
+        # media query — the selectors the colours use, so the two can never
+        # disagree about which mode is drawn.
+        def image_mode_css_lines
+          return [] if image_modes.empty?
+
+          base = @fallback_mode || DEFAULT_MODE_NAME
+          lines = ['/* A colour mode\'s own pictures (<name>.<mode>.svg); an <img> takes content: var(--image-<name>). */']
+          lines << ':root {'
+          React::ImageModes.declarations(base, image_modes).each { |d| lines << "  #{d};" }
+          lines << '}'
+          (@modes - [base]).each do |mode|
+            decls = React::ImageModes.declarations(mode, image_modes)
+            lines << ":root[data-theme=\"#{mode}\"] {"
+            decls.each { |d| lines << "  #{d};" }
+            lines << '}'
+            next unless (@system_mode_mapping || {})['dark'] == mode
+
+            lines << '@media (prefers-color-scheme: dark) {'
+            lines << '  :root:not([data-theme]) {'
+            decls.each { |d| lines << "    #{d};" }
+            lines << '  }'
+            lines << '}'
+          end
+          lines << ''
+          lines
         end
 
         # The mode theme.css draws for the OS's dark, when it is not the base.
@@ -530,6 +567,7 @@ module RjuiTools
 
             lines << ''
           end
+          lines.concat(image_mode_css_lines)
           lines.concat(static_utility_lines)
 
           lines << ''

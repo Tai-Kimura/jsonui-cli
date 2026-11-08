@@ -187,9 +187,9 @@ module KjuiTools
               # Use drawable resource
               painter = if icon != selected_icon
                           # Different icons for selected/unselected
-                          "if (#{state_expr} == #{index}) painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(selected_icon)}) else painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(icon)})"
+                          "if (#{state_expr} == #{index}) painterResource(#{Helpers::ResourceResolver.drawable_id(selected_icon)}) else painterResource(#{Helpers::ResourceResolver.drawable_id(icon)})"
                         else
-                          "painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(icon)})"
+                          "painterResource(#{Helpers::ResourceResolver.drawable_id(icon)})"
                         end
               ["Icon(", "    painter = #{painter},", "    contentDescription = #{kotlin_string_literal(title)}", ")"]
             else

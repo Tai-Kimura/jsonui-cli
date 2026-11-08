@@ -17,6 +17,7 @@ from ..core.screen_identity import is_layout_path
 from ..core.config_manager import ConfigManager
 from ..core.generated_marker import json_marker
 from ..core.image_converter import ImageConverter
+from ..core import image_modes
 from ..core.layout_variant import (
     INLINE_ONLY_CLASSES,
     VALID_VARIANT_CLASSES,
@@ -511,7 +512,9 @@ def cmd_build(args: argparse.Namespace) -> int:
         with clock.stage("distribute resources"):
             _distribute_resources(config_mgr, platforms, args)
         with clock.stage("distribute images"):
-            _distribute_images(config_mgr, config, platforms, args)
+            images_ok = _distribute_images(config_mgr, config, platforms, args)
+        if images_ok is False:
+            return _halt(1)
         with clock.stage("distribute hotload config"):
             _distribute_hotload_config(config_mgr, platforms, args)
 
@@ -3014,20 +3017,35 @@ def _distribute_images(
     config: dict,
     platforms: dict,
     args,
-) -> None:
+) -> bool:
     """Convert SVGs in images_directory and distribute to each platform.
 
     - iOS:     *.xcassets/{name}.imageset/ (SVG + Contents.json)
     - Android: res/drawable/{name}.xml    (Vector Drawable)
     - Web:     public/images/{name}.svg   (copy as-is)
+
+    ``{name}.{mode}.svg`` is a colour mode's own picture (core/image_modes.py):
+    ``{name}__{mode}`` on iOS and Android, the file as it is on the web, and
+    the table each generator reads beside colors.json (image_modes.json).
+    False: a mode's picture the build cannot draw; nothing was written.
     """
     images_src = config_mgr.images_directory
-    if not images_src.exists():
-        return
+    svg_files = sorted(images_src.rglob("*.svg")) if images_src.exists() else []
 
-    svg_files = sorted(images_src.rglob("*.svg"))
-    if not svg_files:
-        return
+    modes = image_modes.read_modes(config_mgr.layouts_directory / "Resources" / "colors.json")
+    images, variants, mode_errors = image_modes.split(svg_files, modes)
+    if mode_errors:
+        print("\nERROR [image-modes]:")
+        for line in mode_errors:
+            print(f"  - {line}")
+        return False
+    # (picture, the name it is written as): each image under its own name,
+    # each mode's picture as {name}__{mode}.
+    pictures = [(path, None) for _, path in sorted(images.items())] + [
+        (path, image_modes.asset_name(name, mode))
+        for name, by_mode in sorted(variants.items())
+        for mode, path in sorted(by_mode.items())
+    ]
 
     for platform, pconfig in platforms.items():
         if args.ios_only and platform != "ios":
@@ -3040,6 +3058,10 @@ def _distribute_images(
         platform_root = config_mgr.project_root / pconfig["root"]
         count = 0
         raster_count = 0
+        if pconfig.get("layoutsDir"):
+            image_modes.write_table(platform_root / pconfig["layoutsDir"] / "Resources", variants)
+        if not pictures:
+            continue
 
         if platform == "ios":
             # Find *.xcassets directory
@@ -3054,8 +3076,8 @@ def _distribute_images(
                     continue
                 dest = candidates[0]
 
-            for svg in svg_files:
-                result = ImageConverter.convert_ios(svg, dest)
+            for svg, name in pictures:
+                result = ImageConverter.convert_ios(svg, dest, name)
                 if result:
                     count += 1
 
@@ -3066,8 +3088,8 @@ def _distribute_images(
             else:
                 dest = platform_root / "app" / "src" / "main" / "res" / "drawable"
 
-            for svg in svg_files:
-                result = ImageConverter.convert_android(svg, dest)
+            for svg, name in pictures:
+                result = ImageConverter.convert_android(svg, dest, name)
                 if result:
                     count += 1
                     # Raster fallbacks land in the sibling drawable-nodpi/
@@ -3081,7 +3103,7 @@ def _distribute_images(
             else:
                 dest = platform_root / "public" / "images"
 
-            for svg in svg_files:
+            for svg, _ in pictures:
                 result = ImageConverter.convert_web(svg, dest)
                 if result:
                     count += 1
@@ -3095,6 +3117,7 @@ def _distribute_images(
                 )
             else:
                 print(f"Converted {count} image(s) → {platform}")
+    return True
 
 
 def _distributed_files(config_mgr) -> list | None:

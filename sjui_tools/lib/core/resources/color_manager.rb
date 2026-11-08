@@ -119,6 +119,43 @@ module SjuiTools
           colours.include?(name) ? "#{name}Palette" : name
         end
 
+        # A colour mode's own pictures (jui build's image_modes.json beside
+        # colors.json: {"images": {name: {mode: asset}}}). Only a project that
+        # has one gets these lines; any other ColorManager.swift is what it was.
+        def image_modes
+          file = File.join(@resources_dir, 'image_modes.json')
+          return {} unless File.exist?(file)
+
+          images = JSON.parse(File.read(file))['images']
+          images.is_a?(Hash) ? images.select { |_, by_mode| by_mode.is_a?(Hash) && !by_mode.empty? } : {}
+        rescue JSON::ParserError
+          {}
+        end
+
+        def image_mode_lines
+          images = image_modes
+          return [] if images.empty?
+
+          entries = images.sort.map do |name, by_mode|
+            modes = by_mode.sort.map { |mode, asset| "#{mode.to_json}: #{asset.to_s.to_json}" }
+            "        #{name.to_s.to_json}: [#{modes.join(', ')}],"
+          end
+          [
+            '    // ========== Images ==========',
+            "    /// The asset an image named *name* is drawn from in the current mode: the mode's",
+            '    /// own picture (<name>.<mode>.svg), else *name*. A generated view reads it in its',
+            '    /// body, which runs again when the mode changes.',
+            '    public static func image(_ name: String) -> String {',
+            '        imageModes[name]?[_currentMode.rawValue] ?? name',
+            '    }',
+            '',
+            '    nonisolated private static let imageModes: [String: [String: String]] = [',
+            *entries,
+            '    ]',
+            ''
+          ]
+        end
+
         def generate_swift_code(merged_palettes)
           # Deterministic marker header — no timestamp. A Time.now header
           # here used to make every build rewrite ColorManager.swift,
@@ -376,6 +413,7 @@ module SjuiTools
           end
           lines << '    }'
           lines << ''
+          image_mode_lines.each { |line| lines << line }
           lines << '}'
           lines << ''
           lines << '// Note: UIColor.colorWithHexString(_:) is provided by the SwiftJsonUI library.'

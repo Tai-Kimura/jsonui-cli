@@ -377,7 +377,7 @@ module KjuiTools
             # leave a stray 8dp indent in front of the label.
             lines = [
               indent("val iconResId = LocalContext.current.let { ctx ->", depth),
-              indent("ctx.resources.getIdentifier(data.#{property}, \"drawable\", ctx.packageName)", depth + 1),
+              indent("ctx.resources.getIdentifier(#{Helpers::ResourceResolver.bound_drawable_name("data.#{property}")}, \"drawable\", ctx.packageName)", depth + 1),
               indent("}", depth),
               indent("if (iconResId != 0) {", depth),
               build_icon_call('painterResource(id = iconResId)', content_desc, depth + 1, json_data, required_imports)
@@ -387,7 +387,7 @@ module KjuiTools
             lines.join("\n")
           else
             required_imports&.add(:r_class)
-            painter = "painterResource(id = R.drawable.#{Helpers::ResourceResolver.drawable_name(image_name)})"
+            painter = "painterResource(id = #{Helpers::ResourceResolver.drawable_id(image_name)})"
             icon = build_icon_call(painter, content_desc, depth, json_data, required_imports)
             spacer_after ? "#{icon}\n#{spacer}" : icon
           end

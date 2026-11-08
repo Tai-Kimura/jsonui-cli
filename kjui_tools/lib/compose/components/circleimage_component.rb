@@ -147,7 +147,7 @@ module KjuiTools
           if is_network && json_data['errorImage']
             required_imports&.add(:painter_resource)
             required_imports&.add(:r_class)
-            code += ",\n" + indent("error = painterResource(R.drawable.#{Helpers::ResourceResolver.drawable_name(json_data['errorImage'])})", depth + 1)
+            code += ",\n" + indent("error = painterResource(#{Helpers::ResourceResolver.drawable_id(json_data['errorImage'])})", depth + 1)
           end
           
           code += "\n" + indent(")", depth)

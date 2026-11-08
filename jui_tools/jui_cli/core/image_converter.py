@@ -31,6 +31,7 @@ class ImageConverter:
     def convert_ios(
         svg_path: Path,
         xcassets_dir: Path,
+        name: str | None = None,
     ) -> Path | None:
         """Create an .imageset inside *xcassets_dir* with a PDF converted from SVG.
 
@@ -38,9 +39,12 @@ class ImageConverter:
         1. ``rsvg-convert`` (Homebrew: ``brew install librsvg``)
         2. ``cairosvg`` Python package (``pip install cairosvg``)
 
+        *name* is the asset's name (default: the file's stem). A mode's own
+        picture (``ic_star.dark.svg``) is written as ``ic_star__dark``.
+
         Returns the imageset directory path, or None on error.
         """
-        name = svg_path.stem
+        name = name or svg_path.stem
         imageset_dir = xcassets_dir / f"{name}.imageset"
         imageset_dir.mkdir(parents=True, exist_ok=True)
 
@@ -77,8 +81,12 @@ class ImageConverter:
     def convert_android(
         svg_path: Path,
         drawable_dir: Path,
+        name: str | None = None,
     ) -> Path | None:
         """Convert an SVG to Android Vector Drawable XML.
+
+        *name* stands for the file's stem (``ic_star__dark`` for
+        ``ic_star.dark.svg``); it is spelled as a resource name either way.
 
         Returns the output XML path, or None on error.
         """
@@ -116,12 +124,12 @@ class ImageConverter:
             # an <image> tag. Without this the file was silently dropped.
             raster = _extract_raster_image(root)
             if raster is not None:
-                return _write_raster_drawable(svg_path, drawable_dir, raster)
+                return _write_raster_drawable(svg_path, drawable_dir, raster, name)
             return None
 
         # Build Vector Drawable XML
         drawable_dir.mkdir(parents=True, exist_ok=True)
-        name = svg_path.stem.replace("-", "_").lower()
+        name = android_resource_name(name or svg_path.stem)
         out_path = drawable_dir / f"{name}.xml"
 
         lines = [
@@ -195,6 +203,11 @@ class ImageConverter:
 # ====================================================================== #
 #  Helpers
 # ====================================================================== #
+
+
+def android_resource_name(stem: str) -> str:
+    """The drawable's resource name for a file stem, as it always was."""
+    return stem.replace("-", "_").lower()
 
 def _pdf_creation_epoch() -> int:
     """The creation date every converted PDF carries, as a Unix time.
@@ -493,6 +506,7 @@ def _write_raster_drawable(
     svg_path: Path,
     drawable_dir: Path,
     raster: tuple[str, bytes],
+    name: str | None = None,
 ) -> Path:
     """Write decoded raster bytes to ``drawable-nodpi/<name>.{png,jpg}``.
 
@@ -503,7 +517,7 @@ def _write_raster_drawable(
     ext, data = raster
     dest_dir = drawable_dir.parent / "drawable-nodpi"
     dest_dir.mkdir(parents=True, exist_ok=True)
-    name = svg_path.stem.replace("-", "_").lower()
+    name = android_resource_name(name or svg_path.stem)
     out_path = dest_dir / f"{name}.{ext}"
     out_path.write_bytes(data)
     return out_path

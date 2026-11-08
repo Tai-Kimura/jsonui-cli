@@ -3,6 +3,8 @@
 require_relative 'base_view_converter'
 require_relative '../helpers/font_helper'
 
+require_relative 'image_modes'
+
 module SjuiTools
   module SwiftUI
     module Views
@@ -307,7 +309,7 @@ module SjuiTools
           if icon || selected_icon
             on_name = selected_icon || icon
             off_name = icon || selected_icon
-            add_line "Image(#{selected_expr} ? #{name_operand(on_name)} : #{name_operand(off_name)})"
+            add_line "Image(#{selected_expr} ? #{radio_image_operand(on_name)} : #{radio_image_operand(off_name)})"
             add_modifier_line ".renderingMode(.template)" if icon_color
             add_modifier_line ".resizable()"
             add_modifier_line ".aspectRatio(contentMode: .fit)"
@@ -384,6 +386,11 @@ module SjuiTools
           walk.call(tree)
           seeds.each_value { |e| e[:seed] = e[:selected] || e[:checked] || '""' }
           seeds
+        end
+
+        # An image's name, through ColorManager when it has a mode's picture.
+        def radio_image_operand(name)
+          bound_value?(name) ? ImageModes.operand(name_operand(name)) : ImageModes.operand(name_operand(name), literal: name)
         end
       end
     end

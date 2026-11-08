@@ -154,7 +154,7 @@ module KjuiTools
           required_imports&.add(:painter_resource)
           required_imports&.add(:r_class)
           unless Helpers::ModifierBuilder.is_binding?(raw_src)
-            return "\n" + indent("painter = painterResource(id = R.drawable.#{Helpers::ResourceResolver.drawable_name(raw_src)}),", depth + 1)
+            return "\n" + indent("painter = painterResource(id = #{Helpers::ResourceResolver.drawable_id(raw_src)}),", depth + 1)
           end
 
           # @{termsCheckboxIcon} -> data.termsCheckboxIcon (String = drawable resource name)
@@ -166,10 +166,10 @@ module KjuiTools
           fallback = if Helpers::BindingExpression.whole_binding?(fallback_raw)
                        Helpers::ResourceResolver.drawable_painter(fallback_raw, required_imports)
                      else
-                       "painterResource(id = R.drawable.#{Helpers::ResourceResolver.drawable_name(fallback_raw)})"
+                       "painterResource(id = #{Helpers::ResourceResolver.drawable_id(fallback_raw)})"
                      end
           "\n" + indent("painter = LocalContext.current.let { ctx ->", depth + 1) +
-            "\n" + indent("val resId = ctx.resources.getIdentifier(data.#{camel_case_name}, \"drawable\", ctx.packageName)", depth + 2) +
+            "\n" + indent("val resId = ctx.resources.getIdentifier(#{Helpers::ResourceResolver.bound_drawable_name("data.#{camel_case_name}")}, \"drawable\", ctx.packageName)", depth + 2) +
             "\n" + indent("if (resId != 0) painterResource(id = resId) else #{fallback}", depth + 2) +
             "\n" + indent("},", depth + 1)
         end

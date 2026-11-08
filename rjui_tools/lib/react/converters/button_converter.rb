@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_converter'
+require_relative '../image_modes'
 require_relative '../../core/frameworks'
 
 module RjuiTools
@@ -166,11 +167,15 @@ module RjuiTools
 
           src = build_image_src(image)
           size = 'w-[1.25em] h-[1.25em] shrink-0'
+          # A name with a colour mode's own picture (ImageModes): the mask
+          # reads the mode's variable, the <img> is replaced through content.
+          moded = !has_binding?(image) && ImageModes.name_with_modes(image.to_s)
+          mask = moded ? "`var(#{ImageModes.variable(moded)}, url(#{src}))`" : "`url(#{src})`"
 
           if tinted_icon?
             styles = [
-              "maskImage: `url(#{src})`",
-              "WebkitMaskImage: `url(#{src})`",
+              "maskImage: #{mask}",
+              "WebkitMaskImage: #{mask}",
               "maskSize: 'contain'",
               "WebkitMaskSize: 'contain'",
               "maskRepeat: 'no-repeat'",
@@ -184,8 +189,9 @@ module RjuiTools
             %(<span aria-hidden="true" className="#{size}#{fill}" ) +
               %(style={{ #{styles.join(', ')} }} />)
           else
+            content = moded ? %( style={{ content: #{ImageModes.content_literal(moded)} }}) : ''
             %(<img src={`#{src}`}#{jsx_attr_text('alt', image_alt(image))} ) +
-              %(className="#{size} object-contain" />)
+              %(className="#{size} object-contain"#{content} />)
           end
         end
 

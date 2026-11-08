@@ -3,6 +3,8 @@
 require_relative 'base_view_converter'
 require_relative 'image_accessibility_modifiers'
 
+require_relative 'image_modes'
+
 module SjuiTools
   module SwiftUI
     module Views
@@ -16,9 +18,9 @@ module SjuiTools
           if @component['srcName']
             if is_binding?(@component['srcName'])
               prop = extract_binding_property(@component['srcName'])
-              add_line "Image(data.#{prop})"
+              add_line "Image(#{ImageModes.operand("data.#{prop}")})"
             else
-              add_line "Image(\"#{@component['srcName']}\")"
+              add_line "Image(#{ImageModes.operand("\"#{@component['srcName']}\"", literal: @component['srcName'])})"
             end
           elsif @component['src']
             processed_src = process_template_value(@component['src'])
@@ -29,12 +31,12 @@ module SjuiTools
             if processed_src.is_a?(Hash) && processed_src[:template_var]
               # テンプレート変数の場合
               var = "data.#{to_camel_case(processed_src[:template_var])}"
-              add_line(system_icon ? "Image(systemName: #{var})" : "Image(#{var})")
+              add_line(system_icon ? "Image(systemName: #{var})" : "Image(#{ImageModes.operand(var)})")
             elsif system_icon
               add_line "Image(systemName: \"#{@component['src']}\")"
             else
               # 通常の画像名
-              add_line "Image(\"#{@component['src']}\")"
+              add_line "Image(#{ImageModes.operand("\"#{@component['src']}\"", literal: @component['src'])})"
             end
           elsif @component['defaultImage'] || @component['errorImage'] || @component['loadingImage']
             # Fallback imagery when no src resolves. A STATIC Image never
@@ -43,7 +45,7 @@ module SjuiTools
             # (defaultImage first, the UIKit runtime honours the full
             # semantics). Better an intended asset than the photo glyph.
             fallback = @component['defaultImage'] || @component['errorImage'] || @component['loadingImage']
-            add_line "Image(#{name_operand(fallback)})"
+            add_line "Image(#{bound_value?(fallback) ? ImageModes.operand(name_operand(fallback)) : ImageModes.operand(name_operand(fallback), literal: fallback)})"
           else
             # デフォルトのシステムイメージ
             add_line "Image(systemName: \"photo\")"
@@ -259,7 +261,7 @@ module SjuiTools
           # overlay with the base hidden underneath rather than a second layer.
           @modifier_bag.append(:component_specific, ".opacity(#{state_var} ? 0 : 1)")
           @modifier_bag.append(:component_specific, ".overlay(")
-          @modifier_bag.append(:component_specific, "    Image(#{resolved})")
+          @modifier_bag.append(:component_specific, "    Image(#{is_binding?(highlight) ? ImageModes.operand(resolved) : ImageModes.operand(resolved, literal: highlight)})")
           @modifier_bag.append(:component_specific, "        .resizable()")
           @modifier_bag.append(:component_specific, "        .opacity(#{state_var} ? 1 : 0)")
           @modifier_bag.append(:component_specific, ")")

@@ -27,6 +27,52 @@ module KjuiTools
             name
           end
 
+          # The drawable a written name draws, as an Int expression. A name
+          # with a colour mode's own picture (`ic_star.dark.svg` beside
+          # `ic_star.svg`, jui build's image_modes.json beside colors.json)
+          # asks ColorManager, which reads its current mode — so the screen
+          # recomposes with the mode, as a written colour does. Any other
+          # name is `R.drawable.<name>`, as it always was. The pictures are
+          # named here as R references, so a resource shrinker keeps them.
+          def drawable_id(raw)
+            name = drawable_name(raw)
+            by_mode = image_modes_by_drawable[name]
+            return "R.drawable.#{name}" unless by_mode
+
+            pairs = by_mode.sort.map { |mode, asset| "#{quote(mode)} to R.drawable.#{drawable_name(asset)}" }
+            "com.kotlinjsonui.generated.ColorManager.compose.drawable(R.drawable.#{name}, #{pairs.join(', ')})"
+          end
+
+          # A bound name is looked up at run time; with any mode's picture in
+          # the project, ColorManager names the current mode's first.
+          def bound_drawable_name(name_expr)
+            return name_expr if image_modes_by_drawable.empty?
+
+            "com.kotlinjsonui.generated.ColorManager.compose.drawableName(#{name_expr})"
+          end
+
+          # {drawable name => {mode => the mode's picture}} from
+          # image_modes.json; empty without the file.
+          def image_modes_by_drawable
+            images = cached_image_modes['images']
+            return {} unless images.is_a?(Hash)
+
+            images.each_with_object({}) do |(name, by_mode), acc|
+              acc[drawable_name(name)] = by_mode if by_mode.is_a?(Hash) && !by_mode.empty?
+            end
+          end
+
+          def cached_image_modes
+            source_directory = cached_config['source_directory'] || 'src/main'
+            layouts_dir = File.join(cached_source_path, source_directory, cached_config['layouts_directory'] || 'assets/Layouts')
+            file = File.join(layouts_dir, 'Resources', 'image_modes.json')
+            return {} unless File.exist?(file)
+
+            JSON.parse(File.read(file))
+          rescue JSON::ParserError
+            {}
+          end
+
           # Drawn when a bound name is no drawable: getIdentifier answers 0,
           # and painterResource(0) throws. Spelled in full, so no import.
           NO_DRAWABLE = 'androidx.compose.ui.graphics.painter.ColorPainter(androidx.compose.ui.graphics.Color.Transparent)'
@@ -41,12 +87,12 @@ module KjuiTools
             required_imports&.add(:painter_resource)
             unless BindingExpression.whole_binding?(raw)
               required_imports&.add(:r_class)
-              return "painterResource(id = R.drawable.#{drawable_name(raw)})"
+              return "painterResource(id = #{drawable_id(raw)})"
             end
 
             required_imports&.add(:local_context)
             name = bound_string_value(raw)
-            "LocalContext.current.let { ctx -> ctx.resources.getIdentifier(#{name}, \"drawable\", ctx.packageName) }" \
+            "LocalContext.current.let { ctx -> ctx.resources.getIdentifier(#{bound_drawable_name(name)}, \"drawable\", ctx.packageName) }" \
               ".let { id -> if (id != 0) painterResource(id = id) else #{empty} }"
           end
 
