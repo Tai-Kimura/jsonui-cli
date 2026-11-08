@@ -321,6 +321,7 @@ def plan_ios(
             dto_subdir=api_cfg["dto_subdir"],
             format_mapping=fmt_enabled,
             format_excluded_docs=fmt_excluded,
+            enum_unknown_case=config_mgr.api_enum_unknown_case(),
         )
     )
 

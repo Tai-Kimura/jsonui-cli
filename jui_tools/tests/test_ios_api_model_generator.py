@@ -15,7 +15,8 @@ from jui_cli.generators.ios_api_model_generator import (
 
 
 def _make_generator(tmp: Path) -> IosApiModelGenerator:
-    config = IosApiPlatformConfig(sources_root=tmp)
+    # the enums as through 2.5.14: these arms hold api.enum_unknown_case off to the old output (the open enums: test_api_model_enum_unknown_case.py)
+    config = IosApiPlatformConfig(sources_root=tmp, enum_unknown_case=False)
     return IosApiModelGenerator(config)
 
 
