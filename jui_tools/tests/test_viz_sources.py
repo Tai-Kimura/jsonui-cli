@@ -11,7 +11,9 @@ import stat
 import time
 from pathlib import Path
 
-from jui_cli.viz.sources import agents_cli, session_files
+import pytest
+
+from jui_cli.viz.sources import agents_cli, devices, session_files
 
 
 def test_parse_reads_the_measured_shape_and_refuses_others():
@@ -46,6 +48,58 @@ def test_run_stops_and_says_why_without_claude():
     statuses = []
     asyncio.run(agents_cli.run(3, lambda rows: None, lambda st, err: statuses.append((st, err)), which=lambda name: None))
     assert statuses and statuses[0][0] == "stopped" and "PATH" in statuses[0][1]
+
+
+# The stop's cancel landing as a poll's answer comes in: on 3.11 asyncio.wait_for returned the answer and dropped the
+# cancel, so the reader went on to its next sleep, the stop waited on it, and serve did not end within its bound (Linux
+# CI, the TERM-while-it-still-starts arm and the held-stop arm; the task dumped as "run (agents_cli.py:85) > sleep",
+# state cancelling). Here the stand-in's communicate() cancels the reader as it answers, every time.
+@pytest.mark.parametrize("reader", ["agents", "devices"])
+def test_a_stop_landing_as_a_poll_answers_ends_the_reader(monkeypatch, reader):
+    box: list = [None]
+
+    class Proc:
+        pid, returncode = 0, 0
+
+        async def communicate(self):
+            box[0].cancel()
+            return b"[]", b""
+
+        async def wait(self):
+            return 0
+
+    async def spawn(*args, **kwargs):
+        return Proc()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", spawn)
+
+    async def go() -> bool:
+        if reader == "agents":
+            coro = agents_cli.run(3.0, lambda rows: None, lambda st, err: None, which=lambda name: "/stand-in/claude")
+        else:
+            coro = devices.run(lambda found: None, lambda st, err: None, which=lambda name: None, adb="/stand-in/adb",
+                               interval=3.0)
+        box[0] = asyncio.create_task(coro)
+        done, _ = await asyncio.wait({box[0]}, timeout=1.0)   # well inside its 3 s sleep
+        return bool(done) and box[0].cancelled()
+
+    assert asyncio.run(go()), f"the {reader} reader went on to its next poll though it was cancelled"
+
+
+def test_no_asyncio_wait_for_in_jui_cli():
+    """asyncio.timeout in its place: on 3.11 wait_for drops a cancel that lands as what it waits on finishes (above)."""
+    import ast
+
+    root = Path(agents_cli.__file__).resolve().parents[2]
+    found, read = [], 0
+    for path in sorted(root.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        read += 1
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and node.attr == "wait_for" and isinstance(node.value, ast.Name) \
+                    and node.value.id == "asyncio":
+                found.append(f"{path.relative_to(root)}:{node.lineno}")
+    assert read > 100 and found == [], found
 
 
 def test_session_files_read_only_pid_json_and_never_open_key_files(tmp_path, monkeypatch):

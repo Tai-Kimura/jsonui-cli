@@ -466,7 +466,8 @@ class Service:
                 except Exception:  # noqa: BLE001 — the view only
                     pass
             try:
-                await asyncio.wait_for(self._wake.wait(), self.watch_sec)
+                async with asyncio.timeout(self.watch_sec):
+                    await self._wake.wait()
             except asyncio.TimeoutError:
                 pass
             self._wake.clear()

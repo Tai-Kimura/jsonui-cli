@@ -218,7 +218,8 @@ async def pull(adb: str, serial: str, base: Path, timeout: float = PULL_TIMEOUT_
     except OSError:
         return False
     try:
-        rc = await asyncio.wait_for(proc.wait(), timeout)
+        async with asyncio.timeout(timeout):
+            rc = await proc.wait()
     except asyncio.TimeoutError:
         try:
             os.killpg(proc.pid, 9)

@@ -72,7 +72,8 @@ async def _run(argv: list[str]) -> bytes | None:
     except OSError:
         return None
     try:
-        stdout, _ = await asyncio.wait_for(proc.communicate(), TIMEOUT_SEC)
+        async with asyncio.timeout(TIMEOUT_SEC):
+            stdout, _ = await proc.communicate()
     except asyncio.TimeoutError:
         try:
             os.killpg(proc.pid, 9)  # the group started just above
