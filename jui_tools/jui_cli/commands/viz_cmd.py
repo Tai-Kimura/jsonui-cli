@@ -1381,6 +1381,9 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
         for task in tasks:
             task.cancel()
         for task in tasks:
+            # which one, when it holds the stop: a task that does not end when cancelled is named in the log
+            coro = task.get_coro()
+            stop_step[0] = f"the tasks ({getattr(coro, '__qualname__', None) or task.get_name()})"
             try:
                 await task
             except (asyncio.CancelledError, Exception):  # noqa: BLE001

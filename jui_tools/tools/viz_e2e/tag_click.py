@@ -209,10 +209,18 @@ async def run_tag_click(pw, out, failures, jt=None):
                 p = await page.evaluate(PART_JS, [rid, ".pill"])
                 x, y = p["x"], p["y"]
                 await page.mouse.move(x, y)
-            await page.evaluate("""() => { window.__pressOn = undefined; window.addEventListener('pointerdown', (e) => {
-              const o = e.target.closest && e.target.closest('[data-robot]'); window.__pressOn = o ? o.dataset.robot : null; }, { capture: true, once: true }); }""")
+            # at the press: what the page had there, and where the robot and its tag were (the why of a miss)
+            await page.evaluate("""(rid) => { window.__pressOn = undefined; window.addEventListener('pointerdown', (e) => {
+              const o = e.target.closest && e.target.closest('[data-robot]'); window.__pressOn = o ? o.dataset.robot : null;
+              const R = rid && window.__dbg.robots.find((x) => x.def.id === rid), pill = R && R.tag.querySelector('.pill'), b = pill && pill.getBoundingClientRect();
+              window.__pressWhy = { x: e.clientX, y: e.clientY, at: e.target.id || e.target.className || e.target.tagName,
+                pill: b ? [Math.round(b.left), Math.round(b.top), Math.round(b.right), Math.round(b.bottom)] : null,
+                tagShown: R ? R.tag.style.visibility : null, root: R ? R.robot.root.position.toArray().map((v) => +v.toFixed(2)) : null,
+                path: R ? (R.path || []).length : null, state: R ? R.robot.state : null, play: R ? !!R.robot.play : null, brk: R ? !!R.robot.brk : null }; },
+              { capture: true, once: true }); }""", rid)
             await page.mouse.down()
             press_on = await page.evaluate("() => window.__pressOn")
+            press_why = await page.evaluate("() => window.__pressWhy")
             for k in range(1, 9):
                 await page.mouse.move(x + 20 * k, y + 4 * k)
             await page.mouse.up()
@@ -220,8 +228,8 @@ async def run_tag_click(pw, out, failures, jt=None):
             c2 = await page.evaluate(CAM_JS)
             card = await page.evaluate(CARD_JS)
             moved = max(abs(a - b) for a, b in zip(c1, c2))
-            res[label] = {"still": still, "moved": moved, "card": card, "pressOn": press_on}
-            check(failures, press_on == rid, f"{label}: the press lands on {rid or 'the bare canvas'}: {press_on}")
+            res[label] = {"still": still, "moved": moved, "card": card, "pressOn": press_on, "pressWhy": press_why}
+            check(failures, press_on == rid, f"{label}: the press lands on {rid or 'the bare canvas'}: {press_on} {press_why}")
             check(failures, still < 0.01 and moved > 0.3, f"{label}: the camera turns (still {still:.3f}, moved {moved:.3f})")
             check(failures, card["robot"] is None and not card["open"], f"{label}: selects nothing: {card}")
 
