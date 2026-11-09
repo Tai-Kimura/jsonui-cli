@@ -1253,6 +1253,19 @@ def _distribute_layouts(config_mgr: ConfigManager, platforms: dict, args) -> Non
         dest_dir = config_mgr.project_root / pconfig["root"] / layouts_rel
         resolver = PlatformResolver(platform)
         count = 0
+        # This platform's own component types are left as written: a project
+        # component named as a type synonym or an alias section (ProgressBar,
+        # EditText) is drawn by its own converter, which reads its attributes
+        # as the layout spells them.
+        platform_canonicalizer = None
+        if canonicalizer is not None:
+            from ..core.app_component_types import app_component_types
+
+            platform_canonicalizer = Canonicalizer(
+                alias_table.with_app_types(
+                    app_component_types(platform, config_mgr.project_root / pconfig["root"])
+                )
+            )
 
         # Determine which subdirectories to skip (handled separately)
         styles_src = config_mgr.styles_directory
@@ -1300,8 +1313,8 @@ def _distribute_layouts(config_mgr: ConfigManager, platforms: dict, args) -> Non
 
             # L1 canonicalization (opt-in). Applies only to the
             # distributed platform-side copy; ``layouts_src`` is L0.
-            if canonicalizer is not None and isinstance(data, dict):
-                data, norm_warnings = canonicalizer.canonicalize(
+            if platform_canonicalizer is not None and isinstance(data, dict):
+                data, norm_warnings = platform_canonicalizer.canonicalize(
                     data, source=rel.as_posix()
                 )
                 for warning in norm_warnings:
@@ -1433,6 +1446,14 @@ def _distribute_styles(config_mgr: ConfigManager, platforms: dict, args) -> None
         layouts_dest = config_mgr.project_root / pconfig["root"] / layouts_rel
         styles_dest = layouts_dest.parent / "Styles"
         count = 0
+        platform_table = alias_table
+        if alias_table is not None:
+            from ..core.app_component_types import app_component_types
+
+            # this platform's own component types as written (see _distribute_layouts)
+            platform_table = alias_table.with_app_types(
+                app_component_types(platform, config_mgr.project_root / pconfig["root"])
+            )
 
         shared_rel_paths: set[Path] = set()
         for src_file in sorted(styles_src.rglob("*.json")):
@@ -1440,7 +1461,7 @@ def _distribute_styles(config_mgr: ConfigManager, platforms: dict, args) -> None
             shared_rel_paths.add(rel)
             dest = styles_dest / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
-            normalized = _normalized_style(src_file, rel, alias_table)
+            normalized = _normalized_style(src_file, rel, platform_table)
             if normalized is None:
                 shutil.copy2(src_file, dest)
             else:

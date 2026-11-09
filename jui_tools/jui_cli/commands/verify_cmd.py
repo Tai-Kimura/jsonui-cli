@@ -155,9 +155,14 @@ def cmd_verify(args: argparse.Namespace) -> int:
     normalizer = None
     from .build_cmd import _normalize_layouts_enabled
     if _normalize_layouts_enabled(config_mgr):
-        from ..core.normalizer import Canonicalizer
+        from ..core.app_component_types import project_app_component_types
+        from ..core.normalizer import AliasTable, Canonicalizer
 
-        _canonicalizer = Canonicalizer()
+        # the project's own component types as written, as `jui build`
+        # distributes them (_distribute_layouts)
+        _canonicalizer = Canonicalizer(
+            AliasTable.from_file().with_app_types(project_app_component_types(config_mgr))
+        )
 
         def normalizer(tree):
             canonical, _warnings = _canonicalizer.canonicalize(tree)

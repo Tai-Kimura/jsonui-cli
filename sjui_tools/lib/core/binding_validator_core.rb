@@ -316,6 +316,9 @@ module JsonUIShared
     # Collection), then the alias hop above. Read as written, a synonym had no
     # table of its own here, so its bindings were checked as an unknown type's.
     def resolve_component_alias(component_type)
+      # an app's own spelling is its own section (TypeSynonyms.app_types)
+      return component_type if JsonUIShared::TypeSynonyms.app_type?(component_type)
+
       entry = component_type.is_a?(String) && JsonUIShared::TypeSynonyms.entries[component_type]
       section = entry ? entry['canonical'] : component_type
       @component_alias_by_type[section] || section

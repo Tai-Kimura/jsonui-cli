@@ -18,10 +18,11 @@ target for deprecated attributes).
 """
 from __future__ import annotations
 
+import copy
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 
 # Cross-platform type-spelling synonyms, applied AFTER the exact-match
@@ -114,8 +115,16 @@ def default_definitions_path() -> Path | None:
 class AliasTable:
     """Per-component alias → canonical maps plus deprecation metadata."""
 
-    def __init__(self, definitions: dict[str, Any], type_synonyms: dict[str, dict[str, str]] | None = None):
+    def __init__(
+        self,
+        definitions: dict[str, Any],
+        type_synonyms: dict[str, dict[str, str]] | None = None,
+        app_types: Iterable[str] = (),
+    ):
         self._definitions = definitions or {}
+        # The project's own component types (app_component_types.py): read
+        # as written — never as a synonym's or an alias's section.
+        self._app_types = frozenset(app_types)
         # spelling -> canonical section. No definitions, no sections to map
         # to (a marker-only pass): the table is not needed then.
         if type_synonyms is None:
@@ -157,6 +166,19 @@ class AliasTable:
         beside = resolved.with_name("type_synonyms.json")
         return cls(definitions, load_type_synonyms(beside if beside.exists() else None))
 
+    def with_app_types(self, app_types: Iterable[str]) -> "AliasTable":
+        """This table, reading *app_types* — the project's own component
+        types — as written: a project component named ``ProgressBar`` is no
+        ``Progress``, one named ``EditText`` no ``TextField``."""
+        app_types = frozenset(app_types)
+        if app_types == self._app_types:
+            return self
+        table = copy.copy(self)
+        table._app_types = app_types
+        table._alias_cache, table._deprecated_cache = {}, {}
+        table._value_alias_cache, table._item_alias_cache = {}, {}
+        return table
+
     def is_empty(self) -> bool:
         """True when no definitions were loaded (marker-only pass)."""
         return not self._definitions
@@ -170,6 +192,12 @@ class AliasTable:
         alias (`_alias_of`) to the canonical section."""
         if not component_type:
             return None
+        if component_type in self._app_types:
+            # the project's own: its own section where the SSoT declares one
+            # (an extension merged into a canonical section), else none — an
+            # undeclared type's, as for any other project component
+            section = self._definitions.get(component_type)
+            return component_type if isinstance(section, dict) and not isinstance(section.get("_alias_of"), str) else None
         if component_type in self._definitions:
             key: str | None = component_type
         else:
@@ -189,7 +217,7 @@ class AliasTable:
         A pointer to a nonexistent section is ignored rather than
         followed — the alias then degrades to its own (empty) section,
         which the schema guard suite reports loudly."""
-        if not component_type:
+        if not component_type or component_type in self._app_types:
             return None
         section = self._definitions.get(component_type)
         if not isinstance(section, dict):

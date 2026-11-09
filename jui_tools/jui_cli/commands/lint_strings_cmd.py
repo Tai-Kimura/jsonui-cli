@@ -725,7 +725,11 @@ def collect_findings(
         )
 
     vocabulary = load_string_props(string_props_path)
-    alias_table = AliasTable(definitions)
+    # the project's own component types as written: a project component
+    # named Text is no Label (app_component_types.py)
+    from ..core.app_component_types import project_app_component_types
+
+    alias_table = AliasTable(definitions).with_app_types(project_app_component_types(config_mgr))
     visible_map = visible_attrs_by_component(definitions, vocabulary)
     strings = StringsTable.load(default_strings_path(config_mgr))
 

@@ -283,8 +283,11 @@ module JsonUIShared
 
       # A synonym spelling whose node sets an attribute the spelling means
       # otherwise (an HStack with orientation vertical): the node's value is
-      # drawn, and the author is told
-      JsonUIShared::TypeSynonyms.disagreements(merged_component, type_synonyms_path).each { |m| add_warning(m) }
+      # drawn, and the author is told. An app's own spelling means nothing of
+      # the synonym's.
+      unless app_type?(type)
+        JsonUIShared::TypeSynonyms.disagreements(merged_component, type_synonyms_path).each { |m| add_warning(m) }
+      end
 
       # Check for weight + dimension conflict
       check_weight_dimension_conflict(merged_component, type, parent_orientation)
@@ -489,6 +492,7 @@ module JsonUIShared
 
       # Load and merge extension attribute definitions
       extension_definitions = load_extension_definitions
+      @extension_types = extension_definitions.keys
       merge_definitions(base_definitions, extension_definitions)
     end
 
@@ -624,8 +628,25 @@ module JsonUIShared
     end
 
     def map_type_to_definition(type)
+      # An app's own spelling is its own section, whatever else it spells: a
+      # project component named ProgressBar is drawn by its converter, so it
+      # is validated against its definition, not against Progress (the
+      # synonym) — nor an EditText the app registers against TextField (the
+      # alias hop). Its own: what the build registers (TypeSynonyms.app_types)
+      # or what this validator read from the project's extension definitions.
+      return type if app_type?(type)
+
       entry = type_synonyms[type]
       resolve_component_alias(entry ? entry['canonical'] : type)
+    end
+
+    # Whether `type` is the project's own: registered by the build
+    # (TypeSynonyms.app_types), in the registry the tool's dispatch reads
+    # (registered_component_types, the profile's), or declared by an
+    # extension definition this validator read.
+    def app_type?(type)
+      JsonUIShared::TypeSynonyms.app_type?(type) || Array(@extension_types).include?(type) ||
+        (@registered_types ||= registered_component_types).include?(type)
     end
 
     # spelling -> { 'canonical' => section, 'render_as' => type (optional) },

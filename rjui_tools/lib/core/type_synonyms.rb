@@ -76,6 +76,11 @@ module JsonUIShared
         @app_types || []
       end
 
+      # Whether `type` is a spelling the app registers as its own (app_types).
+      def app_type?(type)
+        app_types.include?(type)
+      end
+
       # The type a node spelled `type` is drawn as: an app's own spelling as
       # written; else its synonym's target, then the canonical section of a
       # declared alias (ComponentAliases). What classifies a node by its type
@@ -106,11 +111,15 @@ module JsonUIShared
       end
 
       # The declared section a node spelled `type` is validated against:
-      # its synonym's `canonical` (not `render_as` — CircleImage is drawn as
-      # CircleImage and validated as Image), then a declared alias's canonical
-      # section. What looks a type's attributes up asks this.
+      # an app's own spelling as written (its converter draws it, so its
+      # attributes are its own definition's, not the synonym's — ProgressBar
+      # registered by the app is no Progress); else its synonym's `canonical`
+      # (not `render_as` — CircleImage is drawn as CircleImage and validated
+      # as Image), then a declared alias's canonical section. What looks a
+      # type's attributes up asks this.
       def section(type, path = DEFAULT_PATH)
         return type unless type.is_a?(String)
+        return type if app_type?(type)
 
         entry = entries(path)[type]
         JsonUIShared::ComponentAliases.canonical(entry ? entry['canonical'] : type)
@@ -126,8 +135,12 @@ module JsonUIShared
         JsonUIShared::ComponentAliases.resolve(canonicalize(node, path))
       end
 
-      # The attributes the spelling `type` means ({} for most).
+      # The attributes the spelling `type` means ({} for most, and for an
+      # app's own spelling: an HStack the app registers means nothing of the
+      # synonym's).
       def implied(type, path = DEFAULT_PATH)
+        return {} if app_type?(type)
+
         entry = entries(path)[type]
         entry ? entry.reject { |key, _| META_KEYS.include?(key) } : {}
       end
