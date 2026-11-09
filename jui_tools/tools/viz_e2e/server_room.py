@@ -41,17 +41,30 @@ ISOLATE = ("JUI_VIZ_HOME", "XDG_STATE_HOME", "JSONUI_TEST_PROGRESS_DIR", "JSONUI
 SR = "() => window.__dbg.sr()"
 SPEC_SECRET = "postgres://orders@db-prod.internal:5432/orders"
 MARKUP = '<b>x</b><img src=x onerror="window.__srMarkup=1">' 
-#: a frame of the large model must come within this (ms; the slowest tenth of the frames, software GL)
+#: The large model does not stall (ticket 2026-11-06-viz-e2e-full-run-red-under-load), read as two arms over 60 frames:
+#: - its median frame within FRAME_MEDIAN_MAX_MS: the room drawn slowly frame after frame (a level of detail that does not
+#:   switch, a model made for every node) is red whatever the machine. The median, not the p90, holds this bound: a loaded
+#:   machine makes some frames late (2.5.17's whole run: median 56.6, p90 272), the room's own work makes all of them late.
+#: - its slowest tenth (p90) within FRAME_P90_MAX_MS, or FRAME_P90_REF_TIMES the p90 of a fixed amount of work drawn in the
+#:   same loop just after (srRef, 56-server-room.js), whichever is more: the bound follows the machine as it is at that
+#:   moment, measured, not a wider fixed number. A frame now and then made much slower by the room (its tags placed again
+#:   every tenth of a second) is red.
+#: The yardstick, not an empty room: an empty room draws nothing, so a loaded machine left its frames at the screen's beat
+#: (18.5 ms) while the large room's grew; the fixed work takes about what the large room takes (11-09, at rest: 38-43 ms
+#: against 41-46), and grows with it (p90 ratio large / yardstick 1.1 at rest, 1.4 at --slow 4, 1.6 at --slow 8).
+FRAME_MEDIAN_MAX_MS = 250
 FRAME_P90_MAX_MS = 250
-#: ... or within this many times an empty room's, measured in the same page just after (srBlank): a busy machine draws
-#: every frame later, an empty room's too, and the large room's frames read as a stall of the room's own (ticket
-#: 2026-11-06-viz-e2e-full-run-red-under-load). What the large room adds to a frame is still bounded.
-FRAME_P90_EMPTY_TIMES = 5   # measured (11-08): 3.2 at most normally, 3.8 at --slow 4; a frame a large room makes 300 ms slower is red
+FRAME_P90_REF_TIMES = 3
 
 
 def _frame_budget(r):
-    """The p90 a large room's frames may reach: FRAME_P90_MAX_MS, or FRAME_P90_EMPTY_TIMES an empty room's at that moment."""
-    return max(FRAME_P90_MAX_MS, FRAME_P90_EMPTY_TIMES * (r.get("emptyP90") or 0))
+    """The p90 a large room's frames may reach: FRAME_P90_MAX_MS, or FRAME_P90_REF_TIMES the yardstick's at that moment."""
+    return max(FRAME_P90_MAX_MS, FRAME_P90_REF_TIMES * (r.get("refP90") or 0))
+
+
+def _frames_kept(r) -> bool:
+    """Both arms: the median within FRAME_MEDIAN_MAX_MS, the p90 within _frame_budget."""
+    return r["frameMedian"] < FRAME_MEDIAN_MAX_MS and r["frameP90"] < _frame_budget(r)
 #: the same arms in 2D (ticket 2026-10-23-viz-server-room-2d-mode, requester: 「機能は3Dと一緒」): every room opened from straight
 #: above (the page's own choice per project, '*' for all); an arm the 2D cannot share says so where it is skipped
 FLAT = {"on": False}
@@ -1647,19 +1660,23 @@ async def run_server_room(pw, out, failures, flat=False):
             s = await page.evaluate(SR)
             fr = sorted(s["frames"])
             heap = {m["name"]: m["value"] for m in (await cdp.send("Performance.getMetrics"))["metrics"]}
-            # the same loop with the room drawn empty, at once after: the frames this machine gives any room now
-            await page.evaluate("() => { window.__dbg.srBlank(true); window.__dbg.srFramesReset(); }")
+            # the fixed yardstick in the same loop, at once after (srRef: the room not drawn, a fixed amount of work drawn in
+            # its place): the frames this machine gives that work now. Built and drawn a few frames first (its first frame
+            # compiles it).
+            await page.evaluate("() => { window.__dbg.srRef(true); window.__dbg.srFramesReset(); }")
             try:
-                await until(page, "() => window.__dbg.sr().frames.length >= 60", f"60 empty frames ({where})", timeout=60000)
-                em = sorted((await page.evaluate(SR))["frames"])
+                await until(page, "() => window.__dbg.sr().frames.length >= 5", f"the yardstick drawn ({where})", timeout=60000)
+                await page.evaluate("() => window.__dbg.srFramesReset()")
+                await until(page, "() => window.__dbg.sr().frames.length >= 60", f"60 yardstick frames ({where})", timeout=60000)
+                rf = sorted((await page.evaluate(SR))["frames"])
             finally:   # drawn again, two frames, before anything is read or shot
-                await page.evaluate("() => { window.__dbg.srBlank(false); return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); }")
+                await page.evaluate("() => { window.__dbg.srRef(false); return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); }")
             return s, {"lod": s["lod"], "cellPx": s["cellPx"], "frameMedian": round(statistics.median(fr), 1), "frameP90": round(fr[int(len(fr) * 0.9)], 1),
-                       "emptyMedian": round(statistics.median(em), 1), "emptyP90": round(em[int(len(em) * 0.9)], 1),
+                       "refMedian": round(statistics.median(rf), 1), "refP90": round(rf[int(len(rf) * 0.9)], 1),
                        "labels": s["labels"], "gpu": s["gpu"], "jsHeapUsedMB": round(heap.get("JSHeapUsedSize", 0) / 1e6, 1)}
         s, first = await frames("fit")
         res["large"] = {"stats": s["stats"], "fit": first}
-        check(failures, s["stats"]["nodes"] >= 1500 and first["frameP90"] < _frame_budget(first), f"the large model is drawn and does not stall: {res['large']}")
+        check(failures, s["stats"]["nodes"] >= 1500 and _frames_kept(first), f"the large model is drawn and does not stall (median, p90 against the yardstick): {res['large']}")
         # fit-all on the large room draws what it drew before the models (§3: 「引きになったら負荷が大きいので今の表示で」): the far
         # boxes only — 3 draw calls, 12 triangles, as on 2.3.19 — and no model is made
         fit_models = (await page.evaluate("() => window.__dbg.srDetail()"))["models"]
@@ -1695,7 +1712,7 @@ async def run_server_room(pw, out, failures, flat=False):
         overlaps = sum(1 for i, a_ in enumerate(rects) for b_ in rects[i + 1:] if a_[0] < b_[2] - 1 and b_[0] < a_[2] - 1 and a_[1] < b_[3] - 1 and b_[1] < a_[3] - 1)
         res["labelOverlaps"] = [len(rects), overlaps]
         check(failures, len(rects) > 10 and overlaps == 0, f"no label covers another up close: {res['labelOverlaps']}")   # E12
-        check(failures, all(res["large"][k]["frameP90"] < _frame_budget(res["large"][k]) for k in ("far", "near")), f"far and near do not stall: {res['large']}")
+        check(failures, all(_frames_kept(res["large"][k]) for k in ("far", "near")), f"far and near do not stall (median, p90 against the yardstick): {res['large']}")
         await page.screenshot(path=str(out / "large-near-light.png"))
         # up close (§5): many in view, the simple shapes; moved in on one Lambda, the shapes by service and tags with the
         # service; between the two thresholds it stays as it was; the whole view, simple again

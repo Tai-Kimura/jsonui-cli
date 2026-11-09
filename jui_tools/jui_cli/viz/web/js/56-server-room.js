@@ -1003,10 +1003,10 @@ function srBuild(keep) {
     srFlowTick(V, dt);
     srMigTick(V, dt);
     if (!V.blank && t - V.labelAt > 100) { V.labelAt = t; srPlaceLabels(V); }
-    // V.blank (the e2e, srBlank): the same loop with nothing in it drawn or placed — the frames an empty room takes on
-    // this machine at this moment, the yardstick of a large room's frames (ticket 2026-11-06-viz-e2e-full-run-red-under-load)
+    // V.blank and V.ref (the e2e, srRef): the same loop with nothing of the room drawn or placed, the fixed yardstick drawn
+    // in its place — the frames this machine gives that work at this moment (ticket 2026-11-06-viz-e2e-full-run-red-under-load)
     scene.visible = !V.blank;
-    renderer.render(scene, camera);
+    if (V.ref) srRefFrame(renderer); else renderer.render(scene, camera);
     if (SR.pixTrail) SR.pixTrail.push(srPixMean(renderer));   // the e2e: each frame's colour, read as it was drawn
   };
   V.loop = loop;
@@ -1014,6 +1014,32 @@ function srBuild(keep) {
   SR.stats = { firstMs: Math.round(srNow() - t0), nodes: L.nodes.length, edges: L.edges.length, floors: L.floors.length };
   srLog(tl('sr.log.drawn', { nodes: L.nodes.length, edges: L.edges.length, floors: L.floors.length, ms: SR.stats.firstMs })
     + (env ? tl('sr.log.drawn.env', { env }) : ''));
+}
+/* The e2e's yardstick of a frame (srRef; ticket 2026-11-06-viz-e2e-full-run-red-under-load): a fixed amount of work drawn in
+   the room's own loop in place of the room — SR_REF.boxes lit boxes in one InstancedMesh filling a view from straight
+   above, and SR_REF.ops steps of script. It takes the same on every run of a machine at rest, and a loaded machine (the
+   software GL's threads and the page's script both waiting for a core) makes it slower as it makes the room slower. An
+   empty room is not that yardstick: it draws nothing, so a loaded machine leaves its frames at the screen's beat while
+   the large room's grow (2.5.17's whole run: 18.5 ms against 272). */
+const SR_REF = { boxes: 2500, ops: 200000 };
+function srRefBuild(o) {
+  const n = o.boxes, side = Math.ceil(Math.sqrt(n)), scene = new THREE.Scene();
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.8); sun.position.set(0.3, 1, 0.2); scene.add(sun);
+  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), new THREE.MeshLambertMaterial({ color: 0x6a7f99 }), n);
+  const m = new THREE.Matrix4();
+  for (let i = 0; i < n; i++) { m.makeTranslation((i % side) - side / 2 + 0.5, 0, Math.floor(i / side) - side / 2 + 0.5); mesh.setMatrixAt(i, m); }
+  scene.add(mesh);
+  const h = side / 2, camera = new THREE.OrthographicCamera(-h, h, h, -h, 1, 100);
+  camera.position.set(0, 50, 0); camera.lookAt(0, 0, 0);
+  return { scene, camera, ops: o.ops, sink: 0 };
+}
+function srRefFrame(renderer) {
+  const R = SR.ref || (SR.ref = srRefBuild(SR_REF));
+  let a = R.sink;
+  for (let i = 0; i < R.ops; i++) a = (a * 1.000001 + Math.sqrt(i)) % 1e9;
+  R.sink = a;
+  renderer.render(R.scene, R.camera);
 }
 /* The mean colour of a 12 x 8 grid of the frame just drawn (read before the browser clears it): the e2e holds that a
    redraw never shows a frame in other colours. */

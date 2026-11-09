@@ -395,9 +395,10 @@ window.__dbg = {
       price: ($('sr-cost').querySelector('[data-src-price]') || {}).textContent || '' } : null }),
   srCostPlayMs: (ms) => { SRC.playMs = ms; return ms; },
   srFramesReset: () => { if (SR.view) SR.view.frames = []; return !!SR.view; },
-  // the room drawn empty (nothing drawn, no tag placed) or as it is: the frames of an empty room, measured between a large
-  // room's (56-server-room.js V.blank)
-  srBlank: (on) => { const V = SR.view; if (!V) return false; V.blank = !!on; $('sr-labels').hidden = !!on; return true; },
+  // the room's loop drawing the fixed yardstick in its place (56-server-room.js srRefFrame), nothing of the room drawn or
+  // placed; sizes ({boxes, ops}) for measuring it, SR_REF otherwise
+  srRef: (on, sizes) => { const V = SR.view; if (!V) return false; if (sizes) SR.ref = srRefBuild({ ...SR_REF, ...sizes });
+    V.ref = !!on; V.blank = !!on; $('sr-labels').hidden = !!on; return true; },
   // the box (2.3.11 item 6): the nodes on the page now (client px; null behind the camera), the camera, what the last box held
   srScreen: () => { const V = SR.view; if (!V) return null; V.camera.updateMatrixWorld(); const r = V.renderer.domElement.getBoundingClientRect();
     return { rect: [r.left, r.top, r.right, r.bottom], lod: V.lod, nodes: srBoxPoints(V).map(([id, v]) => { const s = srScreenAt(V, v, r.width, r.height); return [id, s ? [r.left + s[0], r.top + s[1]] : null]; }) }; },
