@@ -46,3 +46,7 @@ guard-branch-runtime.xml
 
 # Built by `pip wheel .` / `pip install .` inside jui_tools (not the attr_codegen output above).
 /jui_tools/build/
+
+# Xcode / SwiftPM build output (a -derivedDataPath inside the tree; never tracked)
+.build/
+DerivedData/
