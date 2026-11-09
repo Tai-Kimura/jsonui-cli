@@ -10,6 +10,7 @@ require_relative '../../core/normalization'
 require_relative '../../core/tap_accessibility'
 require_relative '../../core/control_accessibility'
 require_relative '../../core/string_literals'
+require_relative '../../core/type_converter'
 require_relative '../../core/enum_spelling'
 require_relative '../../core/attribute_validator'
 
@@ -1576,7 +1577,7 @@ module KjuiTools
           return [] if interaction == 'false'
 
           required_imports&.add(:pinch_gesture)
-          handler_call = get_event_handler_invocation(handler, view_id(json_data), 'scale')
+          handler_call = get_event_handler_invocation(handler, view_id(json_data), 'scale', value_type: 'Float')
           handler_call = "if (#{interaction}) #{handler_call}" if interaction
 
           gesture = <<~KOTLIN.rstrip
@@ -2046,7 +2047,15 @@ module KjuiTools
           JsonUIShared::LayoutPath.view_id(json_data)
         end
 
-        def self.get_event_handler_invocation(handler, view_id, value_expr)
+        # `value_type` is the Kotlin type of `value_expr` when the event's
+        # value is a platform number that differs from iOS's: Compose's Slider
+        # and the pinch's scale are Float where SwiftUI hands the same handler
+        # a Double (or a CGFloat, which Swift passes to a Double parameter).
+        # One declaration serves both faces, so a handler declared `(Double)`
+        # is given `value.toDouble()` here (handler_argument); it was given the
+        # Float and did not compile (ticket
+        # kjui-slider-on-value-change-passes-float-to-double-handler).
+        def self.get_event_handler_invocation(handler, view_id, value_expr, value_type: nil)
           method_name = extract_binding_property(handler) || handler
 
           # Look up the handler's type in data_definitions
@@ -2077,10 +2086,24 @@ module KjuiTools
           return "data.#{method_name}?.invoke()" if params.nil? || params.empty?
 
           if params.size == 1
-            value_expr ? "data.#{method_name}?.invoke(#{value_expr})" : "data.#{method_name}?.invoke(#{id_literal})"
+            value_expr ? "data.#{method_name}?.invoke(#{handler_argument(value_expr, value_type, params[0])})" : "data.#{method_name}?.invoke(#{id_literal})"
           else
-            value_expr ? "data.#{method_name}?.invoke(#{id_literal}, #{value_expr})" : "data.#{method_name}?.invoke(#{id_literal})"
+            value_expr ? "data.#{method_name}?.invoke(#{id_literal}, #{handler_argument(value_expr, value_type, params[1])})" : "data.#{method_name}?.invoke(#{id_literal})"
           end
+        end
+
+        # The event's value as the declared parameter takes it: a Float value
+        # for a `Double` / `Double?` parameter is converted (`.toDouble()`);
+        # anything else is passed as it is — `Float`, a `CGFloat` (written
+        # Float), `Any` take the Float itself, and a parameter no face's value
+        # fits (`Int`: iOS's Double does not convert either) is left for the
+        # compiler to name.
+        def self.handler_argument(value_expr, value_type, declared)
+          return value_expr unless value_type == 'Float' && declared
+
+          type = declared.sub(/\A[A-Za-z_]\w*\s*:\s*/, '') # a label (`value: Double`)
+          kotlin = KjuiTools::Core::TypeConverter.to_kotlin_type(type.strip, 'compose').to_s.delete_suffix('?')
+          kotlin == 'Double' ? "#{value_expr}.toDouble()" : value_expr
         end
 
         # The parameter list of a declared function type — `(String, Int) ->
