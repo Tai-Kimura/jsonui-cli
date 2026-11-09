@@ -223,10 +223,18 @@ TALK_FILES = 80
 TALK_BYTES = 256 * 1_048_576
 TALK_FILE_BYTES = 16 * 1_048_576
 TALK_KEEP = 40
-#: the kinds read from every file of the window (_week_needle picks their lines)
-WEEK_KINDS = ("denied",)
+#: the kinds read from every file of the window (_week_needle picks their lines). The coordinator's records (the
+#: parent's send to a subagent) are only in subagents' files, which sort after the large main transcripts: the byte
+#: budget ran out before them and read as "unseen" (ticket 2026-11-09-cc-dependency-watch-red: 41 records on 11-08,
+#: rank 28 and later of the window).
+WEEK_KINDS = ("denied", "coordinator")
 SEND_INPUT_KEYS = ["to", "message", "summary"]
 PEER_ORIGIN_KEYS = ["kind", "msg_id", "from", "verifiedPeerPid", "name", "body"]
+#: A message that came through Remote Control's bridge (from "bridge:session_…") carries no msg_id and no
+#: verifiedPeerPid (measured 11-08: 35 of 35); talk.py matches it by the body and the bridge's session. Its own shape,
+#: so its missing msg_id does not read as the uds form's msg_id going "some" (the ticket above).
+BRIDGE_PREFIX = "bridge:"
+BRIDGE_ORIGIN_KEYS = ["kind", "from", "name", "body"]
 #: Keys the readers use when there and do without (talk.py: the sender by pid, else by from / name): whether any record
 #: carries one, not whether all do — its share went all -> some -> all on 10-21..23 with nothing broken.
 OPTIONAL_PEER_ORIGIN_KEYS = {"verifiedPeerPid"}
@@ -284,7 +292,7 @@ def _take(r: dict, got: dict, sends: set, skills: set) -> None:
 
 
 def _week_needle(line: bytes) -> bool:
-    return b"uto mode" in line and b'"is_error"' in line
+    return (b"uto mode" in line and b'"is_error"' in line) or (b'"coordinator"' in line and b'"origin"' in line)
 
 
 def _talk_scan(ctx: Context) -> dict | None:
@@ -362,7 +370,8 @@ def _talk_scan(ctx: Context) -> dict | None:
                     _take(r, week, set(), set())
         except OSError:
             continue
-    talk.update({k: week[k] for k in WEEK_KINDS})
+    week["coordinator"] += [a["origin"] for a in week["queued"] if a["origin"].get("kind") == "coordinator"]
+    talk.update({k: week[k][-TALK_KEEP:] if k == "coordinator" else week[k] for k in WEEK_KINDS})
     ctx._talk = talk
     return ctx._talk
 
@@ -437,9 +446,12 @@ def talk_origin(ctx: Context):
         return s
     peer = ctx._talk["peer"] + [a["origin"] for a in ctx._talk["queued"] if a["origin"].get("kind") == "peer" and not a["origin"].get("senderTaskId")]
     peer = [o for o in peer if "members" not in o]
+    bridge = [o for o in peer if str(o.get("from", "")).startswith(BRIDGE_PREFIX)]
+    peer = [o for o in peer if not str(o.get("from", "")).startswith(BRIDGE_PREFIX)]
     queued = ctx._talk["queued"]
     return {"peer": {k: (_seen_any(peer, k) if k in OPTIONAL_PEER_ORIGIN_KEYS else _all_any(peer, lambda o, k=k: k in o))
                      for k in PEER_ORIGIN_KEYS},
+            "bridge": {k: _all_any(bridge, lambda o, k=k: k in o) for k in BRIDGE_ORIGIN_KEYS},
             "child": {k: _all_any(ctx._talk["child"], lambda o, k=k: k in o) for k in CHILD_ORIGIN_KEYS},
             "coordinator": "seen" if ctx._talk["coordinator"] or any(a["origin"].get("kind") == "coordinator" for a in queued) else "unseen",
             "queued_command": _all_any(queued, _queued_prompt_is_read)}
