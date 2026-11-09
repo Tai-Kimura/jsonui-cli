@@ -72,11 +72,11 @@ module KjuiTools
                 # Both data binding and event handler: the lambda names its
                 # parameter `newValue`, so the handler invocation must reference
                 # `newValue` (an `it`-based call would not resolve).
-                handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(on_value_change, view_id, 'newValue')
+                handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(on_value_change, view_id, 'newValue', value_type: 'Float')
                 code += "\n" + indent("onValueChange = { newValue -> viewModel.updateData(mapOf(\"#{binding_variable}\" to newValue.toDouble())); #{handler_call} },", depth + 1)
               else
                 # Event handler only (implicit `it` parameter)
-                handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(on_value_change, view_id, 'it')
+                handler_call = Helpers::ModifierBuilder.get_event_handler_invocation(on_value_change, view_id, 'it', value_type: 'Float')
                 code += "\n" + indent("onValueChange = { #{seeded ? "#{seeded} = it; " : ''}#{handler_call} },", depth + 1)
               end
             else
