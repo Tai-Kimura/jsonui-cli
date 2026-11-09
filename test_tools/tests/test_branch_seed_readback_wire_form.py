@@ -20,6 +20,9 @@ either way the failure says which way it was read ("in the wire form" /
 "by reflection" / "the Domain's dto, unwrapped"), so a false red on the
 fallback is told apart from a real one. Android's arm needs real kotlinx
 serializers and is in test_branch_seed_readback_wire_android.py.
+
+Needs node and swiftc: run with the compilers (ci.yml's branch-runtime step,
+run-suites.sh), not in python-suite — Linux's Foundation has no URLRequest.
 """
 from __future__ import annotations
 
