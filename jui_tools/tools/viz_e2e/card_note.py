@@ -21,6 +21,7 @@ import sys
 import time
 
 from common import DESKTOP, ISOLATE, LAUNCH_ARGS, T, Watch, dump, new_page, ready, stamp
+from stand_in_channel import StandInChannel
 
 S_C1 = "e2e00000-0000-4000-8000-0000000000e1"
 S_C2 = "e2e00000-0000-4000-8000-0000000000e2"
@@ -68,6 +69,7 @@ async def run_card_note(pw, out, failures):
     sessions_dir = home / ".claude" / "sessions"
     sessions_dir.mkdir(parents=True, exist_ok=True)
     stand_ins: list = []
+    channels: list = []   # our stand-in channels (stand_in_channel.py), closed in finally
 
     def session_process(sid, *args):
         proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(900)", *args],
@@ -138,8 +140,10 @@ async def run_card_note(pw, out, failures):
         session_process(S_C1, "--channels", "plugin:jui-viz@jsonui")
         session_process(S_C2, "--channels", "plugin:jui-viz@jsonui")
         session_process(S_PLAIN)
+        # each channel polls on until the suite ends (stand_in_channel.py): one that only said hello was dropped after 60 s
+        token = json.loads((state / "server.json").read_text())["token"]
         for sid in CWDS:
-            local("POST", "/channel/hello", {"ppid": 1, "cwd": "/", "sessionId": sid, "version": "2", "accepts": ["prompt"], "via": "plugin"})
+            channels.append(StandInChannel(port, token, sid).open())
         launches = {}
         for _ in range(100):
             _, snap = local("GET", "/api/snapshot")
@@ -202,6 +206,8 @@ async def run_card_note(pw, out, failures):
     except Exception as e:
         failures.append(f"card-note: {type(e).__name__}: {str(e).splitlines()[0]}")
     finally:
+        for channel in channels:
+            channel.close()
         for proc in stand_ins:   # the session stand-ins this suite started
             proc.kill()
             proc.wait()

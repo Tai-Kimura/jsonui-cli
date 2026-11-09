@@ -37,6 +37,7 @@ import sys
 import time
 
 from common import DESKTOP, LAUNCH_ARGS, Watch, new_page, ready
+from stand_in_channel import StandInChannel
 from waits import WaitTimeout, settled, until
 
 CWD = "/work/card-waits-app"
@@ -99,6 +100,7 @@ async def run_card_waits(pw, out, failures, jt=None, video: pathlib.Path | None 
     browser = None
     ctx = None
     stand_ins: list = []   # our own stand-in for den's claude process (its pid recorded here, stopped in finally)
+    channels: list = []    # our stand-in channels (stand_in_channel.py), closed in finally
     t0 = time.monotonic()
     try:
         def hook(k, **payload):
@@ -139,9 +141,9 @@ async def run_card_waits(pw, out, failures, jt=None, video: pathlib.Path | None 
         (sessions / f"{proc.pid}.json").write_text(json.dumps({"pid": proc.pid, "sessionId": SID["den"], "cwd": CWD, "kind": "interactive",
                                                                "entrypoint": "cli", "status": "idle", "procStart": f"t{proc.pid}"}))
         token = json.loads((home / ".local" / "state" / "jui-viz" / "server.json").read_text())["token"]   # the server's local token
-        req = urllib.request.Request(f"{url}/channel/hello", method="POST", headers={"Content-Type": "application/json", "X-Jui-Viz-Token": token},
-                                     data=json.dumps({"ppid": 1, "cwd": "/", "sessionId": SID["den"], "version": "2", "accepts": ["prompt"], "via": "plugin"}).encode())
-        res["denHello"] = urllib.request.urlopen(req, timeout=10).status
+        # its channel polls on until the suite ends (stand_in_channel.py): one that only said hello was dropped after 60 s
+        channels.append(den_channel := StandInChannel(port, token, SID["den"]).open())
+        res["denHello"] = den_channel.status
         ids = await page.evaluate("() => Object.fromEntries(window.__dbg.robots.map((R) => [R.def.sessionId, R.def.id]))")
         rid = {k: ids[SID[k]] for k in SID if k not in MORE}
         res["ids"] = rid
@@ -410,6 +412,8 @@ async def run_card_waits(pw, out, failures, jt=None, video: pathlib.Path | None 
         check(failures, more[0] == 6, f"nine waiting: six robots listed and {want_more!r}: {more}")
         (out / "result.json").write_text(json.dumps(res, ensure_ascii=False, indent=1, default=str))
     finally:
+        for channel in channels:
+            channel.close()
         for proc in stand_ins:   # ours, by the pid recorded above
             proc.terminate()
             try:

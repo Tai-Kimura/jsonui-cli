@@ -33,6 +33,7 @@ import sys
 import time
 
 from common import DESKTOP, ISOLATE, LAUNCH_ARGS, T, Watch, dump, new_page, ready
+from stand_in_channel import StandInChannel
 
 SID = "e2e00000-0000-4000-8000-0000000000f7"
 CWD = "/work/hist-cards"
@@ -174,6 +175,7 @@ async def run_hist_cards(pw, out, failures):
     url = f"http://127.0.0.1:{port}"
     res: dict = {}
     held: list = []
+    channels: list = []   # our stand-in channels (stand_in_channel.py), closed in finally
 
     def body(**payload):
         return {"session_id": SID, "cwd": CWD, "transcript_path": "/work/none.jsonl", "permission_mode": "default", **payload}
@@ -210,12 +212,9 @@ async def run_hist_cards(pw, out, failures):
         (sessions_dir / f"{stand_in.pid}.json").write_text(json.dumps({"pid": stand_in.pid, "sessionId": SID, "cwd": CWD, "kind": "interactive",
                                                                        "entrypoint": "cli", "status": "idle", "procStart": f"t{stand_in.pid}"}))
         token = json.loads((home / ".local" / "state" / "jui-viz" / "server.json").read_text())["token"]
-        import http.client
-        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-        conn.request("POST", "/channel/hello", body=json.dumps({"ppid": 1, "cwd": "/", "sessionId": SID, "version": "2", "accepts": ["prompt"], "via": "plugin"}),
-                     headers={"X-Jui-Viz-Token": token, "Content-Type": "application/json"})
-        check(failures, conn.getresponse().status == 200, "the channel's hello")
-        conn.close()
+        # each channel polls on until the suite ends (stand_in_channel.py): one that only said hello was dropped after 60 s
+        channels.append(channel := StandInChannel(port, token, SID).open())
+        check(failures, channel.status == 200, "the channel's hello")
         page = await new_page(browser, watch, "hist-cards", **DESKTOP)
         await page.goto(url + "/")
         await ready(page)
@@ -452,6 +451,8 @@ async def run_hist_cards(pw, out, failures):
     except Exception as e:
         failures.append(f"hist-cards: {type(e).__name__}: {str(e).splitlines()[0]}")
     finally:
+        for channel in channels:
+            channel.close()
         for p in held:
             if p.poll() is None:
                 p.kill()

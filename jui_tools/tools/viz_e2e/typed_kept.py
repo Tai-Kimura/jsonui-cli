@@ -29,6 +29,7 @@ import sys
 import time
 
 from common import DESKTOP, LAUNCH_ARGS, Watch, new_page, ready
+from stand_in_channel import StandInChannel
 from waits import WaitTimeout, settled, until
 
 CWD = "/work/typed-kept-app"
@@ -96,6 +97,7 @@ async def run_typed_kept(pw, out, failures, Server, jt=None):
     url = f"http://127.0.0.1:{port}"
     res: dict = {}
     browser, asks, demo, stand_ins = None, [], None, []
+    channels: list = []   # our stand-in channels (stand_in_channel.py), closed in finally
     t0 = time.monotonic()
     try:
         def hook(k, ask=False, **payload):
@@ -118,7 +120,6 @@ async def run_typed_kept(pw, out, failures, Server, jt=None):
 
         browser = await pw.chromium.launch(args=LAUNCH_ARGS)
         watch = Watch(origin=url)
-        import http.client
         import urllib.request
         for _ in range(400):
             try:
@@ -145,13 +146,10 @@ async def run_typed_kept(pw, out, failures, Server, jt=None):
         rid = {k: ids[SID[k]] for k in SID}
         res["ids"] = rid
         token = json.loads((home / ".local" / "state" / "jui-viz" / "server.json").read_text())["token"]
+        # each channel polls on until the suite ends (stand_in_channel.py): one that only said hello was dropped after 60 s
         for k in ("a", "c"):
-            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
-            conn.request("POST", "/channel/hello", body=json.dumps({"ppid": 1, "cwd": "/", "sessionId": SID[k], "version": "2", "accepts": ["prompt"], "via": "plugin"}),
-                         headers={"X-Jui-Viz-Token": token, "Content-Type": "application/json"})
-            r = conn.getresponse()
-            res.setdefault("hello", {})[k] = [r.status, r.read().decode()[:200]]
-            conn.close()
+            channels.append(channel := StandInChannel(port, token, SID[k]).open())
+            res.setdefault("hello", {})[k] = [channel.status, channel.reply[:200]]
         await page.wait_for_timeout(5500)   # one presence report after the page is up (the hook waits for a page)
 
         # 1. the panel's card: typed, then a new question (another session) draws the list again
@@ -276,6 +274,8 @@ async def run_typed_kept(pw, out, failures, Server, jt=None):
         res["reason"] = await kept(dpage, failures, reason, "a permission's reason, drawn again", lambda: dpage.evaluate("() => window.__dbg.redrawTyped()"), "not on main", other=False)
         (out / "result.json").write_text(json.dumps(res, ensure_ascii=False, indent=1, default=str))
     finally:
+        for channel in channels:
+            channel.close()
         for p in stand_ins:
             p.kill()   # our own session stand-ins
             p.wait(timeout=5)
