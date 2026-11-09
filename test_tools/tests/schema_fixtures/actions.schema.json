@@ -284,6 +284,9 @@
           "$ref": "#/definitions/readTextAction"
         },
         {
+          "$ref": "#/definitions/setSliderValueAction"
+        },
+        {
           "$ref": "#/definitions/repeatAction"
         },
         {
@@ -1061,7 +1064,8 @@
     "readTextAction": {
       "type": "object",
       "x-doc": {
-        "ja": "要素のテキストを実行時変数に読む（`@{変数名}` で後続参照）"
+        "ja": "要素のテキストを実行時変数に読む（`@{変数名}` で後続参照）",
+        "platforms": "Slider は今の値の字（iOS: accessibility value〈0〜1・0〜100 は「37%」〉、Android: RangeInfo の current、Web: input の value）"
       },
       "properties": {
         "action": {
@@ -1101,6 +1105,73 @@
         "action",
         "id",
         "variable"
+      ],
+      "additionalProperties": false
+    },
+    "setSliderValueAction": {
+      "type": "object",
+      "description": "Put a Slider at a value, given in the slider's own units (not a 0..1 position). Before anything is moved the value is checked against the slider: outside its bounds, or off its step grid (the grid starts at the minimum), the step fails and names the bound or the two nearest values on the grid; a declared range or step that differs from the slider's own fails naming the slider's. Android sets the value through the accessibility SET_PROGRESS action and web through the range input (one input event and one change event, as a user's release): both land exactly, and the read-back is checked (Android fails naming the value its steps snapped to). iOS drags the thumb as a finger does (XCUITest has no way to set a slider's value): the step passes when the value it landed on is within the tolerance — half of `step` when given, else 0.5% of the range — and the landed value is recorded in the case's warnings whether it passed or failed. On iOS the bounds are not readable from the element: give `range`, or the driver moves the thumb to both ends to read them (the app sees those values), and a slider that reports its value as a percentage needs `range`. To check what the app keeps (and sends), assert `state` on the bound data; the `value` assertion checks the slider itself.",
+      "x-doc": {
+        "ja": "Slider を値に置く（値はスライダーの単位。範囲外・刻みから外れる値は触る前に失敗）",
+        "platforms": "iOS は指でつまみを引くのでちょうどにはならず、許容（`step` があれば step/2、無ければ範囲の 0.5%）に入れば成功、置けた値を警告に残す。iOS は `range` を書く（無ければ両端まで動かして読む）"
+      },
+      "x-requires-driver": {
+        "android": "1.22.0",
+        "ios": "2.3.0",
+        "web": "1.19.0"
+      },
+      "properties": {
+        "action": {
+          "const": "setSliderValue"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId",
+          "description": "The Slider's id"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "value": {
+          "type": "number",
+          "description": "The value to put the slider at, in the slider's units (e.g. 9 on a 1...10 slider)"
+        },
+        "range": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "[minimum, maximum] of the slider as the layout declares it. Required on iOS for a slider whose bounds are 0...1 or 0...100 (iOS reports those as a percentage); elsewhere on iOS it spares the probe to both ends. On Android and web it is compared with the slider's own bounds and a difference fails the step."
+        },
+        "step": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "The slider's step. The value must lie on the grid min + k*step. On iOS it also sets the tolerance (step/2), so a value the app rounds to the step is the value written; on web it is compared with the input's own step."
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 5000,
+          "description": "Timeout in milliseconds"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "id",
+        "value"
       ],
       "additionalProperties": false
     },
@@ -1315,6 +1386,9 @@
         },
         {
           "$ref": "#/definitions/countAssertion"
+        },
+        {
+          "$ref": "#/definitions/valueAssertion"
         },
         {
           "$ref": "#/definitions/stateAssertion"
@@ -1596,6 +1670,74 @@
           "type": "integer",
           "minimum": 0,
           "description": "Expected element count"
+        },
+        "timeout": {
+          "$ref": "#/definitions/assertionTimeout"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "assert",
+        "id",
+        "equals"
+      ],
+      "additionalProperties": false
+    },
+    "valueAssertion": {
+      "type": "object",
+      "description": "Assert a Slider's current value, in the slider's units. Read from the element itself: Android's accessibility RangeInfo, the web input's value, iOS's accessibility value (a percentage reading is converted with `range`, which is then required). Passes when |read - equals| <= tolerance. The default tolerance is 1e-6 on Android and web; on iOS it is the setSliderValue tolerance (half of `step` when given, else 0.5% of the range), because an iOS slider is placed by a drag and reads back with three decimals. To check the value the app keeps or sends, assert `state` on the bound data instead: that is the app's own number, exactly.",
+      "x-doc": {
+        "ja": "Slider の今の値を検証（`equals` との差が許容以内。送られる値を厳密に見るなら bound の data を `state` で）",
+        "platforms": "iOS は既定の許容が setSliderValue と同じ（step/2 か範囲の 0.5%）。iOS で 0〜1・0〜100 のスライダーは `range` が要る"
+      },
+      "x-requires-driver": {
+        "android": "1.22.0",
+        "ios": "2.3.0",
+        "web": "1.19.0"
+      },
+      "properties": {
+        "assert": {
+          "const": "value"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "equals": {
+          "type": "number",
+          "description": "Expected value, in the slider's units"
+        },
+        "tolerance": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Largest accepted difference. Default 1e-6 on Android and web; on iOS half of `step` when given, else 0.5% of the range."
+        },
+        "range": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "[minimum, maximum] as for setSliderValue: needed on iOS to read a percentage and for the default tolerance"
+        },
+        "step": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "The slider's step: sets the iOS default tolerance (step/2)"
         },
         "timeout": {
           "$ref": "#/definitions/assertionTimeout"

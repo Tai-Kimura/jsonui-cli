@@ -797,6 +797,8 @@ class StepValidator:
             self._validate_set_orientation_action(step, path, result)
         elif action == "emitHook":
             self._validate_emit_hook_action(step, path, result)
+        elif action == "setSliderValue":
+            self._validate_slider_step(step, path, result, "setSliderValue")
 
     def _validate_repeat_action(self, step: dict, path: str, result: ValidationResult):
         """Validate a repeat control step."""
@@ -885,6 +887,88 @@ class StepValidator:
                 result.errors.append(ValidationMessage(
                     path=path,
                     message=f"'{param}' must be a positive integer (logical pixels), got: {value!r}"
+                ))
+
+    def _validate_slider_step(self, step: dict, path: str, result: ValidationResult, kind: str):
+        """setSliderValue / the value assertion: the numbers, and what the
+        drivers would refuse at run time, said here when `range` / `step` are
+        written (the sentences the drivers use, schemas setSliderValueAction).
+        """
+        def number(v) -> bool:
+            return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+        def variable(v) -> bool:
+            return isinstance(v, str) and v.startswith("@{") and v.endswith("}")
+
+        def show(v: float) -> str:
+            return str(int(round(v))) if abs(v - round(v)) < 1e-9 else repr(float(f"{v:.12g}"))
+
+        def error(message: str):
+            result.errors.append(ValidationMessage(path=path, message=message))
+
+        field = "value" if kind == "setSliderValue" else "equals"
+        target = step.get(field)
+        if field in step and not (number(target) or variable(target)):
+            error(f"'{field}' on {kind} must be a number (the slider's units), got: {target!r}")
+        bounds = None
+        if "range" in step:
+            r = step["range"]
+            if not (isinstance(r, list) and len(r) == 2 and all(number(x) for x in r)):
+                error(f"'range' must be [minimum, maximum] (two numbers), got: {r!r}")
+            elif not r[0] < r[1]:
+                error(f"'range' must be [minimum, maximum] with minimum < maximum, got: {r!r}")
+            else:
+                bounds = (float(r[0]), float(r[1]))
+        grid = None
+        if "step" in step:
+            st = step["step"]
+            if not number(st) or st <= 0:
+                error(f"'step' must be a number greater than 0, got: {st!r}")
+            else:
+                grid = float(st)
+        if "tolerance" in step:
+            t = step["tolerance"]
+            if not number(t) or t < 0:
+                error(f"'tolerance' must be a number of 0 or more, got: {t!r}")
+
+        # What the drivers refuse before they move anything, said up front.
+        if number(target) and bounds is not None:
+            v, (lo, hi) = float(target), bounds
+            slack = 1e-6 * max(1.0, hi - lo)
+            if v < lo - slack:
+                error(f"{show(v)} is below the slider's range [{show(lo)}, {show(hi)}]; "
+                      f"the nearest value it can take is {show(lo)}")
+            elif v > hi + slack:
+                error(f"{show(v)} is above the slider's range [{show(lo)}, {show(hi)}]; "
+                      f"the nearest value it can take is {show(hi)}")
+            elif grid is not None:
+                k = (v - lo) / grid
+                if abs(k - round(k)) > 1e-6:
+                    below = lo + int(k + 1e-6) * grid
+                    above = min(below + grid, hi)
+                    error(f"{show(v)} is not on the slider's steps ({show(lo)} + k * {show(grid)}); "
+                          f"the nearest values are {show(below)} and {show(above)}")
+
+        # iOS reads no bounds from a slider (measured: its accessibility value
+        # is a number, or a percentage for 0...1 / 0...100).
+        if not _gated_off(step, ("ios",)) and "range" not in step:
+            if kind == "setSliderValue":
+                result.warnings.append(ValidationMessage(
+                    path=path,
+                    message="setSliderValue without 'range': iOS cannot read a slider's bounds, so it "
+                            "moves the thumb to both ends to read them (the app sees those values), "
+                            "and a 0...1 or 0...100 slider fails there. Write the layout's [minimum, maximum]",
+                    level="warning",
+                    kind=PLATFORM_CONSTRAINT,
+                ))
+            elif "step" not in step and "tolerance" not in step:
+                result.warnings.append(ValidationMessage(
+                    path=path,
+                    message="value without 'range', 'step' or 'tolerance' fails on iOS: a slider "
+                            "there is placed by a drag and read to three decimals, so its tolerance "
+                            "comes from one of them",
+                    level="warning",
+                    kind=PLATFORM_CONSTRAINT,
                 ))
 
     def _validate_set_orientation_action(self, step: dict, path: str, result: ValidationResult):
@@ -1079,6 +1163,9 @@ class StepValidator:
                     path=path,
                     message=f"Count 'equals' must be a non-negative integer, got: {equals}"
                 ))
+
+        if assertion == "value":
+            self._validate_slider_step(step, path, result, "value")
 
         # For state assertion, path must be a non-empty string
         if assertion == "state" and "path" in step:

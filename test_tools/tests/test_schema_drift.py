@@ -373,6 +373,18 @@ def test_driver_requirements_match_the_schemas():
     )
 
 
+def _requirement_key(key, spec):
+    """A step definition's floor is keyed by the step it defines
+    (`action:setSliderValue`, `assert:value`), the name a test file uses;
+    any other definition (`within`) by its own name."""
+    props = spec.get("properties", {})
+    for kind in ("action", "assert"):
+        const = props.get(kind, {}).get("const") if isinstance(props.get(kind), dict) else None
+        if isinstance(const, str):
+            return f"{kind}:{const}"
+    return key
+
+
 def _schema_driver_requirements(schemas=None):
     """`x-requires-driver` per key, read where the schemas declare it: the
     top level of screen-test and flow-test, a screen-test case, and a step
@@ -397,7 +409,8 @@ def _schema_driver_requirements(schemas=None):
         for where, props in places:
             for key, spec in props.items():
                 if isinstance(spec, dict) and "x-requires-driver" in spec:
-                    found.setdefault(key, []).append((f"{name}{where}", spec["x-requires-driver"]))
+                    found.setdefault(_requirement_key(key, spec), []).append(
+                        (f"{name}{where}", spec["x-requires-driver"]))
     merged = {}
     for key, seen in found.items():
         floors = {json.dumps(req, sort_keys=True) for _, req in seen}
