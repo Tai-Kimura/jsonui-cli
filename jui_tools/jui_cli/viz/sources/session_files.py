@@ -43,8 +43,14 @@ def read_session_file(path: Path) -> dict | None:
     finally:
         os.close(fd)
     try:
-        data = json.loads(raw.decode("utf-8"))
+        text = raw.decode("utf-8")
+        data, end = json.JSONDecoder().raw_decode(text.lstrip())
     except (UnicodeDecodeError, ValueError):
+        return None
+    # A shorter object written over a longer one without truncating leaves the old tail's last bytes after it
+    # (2026-11-09: 3 of 56 files ended "}\n}" — the session dropped out of viz, "available: false"). Only braces and
+    # white space may follow the object; anything else is not this shape and the file is not read.
+    if text.lstrip()[end:].strip(" \t\r\n}"):
         return None
     return data if isinstance(data, dict) else None
 

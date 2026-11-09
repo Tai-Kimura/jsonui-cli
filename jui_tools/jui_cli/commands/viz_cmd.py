@@ -776,22 +776,19 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     ctx.world = world
     ctx.publish = world.publish
 
-    watched: dict[str, object] = {}   # project id -> its observer (a worktree shown or gone: watched again)
+    from ..viz.change_batch import ChangeBatch, Watchers
+    from ..viz.sources import jsonui_project as jp_watch
+
+    # the watchers' changes reach the loop in batches, one publish each (a storm of changes was one call per file), and
+    # a room keeps its watcher while its folders are the same (change_batch: the ENOSPC night of 2026-11-09)
+    changes = ChangeBatch(loop.call_soon_threadsafe, lambda pid, path: world.file_changed(pid, path, now_ms()),
+                          world.publish)
+    watchers = Watchers(jp_watch.watch_folders,
+                        lambda project: jp_watch.watch(project, lambda path: changes.add(project.project_id, path)),
+                        observers)
 
     def watch_project(project) -> None:
-        from ..viz.sources import jsonui_project
-
-        def on_change(path: str) -> None:
-            loop.call_soon_threadsafe(lambda: (world.file_changed(project.project_id, path, now_ms()), world.publish()))
-
-        old = watched.pop(project.project_id, None)
-        if old is not None:
-            old.stop()
-            observers.remove(old)
-        observer = jsonui_project.watch(project, on_change)
-        if observer is not None:
-            observers.append(observer)
-            watched[project.project_id] = observer
+        watchers.watch(project)
 
     if not replay:
         world.on_project_loaded = watch_project

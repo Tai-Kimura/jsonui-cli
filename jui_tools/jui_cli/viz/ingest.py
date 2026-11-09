@@ -254,6 +254,10 @@ class World:
         self._asking: dict[str, str] = {}
         self._new_files: set[str] = set()  # tool_use_ids writing a file that did not exist
         self.pid_to_session: dict[int, str] = {}
+        # a claude process's pid -> its session, as its hooks name it (forward.py's X-Jui-Viz-Claude-Pid, jui-viz
+        # 1.x+): a session with no ~/.claude/sessions entry and absent from the agents list (the ENOSPC night lost
+        # entries) is still known by pid. pid_to_session (the registry, the list) wins where both name a pid.
+        self.hook_pids: dict[int, str] = {}
         # A session's process as its newest agents-list row / session file names it: (pid, procStart, entrypoint),
         # and that process's argv as read once (sources/launch.py) — only the classification is ever published.
         self.session_proc: dict[str, tuple] = {}
@@ -916,6 +920,7 @@ class World:
             return None
         cwd = _s(payload.get("cwd"))
         session = self._session(sid, cwd, at)
+        self._hook_names(sid, payload.get("_claudePid"))
         if kind in INPUT_WAIT_ENDS and session.pop("inputWaitAt", None) is not None:   # it moves again: no longer waits for input
             self._dirty.add("sessions")
         self._find_since(session, cwd, _s(payload.get("transcript_path")))
@@ -1447,21 +1452,48 @@ class World:
             self._end(self.sessions[sid], self._main(sid, at), at)
             self.state.add_event({"at": at, "sessionId": sid, "agentId": sid, "kind": "SessionEnd", "cat": "session",
                                   "text": i18n.tl("ev.clock_out", reason="(process gone)")})
+            # its process is gone by both lists: forgotten, so a session its hooks bring back is not ended again at
+            # every poll (the ENOSPC night: the same session ended dozens of times, a hook bringing it back each time;
+            # ticket 2026-11-06-viz-e2e-full-run-red-under-load). A list or an entry naming it again knows it again.
+            self.session_proc.pop(sid, None)
         return gone
 
     # ---------------------------------------------------------------- relay channel (08 §2)
 
+    def pid_session(self, pid) -> str | None:
+        """The session a claude process's pid belongs to: the registry's and the agents list's word, else its hooks'."""
+        if not isinstance(pid, int) or isinstance(pid, bool):
+            return None
+        return self.pid_to_session.get(pid) or self.hook_pids.get(pid)
+
+    def _hook_names(self, sid: str, pid) -> None:
+        """A hook named its claude pid: kept, and a channel still waiting for its session (named by this pid or by
+        this session's id, before the server knew either: a channel reconnects at once after a restart, the hooks come
+        later) is tied to it."""
+        if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 1:
+            return
+        if self.hook_pids.get(pid) != sid:
+            self.hook_pids[pid] = sid
+        for channel in self.perms.channels.values():
+            if channel.session_id is None and (channel.asked_pid == pid or channel.asked_session == sid):
+                if self.pid_session(pid) == sid:
+                    channel.session_id = sid
+                    self._dirty.add("sessions")
+
     def channel_hello(self, ppid, cwd, session_id, at: int, accepts=None, via=None) -> str:
-        """Register a channel; find its session by id, by the parent pid, or by a unique cwd."""
+        """Register a channel; find its session by id, by the parent pid, or by a unique cwd. One not found yet keeps
+        the pid and the id it asked with, and is tied once a hook names them (_hook_names)."""
         sid = session_id if isinstance(session_id, str) and session_id in self.sessions else None
         if sid is None and isinstance(ppid, int):
-            sid = self.pid_to_session.get(ppid)
+            sid = self.pid_session(ppid)
         if sid is None and isinstance(cwd, str):
             relay = self.perms.relay_sessions()
             same = [s for s, v in self.sessions.items() if v["cwd"] == tilde(cwd) and v["status"] != "ended" and s not in relay]
             sid = same[0] if len(same) == 1 else None
         prompts = isinstance(accepts, list) and "prompt" in accepts   # jui-viz 1.2.0+ (channel.py VERSION 2)
         channel = self.perms.hello(sid, at, prompts, via if via in ("plugin", "mcp") else None)
+        channel.asked_pid = ppid if isinstance(ppid, int) and not isinstance(ppid, bool) else None
+        channel.asked_session = session_id if isinstance(session_id, str) else None
         self._dirty.add("sessions")
         return channel.id
 

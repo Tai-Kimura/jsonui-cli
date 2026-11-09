@@ -10,13 +10,17 @@ import uuid
 from .channel import read_server, session_id_of
 
 
-def own_session() -> str | None:
+def own_session(chain: list | None = None) -> str | None:
+    """This session's id: the environment's, else ~/.claude/sessions' entry of a process up the chain. ``chain``
+    collects the pids walked (for whoami, when no entry names any of them)."""
     for key in ('CODEX_THREAD_ID', 'CLAUDE_SESSION_ID'):
         value = os.environ.get(key)
         if value:
             return value
     pid = os.getppid()
     for _ in range(12):
+        if chain is not None:
+            chain.append(pid)
         sid = session_id_of(pid)
         if sid:
             return sid
@@ -51,6 +55,19 @@ def request(path: str, body: dict) -> dict:
         conn.close()
 
 
+def server_session(chain: list) -> str | None:
+    """No ~/.claude/sessions entry names this session (the ENOSPC night lost entries): the server is asked which
+    session these processes are, as its hooks named their claude pid. None when it knows none of them, or is older
+    than the question (404 either way), so the answer is as it was."""
+    if not chain:
+        return None
+    try:
+        sid = request('whoami', {'pids': chain[:32]}).get('sessionId')
+    except (OSError, ValueError, http.client.HTTPException):
+        return None
+    return sid if isinstance(sid, str) and sid else None
+
+
 def command(args) -> int:
     import sys
     message_id = None
@@ -58,7 +75,8 @@ def command(args) -> int:
         if args.viz_cmd == 'peers':
             result = request('peers', {})
         else:
-            sender = args.sender or own_session()
+            chain: list = []
+            sender = args.sender or own_session(chain) or server_session(chain)
             if not sender:
                 raise ValueError('cannot identify this session; use --from <session-id>')
             message_id = args.message_id or str(uuid.uuid4())

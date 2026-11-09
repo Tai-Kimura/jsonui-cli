@@ -77,6 +77,7 @@ ARRIVE_MS = 300_000
 AGENT_ID = re.compile(r"^a[0-9a-f]{6,40}$")
 SID = re.compile(r"^[0-9a-fA-F-]{8,64}$")
 _KEY_SAFE = re.compile(r"[^A-Za-z0-9_.:@-]")
+BRIDGE_PREFIX = "bridge:"   # a session reached through Remote Control's bridge: "bridge:<bridgeSessionId>"
 
 
 def _hash(text: str) -> str:
@@ -111,6 +112,7 @@ class Registry:
         self.by_name: dict[str, str] = {}
         self.by_sock: dict[str, str] = {}
         self.by_pid: dict[int, str] = {}
+        self.by_bridge: dict[str, str] = {}   # Remote Control's bridgeSessionId ("session_…") -> session id
         self.alive: set[str] = set()
         for row in rows:
             sid = row.get("sessionId")
@@ -127,13 +129,22 @@ class Registry:
             pid = row.get("pid")
             if isinstance(pid, int) and not isinstance(pid, bool):
                 self.by_pid[pid] = sid
+            bridge = row.get("bridgeSessionId")
+            if isinstance(bridge, str) and bridge:
+                self.by_bridge[bridge] = sid
 
     history: Callable[[str, str], str | None] | None = None   # (kind, value) -> a session id seen before
 
     def resolve(self, to: str) -> str | None:
-        """A send's `to` -> a session id: the live registry first, then the names and sockets seen before."""
-        kind, value = ("sock", to[4:]) if to.startswith("uds:") else ("name", peer_name(to))
-        got = (self.by_sock if kind == "sock" else self.by_name).get(value)
+        """A send's `to` -> a session id: the live registry first, then the names, sockets and bridge ids seen before.
+        ``bridge:session_…`` is a session reached through Remote Control's bridge (measured 11-08: 7 sends)."""
+        if to.startswith("uds:"):
+            kind, value = "sock", to[4:]
+        elif to.startswith(BRIDGE_PREFIX):
+            kind, value = "bridge", to[len(BRIDGE_PREFIX):]
+        else:
+            kind, value = "name", peer_name(to)
+        got = {"sock": self.by_sock, "bridge": self.by_bridge, "name": self.by_name}[kind].get(value)
         if got is None and self.history is not None:
             got = self.history(kind, value)
         return got
@@ -258,6 +269,7 @@ class TalkIndex:
         # the names and sockets seen, so a send to a session that has ended since still finds it
         self.db.executemany("INSERT OR REPLACE INTO names VALUES('name', ?, ?)", [(n, s) for n, s in self.reg.by_name.items()])
         self.db.executemany("INSERT OR REPLACE INTO names VALUES('sock', ?, ?)", [(k, s) for k, s in self.reg.by_sock.items()])
+        self.db.executemany("INSERT OR REPLACE INTO names VALUES('bridge', ?, ?)", [(k, s) for k, s in self.reg.by_bridge.items()])
 
     def _history(self, kind: str, value: str) -> str | None:
         row = self.db.execute("SELECT sid FROM names WHERE kind=? AND value=?", (kind, value)).fetchone()
@@ -580,6 +592,7 @@ class TalkIndex:
                 self._insert(mid, sender, receiver, sent_at, text, now, state="delivered", summary=summary, seen_s=1,
                              via=via, msg_id=msg_id, use_id=use_id, delivered_at=at or sent_at)
                 self._arrived(mid)
+                self._match_held(mid)                       # a bridge record (no msg_id) read before the send
         else:
             mid = f"u-{use_id}"
             if not self._exists(mid):
@@ -656,15 +669,30 @@ class TalkIndex:
             self._read_mark(row[0], at, merged=True)
         self._update(first, merged=1)
 
+    def _bridge_sender(self, info: dict) -> str | None:
+        """For a peer record that came through Remote Control's bridge (``from: "bridge:session_…"``): the sending
+        session's id, when known; "" when it is a bridge record whose sender is not known; None when it is not one."""
+        frm = info.get("sender_from")
+        if info.get("kind") != "peer" or not isinstance(frm, str) or not frm.startswith(BRIDGE_PREFIX):
+            return None
+        return self.reg.resolve(frm) or ""
+
     def _match(self, receiver: str, info: dict) -> str | None:
-        """The unread send to this receiver this record reads (no msg_id: by the sender and the exact body)."""
+        """The unread send to this receiver this record reads (no msg_id: by the sender and the exact body).
+
+        A record that came through Remote Control's bridge carries no msg_id although the sender's result has one
+        (measured 11-08: 35 of 35, every body equal to the sender's SendMessage text): it is matched by the body to
+        the sends that have a msg_id too, and to the bridge's sender when the bridge id names one."""
         at = info.get("at") or 0
         task = info.get("task")
+        bridge = self._bridge_sender(info)
         rows = self.db.execute("SELECT id, sender, text, cut, hash FROM messages WHERE receiver=? AND read_at IS NULL "
-                               "AND state<>'undelivered' AND msg_id IS NULL AND at<=? ORDER BY at, id",
-                               (receiver, at + 5_000)).fetchall()
+                               "AND state<>'undelivered' AND (msg_id IS NULL OR ?) AND at<=? ORDER BY at, id",
+                               (receiver, bridge is not None, at + 5_000)).fetchall()
         for mid, sender, text, cut, h in rows:
             if task and sender != task:
+                continue
+            if bridge and sender != bridge:
                 continue
             if "body" in info and info["body"] is not None:
                 if h == _hash(info["body"]):
@@ -698,6 +726,8 @@ class TalkIndex:
                     sender, via = self._sub_part(info["task"], sid), "parent"
                 elif info.get("kind") == "coordinator":
                     sender, via = self._session_part(sid), "subagent"
+                elif (bsid := self._bridge_sender(info)) and bsid != sid and not self._dead(bsid):
+                    sender, via = self._session_part(bsid, info.get("name")), "session"
                 else:
                     name = info.get("name") or i18n.tl("srv.peer.unnamed")
                     sender, via = external_key(name), "external"
