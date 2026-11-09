@@ -87,7 +87,7 @@ module JsonUIShared
     #: to keep in step. `string` in the declared types is the exemption that
     #: matters — a binding is a string, so `common.onclick`, `common.gravity`
     #: and four others legitimately take one and must not be reported.
-    def check_undeclared_bindings(component, source_path:)
+    def check_undeclared_bindings(component, source_path:, extension_definitions: nil)
       component_type = component['type']
       return [] unless component_type.is_a?(String)
 
@@ -99,7 +99,7 @@ module JsonUIShared
         stripped = value.strip
         next unless stripped.start_with?('@{') && stripped.end_with?('}')
 
-        definition = attribute_definition(component_type, name)
+        definition = attribute_definition(component_type, name, extension_definitions)
         next unless AttributeValidatorCore.binding_disallowed_by_declaration?(definition)
 
         component_id = component['id'] ? " (id=#{component['id']})" : ''
@@ -211,16 +211,26 @@ module JsonUIShared
     #: Component-specific declaration first, then `common`. Mirrors how the
     #: attribute validator resolves a key, so both agree about which
     #: declaration governs an attribute.
-    def attribute_definition(component_type, name)
+    def attribute_definition(component_type, name, extension_definitions = nil)
       defs = definitions
       # the section the spelling is validated against (a synonym's canonical,
       # an alias's target — type_synonyms.rb), as the attribute validator reads it
-      component_defs = defs[JsonUIShared::TypeSynonyms.section(component_type)]
+      component_defs = defs[section_of(component_type, extension_definitions)]
       found = component_defs.is_a?(Hash) ? component_defs[name] : nil
       return found if found.is_a?(Hash)
 
       common = defs['common']
       common.is_a?(Hash) ? common[name] : nil
+    end
+
+    #: The section `type` is validated against, as the attribute validator
+    #: reads it: the project's own spelling (registered by the build, or
+    #: declared by one of its extension definitions) as written — a project
+    #: component named ProgressBar is no Progress — else TypeSynonyms.section.
+    def section_of(type, extension_definitions = nil)
+      return type if extension_definitions.is_a?(Hash) && extension_definitions.key?(type)
+
+      JsonUIShared::TypeSynonyms.section(type)
     end
 
     def definitions
@@ -287,8 +297,9 @@ module JsonUIShared
       walk_with_path(layout_json, nil) do |node, path|
         next unless node.is_a?(Hash)
 
-        warnings.concat(check_undeclared_bindings(node, source_path: source_path))
-        warnings.concat(check_collection(node, source_path: source_path)) if JsonUIShared::TypeSynonyms.section(node['type']) == 'Collection'
+        warnings.concat(check_undeclared_bindings(node, source_path: source_path,
+                                                  extension_definitions: extension_definitions))
+        warnings.concat(check_collection(node, source_path: source_path)) if section_of(node['type'], extension_definitions) == 'Collection'
         warnings.concat(check_leaf_children(node, source_path: source_path,
                                                   extension_definitions: extension_definitions, path: path))
       end
