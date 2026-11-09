@@ -1151,7 +1151,10 @@ class TestSeedableState:
 
         # web: the read-back is the shared partial match, not JSON equality
         body = web.split("export function seedState")[1].split("\n}\n")[0]
-        assert "partialMismatches(vm[name], want)" in body
+        # (2.5.19: on the value as seedReadbackForm reads it — the wire form
+        # where there is one; test_branch_seed_readback_wire_form.py)
+        assert "partialMismatches(read.value, want)" in body
+        assert "seedReadbackForm(vm[name], want)" in body
         assert "JSON.stringify(vm[name] ?? null) !==" not in body
         assert "differs at" in body and "did not take" in body
         pm = web.split("export function partialMismatches")[1].split("\n}\n")[0]
@@ -1161,7 +1164,8 @@ class TestSeedableState:
         # a map seed is CONSTRUCTED into a class-typed field
         assert "fun valueMismatches(actual: Any?, expected: Any?" in android
         kbody = android.split("fun seedState(")[1].split("\n}\n")[0]
-        assert "valueMismatches(got, want)" in kbody
+        assert "valueMismatches(read.value, want)" in kbody
+        assert "seedReadbackForm(got, want)" in kbody
         assert "if (got != want)" not in kbody
         assert "differs at" in kbody and "did not take" in kbody
         assert "private fun memberValue(target: Any, name: String)" in android
