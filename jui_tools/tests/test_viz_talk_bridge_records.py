@@ -32,7 +32,7 @@ if str(TOOLS) not in sys.path:
 from cc_watch import probes as P  # noqa: E402
 
 
-from test_viz_talk import A, B, D, NAMES, T0, Box, iso  # noqa: E402
+from tests.test_viz_talk import A, B, D, NAMES, T0, Box, iso  # noqa: E402
 
 BRIDGE = {A: "session_01AAAAAAAAAAAAAAAAAAAAAAAA", B: "session_01BBBBBBBBBBBBBBBBBBBBBBBB",
           D: "session_01DDDDDDDDDDDDDDDDDDDDDDDD"}

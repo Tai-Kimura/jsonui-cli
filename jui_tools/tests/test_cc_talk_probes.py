@@ -23,6 +23,8 @@ GREEN = {
     "talk_send_input": {"to": "all", "message": "all", "summary": "seen"},
     "talk_msg_id": {"result_has_msg_id": True, "origin_has_msg_id": True, "uuid_like": "all", "both_sides": True},
     "talk_origin": {"peer": {k: "seen" if k in P.OPTIONAL_PEER_ORIGIN_KEYS else "all" for k in P.PEER_ORIGIN_KEYS},
+                    # no record came through Remote Control's bridge in these shapes (test_viz_talk_bridge_records)
+                    "bridge": {k: "unseen" for k in P.BRIDGE_ORIGIN_KEYS},
                     "child": {k: "all" for k in P.CHILD_ORIGIN_KEYS},
                     "coordinator": "seen", "queued_command": "all"},
     "talk_envelope": {"cross_session": "all", "closed": "all", "agent_message": "seen"},
