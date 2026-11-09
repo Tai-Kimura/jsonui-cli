@@ -24,6 +24,7 @@ import sys
 import time
 
 from common import DESKTOP, ISOLATE, LAUNCH_ARGS, PHONE, T, T_pattern, Watch, dump, new_page, ready, stamp
+from stand_in_channel import StandInChannel
 from notify import CHIMES, SHOWN, STUB
 
 S_OK = "e2e00000-0000-4000-8000-0000000000f1"
@@ -89,6 +90,7 @@ async def run_denied(pw, out, failures):
     sessions_dir = home / ".claude" / "sessions"
     sessions_dir.mkdir(parents=True, exist_ok=True)
     stand_ins: list = []
+    channels: list = []   # our stand-in channels (stand_in_channel.py), closed in finally
     log = open(out / "serve.log", "w")
     srv = subprocess.Popen([sys.executable, str(jt / "bin" / "jui"), "viz", "serve", "--port", str(port)], stdout=log, stderr=subprocess.STDOUT, env=env)
     url = f"http://127.0.0.1:{port}"
@@ -160,9 +162,9 @@ async def run_denied(pw, out, failures):
         stand_ins.append(proc)
         (sessions_dir / f"{proc.pid}.json").write_text(json.dumps({"pid": proc.pid, "sessionId": S_OK, "cwd": CWDS[S_OK], "kind": "interactive",
                                                                   "entrypoint": "cli", "status": "idle", "procStart": f"t{proc.pid}"}))
-        status, hello = local("POST", "/channel/hello", {"ppid": 1, "cwd": "/", "sessionId": S_OK, "version": "2", "accepts": ["prompt"], "via": "plugin"})
-        check(status == 200, f"hello: {status}")
-        channel = hello["channelId"]
+        # its channel polls on until the suite ends (stand_in_channel.py): one that only said hello was dropped after 60 s
+        channels.append(channel := StandInChannel(port, json.loads((state / "server.json").read_text())["token"], S_OK).open())
+        check(channel.status == 200, f"hello: {channel.status}")
         until(lambda: any(s["id"] == S_OK and s.get("launch") == "dev" for s in snap()["sessions"]), "the channel's launch")
         # the server reads S_OK's transcript from now on: a response it bills shows that the tail is live
         # (the server reads a transcript from the end it has when first seen: a line written before is not read)
@@ -258,10 +260,9 @@ async def run_denied(pw, out, failures):
         await page.wait_for_timeout(400)
         await page.click(f"#denied-strip [data-dgo='{d1}']")
         until(lambda: next(c for c in snap()["denials"] if c["id"] == d1)["status"] == "sent", "the card sent")
-        _, polled = local("GET", f"/channel/poll?channelId={channel}", timeout=30)
-        res["inbox"] = polled["prompts"]
-        check(polled["prompts"] == [{"text": words(CMD1, WHY1)}], f"the channel got the card's words, once: {polled['prompts']}")
-        got_text = polled["prompts"][0]["text"] if polled["prompts"] else ""
+        inbox = res["inbox"] = channel.take_prompts(timeout=30)
+        check(inbox == [{"text": words(CMD1, WHY1)}], f"the channel got the card's words, once: {inbox}")
+        got_text = inbox[0]["text"] if inbox else ""
         check(got_text.startswith(T("srv.denial.source") + "\n") and T("srv.denial.what", what=f"Bash: {CMD1}") + "\n" in got_text
               and T("srv.denial.why", why=WHY1) + "\n" in got_text,
               f"the words start with where they come from and hold the card's call and reason as they are: {got_text!r}")
@@ -348,6 +349,8 @@ async def run_denied(pw, out, failures):
     except Exception as e:
         failures.append(f"denied: {type(e).__name__}: {str(e).splitlines()[0]}")
     finally:
+        for channel in channels:
+            channel.close()
         for p in stand_ins:
             p.kill()
             p.wait()

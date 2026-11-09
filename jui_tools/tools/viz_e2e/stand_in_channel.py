@@ -7,7 +7,8 @@ before the step that reads the relay, and went red (ticket 2026-11-06-viz-e2e-fu
 2.5.18's whole run; the same on v2.5.17 with a 65 s pause after the hello). Polling, the stand-in stays as long as the
 suite needs it, as a real session's channel does.
 
-What its polls are handed (verdicts, prompts) is kept in `.verdicts` / `.prompts`, as channel.py takes them.
+What its polls are handed is kept: `.verdicts`, and the prompts until a suite takes them (take_prompts) — a suite reads
+the words a channel got from there, not from a poll of its own (the stand-in's poll would have taken them first).
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ class StandInChannel:
         self.verdicts: list = []
         self.prompts: list = []
         self._stop = threading.Event()
+        self._got = threading.Condition()
         self._thread: threading.Thread | None = None
 
     def _call(self, method: str, path: str, body: dict | None, timeout: float):
@@ -69,7 +71,9 @@ class StandInChannel:
                     return
                 continue
             if status == 404:
-                self.lost = True
+                with self._got:
+                    self.lost = True
+                    self._got.notify_all()
                 return
             if status == 200:
                 self.polls += 1
@@ -77,10 +81,20 @@ class StandInChannel:
                     got = json.loads(text)
                 except ValueError:
                     got = {}
-                self.verdicts += got.get("verdicts") or []
-                self.prompts += got.get("prompts") or []
+                with self._got:
+                    self.verdicts += got.get("verdicts") or []
+                    self.prompts += got.get("prompts") or []
+                    self._got.notify_all()
             elif self._stop.wait(0.5):
                 return
+
+    def take_prompts(self, timeout: float = 30) -> list:
+        """The prompts handed to the channel since the last take, waiting up to `timeout` s for the first (as one poll
+        of the server returned them: at once when something was queued, else empty)."""
+        with self._got:
+            self._got.wait_for(lambda: self.prompts or self.lost, timeout=timeout)
+            out, self.prompts = self.prompts, []
+        return out
 
     def close(self) -> None:
         """Stop polling (a poll the server holds ends by itself within POLL_TIMEOUT_SEC; the thread is a daemon)."""

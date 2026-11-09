@@ -30,6 +30,7 @@ import time
 import zlib
 
 from common import DESKTOP, ISOLATE, LAUNCH_ARGS, PHONE, T, T_pattern, Watch, dump, new_page, ready, stamp
+from stand_in_channel import StandInChannel
 
 S_OK = "e2e00000-0000-4000-8000-0000000000e1"
 CWD = "/work/attach-ok"
@@ -88,6 +89,7 @@ async def run_attach(pw, out, failures):
     sessions_dir = home / ".claude" / "sessions"
     sessions_dir.mkdir(parents=True, exist_ok=True)
     stand_ins: list = []
+    channels: list = []   # our stand-in channels (stand_in_channel.py), closed in finally
     waiting: list = []
     log = open(out / "serve.log", "w")
     srv = subprocess.Popen([sys.executable, str(jt / "bin" / "jui"), "viz", "serve", "--port", str(port)], stdout=log, stderr=subprocess.STDOUT, env=env)
@@ -155,9 +157,9 @@ async def run_attach(pw, out, failures):
         stand_ins.append(proc)
         (sessions_dir / f"{proc.pid}.json").write_text(json.dumps({"pid": proc.pid, "sessionId": S_OK, "cwd": CWD, "kind": "interactive",
                                                                   "entrypoint": "cli", "status": "idle", "procStart": f"t{proc.pid}"}))
-        status, hello = local("POST", "/channel/hello", {"ppid": 1, "cwd": "/", "sessionId": S_OK, "version": "2", "accepts": ["prompt"], "via": "plugin"})
-        check(status == 200, f"hello: {status}")
-        channel = hello["channelId"]
+        # its channel polls on until the suite ends (stand_in_channel.py): one that only said hello was dropped after 60 s
+        channels.append(channel := StandInChannel(port, json.loads((state / "server.json").read_text())["token"], S_OK).open())
+        check(channel.status == 200, f"hello: {channel.status}")
         for _ in range(100):
             _, snap = local("GET", "/api/snapshot")
             if any(s["id"] == S_OK and s.get("launch") == "dev" for s in snap["slices"]["sessions"]):
@@ -230,8 +232,8 @@ async def run_attach(pw, out, failures):
         await page.click("[data-h-go]")
         await wait(page, f"() => new RegExp({json.dumps('^' + T_pattern('hist.state.sending').pattern)}).test(document.querySelector('[data-h-compose] [data-h-state]').textContent)", label="送信中")
         check(await page.evaluate(CHIPS) == [], "the chips go once sent")
-        _, polled = local("GET", f"/channel/poll?channelId={channel}", timeout=30)
-        text = polled["prompts"][0]["text"] if polled["prompts"] else ""
+        inbox = channel.take_prompts(timeout=30)
+        text = inbox[0]["text"] if inbox else ""
         res["inbox"] = text
         lines = text.split("\n")
         check(lines[0] == "この 3 つを見て" and len(lines) == 4, f"the text, then one line per file: {lines}")
@@ -347,8 +349,8 @@ async def run_attach(pw, out, failures):
             await p.wait_for_timeout(500)   # the confirmation takes no click in its first moment
             await p.click("[data-h-go]")
         def take():
-            _, got = local("GET", f"/channel/poll?channelId={channel}", timeout=30)
-            return got["prompts"][0]["text"] if got["prompts"] else ""
+            got = channel.take_prompts(timeout=30)
+            return got[0]["text"] if got else ""
         def kept_md():
             return sorted(uploads.glob("*.md"))
         await page.evaluate("() => document.querySelectorAll('[data-h-attach] .h-attach-x').forEach((b) => b.click())")
@@ -504,6 +506,8 @@ async def run_attach(pw, out, failures):
     except Exception as e:
         failures.append(f"attach: {type(e).__name__}: {str(e).splitlines()[0]}")
     finally:
+        for channel in channels:
+            channel.close()
         for p in waiting:
             if p.poll() is None:
                 p.kill()
