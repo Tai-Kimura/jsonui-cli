@@ -55,9 +55,23 @@ def classpath() -> tuple[str, str]:
     return compiler_cp, ":".join([target_cp, *extra])
 
 
-def build(work: Path, runtime: str, probe: str) -> tuple[str, Path]:
+def serialization_plugin(compiler_cp: str) -> str:
+    """The kotlinx-serialization compiler plugin of the compiler's own
+    version (a probe's @Serializable classes get real serializers, as an
+    app's generated DTOs do)."""
+    compiler = next(p for p in compiler_cp.split(":") if "kotlin-compiler-embeddable-" in p)
+    version = Path(compiler).name[len("kotlin-compiler-embeddable-"):-len(".jar")]
+    found = sorted(p for p in (CACHE / "org.jetbrains.kotlin/kotlin-serialization-compiler-plugin-embeddable"
+                               / version).glob("*/*.jar") if not p.name.endswith("-sources.jar"))
+    if not found:
+        _missing(f"kotlin-serialization-compiler-plugin-embeddable:{version} is not in the Gradle cache")
+    return str(found[0])
+
+
+def build(work: Path, runtime: str, probe: str, *, serializable: bool = False) -> tuple[str, Path]:
     """Compile the runtime template (rendered as the generator renders it:
-    `KOTLIN_RUNTIME % {"package": …}`) and *probe*, both in package `probe`."""
+    `KOTLIN_RUNTIME % {"package": …}`) and *probe*, both in package `probe`.
+    *serializable*: with the kotlinx-serialization compiler plugin."""
     compiler_cp, target_cp = classpath()
     work.mkdir(parents=True, exist_ok=True)
     (work / "Runtime.kt").write_text(runtime % {"package": "probe"}, encoding="utf-8")
@@ -65,6 +79,7 @@ def build(work: Path, runtime: str, probe: str) -> tuple[str, Path]:
     out = work / "out"
     done = subprocess.run(
         [str(tc.JAVA), "-cp", compiler_cp, "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
+         *([f"-Xplugin={serialization_plugin(compiler_cp)}"] if serializable else []),
          "-no-stdlib", "-cp", target_cp, "-d", str(out), str(work / "Runtime.kt"), str(work / "Probe.kt")],
         capture_output=True, text=True, timeout=900)
     assert done.returncode == 0, f"emitted runtime did not compile:\n{(done.stdout + done.stderr)[-4000:]}"
