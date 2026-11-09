@@ -300,12 +300,12 @@ def check_declarations(declared: dict[str, list[Path]],
                 continue
             if not project_root:
                 notes.append(
-                    f"'{key}' requires the {platform} driver {required} or newer; "
+                    f"{describe_requirement_key(key)} requires the {platform} driver {required} or newer; "
                     f"no project root could be resolved (no config was passed and "
                     f"no enclosing .git was found), so the installed driver was "
                     f"never looked for and this is not checked. Pass --config or "
-                    f"run from the project root. An older driver ignores the "
-                    f"declaration silently ({len(files)} file(s) declare it)."
+                    f"run from the project root. {_older_driver(key)} "
+                    f"({len(files)} file(s) declare it)."
                 )
                 continue
             found = installed_driver_version(
@@ -315,25 +315,29 @@ def check_declarations(declared: dict[str, list[Path]],
                    if platform in _PIN_READERS else None)
             if found is None and why:
                 notes.append(
-                    f"'{key}' requires the {platform} driver {required} or newer; "
-                    f"{why}, so this is not checked. An older driver ignores the "
-                    f"declaration silently ({len(files)} file(s) declare it)."
+                    f"{describe_requirement_key(key)} requires the {platform} driver {required} or newer; "
+                    f"{why}, so this is not checked. {_older_driver(key)} "
+                    f"({len(files)} file(s) declare it)."
                 )
                 continue
             if found is None:
                 notes.append(
-                    f"'{key}' requires the {platform} driver {required} or newer; "
+                    f"{describe_requirement_key(key)} requires the {platform} driver {required} or newer; "
                     f"the installed version could not be read, so this is not "
-                    f"checked. An older driver ignores the declaration silently "
+                    f"checked. {_older_driver(key)} "
                     f"({len(files)} file(s) declare it)."
                 )
                 continue
             if parse_version(found) < parse_version(required):
                 errors.append(
-                    f"'{key}' requires the {platform} driver {required} or newer, "
-                    f"but {found} is installed — it does not read this key, and "
-                    f"ignores it without saying so. Upgrade the driver, or remove "
-                    f"the declaration: {', '.join(str(f) for f in sorted(files)[:3])}"
+                    f"{describe_requirement_key(key)} requires the {platform} driver {required} or newer, "
+                    f"but {found} is installed — "
+                    + ("it does not know this step and fails it as unknown when the file runs. "
+                       "Upgrade the driver, or remove the step: "
+                       if step_kind(key) else
+                       "it does not read this key, and ignores it without saying so. Upgrade the "
+                       "driver, or remove the declaration: ")
+                    + f"{', '.join(str(f) for f in sorted(files)[:3])}"
                     f"{' …' if len(files) > 3 else ''}"
                 )
     return errors, notes
@@ -354,6 +358,38 @@ def _declares(key: str, value) -> bool:
 #: Keys a driver reads on a step (or a step's condition), not on a file or
 #: case: collected from every step object in the file.
 STEP_LEVEL_KEYS = frozenset({"within"})
+
+
+def step_kind_key(step) -> str | None:
+    """`action:<name>` / `assert:<name>` for a step: how a requirement on a
+    whole action or assertion is keyed (KEY_DRIVER_REQUIREMENTS), apart from
+    the step keys it would otherwise collide with (`value` is both)."""
+    if not isinstance(step, dict):
+        return None
+    if isinstance(step.get("action"), str):
+        return f"action:{step['action']}"
+    if isinstance(step.get("assert"), str):
+        return f"assert:{step['assert']}"
+    return None
+
+
+def step_kind(key: str) -> bool:
+    """Is `key` a whole action / assertion (`action:<name>`), not a key?"""
+    return key.partition(":")[0] in ("action", "assert") and ":" in key
+
+
+def _older_driver(key: str) -> str:
+    if step_kind(key):
+        return "An older driver fails the step as unknown when the file runs"
+    return "An older driver ignores the declaration silently"
+
+
+def describe_requirement_key(key: str) -> str:
+    """How a requirement key reads in a sentence."""
+    kind, _, name = key.partition(":")
+    if name and kind in ("action", "assert"):
+        return f"the {'action' if kind == 'action' else 'assertion'} '{name}'"
+    return f"'{key}'"
 
 
 def _step_objects(node):
@@ -397,6 +433,9 @@ def collect_declared_keys(files: list[Path],
         # (cases, setup / teardown, a flow's steps, repeat / retry blocks).
         declared |= {key for obj in _step_objects(data) for key in keys & obj.keys()
                      if key in STEP_LEVEL_KEYS and _declares(key, obj[key])}
+        # A step kind (`action:<name>` / `assert:<name>`): a step that is one.
+        declared |= {key for obj in _step_objects(data) for key in keys
+                     if step_kind_key(obj) == key}
         for key in sorted(declared):
             found.setdefault(key, []).append(Path(path))
     return found

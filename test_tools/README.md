@@ -1037,12 +1037,14 @@ Test files must be valid JSON with `.test.json` extension.
 | selectOption | id | value, label, index, timeout | Select option from dropdown |
 | tapItem | id, index | timeout | Tap item at index in collection |
 | selectTab | index | id, timeout | Select tab by index |
+| setSliderValue | id, value | range, step, timeout | Put a Slider at a value in its own units (drivers: ios 2.3.0, android 1.22.0, web 1.19.0) |
 
 **Direction values:** `up`, `down`, `left`, `right`
 
 **Platform notes:**
 - `selectOption`: `index`, `value` and `label` are three ways to name ONE option, with precedence `index` → `value` → `label` (a lower one is ignored when a higher one is present — same on iOS, Android and web). Write exactly one; `validate` warns when a step carries two or more. On this action `label` is the option's visible text, **not** the step note it is everywhere else — a note written there is the option the driver selects.
 - `selectTab`: For `ios-uikit`, `id` is optional (uses UITabBarController directly). For `ios-swiftui`/`android`/`web`, `id` is required (uses `{id}_tab_{index}` pattern).
+- `setSliderValue`: Android and web put the slider at the value exactly; iOS drags the thumb and passes within half of `step`, else 0.5% of the range, and records the landed value in the case's warnings. A value outside the slider's bounds or off its step grid fails before anything moves; with `range` / `step` written, `validate` says so first, in the drivers' sentence. iOS cannot read a slider's bounds: write `range` (`validate` warns on an iOS-reaching step without it).
 
 ## Supported Assertions
 
@@ -1054,6 +1056,7 @@ Test files must be valid JSON with `.test.json` extension.
 | disabled | id | timeout | Element is disabled |
 | text | id | equals, contains, timeout | Text matches |
 | count | id, equals | timeout | Element count |
+| value | id, equals | tolerance, range, step, timeout | A Slider's value within `tolerance` (default 1e-6 on Android / web; on iOS half of `step`, else 0.5% of `range`). For what the app keeps or sends, assert `state` on the bound data |
 
 ### `within`: one cell's child
 

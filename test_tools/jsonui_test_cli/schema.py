@@ -146,6 +146,14 @@ SUPPORTED_ACTIONS = {
         "required": ["id", "variable"],
         "optional": ["timeout", "within"]
     },
+    "setSliderValue": {
+        "description": "Put a Slider at a value in its own units (Android and web land exactly; iOS drags "
+                       "the thumb and passes within half of 'step', else 0.5% of the range, recording the "
+                       "landed value). A value outside the slider's bounds or off its step grid fails "
+                       "before anything moves. iOS reads no bounds from the element: give 'range'",
+        "required": ["id", "value"],
+        "optional": ["range", "step", "timeout", "within"]
+    },
     "repeat": {
         "description": "Repeat a block of steps ('times' and/or 'while' condition)",
         "required": ["steps"],
@@ -241,6 +249,13 @@ SUPPORTED_ASSERTIONS = {
         "description": "Assert element count",
         "required": ["id", "equals"],
         "optional": ["timeout", "within"]
+    },
+    "value": {
+        "description": "Assert a Slider's value in its own units, within 'tolerance' (default 1e-6 on "
+                       "Android and web; on iOS half of 'step', else 0.5% of 'range'). To check what the "
+                       "app keeps or sends, assert 'state' on the bound data",
+        "required": ["id", "equals"],
+        "optional": ["tolerance", "range", "step", "timeout", "within"]
     },
     "state": {
         "description": "Assert ViewModel state value (requires a state provider)",
@@ -377,6 +392,13 @@ KEY_DRIVER_REQUIREMENTS = {
     # the screen, which is the defect it exists to fix, silently.
     # `runtime_support.collect_declared_keys` walks steps for it.
     "within": {"android": "1.20.0", "ios": "2.2.0", "web": "1.18.0"},
+    # A STEP itself, not a key: an action or an assertion a driver before its
+    # floor does not know (`action:<name>` / `assert:<name>`, read from the
+    # `x-requires-driver` on the step's definition in actions.schema.json).
+    # An older driver fails the step as an unknown action, by name — not in
+    # silence — but only when the file runs; validate says so up front.
+    "action:setSliderValue": {"android": "1.22.0", "ios": "2.3.0", "web": "1.19.0"},
+    "assert:value": {"android": "1.22.0", "ios": "2.3.0", "web": "1.19.0"},
 }
 
 # `screenReady` string forms. The object form is {"marker": "<screen id>"}.
@@ -452,6 +474,8 @@ VALID_STEP_KEYS = [
     "hookArgs",
     # Screenshot assertion parameters
     "cropId", "threshold",
+    # setSliderValue / the value assertion
+    "range", "step", "tolerance",
     # File reference step keys (for flow tests)
     "file", "case", "cases",
     # Args for overriding screen test default args (for flow tests)
@@ -471,7 +495,7 @@ VALID_DESCRIPTION_KEYS = [
 PARAMETER_DESCRIPTIONS = {
     "id": "Element identifier (accessibilityIdentifier on iOS, resource-id on Android, data-testid on Web)",
     "ids": "Array of element identifiers for waitForAny",
-    "value": "Text value for input actions. Supports @{varName} syntax for variable substitution",
+    "value": "Text value for input actions (supports @{varName} substitution); on setSliderValue the number to put the slider at",
     "direction": "Direction for scroll/swipe: up, down, left, right",
     "duration": "Duration in milliseconds (for longPress)",
     "timeout": "Maximum wait time in milliseconds (default: 5000)",
@@ -504,5 +528,12 @@ PARAMETER_DESCRIPTIONS = {
              "iOS: UITest bundle, basenames recommended; Web: relative to test file)",
     "cropId": "Element id whose bounding box crops the screenshot before comparing",
     "threshold": "Required similarity percentage for screenshot assertion (0-100, default 98.0)",
-    "hookArgs": "Positional arguments for emitHook, passed to the registered browser-side hook"
+    "hookArgs": "Positional arguments for emitHook, passed to the registered browser-side hook",
+    "range": "[minimum, maximum] of a Slider as the layout declares it (setSliderValue / value). "
+             "Needed on iOS, which cannot read a slider's bounds; compared with the slider's own on "
+             "Android and web",
+    "step": "A Slider's step (setSliderValue / value): the value must lie on min + k * step; on iOS "
+            "it also sets the tolerance (step / 2)",
+    "tolerance": "Largest accepted difference for the value assertion (default 1e-6 on Android and "
+                 "web; on iOS half of 'step', else 0.5% of 'range')"
 }
