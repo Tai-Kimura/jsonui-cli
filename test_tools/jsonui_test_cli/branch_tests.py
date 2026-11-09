@@ -3605,6 +3605,33 @@ export function resolveString(
   return resolved;
 }
 
+/**
+ * What a seeded value is compared as, and how it was read (named in a
+ * failure): a value with toJSON through a JSON round trip; jui's Domain
+ * (`{ dto }`, the seed not naming `dto`) through its dto — "the Domain's
+ * dto"; a list element by element; anything else as it is.
+ */
+export function seedReadbackForm(value: unknown, want: unknown): { value: unknown; via: string } {
+  if (Array.isArray(value) && Array.isArray(want)) {
+    const items = value.map((v, i) => seedReadbackForm(v, want[i]));
+    const vias = [...new Set(items.map((it) => it.via))];
+    return { value: items.map((it) => it.value), via: vias.length === 1 ? vias[0] : vias.join(" / ") };
+  }
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return { value, via: "as it is (its own properties)" };
+  }
+  const obj = value as Record<string, unknown>;
+  if (typeof obj.toJSON === "function") {
+    return { value: JSON.parse(JSON.stringify(obj)), via: "in the wire form (its toJSON)" };
+  }
+  const named = want !== null && typeof want === "object" && !Array.isArray(want)
+    && Object.prototype.hasOwnProperty.call(want, "dto");
+  if (!named && obj.dto !== null && typeof obj.dto === "object" && !Array.isArray(obj.dto)) {
+    return { value: obj.dto, via: "in the wire form (the Domain's dto, unwrapped)" };
+  }
+  return { value, via: "as it is (its own properties)" };
+}
+
 export function seedState(
   h: { vm: unknown; setState(state: Record<string, unknown>): void },
   state: Record<string, unknown>
@@ -3628,7 +3655,13 @@ export function seedState(
     // seed compares only the keys it names (a class instance with more
     // fields than the seed, or fields in another order, still takes), and
     // a mismatch names the path. Whole-JSON equality could not say that.
-    const diff = partialMismatches(vm[name], want);
+    // The seed is the value's wire JSON. A web DTO keeps the wire keys
+    // already; what stands between them is jui's Domain, `{ dto }`
+    // (measured: every Domain seed read back undefined) and a class that
+    // serialises itself (toJSON). Both are read through, and the failure
+    // says how the value was read.
+    const read = seedReadbackForm(vm[name], want);
+    const diff = partialMismatches(read.value, want);
     if (diff.length === 0) continue;
     // An object seed the view model holds a DIFFERENT object for is a
     // harness that built it wrong — name the path. A null there means the
@@ -3636,17 +3669,17 @@ export function seedState(
     if (want !== null && typeof want === "object" && vm[name] !== null && vm[name] !== undefined) {
       throw new Error(
         `seedableState '${name}': seeded ${JSON.stringify(want)} but the ` +
-        `view model's value differs at ${diff.join("; ")}. If setState ` +
-        "wrote it, the harness built a different object; if not, teach " +
-        "the harness to write it."
+        `view model's value differs at ${diff.join("; ")} (compared ` +
+        `${read.via}). If setState wrote it, the harness built a different ` +
+        "object; if not, teach the harness to write it."
       );
     }
     throw new Error(
       `seedableState '${name}' did not take: seeded ` +
       `${JSON.stringify(want)}, the view model holds ` +
-      `${JSON.stringify(vm[name])}. This screen's harness predates ` +
-      "seedable state — its setState drops names it does not know. " +
-      "Teach the harness to write it."
+      `${JSON.stringify(vm[name])} (compared ${read.via}). This screen's ` +
+      "harness predates seedable state — its setState drops names it does " +
+      "not know. Teach the harness to write it."
     );
   }
 }
@@ -4287,11 +4320,19 @@ fun seedState(h: BranchHarness, state: Map<String, Any?>) {
     field.isAccessible = true
     val raw = field.get(h.vm)
     val got = if (raw is MutableStateFlow<*>) raw.value else raw
-    // Partial match, not `got != want`: an object seed (a data class
-    // behind the field) is compared key by key against the map the
-    // contract wrote, so a class with more fields than the seed still
-    // takes, and a mismatch names the path instead of blaming setState.
-    val diff = valueMismatches(got, want)
+    // Partial match, not `got != want`: an object seed is compared key by
+    // key against the map the contract wrote, so a class with more fields
+    // than the seed still takes, and a mismatch names the path instead of
+    // blaming setState. The seed is the value's wire JSON — what the
+    // harness decodes it from — so the value is read back in that form,
+    // through its own serializer (@SerialName, a Domain's serializer
+    // through its dto, an enum's wire name). Reflection reads the Kotlin
+    // names (inputType, dto) and never meets a wire key (measured: every
+    // snake key, and a Domain's unproxied keys, read back missing). A value
+    // with no serializer is read by reflection as before, and the failure
+    // says which way it was read.
+    val read = seedReadbackForm(got, want)
+    val diff = valueMismatches(read.value, want)
     if (diff.isEmpty()) continue
     // An object the view model holds a DIFFERENT object for names the path;
     // null there means the harness never wrote it (the scalar repair).
@@ -4299,17 +4340,65 @@ fun seedState(h: BranchHarness, state: Map<String, Any?>) {
       error(
         "seedableState '" + name + "': seeded " + want + " but the view " +
         "model's " + got.javaClass.simpleName + " differs at " +
-        diff.joinToString("; ") + ". If setState wrote it, the harness " +
-        "built a different object; if not, teach the harness to write it."
+        diff.joinToString("; ") + " (compared " + read.via + "). If " +
+        "setState wrote it, the harness built a different object; if not, " +
+        "teach the harness to write it."
       )
     }
     error(
       "seedableState '" + name + "' did not take: seeded " + want +
-      ", the view model holds " + got + ". This screen's harness " +
-      "predates seedable state — its setState drops names it does not " +
-      "know. Teach the harness to write it."
+      ", the view model holds " + got + " (compared " + read.via + "). " +
+      "This screen's harness predates seedable state — its setState drops " +
+      "names it does not know. Teach the harness to write it."
     )
   }
+}
+
+/** What a seeded value is compared as, and how it was read (named in the
+ * failure). An object, a list or an enum constant goes through its own
+ * kotlinx serializer and is read back as plain JSON values — "in the wire
+ * form"; a list element by element. Anything else, or a value with no
+ * serializer, is compared as it is — "by reflection", as every seed was. */
+class SeedReadback(val value: Any?, val via: String)
+
+fun seedReadbackForm(value: Any?, want: Any?): SeedReadback {
+  val got = if (value is StateFlow<*>) value.value else value
+  if (got == null) return SeedReadback(null, "by reflection (nothing to encode)")
+  val structured = want is Map<*, *> || want is List<*>
+  if (!structured && got !is Enum<*>) return SeedReadback(got, "by reflection")
+  if (got is Collection<*> && want is List<*>) {
+    val items = got.map { wireJsonOf(it) }
+    if (items.all { it.second == null }) {
+      return SeedReadback(items.map { it.first }, "in the wire form (each element's serializer)")
+    }
+    val why = items.firstNotNullOf { it.second }
+    return SeedReadback(got, "by reflection: an element " + why)
+  }
+  val (json, why) = wireJsonOf(got)
+  if (why != null) return SeedReadback(got, "by reflection: " + got.javaClass.simpleName + " " + why)
+  return SeedReadback(json, "in the wire form (" + got.javaClass.simpleName + "'s serializer)")
+}
+
+/** (the value as plain JSON values, null) or (null, why it has none). */
+private fun wireJsonOf(value: Any?): Pair<Any?, String?> {
+  if (value == null) return Pair(null, null)
+  val serializer = try {
+    kotlinx.serialization.serializer(value.javaClass)
+  } catch (e: Exception) {
+    return Pair(null, "has no kotlinx serializer")
+  }
+  return try {
+    Pair(plainJson(Json.encodeToJsonElement(serializer, value)), null)
+  } catch (e: Exception) {
+    Pair(null, "could not be encoded: " + e.message)
+  }
+}
+
+private fun plainJson(e: JsonElement): Any? = when (e) {
+  is JsonNull -> null
+  is JsonObject -> e.mapValues { plainJson(it.value) }
+  is JsonArray -> e.map { plainJson(it) }
+  is JsonPrimitive -> if (e.isString) e.content else (e.booleanOrNull ?: e.content.toLongOrNull() ?: e.doubleOrNull ?: e.content)
 }
 
 /** Partial match of a LIVE Kotlin value (a seeded field, a data class, a
@@ -6095,11 +6184,16 @@ func seedState(_ h: BranchHarness, _ state: [String: Any]) {
       )
       continue
     }
-    // partialMismatches folds a struct / class behind the property into a
-    // dictionary (Mirror), so an object seed compares only the keys it
-    // names and a mismatch carries the path instead of blaming setState.
+    // The seed is written as the value's wire JSON — the form the harness
+    // decodes it from — so the value is read back in that form: its own
+    // Encodable (CodingKeys, a Domain's encode through its dto, an enum's
+    // raw value). Mirror's names are the Swift ones (inputType, dto) and
+    // never meet a wire key (measured: every snake key and every Domain
+    // seed read back nil). A value that is not Encodable is folded by
+    // Mirror as before, and the failure says which way it was read.
     let got = mirrorField(h.vm, name)
-    let diff = partialMismatches(got, want)
+    let read = seedReadbackForm(got, want)
+    let diff = partialMismatches(read.value, want)
     if diff.isEmpty { continue }
     // An object the view model holds a DIFFERENT object for names the path;
     // nil there means the harness never wrote it (the scalar repair).
@@ -6107,17 +6201,41 @@ func seedState(_ h: BranchHarness, _ state: [String: Any]) {
       let type = got.map { String(describing: Swift.type(of: $0)) } ?? "nil"
       XCTFail(
         "seedableState '\\(name)': seeded \\(want) but the view model's " +
-        "\\(type) differs at \\(diff.joined(separator: "; ")). If setState " +
-        "wrote it, the harness built a different object; if not, teach the " +
-        "harness to write it."
+        "\\(type) differs at \\(diff.joined(separator: "; ")) (compared " +
+        "\\(read.via)). If setState wrote it, the harness built a different " +
+        "object; if not, teach the harness to write it."
       )
       continue
     }
     XCTFail(
-      "seedableState '\\(name)' did not take: \\(diff.joined(separator: "; ")). " +
-      "This screen's harness predates seedable state — its setState drops " +
-      "names it does not know. Teach the harness to write it."
+      "seedableState '\\(name)' did not take: \\(diff.joined(separator: "; ")) " +
+      "(compared \\(read.via)). This screen's harness predates seedable " +
+      "state — its setState drops names it does not know. Teach the harness " +
+      "to write it."
     )
+  }
+}
+
+/// What a seeded value is compared as, and how it was read (named in the
+/// failure). An object, a list or an enum is encoded with its own Encodable
+/// and read back as JSON — "in the wire form"; anything else, or a value
+/// that is not Encodable or whose encode throws, is compared as it is —
+/// "by reflection" (Mirror), the way every seed was before.
+nonisolated func seedReadbackForm(_ value: Any?, _ want: Any) -> (value: Any?, via: String) {
+  guard let value, !(value is NSNull) else { return (value, "by reflection (nothing to encode)") }
+  let structured = want is [String: Any] || want is [Any]
+  let isEnum = Mirror(reflecting: value).displayStyle == .enum
+  guard structured || isEnum else { return (value, "by reflection") }
+  let type = String(describing: Swift.type(of: value))
+  guard let encodable = value as? any Encodable else {
+    return (value, "by reflection: \\(type) is not Encodable")
+  }
+  do {
+    let data = try JSONEncoder().encode(encodable)
+    let json = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+    return (json, "in the wire form (\\(type)'s Encodable)")
+  } catch {
+    return (value, "by reflection: \\(type)'s encode threw \\(error)")
   }
 }
 
