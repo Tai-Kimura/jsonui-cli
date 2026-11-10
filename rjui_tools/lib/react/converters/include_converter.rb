@@ -6,6 +6,8 @@ require_relative '../../core/layout_path'
 require_relative '../include_expander'
 require_relative '../included_members'
 require_relative '../style_loader'
+require_relative '../include_place'
+require 'stringio'
 
 module RjuiTools
   module React
@@ -42,7 +44,7 @@ module RjuiTools
           # add_viewmodel_data_prefix like every built-in converter.
           data_prop = build_data_prop(merged_data, including_data_pairs(merged_data))
 
-          id_attr = include_id_attr + include_path_attr(base_name)
+          id_attr = include_id_attr + include_path_attr(base_name) + include_place_attr(base_name)
           warn_test_id_on_include(include_path)
 
           if data_prop.empty?
@@ -126,6 +128,68 @@ module RjuiTools
           IncludedMembers.pairs(tree, include_data_prefix, map).map do |member, including|
             "#{member}: data.#{including}"
           end
+        end
+
+        # `jsonuiPlace` for a partial that takes it (IncludePlace): what this
+        # include's container hands its child, as the difference it makes to
+        # the class of the partial's root. Nothing when the container hands
+        # the root nothing that changes it.
+        def include_place_attr(stem)
+          return '' unless Array(@config['_place_stems']).include?(stem)
+
+          context = json.slice(*IncludePlace::CONTEXT_KEYS)
+          return '' if context.empty?
+
+          root = partial_root_node
+          return '' unless root
+
+          cache = (@config['_place_cache'] ||= {})
+          key = [json['include'], context.to_a.sort_by(&:first)]
+          value = cache.fetch(key) do
+            cache[key] = IncludePlace.prop_value(root_class_tokens_of(root), root_class_tokens_of(root.merge(context)))
+          end
+          value ? " #{IncludePlace::PROP}=#{value}" : ''
+        end
+
+        # The root of the partial this node includes — through a partial whose
+        # root is itself an include, to the element that root draws.
+        def partial_root_node
+          root_dir = @config['_layouts_dir'] || (@config['layouts_directory'] && File.expand_path(@config['layouts_directory']))
+          return nil unless root_dir
+
+          include_path = json['include']
+          seen = []
+          loop do
+            return nil if seen.include?(include_path)
+
+            seen << include_path
+            path = File.join(root_dir, "#{include_path}.json")
+            return nil unless File.file?(path)
+
+            tree = StyleLoader.load_and_merge(JSON.parse(File.read(path, encoding: 'UTF-8')))
+            return nil unless tree.is_a?(Hash)
+            return tree unless tree['include'].is_a?(String)
+
+            include_path = tree['include']
+          end
+        rescue JSON::ParserError
+          nil
+        end
+
+        # The static class tokens of *node* drawn as a layout's root, its
+        # sentences held back (the partial's own build says them).
+        def root_class_tokens_of(node)
+          out = $stdout
+          err = $stderr
+          $stdout = StringIO.new
+          $stderr = StringIO.new
+          begin
+            jsx = create_converter_for_child(node).convert_node(2)
+          ensure
+            $stdout = out
+            $stderr = err
+          end
+          IncludePlace.root_class_tokens(jsx)
         end
 
         # The include's id as the prefix of the partial's data names

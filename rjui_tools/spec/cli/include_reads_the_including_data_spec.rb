@@ -67,7 +67,7 @@ RSpec.describe 'an include draws the including layout data, through rjui build' 
   # The generated Screen and Panel, their data files with them, as one
   # TypeScript source (imports dropped — they are each other's).
   def self.typescript(files)
-    files.select { |f| f =~ %r{/(Screen|Panel)(Data)?\.tsx?\z} }.map do |f|
+    files.select { |f| f =~ %r{/(Screen|Panel|includePlace)(Data)?\.tsx?\z} }.map do |f|
       File.read(f).lines.reject { |l| l.start_with?('import ') || l.start_with?('export default') || l.strip == '"use client";' }.join
     end.join("\n")
   end
@@ -94,7 +94,10 @@ RSpec.describe 'an include draws the including layout data, through rjui build' 
     raise "rjui build failed:\n#{log}" unless status.success?
 
     generated = File.join(dir, 'src', 'generated')
-    files = Dir.glob(File.join(generated, 'data', '*.ts')) + Dir.glob(File.join(generated, 'components', '**', '*.tsx'))
+    # The helpers the components call, as written (an included layout's root
+    # class goes through includePlace's jsonuiPlaceClass).
+    files = Dir.glob(File.join(generated, 'includePlace.ts')) +
+            Dir.glob(File.join(generated, 'data', '*.ts')) + Dir.glob(File.join(generated, 'components', '**', '*.tsx'))
     raise "no Screen.tsx:\n#{log}" unless files.any? { |f| f.end_with?('/Screen.tsx') }
 
     File.write(File.join(dir, 'main.js'), IRD_NODE_PROGRAM)
@@ -163,7 +166,8 @@ RSpec.describe 'an include draws the including layout data, through rjui build' 
     raise "rjui build failed:\n#{log}" unless status.success?
 
     generated = File.join(dir, 'src', 'generated')
-    files = Dir.glob(File.join(generated, 'data', '*.ts')) + Dir.glob(File.join(generated, 'components', '**', '*.tsx'))
+    files = Dir.glob(File.join(generated, 'includePlace.ts')) +
+            Dir.glob(File.join(generated, 'data', '*.ts')) + Dir.glob(File.join(generated, 'components', '**', '*.tsx'))
     File.write(File.join(dir, 'main.js'), IRD_TABS_PROGRAM)
     File.write(File.join(dir, 'files.json'), JSON.generate(files))
     out, err, node = Open3.capture3('node', File.join(dir, 'main.js'), IRD_ESBUILD, File.join(dir, 'files.json'))
@@ -199,7 +203,9 @@ RSpec.describe 'an include draws the including layout data, through rjui build' 
                                       panel: IRD_UNDECLARED)
 
     expect(texts['panel_title']).to eq('from screen')
-    expect(site).to include('<Panel data={{ title: data.title }} />')
+    # The panel's wrapContent height stops at the screen's, as it does as a
+    # direct child (IncludePlace; ticket rjui-include-root-relative-placement-dropped).
+    expect(site).to include('<Panel jsonuiPlace={{ add: "max-h-full" }} data={{ title: data.title }} />')
     expect(ts).to compile_as_typescript.with_ambient(IRD_AMBIENT)
   end
 
@@ -220,7 +226,9 @@ RSpec.describe 'an include draws the including layout data, through rjui build' 
     _, site, ts = self.class.draw([{ 'name' => 'onTap', 'class' => '(() -> Void)?' }], { 'include' => 'parts/panel' },
                                   panel: IRD_UNDECLARED.merge('child' => [button]))
 
-    expect(site).to include('<Panel data={{ onTap: data.onTap }} />')
+    # The panel's wrapContent height stops at the screen's, as it does as a
+    # direct child (IncludePlace; ticket rjui-include-root-relative-placement-dropped).
+    expect(site).to include('<Panel jsonuiPlace={{ add: "max-h-full" }} data={{ onTap: data.onTap }} />')
     expect(ts).to compile_as_typescript.with_ambient(IRD_AMBIENT)
   end
 
