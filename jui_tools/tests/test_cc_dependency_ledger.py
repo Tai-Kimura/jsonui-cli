@@ -347,6 +347,14 @@ open(os.path.join(os.environ["FAKE_LOG"], "argv-%d" % time.time_ns()), "w").writ
     {"argv": args, "cwd": os.getcwd(), "config": os.environ.get("CLAUDE_CONFIG_DIR"),
      "token": os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"), "leaked": sorted(k for k in os.environ if k.startswith("CLAUDE")
      and k not in ("CLAUDE_CONFIG_DIR", "CLAUDE_CODE_OAUTH_TOKEN"))}))
+counting = "Count" in " ".join(args)
+if counting:
+    # the handler is set before the SessionStart hook runs: the watcher sends its SIGTERM once that hook has written,
+    # and a handler set after it lost that race now and then (exit -15, no SessionEnd), even on an idle machine
+    # "flaky": the second SIGTERM run ends without its SessionEnd (as 10-31's one sample did)
+    counts = [f for f in os.listdir(os.environ["FAKE_LOG"]) if "Count" in open(os.path.join(os.environ["FAKE_LOG"], f)).read()]
+    missed = mode == "flaky" and len(counts) == 2
+    signal.signal(signal.SIGTERM, lambda *a: (None if missed else fire("SessionEnd", {"reason": "other"}), sys.exit(143)))
 fire("SessionStart", {"source": "startup"})
 leak = os.environ.get("FAKE_LEAK_DIR")
 if leak and "Count" not in " ".join(args):
@@ -359,11 +367,7 @@ if mode == "nologin":
     print(json.dumps({"type": "result", "is_error": True, "result": "Not logged in · Please run /login", "terminal_reason": "api_error",
                       "total_cost_usd": 0, "usage": {"input_tokens": 0, "output_tokens": 0}}))
     sys.exit(1)
-if "Count" in " ".join(args):
-    # "flaky": the second SIGTERM run ends without its SessionEnd (as 10-31's one sample did)
-    counts = [f for f in os.listdir(os.environ["FAKE_LOG"]) if "Count" in open(os.path.join(os.environ["FAKE_LOG"], f)).read()]
-    missed = mode == "flaky" and len(counts) == 2
-    signal.signal(signal.SIGTERM, lambda *a: (None if missed else fire("SessionEnd", {"reason": "other"}), sys.exit(143)))
+if counting:
     time.sleep(30)
     sys.exit(0)
 fire("UserPromptSubmit", {"prompt": "p", "permission_mode": "default"})
