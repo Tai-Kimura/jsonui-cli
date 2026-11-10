@@ -133,8 +133,16 @@ RSpec.describe 'kjui codegen: safeAreaInsetPositions' do
     expect(emitted.scan('windowInsetsPadding(').size).to be >= expected.size * paths.size
     expect(<<~KOTLIN).to compile_as_kotlin
       #{ComposeStubUniverse.common_stages(emitted)}
-      class ConstrainedLayoutReference
-      interface ConstraintLayoutScope { fun createRef(): ConstrainedLayoutReference = ConstrainedLayoutReference() }
+      class HorizontalAnchor
+      class VerticalAnchor
+      class HorizontalAnchorable { fun linkTo(anchor: HorizontalAnchor, margin: Dp = 0.dp) {} }
+      class VerticalAnchorable { fun linkTo(anchor: VerticalAnchor, margin: Dp = 0.dp) {} }
+      class ConstrainedLayoutReference { val top = HorizontalAnchor(); val bottom = HorizontalAnchor(); val start = VerticalAnchor(); val end = VerticalAnchor() }
+      class ConstrainScope { val top = HorizontalAnchorable(); val bottom = HorizontalAnchorable(); val start = VerticalAnchorable(); val end = VerticalAnchorable(); val parent = ConstrainedLayoutReference() }
+      interface ConstraintLayoutScope {
+          fun createRef(): ConstrainedLayoutReference = ConstrainedLayoutReference()
+          fun Modifier.constrainAs(ref: ConstrainedLayoutReference, constrainBlock: ConstrainScope.() -> Unit): Modifier = this
+      }
       fun ConstraintLayout(modifier: Modifier = Modifier, content: ConstraintLayoutScope.() -> Unit) {}
       fun Modifier.fillMaxHeight(): Modifier = this
       class Data(val onTap: (() -> Unit)? = null)

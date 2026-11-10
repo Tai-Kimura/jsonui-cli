@@ -1541,6 +1541,10 @@ module KjuiTools
         code += Helpers::ModifierBuilder.format(modifiers, depth, is_root: is_root)
         code += "\n" + indent(") {", depth)
 
+        # A data-only child (`{"data": [...]}`) draws nothing: no ref, and no
+        # Box drawn for it (it went through the View branch below).
+        children = children.reject { |c| c.is_a?(Hash) && Components::ConstraintLayoutComponent.data_only_child?(c) }
+
         # Create constraint references for children with IDs
         children.each do |child|
           next unless child.is_a?(Hash) && child['id']
@@ -1549,12 +1553,24 @@ module KjuiTools
         end
         code += "\n"
 
-        # On this path every child draws its margins as padding (the View
-        # and component generators below call build_margins), so each
-        # sibling's ref box includes them: a child aligned to one adds its
-        # margin to reach the drawn box (ModifierBuilder.margin_padding_terms).
+        # As ConstraintLayoutComponent draws its children: a child with a
+        # positioning constraint has its margins drawn by its links (its
+        # margin keys stripped for the drawing), any other draws them as
+        # padding, so its ref box includes them and a child aligned to it
+        # adds them to reach the drawn box (ModifierBuilder.
+        # margin_padding_terms); a centred child is drawn moved by its
+        # centre offset as well (ticket kjui-align-to-view-in-visibility-
+        # wrapper-and-margin-sign — on this path every child drew its
+        # margins as padding and an align*View margin pulled outward).
         anchor_paddings = children.each_with_object({}) do |child, map|
-          map[child['id']] = Helpers::ModifierBuilder.margin_padding_terms(child) if child.is_a?(Hash) && child['id']
+          next unless child.is_a?(Hash) && child['id']
+
+          terms = if Components::ConstraintLayoutComponent.has_positioning_constraints?(child)
+                    { top: [], bottom: [], start: [], end: [] }
+                  else
+                    Helpers::ModifierBuilder.margin_padding_terms(child)
+                  end
+          map[child['id']] = Helpers::ModifierBuilder.with_center_margin_offset(terms, child)
         end
 
         # Generate children with constraints (linking only to the refs above)
@@ -1569,50 +1585,49 @@ module KjuiTools
         code
       end
 
+      # A child of the SafeAreaView's ConstraintLayout, drawn as
+      # ConstraintLayoutComponent draws one: through the real component
+      # dispatch, with `.constrainAs(ref)` injected
+      # (ConstraintLayoutComponent.inject_constrain_as — on the
+      # VisibilityWrapper when it has one, the margins of a positioned child
+      # in its links, a centred child moved back to the centre). This path
+      # drew a View with a local generator that put its margins as padding
+      # INSIDE its declared size — a 10pt child with a 10pt margin drew
+      # nothing, a 20pt centred one with leftMargin 10 drew 10pt wide — and
+      # left out its testTag and every other common stage; the margin of an
+      # align*View edge pulled outward (ticket kjui-align-to-view-in-
+      # visibility-wrapper-and-margin-sign, measured on an emulator).
       def generate_safe_area_child_with_constraints(child_data, depth, anchor_paddings = {}, refs: nil)
         ref_name = child_data['id']
-        component_type = child_data['type'] || 'View'
+        positioned = Components::ConstraintLayoutComponent.has_positioning_constraints?(child_data)
+        # a positioned child is drawn without its margins (its links carry them)
+        drawn_data = if positioned
+                       child_data.reject { |k, _| Components::ConstraintLayoutComponent::MARGIN_KEYS.include?(k) }
+                     else
+                       child_data
+                     end
 
-        # Build constraints for this child
-        constraints = Helpers::ModifierBuilder.build_relative_positioning(child_data, anchor_paddings, refs: refs)
-
-        # A child with a visibility: drawn as everywhere else, inside its
-        # VisibilityWrapper, with constrainAs on the wrapper (the wrapper is
-        # the ConstraintLayout's child; constrainAs cannot be called inside
-        # its BoxScope content). On this path a View dropped its visibility
-        # altogether — always drawn — and any other type was wrapped with
-        # constrainAs inside, which does not compile (ticket
-        # kjui-align-to-view-in-visibility-wrapper-and-margin-sign).
-        if %w[visibility hidden].any? { |k| child_data.key?(k) }
-          code = generate_component(child_data, depth)
-          return code if ref_name.nil? || code.strip.empty?
-
-          block = "modifier = Modifier.constrainAs(#{ref_name}) {"
-          block += "\n" + constraints.map { |c| indent(c, depth + 2) }.join("\n") if constraints.any?
-          block += "\n" + indent("}", depth + 1)
-          wrapped = Components::ConstraintLayoutComponent.wrap_constrain_as(code, block, depth)
-          return wrapped if wrapped
+        # A ScrollView with no visibility keeps its own emit: on the
+        # ScrollView's axis (kjui-scroll-with-constraints-always-vertical).
+        custom = self.class.custom_component_types.include?(child_data['type'] || 'View')
+        drawn = custom ? drawn_data : JsonUIShared::TypeSynonyms.drawn(drawn_data)
+        if !custom && drawn['type'] == 'ScrollView' && %w[visibility hidden].none? { |k| child_data.key?(k) }
+          constraints = Helpers::ModifierBuilder.build_relative_positioning(child_data, anchor_paddings, refs: refs,
+                                                                            margins_in_links: positioned)
+          after_block = Helpers::ModifierBuilder.build_center_margin_offset(child_data, @required_imports).join
+          return Helpers::InheritedTint.provide(drawn, generate_scroll_with_constraints(drawn, ref_name, constraints, depth, after_block),
+                                                depth, @required_imports)
         end
 
-        # Generate the component based on the type it is drawn as (an app's
-        # component as written; an HStack is a View with orientation
-        # horizontal) — anything else through generate_component
-        custom = self.class.custom_component_types.include?(component_type)
-        drawn = custom ? child_data : JsonUIShared::TypeSynonyms.drawn(child_data)
-        # The two inline containers hand their tintColor down as the
-        # generate_component exits do (InheritedTint).
-        case custom ? nil : (drawn['type'] || 'View')
-        when 'ScrollView'
-          Helpers::InheritedTint.provide(drawn, generate_scroll_with_constraints(drawn, ref_name, constraints, depth), depth, @required_imports)
-        when 'View'
-          Helpers::InheritedTint.provide(drawn, generate_view_with_constraints(drawn, ref_name, constraints, depth), depth, @required_imports)
-        else
-          # For other types, generate normally but wrap with constraint modifier
-          generate_component_with_constraints(child_data, ref_name, constraints, depth)
-        end
+        code = generate_component(drawn_data, depth, 'ConstraintLayout')
+        return code if ref_name.nil? || code.strip.empty?
+
+        Components::ConstraintLayoutComponent.inject_constrain_as(child_data, code, depth, 0, anchor_paddings,
+                                                                  refs: refs, required_imports: @required_imports)
       end
 
-      def generate_scroll_with_constraints(child_data, ref_name, constraints, depth)
+      # after_block: what follows the constrainAs block (a centre offset).
+      def generate_scroll_with_constraints(child_data, ref_name, constraints, depth, after_block = '')
         # LazyRow or LazyColumn with constrainAs — on the ScrollView's own
         # axis (Components::ScrollViewComponent.horizontal?). This path wrote
         # LazyColumn for every ScrollView, so a horizontal one placed in a
@@ -1627,7 +1642,7 @@ module KjuiTools
         # Add constrainAs if we have a ref_name
         if ref_name
           constraint_block = constraints.any? ? constraints.join("\n" + "    " * (depth + 2)) : ""
-          modifiers << ".constrainAs(#{ref_name}) {\n" + indent(constraint_block, depth + 2) + "\n" + indent("}", depth + 1)
+          modifiers << ".constrainAs(#{ref_name}) {\n" + indent(constraint_block, depth + 2) + "\n" + indent("}", depth + 1) + after_block
         end
 
         modifiers.concat(Helpers::ModifierBuilder.build_size(child_data, nil, @required_imports))
@@ -1664,74 +1679,6 @@ module KjuiTools
 
         code += "\n" + indent("}", depth)
         code
-      end
-
-      def generate_view_with_constraints(child_data, ref_name, constraints, depth)
-        # Determine layout type based on orientation
-        orientation = child_data['orientation']
-        container = case orientation
-                    when 'horizontal' then 'Row'
-                    when 'vertical' then 'Column'
-                    else 'Box'
-                    end
-
-        code = indent("#{container}(", depth)
-
-        modifiers = ["Modifier"]
-
-        # Add constrainAs if we have a ref_name
-        if ref_name
-          constraint_block = constraints.any? ? constraints.join("\n" + "    " * (depth + 2)) : ""
-          modifiers << ".constrainAs(#{ref_name}) {\n" + indent(constraint_block, depth + 2) + "\n" + indent("}", depth + 1)
-        end
-
-        modifiers.concat(Helpers::ModifierBuilder.build_size(child_data, nil, @required_imports))
-        modifiers.concat(Helpers::ModifierBuilder.build_offset(child_data, @required_imports))
-        modifiers.concat(Helpers::ModifierBuilder.build_margins(child_data))
-        modifiers.concat(Helpers::ModifierBuilder.build_background(child_data, @required_imports))
-        modifiers.concat(Helpers::ModifierBuilder.build_padding(child_data))
-
-        code += Helpers::ModifierBuilder.format(modifiers, depth)
-        code += "\n" + indent(") {", depth)
-
-        # Process children
-        view_children = child_data['child'] || child_data['children'] || []
-        view_children = [view_children] unless view_children.is_a?(Array)
-
-        # the node's onAppear / onDisappear at the start of its content, as a
-        # container's (handle_container_result); this inline one had none
-        effects = lifecycle_effects(child_data, depth + 1)
-        code += "\n" + effects.chomp unless effects.empty?
-
-        declared = Set.new
-        view_children.each do |view_child|
-          child_code = generate_component(view_child, depth + 1, container)
-          next if child_code.empty?
-
-          child_code = in_own_scope_if_its_locals_clash(child_code, depth + 1, declared) do
-            generate_component(view_child, depth + 2, container)
-          end
-          code += "\n" + child_code
-        end
-
-        code += "\n" + indent("}", depth)
-        code
-      end
-
-      def generate_component_with_constraints(child_data, ref_name, constraints, depth)
-        # Generate the component normally and then add constrainAs modifier
-        result = generate_component(child_data, depth)
-
-        # If we have constraints, we need to inject them
-        if ref_name && constraints.any? && result.include?("modifier = Modifier")
-          constraint_block = constraints.join("\n" + "    " * (depth + 2))
-          constraint_modifier = ".constrainAs(#{ref_name}) {\n" + indent(constraint_block, depth + 2) + "\n" + indent("}", depth + 1)
-
-          # Insert after "modifier = Modifier"
-          result = result.sub(/modifier = Modifier/, "modifier = Modifier#{constraint_modifier}")
-        end
-
-        result
       end
 
       # 🔻 A GENERATED VIEW NOBODY CALLS IS A SILENT HOLE, NOT A SPARE FILE.
