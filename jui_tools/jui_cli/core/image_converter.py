@@ -51,6 +51,11 @@ class ImageConverter:
         name = name or svg_path.stem
         imageset_dir = xcassets_dir / f"{name}.imageset"
         imageset_dir.mkdir(parents=True, exist_ok=True)
+        contents_path = imageset_dir / "Contents.json"
+        previous_files, previous_author = _contents_json_files(contents_path)
+
+        for line in _external_image_warnings(svg_path, "ios"):
+            print(line)
 
         raster = _whole_canvas_raster(svg_path)
         if raster is not None:
@@ -77,11 +82,21 @@ class ImageConverter:
             }
 
         # The other form's file from an earlier build (the SVG changed between
-        # vector and raster) would sit in the set unreferenced.
-        for ext in _IOS_ASSET_EXTS:
-            stale = imageset_dir / f"{name}.{ext}"
-            if stale.name != filename:
-                stale.unlink(missing_ok=True)
+        # vector and raster) would sit in the set unreferenced. Only a file
+        # jui's own Contents.json named is jui's to remove: a file nothing
+        # names, or one an Xcode-made set names, was put there by the
+        # project (ticket jui-ios-imageset-stale-removal-deletes-unowned-1x;
+        # 2.5.22 removed by name, taking a project's x.png and leaving its
+        # x@2x.png and x@3x.png).
+        if previous_author == "jui":
+            for stale_name in previous_files:
+                if stale_name != filename and "/" not in stale_name and stale_name not in (".", ".."):
+                    (imageset_dir / stale_name).unlink(missing_ok=True)
+        elif previous_author is not None:
+            print(
+                f"  WARNING: {svg_path.name}: iOS overwrote {imageset_dir.name}/Contents.json, "
+                f"whose author is {previous_author!r}, not jui; the files it named are left in the set"
+            )
 
         # Write Contents.json
         contents = {
@@ -89,7 +104,6 @@ class ImageConverter:
             "info": {"author": "jui", "version": 1},
             "properties": properties,
         }
-        contents_path = imageset_dir / "Contents.json"
         _write_if_changed(contents_path, (json.dumps(contents, indent=2) + "\n").encode("utf-8"))
 
         return imageset_dir
@@ -103,13 +117,27 @@ class ImageConverter:
         svg_path: Path,
         drawable_dir: Path,
         name: str | None = None,
+        outputs: "ImageOutputs | None" = None,
     ) -> Path | None:
-        """Convert an SVG to Android Vector Drawable XML.
+        """Convert an SVG to an Android drawable.
+
+        - shapes only: a Vector Drawable, ``drawable/<name>.xml``;
+        - one embedded PNG/JPEG/WebP filling the canvas and nothing else:
+          that file, ``drawable-nodpi/<name>.<ext>``;
+        - any other SVG with an ``<image>`` (shapes over a picture, two
+          pictures, a moved or transformed one): the SVG drawn as a PNG at
+          three times its size, ``drawable-xxhdpi/<name>.png``, so it keeps
+          its size in dp. Without a converter (rsvg-convert, cairosvg) the
+          drawable is what it was before, and a WARNING says what it lost.
 
         *name* stands for the file's stem (``ic_star__dark`` for
         ``ic_star.dark.svg``); it is spelled as a resource name either way.
 
-        Returns the output XML path, or None on error.
+        *outputs* is the build's record of what jui wrote
+        (`ImageOutputs`): the files it recorded for this name last time and
+        did not write now are removed. Without it nothing is removed.
+
+        Returns the output path, or None on error.
         """
         try:
             tree = ET.parse(svg_path)
@@ -139,19 +167,15 @@ class ImageConverter:
         paths: list[dict[str, str]] = []
         _collect_paths(root, ns, paths)
 
-        lost = _android_loses(root, paths)
-        if lost:
-            print(f"  WARNING: {svg_path.name}: Android {lost}")
+        out = _image_drawable(svg_path, root, paths, drawable_dir, name)
+        drawn_as_png = isinstance(out, Path) and out.parent.name == "drawable-xxhdpi"
+        for line in _external_image_warnings(svg_path, "android", drawn_as_png=drawn_as_png):
+            print(line)
+        if out is not False:
+            _remove_stale_drawables(outputs, svg_path, name, out)
+            return out
 
         if not paths:
-            # SVG with no drawable paths — fall back to raster extraction
-            # for AI-generated illustrations that wrap a base64 PNG/JPEG in
-            # an <image> tag. Without this the file was silently dropped.
-            raster = _extract_raster_image(root)
-            if raster is not None:
-                out = _write_raster_drawable(svg_path, drawable_dir, raster, name)
-                _remove_other_drawables(drawable_dir, out)
-                return out
             return None
 
         # Build Vector Drawable XML
@@ -209,7 +233,7 @@ class ImageConverter:
         lines.append("")
 
         out_path.write_text("\n".join(lines), encoding="utf-8")
-        _remove_other_drawables(drawable_dir, out_path)
+        _remove_stale_drawables(outputs, svg_path, name, out_path)
         return out_path
 
     # ------------------------------------------------------------------ #
@@ -222,6 +246,8 @@ class ImageConverter:
         images_dir: Path,
     ) -> Path | None:
         """Copy SVG to *images_dir*."""
+        for line in _external_image_warnings(svg_path, "web"):
+            print(line)
         images_dir.mkdir(parents=True, exist_ok=True)
         dest = images_dir / svg_path.name
         shutil.copy2(svg_path, dest)
@@ -493,15 +519,18 @@ def _float_sub(a: str, b: str) -> str:
 
 
 _RASTER_DATA_URI_RE = re.compile(
-    r"data:image/(?P<fmt>png|jpeg|jpg);base64,(?P<b64>[A-Za-z0-9+/=\s]+)",
+    r"data:image/(?P<fmt>png|jpeg|jpg|webp);base64,(?P<b64>[A-Za-z0-9+/=\s]+)",
     re.IGNORECASE,
 )
 
 _POINT_NUM_RE = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?")
 
 
-def _extract_raster_image(root: ET.Element) -> tuple[str, bytes] | None:
+def _extract_raster_image(root: ET.Element, *, webp: bool = False) -> tuple[str, bytes] | None:
     """Return ``(ext, bytes)`` for the first base64 raster in an SVG <image>.
+
+    PNG and JPEG; WebP too when *webp* (Android reads it, an iOS asset
+    catalog does not).
 
     Some SVGs — especially AI-generated illustrations — are just a single
     ``<image href="data:image/png;base64,…">`` wrapper with no vector paths.
@@ -519,7 +548,9 @@ def _extract_raster_image(root: ET.Element) -> tuple[str, bytes] | None:
         if not match:
             continue
         fmt = match.group("fmt").lower()
-        ext = "jpg" if fmt in ("jpeg", "jpg") else "png"
+        if fmt == "webp" and not webp:
+            continue
+        ext = {"jpeg": "jpg", "jpg": "jpg", "webp": "webp"}.get(fmt, "png")
         try:
             data = base64.b64decode(match.group("b64"), validate=False)
         except (ValueError, TypeError):
@@ -530,7 +561,6 @@ def _extract_raster_image(root: ET.Element) -> tuple[str, bytes] | None:
     return None
 
 
-_IOS_ASSET_EXTS = ("pdf", "png", "jpg")
 _PIXEL_SLACK = 1.0
 
 
@@ -599,13 +629,58 @@ def _fills_canvas(root: ET.Element, image: ET.Element) -> bool:
     return (x, y, iw, ih) == (0, 0, canvas[0], canvas[1])
 
 
-def _android_loses(root: ET.Element, paths: list[dict[str, str]]) -> str | None:
-    """What of an SVG's ``<image>`` the Android drawable does not carry, said for a WARNING; None when nothing.
+def _image_drawable(
+    svg_path: Path,
+    root: ET.Element,
+    paths: list[dict[str, str]],
+    drawable_dir: Path,
+    name: str | None,
+) -> Path | None | bool:
+    """The drawable of an SVG that has an ``<image>``; False when it has none (the vector path follows).
 
-    The output itself is unchanged (a vector drawable draws no images; the
-    raster fallback takes the first PNG/JPEG data URI whole); this only stops
-    the loss being silent (ticket jui-android-svg-image-dropped-silently).
+    None when nothing is written. Ticket jui-android-svg-image-dropped-silently:
+    a vector drawable has no images, so everything but the one-picture shape
+    is drawn as a PNG instead of losing the picture.
     """
+    images = _images(root)
+    if not images:
+        return False
+    if not paths and len(images) == 1 and _fills_canvas(root, images[0]):
+        raster = _extract_raster_image(images[0], webp=True)
+        if raster is not None:
+            return _write_raster_drawable(svg_path, drawable_dir, raster, name)
+    if not paths and all(_is_external(e) for e in images):
+        # Only pictures from outside the SVG: nothing to draw them from
+        # (_external_image_warnings says so).
+        return None
+
+    png_dir = drawable_dir.parent / "drawable-xxhdpi"
+    png = png_dir / f"{android_resource_name(name or svg_path.stem)}.png"
+    png_dir.mkdir(parents=True, exist_ok=True)
+    if _svg_to_png(svg_path, png):
+        return png
+    try:
+        png_dir.rmdir()  # only when this left it empty
+    except OSError:
+        pass
+
+    # No converter: the drawable it always was, and the loss said.
+    lost = _android_loses(root, paths)
+    if lost:
+        print(
+            f"  WARNING: {svg_path.name}: Android {lost} "
+            "(neither rsvg-convert nor cairosvg is here to draw it as a PNG)"
+        )
+    if paths:
+        return False
+    raster = _extract_raster_image(root)
+    if raster is not None:
+        return _write_raster_drawable(svg_path, drawable_dir, raster, name)
+    return None
+
+
+def _android_loses(root: ET.Element, paths: list[dict[str, str]]) -> str | None:
+    """What of an SVG's ``<image>`` the drawable written without a converter does not carry; None when nothing."""
     images = _images(root)
     if not images:
         return None
@@ -622,8 +697,21 @@ def _android_loses(root: ET.Element, paths: list[dict[str, str]]) -> str | None:
     return None
 
 
+def _href(image: ET.Element) -> str:
+    return (image.get("{http://www.w3.org/1999/xlink}href") or image.get("href") or "").strip()
+
+
+def _is_external(image: ET.Element) -> bool:
+    href = _href(image)
+    return bool(href) and not href.lower().startswith("data:")
+
+
+def _is_url(href: str) -> bool:
+    return bool(re.match(r"([a-z][a-z0-9+.-]*:|//)", href, re.IGNORECASE))
+
+
 def _image_kind(image: ET.Element) -> str:
-    href = (image.get("{http://www.w3.org/1999/xlink}href") or image.get("href") or "").strip()
+    href = _href(image)
     if not href:
         return "without an href"
     m = re.match(r"data:([^;,]*)", href, re.IGNORECASE)
@@ -632,20 +720,219 @@ def _image_kind(image: ET.Element) -> str:
     return "an external file"
 
 
-def _remove_other_drawables(drawable_dir: Path, written: Path) -> None:
-    """Remove the other form's file for the same name (drawable/<name>.xml or drawable-nodpi/<name>.png|jpg).
+def _external_image_warnings(svg_path: Path, platform: str, *, drawn_as_png: bool = False) -> list[str]:
+    """One WARNING per ``<image>`` whose href points outside the SVG, said for *platform*.
 
-    Both forms otherwise stay side by side when an SVG changes between vector
-    and raster, and aapt2 links the pair without complaint, so a device could
-    show the old picture.
+    No platform draws such a picture dependably, and none said so: on iOS
+    rsvg-convert draws a file beside the SVG into the PDF while cairosvg
+    (used where rsvg-convert is missing, as on a Linux CI) leaves it blank,
+    and nothing fetches a URL; Android takes embedded pictures only; the web
+    shows the SVG through ``<img>``, which loads no external resource. The
+    output is unchanged; the fix in the project is to embed the picture as
+    a data URI.
     """
-    stem = written.stem
-    candidates = [drawable_dir / f"{stem}.xml"] + [
-        drawable_dir.parent / "drawable-nodpi" / f"{stem}.{ext}" for ext in ("png", "jpg")
-    ]
-    for path in candidates:
+    try:
+        root = ET.parse(svg_path).getroot()
+    except (ET.ParseError, OSError):
+        return []
+    lines = []
+    for image in _images(root):
+        if not _is_external(image):
+            continue
+        href = _href(image)
+        shown = href if len(href) <= 80 else href[:77] + "..."
+        if _is_url(href):
+            what = f"is a URL ({shown}), which no platform fetches: the picture is blank"
+        elif platform == "ios":
+            what = (f"is a file ({shown}): rsvg-convert draws it into the PDF, cairosvg (used where "
+                    "rsvg-convert is missing, as on a Linux CI) leaves it blank")
+        elif platform == "android":
+            what = (f"is a file ({shown}): " + (
+                "it is in the PNG only through rsvg-convert, cairosvg leaves it blank" if drawn_as_png
+                else "only an embedded picture is taken, so nothing is written for it"))
+        else:
+            what = (f"is a file ({shown}): the page shows the SVG through <img>, which loads no "
+                    "external file, so the picture is blank")
+        label = {"ios": "iOS", "android": "Android", "web": "web"}[platform]
+        lines.append(f"  WARNING: {svg_path.name}: {label}: an <image> href {what}; embed it as a data URI")
+    return lines
+
+
+def _remove_stale_drawables(
+    outputs: "ImageOutputs | None",
+    svg_path: Path,
+    name: str | None,
+    written: Path | None,
+) -> None:
+    """Remove the files jui recorded for this name last time and did not write now.
+
+    Only recorded files: one the project put in drawable/ or drawable-nodpi/
+    under the same name is not jui's (2.5.22 removed by name, taking a
+    project's own x.png or x.xml; ticket
+    jui-ios-imageset-stale-removal-deletes-unowned-1x). Without a record,
+    nothing is removed.
+    """
+    if outputs is None:
+        return
+    resource = android_resource_name(name or svg_path.stem)
+    if written is None:
+        outputs.keep("android", resource)
+        return
+    for path in outputs.owned("android", resource):
         if path != written:
             path.unlink(missing_ok=True)
+    outputs.note("android", resource, written)
+
+
+class ImageOutputs:
+    """The files jui wrote for each image, per platform: ``.jsonui-cli/image-outputs.json``.
+
+    What lets a build remove ITS OWN stale output and nothing else. An iOS
+    set carries its own record (Contents.json names its files); an Android
+    res directory has none, so this is it. Not the generation manifest: that
+    table also gives a file an entry the first time it is seen with no entry,
+    so an entry there does not mean jui wrote the file (a project's own
+    drawable would get one), and it is shared with `jsonui-doc` under its
+    own prune rules.
+
+    Paths are relative to the project root. A name the run did not convert
+    keeps its entry while one of its files is still there; a platform the
+    run did not build keeps its section.
+    """
+
+    FILENAME = "image-outputs.json"
+    COMMENT = (
+        "The files `jui build` wrote for each image, per platform. A build removes the files listed "
+        "for an image that it did not write this time (the SVG changed between vector and raster) "
+        "and nothing else. Written by jui; commit it with the drawables."
+    )
+
+    def __init__(self, project_root: Path, previous: dict | None):
+        self.project_root = project_root
+        #: None = no record was there (nothing is removed on that run)
+        self.previous = previous
+        self.current: dict[str, dict[str, list[str]]] = {}
+
+    @classmethod
+    def path_for(cls, project_root: Path) -> Path:
+        return project_root / ".jsonui-cli" / cls.FILENAME
+
+    @classmethod
+    def load(cls, project_root: Path) -> "ImageOutputs":
+        try:
+            data = json.loads(cls.path_for(project_root).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return cls(project_root, None)
+        platforms = data.get("platforms") if isinstance(data, dict) else None
+        if not isinstance(platforms, dict):
+            return cls(project_root, None)
+        clean: dict[str, dict[str, list[str]]] = {}
+        for platform, by_name in platforms.items():
+            if not isinstance(by_name, dict):
+                continue
+            clean[platform] = {
+                n: [f for f in files if isinstance(f, str)]
+                for n, files in by_name.items()
+                if isinstance(files, list)
+            }
+        return cls(project_root, clean)
+
+    def _rel(self, path: Path) -> str:
+        return Path(os.path.relpath(path, self.project_root)).as_posix()
+
+    def owned(self, platform: str, name: str) -> list[Path]:
+        if self.previous is None:
+            return []
+        return [self.project_root / f for f in self.previous.get(platform, {}).get(name, [])]
+
+    def note(self, platform: str, name: str, path: Path) -> None:
+        self.current.setdefault(platform, {})[name] = [self._rel(path)]
+
+    def keep(self, platform: str, name: str) -> None:
+        files = (self.previous or {}).get(platform, {}).get(name)
+        if files:
+            self.current.setdefault(platform, {}).setdefault(name, list(files))
+
+    def save(self, platforms) -> bool:
+        """Write the record for the *platforms* this run built. True if the file changed."""
+        merged = {k: dict(v) for k, v in (self.previous or {}).items()}
+        for platform in platforms:
+            section = dict(self.current.get(platform, {}))
+            for n, files in (self.previous or {}).get(platform, {}).items():
+                if n not in section and any((self.project_root / f).exists() for f in files):
+                    section[n] = files
+            merged[platform] = section
+        merged = {k: {n: sorted(f) for n, f in sorted(v.items())} for k, v in sorted(merged.items()) if v}
+        path = self.path_for(self.project_root)
+        if not merged and not path.exists():
+            return False
+        path.parent.mkdir(parents=True, exist_ok=True)
+        body = {"_comment": self.COMMENT, "schemaVersion": 1, "platforms": merged}
+        return _write_if_changed(path, (json.dumps(body, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
+
+
+def _contents_json_files(path: Path) -> tuple[list[str], str | None]:
+    """``(filenames, author)`` of an imageset's Contents.json; ``([], None)`` when there is none."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return [], None
+    except OSError:
+        return [], "(unreadable)"
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return [], "(unreadable)"
+    if not isinstance(data, dict):
+        return [], "(unreadable)"
+    info = data.get("info") if isinstance(data.get("info"), dict) else {}
+    author = info.get("author") if isinstance(info.get("author"), str) else ""
+    images = data.get("images") if isinstance(data.get("images"), list) else []
+    files = [i["filename"] for i in images if isinstance(i, dict) and isinstance(i.get("filename"), str)]
+    return files, author
+
+
+def _svg_to_png(svg_path: Path, png_path: Path, zoom: int = 3) -> bool:
+    """Draw an SVG as a PNG *zoom* times its size: rsvg-convert, then cairosvg.
+
+    As `_svg_to_pdf`: into a scratch file beside *png_path*, which replaces
+    it only when the bytes differ. A PNG from either converter carries no
+    date or text chunk (measured 2026-11-10: IHDR and IDAT only), so the
+    same converter at the same version gives the same bytes; two converters,
+    or two rsvg-convert versions, do not (rsvg 2.62.1 and 2.58.0 differed on
+    every shape measured), as with the PDFs.
+    """
+    fd, scratch_name = tempfile.mkstemp(prefix=".jui-", suffix=".png", dir=png_path.parent)
+    os.close(fd)
+    scratch = Path(scratch_name)
+    try:
+        if not _convert_svg_to_png(svg_path, scratch, zoom):
+            return False
+        _write_if_changed(png_path, scratch.read_bytes())
+        return True
+    finally:
+        scratch.unlink(missing_ok=True)
+
+
+def _convert_svg_to_png(svg_path: Path, png_path: Path, zoom: int) -> bool:
+    try:
+        result = subprocess.run(
+            ["rsvg-convert", "-f", "png", "-z", str(zoom), "-o", str(png_path), str(svg_path)],
+            capture_output=True,
+        )
+        if result.returncode == 0 and png_path.exists() and png_path.stat().st_size:
+            return True
+    except FileNotFoundError:
+        pass
+    try:
+        import cairosvg  # type: ignore[import-untyped]
+    except (ImportError, OSError):
+        return False
+    try:
+        cairosvg.svg2png(url=str(svg_path), write_to=str(png_path), scale=zoom)
+    except Exception:  # noqa: BLE001 — a converter failure is "could not draw"
+        return False
+    return png_path.exists() and png_path.stat().st_size > 0
 
 
 def _canvas_size(root: ET.Element) -> tuple[float, float] | None:

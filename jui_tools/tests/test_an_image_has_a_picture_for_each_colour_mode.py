@@ -123,7 +123,7 @@ def project(tmp_path, monkeypatch):
     written = []
 
     def record(face):
-        def convert(svg, dest, name=None):
+        def convert(svg, dest, name=None, outputs=None):
             written.append((face, svg.name, name))
             return dest / (name or svg.stem)
         return convert

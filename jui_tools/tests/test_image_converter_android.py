@@ -41,6 +41,14 @@ def _write_svg(path: Path, body: str) -> None:
     )
 
 
+# At 0,0 and the canvas's size: the one-picture shape whose bytes go into
+# drawable-nodpi as they are. An <image> without a size is drawn at the
+# picture's own size, which is not the canvas here, so since
+# jui-android-svg-image-dropped-silently that SVG is drawn as a PNG instead
+# (tests/test_svg_pictures_on_android_and_owned_outputs.py).
+_WHOLE = 'x="0" y="0" width="24" height="24"'
+
+
 class ConvertAndroidTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -69,7 +77,7 @@ class ConvertAndroidTest(unittest.TestCase):
         png_bytes = _minimal_png_bytes()
         b64 = base64.b64encode(png_bytes).decode("ascii")
         svg = self.root / "ic_taste_fruity.svg"
-        _write_svg(svg, f'<image href="data:image/png;base64,{b64}"/>')
+        _write_svg(svg, f'<image href="data:image/png;base64,{b64}" {_WHOLE}/>')
 
         out = ImageConverter.convert_android(svg, self.drawable_dir)
 
@@ -85,7 +93,7 @@ class ConvertAndroidTest(unittest.TestCase):
         svg = self.root / "ic_taste_malty.svg"
         _write_svg(
             svg,
-            f'<image xlink:href="data:image/png;base64,{b64}"/>',
+            f'<image xlink:href="data:image/png;base64,{b64}" {_WHOLE}/>',
         )
 
         out = ImageConverter.convert_android(svg, self.drawable_dir)
@@ -98,7 +106,7 @@ class ConvertAndroidTest(unittest.TestCase):
         fake_jpeg = b"\xff\xd8\xff\xe0fake-jpeg"
         b64 = base64.b64encode(fake_jpeg).decode("ascii")
         svg = self.root / "ic_photo.svg"
-        _write_svg(svg, f'<image href="data:image/jpeg;base64,{b64}"/>')
+        _write_svg(svg, f'<image href="data:image/jpeg;base64,{b64}" {_WHOLE}/>')
 
         out = ImageConverter.convert_android(svg, self.drawable_dir)
         self.assertIsNotNone(out)
@@ -109,7 +117,7 @@ class ConvertAndroidTest(unittest.TestCase):
         png_bytes = _minimal_png_bytes()
         b64 = base64.b64encode(png_bytes).decode("ascii")
         svg = self.root / "ic-taste-fruity.svg"
-        _write_svg(svg, f'<image href="data:image/png;base64,{b64}"/>')
+        _write_svg(svg, f'<image href="data:image/png;base64,{b64}" {_WHOLE}/>')
 
         out = ImageConverter.convert_android(svg, self.drawable_dir)
         self.assertIsNotNone(out)
