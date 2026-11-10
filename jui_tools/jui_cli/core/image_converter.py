@@ -758,6 +758,104 @@ def _external_image_warnings(svg_path: Path, platform: str, *, drawn_as_png: boo
     return lines
 
 
+#: Which of two files with one resource name a device shows, by its density,
+#: for the directories jui writes to. Measured 2026-11-10 (aapt2 36.0.0, an
+#: Android 15 emulator, ``getValue`` at 120 to 640 dpi; ticket
+#: jui-android-drawable-same-name-two-extensions-after-first-record).
+_SHOWN_AT = {
+    frozenset({"drawable", "drawable-nodpi"}): {
+        "drawable": "160 dpi and below", "drawable-nodpi": "240 dpi and above"},
+    frozenset({"drawable", "drawable-xxhdpi"}): {
+        "drawable": "160 dpi and below", "drawable-xxhdpi": "240 dpi and above"},
+    frozenset({"drawable-nodpi", "drawable-xxhdpi"}): {
+        "drawable-xxhdpi": "480 dpi and below", "drawable-nodpi": "640 dpi"},
+}
+
+
+def _density_dir(directory: str) -> bool:
+    """A ``drawable-<…>`` directory with a density bucket (mdpi, xxhdpi, 420dpi; not nodpi or anydpi)."""
+    return any(q.endswith("dpi") and q not in ("nodpi", "anydpi") for q in directory.split("-")[1:])
+
+
+def same_name_drawables(res_dir: Path, written: dict[str, tuple[str, Path]]) -> list[tuple[str, str, str]]:
+    """What else in ``res/drawable*/`` has the name of a drawable jui wrote: ``(level, line, summary)``.
+
+    *written* maps a resource name to ``(the SVG's file name, the file
+    written)``. jui removes only the files it recorded
+    (`ImageOutputs`), so an earlier build's output that the record does not
+    name — the first build after 2.5.23 has no record — stays beside the
+    new one. Two files of one name in one directory (``x.jpg`` and
+    ``x.png`` in drawable-nodpi/) stop Android's build (aapt2: "conflicting
+    value for configuration"): an ERROR. In two directories the build goes
+    through and a device shows one of them by its density: a WARNING, with
+    the densities measured for jui's directories. A project's own picture
+    in two or more density directories (mdpi, hdpi, …) is the project's
+    choice and is not named; the same-directory ERROR still is. Nothing
+    is removed: the project decides.
+    """
+    found: list[tuple[str, str, str]] = []
+    if not written:
+        return found
+    by_name: dict[str, list[str]] = {}
+    try:
+        directories = sorted(d for d in res_dir.iterdir()
+                             if d.is_dir() and (d.name == "drawable" or d.name.startswith("drawable-")))
+    except OSError:
+        return found
+    for d in directories:
+        try:
+            files = sorted(f.name for f in d.iterdir() if f.is_file() and not f.name.startswith("."))
+        except OSError:
+            continue
+        for f in files:
+            resource = f.split(".", 1)[0]
+            if resource in written:
+                by_name.setdefault(resource, []).append(f"{d.name}/{f}")
+    for resource in sorted(by_name):
+        svg_name, out = written[resource]
+        mine = f"{out.parent.name}/{out.name}"
+        files = by_name[resource]
+        if files == [mine] or mine not in files:
+            continue
+        by_dir: dict[str, list[str]] = {}
+        for f in files:
+            by_dir.setdefault(f.split("/", 1)[0], []).append(f)
+        for directory, same in sorted(by_dir.items()):
+            if len(same) < 2:
+                continue
+            others = [f for f in same if f != mine]
+            if mine in same:
+                fix = f"jui wrote {mine}; remove {' and '.join(others)}"
+            else:
+                fix = f"jui wrote {mine}, neither of these; keep one"
+            found.append((
+                "ERROR",
+                f"  ERROR: {svg_name}: Android: {' and '.join(same)} are one resource "
+                f"(drawable/{resource}) in one directory, which stops Android's build "
+                f"(aapt2: conflicting value for configuration); {fix}",
+                f"{svg_name}: {' and '.join(same)} are one resource in one directory; {fix}",
+            ))
+        mine_dir = out.parent.name
+        other_dirs = [d for d in sorted(by_dir) if d != mine_dir]
+        density_set = len([d for d in other_dirs if _density_dir(d)]) >= 2
+        # A directory already named in an ERROR is not named again, nor a
+        # project's density set.
+        elsewhere = [by_dir[d][0] for d in other_dirs
+                     if len(by_dir[d]) == 1 and not (density_set and _density_dir(d))]
+        for other in elsewhere:
+            other_dir = other.split("/", 1)[0]
+            shown = _SHOWN_AT.get(frozenset({mine_dir, other_dir}), {}).get(other_dir)
+            when = (f"a device at {shown} shows {other}, not {mine}" if shown
+                    else "Android shows one of them by the device's configuration")
+            found.append((
+                "WARNING",
+                f"  WARNING: {svg_name}: Android: {other} has the name of {mine}, which jui wrote, "
+                f"and jui did not write it this time: {when}; remove it if it is an earlier build's output",
+                "",
+            ))
+    return found
+
+
 def _remove_stale_drawables(
     outputs: "ImageOutputs | None",
     svg_path: Path,
