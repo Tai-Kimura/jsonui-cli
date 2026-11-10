@@ -412,8 +412,17 @@ module KjuiTools
           .fillParentMaxHeight(
           .animateItemPlacement(
           .animateItem(
+          .constrainAs(
         ].freeze
 
+        # A ConstraintLayout's content (ticket kjui-align-to-view-in-
+        # visibility-wrapper-and-margin-sign): `val x = createRef()` and
+        # `Modifier.constrainAs(x) { ... }` are ConstraintLayoutScope's, and
+        # a client cell big enough to split had its children lifted into
+        # SectionN helpers — "Unresolved reference 'createRef'", then
+        # 'constrainAs' and 'linkTo'. A chunk that holds the ConstraintLayout
+        # call itself provides the scope and may still be lifted whole.
+        #
         # Scope-bound COMPOSABLE CALLS, not modifiers: material3's
         # NavigationBarItem is `fun RowScope.NavigationBarItem(...)` — lifting
         # a tab item out of its NavigationBar content lambda strands the call
@@ -423,6 +432,7 @@ module KjuiTools
         # matching.
         SCOPE_BOUND_CALL_PREFIXES = %w[
           NavigationBarItem(
+          createRef(
         ].freeze
 
         # Scope-bound RECEIVER MEMBERS, neither modifier nor call: the

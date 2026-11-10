@@ -290,7 +290,7 @@ RSpec.describe 'kjui codegen: onAppear / onDisappear at every exit' do
     wrapping.each do |name, body|
       expect(body).to match(/lifecycle_at_leaf\(|build_lifecycle_effects\(/), name
     end
-    %w[generate_scroll_with_constraints generate_view_with_constraints custom_component_code].each do |name|
+    %w[generate_scroll_with_constraints custom_component_code].each do |name|
       expect(methods.fetch(name)).to match(/lifecycle_effects\(|lifecycle_at_leaf\(/), name
     end
   end

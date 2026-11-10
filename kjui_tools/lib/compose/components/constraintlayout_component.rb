@@ -108,9 +108,13 @@ module KjuiTools
           # One createRef per child — constrainAs below references every
           # child, so every ref must exist (the old code declared refs only
           # for id/positioned children but constrained all of them).
-          hash_children = children.select { |c| c.is_a?(Hash) }
-          hash_children.each_with_index do |child, index|
-            ref_name = child['id'] || "view_#{index}"
+          # A data-only child (`{"data": [...]}`) declares the screen's data
+          # and draws nothing — it gets no ref (the dispatch skips it, and an
+          # unused `val view_0 = createRef()` was one more line for the
+          # section split to strand).
+          hash_children = children.select { |c| c.is_a?(Hash) && !data_only_child?(c) }
+          ref_names = hash_children.each_with_index.map { |child, index| child['id'] || "view_#{index}" }
+          ref_names.each do |ref_name|
             code += "\n" + indent("val #{ref_name} = createRef()", depth + 1)
           end
           code += "\n" if hash_children.any?
@@ -138,10 +142,19 @@ module KjuiTools
           # The siblings whose margins are drawn as padding (not stripped):
           # a sibling aligned to one adds its margin to reach the drawn box
           # (ModifierBuilder.margin_padding_terms).
+          # A child centred on an axis is drawn moved by its centre offset
+          # (build_center_margin_offset), its ref box is not: that is added
+          # too, for a positioned child as well.
           anchor_paddings = hash_children.each_with_index.each_with_object({}) do |(child, index), map|
-            next if has_positioning_constraints?(child)
+            terms = if has_positioning_constraints?(child)
+                      { top: [], bottom: [], start: [], end: [] }
+                    else
+                      Helpers::ModifierBuilder.margin_padding_terms(child)
+                    end
+            terms = Helpers::ModifierBuilder.with_center_margin_offset(terms, child)
+            next if terms.values.all?(&:empty?)
 
-            map[child['id'] || "view_#{index}"] = Helpers::ModifierBuilder.margin_padding_terms(child)
+            map[child['id'] || "view_#{index}"] = terms
           end
 
           {
@@ -154,7 +167,8 @@ module KjuiTools
             # linkTo() must read the margins — resolve the ORIGINAL child by
             # index (order is preserved 1:1 with prepared_children).
             child_decorator: lambda do |_child, child_code, child_depth, index|
-              inject_constrain_as(hash_children[index], child_code, child_depth, index, anchor_paddings)
+              inject_constrain_as(hash_children[index], child_code, child_depth, index, anchor_paddings,
+                                  refs: ref_names, required_imports: required_imports)
             end
           }
         end
@@ -167,13 +181,35 @@ module KjuiTools
           marginRight marginStart marginEnd
         ].freeze
 
-        def self.inject_constrain_as(child_data, component_code, depth, index, anchor_paddings = {})
+        def self.data_only_child?(child)
+          # The entries ComposeBuilder#generate_component skips (no type, no include).
+          !child.key?('type') && !child.key?('include') &&
+            (child.key?('data') || child.key?('shared_data') || child.key?('variables'))
+        end
+
+        def self.inject_constrain_as(child_data, component_code, depth, index, anchor_paddings = {}, refs: nil,
+                                     required_imports: nil)
           ref_name = child_data['id'] || "view_#{index}"
-          constraints = Helpers::ModifierBuilder.build_relative_positioning(child_data, anchor_paddings)
+          constraints = Helpers::ModifierBuilder.build_relative_positioning(child_data, anchor_paddings, refs: refs,
+                                                                            margins_in_links: has_positioning_constraints?(child_data))
           constraint_content = constraints.any? ? constraints.map { |c| indent(c, depth + 2) }.join("\n") : ""
           block = "modifier = Modifier.constrainAs(#{ref_name}) {"
           block += "\n#{constraint_content}" unless constraint_content.empty?
           block += "\n" + indent("}", depth + 1)
+          # A child centred on an axis is moved back to the centre by half
+          # the difference of its margins on it (build_center_margin_offset).
+          block += Helpers::ModifierBuilder.build_center_margin_offset(child_data, required_imports).join
+
+          # A child with a visibility is drawn inside VisibilityWrapper
+          # (VisibilityHelper). Its content lambda is a BoxScope, where the
+          # ConstraintLayout scope's constrainAs cannot be called ("cannot be
+          # called in this context with an implicit receiver"): every such
+          # child failed to compile, whatever its constraint (ticket
+          # kjui-align-to-view-in-visibility-wrapper-and-margin-sign). The
+          # wrapper is a direct child of the ConstraintLayout — it is the
+          # element constrained, and the wrapped component fills it.
+          wrapped = wrap_constrain_as(component_code, block, depth)
+          return wrapped if wrapped
 
           if component_code.include?("modifier = Modifier")
             # Chain constrainAs right after `Modifier`; the child's own
@@ -188,6 +224,28 @@ module KjuiTools
           end
         end
         
+        # *component_code* with *block* (`modifier = Modifier.constrainAs(...)
+        # { ... }`) as the modifier of its outer VisibilityWrapper, or nil when
+        # the code is not one. The header is the wrapper's argument list, up to
+        # the `) {` that opens its content; a modifier the wrapper already has
+        # continues after the constrainAs block.
+        def self.wrap_constrain_as(component_code, block, depth)
+          return nil unless component_code.lstrip.start_with?('VisibilityWrapper(')
+
+          open_at = component_code.index('VisibilityWrapper(')
+          header_end = component_code.index(/\n[ \t]*\) \{/, open_at)
+          return nil unless header_end
+
+          header = component_code[open_at...header_end]
+          new_header =
+            if header.include?('modifier = Modifier')
+              header.sub('modifier = Modifier') { block }
+            else
+              "#{header}\n#{'    ' * (depth + 1)}#{block},"
+            end
+          component_code[0...open_at] + new_header + component_code[header_end..]
+        end
+
         def self.quote(text)
           # Escape special characters properly
           escaped = text.gsub('\\', '\\\\\\\\')  # Escape backslashes first

@@ -2376,10 +2376,16 @@ module RjuiTools
 
               const box = container.getBoundingClientRect();
               const self = child.getBoundingClientRect();
+              // An anchor that is not drawn — a gone element (display:none,
+              // the literal "gone"; a bound "gone" is not in the DOM at all) —
+              // has no box: a constraint that names it does not apply
+              // (attribute_semantics visibility.goneModel). Measured as a box
+              // it was a point at the container's top-left, and an element
+              // above it sat 10px out of its frame.
               const anchorOf = (id#{is_ts ? ': string | undefined' : ''}) => {
                 if (!id) return null;
                 const el = findChild(container, id);
-                return el ? el.getBoundingClientRect() : null;
+                return el && el.getClientRects().length > 0 ? el.getBoundingClientRect() : null;
               };
 
               let top#{is_ts ? ': number | null' : ''} = null;
@@ -2425,12 +2431,16 @@ module RjuiTools
               };
               // A vertical constraint clears the opposite edge, so re-running
               // after a layout change cannot leave both edges pinned and stretch
-              // the element. An axis with no constraint is left alone.
-              if (top !== null || bottom !== null) {
+              // the element. An axis with no constraint is left alone; one whose
+              // anchors are all gone is cleared, so an anchor that went gone
+              // leaves no offset it wrote before behind.
+              const vertical = !!(spec.above || spec.below || spec.alignTop || spec.alignBottom || spec.centerVertical);
+              const horizontal = !!(spec.leftOf || spec.rightOf || spec.alignLeft || spec.alignRight || spec.centerHorizontal);
+              if (vertical) {
                 write('top', top);
                 write('bottom', bottom);
               }
-              if (left !== null || right !== null) {
+              if (horizontal) {
                 write('left', left);
                 write('right', right);
               }
