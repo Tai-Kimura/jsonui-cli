@@ -81,7 +81,8 @@ RSpec.describe SjuiTools::SwiftUI::JsonToSwiftUIConverter, 'a relative child wit
       enum RelativeSizeMode { case matchParent, wrapContent, fixed(CGFloat) }
       struct RelativeChildConfig {
           init(id: String, view: AnyView, constraints: [RelativePositionConstraint] = [], margins: EdgeInsets = .init(),
-               size: CGSize? = nil, widthMode: RelativeSizeMode = .wrapContent, heightMode: RelativeSizeMode = .wrapContent) {}
+               size: CGSize? = nil, widthMode: RelativeSizeMode = .wrapContent, heightMode: RelativeSizeMode = .wrapContent,
+              isGone: Bool = false) {}
       }
       struct RelativePositionContainer: View {
           init(children: [RelativeChildConfig], alignment: Alignment = .topLeading, backgroundColor: Color? = nil,
@@ -108,6 +109,15 @@ RSpec.describe SjuiTools::SwiftUI::JsonToSwiftUIConverter, 'a relative child wit
     expect(wrappers(code).size).to eq(8)
     expect(compilable_view(code, data: ['var v: String? = nil'], stubs: relative_stubs))
       .to compile_as_swift.with_imports('SwiftUI')
+  end
+
+  # A gone child takes no size and no position, and a constraint that names
+  # it does not apply: the container is told, by the expression the wrapper
+  # draws by (ticket relative-constraint-to-gone-anchor-keeps-its-place).
+  it 'tells the container which child is gone, by the expression it draws by' do
+    expect(swift(relative.merge('visibility' => 'gone'))).to include('isGone: ("gone") == "gone"')
+    expect(swift(relative.merge('visibility' => '@{v}'))).to include('isGone: (data.v) == "gone"')
+    expect(swift(relative)).not_to include('isGone:')
   end
 
   it 'still takes a size class override per size class' do

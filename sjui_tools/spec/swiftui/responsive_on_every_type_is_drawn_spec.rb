@@ -121,15 +121,30 @@ RSpec.describe 'sjui: a responsive override is drawn on every type' do
       expect(code).to include('VisibilityWrapper((horizontalSizeClass == .regular ? ("invisible" as String?) : ("visible" as String?)))')
     end
 
-    it 'a ZStack margin: the offset takes the value per size class' do
-      code, = convert_under({ 'type' => 'View' },
+    # A ZStack aligned to the top-left pads a child's top margin in full
+    # inside the child (ticket sjui-overlay-child-far-margin-moves-it-out),
+    # so the per-size-class value is the child function's own padding; the
+    # offset the parent drew per size class stays for an axis the ZStack
+    # centres (below).
+    it 'a ZStack margin: the padding takes the value per size class' do
+      code, _actions, _decls, _root, functions = convert_under(
+        { 'type' => 'View' },
+        { 'type' => 'Switch', 'topMargin' => 4, 'responsive' => { 'regular' => { 'topMargin' => 13 } } }
+      )
+      expect(code).not_to include('.offset(')
+      expect(Array(functions).join("\n")).to include('.padding(.top, 13)').and include('.padding(.top, 4)')
+    end
+
+    it 'a ZStack margin on a centred axis: the offset takes the value per size class' do
+      code, = convert_under({ 'type' => 'View', 'gravity' => 'center' },
                             { 'type' => 'Switch', 'topMargin' => 4, 'responsive' => { 'regular' => { 'topMargin' => 13 } } })
       expect(code).to include('.offset(x: 0, y: (horizontalSizeClass == .regular ? 13 : 4))')
     end
 
     it 'a child without such an override is drawn as before' do
       code, = convert_under({ 'type' => 'View' }, { 'type' => 'Switch', 'topMargin' => 4, 'visibility' => 'invisible' })
-      expect(code).to include('VisibilityWrapper("invisible")').and include('.offset(x: 0, y: 4)')
+      expect(code).to include('VisibilityWrapper("invisible")').and include('.padding(.top, 4)')
+      expect(code).not_to include('.offset(')
       expect(code).not_to include('horizontalSizeClass == .regular ?')
     end
 

@@ -55,7 +55,8 @@ RSpec.describe SjuiTools::SwiftUI::JsonToSwiftUIConverter, 'responsive attribute
     enum RelativeSizeMode { case matchParent, wrapContent, fixed(CGFloat) }
     struct RelativeChildConfig {
         init(id: String, view: AnyView, constraints: [RelativePositionConstraint] = [], margins: EdgeInsets = .init(),
-             size: CGSize? = nil, widthMode: RelativeSizeMode = .wrapContent, heightMode: RelativeSizeMode = .wrapContent) {}
+             size: CGSize? = nil, widthMode: RelativeSizeMode = .wrapContent, heightMode: RelativeSizeMode = .wrapContent,
+              isGone: Bool = false) {}
     }
     struct RelativePositionContainer: View {
         init(children: [RelativeChildConfig], alignment: Alignment = .topLeading, backgroundColor: Color? = nil,

@@ -127,6 +127,17 @@ module SjuiTools
               # value two ways (min(a, b) and min(b, a)).
               top_pad = bottom_pad = shared_margin_padding(top_margin, bottom_margin, :vertical)
               left_pad = right_pad = shared_margin_padding(left_margin, right_margin, :horizontal)
+              # An axis the ZStack aligns to an edge pads both margins in
+              # full: the parent emits no offset there
+              # (PositioningHelper#mark_zstack_pad_axes).
+              if @component['_zstack_pad_v'] && !centered_axis?(:vertical)
+                top_pad = declared_margin(top_margin)
+                bottom_pad = declared_margin(bottom_margin)
+              end
+              if @component['_zstack_pad_h'] && !centered_axis?(:horizontal)
+                left_pad = declared_margin(left_margin)
+                right_pad = declared_margin(right_margin)
+              end
             else
               top_pad = declared_margin(top_margin)
               bottom_pad = declared_margin(bottom_margin)

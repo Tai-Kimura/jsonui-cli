@@ -46,7 +46,29 @@ module SjuiTools
             offset_x = 0
           end
 
+          # An axis the ZStack aligns to an edge takes no offset: the child
+          # pads both margins in full there (SpacingHelper; ticket
+          # sjui-overlay-child-far-margin-moves-it-out).
+          offset_x = 0 if child['_zstack_pad_h']
+          offset_y = 0 if child['_zstack_pad_v']
+
           [offset_x, offset_y]
+        end
+
+        # The axes on which a ZStack child pads its individual margins in
+        # full instead of taking them as an offset: those the ZStack aligns
+        # to an edge. There the margin is the gap to that edge and part of
+        # the child's size, as on Android and web, and as the library draws
+        # it (DynamicViewContainer zstackPadsAxes): a child at the top-left
+        # with a right or bottom margin stays at its own left / top margin,
+        # and a wrapContent ZStack holds the margins. The offset (left -
+        # right, top - bottom) moved such a child out by the far margin and
+        # left the margins out of the ZStack's size (family table
+        # 2026-11-10). An axis the ZStack centres keeps the offset.
+        def mark_zstack_pad_axes(child)
+          alignment = respond_to?(:get_zstack_alignment, true) ? get_zstack_alignment.to_s : '.topLeading'
+          child['_zstack_pad_h'] = !%w[.top .center .bottom].include?(alignment)
+          child['_zstack_pad_v'] = !%w[.leading .center .trailing].include?(alignment)
         end
 
         def apply_zstack_positioning(child, index)
@@ -73,8 +95,9 @@ module SjuiTools
               # The parent draws this offset outside the child's function, so a
               # size class that overrides a margin or a centring flag is drawn
               # here, per size class (ticket sjui-codegen-drops-a-leafs-responsive).
-              offset_x = ResponsiveHelper.per_size_class(child) { |attrs| zstack_offsets(attrs)[0] }
-              offset_y = ResponsiveHelper.per_size_class(child) { |attrs| zstack_offsets(attrs)[1] }
+              pads = child.slice('_zstack_pad_h', '_zstack_pad_v')
+              offset_x = ResponsiveHelper.per_size_class(child) { |attrs| zstack_offsets(attrs.merge(pads))[0] }
+              offset_y = ResponsiveHelper.per_size_class(child) { |attrs| zstack_offsets(attrs.merge(pads))[1] }
             end
 
             # offsetを適用

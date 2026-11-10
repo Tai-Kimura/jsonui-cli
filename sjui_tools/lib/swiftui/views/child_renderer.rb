@@ -15,6 +15,7 @@ module SjuiTools
             # apply_zstack_positioning owns individual margins here; the
             # child's own .padding for the same margins double-applied them.
             child['_zstack_margin_offset'] = true
+            mark_zstack_pad_axes(child) if respond_to?(:mark_zstack_pad_axes, true)
           end
           
           # weightプロパティの処理

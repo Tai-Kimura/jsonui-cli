@@ -17,6 +17,7 @@ module SjuiTools
             # declared 8 in the centered conformance frame — padding
             # half-shift + offset). One mechanism owns the margin.
             child['_zstack_margin_offset'] = true
+            mark_zstack_pad_axes(child) if respond_to?(:mark_zstack_pad_axes, true)
           end
           
           # Wrap with VisibilityWrapper if visibility is set
