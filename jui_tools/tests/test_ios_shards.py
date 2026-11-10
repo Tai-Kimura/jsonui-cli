@@ -274,6 +274,20 @@ class Merge(unittest.TestCase):
         self._refused([self._shard(1), self._shard(2, tests=[("P2UITests", "testTwo")])],
                       "P2UITests.testThree: in no shard's record")
 
+    def test_a_fixtures_only_run_merges_the_suite_alone(self):
+        """A dispatch with `only` runs the suite alone: no probe is expected of it (conformance_only.py)."""
+        dirs = [self._shard(1, tests=[]), self._shard(2, tests=[])]
+        self._refused(dirs, "P1UITests.testOne: in no shard's record")
+        summary = shards.merge("ios", 2, self.uitests, self.manifest, dirs, self.dir / "out", fixtures_only=True)
+        self.assertEqual(summary["fixtures"], 6)
+        self.assertEqual(summary["probe_tests"], 0)
+
+    def test_a_fixtures_only_run_still_refuses_a_probe_that_ran(self):
+        dirs = [self._shard(1, tests=[("P1UITests", "testOne")]), self._shard(2, tests=[])]
+        with self.assertRaises(shards.Refused) as cm:
+            shards.merge("ios", 2, self.uitests, self.manifest, dirs, self.dir / "out", fixtures_only=True)
+        self.assertIn("which the sources do not declare", str(cm.exception))
+
     def test_refuses_a_probe_test_in_two_shards(self):
         self._refused([self._shard(1, tests=[("P1UITests", "testOne"), ("P2UITests", "testTwo")]), self._shard(2)],
                       "P2UITests.testTwo: in")

@@ -314,6 +314,21 @@ ios      SIMULATOR_UDID=<iOS 26 の iPhone 16 Pro> \
 **fixture を増やす/変える**: 手書きしない。SSoT か rules.py を変更 → `jui conformance generate` →
 diff が意図どおりか確認 → 各ホストで実行 → visual なら baseline 更新（local は手元、
 **ci は次の conformance-mobile dispatch のアーティファクトから焼き直し**）→ report ゲート確認。
+
+🔻 **基準が変わる fixture があるなら、`only` で先に焼いてから全部流す**（2026-11-11 ユーザー指示「基準で変わるやつだけ
+先に焼いてそのあと全部流せばいいでしょ」）。新しい fixture・絵の変わる fixture があるまま全部流すと、1 回目の report が
+`no_baseline`（または MOVED）で赤になり、そのアーティファクトから焼いて、もう 1 回全部流すことになる（1 時間以上を 2 回）。
+1. `gh workflow run conformance-mobile.yml --ref <枝> -f only=<fixture id>,<fixture id> [-f swiftjsonui_ref=… -f kotlinjsonui_ref=…]`
+   - 各面（ios・ios-codegen・android・android-codegen・web）が、名指した fixture とその control だけを描いて上げる
+     （`.github/scripts/conformance_only.py`）。probe・android-library-tests・report（門）は動かない。絵を作るための run。
+   - id の誤りは、その job の最初の段で名指して止まる（何も描かずに緑にはならない）。
+2. その run の `results-<面>` を落として焼く。新しい fixture は
+   `jui conformance baseline update --platform <p> --env ci --artifacts <落とした先> --only-new --fail-on-moved`、
+   絵が変わった fixture は `jui conformance baseline update --platform <p> --env ci --artifacts <落とした先> --take <screenshot>.png --fail-on-moved`
+   （`baselines/README.md`。`--fail-on-moved` は `--only-new` では掛からず、`--take` で名指さなかった動きを止める）。
+   - `only` の run の artifacts には名指した物しか無い。`--only-new`・`--take` は、無い物を消さない。
+     無印（全体の書き直し）では焼かない。
+3. 焼いた基準を commit してから、全部流す（`only` なし。probe も門もいつもどおり）。
 codegen ホストは staging を作り直すだけ（`generate_codegen_host.rb` 再実行）。
 
 **テストアクションを追加する**（全レイヤー横断、単一コマンドなし）:

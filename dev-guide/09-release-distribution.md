@@ -165,6 +165,9 @@ SwiftJsonUI 10.29.10 を別々に撃ち、1 回で足りたところを 2 回に
    1.9.7 のタグは、旗を書き忘れた dispatch（probe 9 本が skip）の緑で判定された。iOS の probe の門は 1.9.23 から
    ConformanceHost/UITests のソースから導出して立てる（それまでは 23 クラス・40 本が一度も走っていなかった）。
    schedule は入力を持たないので probe なしのまま）
+   - 基準が変わる fixture（新しい・絵の変わる）がある列車は、この dispatch の前に `-f only=<id>,…` の run で基準を焼いて
+     commit しておく（08-testing-conformance.md の「`only` で先に焼いてから全部流す」）。焼かずに撃つと、
+     この dispatch が no_baseline で赤になり、焼いてもう 1 回撃つことになる。
 3. **全 job の緑**を見てから、SPM のタグと Maven の publish に進む。読むのは緑だけではない:
    各 job が印字する ref と HEAD が撃った枝か、`android-library-tests` の skip の名前、probe の印字。
    Maven の publish は取り消せない。

@@ -13,8 +13,11 @@ simulator. A shard runs a contiguous slice of the suite's runnable fixtures
     ios_shards.py plan  <UITests dir> <weights.json> <mode> <n> <k>
         shard k's test classes, space-separated (ConformanceUITests in every
         shard — each runs its own slice of the suite)
+    ios_shards.py suite
+        the suite's one class (ConformanceUITests): a fixtures-only shard's
+        test classes, for a dispatch with `only` (conformance_only.py)
     ios_shards.py merge --mode ios|ios-codegen --shards N --uitests DIR
-                        --manifest PATH --out DIR SHARD_DIR...
+                        --manifest PATH --out DIR [--fixtures-only] SHARD_DIR...
         the merged results file, screenshots and per-test record under DIR,
         or exit 1 naming what does not add up
     ios_shards.py meta SHARD_DIR...
@@ -173,7 +176,8 @@ def read_record(path: Path) -> list[tuple[str, str, str, float]]:
     return out
 
 
-def merge(mode: str, n: int, uitests: Path, manifest: Path, shard_dirs: list[Path], out: Path) -> dict:
+def merge(mode: str, n: int, uitests: Path, manifest: Path, shard_dirs: list[Path], out: Path,
+          fixtures_only: bool = False) -> dict:
     results_rel, artifacts_rel = LAYOUT[mode]
     problems: list[str] = []
 
@@ -283,7 +287,9 @@ def merge(mode: str, n: int, uitests: Path, manifest: Path, shard_dirs: list[Pat
 
     # Per-test records.
     declared = declared_tests(uitests)
-    expected = {(c, t) for c, tests in declared.items() for t in tests if c != SUITE_CLASS}
+    # A run dispatched with `only` (conformance_only.py) runs the suite and no probe: none is expected, and one
+    # that ran anyway is refused as undeclared, as any other.
+    expected = set() if fixtures_only else {(c, t) for c, tests in declared.items() for t in tests if c != SUITE_CLASS}
     seen: dict[tuple[str, str], str] = {}
     suite: list[tuple[str, float]] = []
     lines = []
@@ -354,6 +360,10 @@ def main(argv: list[str]) -> int:
     if len(argv) == 6 and argv[0] == "plan":
         print(" ".join(shard_classes(Path(argv[1]), Path(argv[2]), argv[3], int(argv[4]), int(argv[5]))))
         return 0
+    if argv == ["suite"]:
+        # The one class a fixtures-only shard runs (the workflow's `only`).
+        print(SUITE_CLASS)
+        return 0
     if len(argv) >= 2 and argv[0] == "meta":
         for key, value in meta([Path(d) for d in argv[1:]]).items():
             print(f"{key}={value}")
@@ -365,9 +375,11 @@ def main(argv: list[str]) -> int:
         p.add_argument("--uitests", required=True, type=Path)
         p.add_argument("--manifest", required=True, type=Path)
         p.add_argument("--out", required=True, type=Path)
+        p.add_argument("--fixtures-only", action="store_true",
+                       help="the shards ran the suite alone (a dispatch with `only`): no probe is expected")
         p.add_argument("shard_dirs", nargs="+", type=Path)
         a = p.parse_args(argv[1:])
-        summary = merge(a.mode, a.shards, a.uitests, a.manifest, a.shard_dirs, a.out)
+        summary = merge(a.mode, a.shards, a.uitests, a.manifest, a.shard_dirs, a.out, fixtures_only=a.fixtures_only)
         print(f"merged {a.mode}: " + ", ".join(f"{k}={v}" for k, v in summary.items()))
         return 0
     print(__doc__, file=sys.stderr)

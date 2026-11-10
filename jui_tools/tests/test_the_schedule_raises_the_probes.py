@@ -47,7 +47,10 @@ def _python(expr: str) -> str:
     out = expr.strip()
     if re.search(r"[^\w\s.!=&|()'-]", out):
         raise ValueError(f"unsupported expression: {expr!r}")
-    out = re.sub(r"\binputs\.(\w+)", r"inputs.get('\1')", out)
+    # An input the event does not carry is GitHub's null, which is falsy and
+    # equals '' (both read as 0): '' stands for it, so `inputs.only == ''`
+    # holds on the schedule as it does on GitHub.
+    out = re.sub(r"\binputs\.(\w+)", r"inputs.get('\1', '')", out)
     out = out.replace("github.event_name", "event_name")
     out = out.replace("cancelled()", "False").replace("always()", "True")
     out = out.replace("&&", " and ").replace("||", " or ")
@@ -154,6 +157,9 @@ class TheEvaluatorItself(unittest.TestCase):
         self.assertTrue(_eval("!cancelled() && (inputs.a || github.event_name == 'schedule')", "schedule", {}))
         self.assertTrue(_eval("github.event_name != 'schedule'", "workflow_dispatch", {}))
         self.assertIs(_eval("inputs.a || true", "workflow_dispatch", {"a": False}), True)
+        # an input the event does not carry equals '' and is falsy (GitHub's null)
+        self.assertTrue(_eval("inputs.only == ''", "schedule", {}))
+        self.assertFalse(_eval("inputs.only != ''", "schedule", {}))
         self.assertEqual(_eval("false && 'true' || 'false'", "schedule", {}), "false")
 
     def test_refuses_what_it_cannot_read(self):
