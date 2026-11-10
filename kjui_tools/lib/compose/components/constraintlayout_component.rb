@@ -176,6 +176,17 @@ module KjuiTools
           block += "\n#{constraint_content}" unless constraint_content.empty?
           block += "\n" + indent("}", depth + 1)
 
+          # A child with a visibility is drawn inside VisibilityWrapper
+          # (VisibilityHelper). Its content lambda is a BoxScope, where the
+          # ConstraintLayout scope's constrainAs cannot be called ("cannot be
+          # called in this context with an implicit receiver"): every such
+          # child failed to compile, whatever its constraint (ticket
+          # kjui-align-to-view-in-visibility-wrapper-and-margin-sign). The
+          # wrapper is a direct child of the ConstraintLayout — it is the
+          # element constrained, and the wrapped component fills it.
+          wrapped = wrap_constrain_as(component_code, block, depth)
+          return wrapped if wrapped
+
           if component_code.include?("modifier = Modifier")
             # Chain constrainAs right after `Modifier`; the child's own
             # modifiers continue on the following lines. Block replacer —
@@ -189,6 +200,28 @@ module KjuiTools
           end
         end
         
+        # *component_code* with *block* (`modifier = Modifier.constrainAs(...)
+        # { ... }`) as the modifier of its outer VisibilityWrapper, or nil when
+        # the code is not one. The header is the wrapper's argument list, up to
+        # the `) {` that opens its content; a modifier the wrapper already has
+        # continues after the constrainAs block.
+        def self.wrap_constrain_as(component_code, block, depth)
+          return nil unless component_code.lstrip.start_with?('VisibilityWrapper(')
+
+          open_at = component_code.index('VisibilityWrapper(')
+          header_end = component_code.index(/\n[ \t]*\) \{/, open_at)
+          return nil unless header_end
+
+          header = component_code[open_at...header_end]
+          new_header =
+            if header.include?('modifier = Modifier')
+              header.sub('modifier = Modifier') { block }
+            else
+              "#{header}\n#{'    ' * (depth + 1)}#{block},"
+            end
+          component_code[0...open_at] + new_header + component_code[header_end..]
+        end
+
         def self.quote(text)
           # Escape special characters properly
           escaped = text.gsub('\\', '\\\\\\\\')  # Escape backslashes first

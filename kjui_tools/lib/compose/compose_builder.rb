@@ -1576,6 +1576,24 @@ module KjuiTools
         # Build constraints for this child
         constraints = Helpers::ModifierBuilder.build_relative_positioning(child_data, anchor_paddings, refs: refs)
 
+        # A child with a visibility: drawn as everywhere else, inside its
+        # VisibilityWrapper, with constrainAs on the wrapper (the wrapper is
+        # the ConstraintLayout's child; constrainAs cannot be called inside
+        # its BoxScope content). On this path a View dropped its visibility
+        # altogether — always drawn — and any other type was wrapped with
+        # constrainAs inside, which does not compile (ticket
+        # kjui-align-to-view-in-visibility-wrapper-and-margin-sign).
+        if %w[visibility hidden].any? { |k| child_data.key?(k) }
+          code = generate_component(child_data, depth)
+          return code if ref_name.nil? || code.strip.empty?
+
+          block = "modifier = Modifier.constrainAs(#{ref_name}) {"
+          block += "\n" + constraints.map { |c| indent(c, depth + 2) }.join("\n") if constraints.any?
+          block += "\n" + indent("}", depth + 1)
+          wrapped = Components::ConstraintLayoutComponent.wrap_constrain_as(code, block, depth)
+          return wrapped if wrapped
+        end
+
         # Generate the component based on the type it is drawn as (an app's
         # component as written; an HStack is a View with orientation
         # horizontal) — anything else through generate_component
