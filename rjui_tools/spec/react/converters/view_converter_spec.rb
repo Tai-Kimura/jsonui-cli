@@ -351,7 +351,54 @@ RSpec.describe RjuiTools::React::Converters::ViewConverter do
       result = container([header, { 'type' => 'Label', 'id' => 'body', 'text' => 'B',
                                     'alignLeftView' => 'header' }])
       root = result.lines.first[/className="([^"]*)"/, 1].split
-      expect(root).to include('grid', 'content-start')
+      expect(root).to include('grid')
+    end
+
+    # The unconstrained children were left to the grid's auto placement, one
+    # per row with `content-start` holding each row at its content height:
+    # stacked where iOS and Android overlap them, and with no height for
+    # alignBottom / centerVertical / centerInParent / matchParent height to
+    # use (web y 0 where the four other renderers draw y 80, 40, 40 and a
+    # height of 100; family table 2026-11-10, ticket
+    # rjui-relative-grid-unconstrained-child-align-bottom-ignored). They share
+    # the grid's one cell now, placed by their own alignment, as a stacked
+    # overlay's children are.
+    describe 'its unconstrained children' do
+      let(:box) { { 'type' => 'View', 'width' => 20, 'height' => 20 } }
+      let(:tie) { { 'type' => 'View', 'id' => 'k', 'width' => 6, 'height' => 6, 'alignLeftOfView' => 's' } }
+
+      def classes_of(result, id)
+        result.lines.find { |l| l.include?("id=\"#{id}\"") }[/className="([^"]*)"/, 1].split
+      end
+
+      it 'share one cell and the rows are not held at their content height' do
+        result = container([box.merge('id' => 'u0'), box.merge('id' => 'u1'), box.merge('id' => 's'), tie])
+        expect(result.lines.first[/className="([^"]*)"/, 1].split).not_to include('content-start')
+        %w[u0 u1 s].each do |id|
+          expect(classes_of(result, id)).to include('col-start-1', 'row-start-1')
+          expect(classes_of(result, id)).not_to include('absolute')
+        end
+        expect(classes_of(result, 'k')).to include('absolute')
+        expect(classes_of(result, 'k')).not_to include('col-start-1')
+      end
+
+      {
+        { 'alignBottom' => true } => %w[self-end],
+        { 'centerVertical' => true } => %w[self-center],
+        { 'centerInParent' => true } => %w[self-center justify-self-center],
+        { 'alignBottom' => true, 'alignRight' => true } => %w[self-end [justify-self:right]],
+        { 'height' => 'matchParent' } => %w[h-full]
+      }.each do |attrs, expected|
+        it "are placed by #{attrs.keys.join(' + ')} in the cell" do
+          result = container([box.merge('id' => 'u0'), box.merge('id' => 's').merge(attrs), tie])
+          expect(classes_of(result, 's')).to include(*expected)
+        end
+      end
+
+      it 'stay where they were when they say nothing (a lone free child, as the conformance fixtures have)' do
+        result = container([box.merge('id' => 's', 'topMargin' => 120, 'leftMargin' => 120), tie])
+        expect(classes_of(result, 's')).to include('col-start-1', 'row-start-1', 'self-start', 'justify-self-start')
+      end
     end
 
     it 'stays a flex container when an orientation is declared' do
