@@ -214,67 +214,23 @@ module SjuiTools
                       end
                     end
                     indent do
-                      # Special handling for views with padding in relative positioning
-                      # We need to ensure padding doesn't affect the view's alignment edges
-                      if (child['padding'] || child['paddings']) && child['background']
-                        # Extract padding value and remove it from the child temporarily
-                        padding_value = child['padding'] || child['paddings']
-                        background_color = child['background']
-                        child_without_padding = without_margins(child)
-                        child_without_padding.delete('padding')
-                        child_without_padding.delete('paddings')
-                        child_without_padding.delete('background')
-                        # Margins are handled separately by RelativePositionContainer; bounded ones collapse to
-                        # their floor there — see relative_margin_edges.
+                      # The child is converted whole, as anywhere else: its padding and background inside the
+                      # modifiers its own converter orders (padding, frame, background, cornerRadius, border, tap,
+                      # accessibility). Margins only are removed — RelativePositionContainer places them.
+                      # A child with both a padding and a background used to have the two taken out and put back
+                      # after everything its converter drew, so they landed outside its corner radius, border and
+                      # accessibility identifier (ticket sjui-relative-child-padding-background-outside-border).
+                      # Remove margin properties before conversion (they're handled separately by RelativePositionContainer)
+                      child_without_margins = without_margins(child)
 
-                        # Generate the view without padding and background
-                        # Use current indent_level + 1 for proper nesting inside view: AnyView(...)
-                        child_converter = @converter_factory.create_converter(child_without_padding, @indent_level + 1, @action_manager, @converter_factory, @view_registry)
-                        child_code = child_converter.convert
-                        adopt_state_variables(child_converter)
-                        child_lines = child_code.split("\n")
-                        child_lines.each do |line|
-                          # Add child code directly to preserve its indentation
-                          @generated_code << line unless line.strip.empty?
-                        end
-                        
-                        # Now apply padding and background together
-                        if padding_value.is_a?(Array)
-                          case padding_value.length
-                          when 1
-                            add_modifier_line ".padding(#{padding_value[0]})"
-                          when 2
-                            # [Vertical, Horizontal]
-                            add_modifier_line ".padding(.vertical, #{padding_value[0]})"
-                            add_modifier_line ".padding(.horizontal, #{padding_value[1]})"
-                          when 4
-                            # [Top, Right, Bottom, Left]
-                            add_modifier_line ".padding(.top, #{padding_value[0]})"
-                            add_modifier_line ".padding(.trailing, #{padding_value[1]})"
-                            add_modifier_line ".padding(.bottom, #{padding_value[2]})"
-                            add_modifier_line ".padding(.leading, #{padding_value[3]})"
-                          else
-                            add_modifier_line ".padding(0)"
-                          end
-                        else
-                          add_modifier_line ".padding(#{padding_value.to_i})"
-                        end
-                        color = get_swiftui_color(background_color)
-                        add_modifier_line ".background(#{color})"
-                      else
-                        # Normal conversion for views without padding or without background
-                        # Remove margin properties before conversion (they're handled separately by RelativePositionContainer)
-                        child_without_margins = without_margins(child)
-
-                        # Use current indent_level + 1 for proper nesting inside view: AnyView(...)
-                        child_converter = @converter_factory.create_converter(child_without_margins, @indent_level + 1, @action_manager, @converter_factory, @view_registry)
-                        child_code = child_converter.convert
-                        adopt_state_variables(child_converter)
-                        child_lines = child_code.split("\n")
-                        child_lines.each do |line|
-                          # Add child code directly to preserve its indentation
-                          @generated_code << line unless line.strip.empty?
-                        end
+                      # Use current indent_level + 1 for proper nesting inside view: AnyView(...)
+                      child_converter = @converter_factory.create_converter(child_without_margins, @indent_level + 1, @action_manager, @converter_factory, @view_registry)
+                      child_code = child_converter.convert
+                      adopt_state_variables(child_converter)
+                      child_lines = child_code.split("\n")
+                      child_lines.each do |line|
+                        # Add child code directly to preserve its indentation
+                        @generated_code << line unless line.strip.empty?
                       end
                     end
                     if has_visibility
