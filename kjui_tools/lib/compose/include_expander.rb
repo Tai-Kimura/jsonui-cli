@@ -82,6 +82,15 @@ module KjuiTools
                          id_prefix
                        end
 
+          # A constraint between two elements of this partial names its target
+          # by the id the partial wrote; the element's id gets this include's
+          # prefix below, so the target gets it too — before the include
+          # node's own attributes are merged in, which name the including
+          # layout's elements and stay as written (jsonui-cli ticket
+          # rjui-include-root-sibling-constraint-dropped, row D4; held by
+          # shared/core/include_constraint_targets_fixture.json).
+          prefix_constraint_targets(included_json, new_prefix, declared_ids(included_json)) if new_prefix
+
           # include元のプロパティ（id, include以外）をマージ
           # dataやshared_dataもマージ対象
           json_data.each do |key, value|
@@ -134,6 +143,53 @@ module KjuiTools
         end
 
         json_data
+      end
+
+      # The attributes that name another element of the same container as a
+      # constraint's target (common.json align*OfView / align*View /
+      # alignCenter*View).
+      CONSTRAINT_TARGET_KEYS = %w[
+        alignTopOfView alignBottomOfView alignLeftOfView alignRightOfView
+        alignTopView alignBottomView alignLeftView alignRightView
+        alignCenterVerticalView alignCenterHorizontalView
+      ].freeze
+
+      # The ids a partial declares itself: its elements' ids, not the ids
+      # inside a partial it includes (those get that include's prefix) and
+      # not an include node's id (a prefix, not an element).
+      def declared_ids(node, ids = [])
+        case node
+        when Hash
+          return ids if node['include']
+
+          ids << node['id'] if node['id'].is_a?(String)
+          kids = node['child'] || node['children']
+          declared_ids(kids, ids) if kids
+        when Array
+          node.each { |n| declared_ids(n, ids) }
+        end
+        ids
+      end
+
+      # Prefixes each constraint target in *node* that names one of *ids*,
+      # the way the ids themselves are prefixed. An include node's own
+      # attributes are read (they land on its root); the partial it names is
+      # not entered.
+      def prefix_constraint_targets(node, prefix, ids)
+        case node
+        when Hash
+          CONSTRAINT_TARGET_KEYS.each do |key|
+            target = node[key]
+            node[key] = combine_with_prefix(prefix, target) if target.is_a?(String) && ids.include?(target)
+          end
+          return node if node['include']
+
+          kids = node['child'] || node['children']
+          prefix_constraint_targets(kids, prefix, ids) if kids
+        when Array
+          node.each { |n| prefix_constraint_targets(n, prefix, ids) }
+        end
+        node
       end
 
       # IDプレフィックスを全要素に適用し、data定義と@{}参照も更新する

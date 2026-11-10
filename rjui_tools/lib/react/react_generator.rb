@@ -308,6 +308,10 @@ module RjuiTools
         state_vars = extract_state_variables(json)
         focus_fields = extract_focus_fields(json)
         collection_scrolls = extract_collection_scrolls(json)
+        # The ids this layout declares itself (not inside the layouts it
+        # includes): under an include, the DOM carries each of them as
+        # jsonuiIncludeId(idPrefix, id), so a constraint names them so too.
+        @relative_local_ids = IncludePlace.declared_ids(json)
         relative_containers = extract_relative_containers(json)
         auto_shrink_targets = extract_auto_shrink_targets(json)
         included_component_map = extract_included_components(json)  # { CompName => subdir_or_nil }
@@ -828,7 +832,7 @@ module RjuiTools
         id = node['id']
         return nil unless id.is_a?(String) && !id.empty? && !id.include?('@{')
 
-        spec = { :ref_id => id, 'id' => id }
+        spec = { :ref_id => id, 'id' => local_dom_id(id) }
         if node != child
           dom_id = IncludePlace.root_dom_id_js(child, @config)
           return nil unless dom_id
@@ -837,9 +841,23 @@ module RjuiTools
         end
         RELATIVE_CONSTRAINT_FIELDS.each do |attr, field|
           target = node[attr]
-          spec[field] = target if target.is_a?(String) && !target.empty? && !target.include?('@{')
+          next unless target.is_a?(String) && !target.empty? && !target.include?('@{')
+
+          spec[field] = Array(@relative_local_ids).include?(target) ? local_dom_id(target) : target
         end
         spec.length > 2 ? spec : nil
+      end
+
+      # How an element this layout declares is found in the DOM: as written
+      # on a layout nothing includes (no prefix above it), else under the
+      # include's prefix the way BaseConverter#build_id_attr writes it
+      # (ticket rjui-include-root-sibling-constraint-dropped, row D4: inside
+      # an include with an id the elements carry `incA`, and a spec naming
+      # `a` found nothing).
+      def local_dom_id(id)
+        return id unless @config['_place_prop'] && @config['_include_id_prefix']
+
+        { js: "jsonuiIncludeId(idPrefix, #{IncludePlace.js_string(id)})" }
       end
 
       def relative_position_ref_name(child_id)

@@ -51,7 +51,12 @@ RSpec.describe 'an included root constrained against a sibling of the include, t
     'ab' => ['alignBottomView', nil, false],
     'acv' => ['alignCenterVerticalView', nil, false],
     'idato' => ['alignTopOfView', 'inc', false],
-    'nest' => ['alignTopOfView', 'outer', true]
+    'nest' => ['alignTopOfView', 'outer', true],
+    # row D4: both elements inside the partial, the include with an id —
+    # the elements carry `incS…` / `incA…` and the constraint has to name
+    # them so
+    'inner' => ['alignTopOfView', 'inc', :inner],
+    'innerl' => ['alignLeftView', 'inc', :inner]
   }.freeze
 
   def self.layouts
@@ -60,6 +65,16 @@ RSpec.describe 'an included root constrained against a sibling of the include, t
     IRSC_CASES.each do |key, (attr, include_id, nested)|
       %w[direct inc].each do |mode|
         k = "#{key}_#{mode}"
+        if nested == :inner
+          inner = { 'type' => 'View', 'width' => 'matchParent', 'height' => 'matchParent',
+                    'child' => [box("s_#{k}", attr => "a_#{k}"), anchor("a_#{k}")] }
+          if mode == 'inc'
+            files["parts/p_#{k}"] = inner
+            inner = { 'include' => "parts/p_#{k}", 'id' => include_id }
+          end
+          frames << frame(k, [inner])
+          next
+        end
         subject = box("s_#{k}", attr => "a_#{k}")
         if mode == 'inc'
           if nested
@@ -193,6 +208,9 @@ RSpec.describe 'an included root constrained against a sibling of the include, t
                                 "\"s_nest_inc\"), above: 'a_nest_inc' }")
       # control: a direct child's spec is as it was
       expect(screen).to include("{ id: 's_ato_direct', above: 'a_ato_direct' }")
+      # inside an included layout the spec names its own elements as the DOM does
+      part = File.read(File.join(dir, 'src', 'generated', 'components', 'parts', 'PInnerInc.tsx'))
+      expect(part).to include('{ id: jsonuiIncludeId(idPrefix, "s_inner_inc"), above: jsonuiIncludeId(idPrefix, "a_inner_inc") }')
       # the include is absolute, as the constrained direct child is
       expect(screen).to match(/<PAtoInc idPrefix=\{idPrefix\} jsonuiPlace=\{\{ add: "absolute" \}\} \/>/)
     end
@@ -217,6 +235,7 @@ RSpec.describe 'an included root constrained against a sibling of the include, t
         expect(at.call("#{key}_inc")).to eq(at.call("#{key}_direct")), "#{key}: #{got.inspect}"
       end
       expect(got['idato_inc'][0]).to eq('incSIdatoInc')
+      expect(got['inner_inc'][0]).to eq('incSInnerInc')
     end
   end
 end
