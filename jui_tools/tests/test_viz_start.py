@@ -65,7 +65,7 @@ def test_start_status_open_stop_round_trip(home, stop_after, tmp_path):
     old.write_text("earlier run\n" * 700)   # longer than serve writes, so an untruncated log keeps some
     old.chmod(0o644)
     started = _jui(home, "viz", "start", "--port", str(port), "--json")
-    assert started.returncode == 0, started.stderr
+    assert started.returncode == 0, f"stdout:\n{started.stdout}\nstderr:\n{started.stderr}"  # start --json says why on stdout
     info = json.loads(started.stdout)
     assert info["running"] is True and info["alreadyRunning"] is False
     assert info["url"] == f"http://127.0.0.1:{port}/"

@@ -591,6 +591,15 @@ STILL_MS = 3000
 #: settle names it after STALLED_POLLS polls, or STALLED_TURNS turns —
 #: a second at the least, more on a loaded machine.
 STILL_BEFORE_IMPORT_MS = 10000
+#: How many polls, or turns, of a clock standing still the clock cases'
+#: runtime counts before it names the clock: the product counts 200
+#: (STALLED_POLLS, STALLED_TURNS), at least a second of 5 ms polls, and a
+#: loaded machine took past STILL_MS over them — the frozen-clock cases read
+#: "still waiting after 3000 ms" in a 2.5.24 run-suites (load average 30-90),
+#: and here at load average 183 one did again (ticket test-tools-settle-real-
+#: clock-arm-flakes-under-load). Fifty is a quarter of the time and the same
+#: verdict: the clock is named rather than looped on.
+FROZEN_COUNT = 50
 #: The copy of the runtime the named-failure cases run: one capped delay of
 #: SHORT_CAP_MS (the budget is that and 1000 ms) and EXPECT_MS of
 #: SHORT_EXPECT_MS, so the cases take a second and not thirty.
@@ -609,7 +618,18 @@ HELD_MS = 2 * bt.QUIET_MS
 #: on-the-mutants-wait). The fast paths drain turns: settle(40), the longest,
 #: took 52 ms here (2026-10-08); forty turns at a browser's clamped 4 ms each
 #: would be 160.
-FAST_MS = bt.QUIET_MS // 2
+#:
+#: The fast arms run on a copy of the runtime whose quiet window is
+#: WIDE_QUIET_MS, three times the product's (_clock_project derives it from
+#: the runtime under test, mutant or not), and FAST_MS is half of THAT: the
+#: wait a mutant adds is 1200 ms, and a loaded machine's fast path, 220 and
+#: 239 ms on 2026-11-10 (a local run-suites and main CI run 42763919788),
+#: is far from the 600 ms line. Against the product's 400 ms the line sat at
+#: 200 and those two runs crossed it (ticket test-tools-settle-real-clock-
+#: arm-flakes-under-load). Only the eleven fast arms take the copy: the cases
+#: that wait the window keep the product's, so the file takes no longer.
+WIDE_QUIET_MS = 3 * bt.QUIET_MS
+FAST_MS = WIDE_QUIET_MS // 2
 
 
 def test_the_fake_clock_specimens_are_bound_to_the_declarations():
@@ -621,9 +641,38 @@ def test_the_fake_clock_specimens_are_bound_to_the_declarations():
     assert STILL_BEFORE_IMPORT_MS >= 10 * 200 * 5
     assert HELD_MS > bt.QUIET_MS
     # Away from the mutant's wait on one side and from forty clamped turns on the other.
-    assert FAST_MS <= bt.QUIET_MS // 2
+    assert FAST_MS <= WIDE_QUIET_MS // 2
+    # and from the loaded fast paths the ticket measured (239 ms), by more than they took
+    assert FAST_MS >= 2 * 239
     assert FAST_MS > 40 * 4
     assert "const DEFAULT_SETTLE_TURNS = 10;" in bt.RUNTIME_TS
+
+
+def test_the_fast_arms_window_is_the_runtime_under_test_with_only_its_quiet_window_widened():
+    """The wide copy is derived, not written: the product's runtime, or a
+    control's mutant, with QUIET_MS and nothing else changed — so what the fast
+    arms measure is the code under test."""
+    wide = wide_window(bt.RUNTIME_TS)
+    assert f"export const QUIET_MS = {WIDE_QUIET_MS};" in wide and _QUIET_LINE not in wide
+    changed = [(a, b) for a, b in zip(bt.RUNTIME_TS.splitlines(), wide.splitlines()) if a != b]
+    assert changed == [(_QUIET_LINE, f"export const QUIET_MS = {WIDE_QUIET_MS};")]
+    assert len(wide.splitlines()) == len(bt.RUNTIME_TS.splitlines())
+    # every control's mutant still declares the window, so it is widened as the product is
+    for part in _PARTS:
+        assert _without(part).count(_QUIET_LINE) == 1, part
+
+
+def test_the_clock_cases_runtime_is_the_runtime_under_test_counting_fewer_polls_and_nothing_else():
+    """As the wide copy: derived from the runtime under test, the two counts
+    and nothing else changed — for the product and every control's mutant."""
+    fewer = fewer_polls(bt.RUNTIME_TS)
+    changed = [(a, b) for a, b in zip(bt.RUNTIME_TS.splitlines(), fewer.splitlines()) if a != b]
+    assert changed == [(line, line.replace("200", str(FROZEN_COUNT))) for line in _FROZEN_COUNT_LINES]
+    assert len(fewer.splitlines()) == len(bt.RUNTIME_TS.splitlines())
+    for part in _PARTS:
+        assert all(_without(part).count(line) == 1 for line in _FROZEN_COUNT_LINES), part
+    # a quarter of the product's count, so a loaded machine's polls stay far inside STILL_MS
+    assert FROZEN_COUNT * 4 == 200 and FROZEN_COUNT * 5 * 4 <= STILL_MS
 
 
 _CLOCK_RACE_TS = '''// The real timers and clock, taken when this helper loads — a static import
@@ -676,6 +725,8 @@ export function must(got: string, want: string | RegExp): void {
 _CLOCK_AFTER_IMPORT_TS = r'''import { it, vi, afterEach } from "vitest";
 import { installFetchMock, settle, settleQuiet, type RouteSpec } from "./generated/jsonui-branch-runtime";
 import * as short from "./generated/short-budget-runtime";
+// The fast arms' runtime: the same source with the quiet window WIDE_QUIET_MS (see FAST_MS).
+import * as wide from "./generated/wide-window-runtime";
 import { TODAY, must, outcome, timed } from "./race";
 
 afterEach(() => { vi.useRealTimers(); });
@@ -723,8 +774,8 @@ for (const [fake, install] of Object.entries(FAKES)) {
 for (const fake of ["Date", "every timer"]) {
   it(`settleQuiet() closes early with nothing due — fake: ${fake}`, async () => {
     FAKES[fake]();
-    const rec = installFetchMock([], {}, null, `early ${fake}`);
-    try { must(await timed(settleQuiet()), "returned within QUIET_MS"); } finally { rec.restore(); }
+    const rec = wide.installFetchMock([], {}, null, `early ${fake}`);
+    try { must(await timed(wide.settleQuiet()), "returned within QUIET_MS"); } finally { rec.restore(); }
   }, 10000);
 }
 
@@ -732,23 +783,23 @@ for (const fake of ["Date", "every timer"]) {
 for (const [clock, install] of CLOCKS) {
   it(`settle() returns within QUIET_MS — ${clock}`, async () => {
     install();
-    const rec = installFetchMock([], {}, null, "no-arg");
-    try { must(await timed(settle()), "returned within QUIET_MS"); } finally { rec.restore(); }
+    const rec = wide.installFetchMock([], {}, null, "no-arg");
+    try { must(await timed(wide.settle()), "returned within QUIET_MS"); } finally { rec.restore(); }
   }, 10000);
 }
 
 // The 1.8.120 call with a number of turns: what it did then — no quiet window.
 for (const turns of [2, 20, 40]) {
   it(`settle(${turns}) returns within QUIET_MS — real clock`, async () => {
-    const rec = installFetchMock([], {}, null, "turns");
-    try { must(await timed(settle(turns)), "returned within QUIET_MS"); } finally { rec.restore(); }
+    const rec = wide.installFetchMock([], {}, null, "turns");
+    try { must(await timed(wide.settle(turns)), "returned within QUIET_MS"); } finally { rec.restore(); }
   }, 10000);
 }
 
 it("settle(20) returns within QUIET_MS — fake: Date", async () => {
   FAKES["Date"]();
-  const rec = installFetchMock([], {}, null, "turns");
-  try { must(await timed(settle(20)), "returned within QUIET_MS"); } finally { rec.restore(); }
+  const rec = wide.installFetchMock([], {}, null, "turns");
+  try { must(await timed(wide.settle(20)), "returned within QUIET_MS"); } finally { rec.restore(); }
 }, 10000);
 
 // ...and it waits for a response a delayMs holds back, as it did then.
@@ -869,7 +920,7 @@ it("settleQuiet() names the clock — Date and performance frozen before the run
   const t = setTimeout(() => {}, 600000);
   try {
     must(await outcome(settleQuiet(), STILL_BEFORE_IMPORT_MS),
-      /^threw: settle: the clock it measures with \(performance\.now, taken when this runtime loaded\) read the same time across 200 polls/);
+      /^threw: settle: the clock it measures with \(performance\.now, taken when this runtime loaded\) read the same time across FROZEN_COUNT polls/);
   } finally { clearTimeout(t); rec.restore(); }
 }, STILL_BEFORE_IMPORT_MS + 10000);
 
@@ -879,10 +930,10 @@ it("settle(20) names the clock after a delayed response — Date and performance
   void fetch("https://x.test/slow");
   try {
     must(await outcome(settle(20), STILL_BEFORE_IMPORT_MS),
-      /^threw: settle: the clock it measures with \(performance\.now, taken when this runtime loaded\) read the same time across 200 macrotask turns/);
+      /^threw: settle: the clock it measures with \(performance\.now, taken when this runtime loaded\) read the same time across FROZEN_COUNT macrotask turns/);
   } finally { rec.restore(); }
 }, STILL_BEFORE_IMPORT_MS + 10000);
-'''.replace("STILL_BEFORE_IMPORT_MS", str(STILL_BEFORE_IMPORT_MS))
+'''.replace("STILL_BEFORE_IMPORT_MS", str(STILL_BEFORE_IMPORT_MS)).replace("FROZEN_COUNT", str(FROZEN_COUNT))
 
 _FAKES = ("Date", "Date, setInterval, clearInterval", "setSystemTime alone", "every timer")
 #: The quiet wait on a frozen clock: passes only if its window runs while the
@@ -938,7 +989,7 @@ it("timed() reads FAST_MS - 1 as fast and FAST_MS as slow", async () => {
   must(await timed(Promise.resolve(), clockThatTakes(FAST_MS - 1)), "returned within QUIET_MS");
   must(await timed(Promise.resolve(), clockThatTakes(FAST_MS)), /^returned in \\d+ ms, not under/);
 });
-'''.replace("QUIET_MS_VALUE_MINUS_ONE", str(bt.QUIET_MS - 1)).replace("QUIET_MS_VALUE", str(bt.QUIET_MS))
+'''.replace("QUIET_MS_VALUE_MINUS_ONE", str(WIDE_QUIET_MS - 1)).replace("QUIET_MS_VALUE", str(WIDE_QUIET_MS))
 
 #: How settle sends a call without an object — to settleTurns, ten turns when
 #: it is not given a number.
@@ -999,8 +1050,32 @@ def _without(*parts: str) -> str:
     return runtime
 
 
+#: The product's quiet window, as the runtime declares it.
+_QUIET_LINE = f"export const QUIET_MS = {bt.QUIET_MS};"
+
+
+def wide_window(runtime: str) -> str:
+    """*runtime* — the product's or a control's mutant — with its quiet window
+    WIDE_QUIET_MS and nothing else changed."""
+    assert runtime.count(_QUIET_LINE) == 1, _QUIET_LINE
+    return runtime.replace(_QUIET_LINE, f"export const QUIET_MS = {WIDE_QUIET_MS};")
+
+
+_FROZEN_COUNT_LINES = ("const STALLED_POLLS = 200;", "const STALLED_TURNS = 200;")
+
+
+def fewer_polls(runtime: str) -> str:
+    """*runtime* — the product's or a control's mutant — counting FROZEN_COUNT
+    polls and turns of a clock standing still, and nothing else changed."""
+    for line in _FROZEN_COUNT_LINES:
+        assert runtime.count(line) == 1, line
+        runtime = runtime.replace(line, line.replace("200", str(FROZEN_COUNT)))
+    return runtime
+
+
 def _clock_project(root: Path, runtime: str) -> Path:
     from tests import test_branch_notices_reach_agent_runs as n
+    runtime = fewer_polls(runtime)   # the three copies below count FROZEN_COUNT
     short = runtime
     for old, new in (("export const DELAY_CAP_MS = 30000;", f"export const DELAY_CAP_MS = {SHORT_CAP_MS};"),
                      ("export const EXPECT_MS = 10000;", f"export const EXPECT_MS = {SHORT_EXPECT_MS};")):
@@ -1009,6 +1084,7 @@ def _clock_project(root: Path, runtime: str) -> Path:
     unit = root / "tests" / "unit"
     n._write(unit / "generated" / "jsonui-branch-runtime.ts", runtime)
     n._write(unit / "generated" / "short-budget-runtime.ts", short)
+    n._write(unit / "generated" / "wide-window-runtime.ts", wide_window(runtime))
     n._write(unit / "race.ts", _CLOCK_RACE_TS)
     n._write(unit / "timed-threshold.test.ts", _CLOCK_THRESHOLD_TS)
     n._write(unit / "fake-after-import.test.ts", _CLOCK_AFTER_IMPORT_TS)
@@ -1066,8 +1142,8 @@ _SLOW = "OUTCOME returned in "
     # fails — named by the stall guards, which now stand between that
     # regression and a loop. settle() and settle(20) on a frozen Date with
     # nothing delayed still return: 1.8.120's did too.
-    (("clock",), {**dict.fromkeys([*_FROZEN, _DELAYED, *_NAMED, _DATE_BEFORE, _BOTH_BEFORE], _STOOD + "200 polls"),
-                  **dict.fromkeys([_DELIVERY_DATE, _TURNS_BUDGET, _TURNS_BOTH_BEFORE], _STOOD + "200 macrotask turns")}),
+    (("clock",), {**dict.fromkeys([*_FROZEN, _DELAYED, *_NAMED, _DATE_BEFORE, _BOTH_BEFORE], _STOOD + f"{FROZEN_COUNT} polls"),
+                  **dict.fromkeys([_DELIVERY_DATE, _TURNS_BUDGET, _TURNS_BOTH_BEFORE], _STOOD + f"{FROZEN_COUNT} macrotask turns")}),
     # ...and without the guards: the reported failure, neither returned nor threw.
     (("clock", "guard"), dict.fromkeys([*_FROZEN, _DELAYED, *_NAMED, _DATE_BEFORE, _BOTH_BEFORE,
                                         _DELIVERY_DATE, _TURNS_BUDGET, _TURNS_BOTH_BEFORE], _WAITING)),
@@ -1096,15 +1172,15 @@ _SLOW = "OUTCOME returned in "
                                       _TURNS_BUDGET: "OUTCOME threw: settle: still busy after ",
                                       _TURNS_BOTH_BEFORE: "OUTCOME threw: settle: the clock it measures with "
                                                           "(performance.now, taken when this runtime loaded) read "
-                                                          "the same time across 200 polls"}),
+                                                          f"the same time across {FROZEN_COUNT} polls"}),
     # settle() sent through the quiet window (d5808b85): QUIET_MS on every call.
     (("quiet-for-no-arg", "early"), dict.fromkeys([*_NO_ARG_FAST, *_EARLY], _SLOW)),
     # settle(turns) that does not wait for a delayed response.
     (("no-deliveries",), {_DELIVERY_REAL: "OUTCOME arrived false", _DELIVERY_DATE: "OUTCOME arrived false",
                           _TURNS_BUDGET: "OUTCOME returned", _TURNS_BOTH_BEFORE: "OUTCOME returned"}),
     # The clock taken from Date: a Date frozen before the import is the one taken.
-    (("date-clock",), {_DATE_BEFORE: _STOOD + "200 polls", _BOTH_BEFORE: _STOOD + "200 polls",
-                       _TURNS_BOTH_BEFORE: _STOOD + "200 macrotask turns"}),
+    (("date-clock",), {_DATE_BEFORE: _STOOD + f"{FROZEN_COUNT} polls", _BOTH_BEFORE: _STOOD + f"{FROZEN_COUNT} polls",
+                       _TURNS_BOTH_BEFORE: _STOOD + f"{FROZEN_COUNT} macrotask turns"}),
     # No stall guards: the clock frozen before the import loops again.
     (("guard",), dict.fromkeys([_BOTH_BEFORE, _TURNS_BOTH_BEFORE],
                                f"OUTCOME still waiting after {STILL_BEFORE_IMPORT_MS} ms")),

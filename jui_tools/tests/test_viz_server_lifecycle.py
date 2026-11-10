@@ -99,7 +99,7 @@ def test_a_started_server_lives_in_its_own_folder_and_keeps_its_agents_source_wh
     bin_dir = _fake_claude(home / "fakebin")
     port = _free_port()
     started = _jui(home, "viz", "start", "--port", str(port), "--json", cwd=launch, PATH=f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
-    assert started.returncode == 0, started.stderr
+    assert started.returncode == 0, f"stdout:\n{started.stdout}\nstderr:\n{started.stderr}"  # start --json says why on stdout
     pid = json.loads(started.stdout)["pid"]
     shutil.rmtree(launch)                                         # the worktree is removed
     assert Path(_cwd_of(pid)).resolve() == (home / ".local" / "state" / "jui-viz").resolve()
@@ -133,7 +133,7 @@ def test_stop_ends_a_server_holding_a_page_and_a_waiting_hook_without_kill(home)
     """The orchestrator's arm: a WebSocket from a visible page and a --decide hook waiting on it; stop ends it within TERM."""
     port = _free_port()
     started = _jui(home, "viz", "start", "--port", str(port), "--json")
-    assert started.returncode == 0, started.stderr
+    assert started.returncode == 0, f"stdout:\n{started.stdout}\nstderr:\n{started.stderr}"  # start --json says why on stdout
     pid = json.loads(started.stdout)["pid"]
     url = f"http://127.0.0.1:{port}"
     token = re.search(r'name="jui-viz-token" content="([^"]+)"', urllib.request.urlopen(url + "/").read().decode()).group(1)
@@ -169,7 +169,7 @@ def test_stop_ends_a_server_holding_a_page_and_a_waiting_hook_without_kill(home)
 def test_stop_ends_our_server_that_no_longer_answers_health(home):
     port = _free_port()
     started = _jui(home, "viz", "start", "--port", str(port), "--json")
-    assert started.returncode == 0, started.stderr
+    assert started.returncode == 0, f"stdout:\n{started.stdout}\nstderr:\n{started.stderr}"  # start --json says why on stdout
     pid = json.loads(started.stdout)["pid"]
     os.kill(pid, signal.SIGSTOP)                                  # alive, listening, never answers
     try:

@@ -54,12 +54,58 @@ def _room(tmp_path: Path, app: str = "") -> tuple[Path, Path]:
 
 
 def _tree_hash(folder: Path) -> str:
+    """A hash of every file under *folder*, its path with it. A file or folder that goes while it is walked is named,
+    with what is there afterwards and any git still running in it: a run on 2026-11-10 lost .git/objects/17 here
+    and the error named only the path, so the cause could not be read (the full suites run side by side)."""
     h = hashlib.sha256()
-    for p in sorted(folder.rglob("*")):
-        if p.is_file():
-            h.update(str(p.relative_to(folder)).encode() + p.read_bytes())
+    step = "listing"
+    try:
+        paths = sorted(folder.rglob("*"))
+        step = "reading"
+        for p in paths:
+            if p.is_file():
+                h.update(str(p.relative_to(folder)).encode() + p.read_bytes())
+    except FileNotFoundError as gone:
+        raise AssertionError(_gone_while_walked(folder, step, gone)) from gone
     return h.hexdigest()
 
+
+def _gone_while_walked(folder: Path, step: str, gone: FileNotFoundError) -> str:
+    missing = Path(gone.filename or "")
+    parent = next((p for p in (missing, *missing.parents) if p.exists()), folder)
+    try:
+        there = sorted(c.name for c in parent.iterdir())
+    except OSError as error:
+        there = [f"<not readable: {error}>"]
+    ps = subprocess.run(["ps", "-ax", "-o", "pid=,command="], capture_output=True, text=True)
+    gits = [line.strip() for line in ps.stdout.splitlines() if "git" in line and str(folder.parent) in line]
+    return (f"{missing} went while {folder} was {step}: {gone.strerror}\n"
+            f"  {parent} holds now: {there}\n"
+            f"  git running in it: {gits or 'none'}")
+
+
+
+def test_a_file_that_goes_while_the_tree_is_hashed_is_named(tmp_path, monkeypatch):
+    """The helper's own control: the path, the step and what is left are in the message."""
+    (tmp_path / "objects" / "17").mkdir(parents=True)
+    (tmp_path / "objects" / "17" / "ab").write_bytes(b"x")
+    real = Path.read_bytes
+
+    def gone(self):
+        if self.name == "ab":
+            (tmp_path / "objects" / "17" / "ab").unlink()
+            (tmp_path / "objects" / "17").rmdir()
+        return real(self)
+
+    monkeypatch.setattr(Path, "read_bytes", gone)
+    try:
+        _tree_hash(tmp_path)
+    except AssertionError as error:
+        said = str(error)
+    else:
+        raise AssertionError("a file that went was hashed without a word")
+    assert f"{tmp_path / 'objects' / '17' / 'ab'} went while {tmp_path} was reading" in said, said
+    assert f"{tmp_path / 'objects'} holds now: []" in said, said
 
 def _rows(project: JsonUIProject) -> dict[str, dict]:
     return {s["id"]: s for s in project.summaries(0)}

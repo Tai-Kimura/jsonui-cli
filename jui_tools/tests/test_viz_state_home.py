@@ -167,7 +167,7 @@ def test_state_survives_the_install_folder_being_replaced(home):
 
 def test_a_running_server_is_still_reachable_after_the_install_folder_is_replaced(home):
     started = _jui(home, "viz", "start", "--json")
-    assert started.returncode == 0, started.stderr
+    assert started.returncode == 0, f"stdout:\n{started.stdout}\nstderr:\n{started.stderr}"  # start --json says why on stdout
     pid = json.loads(started.stdout)["pid"]
     try:
         install = home / ".jsonui-cli"
@@ -260,7 +260,7 @@ def test_hooks_install_rewrites_the_old_progress_folder_and_uninstall_removes_it
 
 def test_a_server_whose_files_were_lost_is_named_by_start_and_stopped_by_stop(home):
     started = _jui(home, "viz", "start", "--json")   # on the configured port, which status / start / stop look at
-    assert started.returncode == 0, started.stderr
+    assert started.returncode == 0, f"stdout:\n{started.stdout}\nstderr:\n{started.stderr}"  # start --json says why on stdout
     pid = json.loads(started.stdout)["pid"]
     try:
         for name in ("server.json", "viz.pid"):
@@ -286,7 +286,7 @@ def test_a_server_of_another_home_is_not_stopped(home, tmp_path):
     other.mkdir()
     port = _own_port(other)
     started = _jui(other, "viz", "start", "--json")
-    assert started.returncode == 0, started.stderr
+    assert started.returncode == 0, f"stdout:\n{started.stdout}\nstderr:\n{started.stderr}"  # start --json says why on stdout
     pid = json.loads(started.stdout)["pid"]
     try:
         stopped = _jui(home, "viz", "stop", "--port", str(port))
@@ -337,7 +337,7 @@ def server(home):
     """A server started in this HOME (with an install folder there, as on a real machine)."""
     (home / ".jsonui-cli" / "jui_tools").mkdir(parents=True)
     started = _jui(home, "viz", "start", "--json")
-    assert started.returncode == 0, started.stderr
+    assert started.returncode == 0, f"stdout:\n{started.stdout}\nstderr:\n{started.stderr}"  # start --json says why on stdout
     pid = json.loads(started.stdout)["pid"]
     yield pid
     _jui(home, "viz", "stop")
@@ -383,7 +383,7 @@ def test_stopping_removes_the_copy_and_the_real_file(home, server):
 
 def test_no_install_folder_means_no_copy(home):
     started = _jui(home, "viz", "start", "--json")
-    assert started.returncode == 0, started.stderr
+    assert started.returncode == 0, f"stdout:\n{started.stdout}\nstderr:\n{started.stderr}"  # start --json says why on stdout
     pid = json.loads(started.stdout)["pid"]
     try:
         time.sleep(2.5)  # past one rewrite

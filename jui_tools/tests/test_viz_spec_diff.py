@@ -91,11 +91,34 @@ def _section(diff: dict, key: str) -> list:
 
 
 def _tree_hash(folder: Path) -> str:
+    """A hash of every file under *folder*, its path with it. A file or folder that goes while it is walked is named,
+    with what is there afterwards and any git still running in it: a run on 2026-11-10 lost .git/objects/17 here
+    and the error named only the path, so the cause could not be read (the full suites run side by side)."""
     h = hashlib.sha256()
-    for p in sorted(folder.rglob("*")):
-        if p.is_file():
-            h.update(str(p.relative_to(folder)).encode() + p.read_bytes())
+    step = "listing"
+    try:
+        paths = sorted(folder.rglob("*"))
+        step = "reading"
+        for p in paths:
+            if p.is_file():
+                h.update(str(p.relative_to(folder)).encode() + p.read_bytes())
+    except FileNotFoundError as gone:
+        raise AssertionError(_gone_while_walked(folder, step, gone)) from gone
     return h.hexdigest()
+
+
+def _gone_while_walked(folder: Path, step: str, gone: FileNotFoundError) -> str:
+    missing = Path(gone.filename or "")
+    parent = next((p for p in (missing, *missing.parents) if p.exists()), folder)
+    try:
+        there = sorted(c.name for c in parent.iterdir())
+    except OSError as error:
+        there = [f"<not readable: {error}>"]
+    ps = subprocess.run(["ps", "-ax", "-o", "pid=,command="], capture_output=True, text=True)
+    gits = [line.strip() for line in ps.stdout.splitlines() if "git" in line and str(folder.parent) in line]
+    return (f"{missing} went while {folder} was {step}: {gone.strerror}\n"
+            f"  {parent} holds now: {there}\n"
+            f"  git running in it: {gits or 'none'}")
 
 
 # ---------------------------------------------------------------- pairing
