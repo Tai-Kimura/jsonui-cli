@@ -52,10 +52,14 @@ class TheGoneAnchorPair(unittest.TestCase):
             self.assertEqual(stripped, control[frame_id], frame_id)
             self.assertTrue(any(c.get(k) == anchors[0]["id"] for c in rest for k in CONSTRAINT_KEYS), frame_id)
 
-    def test_the_ledger_observes_the_fixture_ios_divergent(self):
+    def test_the_ledger_observes_the_fixture_inert_on_every_face(self):
+        # ios was active (the gone anchor kept its place) until SwiftJsonUI
+        # 48ba331 / sjui_tools c287e77ce; android dynamic was too until
+        # KotlinJsonUI b972b73. Measured 2026-11-10: every face draws the
+        # fixture identically to its control.
         semantics = json.loads((REPO / "shared/core/attribute_semantics.json").read_text(encoding="utf-8"))
         observable = semantics["semantics"]["visibility"]["observable"]
-        self.assertEqual(observable, {self.target["id"]: {"ios": "active", "android": "inert", "web": "inert"}})
+        self.assertEqual(observable, {self.target["id"]: {"ios": "inert", "android": "inert", "web": "inert"}})
 
     def test_the_committed_manifest_carries_the_pair(self):
         manifest = json.loads((REPO / "conformance/manifest.json").read_text(encoding="utf-8"))
