@@ -10,23 +10,18 @@ loses nothing: no shapes, one <image> at 0,0 filling the canvas, no
 transform, PNG/JPEG data URI, pixels 1/2/3 times the canvas within a pixel.
 Everything else stays the PDF it was.
 
-The same build also:
-- removes the other form's file when an SVG changes between vector and
-  raster, on iOS ({name}.pdf / .jpg / .png in the set) and on Android
-  (drawable/<name>.xml / drawable-nodpi/<name>.png|jpg), where both used to
-  stay side by side;
-- says so in a WARNING when Android's drawable loses an <image> (WebP, an
-  external href, shapes over an image, two images, a moved or transformed
-  image) instead of losing it silently. The output there is unchanged
-  (ticket jui-android-svg-image-dropped-silently carries the real fix).
+The same build also removes the other form's file from the set when an SVG
+changes between vector and raster ({name}.pdf / .jpg / .png), where both used
+to stay side by side; since jui-ios-imageset-stale-removal-deletes-unowned-1x
+only a file jui's own Contents.json named. Android's side of both (the
+pictures it used to drop, its own stale files) is in
+tests/test_svg_pictures_on_android_and_owned_outputs.py.
 
 The PDF arms do not need a converter: `_svg_to_pdf` is replaced by a stub.
 """
 from __future__ import annotations
 
 import base64
-import contextlib
-import io
 import json
 import os
 import struct
@@ -249,79 +244,6 @@ class TheOtherFormIsRemoved(_Base):
         self.ios(svg)
         self.assertTrue((out / "x@2x.png").exists())
         self.assertTrue((out / "y.pdf").exists())
-
-    def android_files(self, name: str):
-        res = self.drawable.parent
-        return sorted(str(p.relative_to(res)) for p in res.rglob(f"{name}.*"))
-
-    def test_android_vector_then_raster_then_vector(self):
-        svg = self.write("x-y", VECTOR)
-        ImageConverter.convert_android(svg, self.drawable)
-        self.assertEqual(self.android_files("x_y"), ["drawable/x_y.xml"])
-        svg.write_text(_svg(24, 24, _image(_uri("image/jpeg", _jpeg(72, 72)), 24, 24)))
-        ImageConverter.convert_android(svg, self.drawable)
-        self.assertEqual(self.android_files("x_y"), ["drawable-nodpi/x_y.jpg"])
-        svg.write_text(_svg(24, 24, _image(_uri("image/png", _png(72, 72)), 24, 24)))
-        ImageConverter.convert_android(svg, self.drawable)
-        self.assertEqual(self.android_files("x_y"), ["drawable-nodpi/x_y.png"])
-        svg.write_text(VECTOR)
-        ImageConverter.convert_android(svg, self.drawable)
-        self.assertEqual(self.android_files("x_y"), ["drawable/x_y.xml"])
-
-    def test_android_nothing_written_removes_nothing(self):
-        svg = self.write("z", VECTOR)
-        ImageConverter.convert_android(svg, self.drawable)
-        svg.write_text(_svg(64, 64, _image("https://example.com/a.jpg", 64, 64)))
-        with contextlib.redirect_stdout(io.StringIO()):
-            self.assertIsNone(ImageConverter.convert_android(svg, self.drawable))
-        self.assertEqual(self.android_files("z"), ["drawable/z.xml"])
-
-
-class AndroidSaysWhatItLoses(_Base):
-    def android(self, name: str, text: str):
-        svg = self.write(name, text)
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            out = ImageConverter.convert_android(svg, self.drawable)
-        return out, [l for l in buf.getvalue().splitlines() if "WARNING" in l]
-
-    def assertWarns1(self, name: str, text: str, words: str):
-        out, warnings = self.android(name, text)
-        self.assertEqual(len(warnings), 1, warnings)
-        self.assertIn(f"{name}.svg", warnings[0])
-        self.assertIn(words, warnings[0])
-        return out
-
-    def test_webp_writes_nothing(self):
-        out = self.assertWarns1("w", _svg(64, 64, _image(_uri("image/webp", b"RIFF"), 64, 64)), "image/webp")
-        self.assertIsNone(out)
-
-    def test_an_external_href_writes_nothing(self):
-        out = self.assertWarns1("e", _svg(64, 64, _image("side.png", 64, 64)), "external file")
-        self.assertIsNone(out)
-
-    def test_shapes_over_an_image_drop_the_image(self):
-        body = _image(_uri("image/jpeg", _jpeg(300, 300)), 100, 100) + '<path d="M0 0 L9 9" stroke="#000"/>'
-        out = self.assertWarns1("m", _svg(100, 100, body), "1 <image> dropped")
-        self.assertEqual(out.suffix, ".xml")
-
-    def test_two_images_keep_the_first(self):
-        first = _jpeg(150, 300, b"first")
-        body = _image(_uri("image/jpeg", first), 50, 100) + _image(_uri("image/png", _png(150, 300)), 50, 100, x=50)
-        out = self.assertWarns1("t", _svg(100, 100, body), "first PNG/JPEG of 2")
-        self.assertEqual(out.read_bytes(), first)
-
-    def test_a_moved_or_transformed_image_is_written_whole(self):
-        uri = _uri("image/jpeg", _jpeg(300, 300))
-        self.assertWarns1("o", _svg(100, 100, _image(uri, 80, 80, x=10, y=10)), "not kept")
-        self.assertWarns1("g", _svg(100, 100, f'<g transform="rotate(5)">{_image(uri, 100, 100)}</g>'), "not kept")
-
-    def test_no_warning_for_a_vector_or_a_whole_canvas_raster(self):
-        self.assertEqual(self.android("v", VECTOR)[1], [])
-        uri = _uri("image/jpeg", _jpeg(840, 1280))
-        self.assertEqual(self.android("r", _svg(280, 427, _image(uri, 280, 427)))[1], [])
-        # a ratio iOS keeps as a PDF loses nothing on Android: no warning
-        self.assertEqual(self.android("q", _svg(100, 100, _image(_uri("image/jpeg", _jpeg(250, 250)), 100, 100)))[1], [])
 
 
 class PixelSizeReader(unittest.TestCase):

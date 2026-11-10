@@ -31,7 +31,10 @@ MCP の `mcp__jui-tools__jui_*` ツール群はこれらの薄いラッパ（07�
    orphan コピーの削除も行う）→ `_distribute_styles` → `_distribute_resources` →
    `_distribute_images`（SVG → imageset/VectorDrawable/svg、`core/image_converter.py`、
    rsvg-convert or cairosvg 必須。埋め込みの PNG/JPEG 1 枚が枠いっぱいの SVG は、iOS は imageset に
-   その絵を scale 付きで、Android は drawable-nodpi に置く。Android が `<image>` を落とす形は WARNING）→ `_distribute_hotload_config`（iOS/Android バンドルに
+   その絵を scale 付きで、Android は drawable-nodpi に置く（WebP も）。絵と図形が混ざる・2 枚・位置ずれなどは、
+   Android は 3 倍の PNG（drawable-xxhdpi）に描く。外の href の `<image>` は 3 つの OS で WARNING。
+   古い出力を消すのは jui が書いた物だけ: iOS は jui の Contents.json が名指しした物、Android は
+   `.jsonui-cli/image-outputs.json` の記録にある物）→ `_distribute_hotload_config`（iOS/Android バンドルに
    `hotloader.json`、Android は `network_security_config.xml` の cleartext IP をマーカーブロックで管理）
 2. **API モデル同期** `_sync_api_models`: swagger → DTO + Domain（`core/api_model_sync.py` の
    collect_docs / plan_for / apply_plan）。halt 不変条件（多ファイル `$ref`、直接自己参照など）で

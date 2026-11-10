@@ -16,7 +16,7 @@ from pathlib import Path
 from ..core.screen_identity import is_layout_path
 from ..core.config_manager import ConfigManager
 from ..core.generated_marker import json_marker
-from ..core.image_converter import ImageConverter
+from ..core.image_converter import ImageConverter, ImageOutputs
 from ..core import image_modes
 from ..core.layout_variant import (
     INLINE_ONLY_CLASSES,
@@ -3123,7 +3123,9 @@ def _distribute_images(
 
     - iOS:     *.xcassets/{name}.imageset/ (PDF, or the one PNG/JPEG the SVG
                only wraps, + Contents.json)
-    - Android: res/drawable/{name}.xml    (Vector Drawable)
+    - Android: res/drawable/{name}.xml    (Vector Drawable), or
+               drawable-nodpi/{name}.png|jpg|webp (the one picture it wraps),
+               or drawable-xxhdpi/{name}.png (an SVG with a picture and more)
     - Web:     public/images/{name}.svg   (copy as-is)
 
     ``{name}.{mode}.svg`` is a colour mode's own picture (core/image_modes.py):
@@ -3148,6 +3150,12 @@ def _distribute_images(
         for name, by_mode in sorted(variants.items())
         for mode, path in sorted(by_mode.items())
     ]
+
+    # What jui wrote for each image last time (Android; an iOS set names its
+    # own files in Contents.json), so a stale file is removed only if it was
+    # jui's (ticket jui-ios-imageset-stale-removal-deletes-unowned-1x).
+    outputs = ImageOutputs.load(config_mgr.project_root)
+    built: list[str] = []
 
     for platform, pconfig in platforms.items():
         if args.ios_only and platform != "ios":
@@ -3191,12 +3199,14 @@ def _distribute_images(
                 dest = platform_root / "app" / "src" / "main" / "res" / "drawable"
 
             for svg, name in pictures:
-                result = ImageConverter.convert_android(svg, dest, name)
+                result = ImageConverter.convert_android(svg, dest, name, outputs=outputs)
                 if result:
                     count += 1
-                    # Raster fallbacks land in the sibling drawable-nodpi/
-                    if result.parent.name.startswith("drawable-nodpi"):
+                    # Pictures land in the sibling drawable-nodpi/ (as they
+                    # are) or drawable-xxhdpi/ (drawn as a PNG)
+                    if result.parent.name.startswith(("drawable-nodpi", "drawable-xxhdpi")):
                         raster_count += 1
+            built.append("android")
 
         elif platform == "web":
             web_images_dir = pconfig.get("imagesDir", "")
@@ -3219,6 +3229,8 @@ def _distribute_images(
                 )
             else:
                 print(f"Converted {count} image(s) → {platform}")
+    if built:
+        outputs.save(built)
     return True
 
 
