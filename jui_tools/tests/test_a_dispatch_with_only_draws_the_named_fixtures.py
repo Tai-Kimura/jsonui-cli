@@ -72,6 +72,32 @@ class Narrow(unittest.TestCase):
             self.assertEqual(json.loads((Path(d) / "manifest.json").read_text())["counts"]["fixtures"], len(want))
 
 
+class StageCells(unittest.TestCase):
+    """The iOS codegen host needs every Collection cell staged; a narrowed manifest names none."""
+
+    def test_the_cover_names_every_cell_with_few_fixtures(self):
+        manifest = json.loads((ROOT / "conformance" / "manifest.json").read_text(encoding="utf-8"))
+        cover = only.cell_cover(manifest["fixtures"])
+        by_id = {f["id"]: f for f in manifest["fixtures"]}
+        cells = {c for f in manifest["fixtures"] if "ios" in (f.get("platforms") or [])
+                 for c in (f.get("companions") or []) if only.CELLS in c}
+        covered = {c for i in cover for c in (by_id[i].get("companions") or []) if only.CELLS in c}
+        self.assertTrue(cells)
+        self.assertEqual(covered, cells)
+        self.assertLessEqual(len(cover), 8)
+
+    def test_stage_cells_adds_the_cover_to_the_narrowed_manifest_and_keeps_the_named(self):
+        manifest = json.loads((ROOT / "conformance" / "manifest.json").read_text(encoding="utf-8"))
+        named = next(f for f in manifest["fixtures"] if f.get("control") and not f.get("companions"))
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            only.narrow(Path(d), named["id"])
+            added = only.stage_cells(Path(d))
+            ids = [f["id"] for f in json.loads((Path(d) / "manifest.json").read_text())["fixtures"]]
+            self.assertEqual(set(ids), {named["id"], named["control"], *added})
+            self.assertEqual(set(added), set(only.cell_cover(manifest["fixtures"])))
+
+
 class TheWorkflow(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -109,6 +135,17 @@ class TheWorkflow(unittest.TestCase):
         for job in DRAWING + MERGES:
             self.assertTrue(_eval(self._cond(job), *ONLY), f"{job} does not run under only")
         self.assertTrue(_eval(self._cond("report"), *FULL))
+
+    def test_the_codegen_face_stages_the_cells_after_the_sync_and_before_the_registry(self):
+        names = [s.get("name", s.get("uses", "")) for s in self.jobs["ios-codegen"]["steps"]]
+        sync = names.index("Sync fixtures + vendor the iOS test-runner driver")
+        cells = names.index("Stage the Collection cells for the codegen host (only)")
+        registry = names.index("Generate the codegen fixture registry (sjui build)")
+        self.assertLess(sync, cells)
+        self.assertLess(cells, registry)
+        step = self.jobs["ios-codegen"]["steps"][cells]
+        self.assertTrue(_eval(EXPR.findall(step["if"])[0], *ONLY))
+        self.assertFalse(_eval(EXPR.findall(step["if"])[0], *FULL))
 
     def test_named_the_ios_shards_run_the_suite_alone_and_the_merges_say_so(self):
         for job in ("ios", "ios-codegen"):

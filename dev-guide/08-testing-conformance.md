@@ -322,8 +322,10 @@ diff が意図どおりか確認 → 各ホストで実行 → visual なら bas
    - 各面（ios・ios-codegen・android・android-codegen・web）が、名指した fixture とその control だけを描いて上げる
      （`.github/scripts/conformance_only.py`）。probe・android-library-tests・report（門）は動かない。絵を作るための run。
    - id の誤りは、その job の最初の段で名指して止まる（何も描かずに緑にはならない）。
-2. その run の `results-<面>` を落とし、`jui conformance baseline update --platform <p> --env ci --artifacts <落とした先>`
-   で焼く。新しい fixture は `--only-new`、絵が変わった fixture は `--take <screenshot>.png`（`baselines/README.md`）。
+2. その run の `results-<面>` を落として焼く。新しい fixture は
+   `jui conformance baseline update --platform <p> --env ci --artifacts <落とした先> --only-new --fail-on-moved`、
+   絵が変わった fixture は `jui conformance baseline update --platform <p> --env ci --artifacts <落とした先> --take <screenshot>.png --fail-on-moved`
+   （`baselines/README.md`。`--fail-on-moved` は `--only-new` では掛からず、`--take` で名指さなかった動きを止める）。
    - `only` の run の artifacts には名指した物しか無い。`--only-new`・`--take` は、無い物を消さない。
      無印（全体の書き直し）では焼かない。
 3. 焼いた基準を commit してから、全部流す（`only` なし。probe も門もいつもどおり）。
