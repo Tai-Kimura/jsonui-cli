@@ -344,7 +344,7 @@ def test_a_restarted_server_still_shows_the_runs_from_before_it_started(tmp_path
 
     for attempt in range(2):  # start, read; stop; start again, read the same
         started = _jui(home, "viz", "start", "--json")
-        assert started.returncode == 0, started.stderr
+        assert started.returncode == 0, f"stdout:\n{started.stdout}\nstderr:\n{started.stderr}"  # start --json says why on stdout
         pid = json.loads(started.stdout)["pid"]
         try:
             assert f":{port}" in json.dumps(json.loads(started.stdout)), started.stdout  # this HOME's own port

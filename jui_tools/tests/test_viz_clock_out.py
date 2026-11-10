@@ -134,7 +134,7 @@ class Viz:
         self.sessions_dir.mkdir(parents=True, exist_ok=True)
         (self.state / "config.json").write_text(json.dumps({"port": _free_port()}))
         started = subprocess.run([sys.executable, str(JUI), "viz", "start", "--json"], env=_env(home), capture_output=True, text=True, timeout=40)
-        assert started.returncode == 0, started.stderr
+        assert started.returncode == 0, f"stdout:\n{started.stdout}\nstderr:\n{started.stderr}"  # start --json says why on stdout
         self.pid = json.loads(started.stdout)["pid"]
         info = json.loads((self.state / "server.json").read_text())
         self.port, self.token = info["port"], info["token"]
