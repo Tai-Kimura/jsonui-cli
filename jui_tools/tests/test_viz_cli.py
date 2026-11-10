@@ -368,8 +368,12 @@ def _term_ends_it(proc: subprocess.Popen, err_out: list | None = None, after_ter
         rc = proc.wait(timeout=TERM_WITHIN_SEC)
     except subprocess.TimeoutExpired:
         proc.kill()
-        proc.communicate()
-        raise AssertionError(f"TERM did not end serve within {TERM_WITHIN_SEC} s")
+        out, err = proc.communicate()
+        # serve's own log says where the stop was (held in a step, a thread not waited for): the gate's red of 11-11
+        # had only the line above
+        raise AssertionError(f"TERM did not end serve within {TERM_WITHIN_SEC} s (killed "
+                             f"{time.monotonic() - start:.2f} s after the TERM)\n--- stderr ---\n{err[-3000:]}"
+                             f"\n--- stdout ---\n{out[-1500:]}")
     took = time.monotonic() - start
     out, err = proc.communicate()
     assert rc == 0, err
