@@ -178,7 +178,10 @@ def test_usr1_writes_every_threads_stack_and_the_server_goes_on(home):
                 break
             time.sleep(0.1)
         text = log.read_text()
-        assert all(f in text for f in frames), text[-2000:]
+        # which marks are missing says which writer was late: the stacks come from faulthandler at the signal, the
+        # threads' line from the Python handler on the loop's thread (the red of 11-10 under load had the stacks only)
+        missing = [f for f in frames if f not in text]
+        assert not missing, (missing, text[-2000:])
         names = text.split("jui viz: threads: ")[-1].splitlines()[0]
         watch_id = next(part.split()[0] for part in names.split(", ") if part.endswith(" jui-viz-loop-watch"))
         assert f"Thread {watch_id}" in text, (watch_id, text[-2000:])   # the id is the one in the stack's header
