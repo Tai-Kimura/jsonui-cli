@@ -117,6 +117,23 @@ module RjuiTools
         "jsonuiIncludeId(#{prefix}, #{js_string(root_id)})"
       end
 
+      # The ids a layout declares itself: its elements' literal ids, not the
+      # ids inside a layout it includes (another component) and not an
+      # include node's id (a prefix, not an element).
+      def declared_ids(node, ids = [])
+        case node
+        when Hash
+          return ids if node['include']
+
+          ids << node['id'] if literal_id?(node['id'])
+          kids = node['child'] || node['children']
+          declared_ids(kids, ids) if kids
+        when Array
+          node.each { |n| declared_ids(n, ids) }
+        end
+        ids
+      end
+
       def literal_id?(id)
         id.is_a?(String) && !id.empty? && !id.include?('@{')
       end
