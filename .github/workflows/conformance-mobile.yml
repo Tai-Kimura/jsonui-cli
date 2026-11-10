@@ -488,6 +488,12 @@ jobs:
         # before its collect step would otherwise upload a PREVIOUS
         # campaign's file and read as a successful suite.
         run: rm -f conformance/codegen/ios.results.json
+      # The host compiles views that draw the Collection cells, staged only from fixtures that name them: a
+      # narrowed manifest names none. Added back for the staging alone, after the sync bundled the narrowed list
+      # the suite runs (conformance_only.py stage-cells).
+      - name: Stage the Collection cells for the codegen host (only)
+        if: ${{ inputs.only != '' }}
+        run: python3 .github/scripts/conformance_only.py stage-cells conformance
       - name: Generate the codegen fixture registry (sjui build)
         run: ruby SwiftJsonUI/ConformanceHost/scripts/generate_codegen_host.rb
       - name: Generate ConformanceHost.xcodeproj (codegen sources)
