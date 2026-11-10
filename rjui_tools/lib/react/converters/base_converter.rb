@@ -236,21 +236,25 @@ module RjuiTools
             classes << TailwindMapper.map_inset_horizontal(attributes['insetHorizontal']) if attributes['insetHorizontal']
           end
 
+          # The margins as emitted: on an axis the node centers itself on, as
+          # centered_margin_attributes rewrites them (the declaration's).
+          margins = centered_margin_attributes
+
           # Margin (array format)
-          classes << TailwindMapper.map_margin(attributes['margins']) unless bound_margins_style(attributes['margins'])
+          classes << TailwindMapper.map_margin(margins['margins']) unless bound_margins_style(margins['margins'])
 
           # Individual margins (topMargin, bottomMargin, leftMargin, rightMargin)
           classes << TailwindMapper.map_individual_margins(
-            static_spacing('marginTop', attributes['topMargin']),
-            static_spacing('marginRight', attributes['rightMargin']),
-            static_spacing('marginBottom', attributes['bottomMargin']),
-            static_spacing('marginLeft', attributes['leftMargin'])
+            static_spacing('marginTop', margins['topMargin']),
+            static_spacing('marginRight', margins['rightMargin']),
+            static_spacing('marginBottom', margins['bottomMargin']),
+            static_spacing('marginLeft', margins['leftMargin'])
           )
 
           # RTL-aware margins (startMargin, endMargin)
           classes << TailwindMapper.map_rtl_margins(
-            static_spacing('marginInlineStart', attributes['startMargin']),
-            static_spacing('marginInlineEnd', attributes['endMargin'])
+            static_spacing('marginInlineStart', margins['startMargin']),
+            static_spacing('marginInlineEnd', margins['endMargin'])
           )
 
           # Background - check for dynamic binding or gradient.
@@ -598,8 +602,8 @@ module RjuiTools
           # element was centered unconditionally. mx-auto / my-auto are
           # `margin-inline: auto` / `margin-block: auto`, so the bound form
           # is the same declaration behind a runtime condition.
-          classes << 'mx-auto' if bound_flag_style('marginInline', attributes['centerHorizontal'], on: 'auto')
-          classes << 'my-auto' if bound_flag_style('marginBlock', attributes['centerVertical'], on: 'auto')
+          classes.concat(center_self_classes(:x)) if centered_flag(:x, attributes['centerHorizontal'])
+          classes.concat(center_self_classes(:y)) if centered_flag(:y, attributes['centerVertical'])
 
           # Edge alignment for a FLOW child.
           #
@@ -619,17 +623,20 @@ module RjuiTools
           #
           # The opposite-edge margin is what does the pushing: to sit at the
           # bottom you take all the free space ABOVE you.
-          classes << 'mt-auto' if bound_flag_style('marginTop', attributes['alignBottom'], on: 'auto')
-          classes << 'mb-auto' if bound_flag_style('marginBottom', attributes['alignTop'], on: 'auto')
-          classes << 'ms-auto' if bound_flag_style('marginInlineStart', attributes['alignRight'], on: 'auto')
-          classes << 'me-auto' if bound_flag_style('marginInlineEnd', attributes['alignLeft'], on: 'auto')
+          #
+          # The pushing side may also carry a margin of its own (alignRight +
+          # leftMargin): edge_auto_side? decides which of the two is spelled.
+          classes << 'mt-auto' if bound_flag_style('marginTop', attributes['alignBottom'], on: 'auto') && edge_auto_side?('top')
+          classes << 'mb-auto' if bound_flag_style('marginBottom', attributes['alignTop'], on: 'auto') && edge_auto_side?('bottom')
+          classes << 'ms-auto' if bound_flag_style('marginInlineStart', attributes['alignRight'], on: 'auto') && edge_auto_side?('left')
+          classes << 'me-auto' if bound_flag_style('marginInlineEnd', attributes['alignLeft'], on: 'auto') && edge_auto_side?('right')
           center_in_parent = attributes['centerInParent']
           if (center_expr = bound_value_expr(center_in_parent))
-            dynamic_styles['marginInline'] = "#{center_expr} ? 'auto' : undefined"
-            dynamic_styles['marginBlock']  = "#{center_expr} ? 'auto' : undefined"
+            bound_center_style(:x, center_expr)
+            bound_center_style(:y, center_expr)
           elsif center_in_parent
-            classes << 'mx-auto'
-            classes << 'my-auto'
+            classes.concat(center_self_classes(:x))
+            classes.concat(center_self_classes(:y))
           end
 
           # Gravity alignment - pass orientation for correct flexbox mapping
@@ -769,6 +776,199 @@ module RjuiTools
             end
           end
           out.join(' ')
+        end
+
+        # ------------------------------------------------------------------
+        # A centered axis and its margins
+        # ------------------------------------------------------------------
+        #
+        # The declaration (attribute_semantics margins.offsetModel): "an
+        # explicit center declaration disables that axis margin" — the margin
+        # does not move a node centered on that axis; it still counts in the
+        # size of a parent that wraps its content (iOS, both modes). Until
+        # jsonui-cli 2.5.26 the axis's margin class stayed beside the
+        # centering, and on web it won: over the auto margins of a flow child
+        # (centerHorizontal + leftMargin 10 at x = 10, not 40), over the grid
+        # self-alignment of a stacked one (the same), or on top of the
+        # translate of an absolute one (x = 50) — 73 rows of 288 drawn in
+        # Chromium (ticket relative-center-with-margin-diverges-from-declaration).
+        #
+        # Per axis, how the node is centered decides what its margins become:
+        #   :split — the two margins, each the half of their sum: the margin box
+        #            is what the parent centers, so the node sits at the center
+        #            and a wrapContent parent still counts the margins. A
+        #            stacked child (grid self-alignment), and a flow child on
+        #            its parent's cross axis (align-self: center).
+        #   :drop  — no margin on the axis: an absolute child is centered by its
+        #            translate, and margins would only move it.
+        #   :auto  — no margin, the auto margins kept: a flow child on its
+        #            parent's main axis when the parent has a size there; a
+        #            parent that wraps its content has no free space for auto
+        #            margins to take, and gets :split.
+        # nil when the axis is not centered literally or carries no margin (the
+        # output is then what it always was), or when a margin on it is bound.
+        def center_margin_plan(axis)
+          @center_margin_plans ||= {}
+          return @center_margin_plans[axis] if @center_margin_plans.key?(axis)
+
+          @center_margin_plans[axis] = compute_center_margin_plan(axis)
+        end
+
+        def compute_center_margin_plan(axis)
+          key = axis == :x ? 'centerHorizontal' : 'centerVertical'
+          return nil unless attributes[key] == true || attributes['centerInParent'] == true
+          return nil unless (pair = static_axis_margins(axis)) && pair.sum.positive?
+
+          if json['_overlay'] == 'stack' then :split
+          elsif json['_overlay'] then :drop
+          elsif flow_cross_axis?(axis) then :split
+          elsif json["_parent_bounded_#{axis == :x ? 'width' : 'height'}"] == false then :split
+          else :auto
+          end
+        end
+
+        # A flow child's parent lays its children out along its orientation
+        # (a column when none is declared); the other axis is the cross axis.
+        def flow_cross_axis?(axis)
+          main = json['_parent_orientation'] == 'horizontal' ? :x : :y
+          axis != main
+        end
+
+        # [first, second] in px of the static margins on *axis* ([left, right]
+        # or [top, bottom]), or nil when one of them is bound.
+        def static_axis_margins(axis)
+          sides = axis == :x ? %w[leftMargin startMargin rightMargin endMargin] : %w[topMargin bottomMargin]
+          return nil if sides.any? { |k| bound_value_expr(attributes[k]) } || bound_value_expr(attributes['margins'])
+          return horizontal_margins if axis == :x
+
+          m = attributes['margins']
+          m = [m] if m.is_a?(Numeric)
+          from = m.is_a?(Array) && m.all? { |v| v.is_a?(Numeric) } ? { 1 => [m[0], m[0]], 2 => [m[0], m[0]], 4 => [m[0], m[2]] }[m.length] : nil
+          top = attributes['topMargin'].is_a?(Numeric) ? attributes['topMargin'] : (from ? from[0] : 0)
+          bottom = attributes['bottomMargin'].is_a?(Numeric) ? attributes['bottomMargin'] : (from ? from[1] : 0)
+          [top, bottom]
+        end
+
+        # A flow child aligned to an edge takes the free space on the OTHER
+        # side with an auto margin (mt-auto for alignBottom). A static margin
+        # on that same side is the other spelling of the same side, and one of
+        # the two lost: the margin class over the logical auto (alignRight +
+        # leftMargin 10 at x = 10, not 80, in a parent 100 wide), the auto over
+        # the margin (alignBottom + topMargin 10 left out of a wrapContent
+        # parent's height: 20, not 30). The declaration has the margin count in
+        # the size and not move the aligned child — so where the parent has a
+        # size on the axis the auto margin is spelled and the margin is not;
+        # where it wraps its content (no free space to take) the margin is
+        # spelled and the auto margin is not.
+        # The side (top / bottom / left / right) with such a margin, mapped to
+        # whether the auto margin is spelled there; nil when there is no such
+        # side (an overlay child is placed by its position classes instead).
+        EDGE_PUSHING_SIDE = { 'alignBottom' => 'top', 'alignTop' => 'bottom', 'alignRight' => 'left', 'alignLeft' => 'right' }.freeze
+
+        def edge_margin_sides
+          @edge_margin_sides ||= begin
+            sides = {}
+            unless json['_overlay']
+              EDGE_PUSHING_SIDE.each do |align, side|
+                next unless attributes[align] == true
+
+                axis = %w[left right].include?(side) ? :x : :y
+                next if center_margin_plan(axis)
+                pair = static_axis_margins(axis)
+                next unless pair && pair[%w[left top].include?(side) ? 0 : 1].positive?
+
+                bounded = json["_parent_bounded_#{axis == :x ? 'width' : 'height'}"] != false
+                sides[side] = bounded
+              end
+            end
+            sides
+          end
+        end
+
+        # Whether the auto margin on *side* is spelled (see edge_margin_sides).
+        def edge_auto_side?(side)
+          edge_margin_sides.fetch(side, true)
+        end
+
+        # The margin attributes as they are emitted (a Hash of the margin keys
+        # the node declares): an axis with a plan is
+        # spelled by its own keys (a `margins` array spread into the four, so
+        # the other axis keeps its own), each the half of the sum for :split,
+        # none for :drop and :auto.
+        def centered_margin_attributes
+          keys = %w[margins topMargin rightMargin bottomMargin leftMargin startMargin endMargin]
+          out = keys.each_with_object({}) { |k, h| h[k] = attributes[k] unless attributes[k].nil? }
+          plans = { x: center_margin_plan(:x), y: center_margin_plan(:y) }
+          # an edge side whose auto margin is spelled drops its static margin
+          dropped = edge_margin_sides.select { |_side, auto| auto }.keys
+          return out if plans.values.none? && dropped.empty?
+
+          if (m = out.delete('margins'))
+            m = [m] if m.is_a?(Numeric)
+            t, r, b, l = { 1 => [m[0]] * 4, 2 => [m[0], m[1], m[0], m[1]], 4 => m }[m.length] || [0, 0, 0, 0]
+            out['topMargin'] = t unless out.key?('topMargin')
+            out['bottomMargin'] = b unless out.key?('bottomMargin')
+            out['leftMargin'] = l unless out.key?('leftMargin') || out.key?('startMargin')
+            out['rightMargin'] = r unless out.key?('rightMargin') || out.key?('endMargin')
+          end
+          plans.each do |axis, plan|
+            next unless plan
+
+            first, second = static_axis_margins(axis)
+            keys = axis == :x ? %w[leftMargin rightMargin startMargin endMargin] : %w[topMargin bottomMargin]
+            keys.each { |k| out.delete(k) }
+            next unless plan == :split
+
+            half = (first + second) / 2.0
+            half = half.to_i if half == half.to_i
+            pair = axis == :x ? %w[leftMargin rightMargin] : %w[topMargin bottomMargin]
+            pair.each { |k| out[k] = half }
+          end
+          side_keys = { 'left' => %w[leftMargin startMargin], 'right' => %w[rightMargin endMargin],
+                        'top' => %w[topMargin], 'bottom' => %w[bottomMargin] }
+          dropped.each { |side| side_keys[side].each { |k| out.delete(k) } }
+          out
+        end
+
+        # The classes a literal center on *axis* takes in flow: the auto
+        # margins, unless the plan says otherwise (none for a stacked or an
+        # absolute child, which are centered by their own position classes;
+        # align-self for the cross axis).
+        def center_self_classes(axis)
+          auto = axis == :x ? 'mx-auto' : 'my-auto'
+          case center_margin_plan(axis)
+          when nil, :auto then [auto]
+          when :drop then []
+          else json['_overlay'] || !flow_cross_axis?(axis) ? [] : ['self-center']
+          end
+        end
+
+        # centerHorizontal / centerVertical: the literal classes, or for a bound
+        # one its runtime style; returns whether the literal classes apply.
+        def centered_flag(axis, value)
+          expr = bound_value_expr(value)
+          return !!value unless expr   # as before: any literal but false / nil
+
+          bound_center_style(axis, expr)
+          false
+        end
+
+        # A bound center's runtime style on *axis*: the auto margins while it
+        # holds, as always — except where the parent wraps its content on that
+        # axis (or it is the cross axis of a wrapping parent) and the axis has a
+        # margin: there auto margins have no free space to take and drop the
+        # margin from the parent's size, so it holds the half of the margins'
+        # sum on each side instead, with align-self: center on the cross axis.
+        def bound_center_style(axis, expr)
+          prop = axis == :x ? 'marginInline' : 'marginBlock'
+          pair = static_axis_margins(axis)
+          wraps = json["_parent_bounded_#{axis == :x ? 'width' : 'height'}"] == false
+          if !json['_overlay'] && wraps && pair && pair.sum.positive?
+            dynamic_styles[prop] = "#{expr} ? '#{TailwindMapper.rem((pair.sum) / 2.0)}' : undefined"
+            dynamic_styles['alignSelf'] = "#{expr} ? 'center' : undefined" if flow_cross_axis?(axis)
+          else
+            dynamic_styles[prop] = "#{expr} ? 'auto' : undefined"
+          end
         end
 
         # The static horizontal margins a matchParent width leaves room for,
