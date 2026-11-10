@@ -69,7 +69,8 @@ RSpec.describe 'codegen of a facing link against a margined anchor' do
         let view: AnyView
         init(id: String, view: AnyView, constraints: [RelativePositionConstraint] = [],
              margins: EdgeInsets = .init(), size: CGSize? = nil,
-             widthMode: RelativeSizeMode = .wrapContent, heightMode: RelativeSizeMode = .wrapContent) {
+             widthMode: RelativeSizeMode = .wrapContent, heightMode: RelativeSizeMode = .wrapContent,
+             isGone: Bool = false) {
             self.id = id
             self.view = view
         }

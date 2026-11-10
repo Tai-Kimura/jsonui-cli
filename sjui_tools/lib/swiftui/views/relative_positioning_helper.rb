@@ -292,7 +292,16 @@ module SjuiTools
                     emit_relative_constraints(child)
                     add_line "margins: #{relative_margins(child)},"
                     add_line "widthMode: #{relative_size_mode(child, 'width')},"
-                    add_line "heightMode: #{relative_size_mode(child, 'height')}"
+                    if has_visibility
+                      add_line "heightMode: #{relative_size_mode(child, 'height')},"
+                      # A gone child takes no size and no position, and a constraint that names it does not
+                      # apply (attribute_semantics goneModel; the library's RelativePositionContainer leaves it
+                      # out). The same expression the VisibilityWrapper above draws by, so a binding is read
+                      # when the view is (ticket relative-constraint-to-gone-anchor-keeps-its-place).
+                      add_line "isGone: (#{vis_param}) == \"gone\""
+                    else
+                      add_line "heightMode: #{relative_size_mode(child, 'height')}"
+                    end
                   end
                   add_line index < children.length - 1 ? ")," : ")"
                 end
