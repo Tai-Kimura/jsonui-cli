@@ -1,6 +1,7 @@
 """Convert SVG images to platform-specific formats.
 
-- iOS: Create .imageset in *.xcassets with PDF (preserves-vector-representation)
+- iOS: Create .imageset in *.xcassets with PDF (preserves-vector-representation),
+  or the PNG/JPEG itself when the SVG is only one embedded raster covering it
 - Android: Convert SVG to Android Vector Drawable XML (or extract raster
   PNG/JPEG when the SVG only wraps a base64 data URI)
 - Web: Copy SVG as-is to public/images/
@@ -35,6 +36,9 @@ class ImageConverter:
     ) -> Path | None:
         """Create an .imageset inside *xcassets_dir* with a PDF converted from SVG.
 
+        An SVG that is nothing but one embedded PNG/JPEG covering its canvas
+        (`_whole_canvas_raster`) is written as that PNG/JPEG instead.
+
         Conversion priority:
         1. ``rsvg-convert`` (Homebrew: ``brew install librsvg``)
         2. ``cairosvg`` Python package (``pip install cairosvg``)
@@ -48,25 +52,42 @@ class ImageConverter:
         imageset_dir = xcassets_dir / f"{name}.imageset"
         imageset_dir.mkdir(parents=True, exist_ok=True)
 
-        pdf_name = f"{name}.pdf"
-        dest_pdf = imageset_dir / pdf_name
+        raster = _whole_canvas_raster(svg_path)
+        if raster is not None:
+            # A picture that is only one embedded PNG/JPEG goes in as that
+            # file, as on Android: through rsvg-convert the JPEG came out
+            # re-encoded and about 7x larger (151,386 bytes -> a 1,145,847
+            # byte PDF; ticket jui-ios-raster-only-svg-inflates-as-pdf).
+            ext, data, scale = raster
+            filename = f"{name}.{ext}"
+            _write_if_changed(imageset_dir / filename, data)
+            image: dict[str, Any] = {"filename": filename, "idiom": "universal"}
+            if scale > 1:
+                # pixels / canvas, so the asset keeps the SVG's size in points
+                image["scale"] = f"{scale}x"
+            properties: dict[str, Any] = {"template-rendering-intent": "original"}
+        else:
+            filename = f"{name}.pdf"
+            if not _svg_to_pdf(svg_path, imageset_dir / filename):
+                return None
+            image = {"filename": filename, "idiom": "universal"}
+            properties = {
+                "preserves-vector-representation": True,
+                "template-rendering-intent": "original",
+            }
 
-        if not _svg_to_pdf(svg_path, dest_pdf):
-            return None
+        # The other form's file from an earlier build (the SVG changed between
+        # vector and raster) would sit in the set unreferenced.
+        for ext in _IOS_ASSET_EXTS:
+            stale = imageset_dir / f"{name}.{ext}"
+            if stale.name != filename:
+                stale.unlink(missing_ok=True)
 
         # Write Contents.json
         contents = {
-            "images": [
-                {
-                    "filename": pdf_name,
-                    "idiom": "universal",
-                }
-            ],
+            "images": [image],
             "info": {"author": "jui", "version": 1},
-            "properties": {
-                "preserves-vector-representation": True,
-                "template-rendering-intent": "original",
-            },
+            "properties": properties,
         }
         contents_path = imageset_dir / "Contents.json"
         _write_if_changed(contents_path, (json.dumps(contents, indent=2) + "\n").encode("utf-8"))
@@ -118,13 +139,19 @@ class ImageConverter:
         paths: list[dict[str, str]] = []
         _collect_paths(root, ns, paths)
 
+        lost = _android_loses(root, paths)
+        if lost:
+            print(f"  WARNING: {svg_path.name}: Android {lost}")
+
         if not paths:
             # SVG with no drawable paths — fall back to raster extraction
             # for AI-generated illustrations that wrap a base64 PNG/JPEG in
             # an <image> tag. Without this the file was silently dropped.
             raster = _extract_raster_image(root)
             if raster is not None:
-                return _write_raster_drawable(svg_path, drawable_dir, raster, name)
+                out = _write_raster_drawable(svg_path, drawable_dir, raster, name)
+                _remove_other_drawables(drawable_dir, out)
+                return out
             return None
 
         # Build Vector Drawable XML
@@ -182,6 +209,7 @@ class ImageConverter:
         lines.append("")
 
         out_path.write_text("\n".join(lines), encoding="utf-8")
+        _remove_other_drawables(drawable_dir, out_path)
         return out_path
 
     # ------------------------------------------------------------------ #
@@ -499,6 +527,176 @@ def _extract_raster_image(root: ET.Element) -> tuple[str, bytes] | None:
         if not data:
             continue
         return ext, data
+    return None
+
+
+_IOS_ASSET_EXTS = ("pdf", "png", "jpg")
+_PIXEL_SLACK = 1.0
+
+
+def _whole_canvas_raster(svg_path: Path) -> tuple[str, bytes, int] | None:
+    """``(ext, bytes, scale)`` when the SVG is one embedded PNG/JPEG filling its canvas.
+
+    Only the shape that loses nothing when the SVG is dropped for the raster:
+    no drawable shapes, exactly one ``<image>``, its ``href``/``xlink:href`` a
+    PNG or JPEG data URI, at 0,0 and the canvas's size, with no transform on
+    it or around it, and the canvas (``width``/``height``, which must agree
+    with the ``viewBox``) 1/2/3 times smaller than the pixels on both axes,
+    to within a pixel, so ``scale`` keeps the asset the SVG's size in points. Anything else
+    (WebP, which an asset catalog does not take; an external href; two
+    images; a picture drawn over the image) is None and stays a PDF.
+    """
+    try:
+        root = ET.parse(svg_path).getroot()
+    except (ET.ParseError, OSError):
+        return None
+    shapes: list[dict[str, str]] = []
+    _collect_paths(root, {}, shapes)
+    if shapes:
+        return None
+    images = _images(root)
+    if len(images) != 1 or not _fills_canvas(root, images[0]):
+        return None
+    image = images[0]
+    cw, ch = _canvas_size(root)  # type: ignore[misc]  # _fills_canvas read it
+    raster = _extract_raster_image(image)
+    if raster is None:
+        return None
+    ext, data = raster
+    pixels = _raster_pixel_size(ext, data)
+    if pixels is None:
+        return None
+    pw, ph = pixels
+    scale = round(pw / cw)
+    if scale not in (1, 2, 3) or round(ph / ch) != scale:
+        return None
+    # Within a pixel on each axis: an export rounds the canvas or the pixels
+    # (280x427 drawn from 840x1280 is 1 px short of 3x; a 341.33 canvas for
+    # 1024 px is 0.01 over), and a pixel is not a difference anyone sees.
+    if abs(pw - cw * scale) > _PIXEL_SLACK or abs(ph - ch * scale) > _PIXEL_SLACK:
+        return None
+    return ext, data, scale
+
+
+def _images(root: ET.Element) -> list[ET.Element]:
+    return [e for e in root.iter() if _local_tag(e.tag) == "image"]
+
+
+def _fills_canvas(root: ET.Element, image: ET.Element) -> bool:
+    """True when *image* sits at 0,0 at the canvas's size and nothing in the SVG is transformed."""
+    if any(e.get("transform") for e in root.iter()):
+        return False
+    canvas = _canvas_size(root)
+    if canvas is None:
+        return False
+    try:
+        x = float(_strip_unit(image.get("x", "0")) or 0)
+        y = float(_strip_unit(image.get("y", "0")) or 0)
+        iw = float(_strip_unit(image.get("width", "")))
+        ih = float(_strip_unit(image.get("height", "")))
+    except ValueError:
+        return False
+    return (x, y, iw, ih) == (0, 0, canvas[0], canvas[1])
+
+
+def _android_loses(root: ET.Element, paths: list[dict[str, str]]) -> str | None:
+    """What of an SVG's ``<image>`` the Android drawable does not carry, said for a WARNING; None when nothing.
+
+    The output itself is unchanged (a vector drawable draws no images; the
+    raster fallback takes the first PNG/JPEG data URI whole); this only stops
+    the loss being silent (ticket jui-android-svg-image-dropped-silently).
+    """
+    images = _images(root)
+    if not images:
+        return None
+    if paths:
+        return f"draws only the shapes: {len(images)} <image> dropped (a vector drawable has no images)"
+    raster = _extract_raster_image(root)
+    if raster is None:
+        kinds = sorted({_image_kind(e) for e in images})
+        return f"writes nothing: the <image> is {' / '.join(kinds)} (only an embedded PNG/JPEG is taken)"
+    if len(images) > 1:
+        return f"writes only the first PNG/JPEG of {len(images)} <image>"
+    if not _fills_canvas(root, images[0]):
+        return "writes the embedded picture whole: its position, size or transform in the SVG is not kept"
+    return None
+
+
+def _image_kind(image: ET.Element) -> str:
+    href = (image.get("{http://www.w3.org/1999/xlink}href") or image.get("href") or "").strip()
+    if not href:
+        return "without an href"
+    m = re.match(r"data:([^;,]*)", href, re.IGNORECASE)
+    if m:
+        return f"a {m.group(1) or 'data'} data URI"
+    return "an external file"
+
+
+def _remove_other_drawables(drawable_dir: Path, written: Path) -> None:
+    """Remove the other form's file for the same name (drawable/<name>.xml or drawable-nodpi/<name>.png|jpg).
+
+    Both forms otherwise stay side by side when an SVG changes between vector
+    and raster, and aapt2 links the pair without complaint, so a device could
+    show the old picture.
+    """
+    stem = written.stem
+    candidates = [drawable_dir / f"{stem}.xml"] + [
+        drawable_dir.parent / "drawable-nodpi" / f"{stem}.{ext}" for ext in ("png", "jpg")
+    ]
+    for path in candidates:
+        if path != written:
+            path.unlink(missing_ok=True)
+
+
+def _canvas_size(root: ET.Element) -> tuple[float, float] | None:
+    """The SVG's size in points: ``width``/``height`` and ``viewBox`` agreeing (either alone is enough)."""
+    try:
+        size = None
+        if root.get("width") and root.get("height"):
+            size = (float(_strip_unit(root.get("width"))), float(_strip_unit(root.get("height"))))
+        viewbox = (root.get("viewBox") or "").replace(",", " ").split()
+        if viewbox:
+            if len(viewbox) != 4:
+                return None
+            vx, vy, vw, vh = (float(v) for v in viewbox)
+            if (vx, vy) != (0, 0) or (size is not None and size != (vw, vh)):
+                return None
+            size = (vw, vh)
+    except ValueError:
+        return None
+    if size is None or size[0] <= 0 or size[1] <= 0:
+        return None
+    return size
+
+
+def _raster_pixel_size(ext: str, data: bytes) -> tuple[int, int] | None:
+    """A PNG's or JPEG's width and height in pixels, read from its header."""
+    if ext == "png":
+        if data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
+            return None
+        return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+    if data[:2] != b"\xff\xd8":
+        return None
+    i = 2
+    while i + 4 <= len(data):
+        if data[i] != 0xFF:
+            return None
+        marker = data[i + 1]
+        if marker == 0xFF:
+            i += 1
+            continue
+        if marker in (0xD8, 0x01) or 0xD0 <= marker <= 0xD7:
+            i += 2
+            continue
+        length = int.from_bytes(data[i + 2:i + 4], "big")
+        # SOF0..SOF15 except DHT (C4), JPG (C8), DAC (CC)
+        if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+            if i + 9 > len(data):
+                return None
+            h = int.from_bytes(data[i + 5:i + 7], "big")
+            w = int.from_bytes(data[i + 7:i + 9], "big")
+            return (w, h) if w and h else None
+        i += 2 + length
     return None
 
 

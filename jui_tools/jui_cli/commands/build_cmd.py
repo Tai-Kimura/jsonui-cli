@@ -3121,7 +3121,8 @@ def _distribute_images(
 ) -> bool:
     """Convert SVGs in images_directory and distribute to each platform.
 
-    - iOS:     *.xcassets/{name}.imageset/ (SVG + Contents.json)
+    - iOS:     *.xcassets/{name}.imageset/ (PDF, or the one PNG/JPEG the SVG
+               only wraps, + Contents.json)
     - Android: res/drawable/{name}.xml    (Vector Drawable)
     - Web:     public/images/{name}.svg   (copy as-is)
 
