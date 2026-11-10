@@ -34,7 +34,10 @@ MCP の `mcp__jui-tools__jui_*` ツール群はこれらの薄いラッパ（07�
    その絵を scale 付きで、Android は drawable-nodpi に置く（WebP も）。絵と図形が混ざる・2 枚・位置ずれなどは、
    Android は 3 倍の PNG（drawable-xxhdpi）に描く。外の href の `<image>` は 3 つの OS で WARNING。
    古い出力を消すのは jui が書いた物だけ: iOS は jui の Contents.json が名指しした物、Android は
-   `.jsonui-cli/image-outputs.json` の記録にある物）→ `_distribute_hotload_config`（iOS/Android バンドルに
+   `.jsonui-cli/image-outputs.json` の記録にある物。記録に無い同じ名前の drawable は `same_name_drawables` が
+   名指しする: 同じ置き場所で拡張子違いは ERROR（Android のビルドが落ちる形。build は止めず、stage の失敗として
+   台帳 `JUI_STAGE_FAILURES` に載り、終わりに exit 1）、置き場所違いは WARNING（古い方が出る密度を添える。
+   利用者の密度別の組は黙る））→ `_distribute_hotload_config`（iOS/Android バンドルに
    `hotloader.json`、Android は `network_security_config.xml` の cleartext IP をマーカーブロックで管理）
 2. **API モデル同期** `_sync_api_models`: swagger → DTO + Domain（`core/api_model_sync.py` の
    collect_docs / plan_for / apply_plan）。halt 不変条件（多ファイル `$ref`、直接自己参照など）で

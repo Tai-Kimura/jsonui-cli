@@ -16,7 +16,7 @@ from pathlib import Path
 from ..core.screen_identity import is_layout_path
 from ..core.config_manager import ConfigManager
 from ..core.generated_marker import json_marker
-from ..core.image_converter import ImageConverter, ImageOutputs
+from ..core.image_converter import ImageConverter, ImageOutputs, same_name_drawables
 from ..core import image_modes
 from ..core.layout_variant import (
     INLINE_ONLY_CLASSES,
@@ -725,6 +725,26 @@ def _exit_for_incomplete(incomplete: list, args) -> int:
         f"Pass --allow-partial to accept a partial tree."
     )
     return 1
+
+
+def _note_stage_failure(stage: str, message: str) -> None:
+    """Add a stage that did not complete to this build's ledger (``JUI_STAGE_FAILURES``).
+
+    The entry the platform tools write (shared/core/stage_failures.rb), for
+    a failure found in jui itself that does not stop the build: the closing
+    block names it and the build exits 1 (`_exit_for_incomplete`). Without
+    the variable (a caller outside `cmd_build`) only the printed line says it.
+    """
+    path = os.environ.get("JUI_STAGE_FAILURES")
+    if not path:
+        return
+    ledger = Path(path)
+    entries = _stage_failures(ledger)
+    entries.append({"stage": stage, "message": message})
+    try:
+        ledger.write_text(json.dumps(entries), encoding="utf-8")
+    except OSError:
+        pass
 
 
 def _stage_failures(ledger: Path) -> list:
@@ -3198,14 +3218,27 @@ def _distribute_images(
             else:
                 dest = platform_root / "app" / "src" / "main" / "res" / "drawable"
 
+            written = {}
             for svg, name in pictures:
                 result = ImageConverter.convert_android(svg, dest, name, outputs=outputs)
                 if result:
                     count += 1
+                    written[result.name.split(".", 1)[0]] = (svg.name, result)
                     # Pictures land in the sibling drawable-nodpi/ (as they
                     # are) or drawable-xxhdpi/ (drawn as a PNG)
                     if result.parent.name.startswith(("drawable-nodpi", "drawable-xxhdpi")):
                         raster_count += 1
+            # What else in res/drawable*/ has a written name: an earlier
+            # build's output the record does not name stays (ticket
+            # jui-android-drawable-same-name-two-extensions-after-first-record).
+            # The ERROR does not stop the build — iOS and web are still
+            # generated — and is a stage that did not complete, so the
+            # build exits 1 at its end as any such stage does
+            # (_exit_for_incomplete).
+            for level, line, summary in same_name_drawables(dest.parent, written):
+                print(line)
+                if level == "ERROR":
+                    _note_stage_failure("images: android", summary)
             built.append("android")
 
         elif platform == "web":
