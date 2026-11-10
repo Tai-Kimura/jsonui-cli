@@ -5,8 +5,9 @@ shared/core/include_constraint_targets_fixture.json holds specimens — a
 screen and the partials it includes, and, for each constrained element, its
 expanded id and its constraint attributes with their expanded targets. Each
 specimen goes through the sjui and kjui include expanders (the codegen's
-expansion; SwiftUI and Compose are generated from what they return), and the
-constraints of the expanded screen are read back. Both must equal `expected`.
+expansion; SwiftUI and Compose are generated from what they return) and jui's
+own Python expander, and the constraints of the expanded screen are read
+back. Each must equal `expected`.
 
 Measured on v2.5.24 before the change: under an include with an id the
 elements' ids were prefixed (`cardA`) and the targets naming them were not
@@ -95,4 +96,19 @@ def test_the_fixture_covers_every_constraint_key():
 @pytest.mark.parametrize("name", SPECIMENS)
 def test_the_expanded_screen_names_each_target_as_it_is_spelled(roots, tool, name):
     expanded = _expand(tool, roots[name])
+    assert _constraints(expanded, KEYS) == FIXTURE["specimens"][name]["expected"]
+
+
+@pytest.mark.parametrize("name", SPECIMENS)
+def test_the_python_expander_names_each_target_as_the_codegen_does(roots, name):
+    """jui's own expander (`jui_cli.core.normalizer`, what the spec validator,
+    coverage and `jui build`'s relative-constraint check read layouts with)
+    applies the same rule (ticket jui-relative-constraint-target-not-a-sibling)."""
+    from jui_cli.core.normalizer.include_expander import CONSTRAINT_TARGET_KEYS, IncludeExpander
+    from jui_cli.core.normalizer.style_merger import StyleMerger
+
+    assert list(CONSTRAINT_TARGET_KEYS) == KEYS
+    layouts = roots[name] / "layouts"
+    screen = json.loads((layouts / FIXTURE["screen"]).read_text(encoding="utf-8"))
+    expanded = IncludeExpander(layouts, StyleMerger(layouts)).expand(screen)
     assert _constraints(expanded, KEYS) == FIXTURE["specimens"][name]["expected"]
