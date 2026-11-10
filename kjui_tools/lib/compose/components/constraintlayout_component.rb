@@ -108,7 +108,11 @@ module KjuiTools
           # One createRef per child — constrainAs below references every
           # child, so every ref must exist (the old code declared refs only
           # for id/positioned children but constrained all of them).
-          hash_children = children.select { |c| c.is_a?(Hash) }
+          # A data-only child (`{"data": [...]}`) declares the screen's data
+          # and draws nothing — it gets no ref (the dispatch skips it, and an
+          # unused `val view_0 = createRef()` was one more line for the
+          # section split to strand).
+          hash_children = children.select { |c| c.is_a?(Hash) && !data_only_child?(c) }
           ref_names = hash_children.each_with_index.map { |child, index| child['id'] || "view_#{index}" }
           ref_names.each do |ref_name|
             code += "\n" + indent("val #{ref_name} = createRef()", depth + 1)
@@ -176,6 +180,12 @@ module KjuiTools
           startMargin endMargin marginTop marginBottom marginLeft
           marginRight marginStart marginEnd
         ].freeze
+
+        def self.data_only_child?(child)
+          # The entries ComposeBuilder#generate_component skips (no type, no include).
+          !child.key?('type') && !child.key?('include') &&
+            (child.key?('data') || child.key?('shared_data') || child.key?('variables'))
+        end
 
         def self.inject_constrain_as(child_data, component_code, depth, index, anchor_paddings = {}, refs: nil,
                                      required_imports: nil)
