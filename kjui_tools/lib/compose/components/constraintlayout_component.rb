@@ -109,8 +109,8 @@ module KjuiTools
           # child, so every ref must exist (the old code declared refs only
           # for id/positioned children but constrained all of them).
           hash_children = children.select { |c| c.is_a?(Hash) }
-          hash_children.each_with_index do |child, index|
-            ref_name = child['id'] || "view_#{index}"
+          ref_names = hash_children.each_with_index.map { |child, index| child['id'] || "view_#{index}" }
+          ref_names.each do |ref_name|
             code += "\n" + indent("val #{ref_name} = createRef()", depth + 1)
           end
           code += "\n" if hash_children.any?
@@ -154,7 +154,8 @@ module KjuiTools
             # linkTo() must read the margins — resolve the ORIGINAL child by
             # index (order is preserved 1:1 with prepared_children).
             child_decorator: lambda do |_child, child_code, child_depth, index|
-              inject_constrain_as(hash_children[index], child_code, child_depth, index, anchor_paddings)
+              inject_constrain_as(hash_children[index], child_code, child_depth, index, anchor_paddings,
+                                  refs: ref_names)
             end
           }
         end
@@ -167,9 +168,9 @@ module KjuiTools
           marginRight marginStart marginEnd
         ].freeze
 
-        def self.inject_constrain_as(child_data, component_code, depth, index, anchor_paddings = {})
+        def self.inject_constrain_as(child_data, component_code, depth, index, anchor_paddings = {}, refs: nil)
           ref_name = child_data['id'] || "view_#{index}"
-          constraints = Helpers::ModifierBuilder.build_relative_positioning(child_data, anchor_paddings)
+          constraints = Helpers::ModifierBuilder.build_relative_positioning(child_data, anchor_paddings, refs: refs)
           constraint_content = constraints.any? ? constraints.map { |c| indent(c, depth + 2) }.join("\n") : ""
           block = "modifier = Modifier.constrainAs(#{ref_name}) {"
           block += "\n#{constraint_content}" unless constraint_content.empty?

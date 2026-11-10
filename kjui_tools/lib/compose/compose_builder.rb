@@ -1557,10 +1557,11 @@ module KjuiTools
           map[child['id']] = Helpers::ModifierBuilder.margin_padding_terms(child) if child.is_a?(Hash) && child['id']
         end
 
-        # Generate children with constraints
+        # Generate children with constraints (linking only to the refs above)
+        ref_names = children.select { |c| c.is_a?(Hash) && c['id'] }.map { |c| c['id'] }
         children.each do |child|
           next unless child.is_a?(Hash)
-          child_code = generate_safe_area_child_with_constraints(child, depth + 1, anchor_paddings)
+          child_code = generate_safe_area_child_with_constraints(child, depth + 1, anchor_paddings, refs: ref_names)
           code += "\n" + child_code unless child_code.empty?
         end
 
@@ -1568,12 +1569,12 @@ module KjuiTools
         code
       end
 
-      def generate_safe_area_child_with_constraints(child_data, depth, anchor_paddings = {})
+      def generate_safe_area_child_with_constraints(child_data, depth, anchor_paddings = {}, refs: nil)
         ref_name = child_data['id']
         component_type = child_data['type'] || 'View'
 
         # Build constraints for this child
-        constraints = Helpers::ModifierBuilder.build_relative_positioning(child_data, anchor_paddings)
+        constraints = Helpers::ModifierBuilder.build_relative_positioning(child_data, anchor_paddings, refs: refs)
 
         # Generate the component based on the type it is drawn as (an app's
         # component as written; an HStack is a View with orientation

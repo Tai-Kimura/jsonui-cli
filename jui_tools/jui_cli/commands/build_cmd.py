@@ -449,6 +449,13 @@ def cmd_build(args: argparse.Namespace) -> int:
     _stage_env_before = os.environ.get("JUI_STAGE_FAILURES")
     os.environ["JUI_STAGE_FAILURES"] = str(_stage_ledger)
 
+    # A relative constraint names a sibling (ticket jui-relative-constraint-
+    # target-not-a-sibling). Not a hard gate: the platforms are still
+    # generated, and the build exits 1 at its end (_exit_for_incomplete), as
+    # the images stage's ERROR does — so it runs once the ledger is there.
+    with clock.stage("relative constraint targets"):
+        _check_relative_constraint_targets(config_mgr, platforms)
+
     def _halt(code: int) -> int:
         """Record what this run wrote, then return `code`.
 
@@ -2309,6 +2316,67 @@ def _check_layout_id_uniqueness(config_mgr: ConfigManager, platforms) -> bool:
     for line in errors:
         print(f"  - {line}")
     return False
+
+
+def _check_relative_constraint_targets(config_mgr: ConfigManager, platforms) -> list:
+    """Name every relative constraint whose target is not a sibling.
+
+    align*OfView / align*View / alignCenter*View place an element against
+    another child of the same container. A target that is not one was a
+    different thing on each face (2.5.25: Compose did not compile for seven
+    of eight such shapes, SwiftUI dropped the constraint, the web found a
+    sibling's child and moved an element that names itself out of its
+    frame) and nothing said so. Read per platform the project builds, with
+    the includes expanded as the codegen expands them
+    (`jui_cli.core.relative_targets`). Each finding is an ERROR line and one
+    stage that did not complete; the build goes on and exits 1 at its end.
+    """
+    from ..core.platform_resolver import VALID_PLATFORMS
+    from ..core.relative_targets import constraint_target_findings, included_stems
+
+    layouts_dir = config_mgr.layouts_directory
+    if not layouts_dir.exists():
+        return []
+    skip_prefixes = {"Resources"}
+    styles_src = config_mgr.styles_directory
+    if styles_src.exists() and layouts_dir in styles_src.parents:
+        skip_prefixes.add(styles_src.relative_to(layouts_dir).parts[0])
+    targets = [p for p in VALID_PLATFORMS if not platforms or p in platforms]
+    styles_dir = styles_src if styles_src.exists() else layouts_dir
+
+    names = []
+    trees = {}
+    for src_file in sorted(layouts_dir.rglob("*.json")):
+        rel = src_file.relative_to(layouts_dir)
+        if rel.parts[0] in skip_prefixes:
+            continue
+        name = rel.with_suffix("").as_posix()
+        names.append(name)
+        try:
+            trees[name] = json.loads(src_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+    included = included_stems(trees)
+
+    by_finding: dict = {}
+    for name in names:
+        for platform in targets:
+            for finding in constraint_target_findings(name, platform, layouts_dir=layouts_dir,
+                                                      styles_dir=styles_dir,
+                                                      included=name in included):
+                by_finding.setdefault(finding, []).append(platform)
+    if not by_finding:
+        return []
+    lines = [f.line(["all"] if ps == targets else ps) for f, ps in by_finding.items()]
+    print("ERROR [relative-constraints]: a relative constraint (align*OfView / align*View / "
+          "alignCenter*View) places an element against another child of the same container. "
+          "These name something else — on Android the generated Compose does not compile, on "
+          "iOS and the web the constraint is dropped or lands elsewhere:")
+    for line in lines:
+        print(f"  - {line}")
+    _note_stage_failure("layouts: relative constraints",
+                        f"{len(lines)} relative constraint(s) name something that is not a sibling")
+    return lines
 
 
 def _check_variant_constraints(config_mgr: ConfigManager) -> bool:

@@ -1783,7 +1783,16 @@ module KjuiTools
 
         # anchor_paddings: id => margin_padding_terms of the siblings whose
         # margins are drawn as padding (ConstraintLayoutComponent passes them).
-        def self.build_relative_positioning(json_data, anchor_paddings = {})
+        #
+        # refs: the names this ConstraintLayout declares with createRef(), or
+        # nil (not checked). A target not among them is not a sibling — a
+        # parent, a sibling's child, another container's element, an id
+        # nothing carries — and linking to it is an unresolved reference
+        # that does not compile; `jui build` names it as an ERROR
+        # ([relative-constraints], ticket jui-relative-constraint-target-
+        # not-a-sibling), and the link is left out so the project still
+        # compiles, as iOS and the web drop the constraint.
+        def self.build_relative_positioning(json_data, anchor_paddings = {}, refs: nil)
           # These attributes require ConstraintLayout
           # They generate constraint references instead of modifiers
           constraints = []
@@ -1810,48 +1819,49 @@ module KjuiTools
           # it is subtracted — `bottom.linkTo(a.top, margin = m)` puts the
           # bottom at a.top - m, and the drawn top is a.top + the margin.
           neg = ->(terms) { terms.map { |t| "(-#{t})" } }
-          if (a = json_data['alignTopOfView'])
+          known = ->(target) { refs.nil? || refs.include?(target) }
+          if (a = json_data['alignTopOfView']) && known.(a)
             constraints << "bottom.linkTo(#{a}.top#{link_margin([own.(bottom_margin), *neg.(pad.(a, :top))])})"
           end
 
-          if (a = json_data['alignBottomOfView'])
+          if (a = json_data['alignBottomOfView']) && known.(a)
             constraints << "top.linkTo(#{a}.bottom#{link_margin([own.(top_margin), *neg.(pad.(a, :bottom))])})"
           end
 
-          if (a = json_data['alignLeftOfView'])
+          if (a = json_data['alignLeftOfView']) && known.(a)
             constraints << "end.linkTo(#{a}.start#{link_margin([own.(end_margin), *neg.(pad.(a, :start))])})"
           end
 
-          if (a = json_data['alignRightOfView'])
+          if (a = json_data['alignRightOfView']) && known.(a)
             constraints << "start.linkTo(#{a}.end#{link_margin([own.(start_margin), *neg.(pad.(a, :end))])})"
           end
 
           # Align edges with other views: the anchor's drawn edge (its margin
           # inward), then the child's own margin pulls it the expected way —
           # linkTo's margin pushes away, so the own term is negated.
-          if (a = json_data['alignTopView'])
+          if (a = json_data['alignTopView']) && known.(a)
             constraints << "top.linkTo(#{a}.top#{link_margin([*pad.(a, :top), pulled.(top_margin)])})"
           end
 
-          if (a = json_data['alignBottomView'])
+          if (a = json_data['alignBottomView']) && known.(a)
             constraints << "bottom.linkTo(#{a}.bottom#{link_margin([*pad.(a, :bottom), pulled.(bottom_margin)])})"
           end
 
-          if (a = json_data['alignLeftView'])
+          if (a = json_data['alignLeftView']) && known.(a)
             constraints << "start.linkTo(#{a}.start#{link_margin([*pad.(a, :start), pulled.(start_margin)])})"
           end
 
-          if (a = json_data['alignRightView'])
+          if (a = json_data['alignRightView']) && known.(a)
             constraints << "end.linkTo(#{a}.end#{link_margin([*pad.(a, :end), pulled.(end_margin)])})"
           end
 
           # Center with other views: between the anchor's drawn edges.
-          if (a = json_data['alignCenterVerticalView'])
+          if (a = json_data['alignCenterVerticalView']) && known.(a)
             constraints << "top.linkTo(#{a}.top#{link_margin(pad.(a, :top))})"
             constraints << "bottom.linkTo(#{a}.bottom#{link_margin(pad.(a, :bottom))})"
           end
 
-          if (a = json_data['alignCenterHorizontalView'])
+          if (a = json_data['alignCenterHorizontalView']) && known.(a)
             constraints << "start.linkTo(#{a}.start#{link_margin(pad.(a, :start))})"
             constraints << "end.linkTo(#{a}.end#{link_margin(pad.(a, :end))})"
           end

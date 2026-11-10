@@ -78,6 +78,15 @@ class IncludeExpander:
                 included = self._style_merger.resolve(included)
                 include_id = node.get("id")
                 new_prefix = _derive_prefix(id_prefix, include_id)
+                # A constraint between two elements of this partial names its
+                # target by the id the partial wrote; the element's id takes
+                # this include's prefix, so the target does too — before the
+                # include node's own attributes are merged in, which name the
+                # including layout's elements and stay as written (sjui / kjui
+                # prefix_constraint_targets; held by
+                # shared/core/include_constraint_targets_fixture.json).
+                if new_prefix:
+                    _prefix_constraint_targets(included, new_prefix, set(_declared_ids(included)))
 
                 # Merge parent overrides (excluding include/id)
                 for key, value in node.items():
@@ -228,6 +237,52 @@ def _to_camel_case(s: str) -> str:
         return s
     parts = s.split("_")
     return parts[0] + "".join(p.capitalize() for p in parts[1:])
+
+
+#: The attributes that name another element of the same container as a
+#: constraint's target (common.json align*OfView / align*View / alignCenter*View).
+CONSTRAINT_TARGET_KEYS = (
+    "alignTopOfView", "alignBottomOfView", "alignLeftOfView", "alignRightOfView",
+    "alignTopView", "alignBottomView", "alignLeftView", "alignRightView",
+    "alignCenterVerticalView", "alignCenterHorizontalView",
+)
+
+
+def _declared_ids(node: Any, ids: list | None = None) -> list:
+    """The ids a partial declares itself: not inside a partial it includes,
+    not an include node's id (a prefix, not an element)."""
+    ids = [] if ids is None else ids
+    if isinstance(node, dict):
+        if "include" in node:
+            return ids
+        if isinstance(node.get("id"), str):
+            ids.append(node["id"])
+        kids = node.get("child", node.get("children"))
+        if kids is not None:
+            _declared_ids(kids, ids)
+    elif isinstance(node, list):
+        for item in node:
+            _declared_ids(item, ids)
+    return ids
+
+
+def _prefix_constraint_targets(node: Any, prefix: str, ids: set) -> None:
+    """Prefix, in place, each constraint target in *node* that names one of
+    *ids*. An include node's own attributes are read (they land on its
+    root); the partial it names is not entered."""
+    if isinstance(node, dict):
+        for key in CONSTRAINT_TARGET_KEYS:
+            target = node.get(key)
+            if isinstance(target, str) and target in ids:
+                node[key] = _combine_with_prefix(prefix, target)
+        if "include" in node:
+            return
+        kids = node.get("child", node.get("children"))
+        if kids is not None:
+            _prefix_constraint_targets(kids, prefix, ids)
+    elif isinstance(node, list):
+        for item in node:
+            _prefix_constraint_targets(item, prefix, ids)
 
 
 def _combine_with_prefix(prefix: str | None, name: str) -> str:
