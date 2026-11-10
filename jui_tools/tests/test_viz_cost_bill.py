@@ -97,6 +97,10 @@ def test_the_modifiers_the_source_gives():
     base = prices.cost(table, "claude-opus-5-5", USAGE)[0]
     assert prices.cost(table, "claude-opus-5-5", {**USAGE, "inference_geo": "us"})[0] == pytest.approx(base * 1.1)
     assert prices.cost(table, "claude-opus-5-5", {**USAGE, "speed": "fast"})[0] == pytest.approx(base * 2)   # 8/40 = 2x every kind
+    fable = prices.cost(table, "claude-fable-5-2", USAGE)[0]                       # 8 / 10 / 16 / 0.2 / 40, fast 16/80
+    assert fable == pytest.approx(base * 2 - USAGE["cache_read_input_tokens"] * 0.2 / 1e6)   # 2x opus 5.5 but the same cache read
+    assert prices.cost(table, "claude-fable-5-2", {**USAGE, "speed": "fast"})[0] == pytest.approx(fable * 2)
+    assert prices.cost(table, "claude-fable-5-2", {**USAGE, "inference_geo": "us"})[0] == pytest.approx(fable * 1.1)
     small = {"input_tokens": 1000, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "output_tokens": 1000}
     big = {**small, "cache_read_input_tokens": 100_000}     # prompt over 100,000 counts the cache reads
     assert prices.cost(table, "claude-haiku-5-5", small)[0] == pytest.approx((1000 * 0.1 + 1000 * 0.5) / 1e6)
@@ -105,7 +109,7 @@ def test_the_modifiers_the_source_gives():
 
 def test_the_shipped_table_says_where_its_prices_come_from_and_every_row_is_whole():
     d = json.loads(prices.DEFAULT_PATH.read_text())
-    assert d["source"] == "https://platform.claude.com/docs/en/about-claude/pricing" and d["checked"] == "2026-10-19"
+    assert d["source"] == "https://platform.claude.com/docs/en/about-claude/pricing" and d["checked"] == "2026-11-10"
     for model, row in d["models"].items():
         assert prices.MODEL_RE.fullmatch(model) and prices.check_row(row) is None, model
         assert row["cache_read"] < row["input"] < row["cache_write_5m"] < row["cache_write_1h"] < row["output"], model
