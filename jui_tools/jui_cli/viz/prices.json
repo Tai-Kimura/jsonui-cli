@@ -2,9 +2,11 @@
  "about": "The prices viz uses for the estimated cost (USD) of one response over its robot (ticket 2026-10-19-jui-viz-cost-bill-over-robot). USD per million tokens, copied from the source below on the checked date, never guessed: a model whose ID or price could not be confirmed there is left out, and a response of a model not in the table shows no amount. The user's own table (<viz home>/prices.json; `jui viz prices`, or the page's 単価 sheet) overrides and adds to this one. cache_read: cache hits and refreshes. long: the prices of a request whose prompt (input + cache writes + cache reads) is over `over` tokens. fast: fast mode's input and output (the caching multipliers of the row apply on top, per the source). us: the multiplier of inference_geo \"us\" (Claude 4.6 and later).",
  "source": "https://platform.claude.com/docs/en/about-claude/pricing",
  "ids_source": "https://platform.claude.com/docs/en/about-claude/models/overview and https://platform.claude.com/docs/en/about-claude/models/model-ids-and-versions",
- "checked": "2026-10-19",
+ "checked": "2026-11-10",
  "derived": "Every number below is the source's table except fast mode's cache prices: the source's fast mode table gives input and output only, so prices.cost derives the cache writes and reads as fast input × the row's own cache multipliers, by the source's rule (verbatim: \"Prompt caching multipliers apply on top of fast mode pricing\"). Rows with such a derived price say so with \"cache\": \"derived\" in their fast object.",
  "models": {
+  "claude-fable-5-2": {"input": 8, "cache_write_5m": 10, "cache_write_1h": 16, "cache_read": 0.2, "output": 40, "us": 1.1,
+                       "fast": {"input": 16, "output": 80, "cache": "derived"}},
   "claude-fable-5-1": {"input": 10, "cache_write_5m": 12.5, "cache_write_1h": 20, "cache_read": 0.25, "output": 50, "us": 1.1},
   "claude-opus-5-5": {"input": 4, "cache_write_5m": 5, "cache_write_1h": 8, "cache_read": 0.2, "output": 20, "us": 1.1,
                       "fast": {"input": 8, "output": 40, "cache": "derived"}},
