@@ -25,6 +25,18 @@ on:
     # runs in both iOS jobs), then tag. The schedule has no inputs, so it keeps
     # `master` / `main`.
     inputs:
+      # A short run that draws only the named fixtures (and each one's
+      # control) on every face and uploads them, for baking a baseline the
+      # full run then has: a fixture whose picture is new or changed made the
+      # full run red (no_baseline / MOVED), its artifacts were baked, and the
+      # whole run went again. Named, the probes and android-library-tests are
+      # off and the report (the gate) does not run; empty, the run is what it
+      # always was (.github/scripts/conformance_only.py).
+      only:
+        description: "Draw ONLY these fixtures (ids, comma-separated) and their controls, for a baseline bake: no probes, no report/gate. Empty = the full run"
+        required: false
+        default: ''
+        type: string
       swiftjsonui_ref:
         description: "SwiftJsonUI ref (branch, tag or SHA) both iOS jobs check out"
         required: false
@@ -140,6 +152,11 @@ jobs:
       chromium: ${{ steps.library_sha.outputs.chromium }}
     steps:
       - uses: actions/checkout@v4
+      - name: Narrow to the dispatched fixtures (only)
+        if: ${{ inputs.only != '' }}
+        env:
+          ONLY: ${{ inputs.only }}
+        run: python3 .github/scripts/conformance_only.py narrow conformance "$ONLY"
       - uses: actions/setup-node@v4
         with:
           node-version: "24" # scripts/run.ts relies on native TS type stripping (Node >= 23)
@@ -250,6 +267,11 @@ jobs:
       JSONUI_TEST_RUNNER_PATH: ${{ github.workspace }}/jsonui-test-runner
     steps:
       - uses: actions/checkout@v4
+      - name: Narrow to the dispatched fixtures (only)
+        if: ${{ inputs.only != '' }}
+        env:
+          ONLY: ${{ inputs.only }}
+        run: python3 .github/scripts/conformance_only.py narrow conformance "$ONLY"
       - uses: actions/checkout@v4
         with:
           repository: Tai-Kimura/SwiftJsonUI
@@ -342,14 +364,15 @@ jobs:
           SIMULATOR_OS: "26"
           # The opt-in probes read these through the test runner (TEST_RUNNER_
           # prefix stripped); "0" when not dispatched with image_probes.
-          TEST_RUNNER_DECORATIVE_IMAGE_PROBE: ${{ (inputs.image_probes || github.event_name == 'schedule') && '1' || '0' }}
-          TEST_RUNNER_IMAGE_EVENTS_PROBE: ${{ (inputs.image_probes || github.event_name == 'schedule') && '1' || '0' }}
+          TEST_RUNNER_DECORATIVE_IMAGE_PROBE: ${{ (inputs.only == '' && (inputs.image_probes || github.event_name == 'schedule')) && '1' || '0' }}
+          TEST_RUNNER_IMAGE_EVENTS_PROBE: ${{ (inputs.only == '' && (inputs.image_probes || github.event_name == 'schedule')) && '1' || '0' }}
           # A fixed staging of the caller's (kept after a green run, for the
           # per-test record below); /tmp, as run_conformance.sh's own.
           CONFORMANCE_STAGING: /tmp/jsonui-conformance-ios.ci
           CONFORMANCE_SHARD: ${{ matrix.shard }}/${{ env.IOS_SHARDS }}
-          IOS_PROBES: ${{ (inputs.ios_probes || github.event_name == 'schedule') && 'true' || 'false' }}
+          IOS_PROBES: ${{ (inputs.only == '' && (inputs.ios_probes || github.event_name == 'schedule')) && 'true' || 'false' }}
           SHARD_MODE: ios
+          ONLY: ${{ inputs.only }}
         run: |
           # When this step began, for record_xctests.py's phase times (printed only).
           date +%s > "$RUNNER_TEMP/suite-started"
@@ -362,7 +385,12 @@ jobs:
           else
             echo "opt-in probes: off (dispatch with ios_probes=true to raise them)"
           fi
-          export CONFORMANCE_ONLY_TESTING="$(python3 .github/scripts/ios_shards.py plan SwiftJsonUI/ConformanceHost/UITests .github/scripts/ios_shard_weights.json "$SHARD_MODE" "$IOS_SHARDS" "${{ matrix.shard }}")"
+          # A dispatch with `only` runs the suite alone (its slice of the narrowed manifest), no probe class.
+          if [ -n "$ONLY" ]; then
+            export CONFORMANCE_ONLY_TESTING="$(python3 .github/scripts/ios_shards.py suite)"
+          else
+            export CONFORMANCE_ONLY_TESTING="$(python3 .github/scripts/ios_shards.py plan SwiftJsonUI/ConformanceHost/UITests .github/scripts/ios_shard_weights.json "$SHARD_MODE" "$IOS_SHARDS" "${{ matrix.shard }}")"
+          fi
           echo "shard $CONFORMANCE_SHARD: $(echo $CONFORMANCE_ONLY_TESTING | wc -w | tr -d ' ') test classes — $CONFORMANCE_ONLY_TESTING"
           SwiftJsonUI/ConformanceHost/scripts/run_conformance.sh
       - name: Record every XCTest result
@@ -429,6 +457,11 @@ jobs:
       SJUI_TOOLS_PATH: ${{ github.workspace }}/sjui_tools
     steps:
       - uses: actions/checkout@v4
+      - name: Narrow to the dispatched fixtures (only)
+        if: ${{ inputs.only != '' }}
+        env:
+          ONLY: ${{ inputs.only }}
+        run: python3 .github/scripts/conformance_only.py narrow conformance "$ONLY"
       - uses: actions/checkout@v4
         with:
           repository: Tai-Kimura/SwiftJsonUI
@@ -470,9 +503,10 @@ jobs:
           CONFORMANCE_STAGING: /tmp/jsonui-conformance-ios-codegen.ci
           CONFORMANCE_SHARD: ${{ matrix.shard }}/${{ env.IOS_SHARDS }}
           SHARD_MODE: ios-codegen
-          TEST_RUNNER_DECORATIVE_IMAGE_PROBE: ${{ (inputs.image_probes || github.event_name == 'schedule') && '1' || '0' }}
-          TEST_RUNNER_IMAGE_EVENTS_PROBE: ${{ (inputs.image_probes || github.event_name == 'schedule') && '1' || '0' }}
-          IOS_PROBES: ${{ (inputs.ios_probes || github.event_name == 'schedule') && 'true' || 'false' }}
+          ONLY: ${{ inputs.only }}
+          TEST_RUNNER_DECORATIVE_IMAGE_PROBE: ${{ (inputs.only == '' && (inputs.image_probes || github.event_name == 'schedule')) && '1' || '0' }}
+          TEST_RUNNER_IMAGE_EVENTS_PROBE: ${{ (inputs.only == '' && (inputs.image_probes || github.event_name == 'schedule')) && '1' || '0' }}
+          IOS_PROBES: ${{ (inputs.only == '' && (inputs.ios_probes || github.event_name == 'schedule')) && 'true' || 'false' }}
         run: |
           # When this step began, for record_xctests.py's phase times (printed only).
           date +%s > "$RUNNER_TEMP/suite-started"
@@ -485,7 +519,12 @@ jobs:
           else
             echo "opt-in probes: off (dispatch with ios_probes=true to raise them)"
           fi
-          export CONFORMANCE_ONLY_TESTING="$(python3 .github/scripts/ios_shards.py plan SwiftJsonUI/ConformanceHost/UITests .github/scripts/ios_shard_weights.json "$SHARD_MODE" "$IOS_SHARDS" "${{ matrix.shard }}")"
+          # A dispatch with `only` runs the suite alone (its slice of the narrowed manifest), no probe class.
+          if [ -n "$ONLY" ]; then
+            export CONFORMANCE_ONLY_TESTING="$(python3 .github/scripts/ios_shards.py suite)"
+          else
+            export CONFORMANCE_ONLY_TESTING="$(python3 .github/scripts/ios_shards.py plan SwiftJsonUI/ConformanceHost/UITests .github/scripts/ios_shard_weights.json "$SHARD_MODE" "$IOS_SHARDS" "${{ matrix.shard }}")"
+          fi
           echo "shard $CONFORMANCE_SHARD: $(echo $CONFORMANCE_ONLY_TESTING | wc -w | tr -d ' ') test classes — $CONFORMANCE_ONLY_TESTING"
           SwiftJsonUI/ConformanceHost/scripts/run_conformance.sh
       - name: Record every XCTest result
@@ -547,6 +586,11 @@ jobs:
       toolchain: ${{ steps.merge.outputs.toolchain }}
     steps:
       - uses: actions/checkout@v4
+      - name: Narrow to the dispatched fixtures (only)
+        if: ${{ inputs.only != '' }}
+        env:
+          ONLY: ${{ inputs.only }}
+        run: python3 .github/scripts/conformance_only.py narrow conformance "$ONLY"
       - uses: actions/checkout@v4
         with:
           repository: Tai-Kimura/SwiftJsonUI
@@ -563,7 +607,7 @@ jobs:
         run: |
           set -euo pipefail
           ls -d shards/ios-shard-* || true
-          python3 .github/scripts/ios_shards.py merge --mode ios --shards "$IOS_SHARDS" \
+          python3 .github/scripts/ios_shards.py merge --mode ios --shards "$IOS_SHARDS" ${{ inputs.only != '' && '--fixtures-only' || '' }} \
             --uitests SwiftJsonUI/ConformanceHost/UITests --manifest conformance/manifest.json \
             --out merged shards/ios-shard-*
           python3 .github/scripts/ios_shards.py meta shards/ios-shard-* | tee -a "$GITHUB_OUTPUT"
@@ -584,7 +628,7 @@ jobs:
           retention-days: 90
           path: merged/retaps.json
       - name: Every probe whose switch was raised ran
-        if: ${{ !cancelled() && (inputs.ios_probes || github.event_name == 'schedule') }}
+        if: ${{ !cancelled() && (inputs.only == '' && (inputs.ios_probes || github.event_name == 'schedule')) }}
         run: python3 .github/scripts/ios_probe_gates.py check merged/xctests.txt SwiftJsonUI/ConformanceHost/UITests
       - name: Upload results
         uses: actions/upload-artifact@v4
@@ -616,6 +660,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - name: Narrow to the dispatched fixtures (only)
+        if: ${{ inputs.only != '' }}
+        env:
+          ONLY: ${{ inputs.only }}
+        run: python3 .github/scripts/conformance_only.py narrow conformance "$ONLY"
       - uses: actions/checkout@v4
         with:
           repository: Tai-Kimura/SwiftJsonUI
@@ -632,7 +681,7 @@ jobs:
         run: |
           set -euo pipefail
           ls -d shards/ios-codegen-shard-* || true
-          python3 .github/scripts/ios_shards.py merge --mode ios-codegen --shards "$IOS_SHARDS" \
+          python3 .github/scripts/ios_shards.py merge --mode ios-codegen --shards "$IOS_SHARDS" ${{ inputs.only != '' && '--fixtures-only' || '' }} \
             --uitests SwiftJsonUI/ConformanceHost/UITests --manifest conformance/manifest.json \
             --out merged shards/ios-codegen-shard-*
           python3 .github/scripts/ios_shards.py meta shards/ios-codegen-shard-* | tee -a "$GITHUB_OUTPUT"
@@ -650,7 +699,7 @@ jobs:
           retention-days: 90
           path: merged/retaps.json
       - name: Every probe whose switch was raised ran
-        if: ${{ !cancelled() && (inputs.ios_probes || github.event_name == 'schedule') }}
+        if: ${{ !cancelled() && (inputs.only == '' && (inputs.ios_probes || github.event_name == 'schedule')) }}
         run: python3 .github/scripts/ios_probe_gates.py check merged/xctests.txt SwiftJsonUI/ConformanceHost/UITests
       - name: Upload results
         uses: actions/upload-artifact@v4
@@ -743,6 +792,11 @@ jobs:
       toolchain: ${{ steps.android_toolchain.outputs.spec }}
     steps:
       - uses: actions/checkout@v4
+      - name: Narrow to the dispatched fixtures (only)
+        if: ${{ inputs.only != '' }}
+        env:
+          ONLY: ${{ inputs.only }}
+        run: python3 .github/scripts/conformance_only.py narrow conformance "$ONLY"
       - uses: actions/checkout@v4
         with:
           repository: Tai-Kimura/KotlinJsonUI
@@ -888,6 +942,11 @@ jobs:
       KJUI_TOOLS_PATH: ${{ github.workspace }}/kjui_tools
     steps:
       - uses: actions/checkout@v4
+      - name: Narrow to the dispatched fixtures (only)
+        if: ${{ inputs.only != '' }}
+        env:
+          ONLY: ${{ inputs.only }}
+        run: python3 .github/scripts/conformance_only.py narrow conformance "$ONLY"
       - uses: actions/checkout@v4
         with:
           repository: Tai-Kimura/KotlinJsonUI
@@ -988,7 +1047,7 @@ jobs:
   # red already makes the run red.
   # ------------------------------------------------------------------ #
   android-library-tests:
-    if: ${{ !inputs.tap_repro }} # off when only the tap repro runs; on with android_library_only
+    if: ${{ !inputs.tap_repro && inputs.only == '' }} # off when only the tap repro runs, and for an `only` bake; on with android_library_only
     runs-on: ubuntu-latest
     # Budget. First run (36196156936, 2026-09-26, API 34): step 17.5 min,
     # gradle 15m47s for 262 cases on a good runner. The android job's
@@ -1022,7 +1081,7 @@ jobs:
         timeout-minutes: 110
         uses: reactivecircus/android-emulator-runner@v2
         env:
-          ANDROID_PROBES: ${{ (inputs.android_probes || github.event_name == 'schedule') && 'true' || 'false' }}
+          ANDROID_PROBES: ${{ (inputs.only == '' && (inputs.android_probes || github.event_name == 'schedule')) && 'true' || 'false' }}
         # API 35, not the conformance jobs' 34 (those keep 34 for their
         # baselines; this job has none). Measured 2026-09-26, same
         # KotlinJsonUI 329f5d6 and the same runner image. Only the classes
@@ -1103,7 +1162,7 @@ jobs:
     # wrong was turning "cannot produce a complete report" into "produce
     # nothing". The verdict step below keeps the run RED whenever a face is
     # missing — an incomplete report is "not judged", never "passed".
-    if: ${{ always() && !inputs.tap_repro && !inputs.android_library_only }}
+    if: ${{ always() && !inputs.tap_repro && !inputs.android_library_only && inputs.only == '' }} # an `only` run draws for a bake, not for the gate
     permissions:
       contents: read
       # ios_retaps.py reads the run before's retaps records (GET /actions/runs, /artifacts)
