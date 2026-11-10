@@ -75,11 +75,24 @@ RSpec.describe 'kjui codegen: relative alignment to a margined anchor' do
     expect(links(emitted('alignBottomOfView', anchor: anchor))).to eq(['top.linkTo(anchor.bottom, margin = (-30.dp))'])
   end
 
-  it "adds the target's own margin to the anchor's, as before" do
+  # The target's own margin on an align*View edge pushes it inward, as iOS
+  # and the web draw it (ticket kjui-align-to-view-in-visibility-wrapper-and-
+  # margin-sign): until 2.5.26 it was negated and drew outward.
+  it "adds the target's own margin to the anchor's, inward" do
     expect(links(emitted('alignTopView', target_extra: { 'topMargin' => 10 })))
-      .to eq(['top.linkTo(anchor.top, margin = (120.dp + (-10.dp)))'])
+      .to eq(['top.linkTo(anchor.top, margin = (120.dp + 10.dp))'])
     expect(links(emitted('alignTopOfView', target_extra: { 'bottomMargin' => 8 })))
       .to eq(['bottom.linkTo(anchor.top, margin = (8.dp + (-120.dp)))'])
+  end
+
+  # The margin of an axis no link places is kept by linking that axis to
+  # the parent: the child's margin keys are stripped for its links, and until
+  # 2.5.26 that margin was dropped (triage support 2's table, 12 rows).
+  it "keeps the target's margin on the axis no link places, as a link to the parent" do
+    expect(links(emitted('alignTopView', target_extra: { 'leftMargin' => 10 })))
+      .to eq(['top.linkTo(anchor.top, margin = 120.dp)', 'start.linkTo(parent.start, margin = 10.dp)'])
+    expect(links(emitted('alignLeftView', target_extra: { 'topMargin' => 10 })))
+      .to eq(['start.linkTo(anchor.start, margin = 120.dp)', 'top.linkTo(parent.top, margin = 10.dp)'])
   end
 
   it 'an anchor positioned by its own constraints keeps its margins in linkTo, so nothing is added (control)' do

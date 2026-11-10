@@ -46,6 +46,7 @@ module KjuiTools
             compose_key: "import androidx.compose.runtime.key",
             arrangement: "import androidx.compose.foundation.layout.Arrangement",
             absolute_offset: "import androidx.compose.foundation.layout.absoluteOffset",
+            offset: "import androidx.compose.foundation.layout.offset",
             keyboard_type: ["import androidx.compose.foundation.text.KeyboardOptions",
                             "import androidx.compose.ui.text.input.KeyboardType"],
             keyboard_actions: "import androidx.compose.foundation.text.KeyboardActions",

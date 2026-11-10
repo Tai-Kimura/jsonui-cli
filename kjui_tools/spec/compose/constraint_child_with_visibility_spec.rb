@@ -30,7 +30,7 @@ RSpec.describe 'kjui: a ConstraintLayout child with a visibility' do
     { 'type' => 'View', 'id' => id, 'width' => 20, 'height' => 20 }.merge(extra)
   end
 
-  ANCHOR = { 'type' => 'View', 'id' => 'a', 'width' => 40, 'height' => 40, 'leftMargin' => 30, 'topMargin' => 30 }.freeze
+  VIS_ANCHOR = { 'type' => 'View', 'id' => 'a', 'width' => 40, 'height' => 40, 'leftMargin' => 30, 'topMargin' => 30 }.freeze
 
   # The VisibilityWrapper call of *ref*: its argument list and its content.
   def wrapper(code, ref)
@@ -40,15 +40,15 @@ RSpec.describe 'kjui: a ConstraintLayout child with a visibility' do
     m
   end
 
-  CASES = {
-    'alignTopView' => [ANCHOR, { 'type' => 'View', 'id' => 's', 'width' => 10, 'height' => 10, 'alignTopView' => 'a', 'visibility' => '@{vis}' }],
-    'alignTopOfView' => [ANCHOR, { 'type' => 'View', 'id' => 's', 'width' => 10, 'height' => 10, 'alignTopOfView' => 'a', 'visibility' => '@{vis}' }],
-    'a literal gone' => [ANCHOR, { 'type' => 'View', 'id' => 's', 'width' => 10, 'height' => 10, 'alignLeftView' => 'a', 'visibility' => 'gone' }],
-    'hidden' => [ANCHOR, { 'type' => 'View', 'id' => 's', 'width' => 10, 'height' => 10, 'alignLeftView' => 'a', 'hidden' => '@{h}' }],
-    'a Label' => [ANCHOR, { 'type' => 'Label', 'id' => 's', 'text' => 'x', 'alignTopView' => 'a', 'visibility' => '@{vis}' }]
+  VIS_CASES = {
+    'alignTopView' => [VIS_ANCHOR, { 'type' => 'View', 'id' => 's', 'width' => 10, 'height' => 10, 'alignTopView' => 'a', 'visibility' => '@{vis}' }],
+    'alignTopOfView' => [VIS_ANCHOR, { 'type' => 'View', 'id' => 's', 'width' => 10, 'height' => 10, 'alignTopOfView' => 'a', 'visibility' => '@{vis}' }],
+    'a literal gone' => [VIS_ANCHOR, { 'type' => 'View', 'id' => 's', 'width' => 10, 'height' => 10, 'alignLeftView' => 'a', 'visibility' => 'gone' }],
+    'hidden' => [VIS_ANCHOR, { 'type' => 'View', 'id' => 's', 'width' => 10, 'height' => 10, 'alignLeftView' => 'a', 'hidden' => '@{h}' }],
+    'a Label' => [VIS_ANCHOR, { 'type' => 'Label', 'id' => 's', 'text' => 'x', 'alignTopView' => 'a', 'visibility' => '@{vis}' }]
   }.freeze
 
-  CASES.each do |name, children|
+  VIS_CASES.each do |name, children|
     it "constrains the wrapper, not what it wraps — #{name}" do
       [nil, 'SafeAreaView'].each do |root|
         code = root ? generate(children, root: root) : generate(children)
@@ -60,13 +60,13 @@ RSpec.describe 'kjui: a ConstraintLayout child with a visibility' do
   end
 
   it 'constrains an anchor that has a visibility, and links the others to it' do
-    code = generate([ANCHOR.merge('visibility' => '@{vis}'), box('s', 'alignTopView' => 'a')])
+    code = generate([VIS_ANCHOR.merge('visibility' => '@{vis}'), box('s', 'alignTopView' => 'a')])
     expect(wrapper(code, 'a')[:args]).to include('modifier = Modifier.constrainAs(a) {')
     expect(code).to include('top.linkTo(a.top')
   end
 
   it 'leaves a child with no visibility as it was' do
-    code = generate([ANCHOR, box('s', 'alignTopView' => 'a')])
+    code = generate([VIS_ANCHOR, box('s', 'alignTopView' => 'a')])
     expect(code).not_to include('VisibilityWrapper')
     expect(code).to match(/Box\(\s*\n\s*modifier = Modifier\.constrainAs\(s\)/)
   end
@@ -75,7 +75,7 @@ RSpec.describe 'kjui: a ConstraintLayout child with a visibility' do
   # wrapper's BoxScope content the ConstraintLayout scope's constrainAs is not
   # callable — what Gradle stopped on — and on the wrapper it is.
   it 'compiles, on both paths' do
-    emitted = CASES.values.flat_map do |children|
+    emitted = VIS_CASES.values.flat_map do |children|
       [generate(children), generate(children, root: 'SafeAreaView')]
     end.each_with_index.map { |code, i| "@Composable\nfun emitted#{i}(data: Data) {\n#{code}\n}" }.join("\n\n")
     expect(<<~KOTLIN).to compile_as_kotlin

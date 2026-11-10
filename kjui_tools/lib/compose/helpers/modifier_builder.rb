@@ -1648,7 +1648,7 @@ module KjuiTools
               # For Box and other containers, full alignment options
               [BoundValue.priority_modifier(
                 box_alignment_pairs(top, bottom, left, right, center_h, center_v, center_both)
-              )]
+              ), *build_center_margin_offset(json_data, required_imports)]
               # No default TopStart - let parent's contentAlignment handle it
             else
               []
@@ -1792,7 +1792,17 @@ module KjuiTools
         # ([relative-constraints], ticket jui-relative-constraint-target-
         # not-a-sibling), and the link is left out so the project still
         # compiles, as iOS and the web drop the constraint.
-        def self.build_relative_positioning(json_data, anchor_paddings = {}, refs: nil)
+        #
+        # margins_in_links: the child's margin keys were stripped for its
+        # links (ConstraintLayoutComponent, a positioned child) — its own
+        # margin is drawn by the links alone: an align*View margin pushes
+        # inward, as iOS and the web draw it, and the margin of an axis no
+        # link places is kept by linking that axis to the parent (ticket
+        # kjui-align-to-view-in-visibility-wrapper-and-margin-sign; measured
+        # by triage support 2 on four faces). Off (the SafeAreaView path,
+        # where every child draws its margins as padding too), the links are
+        # as they were.
+        def self.build_relative_positioning(json_data, anchor_paddings = {}, refs: nil, margins_in_links: false)
           # These attributes require ConstraintLayout
           # They generate constraint references instead of modifiers
           constraints = []
@@ -1811,14 +1821,18 @@ module KjuiTools
           end
 
           own = ->(m) { has_constraint_margin?(m) ? m : nil }
-          pulled = ->(m) { has_constraint_margin?(m) ? "(-#{m})" : nil }
+          pulled = if margins_in_links
+                     own
+                   else
+                     ->(m) { has_constraint_margin?(m) ? "(-#{m})" : nil }
+                   end
           pad = ->(anchor, edge) { (anchor_paddings[anchor] || {})[edge] || [] }
 
           # Relative to other views: the child's own margin is the gap, and
           # the anchor's margin on the facing edge is INSIDE its ref box, so
           # it is subtracted — `bottom.linkTo(a.top, margin = m)` puts the
           # bottom at a.top - m, and the drawn top is a.top + the margin.
-          neg = ->(terms) { terms.map { |t| "(-#{t})" } }
+          neg = ->(terms) { terms.map { |t| negate_dp(t) } }
           known = ->(target) { refs.nil? || refs.include?(target) }
           if (a = json_data['alignTopOfView']) && known.(a)
             constraints << "bottom.linkTo(#{a}.top#{link_margin([own.(bottom_margin), *neg.(pad.(a, :top))])})"
@@ -1888,26 +1902,129 @@ module KjuiTools
             constraints << "end.linkTo(parent.end#{margin})"
           end
           
-          if json_data['centerHorizontal']
-            constraints << "start.linkTo(parent.start)"
-            constraints << "end.linkTo(parent.end)"
+          # A centre's links carry the child's margins when they are drawn by
+          # the links (margins_in_links: a child that also has a positioning
+          # constraint, its margin keys stripped) — the box it is centred by,
+          # and a wrapContent parent's size, include them as on iOS; the
+          # offset ConstraintLayoutComponent adds moves the content back to
+          # the centre (ModifierBuilder.build_center_margin_offset).
+          center_margin = ->(m) { margins_in_links && has_constraint_margin?(m) ? ", margin = #{m}" : "" }
+          if json_data['centerHorizontal'] || json_data['centerInParent']
+            constraints << "start.linkTo(parent.start#{center_margin.(start_margin)})"
+            constraints << "end.linkTo(parent.end#{center_margin.(end_margin)})"
           end
-          
-          if json_data['centerVertical']
-            constraints << "top.linkTo(parent.top)"
-            constraints << "bottom.linkTo(parent.bottom)"
+
+          if json_data['centerVertical'] || json_data['centerInParent']
+            constraints << "top.linkTo(parent.top#{center_margin.(top_margin)})"
+            constraints << "bottom.linkTo(parent.bottom#{center_margin.(bottom_margin)})"
           end
-          
-          if json_data['centerInParent']
-            constraints << "top.linkTo(parent.top)"
-            constraints << "bottom.linkTo(parent.bottom)"
-            constraints << "start.linkTo(parent.start)"
-            constraints << "end.linkTo(parent.end)"
+
+          if margins_in_links
+            horizontal = constraints.any? { |c| c.start_with?('start.', 'end.') }
+            vertical = constraints.any? { |c| c.start_with?('top.', 'bottom.') }
+            constraints << "start.linkTo(parent.start, margin = #{start_margin})" if !horizontal && has_constraint_margin?(start_margin)
+            constraints << "top.linkTo(parent.top, margin = #{top_margin})" if !vertical && has_constraint_margin?(top_margin)
           end
-          
+
           constraints
         end
-        
+
+        # `.offset(...)` that centres a child on the axis it centres itself
+        # on (centerHorizontal / centerVertical / centerInParent), or [].
+        # Its margins stay drawn as padding, so the box it is centred by — and
+        # a wrapContent parent's size — includes them, as on iOS and the
+        # Android Dynamic renderer; the padding puts the content off centre by
+        # half the difference of the two margins on that axis, and this moves
+        # it back. The declaration (attribute_semantics margins.offsetModel)
+        # gives a margin no effect on the position a center places. Drawn as
+        # padding alone it moved the element by half the margin (ticket
+        # kjui-align-to-view-in-visibility-wrapper-and-margin-sign; measured
+        # by triage support 2 on four faces, wrapContent parents included).
+        # Only a child's own center declaration — a parent's gravity is not
+        # it. `offset`, not `absoluteOffset`: the padding is start/end, and
+        # mirrors under RTL with it.
+        def self.build_center_margin_offset(json_data, required_imports = nil)
+          values = center_margin_offsets(json_data)
+          return [] if values.empty?
+
+          required_imports&.add(:offset)
+          [".offset(#{values.map { |axis, value| "#{axis} = #{value}" }.join(', ')})"]
+        end
+
+        # {x:, y:} — the Dp expression of each axis build_center_margin_offset
+        # moves, only the axes it moves. A sibling aligned to the child adds
+        # them to reach the box it draws (ConstraintLayoutComponent).
+        def self.center_margin_offsets(json_data)
+          return {} unless json_data.is_a?(Hash)
+
+          both = BoundValue.bool(json_data['centerInParent'])
+          axes = { x: any_of(BoundValue.bool(json_data['centerHorizontal']), both),
+                   y: any_of(BoundValue.bool(json_data['centerVertical']), both) }
+          terms = margin_padding_terms(json_data)
+          {
+            x: half_difference(terms[:end], terms[:start]),
+            y: half_difference(terms[:bottom], terms[:top])
+          }.each_with_object({}) do |(axis, value), out|
+            state = axes[axis]
+            next if value.nil? || state == :off
+
+            out[axis] = state == :on ? value : "(if (#{state}) #{value} else 0.dp)"
+          end
+        end
+
+        # *terms* (margin_padding_terms) with the centre offset of
+        # *json_data* added: its drawn box moves by it, its ref box does not
+        # (an offset is applied after layout).
+        def self.with_center_margin_offset(terms, json_data)
+          offsets = center_margin_offsets(json_data)
+          return terms if offsets.empty?
+
+          out = terms.transform_values(&:dup)
+          if (x = offsets[:x])
+            out[:start] << x
+            out[:end] << negate_dp(x)
+          end
+          if (y = offsets[:y])
+            out[:top] << y
+            out[:bottom] << negate_dp(y)
+          end
+          out
+        end
+
+        # -value as a Dp expression; a negative literal loses its sign
+        # rather than becoming `--5.dp` (Kotlin's decrement).
+        def self.negate_dp(value)
+          return value.delete_prefix('-') if value.start_with?('-') && value.match?(LITERAL_DP)
+
+          "(-#{value})"
+        end
+
+        def self.any_of(*states)
+          return :on if states.include?(:on)
+
+          dynamic = states.reject { |state| state == :off }
+          return :off if dynamic.empty?
+
+          dynamic.length == 1 ? dynamic.first : "(#{dynamic.join(' || ')})"
+        end
+
+        LITERAL_DP = /\A-?\d+(?:\.\d+)?\.dp\z/.freeze
+
+        # (far - near) / 2 as a Dp expression, or nil when it is zero.
+        def self.half_difference(far, near)
+          return nil if far.empty? && near.empty?
+
+          if (far + near).all? { |t| t.match?(LITERAL_DP) }
+            sum = ->(ts) { ts.sum { |t| t.delete_suffix('.dp').to_f } }
+            half = (sum.(far) - sum.(near)) / 2.0
+            return nil if half.zero?
+
+            return "#{half == half.to_i ? half.to_i : half}.dp"
+          end
+          side = ->(ts) { ts.empty? ? '0.dp' : (ts.length == 1 ? ts.first : "(#{ts.join(' + ')})") }
+          "((#{side.(far)} - #{side.(near)}) / 2)"
+        end
+
         # is_root: when true, start the modifier chain from the caller's
         # `modifier` (lowercase) parameter instead of a fresh `Modifier`.
         # The generated *GeneratedView function signature exposes

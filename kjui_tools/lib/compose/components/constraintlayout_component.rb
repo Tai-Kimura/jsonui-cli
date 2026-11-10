@@ -138,10 +138,19 @@ module KjuiTools
           # The siblings whose margins are drawn as padding (not stripped):
           # a sibling aligned to one adds its margin to reach the drawn box
           # (ModifierBuilder.margin_padding_terms).
+          # A child centred on an axis is drawn moved by its centre offset
+          # (build_center_margin_offset), its ref box is not: that is added
+          # too, for a positioned child as well.
           anchor_paddings = hash_children.each_with_index.each_with_object({}) do |(child, index), map|
-            next if has_positioning_constraints?(child)
+            terms = if has_positioning_constraints?(child)
+                      { top: [], bottom: [], start: [], end: [] }
+                    else
+                      Helpers::ModifierBuilder.margin_padding_terms(child)
+                    end
+            terms = Helpers::ModifierBuilder.with_center_margin_offset(terms, child)
+            next if terms.values.all?(&:empty?)
 
-            map[child['id'] || "view_#{index}"] = Helpers::ModifierBuilder.margin_padding_terms(child)
+            map[child['id'] || "view_#{index}"] = terms
           end
 
           {
@@ -155,7 +164,7 @@ module KjuiTools
             # index (order is preserved 1:1 with prepared_children).
             child_decorator: lambda do |_child, child_code, child_depth, index|
               inject_constrain_as(hash_children[index], child_code, child_depth, index, anchor_paddings,
-                                  refs: ref_names)
+                                  refs: ref_names, required_imports: required_imports)
             end
           }
         end
@@ -168,13 +177,18 @@ module KjuiTools
           marginRight marginStart marginEnd
         ].freeze
 
-        def self.inject_constrain_as(child_data, component_code, depth, index, anchor_paddings = {}, refs: nil)
+        def self.inject_constrain_as(child_data, component_code, depth, index, anchor_paddings = {}, refs: nil,
+                                     required_imports: nil)
           ref_name = child_data['id'] || "view_#{index}"
-          constraints = Helpers::ModifierBuilder.build_relative_positioning(child_data, anchor_paddings, refs: refs)
+          constraints = Helpers::ModifierBuilder.build_relative_positioning(child_data, anchor_paddings, refs: refs,
+                                                                            margins_in_links: has_positioning_constraints?(child_data))
           constraint_content = constraints.any? ? constraints.map { |c| indent(c, depth + 2) }.join("\n") : ""
           block = "modifier = Modifier.constrainAs(#{ref_name}) {"
           block += "\n#{constraint_content}" unless constraint_content.empty?
           block += "\n" + indent("}", depth + 1)
+          # A child centred on an axis is moved back to the centre by half
+          # the difference of its margins on it (build_center_margin_offset).
+          block += Helpers::ModifierBuilder.build_center_margin_offset(child_data, required_imports).join
 
           # A child with a visibility is drawn inside VisibilityWrapper
           # (VisibilityHelper). Its content lambda is a BoxScope, where the
