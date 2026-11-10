@@ -8,13 +8,13 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "bf398b04e29572a2c3a74d28e768186c67bd44ba26f7eeacbb7837c500ccec78",
+  "generatedFrom": "d0beb2a945282a8220d152f723b41b26ff632ab75a56c3bdb7f63d8c3dcaa8b2",
   "counts": {
-    "fixtures": 1286,
+    "fixtures": 1288,
     "assertable": 54,
-    "visual": 980,
+    "visual": 981,
     "interactive": 41,
-    "control": 133,
+    "control": 134,
     "declarationOnly": 77,
     "skipped": 158,
     "promoted": {
@@ -30266,6 +30266,53 @@
       "state": null,
       "promotedFrom": null,
       "control": "__control/Label__wrap-max"
+    },
+    {
+      "class": "visual",
+      "host": "View",
+      "aliasOf": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "state": null,
+      "promotedFrom": null,
+      "id": "__control/View__gone-anchor",
+      "component": "__control",
+      "attribute": null,
+      "case": "View__gone-anchor",
+      "writtenKey": null,
+      "value": null,
+      "layout": "fixtures/__control/View__gone-anchor.layout.json",
+      "test": "fixtures/__control/View__gone-anchor.test.json",
+      "control": null,
+      "isControl": true
+    },
+    {
+      "class": "visual",
+      "host": "View",
+      "aliasOf": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "state": null,
+      "promotedFrom": null,
+      "id": "common/visibility__gone_anchor",
+      "component": "common",
+      "attribute": "visibility",
+      "case": "gone_anchor",
+      "writtenKey": "visibility",
+      "value": "gone",
+      "layout": "fixtures/common/visibility__gone_anchor.layout.json",
+      "test": "fixtures/common/visibility__gone_anchor.test.json",
+      "control": "__control/View__gone-anchor"
     },
     {
       "id": "Collection/cellAddress__scroll_1",

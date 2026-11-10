@@ -945,6 +945,19 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
         summary.files_written += 1
     fixture_entries.extend(bounds_entries)
 
+    # A constraint that names a gone element (visibility.goneModel): the
+    # sweep's visibility__gone is one element, so what gone does to layout is
+    # invisible to it — see gone_fixtures module docstring.
+    from .gone_fixtures import build_gone_fixtures
+
+    gone_files, gone_entries = build_gone_fixtures(source_label)
+    for rel_path, payload in gone_files:
+        target = out_dir / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(_dump_json(payload), encoding="utf-8")
+        summary.files_written += 1
+    fixture_entries.extend(gone_entries)
+
     # Collection cell-address fixtures (flow track): the sweep's Collection
     # fixtures are all visual, and the Android suite skips waitFor for
     # visual fixtures, so nothing ever asked whether a cell is reachable —
@@ -1114,6 +1127,11 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
         1 for e in bounds_entries if e["class"] == "visual" and not e.get("isControl")
     )
     summary.control_count += sum(1 for e in bounds_entries if e.get("isControl"))
+    summary.fixture_count += len(gone_entries)
+    summary.visual_count += sum(
+        1 for e in gone_entries if e["class"] == "visual" and not e.get("isControl")
+    )
+    summary.control_count += sum(1 for e in gone_entries if e.get("isControl"))
 
     _attach_after_first_draw(out_dir, fixture_entries)
 

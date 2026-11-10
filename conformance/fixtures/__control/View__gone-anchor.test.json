@@ -1,0 +1,31 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/__control/View__gone-anchor.layout.json"
+  },
+  "metadata": {
+    "name": "conformance View__gone-anchor",
+    "description": "Control for the gone-anchor fixture: the same frames and children with no anchor.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "View__gone-anchor",
+      "description": "Control for the gone-anchor fixture: the same frames and children with no anchor.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "control_View__gone-anchor"
+        }
+      ]
+    }
+  ]
+}
