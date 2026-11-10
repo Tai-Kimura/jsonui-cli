@@ -314,7 +314,14 @@ class GenerationRun:
     #: that used to share one value — the ticket's 0 ≠ not-observed, on the
     #: directory axis (found by an independent check's probe, 2026-09-11).
     roots: tuple | None = None
-    #: How many paths `observe` was handed. None = observe never ran.
+    #: How many paths the scan found. None = no scan ran. `observe` sets it
+    #: from the scan before the run; a producer that scans again afterwards
+    #: (jui build) sets it from that one through `observe_after`, the same
+    #: moment `tracked`, `outsideDeclaredRoots` and the roots it adds speak
+    #: of — the count before the run was one build behind every file the run
+    #: created or removed, and the next build that changed nothing rewrote
+    #: the record to catch up (ticket jui-generation-manifest-observed-lags-
+    #: a-new-file: 235 → 236 one build late on a consumer's 2.5.25).
     observed: int | None = None
 
     # --- what the run found afterwards ---------------------------------
@@ -359,6 +366,12 @@ class GenerationRun:
             state = _state_of(path)
             if state is not None:
                 self.before[self._key(path, listings=listings)] = state
+
+    def observe_after(self, paths) -> None:
+        """The scan's count from the tree after the run: what the record
+        describes. The state before the run, which `written` compares
+        against, stays as `observe` recorded it."""
+        self.observed = len(list(paths))
 
     def add_roots(self, roots) -> None:
         """Directories the run created or found after `observe`.

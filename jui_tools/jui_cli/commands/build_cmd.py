@@ -808,6 +808,8 @@ def _record_generation(config_mgr, gen_run, present, *, roots=None, bootstrap=Tr
 
     if roots is not None:
         gen_run.add_roots(roots)
+    # The record describes the tree after the run, as `tracked` and the roots do.
+    gen_run.observe_after(present)
     known = set(generation_manifest.load_migrated(config_mgr.project_root))
     gen_run.written(present, known=known, bootstrap=bootstrap)
     # Observed here, at the point it is measured — not computed at the print
