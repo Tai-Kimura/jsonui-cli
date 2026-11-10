@@ -154,26 +154,8 @@ module RjuiTools
         # The root of the partial this node includes — through a partial whose
         # root is itself an include, to the element that root draws.
         def partial_root_node
-          root_dir = @config['_layouts_dir'] || (@config['layouts_directory'] && File.expand_path(@config['layouts_directory']))
-          return nil unless root_dir
-
-          include_path = json['include']
-          seen = []
-          loop do
-            return nil if seen.include?(include_path)
-
-            seen << include_path
-            path = File.join(root_dir, "#{include_path}.json")
-            return nil unless File.file?(path)
-
-            tree = StyleLoader.load_and_merge(JSON.parse(File.read(path, encoding: 'UTF-8')))
-            return nil unless tree.is_a?(Hash)
-            return tree unless tree['include'].is_a?(String)
-
-            include_path = tree['include']
-          end
-        rescue JSON::ParserError
-          nil
+          resolved = IncludePlace.resolve(json, @config)
+          resolved && resolved[1]
         end
 
         # The static class tokens of *node* drawn as a layout's root, its

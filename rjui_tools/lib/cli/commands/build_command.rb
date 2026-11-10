@@ -172,6 +172,7 @@ module RjuiTools
           @config['_place_stems'] = layout_trees.values.flat_map { |tree| React::IncludePaths.include_stems(tree) }
                                                 .uniq.select { |stem| layout_trees.key?(stem) }.sort
           @config['_place_cache'] = {}
+          @config['_partial_root_cache'] = {}
           emit_include_place_helper unless @config['_place_stems'].empty?
 
           # Where an include call site reads the partial it hands data to.

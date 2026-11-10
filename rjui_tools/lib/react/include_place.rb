@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require 'json'
+require_relative 'style_loader'
+
 module RjuiTools
   module React
     # Where an included layout's root sits in the layout that includes it.
@@ -36,6 +39,87 @@ module RjuiTools
       HELPER = 'jsonuiPlaceClass'
 
       module_function
+
+      # The layouts directory the include paths are read against.
+      def layouts_dir(config)
+        config['_layouts_dir'] || (config['layouts_directory'] && File.expand_path(config['layouts_directory']))
+      end
+
+      # The include nodes from *include_node* down to the element its partial
+      # draws (a partial whose root is itself an include is followed), and
+      # that element: [[include, ...], root]. nil when a partial cannot be read
+      # or the includes go round. Read once per file in a build.
+      def resolve(include_node, config)
+        dir = layouts_dir(config)
+        return nil unless dir && include_node.is_a?(Hash) && include_node['include'].is_a?(String)
+
+        cache = (config['_partial_root_cache'] ||= {})
+        chain = [include_node]
+        loop do
+          include_path = chain.last['include']
+          return nil if chain[0...-1].any? { |n| n['include'] == include_path }
+
+          tree = cache.fetch(include_path) do
+            path = File.join(dir, "#{include_path}.json")
+            cache[include_path] =
+              if File.file?(path)
+                begin
+                  StyleLoader.load_and_merge(JSON.parse(File.read(path, encoding: 'UTF-8')))
+                rescue JSON::ParserError
+                  nil
+                end
+              end
+          end
+          return nil unless tree.is_a?(Hash)
+          return [chain, tree] unless tree['include'].is_a?(String)
+
+          chain << tree
+        end
+      end
+
+      # The element a container lays out for *child*: the child, or for an
+      # include, the root its partial draws.
+      def laid_out(child, config)
+        return child unless child.is_a?(Hash) && child['include'].is_a?(String)
+
+        resolved = resolve(child, config)
+        resolved ? resolved[1] : child
+      end
+
+      # The JavaScript expression of the DOM id an include's root carries in
+      # the including layout (the id the partial's root writes, under the
+      # prefixes of the includes above it — design U8), or nil when an include
+      # on the way has a bound id. With the prefix off, the include's literal
+      # id is the root's (the component's `id` prop).
+      def root_dom_id_js(include_node, config)
+        resolved = resolve(include_node, config)
+        return nil unless resolved
+
+        chain, root = resolved
+        root_id = root['id']
+        return nil unless literal_id?(root_id)
+
+        unless config['_include_id_prefix']
+          outer = chain.first['id']
+          return nil if outer && !literal_id?(outer)
+
+          return js_string(outer || root_id)
+        end
+
+        prefix = 'idPrefix'
+        chain.each do |node|
+          id = node['id']
+          next if id.nil?
+          return nil unless literal_id?(id)
+
+          prefix = "jsonuiIncludePrefix(#{prefix}, #{js_string(id)})"
+        end
+        "jsonuiIncludeId(#{prefix}, #{js_string(root_id)})"
+      end
+
+      def literal_id?(id)
+        id.is_a?(String) && !id.empty? && !id.include?('@{')
+      end
 
       # The component name an include of *stem* calls (IncludeConverter).
       def component_name(stem)

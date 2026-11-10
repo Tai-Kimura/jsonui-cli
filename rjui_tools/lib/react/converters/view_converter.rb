@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'base_converter'
+require_relative '../include_place'
 
 module RjuiTools
   module React
@@ -347,7 +348,12 @@ module RjuiTools
           alignCenterVerticalView alignCenterHorizontalView
         ].freeze
 
+        # An include is laid out as the root its partial draws, so a
+        # constraint on that root makes the include a constrained child (ticket
+        # rjui-include-root-sibling-constraint-dropped). MUST stay in sync with
+        # ReactGenerator#relative_constraint_for.
         def relative_positioned?(child)
+          child = IncludePlace.laid_out(child, config)
           return false unless child.is_a?(Hash)
 
           id = child['id']
@@ -371,7 +377,7 @@ module RjuiTools
           first = items.find { |child| relative_positioned?(child) }
           return '' unless first
 
-          " ref={#{snake_to_camel_id(first['id'])}RelRef}"
+          " ref={#{snake_to_camel_id(IncludePlace.laid_out(first, config)['id'])}RelRef}"
         end
 
         def convert_children(indent)

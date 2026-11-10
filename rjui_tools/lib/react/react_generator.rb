@@ -623,7 +623,7 @@ module RjuiTools
         # createXxxData() defaults so every member is present for the body's
         # reads.
         include_prefix = @config['_include_id_prefix']
-        uses_id_prefix = include_prefix && jsx_content.match?(/\bidPrefix\b/)
+        uses_id_prefix = include_prefix && (jsx_content.match?(/\bidPrefix\b/) || relative_position_declarations.match?(/\bidPrefix\b/))
         props_interface = generate_data_props_interface(name, uses_data, data_type: data_name,
                                                                     id_prefix: include_prefix,
                                                                     path: @config['_path_prop'],
@@ -636,7 +636,9 @@ module RjuiTools
         # A screen (not included) has no path above its root: `0`.
         id_part += ', jsonuiPath = "0"' if @config['_path_prop'] && jsx_content.match?(/\bjsonuiPath\b/)
         id_part += ", #{IncludePlace::PROP}" if uses_place
-        include_id_names = %w[jsonuiIncludeId jsonuiIncludePrefix].select { |f| jsx_content.include?("#{f}(") }
+        include_id_names = %w[jsonuiIncludeId jsonuiIncludePrefix].select do |f|
+          jsx_content.include?("#{f}(") || relative_position_declarations.include?("#{f}(")
+        end
         include_id_import =
           if include_prefix && include_id_names.any?
             "\nimport { #{include_id_names.join(', ')} } from '@/generated/includeId';"
@@ -799,7 +801,7 @@ module RjuiTools
           children = child.is_a?(Array) ? child : [child].compact
           if %w[View SafeAreaView].include?(drawn_type_of(json).to_s) || json['type'].nil?
             specs = children.map { |c| relative_constraint_for(c) }.compact
-            found << { ref: relative_position_ref_name(specs.first['id']), specs: specs } if specs.any?
+            found << { ref: relative_position_ref_name(specs.first[:ref_id]), specs: specs } if specs.any?
           end
           children.each { |c| extract_relative_containers(c, found) }
         else
@@ -811,18 +813,33 @@ module RjuiTools
 
       # One child's constraint spec, or nil when it has none. A literal id is
       # required: it is how the helper finds the element in the DOM.
+      #
+      # An include is laid out as the root its partial draws: that root's
+      # constraints are the include's, and it is found by the id it carries
+      # here — the root's own id under the prefixes of the includes on the way
+      # (IncludePlace.root_dom_id_js; ticket rjui-include-root-sibling-
+      # constraint-dropped: a root with alignTopOfView drew where it would have
+      # with no constraint). `:ref_id` names the ref, as
+      # ViewConverter#build_relative_position_ref_attr does.
       def relative_constraint_for(child)
         return nil unless child.is_a?(Hash)
 
-        id = child['id']
+        node = IncludePlace.laid_out(child, @config)
+        id = node['id']
         return nil unless id.is_a?(String) && !id.empty? && !id.include?('@{')
 
-        spec = { 'id' => id }
+        spec = { :ref_id => id, 'id' => id }
+        if node != child
+          dom_id = IncludePlace.root_dom_id_js(child, @config)
+          return nil unless dom_id
+
+          spec['id'] = { js: dom_id }
+        end
         RELATIVE_CONSTRAINT_FIELDS.each do |attr, field|
-          target = child[attr]
+          target = node[attr]
           spec[field] = target if target.is_a?(String) && !target.empty? && !target.include?('@{')
         end
-        spec.length > 1 ? spec : nil
+        spec.length > 2 ? spec : nil
       end
 
       def relative_position_ref_name(child_id)
@@ -915,7 +932,7 @@ module RjuiTools
       def relative_position_effect(container)
         element_type = @config['typescript'] ? '<HTMLDivElement | null>' : ''
         spec_literal = container[:specs].map do |spec|
-          pairs = spec.map { |k, v| "#{k}: '#{v}'" }
+          pairs = spec.reject { |k, _| k == :ref_id }.map { |k, v| v.is_a?(Hash) ? "#{k}: #{v[:js]}" : "#{k}: '#{v}'" }
           "{ #{pairs.join(', ')} }"
         end.join(', ')
 
