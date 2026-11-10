@@ -134,7 +134,10 @@ RSpec.describe 'the viewId of a node inside an include, through rjui build' do
 
   def self.rjui_view_ids(dir, screen)
     generated = File.join(dir, 'src', 'generated')
-    files = Dir.glob(File.join(generated, 'data', '*.ts')) + Dir.glob(File.join(generated, 'components', '*.tsx'))
+    # The helpers the components call, as written (an included layout's root
+    # class goes through includePlace's jsonuiPlaceClass).
+    files = Dir.glob(File.join(generated, 'includePlace.ts')) +
+            Dir.glob(File.join(generated, 'data', '*.ts')) + Dir.glob(File.join(generated, 'components', '*.tsx'))
     Dir.mktmpdir('rjui_include_eval') do |tmp|
       # The handler's call is the one thing replaced: the viewId expression
       # handed to it is evaluated as emitted.

@@ -14,6 +14,7 @@ require 'json'
 require_relative '../core/string_manager_core'
 require_relative '../core/layout_path'
 require_relative 'include_paths'
+require_relative 'include_place'
 require_relative 'nested_taps'
 require_relative '../core/node_keys'
 require_relative 'component_name'
@@ -218,6 +219,9 @@ module RjuiTools
         # Whether this layout takes `jsonuiPath`, its root's path in the
         # include-expanded tree (IncludePaths; `jui build` names them).
         @config['_path_prop'] = Array(@config['_path_stems']).include?(stem)
+        # Whether this layout takes `jsonuiPlace`, where its root sits in the
+        # layout that includes it (IncludePlace; `jui build` names them).
+        @config['_place_prop'] = Array(@config['_place_stems']).include?(stem)
 
         # The layout's declared data classes, raw (`name => class`): the
         # class-list Collection reads its `items` by what the property
@@ -582,6 +586,15 @@ module RjuiTools
         # root can't carry an id, so injection is skipped there.
         jsx_content, root_id_injected = inject_root_id_prop(jsx_content)
 
+        # An included layout's root takes its place in the including layout
+        # (IncludePlace): its class goes through jsonuiPlaceClass, or a root
+        # that is itself an include hands the prop on.
+        if @config['_place_prop']
+          forward = Array(@config['_place_stems']).map { |s| IncludePlace.component_name(s) }
+          jsx_content = IncludePlace.apply(jsx_content, forward)
+        end
+        uses_place = @config['_place_prop'] && jsx_content.match?(/[,{(]\s*#{IncludePlace::PROP}\s*[)}]/)
+
         # Screen marker: a data attribute on the SAME root element, so it is
         # visible exactly when the screen is. A dedicated node would need a
         # non-empty box to satisfy the driver's visibility predicate, and a
@@ -613,7 +626,8 @@ module RjuiTools
         uses_id_prefix = include_prefix && jsx_content.match?(/\bidPrefix\b/)
         props_interface = generate_data_props_interface(name, uses_data, data_type: data_name,
                                                                     id_prefix: include_prefix,
-                                                                    path: @config['_path_prop'])
+                                                                    path: @config['_path_prop'],
+                                                                    place: @config['_place_prop'])
         # `id` is destructured only when it was injected into the root —
         # the interface always accepts it (call sites can't know), but an
         # unused binding would trip noUnusedParameters setups.
@@ -621,6 +635,7 @@ module RjuiTools
         id_part += ', idPrefix' if uses_id_prefix
         # A screen (not included) has no path above its root: `0`.
         id_part += ', jsonuiPath = "0"' if @config['_path_prop'] && jsx_content.match?(/\bjsonuiPath\b/)
+        id_part += ", #{IncludePlace::PROP}" if uses_place
         include_id_names = %w[jsonuiIncludeId jsonuiIncludePrefix].select { |f| jsx_content.include?("#{f}(") }
         include_id_import =
           if include_prefix && include_id_names.any?
@@ -628,6 +643,9 @@ module RjuiTools
           else
             ''
           end
+        if @config['_place_prop'] && jsx_content.include?("#{IncludePlace::HELPER}(")
+          include_id_import += "\nimport { #{IncludePlace::HELPER} } from '@/generated/includePlace';"
+        end
         props_sig =
           if uses_data
             @config['typescript'] ? "{ data: dataProp#{id_part} }: #{name}Props" : "{ data: dataProp#{id_part} }"
@@ -675,7 +693,7 @@ module RjuiTools
       # defaults, an include of a layout that declares nothing renders
       # `<Name />`, and pages/cells pass the full object (a full XxxData is
       # assignable to Partial<XxxData>).
-      def generate_data_props_interface(name, uses_data = true, data_type: nil, id_prefix: false, path: false)
+      def generate_data_props_interface(name, uses_data = true, data_type: nil, id_prefix: false, path: false, place: false)
         data_name = data_type || name
         data_field = uses_data ? "data?: Partial<#{data_name}Data>;" : "data?: #{data_name}Data;"
         # `idPrefix`: the include prefix above this component (design U8) —
@@ -685,6 +703,9 @@ module RjuiTools
         # `jsonuiPath`: this layout's root's position in the include-expanded
         # tree (IncludePaths) — declared only for a layout that takes it.
         prefix_field += "\n  jsonuiPath?: string;" if path
+        # `jsonuiPlace`: where this layout's root sits in the layout that
+        # includes it (IncludePlace) — declared only for an included layout.
+        prefix_field += "\n  #{IncludePlace::PROP}?: { add?: string; drop?: string };" if place
         <<~TS
           interface #{name}Props {
             #{data_field}

@@ -158,14 +158,21 @@ module RjuiTools
           # holding a node that hands its handler a viewId without an id. The
           # include graph is the whole set of layouts, so it is read here,
           # before any of them is generated.
-          @config['_path_stems'] = React::IncludePaths.stems_taking_path(
-            json_files.each_with_object({}) do |json_file, trees|
-              trees[File.basename(json_file, '.json')] =
-                React::StyleLoader.load_and_merge(JSON.parse(File.read(json_file, encoding: 'UTF-8')))
-            rescue JSON::ParserError
-              next
-            end
-          ).to_a
+          layout_trees = json_files.each_with_object({}) do |json_file, trees|
+            trees[File.basename(json_file, '.json')] =
+              React::StyleLoader.load_and_merge(JSON.parse(File.read(json_file, encoding: 'UTF-8')))
+          rescue JSON::ParserError
+            next
+          end
+          @config['_path_stems'] = React::IncludePaths.stems_taking_path(layout_trees).to_a
+
+          # The layouts that take `jsonuiPlace`, where their root sits in the
+          # layout that includes them (React::IncludePlace): every layout an
+          # include names. Their helper is written when there is one.
+          @config['_place_stems'] = layout_trees.values.flat_map { |tree| React::IncludePaths.include_stems(tree) }
+                                                .uniq.select { |stem| layout_trees.key?(stem) }.sort
+          @config['_place_cache'] = {}
+          emit_include_place_helper unless @config['_place_stems'].empty?
 
           # Where an include call site reads the partial it hands data to.
           @config['_layouts_dir'] = File.expand_path(layouts_dir)
@@ -1615,6 +1622,49 @@ module RjuiTools
 
             export function jsonuiIncludePrefix(outer#{opt}, includeId#{s})#{s} {
               return outer ? jsonuiIncludeId(outer, includeId) : jsonuiCamel(includeId);
+            }
+
+            #{marker_footer}
+          JS
+
+          File.write(path, content)
+          note_emitted_helper(path)
+          Core::Logger.info("Generated: #{path}")
+        end
+
+        # The helper an included layout's root reads its place in the
+        # including layout with (React::IncludePlace): the class the root
+        # declares, less the classes its container takes away, with the ones
+        # it adds.
+        def emit_include_place_helper
+          generated_dir = @config['generated_directory'] || 'src/generated'
+          FileUtils.mkdir_p(generated_dir)
+          is_ts = @config['typescript']
+          extension = is_ts ? 'ts' : 'js'
+          path = File.join(generated_dir, "includePlace.#{extension}")
+          place_type = is_ts ? ': { add?: string; drop?: string } | undefined' : ''
+          s = is_ts ? ': string' : ''
+
+          marker_header = Core::GeneratedMarker.comment_header(
+            source: 'includePlace (include root placement helper)',
+            generator: 'rjui build'
+          )
+          marker_footer = Core::GeneratedMarker.comment_footer
+
+          content = <<~JS
+            #{marker_header}
+            // An included layout's root takes what the container it is included
+            // in hands its children (an overlay's placement, the row a
+            // matchParent height is in, ...): the include call site passes the
+            // difference that makes to the root's class.
+            export function jsonuiPlaceClass(className#{s}, place#{place_type})#{s} {
+              if (!place) {
+                return className;
+              }
+              const drop = new Set((place.drop ?? '').split(' ').filter(Boolean));
+              const kept = className.split(/\\s+/).filter((c) => c && !drop.has(c));
+              const add = (place.add ?? '').split(' ').filter(Boolean);
+              return kept.concat(add).join(' ');
             }
 
             #{marker_footer}
