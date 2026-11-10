@@ -200,15 +200,12 @@ module SjuiTools
                     add_line "id: \"#{child_id}\","
                     
                     # View (with optional VisibilityWrapper)
-                    visibility_value = child['visibility']
-                    has_visibility = visibility_value.is_a?(String) && visibility_value.start_with?('@{') && visibility_value.end_with?('}')
-                    # Canonical expression parsing shared with parse_binding
-                    vis_param = has_visibility ? SwiftUI::Binding::BindingExpression.swift_visibility_param(visibility_value) : nil
-                    if ResponsiveHelper.overrides_any?(child, %w[visibility])
-                      # a size class overrides it: the wrapper takes it per size class, as outside this container
-                      has_visibility = true
-                      vis_param = ResponsiveHelper.visibility_param(child)
-                    end
+                    # As every other parent wraps it (ResponsiveHelper.visibility_declared?): a literal too, not
+                    # only a binding. A literal "gone" here was drawn — Android does not draw it — and an include's
+                    # `data` turns a bound visibility into a literal one (ticket
+                    # sjui-relative-child-literal-visibility-dropped).
+                    has_visibility = ResponsiveHelper.visibility_declared?(child)
+                    vis_param = has_visibility ? ResponsiveHelper.visibility_param(child) : nil
 
                     add_line "view: AnyView("
                     if has_visibility
