@@ -55,6 +55,9 @@ Format retention (2026-07, plan ``2026-07-24-v1-unsupported/03``):
 - inline object name collision with top-level schema → halt (Q4 / B2)
 - ``type: object`` with no ``$ref`` / ``properties`` / ``additionalProperties``
   → halt (§3.3)
+- a map alias (a top-level schema that is only a typed ``additionalProperties``)
+  whose value reaches itself through map aliases alone → halt
+  (``map-alias-cycle``; a type alias cannot contain itself)
 
 Soft cases (warning only, NOT halt):
 
@@ -743,7 +746,7 @@ def parse_swagger(
         # ``_check_object_typed`` because that helper only fires on
         # ``type: object`` and would silently allow ``type: string`` to
         # fall through into ``_extract_fields`` which returns empty fields.
-        if _is_wrapper_schema(merged):
+        if _is_wrapper_schema(merged) or _is_map_alias(merged):
             wrapper_schema, wrapper_extras, wrapper_enums = _parse_wrapper_schema(
                 name,
                 merged,
@@ -821,6 +824,8 @@ def parse_swagger(
                         pointer=schema.source_pointer,
                     )
 
+    schemas = _resolve_map_aliases(schemas, source_path=source_path)
+
     # Cycle detection — only direct self-reference without collection
     # indirection. Collection-mediated cycles are explicitly allowed (§3.3 / Q13).
     for schema in schemas:
@@ -882,6 +887,94 @@ def _is_wrapper_schema(body: dict[str, Any]) -> bool:
     return True
 
 
+def _is_map_alias(body: dict[str, Any]) -> bool:
+    """True when a top-level schema body is only a typed ``additionalProperties``.
+
+    ``{type: object, additionalProperties: {type: string}}`` with no
+    ``properties`` is a dictionary on the wire. Written in place on a field it
+    has always been ``[String: T]`` / ``Map<String, T>``; at the top level it
+    used to fall through to :func:`_extract_fields`, which reads
+    ``properties`` only, and became a DTO with no fields — iOS decoded it and
+    dropped every entry, Kotlin refused the empty data class (ticket
+    jui-api-model-ref-to-map-schema-generates-empty-dto). It is emitted as a
+    type alias of that map (:attr:`SchemaDef.is_map_alias`). A body with
+    ``properties`` as well stays an object schema.
+    """
+    if body.get("type") not in ("object", None):
+        return False
+    if body.get("properties"):
+        return False
+    if any(k in body for k in ("allOf", "oneOf", "anyOf", "$ref", "enum")):
+        return False
+    return isinstance(body.get("additionalProperties"), dict)
+
+
+def _resolve_map_aliases(schemas: list[SchemaDef], *, source_path: str) -> list[SchemaDef]:
+    """Mark every ref to a map alias with the map it names, and halt on an alias
+    that contains itself.
+
+    A ref to a map alias renders as ``{Name}Dto`` like any other, but it is a
+    dictionary, not a struct / class: Swift does not synthesize hashing for it
+    and Kotlin has no ``{Name}Dto.serializer()``. :attr:`FieldType.alias_map`
+    carries the map so a generator can tell. ``typealias A = [String: B]`` with
+    ``typealias B = [String: A]`` (or ``A`` naming itself) does not compile on
+    any face, so a cycle through aliases alone halts; an object schema on the
+    way breaks it as usual.
+    """
+    aliases = {s.name: s for s in schemas if s.is_map_alias and s.wrapped_type is not None}
+    if not aliases:
+        return schemas
+
+    def alias_refs(ftype: FieldType) -> set[str]:
+        names: set[str] = set()
+        if ftype.is_object_ref and ftype.ref_name in aliases:
+            names.add(ftype.ref_name)
+        if ftype.element is not None and not ftype.is_object_ref:
+            names |= alias_refs(ftype.element)
+        return names
+
+    for name, alias in aliases.items():
+        seen: set[str] = set()
+        stack = list(alias_refs(alias.wrapped_type))
+        while stack:
+            current = stack.pop()
+            if current == name:
+                raise OpenAPILoadError(
+                    "map-alias-cycle",
+                    f"Schema '{name}' is a map (only a typed additionalProperties) whose "
+                    f"value reaches '{name}' again through maps alone. A type alias "
+                    f"cannot contain itself: put an object schema with properties "
+                    f"between them.",
+                    source=source_path,
+                    pointer=alias.source_pointer,
+                )
+            if current in seen:
+                continue
+            seen.add(current)
+            stack.extend(alias_refs(aliases[current].wrapped_type))
+
+    def tag(ftype: FieldType | None) -> FieldType | None:
+        if ftype is None:
+            return None
+        element = tag(ftype.element)
+        alias_map = ftype.alias_map
+        if ftype.is_object_ref and ftype.ref_name in aliases:
+            alias_map = tag(aliases[ftype.ref_name].wrapped_type)
+        if element is ftype.element and alias_map is ftype.alias_map:
+            return ftype
+        return FieldType(**{**ftype.__dict__, "element": element, "alias_map": alias_map})
+
+    out: list[SchemaDef] = []
+    for schema in schemas:
+        fields = [FieldDef(**{**f.__dict__, "type": tag(f.type)}) for f in schema.fields]
+        wrapped = tag(schema.wrapped_type)
+        if all(a.type is b.type for a, b in zip(fields, schema.fields)) and wrapped is schema.wrapped_type:
+            out.append(schema)
+            continue
+        out.append(SchemaDef(**{**schema.__dict__, "fields": fields, "wrapped_type": wrapped}))
+    return out
+
+
 def _parse_wrapper_schema(
     name: str,
     body: dict[str, Any],
@@ -900,10 +993,13 @@ def _parse_wrapper_schema(
     everything else; this is the property consumer code will see on the
     generated DTO (``dto.value`` / ``dto.items``).
     """
+    is_map_alias = _is_map_alias(body)
     wrapped_type, extra_inline, extra_enums = _field_type(
         body,
         parent_name=name,
-        field_name="value",
+        # A map alias's inline value object is ``{Name}Value``, as a map
+        # written in place on field ``f`` derives ``{Parent}FValue``.
+        field_name="" if is_map_alias else "value",
         top_level_names=top_level_names,
         inline_names=inline_names,
         schemas_root=schemas_root,
@@ -935,6 +1031,7 @@ def _parse_wrapper_schema(
         is_wrapper=True,
         wrapped_type=wrapped_type,
         wrapper_field_name=field_name,
+        is_map_alias=is_map_alias,
     )
     return schema, list(extra_inline), list(extra_enums)
 
@@ -1148,6 +1245,12 @@ def _resolve_all_of(
         for r in (resolved.get("required") or []):
             if r not in merged_required:
                 merged_required.append(r)
+        # A typed map carries over too: ``allOf: [{$ref: <map alias>}]`` is
+        # that map, not an object with no fields (ticket
+        # jui-api-model-ref-to-map-schema-generates-empty-dto). Only a typed
+        # one — ``false`` / ``true`` keep their old (unmerged) reading.
+        if isinstance(resolved.get("additionalProperties"), dict):
+            merged["additionalProperties"] = resolved["additionalProperties"]
 
     merged["properties"] = merged_props
     merged["required"] = merged_required

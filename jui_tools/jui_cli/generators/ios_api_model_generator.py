@@ -139,6 +139,22 @@ class IosApiModelGenerator:
         enums_by_name = {e.name: e for e in doc.enums}
         enum_names = set(enums_by_name)
 
+        # A map alias (a top-level schema that is only a typed
+        # additionalProperties) is a typealias of the map — an alias, not a wrapper like a top-level array: the array needs a field name to hold it in a struct, a dictionary does not.
+        # It reads like a map written in place: ``dto.name["ja"]``.
+        if schema.is_map_alias and schema.wrapped_type is not None:
+            alias_lines: list[str] = []
+            if schema.description:
+                alias_lines.extend(_doc_comment_lines(schema.description))
+            if schema.deprecated:
+                alias_lines.append("@available(*, deprecated)")
+            mapped = _swift_type_with_enums(
+                schema.wrapped_type, enum_names, format_native=self._format_enabled(doc)
+            )
+            alias_lines.append(f"typealias {schema.name}Dto = {mapped}")
+            body = "\n".join(alias_lines)
+            return f"{header}\nimport Foundation\n\n{body}\n\n{footer}\n"
+
         # Hashable is always declared so consumers can put DTOs in `Set` /
         # `Dictionary` keys without having to write extensions. When the
         # schema has a field Swift can't auto-synthesize on (map, array of
@@ -632,6 +648,8 @@ def _hash_safe(ftype: FieldType) -> bool:
         return True
     if ftype.is_enum_ref:
         return True
+    if ftype.is_object_ref and ftype.alias_map is not None:
+        return _hash_safe(ftype.alias_map)   # a map alias is the map it names
     if ftype.is_object_ref:
         return True
     if ftype.is_one_of_ref:
@@ -728,24 +746,34 @@ def _swift_type_with_enums(
     enum_names: set[str],
     *,
     format_native: bool = False,
+    raw_dates: bool = False,
 ) -> str:
     """Like :func:`_swift_type` but treats enum refs without the ``Dto`` suffix.
 
     Used when the generator has access to the doc-level enum name set
-    (most production callsites do).
+    (most production callsites do). ``raw_dates`` spells the wire (String)
+    shape of a native-Date field for its hand-written decode / encode: a
+    map alias holding dates is then written out as its map, since the
+    alias's own name means the Date-valued map.
     """
+    if (raw_dates and ftype.is_object_ref and ftype.alias_map is not None
+            and _ftype_has_native_date(ftype.alias_map)):
+        return _swift_type_with_enums(
+            FieldType(**{**ftype.alias_map.__dict__, "nullable": ftype.nullable}),
+            enum_names, raw_dates=True,
+        )
     if (ftype.is_object_ref or ftype.is_enum_ref) and ftype.ref_name in enum_names:
         base = ftype.ref_name
         return f"{base}?" if ftype.nullable else base
     if ftype.is_array and ftype.element:
         inner = _swift_type_with_enums(
-            ftype.element, enum_names, format_native=format_native
+            ftype.element, enum_names, format_native=format_native, raw_dates=raw_dates
         )
         rendered = f"[{inner}]"
         return f"{rendered}?" if ftype.nullable else rendered
     if ftype.is_map and ftype.element:
         inner = _swift_type_with_enums(
-            ftype.element, enum_names, format_native=format_native
+            ftype.element, enum_names, format_native=format_native, raw_dates=raw_dates
         )
         rendered = f"[String: {inner}]"
         return f"{rendered}?" if ftype.nullable else rendered
@@ -838,6 +866,10 @@ def _ftype_has_native_date(ftype: FieldType) -> bool:
     """
     if ftype.is_primitive:
         return ftype.format == "date-time"
+    if ftype.is_object_ref and ftype.alias_map is not None:
+        # A map alias is a typealias with no (de)coding of its own: the
+        # parent converts its dates, as for a map written in place.
+        return _ftype_has_native_date(ftype.alias_map)
     if (ftype.is_array or ftype.is_map) and ftype.element is not None:
         return _ftype_has_native_date(ftype.element)
     return False
@@ -878,6 +910,8 @@ def _swift_date_decode_expr(ftype: FieldType, src: str) -> str:
     """
     if ftype.is_primitive:
         return f"try _juiParseIsoDate({src}, codingPath: decoder.codingPath)"
+    if ftype.is_object_ref and ftype.alias_map is not None:
+        return _swift_date_decode_expr(ftype.alias_map, src)
     if (ftype.is_array or ftype.is_map) and ftype.element is not None:
         inner = _swift_date_decode_expr(ftype.element, "$0")
         if ftype.element.nullable:
@@ -893,6 +927,8 @@ def _swift_date_encode_expr(ftype: FieldType, src: str) -> str:
     """Conversion expression: native Date shape → raw (String-shaped) value."""
     if ftype.is_primitive:
         return f"_juiFormatIsoDate({src})"
+    if ftype.is_object_ref and ftype.alias_map is not None:
+        return _swift_date_encode_expr(ftype.alias_map, src)
     if (ftype.is_array or ftype.is_map) and ftype.element is not None:
         inner = _swift_date_encode_expr(ftype.element, "$0")
         if ftype.element.nullable:
@@ -1020,7 +1056,7 @@ def _emit_swift_custom_init_from_decoder(
             continue
         name = _swift_property_name(f)
         if format_native and _ftype_has_native_date(f.type):
-            raw = _swift_type_with_enums(f.type, enum_names).rstrip("?")
+            raw = _swift_type_with_enums(f.type, enum_names, raw_dates=True).rstrip("?")
             if f.type.nullable:
                 convert = _swift_date_decode_expr(f.type, "$0")
                 lines.append(
@@ -1213,7 +1249,7 @@ def _emit_swift_wrapper_body(
     name = field.wire_name
 
     if format_native and _ftype_has_native_date(field.type):
-        raw = _swift_type_with_enums(field.type, enum_names)
+        raw = _swift_type_with_enums(field.type, enum_names, raw_dates=True)
         decode_expr = _swift_date_decode_expr(
             field.type, f"(try container.decode({raw}.self))"
         )

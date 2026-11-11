@@ -187,7 +187,7 @@ def plan_android(
                 # next ``jui build``.
                 if is_kotlinx:
                     patchers[dpath] = (
-                        lambda p=dpath, n=schema.name: _patch_kotlinx_domain(p, n)
+                        lambda p=dpath, n=schema.name, a=schema.is_map_alias: _patch_kotlinx_domain(p, n, map_alias=a)
                     )
         for union in doc.unions:
             dto_path = gen.dto_path(union.name)

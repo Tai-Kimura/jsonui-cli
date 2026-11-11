@@ -176,6 +176,9 @@ class AndroidApiModelGenerator:
                 f"Switch api.platforms.android.serializer to 'kotlinx' or wait "
                 f"for v2 Moshi sealed-class codegen."
             )
+        if schema.is_map_alias and schema.wrapped_type is not None:
+            return self._generate_map_alias_dto(schema, doc, fmt)
+
         if schema.is_wrapper and self._config.serializer != "kotlinx":
             raise ValueError(
                 f"Schema {schema.name!r} is a non-object wrapper "
@@ -714,6 +717,28 @@ class AndroidApiModelGenerator:
 
     # --------------------------- emit Domain ------------------------- #
 
+    def _generate_map_alias_dto(self, schema: SchemaDef, doc: SwaggerDocument, fmt: bool) -> str:
+        """A map alias (a top-level schema that is only a typed
+        additionalProperties) is a ``typealias`` of the map — an alias, not a wrapper like a top-level array: the array needs a field name to hold it in a struct, a dictionary does not.
+        kotlinx and moshi both read a ``Map`` without a codec of its own, so
+        every serializer takes it (a wrapper needs kotlinx)."""
+        header = comment_header(
+            source=_relative_source(doc.source_path) + f"#{schema.source_pointer.rsplit('#', 1)[-1]}",
+            generator=self.GENERATOR_NAME,
+        )
+        mapped = _kotlin_type_with_enums(
+            schema.wrapped_type, {e.name for e in doc.enums}, format_native=fmt
+        )
+        lines = [f"package {self._dto_package()}", ""]
+        if fmt and "date-time" in collect_string_formats(schema.wrapped_type):
+            lines += ["import kotlinx.datetime.Instant", ""]
+        if schema.description:
+            lines.extend(_kdoc_lines(schema.description))
+        if schema.deprecated:
+            lines.append('@Deprecated("schema marked deprecated")')
+        lines.append(f"typealias {schema.name}Dto = {mapped}")
+        return f"{header}\n\n" + "\n".join(lines) + f"\n\n{comment_footer()}\n"
+
     def generate_domain_source(self, schema: SchemaDef) -> str:
         """Plain ``class`` (not ``data class``) so users can freely add
         ``var`` stored properties / equality / methods. Mirrors the v3
@@ -760,7 +785,7 @@ class AndroidApiModelGenerator:
             "    // stored properties, methods, and conversions here.\n"
             "}\n"
             "\n"
-            f"{_generate_kotlinx_serializer_block(name)}"
+            f"{_generate_kotlinx_serializer_block(name, map_alias=schema.is_map_alias)}"
         )
 
     # ----------------------------- writes ---------------------------- #
@@ -785,7 +810,7 @@ class AndroidApiModelGenerator:
         path = self.domain_path(schema.name)
         if path.exists():
             if self._config.serializer == "kotlinx":
-                wrote = _patch_kotlinx_domain(path, schema.name)
+                wrote = _patch_kotlinx_domain(path, schema.name, map_alias=schema.is_map_alias)
                 return self.WriteResult(
                     path=path,
                     wrote=wrote,
@@ -818,16 +843,23 @@ _KOTLINX_DOMAIN_IMPORTS: tuple[str, ...] = (
 )
 
 
-def _generate_kotlinx_serializer_block(name: str) -> str:
+def _generate_kotlinx_serializer_block(name: str, *, map_alias: bool = False) -> str:
     """Render the delegating ``KSerializer`` object for a Domain wrapper.
 
     Descriptor is forwarded from ``{name}Dto.serializer()`` so the wire
     format is exactly the DTO's — the wrapper is invisible on the wire.
     """
+    # A map alias's Dto is a typealias of Map, which has no companion
+    # ``serializer()``; the reified lookup finds the Map serializer. Other
+    # schemas keep ``{name}Dto.serializer()`` — this block is rewritten in
+    # every existing Domain file on each build.
+    dto_serializer = (
+        f"kotlinx.serialization.serializer<{name}Dto>()" if map_alias else f"{name}Dto.serializer()"
+    )
     return (
         f"{_KOTLINX_SERIALIZER_BEGIN}\n"
         f"object {name}Serializer : KSerializer<{name}> {{\n"
-        f"    private val dtoSerializer = {name}Dto.serializer()\n"
+        f"    private val dtoSerializer = {dto_serializer}\n"
         f"    override val descriptor: SerialDescriptor = dtoSerializer.descriptor\n"
         f"    override fun serialize(encoder: Encoder, value: {name}) =\n"
         f"        dtoSerializer.serialize(encoder, value.dto)\n"
@@ -860,7 +892,7 @@ def _generate_kotlinx_union_serializer_block(name: str) -> str:
     )
 
 
-def _patch_kotlinx_domain(path: Path, schema_name: str) -> bool:
+def _patch_kotlinx_domain(path: Path, schema_name: str, *, map_alias: bool = False) -> bool:
     """Update an existing kotlinx Domain wrapper to carry the serializer.
 
     Three idempotent transformations:
@@ -952,7 +984,7 @@ def _patch_kotlinx_domain(path: Path, schema_name: str) -> bool:
                 text = text[:insert_pos] + f"{annotation}\n" + text[insert_pos:]
 
     # Step 3: replace or append the serializer block.
-    serializer_block = _generate_kotlinx_serializer_block(schema_name)
+    serializer_block = _generate_kotlinx_serializer_block(schema_name, map_alias=map_alias)
     markers_present = (
         _KOTLINX_SERIALIZER_BEGIN in text and _KOTLINX_SERIALIZER_END in text
     )
@@ -1292,6 +1324,9 @@ def _kotlin_wrapper_serializer_expr(
         return expr, [imp]
     if ftype.is_enum_ref:
         return f"{ftype.ref_name}.serializer()", []
+    if ftype.is_object_ref and ftype.alias_map is not None:
+        # A map alias is a typealias of Map — no companion serializer().
+        return f"kotlinx.serialization.serializer<{ftype.ref_name}Dto>()", []
     if ftype.is_object_ref:
         return f"{ftype.ref_name}Dto.serializer()", []
     if ftype.is_array and ftype.element is not None:

@@ -131,6 +131,11 @@ class FieldType:
             generators consult it only when ``api.format_mapping`` is
             enabled for the doc (integer/number widths use dedicated
             :class:`PrimitiveKind` members instead).
+        alias_map: set on an ``is_object_ref`` whose target is a map alias
+            (:attr:`SchemaDef.is_map_alias`): the map type the alias names.
+            The ref still renders as ``{ref_name}Dto``; this tells a
+            generator that the name is a dictionary, not a struct / class
+            (Swift hashing, a Kotlin serializer expression).
     """
 
     is_primitive: bool = False
@@ -145,6 +150,7 @@ class FieldType:
     one_of: OneOfRef | None = None
     nullable: bool = False
     format: str | None = None
+    alias_map: "FieldType | None" = None
 
     def referenced_schemas(self) -> set[str]:
         """Names of schemas this type depends on (transitively).
@@ -254,6 +260,14 @@ class SchemaDef:
             convention ``"items"`` for ``type: array``, ``"value"`` for
             primitives. Used by every platform generator so consumer code
             accesses ``dto.value`` or ``dto.items``.
+        is_map_alias: True for a top-level schema that is only a typed
+            ``additionalProperties`` (no ``properties``): a dictionary on
+            the wire. Also ``is_wrapper`` (``wrapped_type`` is the map), but
+            generators emit a type alias (``typealias XDto = [String: T]`` /
+            ``Map<String, T>`` / ``Record<string, T>``), not a wrapper: an
+            array wrapper needs a field name to hold the bare array in a
+            struct, a dictionary does not, and an alias reads the same as a
+            map written in place (``dto.name["ja"]``) with every serializer.
     """
 
     name: str
@@ -269,6 +283,7 @@ class SchemaDef:
     is_wrapper: bool = False
     wrapped_type: "FieldType | None" = None
     wrapper_field_name: str = "value"
+    is_map_alias: bool = False
 
     def referenced_schemas(self) -> set[str]:
         names: set[str] = set()
