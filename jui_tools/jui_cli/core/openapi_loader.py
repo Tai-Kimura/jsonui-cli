@@ -61,6 +61,12 @@ Format retention (2026-07, plan ``2026-07-24-v1-unsupported/03``):
 
 Soft cases (warning only, NOT halt):
 
+- ``properties`` together with a typed ``additionalProperties`` → one side is
+  dropped, and which side depends on where the schema is written (a top-level
+  schema keeps the properties and drops the map's other keys; one written in
+  place is the map and drops the properties). A WARNING names the schema or
+  the place and the side dropped (:func:`_warn_properties_with_typed_map`)
+
 - ``additionalProperties: true`` / omitted → silently drop extra fields,
   DTO declares only enumerated properties (§3.3, §4)
 """
@@ -766,6 +772,7 @@ def parse_swagger(
             continue
 
         _check_object_typed(merged, source_path=source_path, pointer=pointer)
+        _warn_properties_with_typed_map(merged, keeps="properties", where=f"schema {name!r}")
 
         fields, extra_inline, extra_enums = _extract_fields(
             merged,
@@ -885,6 +892,33 @@ def _is_wrapper_schema(body: dict[str, Any]) -> bool:
     if t in ("string", "integer") and "enum" in body:
         return False
     return True
+
+
+def _warn_properties_with_typed_map(body: dict[str, Any], *, keeps: str, where: str) -> None:
+    """WARNING when a schema has ``properties`` and a typed ``additionalProperties``.
+
+    The generated type holds only one of them (ticket
+    jui-api-model-properties-with-typed-additional-properties-drops-one-side):
+    a top-level schema (and a schema-level allOf) keeps the properties and
+    drops every other key of the map; one written in place — a field, an
+    array element, a map value — is the map and drops the properties. Not a
+    halt and not a new type: the generated types stay as they were. Printed
+    on stderr like the other api-model WARNING (the loader also runs inside
+    MCP servers whose stdout is a protocol channel).
+    """
+    props = body.get("properties")
+    if not (isinstance(props, dict) and props and isinstance(body.get("additionalProperties"), dict)):
+        return
+    names = ", ".join(str(k) for k in props)
+    if keeps == "properties":
+        dropped = f"keeps the properties ({names}) and drops every other key (the additionalProperties map)"
+    else:
+        dropped = f"is the additionalProperties map and drops the properties ({names})"
+    print(
+        f"  WARNING [api-model]: {where} declares both properties and a typed additionalProperties; "
+        f"the generated type {dropped}. Declare only the map, or only the properties.",
+        file=sys.stderr,
+    )
 
 
 def _is_map_alias(body: dict[str, Any]) -> bool:
@@ -2110,6 +2144,7 @@ def _field_type(
         # 3a. typed additionalProperties → map
         addl = body.get("additionalProperties")
         if isinstance(addl, dict):
+            _warn_properties_with_typed_map(body, keeps="map", where=pointer)
             value_type, derived, derived_enums = _field_type(
                 addl,
                 parent_name=parent_name,
