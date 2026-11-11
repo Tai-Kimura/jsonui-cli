@@ -15,6 +15,10 @@ module KjuiTools
     # the colour the Data holds — so nothing here can make a value fit.
     module TestBridgeCode
       MIN_LIBRARY_VERSION = '2.44.0'
+      # JsonUITestValue accepts a Visibility value (visible / invisible / gone)
+      # from this version; an older one rejects it as unsupported.
+      VISIBILITY_MIN_LIBRARY_VERSION = '2.54.2'
+      VISIBILITY_SPELLINGS = %w[Visibility visibility].freeze
 
       COLOR_SPELLINGS = %w[Color color].freeze
 
@@ -43,6 +47,9 @@ module KjuiTools
         lines << '        // The class each Data field is declared with, as the layout spells it: what'
         lines << '        // the test bridge judges an initialState value by (jsonui-test-runner spec 10.3).'
         lines << "        // Requires KotlinJsonUI >= #{MIN_LIBRARY_VERSION} (test bridge)"
+        if props.any? { |prop| VISIBILITY_SPELLINGS.include?(prop[:declared].to_s.strip.sub(/\?\z/, '')) }
+          lines << "        // Requires KotlinJsonUI >= #{VISIBILITY_MIN_LIBRARY_VERSION} (initialState: Visibility)"
+        end
         if props.empty?
           lines << '        val testDeclaredClasses: Map<String, String> = emptyMap()'
         else

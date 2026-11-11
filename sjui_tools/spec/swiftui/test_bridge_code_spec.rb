@@ -46,6 +46,35 @@ RSpec.describe 'test bridge (sjui)' do
       expect(code).to include('rejected.append(.notADataField(key))')
     end
 
+    # Visibility (2026-11-11): a String on the Data, set from the three words
+    # the judge accepts. The library judges it from 10.35.2, so the case says
+    # so; a Data without a Visibility field keeps the code it had.
+    it 'assigns an accepted Visibility to its String field, names 10.35.2 on that case only, and reads it back' do
+      expect(described_class.kind('Visibility')).to eq(:visibility)
+      expect(described_class.kind('visibility?')).to eq(:visibility)
+      expect(described_class.kind('Array(Visibility)')).to eq(:unsupported)
+      props = [
+        { name: 'bodyVisibility', declared: 'Visibility', swift_type: 'String', swift_optional: false },
+        { name: 'hintVisibility', declared: 'Visibility?', swift_type: 'String?', swift_optional: true },
+        { name: 'email', declared: 'String', swift_type: 'String', swift_optional: false }
+      ]
+      code = described_class.apply_function(props)
+      expect(code).to include('JsonUITestValue.check(value, declaredClass: "Visibility")')
+      expect(code).to include('if let typed = accepted as? String { self.bodyVisibility = typed }')
+      expect(code).to include('self.hintVisibility = accepted as? String')
+      expect(code).not_to match(/case \.accept:\n\s*break/)
+      expect(code.scan('// Requires SwiftJsonUI >= 10.35.2 (initialState: Visibility)').size).to eq(2)
+      email_case = code[/case "email":\n(.*?)case \.reject/m, 1]
+      expect(email_case).not_to include('10.35.2')
+
+      plain = described_class.apply_function([props.last])
+      expect(plain).not_to include('10.35.2')
+
+      snapshot = described_class.snapshot_function(props)
+      expect(snapshot).to include('snapshot["bodyVisibility"] = bodyVisibility')
+      expect(snapshot).to include('snapshot["hintVisibility"] = hintVisibility.map { $0 as Any } ?? NSNull()')
+    end
+
     it 'leaves closures and colours out of the snapshot, and writes null for a nil optional' do
       code = described_class.snapshot_function([
         { name: 'email', declared: 'String', swift_type: 'String', swift_optional: false },

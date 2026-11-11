@@ -157,6 +157,21 @@ RSpec.describe 'test bridge (kjui)' do
       end
     end
 
+    # Visibility (2026-11-11): the library judges it from 2.54.2. Only a Data
+    # that declares one says so; the code around the check is the same.
+    it 'names KotlinJsonUI 2.54.2 only for a Data that declares a Visibility' do
+      with_visibility, = build_data([{ 'name' => 'bodyVisibility', 'class' => 'Visibility', 'defaultValue' => 'gone' },
+                                     { 'name' => 'email', 'class' => 'String' }])
+      expect(with_visibility).to include('// Requires KotlinJsonUI >= 2.54.2 (initialState: Visibility)')
+      expect(declared_classes(with_visibility)).to eq([%w[bodyVisibility Visibility], %w[email String]])
+
+      optional, = build_data([{ 'name' => 'hintVisibility', 'class' => 'visibility?' }])
+      expect(optional).to include('// Requires KotlinJsonUI >= 2.54.2 (initialState: Visibility)')
+
+      without, = build_data([{ 'name' => 'email', 'class' => 'String' }])
+      expect(without).not_to include('2.54.2')
+    end
+
     it 'leaves out a field the generator adds by itself, as validate does' do
       File.write(File.join(dir, 'Layouts', 'screen.json'), JSON.generate(
         'type' => 'View', 'id' => 'root', 'data' => [{ 'name' => 'email', 'class' => 'String', 'defaultValue' => '' }],
@@ -248,6 +263,29 @@ RSpec.describe 'test bridge (kjui)' do
       expect(lines).to include('rejected [RejectedKey(key=nope, reason=not a data field)]')
       expect(lines).to include('data [new, null, 7, true, Color(value=4294901760)]')
       expect(lines).to include('snapshot {email=new, nickname=null, count=7, agreed=true}')
+    end
+
+    # What the judge accepts for a Visibility is a String, and the Data holds
+    # one: updateData sets it as it sets any String field.
+    it 'sets an accepted Visibility through updateData as the String the Data holds' do
+      skip_without_compiler
+      kotlin_items = items + [{ 'name' => 'bodyVisibility', 'class' => 'Visibility', 'defaultValue' => 'gone' }]
+      kotlin, = build_data(kotlin_items)
+      source = view_model(kotlin_items) + "\n" + <<~KOTLIN
+        fun main() {
+            val vm = ScreenViewModel()
+            val rejected = vm.data.value.applyTestInitialState(mapOf("bodyVisibility" to "visible"), vm::updateData)
+            println("rejected " + rejected)
+            println("visibility " + vm.data.value.bodyVisibility)
+            println("snapshot " + vm.data.value.testSnapshot()["bodyVisibility"])
+        }
+      KOTLIN
+      run = KotlinCompiler.run(source, files: {
+        KotlinCompiler::TEST_BRIDGE_STUBS_FILE => TestBridgeCodeSpec::JUDGE,
+        'Color.kt' => TestBridgeCodeSpec::COLOR_STUBS, 'ColorManager.kt' => TestBridgeCodeSpec::COLOR_MANAGER_STUBS, 'ScreenData.kt' => kotlin
+      })
+      expect(run.errors).to eq([])
+      expect(run.output.lines.map(&:strip)).to include('rejected []', 'visibility visible', 'snapshot visible')
     end
 
     it 'rejects a colour spelling that names no colour, and keeps the field' do

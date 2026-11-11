@@ -80,6 +80,10 @@ _SCALARS = {
 }
 _ELEMENT = (re.compile(r"^Array\((.+)\)$"), re.compile(r"^\[(.+)\]$"), re.compile(r"^List<(.+)>$"))
 _INT_MIN, _INT_MAX = -2147483648, 2147483647
+#: Visibility takes the three words the `visibility` attribute reads, as a
+#: string on every face (§10.3). Not an array element: no attribute reads one.
+_VISIBILITY_SPELLINGS = ("Visibility", "visibility")
+_VISIBILITY_VALUES = ("visible", "invisible", "gone")
 
 
 def _scalar(name: str) -> str | None:
@@ -91,6 +95,8 @@ def _shape(base: str):
     scalar = _scalar(base)
     if scalar:
         return scalar, None
+    if base in _VISIBILITY_SPELLINGS:
+        return "visibility", None
     for pattern in _ELEMENT:
         m = pattern.match(base)
         if m:
@@ -116,6 +122,8 @@ def _fits(kind: str, v) -> bool:
         return isinstance(v, str)
     if kind == "boolean":
         return isinstance(v, bool)
+    if kind == "visibility":
+        return isinstance(v, str) and v in _VISIBILITY_VALUES
     if isinstance(v, bool) or not isinstance(v, (int, float)) or not _finite(v):
         return False
     if kind == "number":

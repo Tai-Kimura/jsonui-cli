@@ -1853,6 +1853,7 @@ module RjuiTools
               switch (kind) {
                 case 'string': return typeof v === 'string';
                 case 'boolean': return typeof v === 'boolean';
+                case 'visibility': return v === 'visible' || v === 'invisible' || v === 'gone';
                 case 'number': return typeof v === 'number' && Number.isFinite(v);
                 case 'int':
                   return typeof v === 'number' && Number.isInteger(v) && v >= -2147483648 && v <= 2147483647;
@@ -1865,6 +1866,8 @@ module RjuiTools
             function shapeOf(base#{t.(': string')})#{t.(': { kind: string; element?: string } | null')} {
               const scalar = scalarKind(base);
               if (scalar) return { kind: scalar };
+              // The three words the visibility attribute reads; never an array element.
+              if (base === 'Visibility' || base === 'visibility') return { kind: 'visibility' };
               const element = /^Array\\((.+)\\)$/.exec(base) || /^\\[(.+)\\]$/.exec(base) || /^List<(.+)>$/.exec(base);
               if (element) {
                 const inner = scalarKind(element[1].trim());
