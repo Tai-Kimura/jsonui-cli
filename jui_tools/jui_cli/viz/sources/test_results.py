@@ -227,6 +227,12 @@ async def pull(adb: str, serial: str, base: Path, timeout: float = PULL_TIMEOUT_
             pass
         await proc.wait()
         return False
+    # the prune reads and deletes files: in the executor, not on the loop's thread (it held a TERM there)
+    await asyncio.get_running_loop().run_in_executor(None, prune_pulled, dest)
+    return rc == 0
+
+
+def prune_pulled(dest: Path) -> None:
+    """Prune each app folder one device's pull left."""
     for folder in (p for p in dest.iterdir() if quiet_fs.is_dir(p)) if quiet_fs.is_dir(dest) else []:
         prune(folder)
-    return rc == 0

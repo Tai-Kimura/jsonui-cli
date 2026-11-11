@@ -335,16 +335,29 @@ SLOW_JOB = {   # name: (the patch, seconds until it runs, the thread left busy, 
 }
 
 
-def _serve_as(home: Path, port: int, patch: str = "", claude_sleep: float = 0) -> subprocess.Popen:
+def _serve_as(home: Path, port: int, patch: str = "", claude_sleep: float = 0, android: tuple[str, ...] = ()
+              ) -> subprocess.Popen:
     """serve in a child with a stand-in `claude` first on PATH (its `agents --json` answers after claude_sleep s) and
-    patch run first; started once server.json is there."""
+    patch run first; started once server.json is there. A stand-in `adb` is first on PATH too: it lists the serials
+    in `android` (none by default) and its pull leaves one app folder, each pull named in <home>/adb-pulls. The
+    machine's own adb and its devices do not reach the case: 2.5.29's red came from three devices attached to the
+    gate's machine, whose start-up pull ran a slow job on the loop."""
     bin_dir = home / "stand-in-bin"
     bin_dir.mkdir(exist_ok=True)
     (bin_dir / "claude").write_text(f"#!/bin/sh\nsleep {claude_sleep}\necho '[]'\n")
     (bin_dir / "claude").chmod(0o755)
+    listed = "".join(f"echo '{serial} device product:p model:Stand_In device:d transport_id:1'\n" for serial in android)
+    (bin_dir / "adb").write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = devices ]; then echo "List of devices attached"\n' + listed + "exit 0; fi\n"
+        'if [ "$3" = pull ]; then for last; do :; done; mkdir -p "$last/app.stand.in"; '
+        f'echo "$2" >> {str(home / "adb-pulls")!r}; exit 0; fi\n'
+        "exit 1\n")
+    (bin_dir / "adb").chmod(0o755)
     code = (f"import sys; sys.argv = ['jui', 'viz', 'serve', '--port', '{port}']; sys.path.insert(0, {str(JUI.parents[1])!r}); "
             + (f"exec({patch!r}); " if patch else "") + "from jui_cli.cli import main; sys.exit(main())")
     env = dict(os.environ, HOME=str(home), PYTHONUNBUFFERED="1", PATH=f"{bin_dir}:{os.environ['PATH']}")
+    env.pop("JSONUI_TEST_RESULTS_DIR", None)   # the results' shelf under the case's home
     proc = subprocess.Popen([sys.executable, "-c", code], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline:
@@ -433,6 +446,41 @@ def test_term_while_a_pool_job_runs_ends_it(home, where):
     # the thread not waited for is named on stderr (what `jui viz start` keeps in serve.log)
     left = [line for line in err[0].splitlines() if "stopped; not waited for:" in line]
     assert len(left) == 1 and thread in left[0], err[0][-2000:]
+
+
+#: the results' shelf read and pruned (ticket 2026-11-06-viz-e2e-full-run-red-under-load, kind 9): each made to take 20 s
+#: once under way, a marker file written as it starts. Each ran on the loop's thread until 2.5.30, so a TERM was not
+#: taken until it ended (the page's requests neither). name: (the patch, the stand-in devices)
+SHELF_JOB = {
+    "the start's read of the shelf": (
+        "import time; from jui_cli.viz.sources import test_results as T; o = T.ResultShelf.scan\n"
+        "def slow(self):\n    open({inside!r}, 'w').close(); time.sleep(20); return o(self)\nT.ResultShelf.scan = slow", ()),
+    "a device's pull: the prune": (
+        "import time; from jui_cli.viz.sources import test_results as T; o = T.prune\n"
+        "def slow(folder, *a, **k):\n    open({inside!r}, 'w').close(); time.sleep(20); return o(folder, *a, **k)\n"
+        "T.prune = slow", ("STANDIN01",)),
+    "a device's pull: the shelf read again": (
+        "import time; from jui_cli.viz.sources import test_results as T; o = T.ResultShelf.scan; n = [0]\n"
+        "def slow(self):\n    n[0] += 1\n    if n[0] > 1:\n        open({inside!r}, 'w').close(); time.sleep(20)\n"
+        "    return o(self)\nT.ResultShelf.scan = slow", ("STANDIN01",)),
+}
+
+
+@pytest.mark.parametrize("where", list(SHELF_JOB))
+def test_term_while_the_results_shelf_is_read_ends_it(home, where):
+    patch, android = SHELF_JOB[where]
+    inside = home / "shelf-job-under-way"
+    proc = _serve_as(home, _free_port(), patch=patch.format(inside=str(inside)), android=android)
+    deadline = time.monotonic() + 30
+    while not inside.exists() and proc.poll() is None and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert inside.exists(), f"the shelf's job did not start ({where})"
+    if android:
+        assert (home / "adb-pulls").read_text().split() == list(android)   # the job is the pull's own
+    err: list = []
+    _term_ends_it(proc, err)
+    left = [line for line in err[0].splitlines() if "stopped; not waited for:" in line]
+    assert len(left) == 1 and "jui-viz-serve_" in left[0], err[0][-2000:]
 
 
 def test_term_while_it_still_starts_ends_it_with_its_files_cleared(home):

@@ -1151,9 +1151,20 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
             from ..viz.sources import test_results
 
             shelf = test_results.ResultShelf(test_results.results_base())
-            for folder in test_results.app_folders(shelf.base):
-                test_results.prune(folder)
-            world.apply_saved_results(shelf.scan())
+
+            def first_shelf_read() -> list[dict]:
+                for folder in test_results.app_folders(shelf.base):
+                    test_results.prune(folder)
+                return shelf.scan()
+
+            async def first_shelf_load() -> None:
+                # The shelf's prune and read, in the executor and not awaited by the start: on the loop's thread they
+                # held a TERM, and every request, for as long as the disk took (ticket
+                # 2026-11-06-viz-e2e-full-run-red-under-load, kind 9).
+                world.apply_saved_results(await loop.run_in_executor(None, first_shelf_read))
+                world.publish()
+
+            tasks.append(asyncio.create_task(first_shelf_load()))
             pulls: dict[str, asyncio.Task] = {}
 
             def pull_results(serial: str) -> None:
@@ -1164,7 +1175,7 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
 
                 async def go() -> None:
                     await test_results.pull(adb, serial, shelf.base)
-                    world.apply_saved_results(shelf.scan())
+                    world.apply_saved_results(await loop.run_in_executor(None, shelf.scan))   # not on the loop's thread
                     world.publish()
 
                 pulls[serial] = asyncio.create_task(go())
