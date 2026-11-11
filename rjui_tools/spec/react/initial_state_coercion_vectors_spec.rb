@@ -73,8 +73,8 @@ RSpec.describe 'initialState coercion vectors (rjui)' do
     skip(reason) if reason
   end
 
-  it 'is the test-runner vector, case for case (86 cases when copied)' do
-    expect(COERCION['cases'].size).to eq(86)
+  it 'is the test-runner vector, case for case (98 cases when copied)' do
+    expect(COERCION['cases'].size).to eq(98)
   end
 
   describe 'checkTestValue, the helper alone' do

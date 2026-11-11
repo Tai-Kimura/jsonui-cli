@@ -14,6 +14,10 @@ module SjuiTools
     # rejects it as unsupported — so nothing here can make a value fit.
     module TestBridgeCode
       MIN_LIBRARY_VERSION = '10.30.0'
+      # JsonUITestValue accepts a Visibility value (visible / invisible / gone)
+      # from this version; an older one rejects it as unsupported.
+      VISIBILITY_MIN_LIBRARY_VERSION = '10.35.2'
+      VISIBILITY_SPELLINGS = %w[Visibility visibility].freeze
 
       SCALARS = {
         'String' => :string, 'string' => :string,
@@ -27,10 +31,12 @@ module SjuiTools
 
       module_function
 
-      # :scalar / :typed_array / :untyped_array / :object / :color / :color_array / :unsupported
+      # :scalar / :visibility / :typed_array / :untyped_array / :object / :color / :color_array / :unsupported
       def kind(declared_class)
         base = declared_class.to_s.strip.sub(/\?\z/, '')
         return :unsupported if base.include?('->')
+        # A String on the Data (type_converter), set from the three words; not an array element.
+        return :visibility if VISIBILITY_SPELLINGS.include?(base)
 
         scalar = SCALARS[base]
         return(scalar == :color ? :color : :scalar) if scalar
@@ -64,6 +70,9 @@ module SjuiTools
         lines << '            switch key {'
         props.each do |prop|
           lines << "            case #{swift_string(prop[:name])}:"
+          if kind(prop[:declared]) == :visibility
+            lines << "                // Requires SwiftJsonUI >= #{VISIBILITY_MIN_LIBRARY_VERSION} (initialState: Visibility)"
+          end
           lines << "                switch JsonUITestValue.check(value, declaredClass: #{swift_string(prop[:declared])}) {"
           lines.concat(accept_lines(prop))
           lines << '                case .reject(let reason):'
