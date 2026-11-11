@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import socket
 import stat
 import subprocess
@@ -367,12 +368,20 @@ def _term_ends_it(proc: subprocess.Popen, err_out: list | None = None, after_ter
     try:
         rc = proc.wait(timeout=TERM_WITHIN_SEC)
     except subprocess.TimeoutExpired:
+        # every thread's stack first (faulthandler writes it at the signal, the loop's thread need not run), as
+        # `jui viz stop` does before it kills: 2.5.28's red had serve started and no "stopping", the loop's thread
+        # held by something for the whole 3 s
+        try:
+            os.kill(proc.pid, signal.SIGUSR1)   # our own child
+            time.sleep(1)
+        except ProcessLookupError:
+            pass
         proc.kill()
         out, err = proc.communicate()
         # serve's own log says where the stop was (held in a step, a thread not waited for): the gate's red of 11-11
         # had only the line above
         raise AssertionError(f"TERM did not end serve within {TERM_WITHIN_SEC} s (killed "
-                             f"{time.monotonic() - start:.2f} s after the TERM)\n--- stderr ---\n{err[-3000:]}"
+                             f"{time.monotonic() - start:.2f} s after the TERM)\n--- stderr ---\n{err[-12000:]}"
                              f"\n--- stdout ---\n{out[-1500:]}")
     took = time.monotonic() - start
     out, err = proc.communicate()
