@@ -954,11 +954,11 @@ module RjuiTools
         # Generated components apply the `id` prop to their root element.
         # Only a literal collection id qualifies; without one, tapItem has
         # no way to address the collection anyway.
+        # Under an include with an id the collection's id takes the include's
+        # prefix first (BaseConverter#build_suffixed_id_attr), as the expanded
+        # id does on iOS and Android.
         def cell_item_id_attr(index_var)
-          collection_id = attributes['id']
-          return '' unless collection_id.is_a?(String) && !collection_id.empty? && !collection_id.include?('@{')
-
-          " id={`#{collection_id}_item_${#{index_var}}`}"
+          build_suffixed_id_attr("_item_${#{index_var}}", attributes['id'])
         end
 
         # The class-list shape — `cellClasses` (with `headerClasses` /
