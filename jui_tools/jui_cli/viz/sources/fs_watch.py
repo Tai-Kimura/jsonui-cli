@@ -25,24 +25,21 @@ def observer():
     return _guarded_fsevents_observer()
 
 
-def started(obs, wait_sec: float = START_WAIT_SEC) -> bool:
-    """After ``obs.start()``: True when each folder's stream started; False when one did not (or did not say so within
-    wait_sec). Not FSEvents: True."""
+def outcome(obs, wait_sec: float = START_WAIT_SEC) -> tuple[int, list[str]]:
+    """After ``obs.start()``: how many folders' streams started, and why each that did not (its folder and the error;
+    one that did not say within wait_sec counts as not started). Not FSEvents: every folder, none failed."""
+    ok, failed = 0, []
     for emitter in list(getattr(obs, "emitters", ())):
         settled = getattr(emitter, "settled", None)
         if settled is None:
-            continue
-        if not settled.wait(wait_sec) or emitter.failed is not None:
-            return False
-    return True
-
-
-def failure(obs) -> str:
-    """Why the streams that did not start did not, for the log."""
-    for emitter in list(getattr(obs, "emitters", ())):
-        if getattr(emitter, "failed", None) is not None:
-            return f"{type(emitter.failed).__name__}: {emitter.failed}"
-    return "no answer from FSEvents"
+            ok += 1
+        elif not settled.wait(wait_sec):
+            failed.append(f"{emitter.watch.path}: no answer from FSEvents")
+        elif emitter.failed is not None:
+            failed.append(f"{emitter.watch.path}: {type(emitter.failed).__name__}: {emitter.failed}")
+        else:
+            ok += 1
+    return ok, failed
 
 
 _CLASS = None
@@ -102,11 +99,13 @@ def _guarded_fsevents_observer():
 
 
 def kept_or_none(obs, what: str):
-    """``obs`` once started, when every folder is watched; else it is stopped (safely) and None is returned: the server
-    does without that watcher rather than end (a stream FSEvents would not start)."""
-    if started(obs):
+    """``obs`` once started, when one folder or more is watched (a folder whose stream did not start is named in the
+    log, as watchdog did before); None when none is: it is stopped (safely) and the caller does without it."""
+    ok, failed = outcome(obs)
+    for line in failed:
+        print(f"jui viz: {what}: a folder not watched: {line}"[:1000], file=sys.stderr, flush=True)
+    if ok or not failed:
         return obs
-    print(f"jui viz: {what} not watched: FSEvents did not start ({failure(obs)})"[:300], file=sys.stderr, flush=True)
     try:
         obs.stop()
         obs.join(timeout=1)

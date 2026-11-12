@@ -334,3 +334,42 @@ def test_a_stream_that_started_is_kept_and_stopped_as_before(tmp_path):
         obs.stop()
         obs.join(timeout=5)
     assert not obs.is_alive()
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="FSEvents is macOS's")
+def test_a_watcher_whose_one_folder_did_not_start_keeps_the_others(tmp_path, monkeypatch):
+    """One folder's stream refused ("Cannot add watch ... already scheduled", another watcher holds it), the other
+    folder's started: the watcher stays for the folder it has, as watchdog left it before, and the refused folder is
+    never stopped through FSEvents."""
+    import _watchdog_fsevents as native
+    from watchdog.events import FileSystemEventHandler
+    from jui_cli.viz.sources import fs_watch
+
+    real_add, real_remove = native.add_watch, native.remove_watch
+    refused: list = []
+    (tmp_path / "good").mkdir()
+    (tmp_path / "bad").mkdir()
+
+    def add_watch(emitter, watch, *a):
+        if watch.path.endswith("bad"):
+            refused.append(watch.path)
+            raise RuntimeError(f"Cannot add watch {watch} - it is already scheduled")
+        return real_add(emitter, watch, *a)
+
+    def remove_watch(watch):
+        assert not watch.path.endswith("bad"), "the refused folder was stopped through FSEvents"
+        return real_remove(watch)
+
+    monkeypatch.setattr(native, "add_watch", add_watch)
+    monkeypatch.setattr(native, "remove_watch", remove_watch)
+    obs = fs_watch.observer()
+    for name in ("good", "bad"):
+        obs.schedule(FileSystemEventHandler(), str(tmp_path / name), recursive=True)
+    obs.daemon = True
+    obs.start()
+    try:
+        assert fs_watch.kept_or_none(obs, "a test room") is obs
+        assert len(refused) == 1
+    finally:
+        obs.stop()
+        obs.join(timeout=5)
