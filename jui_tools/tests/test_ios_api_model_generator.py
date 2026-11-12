@@ -1071,8 +1071,10 @@ class FormatAwareMappingTests(unittest.TestCase):
         )
         # encode re-emits ISO strings
         self.assertIn("_juiFormatIsoDate($0)", src)
-        # memberwise init restored (suppressed by the custom init)
-        self.assertIn("init(id: UUID, data: Data, createdAt: Date?, tags: [Date]?)", src)
+        # memberwise init restored (suppressed by the custom init); an optional
+        # field's parameter defaults to nil, as on Android (ticket
+        # jui-api-model-ios-init-optional-without-default-nil)
+        self.assertIn("init(id: UUID, data: Data, createdAt: Date? = nil, tags: [Date]? = nil)", src)
 
     def test_uuid_data_only_keeps_synthesized_codable(self):
         """UUID / Data decode natively — no custom init without a date."""

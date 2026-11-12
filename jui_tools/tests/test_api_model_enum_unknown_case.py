@@ -12,7 +12,9 @@ Kotlin (kotlinx and moshi) gets ``UNKNOWN`` and a serializer beside the enum. Wr
 enum, so a value the app does not know is never sent as another; its ``wire`` is ``""`` (an integer enum's
 ``Int.MIN_VALUE``), which no entry has, so ``entries.firstOrNull { it.wire == s }`` (as the apps find an entry) stays
 null for a string no entry has. Off
-(``"api": {"enum_unknown_case": false}``): the generators write what 2.5.14 wrote, to the byte (the golden).
+(``"api": {"enum_unknown_case": false}``): the generators write what 2.5.14 wrote, to the byte (the golden) — but
+for the iOS DTO init, whose optional parameters default to ``nil`` from jsonui-cli 2.5.32 whatever this key says
+(ticket jui-api-model-ios-init-optional-without-default-nil; one line of ios/ItemDto.swift).
 """
 from __future__ import annotations
 

@@ -20,7 +20,7 @@ nonisolated struct ItemDto: Codable, Sendable, Equatable, Hashable {
     let byName: [String: DeviceKind]?
     let inner: InnerDto?
 
-    init(id: String, kind: DeviceKind, optKind: DeviceKind?, nullKind: DeviceKind?, defaulted: LoginMethod? = LoginMethod.appleId, inline: ItemInline, level: Level, severity: Severity?, kinds: [DeviceKind], byName: [String: DeviceKind]?, inner: InnerDto?) {
+    init(id: String, kind: DeviceKind, optKind: DeviceKind? = nil, nullKind: DeviceKind? = nil, defaulted: LoginMethod? = LoginMethod.appleId, inline: ItemInline, level: Level, severity: Severity? = nil, kinds: [DeviceKind], byName: [String: DeviceKind]? = nil, inner: InnerDto? = nil) {
         self.id = id
         self.kind = kind
         self.optKind = optKind
