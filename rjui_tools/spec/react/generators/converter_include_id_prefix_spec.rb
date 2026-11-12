@@ -49,8 +49,13 @@ RSpec.describe 'a converter writes the DOM id with the include prefix and the bi
     $stdout = saved
   end
 
-  before do
+  # The converters named are process-wide (once a build); each example starts
+  # with none and leaves none (spec/support/process_state_guard.rb).
+  around do |example|
     base = RjuiTools::React::Converters::BaseConverter
+    base.reset_id_written_as_written_named! if base.respond_to?(:reset_id_written_as_written_named!)
+    example.run
+  ensure
     base.reset_id_written_as_written_named! if base.respond_to?(:reset_id_written_as_written_named!)
   end
 
