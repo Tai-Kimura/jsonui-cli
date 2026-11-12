@@ -22,6 +22,8 @@ import os
 import re
 from pathlib import Path
 
+from .class_scope import member_filter, member_lines
+
 
 # --------------------------------------------------------------------------- #
 # Atomic write
@@ -383,7 +385,7 @@ KOTLIN_FUN_LINE_RE = re.compile(
 
 
 def extract_swift_method_labels(
-    impl_source: str, method_name: str,
+    impl_source: str, method_name: str, class_name: str | None = None,
 ) -> list[tuple[str, str]] | None:
     """Return ``[(external_label, internal_name), ...]`` for *method_name*.
 
@@ -396,8 +398,11 @@ def extract_swift_method_labels(
     func_re = re.compile(
         r"func\s+(\w+)\s*(?:<[^>]+>)?\s*\((?P<params>[^)]*)\)",
     )
+    # *class_name*: only the class's (and its extensions') own functions — a local function of the same name read
+    # first gave its labels instead (ticket jui-kotlin-override-inserted-on-local-val, the Swift side).
+    is_member = member_filter(impl_source, class_name, "swift")
     for m in func_re.finditer(impl_source):
-        if m.group(1) != method_name:
+        if m.group(1) != method_name or not is_member(m.start()):
             continue
         return _parse_swift_param_labels(m.group("params"))
     return None
@@ -461,22 +466,36 @@ def extract_expected_labels_from_swift_sig(
     return _parse_swift_param_labels(m.group("params"))
 
 
+def _kotlin_members(source: str, class_name: str | None) -> set[int] | None:
+    """Lines declaring a member of *class_name* (None: no restriction — no class named, or not found; the
+    inheritance step that runs first already halts on a class it cannot find)."""
+    if class_name is None:
+        return None
+    return member_lines(source, class_name, "kotlin")
+
+
 def inject_kotlin_override(
     source: str,
     method_names: list[str],
+    class_name: str | None = None,
 ) -> str:
     """Ensure every function declaration in *method_names* is prefixed with
-    ``override``.
+    ``override``; one that already has it is left alone.
 
-    Only the first ``fun <name>`` on its own line is considered per name; we
-    avoid rewriting if ``override`` is already present.
+    *class_name*: only a ``fun`` declared directly in that class (see
+    :mod:`class_scope`) — a local function, or a member of a nested class,
+    companion or anonymous object, cannot override the class's protocol and
+    Kotlin refuses ``override`` there. None: every line, as before.
     """
     if not method_names:
         return source
 
     name_set = set(method_names)
+    members = _kotlin_members(source, class_name)
     lines = source.splitlines(keepends=True)
     for idx, line in enumerate(lines):
+        if members is not None and idx not in members:
+            continue
         m = KOTLIN_FUN_LINE_RE.match(line.rstrip("\r\n"))
         if not m:
             continue
@@ -522,18 +541,27 @@ KOTLIN_VAR_LINE_RE = re.compile(
 def inject_kotlin_var_override(
     source: str,
     var_names: list[str],
+    class_name: str | None = None,
 ) -> str:
     """Ensure every ``var``/``val`` declaration in *var_names* is prefixed
     with ``override``.
 
-    Same idempotency guarantee as ``inject_kotlin_override``.
+    Same idempotency and *class_name* scope as ``inject_kotlin_override``: a
+    local ``val plan = …`` in a function body became ``override val plan``
+    and Kotlin refused it ("Modifier 'override' is not applicable to 'local
+    variable'"; ticket jui-kotlin-override-inserted-on-local-val). A Kotlin
+    primary constructor's ``val``/``var`` parameters are the class's
+    properties and are kept.
     """
     if not var_names:
         return source
 
     name_set = set(var_names)
+    members = _kotlin_members(source, class_name)
     lines = source.splitlines(keepends=True)
     for idx, line in enumerate(lines):
+        if members is not None and idx not in members:
+            continue
         m = KOTLIN_VAR_LINE_RE.match(line.rstrip("\r\n"))
         if not m:
             continue

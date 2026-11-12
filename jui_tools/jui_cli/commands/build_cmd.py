@@ -3020,6 +3020,7 @@ def _sync_viewmodel_protocols(
             proto_path = generator.viewmodel_protocol_path(spec.name, subdir)
 
             impl_source: str | None = None
+            impl_class = f"{spec.name}ViewModel"
             impl_method_names: set[str] | None = None
             impl_var_names: set[str] | None = None
             if impl_path.exists():
@@ -3030,8 +3031,11 @@ def _sync_viewmodel_protocols(
                         f"[{platform}] could not read Impl {impl_path}: {e}"
                     )
                     continue
-                impl_method_names = list_impl_method_names(impl_source)
-                impl_var_names = list_impl_var_names(impl_source)
+                # The class's own members only (ticket
+                # jui-kotlin-override-inserted-on-local-val): a local `val plan`
+                # or a nested type's member is not the Impl declaring `plan`.
+                impl_method_names = list_impl_method_names(impl_source, impl_class, platform)
+                impl_var_names = list_impl_var_names(impl_source, impl_class, platform)
 
             sync_platform = platform
             try:
@@ -3071,7 +3075,7 @@ def _sync_viewmodel_protocols(
             # The same for a spec method: `private fun X` counted as present,
             # then became `private override fun X`, which Kotlin refuses;
             # Swift's `private func X` meets no requirement.
-            narrowed_methods = (list_impl_narrowed_methods(impl_source, platform)
+            narrowed_methods = (list_impl_narrowed_methods(impl_source, platform, impl_class)
                                 if impl_source is not None else {})
             narrowed_spec_methods = {m.name for m in sync_result.methods
                                      if m.name in narrowed_methods}
@@ -3089,7 +3093,7 @@ def _sync_viewmodel_protocols(
             # `private override var` injecting `override` would write, and
             # Swift's `private var` meets no requirement. Named with the fix
             # the protocol allows, and left out of the injection below.
-            narrowed = (list_impl_narrowed_vars(impl_source, platform)
+            narrowed = (list_impl_narrowed_vars(impl_source, platform, impl_class)
                         if impl_source is not None else {})
             narrowed_spec_vars = {v.name: v for v in sync_result.vars if v.name in narrowed}
             for name, var in sorted(narrowed_spec_vars.items()):
@@ -3107,7 +3111,7 @@ def _sync_viewmodel_protocols(
                         method.signature
                     )
                     actual = extract_swift_method_labels(
-                        impl_source, method.name
+                        impl_source, method.name, impl_class
                     )
                     if actual is None:
                         continue  # missing_methods_in_impl already reported
@@ -3183,8 +3187,8 @@ def _sync_viewmodel_protocols(
                         # "data hides member of supertype".
                         var_names = ["data"] + [v.name for v in sync_result.vars
                                                 if v.name not in narrowed_spec_vars]
-                        updated = inject_kotlin_override(updated, method_names)
-                        updated = inject_kotlin_var_override(updated, var_names)
+                        updated = inject_kotlin_override(updated, method_names, impl_class)
+                        updated = inject_kotlin_var_override(updated, var_names, impl_class)
                 except ValueError as e:
                     errors.append(
                         f"[{platform}] {impl_path}: {e}"

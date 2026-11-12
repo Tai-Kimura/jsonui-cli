@@ -10,6 +10,7 @@ import sys
 from dataclasses import dataclass
 from typing import Callable
 
+from .class_scope import member_filter
 from .method_extractor import MarkerBlock, extract_marker_blocks
 from .spec_extractor import MethodDef, ScreenSpec, VarDef
 from .spec_validator import resolve_platforms
@@ -277,8 +278,16 @@ def _marker_member_name(blk: MarkerBlock) -> str | None:
     return m.group(1) if m else None
 
 
-def list_impl_method_names(impl_source: str) -> set[str]:
-    """Names of every top-level ``func``/``fun`` in *impl_source*."""
+def _language(platform: str | None) -> str:
+    return "swift" if platform == "ios" else "kotlin"
+
+
+def list_impl_method_names(impl_source: str, class_name: str | None = None,
+                           platform: str | None = None) -> set[str]:
+    """Names of every ``func``/``fun`` in *impl_source* — with *class_name*,
+    only those declared directly in that class (and, on iOS, its extensions):
+    a local function or a nested type's member does not implement the
+    protocol (see :mod:`class_scope`)."""
     import re
     pattern = re.compile(
         r"^[ \t]*"
@@ -290,7 +299,8 @@ def list_impl_method_names(impl_source: str) -> set[str]:
         r"(?:func|fun)\s+(?:<[^>]+>\s+)?(\w+)",
         re.MULTILINE,
     )
-    return {m.group(1) for m in pattern.finditer(impl_source)}
+    is_member = member_filter(impl_source, class_name, _language(platform))
+    return {m.group(1) for m in pattern.finditer(impl_source) if is_member(m.start())}
 
 
 #: Access modifiers that narrow a property's READER below a protocol member's,
@@ -304,7 +314,8 @@ NARROWING_MODIFIERS = {
 }
 
 
-def list_impl_narrowed_vars(impl_source: str, platform: str) -> dict[str, str]:
+def list_impl_narrowed_vars(impl_source: str, platform: str,
+                            class_name: str | None = None) -> dict[str, str]:
     """{name: modifier} for every ``var``/``val``/``let`` in *impl_source*
     declared ONLY with a modifier that narrows its reader on *platform* —
     ``private var X``, not ``private(set) var X`` nor ``override var X …
@@ -321,10 +332,12 @@ def list_impl_narrowed_vars(impl_source: str, platform: str) -> dict[str, str]:
         r"(?:var|val|let)\s+(?P<name>\w+)",
         re.MULTILINE,
     )
-    return _narrowed_names(pattern, impl_source, narrowing)
+    return _narrowed_names(pattern, impl_source, narrowing,
+                           member_filter(impl_source, class_name, _language(platform)))
 
 
-def list_impl_narrowed_methods(impl_source: str, platform: str) -> dict[str, str]:
+def list_impl_narrowed_methods(impl_source: str, platform: str,
+                               class_name: str | None = None) -> dict[str, str]:
     """{name: modifier} for every ``func``/``fun`` in *impl_source* declared
     ONLY with a modifier that narrows its reader on *platform* — the same
     reading as :func:`list_impl_narrowed_vars`. `list_impl_method_names`
@@ -340,15 +353,21 @@ def list_impl_narrowed_methods(impl_source: str, platform: str) -> dict[str, str
         r"(?:func|fun)\s+(?:<[^>]+>\s+)?(?P<name>\w+)",
         re.MULTILINE,
     )
-    return _narrowed_names(pattern, impl_source, narrowing)
+    return _narrowed_names(pattern, impl_source, narrowing,
+                           member_filter(impl_source, class_name, _language(platform)))
 
 
-def _narrowed_names(pattern, source: str, narrowing: set[str]) -> dict[str, str]:
+def _narrowed_names(pattern, source: str, narrowing: set[str], is_member=lambda pos: True) -> dict[str, str]:
     """Names whose every declaration carries a narrowing modifier: one also
-    declared without one (an overload, a nested type's member) is left out."""
+    declared without one (an overload, a nested type's member) is left out.
+    *is_member* keeps only the class's own declarations: a local ``val plan``
+    beside a ``private val plan`` member counted as an un-narrowed
+    declaration, so the member was injected into ``private override val``."""
     narrowed: dict[str, str] = {}
     open_names: set[str] = set()
     for m in pattern.finditer(source):
+        if not is_member(m.start()):
+            continue
         bare = [t for t in m.group("mods").split() if t in narrowing]
         if bare:
             narrowed.setdefault(m.group("name"), bare[0])
@@ -357,8 +376,11 @@ def _narrowed_names(pattern, source: str, narrowing: set[str]) -> dict[str, str]
     return {name: mod for name, mod in narrowed.items() if name not in open_names}
 
 
-def list_impl_var_names(impl_source: str) -> set[str]:
-    """Names of every top-level ``var``/``val``/``let`` in *impl_source*.
+def list_impl_var_names(impl_source: str, class_name: str | None = None,
+                        platform: str | None = None) -> set[str]:
+    """Names of every ``var``/``val``/``let`` in *impl_source* — with
+    *class_name*, only the class's own (a local ``val plan`` made a missing
+    member read as present; see :mod:`class_scope`).
 
     Swallows property wrappers (``@Published var x``) and access modifiers.
     """
@@ -374,4 +396,5 @@ def list_impl_var_names(impl_source: str) -> set[str]:
         r"(?:var|val|let)\s+(\w+)",
         re.MULTILINE,
     )
-    return {m.group(1) for m in pattern.finditer(impl_source)}
+    is_member = member_filter(impl_source, class_name, _language(platform))
+    return {m.group(1) for m in pattern.finditer(impl_source) if is_member(m.start())}
