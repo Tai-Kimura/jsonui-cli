@@ -18,6 +18,8 @@ import threading
 import time
 from pathlib import Path
 
+import pytest
+
 from jui_cli.viz.change_batch import ChangeBatch, Watchers
 from jui_cli.viz.ingest import World
 from jui_cli.viz.state import VizState
@@ -145,11 +147,74 @@ def test_the_same_folders_keep_their_watcher_and_one_replaced_is_joined_first():
     assert w.watch(_Room()) is True
     for _ in range(20):                       # the room's apps read again and again, the same folders
         assert w.watch(_Room()) is False
+    w.settle(5)
     assert log == [("start", 0)] and len(started) == 1
     folders.append(Path("/r/tests"))          # a folder came: watched again, the old one let go first
     assert w.watch(_Room()) is True
+    w.settle(5)
     assert log == [("start", 0), ("stop", 0), ("join", 0), ("start", 1)]
     assert [o.n for o in started] == [1]
+
+
+class _HeldObserver(_Observer):
+    """Its stop (or its start) waits until let go, 20 s at most: FSEvents' stop and start took 20 to 68 s when
+    fseventsd was busy (ticket 2026-11-12-viz-loop-stalls-on-watcher-stop)."""
+
+    def __init__(self, log, n, go):
+        super().__init__(log, n)
+        self.go = go
+
+    def stop(self):
+        self.log.append(("stop", self.n))
+        self.go.wait(20)
+
+
+@pytest.mark.parametrize("held", ["the old one's stop", "the new one's start"])
+def test_a_watcher_held_in_its_stop_or_start_does_not_hold_the_caller(held):
+    """Watchers.watch runs on the loop's thread (a room's worktrees changed): it hands the stop, the join and the start
+    to its worker and returns at once. Until 2.5.31 it called them itself, and the loop answered nothing for 20 to 68 s.
+    The order stays: the old one stopped and joined before the new one starts (the ENOSPC night of 2026-11-09)."""
+    log: list = []
+    go = threading.Event()
+    folders = [Path("/r/specs")]
+    started: list = []
+
+    def start(project):
+        n = len([e for e in log if e[0] == "start"])
+        if held == "the new one's start" and n == 1:
+            log.append(("start", n))
+            go.wait(20)
+            return _Observer(log, n)
+        log.append(("start", n))
+        return _HeldObserver(log, n, go) if held == "the old one's stop" else _Observer(log, n)
+
+    w = Watchers(lambda p: list(folders), start, started)
+    try:
+        assert w.watch(_Room()) is True
+        w.settle(5)
+        folders.append(Path("/r/tests"))
+        t0 = time.monotonic()
+        assert w.watch(_Room()) is True
+        assert w.watch(_Room()) is False      # the same folders again while the swap is under way: no second swap
+        took = time.monotonic() - t0
+        assert took < 1.0, f"watch waited {took:.1f} s on {held}"
+    finally:
+        go.set()
+    w.settle(5)
+    assert log == [("start", 0), ("stop", 0), ("join", 0), ("start", 1)]
+    assert [o.n for o in started] == [1]
+
+
+def test_watchers_closed_hand_back_the_running_ones_and_start_no_more():
+    log: list = []
+    folders = [Path("/r/specs")]
+    w = Watchers(lambda p: list(folders), lambda p: _Observer(log, 0), [])
+    w.watch(_Room())
+    w.settle(5)
+    running = w.close()
+    assert [o.n for o in running] == [0] and w.started == []
+    folders.append(Path("/r/tests"))
+    assert w.watch(_Room()) is False          # closed: nothing more is started
 
 
 # ---------------------------------------------------------------- (d) a session its hooks bring back

@@ -653,6 +653,8 @@ REQUEST_GRACE_SEC = 1.0
 #: How long a stop may take in all, whatever holds it: then the process ends, naming the step it was in (ticket
 #: 2026-10-23-viz-serve-restart-term-not-ending-on-ci). Each wait of the stop has its own grace of 1 to 2 s.
 STOP_MAX_SEC = 5.0
+#: How long the stop waits for the file watchers to stop (each is joined for 2 s at most; FSEvents' stop can hang).
+WATCHERS_STOP_SEC = 1.5
 
 
 def _run_serve(main) -> int:
@@ -884,7 +886,7 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
     watch.start()
     tasks: list[asyncio.Task] = []
     reader_cleanup: list = []
-    observer = None
+    observer: list = [None]   # the sessions folder's watcher, once started
     from ..viz.config import ask_server_info
 
     # TERM / INT taken from here on, before server.json says the server is there: a TERM while the rest starts up stops
@@ -1028,13 +1030,23 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
             def on_session_file(data: dict) -> None:
                 loop.call_soon_threadsafe(lambda: (world.apply_session_file(data, now_ms()), world.publish()))
 
-            observer = session_files.watch(paths.claude_sessions_dir(), on_session_file)
-            # Subscribe before scanning: a session created between scan and subscription must not be lost.
             for data in session_files.scan(paths.claude_sessions_dir()):
                 world.apply_session_file(data, now_ms())
             world.publish()
-            set_source("sessionFiles", "running" if observer else "stopped",
-                       None if observer else i18n.tl("srv.sessions.none"))
+
+            async def watch_session_files() -> None:
+                # the watcher is started off the loop's thread: FSEvents' start has waited a minute when fseventsd was
+                # busy (ticket 2026-11-12-viz-loop-stalls-on-watcher-stop). Read again once it is there: a session
+                # created between the scan above and the subscription must not be lost.
+                folder = paths.claude_sessions_dir()
+                observer[0] = await loop.run_in_executor(None, session_files.watch, folder, on_session_file)
+                for data in await loop.run_in_executor(None, lambda: list(session_files.scan(folder))):
+                    world.apply_session_file(data, now_ms())
+                world.publish()
+                set_source("sessionFiles", "running" if observer[0] else "stopped",
+                           None if observer[0] else i18n.tl("srv.sessions.none"))
+
+            tasks.append(asyncio.create_task(watch_session_files()))
             if agents_poll:
                 vanish_check: list = []   # the one registry read in flight (never more than one)
 
@@ -1420,10 +1432,19 @@ async def _serve(config, open_browser: bool, record: str | None = None, replay: 
             except (asyncio.CancelledError, Exception):  # noqa: BLE001
                 pass
         stop_step[0] = "the file watchers"
-        for watcher in [observer, *observers]:
-            if watcher is not None:
-                watcher.stop()
-                watcher.join(timeout=2)
+        # off the loop's thread, WATCHERS_STOP_SEC at most: FSEvents' stop has taken a minute (ticket
+        # 2026-11-12-viz-loop-stalls-on-watcher-stop); the observers' threads are daemons and do not hold the exit
+        # (a daemon thread of its own: one held does not hold the exit, as a pool's thread would for HELPERS_GRACE_SEC)
+        from concurrent.futures import Future as _Future
+        from ..viz.change_batch import stop_observers
+        going, stopped = [observer[0], *watchers.close()], _Future()
+        threading.Thread(target=lambda: (stop_observers(going), stopped.set_result(None)),
+                         name="jui-viz-watchers-stop", daemon=True).start()
+        try:
+            async with asyncio.timeout(WATCHERS_STOP_SEC):
+                await asyncio.wrap_future(stopped)
+        except asyncio.TimeoutError:
+            log(f"the file watchers did not stop within {WATCHERS_STOP_SEC:g} s: not waited for")
         if rec is not None:
             rec.close()
         stop_step[0] = "the web server"
