@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -321,6 +322,11 @@ print("ok")
 """
 
 
+# The file name the linker finds for `-lEventCore`: Linux looks for lib<name>.so, macOS for lib<name>.dylib (with a
+# .dylib name on Linux the library builds and the app's link fails with "cannot find -lEventCore").
+_LIBRARY = "libEventCore.dylib" if sys.platform == "darwin" else "libEventCore.so"
+
+
 @unittest.skipUnless(shutil.which("swiftc"), "swiftc not installed")
 class TwoModuleCompileTests(unittest.TestCase):
     """The module's files and a public function returning EventBundleDto are one library module; the app's files and
@@ -339,7 +345,7 @@ class TwoModuleCompileTests(unittest.TestCase):
             out.mkdir()
             lib = subprocess.run(
                 ["swiftc", "-parse-as-library", "-emit-library", "-module-name", "EventCore", "-emit-module",
-                 "-emit-module-path", str(out / "EventCore.swiftmodule"), "-o", str(out / "libEventCore.dylib"),
+                 "-emit-module-path", str(out / "EventCore.swiftmodule"), "-o", str(out / _LIBRARY),
                  *map(str, core), str(root / "api.swift")],
                 capture_output=True, text=True, timeout=600)
             if lib.returncode != 0:
@@ -353,7 +359,7 @@ class TwoModuleCompileTests(unittest.TestCase):
             if build.returncode != 0:
                 return lib, build
             run = subprocess.run([str(out / "app")], capture_output=True, text=True, timeout=60,
-                                 env={**os.environ, "DYLD_LIBRARY_PATH": str(out)})
+                                 env={**os.environ, "DYLD_LIBRARY_PATH": str(out), "LD_LIBRARY_PATH": str(out)})
             return lib, run
 
     def test_public_module_compiles_without_warnings_and_the_app_uses_it(self):
