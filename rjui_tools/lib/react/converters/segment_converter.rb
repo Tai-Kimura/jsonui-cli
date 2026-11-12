@@ -79,10 +79,7 @@ module RjuiTools
         # contract that the web test driver's selectTab action resolves.
         # Literal ids only — a bound id has no static value to interpolate.
         def segment_item_id_attr(index)
-          seg_id = extract_id
-          return '' if seg_id.nil? || has_binding?(seg_id)
-
-          " id=\"#{seg_id}_tab_#{index}\""
+          build_suffixed_id_attr("_tab_#{index}")
         end
 
         def build_class_name

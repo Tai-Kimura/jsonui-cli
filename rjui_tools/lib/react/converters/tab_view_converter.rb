@@ -149,8 +149,7 @@ module RjuiTools
           write = "#{selection_setter}?.(#{index})"
 
           # Build tab id for test automation (selectTab action)
-          tab_id = extract_id ? "#{extract_id}_tab_#{index}" : nil
-          tab_id_attr = tab_id ? " id=\"#{tab_id}\"" : ''
+          tab_id_attr = build_suffixed_id_attr("_tab_#{index}")
 
           <<~JSX.chomp
             #{indent_str(6)}<button#{tab_id_attr}

@@ -54,7 +54,62 @@ module RjuiTools
         # Built-in converters that still wrap inside `convert` are
         # unaffected — wrap_with_visibility is idempotent per instance.
         def convert_node(indent = 2)
-          wrap_with_visibility(convert(indent), indent)
+          jsx = convert(indent)
+          warn_id_written_as_written(jsx)
+          wrap_with_visibility(jsx, indent)
+        end
+
+        # The converters a project wrote (Converters::Extensions) are its own,
+        # and rjui does not rewrite them; one that writes the DOM id as written
+        # — `id_attr = extract_id ? %( id="#{extract_id}") : ''`, the line
+        # `rjui g converter` scaffolded until jsonui-cli 2.5.31 — is named
+        # instead, once a run, where the id it writes is not the id
+        # #build_id_attr gives: a bound id (`@{field}`, written as the literal
+        # text) or an id under an include with an id (no prefix, so a partial
+        # included twice gives the element one DOM id twice). Measured on the
+        # output, not read off the source: an id written any other way is the
+        # converter's own business. Ticket
+        # rjui-generated-converter-ignores-include-id-prefix.
+        @@id_written_as_written_named = {}
+        @@silent_depth = 0
+
+        def self.reset_id_written_as_written_named!
+          @@id_written_as_written_named = {}
+        end
+
+        # A conversion drawn only to be read (#drawn_classes, the include's
+        # root classes) prints nothing: its output is thrown away, and the
+        # converter is named where the node is drawn for real. Until this was
+        # held apart, the probe's line went into the discarded output and the
+        # converter counted as named, so the real build said nothing.
+        def self.silently
+          @@silent_depth += 1
+          yield
+        ensure
+          @@silent_depth -= 1
+        end
+
+        def warn_id_written_as_written(jsx)
+          return unless self.class.name.to_s.include?('::Extensions::')
+          return if @@silent_depth.positive?
+          return if @@id_written_as_written_named[self.class]
+
+          id = extract_id
+          return if id.nil? || id.to_s.empty?
+
+          literal = %( id="#{id}")
+          return if build_id_attr == literal
+          return unless jsx.to_s.include?(literal)
+
+          @@id_written_as_written_named[self.class] = true
+          file = self.class.instance_method(:convert).source_location&.first
+          where = file ? "#{File.basename(file)} (#{self.class.name.split('::').last})" : self.class.name
+          why = has_binding?(id.to_s) ? "a bound id (#{id}) as its literal text" : "id \"#{id}\" with no include's prefix, so a partial included twice gives it one DOM id twice"
+          Core::Logger.warn(
+            "[converter-id] #{where} writes the DOM id as written: #{why}. " \
+            "Write it with `id_attr = build_id_attr` (as every built-in converter, and `jui g converter` from " \
+            "jsonui-cli 2.5.31) in place of `extract_id ? %( id=\"\#{extract_id}\") : ''`"
+          )
         end
 
         # Typed attribute access backed by the generated extraction tables
@@ -1260,7 +1315,7 @@ module RjuiTools
         def drawn_classes(node)
           old = $stdout
           $stdout = StringIO.new
-          jsx = self.class.new(JSON.parse(JSON.generate(node)), @config).convert_node(0).to_s
+          jsx = BaseConverter.silently { self.class.new(JSON.parse(JSON.generate(node)), @config).convert_node(0).to_s }
           class_of = ->(tag) { tag && tag.match(/className=(?:"([^"]*)"|\{`([^`]*)`\})/) }
           # The element with the node's id (the scroll box of a Collection's
           # or a ScrollView's still box), and the outermost element when it is
@@ -2835,6 +2890,28 @@ module RjuiTools
             " id={jsonuiIncludeId(idPrefix, \"#{id_value}\")}"
           else
             " id=\"#{id_value}\""
+          end
+        end
+
+        # The DOM id of a part named after the node's literal id
+        # (`<id>_tab_<n>`, the Segment's and the TabView's buttons;
+        # `<id>_item_${i}`, a Collection's cells): under an include with an
+        # id the node's id takes the include's prefix first, as on iOS and
+        # Android, where the expanded id is the one the suffix is added to
+        # (`heroKindSeg_tab_0`). "" for no id or a bound one. *suffix* is the
+        # text after the id, `${…}` in it being JavaScript (a template
+        # literal is written then). Until jsonui-cli 2.5.31 the suffix went on
+        # the id as written, so a partial included twice gave the parts one
+        # DOM id twice.
+        def build_suffixed_id_attr(suffix, id_value = extract_id)
+          return '' unless id_value.is_a?(String) && !id_value.empty? && !has_binding?(id_value)
+
+          if @config['_include_id_prefix']
+            " id={`${jsonuiIncludeId(idPrefix, #{id_value.to_json})}#{suffix}`}"
+          elsif suffix.include?('${')
+            " id={`#{id_value}#{suffix}`}"
+          else
+            " id=\"#{id_value}#{suffix}\""
           end
         end
 

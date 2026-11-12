@@ -108,6 +108,10 @@ module RjuiTools
           # (INCLUDE_ID_PREFIX_GATE_FROM) and hands the answer over.
           apply_include_id_prefix_decision
 
+          # A project converter that writes the DOM id as written is named once
+          # a build (BaseConverter#warn_id_written_as_written).
+          React::Converters::BaseConverter.reset_id_written_as_written_named! if defined?(React::Converters::BaseConverter)
+
           # Resources (colors.json, strings.json, …) and Styles (reusable style
           # definitions) hold no layout — the one rule, ScreenIndex.layout_path?
           all_json_files = Dir.glob(File.join(layouts_dir, '**', '*.json')).select do |file|
