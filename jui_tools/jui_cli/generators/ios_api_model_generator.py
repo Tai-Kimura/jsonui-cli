@@ -296,7 +296,15 @@ class IosApiModelGenerator:
         # restore it for consumers who construct DTOs at call sites.
         # A public struct's synthesized memberwise init is internal, so code in another module could not build one:
         # a public DTO always writes its own.
-        if needs_custom_codable or self._is_public:
+        # And whenever a field may be omitted: Swift's synthesized memberwise
+        # init gives a `let` optional no default, so the init is written to
+        # carry `= nil` (_swift_omittable_without_default). A DTO whose
+        # fields are all required keeps the synthesized one, unchanged.
+        if (
+            needs_custom_codable
+            or self._is_public
+            or any(_swift_omittable_without_default(f) for f in schema.fields)
+        ):
             body_lines.extend(
                 _emit_swift_memberwise_init(
                     schema, enum_names, enums_by_name, format_native=fmt
@@ -1035,6 +1043,21 @@ def _emit_swift_oneof_nested_enum(field: FieldDef, one_of: OneOfRef) -> list[str
     return lines
 
 
+def _swift_omittable_without_default(field: FieldDef) -> bool:
+    """A field the server may leave out, with no swagger ``default``: its
+    init parameter defaults to ``nil``, as Android's constructor parameter
+    defaults to ``null`` (android_api_model_generator._kotlin_default_literal
+    — the same rule: optional, not required). A required field, nullable or
+    not, stays a parameter every call names, as on Android.
+
+    Until jsonui-cli 2.5.32 no such parameter had a default, so each
+    optional field added to the swagger broke every hand-written call on
+    iOS while Android's still compiled. Ticket
+    jui-api-model-ios-init-optional-without-default-nil.
+    """
+    return field.type.nullable and not field.required and not field.has_default
+
+
 def _emit_swift_memberwise_init(
     schema: SchemaDef,
     enum_names: set[str],
@@ -1062,12 +1085,15 @@ def _emit_swift_memberwise_init(
                 f.type, enum_names, format_native=format_native
             )
         param = f"{name}: {type_str}"
+        default = None
         if enums_by_name is not None and not f.type.is_one_of_ref:
             default = _swift_default_literal(
                 f, type_str, enums_by_name, format_native=format_native
             )
-            if default is not None:
-                param += f" = {default}"
+        if default is None and _swift_omittable_without_default(f):
+            default = "nil"
+        if default is not None:
+            param += f" = {default}"
         params.append(param)
     lines: list[str] = ["", f"    init({', '.join(params)}) {{"]
     for f in schema.fields:
