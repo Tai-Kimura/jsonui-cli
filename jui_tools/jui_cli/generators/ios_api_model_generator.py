@@ -68,6 +68,10 @@ class IosApiPlatformConfig:
     # not fail the whole response. False: the enum as before (a raw-value enum whose decode throws on such a value).
     enum_unknown_case: bool = True
     format_excluded_docs: frozenset[str] = frozenset()
+    # ``api.platforms.ios.modules[].access_level`` (ticket jui-api-model-ios-dto-cannot-be-shared-with-framework-target):
+    # "public" for the DTOs written into a module of their own (a framework the app and an extension share), so code
+    # outside that module can name them. "internal" (the default) writes exactly what was written before the key.
+    access_level: str = "internal"
 
 
 class IosApiModelGenerator:
@@ -90,6 +94,25 @@ class IosApiModelGenerator:
 
     def __init__(self, config: IosApiPlatformConfig):
         self._config = config
+
+    @property
+    def _is_public(self) -> bool:
+        return self._config.access_level == "public"
+
+    def _access(self, lines: list[str]) -> list[str]:
+        """The lines as written, or with ``public`` on every declaration another module needs (see _publicize)."""
+        return _publicize(lines) if self._is_public else lines
+
+    @staticmethod
+    def with_imports(source: str, modules: "list[str] | tuple[str, ...]") -> str:
+        """*source* with ``import <module>`` after its ``import Foundation``, for a file that names a type a module
+        of DTOs holds. No modules: *source* unchanged."""
+        if not modules:
+            return source
+        extra = "".join(f"import {m}\n" for m in sorted(set(modules)))
+        if "import Foundation\n" not in source:
+            return extra + source
+        return source.replace("import Foundation\n", "import Foundation\n" + extra, 1)
 
     def _format_enabled(self, doc: SwaggerDocument) -> bool:
         """Per-doc format-aware mapping decision (opt-in + per-doc opt-out)."""
@@ -152,7 +175,7 @@ class IosApiModelGenerator:
                 schema.wrapped_type, enum_names, format_native=self._format_enabled(doc)
             )
             alias_lines.append(f"typealias {schema.name}Dto = {mapped}")
-            body = "\n".join(alias_lines)
+            body = "\n".join(self._access(alias_lines))
             return f"{header}\nimport Foundation\n\n{body}\n\n{footer}\n"
 
         # Hashable is always declared so consumers can put DTOs in `Set` /
@@ -213,7 +236,7 @@ class IosApiModelGenerator:
             if fmt and _ftype_has_native_date(schema.fields[0].type):
                 body_lines.append("")
                 body_lines.extend(_SWIFT_ISO_DATE_HELPERS)
-            body = "\n".join(body_lines)
+            body = "\n".join(self._access(body_lines))
             return f"{header}\nimport Foundation\n\n{body}\n\n{footer}\n"
 
         has_oneof = any(f.type.is_one_of_ref for f in schema.fields)
@@ -271,7 +294,9 @@ class IosApiModelGenerator:
         # Memberwise initializer — Swift suppresses the auto-synthesized one
         # once we write a custom ``init(from decoder:)`` below, so explicitly
         # restore it for consumers who construct DTOs at call sites.
-        if needs_custom_codable:
+        # A public struct's synthesized memberwise init is internal, so code in another module could not build one:
+        # a public DTO always writes its own.
+        if needs_custom_codable or self._is_public:
             body_lines.extend(
                 _emit_swift_memberwise_init(
                     schema, enum_names, enums_by_name, format_native=fmt
@@ -321,7 +346,7 @@ class IosApiModelGenerator:
             body_lines.append("")
             body_lines.extend(_SWIFT_ISO_DATE_HELPERS)
 
-        body = "\n".join(body_lines)
+        body = "\n".join(self._access(body_lines))
         return f"{header}\nimport Foundation\n\n{body}\n\n{footer}\n"
 
     # ---------------------------- emit union ------------------------- #
@@ -402,7 +427,7 @@ class IosApiModelGenerator:
         lines.append("    }")
         lines.append("}")
 
-        body = "\n".join(lines)
+        body = "\n".join(self._access(lines))
         return f"{header}\nimport Foundation\n\n{body}\n\n{footer}\n"
 
     def generate_union_domain_source(self, union: UnionDef) -> str:
@@ -474,7 +499,7 @@ class IosApiModelGenerator:
         if enum.deprecated:
             preamble.append("@available(*, deprecated)")
 
-        body = "\n".join(preamble + lines)
+        body = "\n".join(self._access(preamble + lines))
         return f"{header}\nimport Foundation\n\n{body}\n\n{footer}\n"
 
     # --------------------------- emit Domain ------------------------- #
@@ -565,6 +590,37 @@ def _doc_comment_lines(text: str) -> list[str]:
     out: list[str] = []
     for raw in text.splitlines() or [text]:
         out.append(f"/// {raw}")
+    return out
+
+
+# What another module needs to see of a DTO, enum or union (``access_level: "public"``): the type itself, its stored
+# properties, its initializers, and every member that satisfies a protocol (Codable / Hashable / RawRepresentable /
+# CaseIterable). ``CodingKeys`` and ``TagCodingKeys`` stay internal (no API names them), and the ISO date helpers stay
+# fileprivate, their bodies untouched. Applied to the finished lines because the emitters own their whole text: a declaration starts at column
+# 0 (the type) or column 4 (a member, or a nested oneOf enum); function bodies start at column 8 and are never touched.
+_PUBLIC_TOP = ("nonisolated struct ", "nonisolated enum ", "enum ", "struct ", "typealias ")
+_PUBLIC_MEMBER = ("let ", "var ", "init(", "init?(", "func ", "static let ", "enum ")
+_INTERNAL_MEMBER = ("enum CodingKeys:",)
+
+
+def _publicize(lines: list[str]) -> list[str]:
+    out: list[str] = []
+    in_fileprivate = False   # a fileprivate helper's body, up to its closing brace at column 0: left as written
+    for line in lines:
+        if in_fileprivate or line.startswith("fileprivate "):
+            in_fileprivate = line != "}"
+            out.append(line)
+        elif line.startswith(_PUBLIC_TOP):
+            out.append("public " + line)
+        elif (
+            line.startswith("    ")
+            and not line.startswith("     ")
+            and line[4:].startswith(_PUBLIC_MEMBER)
+            and not line[4:].startswith(_INTERNAL_MEMBER)
+        ):
+            out.append("    public " + line[4:])
+        else:
+            out.append(line)
     return out
 
 

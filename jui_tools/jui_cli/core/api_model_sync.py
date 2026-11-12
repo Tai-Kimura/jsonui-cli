@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable
@@ -305,62 +306,120 @@ def plan_ios(
 
     Resolves ``sjui.config.json#source_directory`` so the output lands in
     the same root the existing IosGenerator uses for ViewModel/Repository.
+
+    ``api.platforms.ios.modules`` (see :mod:`ios_api_modules`) sends some
+    schemas to a Swift module of their own: their DTO files go to that
+    module's directory (``public`` by default) and not to the app's, an app
+    file that names one imports the module, and their Domain scaffolds stay
+    in the app's model directory. Without the key the plan is what it was.
     """
     from ..generators.ios_api_model_generator import (
         IosApiModelGenerator,
         IosApiPlatformConfig,
     )
+    from . import ios_api_modules
 
     platform_root = config_mgr.project_root / pconfig["root"]
     sources_root = _resolve_ios_sources_root(platform_root)
     api_cfg = config_mgr.api_platform_config("ios")
     fmt_enabled, fmt_excluded = config_mgr.api_format_mapping()
-    gen = IosApiModelGenerator(
-        IosApiPlatformConfig(
-            sources_root=sources_root,
-            model_dir=api_cfg["model_dir"],
-            dto_subdir=api_cfg["dto_subdir"],
-            format_mapping=fmt_enabled,
-            format_excluded_docs=fmt_excluded,
-            enum_unknown_case=config_mgr.api_enum_unknown_case(),
+
+    def make_gen(
+        model_dir: str, dto_subdir: str, access_level: str = "internal", root: Path | None = None
+    ) -> IosApiModelGenerator:
+        return IosApiModelGenerator(
+            IosApiPlatformConfig(
+                sources_root=sources_root if root is None else root,
+                model_dir=model_dir,
+                dto_subdir=dto_subdir,
+                format_mapping=fmt_enabled,
+                format_excluded_docs=fmt_excluded,
+                enum_unknown_case=config_mgr.api_enum_unknown_case(),
+                access_level=access_level,
+            )
         )
-    )
+
+    gen = make_gen(api_cfg["model_dir"], api_cfg["dto_subdir"])
+    modules = ios_api_modules.modules_from_config(api_cfg.get("modules"))
+    # A module's model_dir usually leaves the app's sources ("../EventCore/Model"): normalized, so its files are
+    # written, compared and pruned under one spelling of the path.
+    module_gens = {
+        m.module: make_gen(".", m.dto_subdir, m.access_level, Path(os.path.normpath(sources_root / m.model_dir)))
+        for m in modules
+    }
+    if modules:
+        ios_api_modules.check_dirs(
+            gen.dto_path("_").parent,
+            sources_root,
+            {m.module: (m, module_gens[m.module].dto_path("_").parent) for m in modules},
+        )
+    placed = ios_api_modules.assign(modules, docs)
+    refs = ios_api_modules.item_refs(docs) if placed else {}
+
+    def gen_for(name: str) -> IosApiModelGenerator:
+        mod = placed.get(name)
+        return gen if mod is None else module_gens[mod.module]
+
+    def imports_for(name: str) -> list[str]:
+        """Modules *name*'s file names a type of, other than its own (only the app can, see assign)."""
+        own = placed.get(name)
+        return sorted({placed[r].module for r in refs.get(name, ()) if r in placed and placed[r] is not own})
+
+    def dto(name: str, source: str) -> str:
+        return IosApiModelGenerator.with_imports(source, imports_for(name))
+
+    def scaffold(name: str, source: str) -> str:
+        mod = placed.get(name)
+        return source if mod is None else IosApiModelGenerator.with_imports(source, [mod.module])
 
     expected: dict[Path, str] = {}
     scaffolds: dict[Path, str] = {}
     shadowed = _shadowed_schema_names(config_mgr)
     for doc in docs:
         for schema in doc.schemas:
-            dto_path = gen.dto_path(schema.name)
+            g = gen_for(schema.name)
+            dto_path = g.dto_path(schema.name)
             if dto_path in expected:
                 continue  # cross-doc duplicate — first doc wins (see plan_android)
             # DTO emit is unconditional — see plan_android for the
             # rationale (shadowed Domain wrappers still reference the
             # auto-emitted DTO via ``let dto: XxxDto``).
-            expected[dto_path] = gen.generate_dto_source(schema, doc)
+            expected[dto_path] = dto(schema.name, g.generate_dto_source(schema, doc))
             if schema.name in shadowed:
                 continue
             # OR-evaluate per-schema x-jui-skip-domain (schema.skip_domain)
             # and per-app api.schemas.skip_domain (doc.skip_domain_overrides).
             # v2 plan §2.6.
             if not doc.should_skip_domain(schema):
-                scaffolds[gen.domain_path(schema.name)] = gen.generate_domain_source(schema)
+                scaffolds[gen.domain_path(schema.name)] = scaffold(
+                    schema.name, gen.generate_domain_source(schema)
+                )
         for union in doc.unions:
-            dto_path = gen.dto_path(union.name)
+            g = gen_for(union.name)
+            dto_path = g.dto_path(union.name)
             if dto_path in expected:
                 continue  # cross-doc duplicate — first doc wins
-            expected[dto_path] = gen.generate_union_source(union, doc)
+            expected[dto_path] = dto(union.name, g.generate_union_source(union, doc))
             if union.name in shadowed:
                 continue
             if not doc.should_skip_domain(union):
-                scaffolds[gen.domain_path(union.name)] = (
-                    gen.generate_union_domain_source(union)
+                scaffolds[gen.domain_path(union.name)] = scaffold(
+                    union.name, gen.generate_union_domain_source(union)
                 )
         for enum in doc.enums:
-            enum_path = gen.enum_path(enum.name)
+            g = gen_for(enum.name)
+            enum_path = g.enum_path(enum.name)
             if enum_path in expected:
                 continue  # cross-doc duplicate — first doc wins
-            expected[enum_path] = gen.generate_enum_source(enum, doc)
+            expected[enum_path] = g.generate_enum_source(enum, doc)
+    if placed:
+        ios_api_modules.warn_scaffolds_without_import(
+            {
+                name: (mod, gen.domain_path(name))
+                for name, mod in placed.items()
+                if gen.domain_path(name) in scaffolds
+            }
+        )
     return SyncPlan(platform="ios", expected_files=expected, domain_scaffolds=scaffolds)
 
 
