@@ -71,13 +71,27 @@ module RjuiTools
         # converter's own business. Ticket
         # rjui-generated-converter-ignores-include-id-prefix.
         @@id_written_as_written_named = {}
+        @@silent_depth = 0
 
         def self.reset_id_written_as_written_named!
           @@id_written_as_written_named = {}
         end
 
+        # A conversion drawn only to be read (#drawn_classes, the include's
+        # root classes) prints nothing: its output is thrown away, and the
+        # converter is named where the node is drawn for real. Until this was
+        # held apart, the probe's line went into the discarded output and the
+        # converter counted as named, so the real build said nothing.
+        def self.silently
+          @@silent_depth += 1
+          yield
+        ensure
+          @@silent_depth -= 1
+        end
+
         def warn_id_written_as_written(jsx)
           return unless self.class.name.to_s.include?('::Extensions::')
+          return if @@silent_depth.positive?
           return if @@id_written_as_written_named[self.class]
 
           id = extract_id
@@ -1301,7 +1315,7 @@ module RjuiTools
         def drawn_classes(node)
           old = $stdout
           $stdout = StringIO.new
-          jsx = self.class.new(JSON.parse(JSON.generate(node)), @config).convert_node(0).to_s
+          jsx = BaseConverter.silently { self.class.new(JSON.parse(JSON.generate(node)), @config).convert_node(0).to_s }
           class_of = ->(tag) { tag && tag.match(/className=(?:"([^"]*)"|\{`([^`]*)`\})/) }
           # The element with the node's id (the scroll box of a Collection's
           # or a ScrollView's still box), and the outermost element when it is

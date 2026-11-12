@@ -166,7 +166,7 @@ module RjuiTools
           $stdout = StringIO.new
           $stderr = StringIO.new
           begin
-            jsx = create_converter_for_child(node).convert_node(2)
+            jsx = BaseConverter.silently { create_converter_for_child(node).convert_node(2) }
           ensure
             $stdout = out
             $stderr = err

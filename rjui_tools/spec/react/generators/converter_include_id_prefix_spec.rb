@@ -133,6 +133,18 @@ RSpec.describe 'a converter writes the DOM id with the include prefix and the bi
       expect(next_build).to include('[converter-id]')
     end
 
+    # A node with a size class is drawn once more only to read its classes
+    # (BaseConverter#drawn_classes), its output thrown away. The line said
+    # there went with it, and the converter counted as named: the real
+    # drawing said nothing (measured on a face: 2 of 18 converters).
+    it 'is named where it is drawn for real, not in a drawing made only to read its classes' do
+      klass = old_scaffold('OldProbedPicker')
+      node = { 'type' => 'OldProbedPicker', 'id' => 'csv_file_picker', 'width' => 'matchParent',
+               'leftMargin' => 44, 'responsive' => { 'maxWidth:768' => { 'leftMargin' => 0 } } }
+      _, said = run(klass, node, on)
+      expect(said.lines.grep(/\[converter-id\]/).size).to eq(1)
+    end
+
     it 'names a bound id written as its literal text, with the prefix decision off too' do
       klass = old_scaffold('OldBoundPicker')
       _, said = run(klass, { 'type' => 'OldBoundPicker', 'id' => '@{picker_id}' }, off)
