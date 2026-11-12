@@ -159,6 +159,14 @@ ALLOWED_SKIP_REASONS: tuple[str, ...] = (
     # a separate project). The tool's other arms run everywhere.
     "the jsonui-promo project is not on this machine",
     "the demo-shop workdir is not on this machine",
+    # THE FOURTH SHAPE: AN OS'S OWN SERVICE. test_viz_change_storm's FSEvents arms (2.5.31, ticket
+    # 2026-11-12-viz-loop-stalls-on-watcher-stop) drive watchdog's FSEvents emitter: a stream that did not start is
+    # never stopped through FSEvents (stopping it ended viz serve with SIGSEGV), and a watcher keeps the folders that
+    # did start. FSEvents and _watchdog_fsevents exist only on macOS; python-suite runs on ubuntu, where the server's
+    # watcher is watchdog's inotify Observer and fs_watch hands it back unchanged (no stream, nothing to guard).
+    # Allowed only because the code they pin is macOS-only and the release's own full suite runs on macOS, where they
+    # execute (2.5.31: run there, passed); viz serve's users are on macOS.
+    "FSEvents is macOS's",
 )
 
 
