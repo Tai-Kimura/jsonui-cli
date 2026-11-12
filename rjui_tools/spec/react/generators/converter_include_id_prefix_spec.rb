@@ -11,7 +11,7 @@ require_relative '../../support/typescript_compiler'
 # for a bound id (`id: "@{field}"`): BaseConverter#build_id_attr gives both,
 # and every built-in converter writes the id through it.
 #
-# Until jsonui-cli 2.5.32 the converter `rjui g converter` scaffolds wrote
+# Until jsonui-cli 2.5.31 the converter `rjui g converter` scaffolds wrote
 # `id_attr = extract_id ? %( id="#{extract_id}") : ''` — the id as written —
 # so a partial with a custom component, included twice, gave that component
 # one DOM id twice (and a bound id was the literal text `@{field}`). The
@@ -23,7 +23,7 @@ require_relative '../../support/typescript_compiler'
 RSpec.describe 'a converter writes the DOM id with the include prefix and the binding' do
   EXT_INCLUDE_ID = File.expand_path('../../../lib/react/converters/extensions', __dir__)
 
-  # The line the scaffold wrote until 2.5.32, as the projects have it.
+  # The line the scaffold wrote until 2.5.31, as the projects have it.
   OLD_ID_LINE = "id_attr = extract_id ? %( id=\"\#{extract_id}\") : ''"
 
   let(:off) { { 'use_tailwind' => true, 'typescript' => true } }

@@ -62,7 +62,7 @@ module RjuiTools
         # The converters a project wrote (Converters::Extensions) are its own,
         # and rjui does not rewrite them; one that writes the DOM id as written
         # — `id_attr = extract_id ? %( id="#{extract_id}") : ''`, the line
-        # `rjui g converter` scaffolded until jsonui-cli 2.5.32 — is named
+        # `rjui g converter` scaffolded until jsonui-cli 2.5.31 — is named
         # instead, once a run, where the id it writes is not the id
         # #build_id_attr gives: a bound id (`@{field}`, written as the literal
         # text) or an id under an include with an id (no prefix, so a partial
@@ -108,7 +108,7 @@ module RjuiTools
           Core::Logger.warn(
             "[converter-id] #{where} writes the DOM id as written: #{why}. " \
             "Write it with `id_attr = build_id_attr` (as every built-in converter, and `jui g converter` from " \
-            "jsonui-cli 2.5.32) in place of `extract_id ? %( id=\"\#{extract_id}\") : ''`"
+            "jsonui-cli 2.5.31) in place of `extract_id ? %( id=\"\#{extract_id}\") : ''`"
           )
         end
 
@@ -2900,7 +2900,7 @@ module RjuiTools
         # Android, where the expanded id is the one the suffix is added to
         # (`heroKindSeg_tab_0`). "" for no id or a bound one. *suffix* is the
         # text after the id, `${…}` in it being JavaScript (a template
-        # literal is written then). Until jsonui-cli 2.5.32 the suffix went on
+        # literal is written then). Until jsonui-cli 2.5.31 the suffix went on
         # the id as written, so a partial included twice gave the parts one
         # DOM id twice.
         def build_suffixed_id_attr(suffix, id_value = extract_id)

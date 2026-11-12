@@ -152,7 +152,7 @@ module RjuiTools
           # The DOM id through BaseConverter#build_id_attr, as every built-in
           # converter writes it: `id: "@{field}"` as the bound value, and
           # under an include with an id the include's prefix (design U8).
-          # Until jsonui-cli 2.5.32 the scaffold wrote the id as written, so
+          # Until jsonui-cli 2.5.31 the scaffold wrote the id as written, so
           # a partial included twice gave its custom components one DOM id
           # twice. Ticket rjui-generated-converter-ignores-include-id-prefix.
           template << '            id_attr = build_id_attr'
