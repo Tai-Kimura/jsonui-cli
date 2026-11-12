@@ -14,9 +14,12 @@ process forgotten, so its hooks bringing it back do not end it again; one that i
 """
 from __future__ import annotations
 
+import sys
 import threading
 import time
 from pathlib import Path
+
+import pytest
 
 from jui_cli.viz.change_batch import ChangeBatch, Watchers
 from jui_cli.viz.ingest import World
@@ -145,11 +148,74 @@ def test_the_same_folders_keep_their_watcher_and_one_replaced_is_joined_first():
     assert w.watch(_Room()) is True
     for _ in range(20):                       # the room's apps read again and again, the same folders
         assert w.watch(_Room()) is False
+    w.settle(5)
     assert log == [("start", 0)] and len(started) == 1
     folders.append(Path("/r/tests"))          # a folder came: watched again, the old one let go first
     assert w.watch(_Room()) is True
+    w.settle(5)
     assert log == [("start", 0), ("stop", 0), ("join", 0), ("start", 1)]
     assert [o.n for o in started] == [1]
+
+
+class _HeldObserver(_Observer):
+    """Its stop (or its start) waits until let go, 20 s at most: FSEvents' stop and start took 20 to 68 s when
+    fseventsd was busy (ticket 2026-11-12-viz-loop-stalls-on-watcher-stop)."""
+
+    def __init__(self, log, n, go):
+        super().__init__(log, n)
+        self.go = go
+
+    def stop(self):
+        self.log.append(("stop", self.n))
+        self.go.wait(20)
+
+
+@pytest.mark.parametrize("held", ["the old one's stop", "the new one's start"])
+def test_a_watcher_held_in_its_stop_or_start_does_not_hold_the_caller(held):
+    """Watchers.watch runs on the loop's thread (a room's worktrees changed): it hands the stop, the join and the start
+    to its worker and returns at once. Until 2.5.31 it called them itself, and the loop answered nothing for 20 to 68 s.
+    The order stays: the old one stopped and joined before the new one starts (the ENOSPC night of 2026-11-09)."""
+    log: list = []
+    go = threading.Event()
+    folders = [Path("/r/specs")]
+    started: list = []
+
+    def start(project):
+        n = len([e for e in log if e[0] == "start"])
+        if held == "the new one's start" and n == 1:
+            log.append(("start", n))
+            go.wait(20)
+            return _Observer(log, n)
+        log.append(("start", n))
+        return _HeldObserver(log, n, go) if held == "the old one's stop" else _Observer(log, n)
+
+    w = Watchers(lambda p: list(folders), start, started)
+    try:
+        assert w.watch(_Room()) is True
+        w.settle(5)
+        folders.append(Path("/r/tests"))
+        t0 = time.monotonic()
+        assert w.watch(_Room()) is True
+        assert w.watch(_Room()) is False      # the same folders again while the swap is under way: no second swap
+        took = time.monotonic() - t0
+        assert took < 1.0, f"watch waited {took:.1f} s on {held}"
+    finally:
+        go.set()
+    w.settle(5)
+    assert log == [("start", 0), ("stop", 0), ("join", 0), ("start", 1)]
+    assert [o.n for o in started] == [1]
+
+
+def test_watchers_closed_hand_back_the_running_ones_and_start_no_more():
+    log: list = []
+    folders = [Path("/r/specs")]
+    w = Watchers(lambda p: list(folders), lambda p: _Observer(log, 0), [])
+    w.watch(_Room())
+    w.settle(5)
+    running = w.close()
+    assert [o.n for o in running] == [0] and w.started == []
+    folders.append(Path("/r/tests"))
+    assert w.watch(_Room()) is False          # closed: nothing more is started
 
 
 # ---------------------------------------------------------------- (d) a session its hooks bring back
@@ -190,3 +256,120 @@ def test_a_session_really_gone_still_ends_and_one_known_again_can_end_again():
     _hook(w, "s-dead", 6500)
     assert w.end_vanished({"s-dead", "s-alive"}, set(), 8000) == []
     assert w.end_vanished({"s-alive"}, set(), 11000) == ["s-dead"]
+
+
+def test_a_room_whose_watcher_did_not_start_is_tried_again_after_a_while():
+    """FSEvents would not start (fs_watch gave None): the room is without a watcher, and tried again on a watch at least
+    RETRY_SEC later, not at every one (fseventsd in trouble is not asked over and over)."""
+    log: list = []
+    folders = [Path("/r/specs")]
+
+    def start(project):
+        log.append("start")
+        return None
+
+    w = Watchers(lambda p: list(folders), start, [])
+    w.RETRY_SEC = 0.3
+    assert w.watch(_Room()) is True
+    w.settle(5)
+    assert w.watch(_Room()) is False          # too soon
+    time.sleep(0.4)
+    assert w.watch(_Room()) is True           # tried again
+    w.settle(5)
+    assert log == ["start", "start"]
+
+
+# ---------------------------------------------------------------- (e) a stream FSEvents would not start
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="FSEvents is macOS's")
+def test_a_stream_fsevents_did_not_start_is_let_go_without_stopping_it(tmp_path, monkeypatch):
+    """After fseventsd was restarted its streams would not start ("Cannot start fsevents stream"); the stream stays
+    registered unstarted, and stopping the observer called FSEventStreamStop on it: SIGSEGV (2026-11-12 16:36). The
+    observer is let go without that call, and the caller is told it has no watcher. The FSEvents calls are stand-ins
+    here, so the case cannot end the process."""
+    import _watchdog_fsevents as native
+    from watchdog.events import FileSystemEventHandler
+    from jui_cli.viz.sources import fs_watch
+
+    calls: list = []
+
+    def add_watch(*a):
+        calls.append("add_watch")
+        raise SystemError("Cannot start fsevents stream. Use a kqueue or polling observer instead.")
+
+    monkeypatch.setattr(native, "add_watch", add_watch)
+    monkeypatch.setattr(native, "remove_watch", lambda *a: calls.append("remove_watch"))
+    monkeypatch.setattr(native, "stop", lambda *a: calls.append("stop"))
+    obs = fs_watch.observer()
+    obs.schedule(FileSystemEventHandler(), str(tmp_path), recursive=True)
+    obs.daemon = True
+    obs.start()
+    assert fs_watch.kept_or_none(obs, "a test folder") is None
+    assert calls == ["add_watch"], calls      # never stopped through FSEvents
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="FSEvents is macOS's")
+def test_a_stream_that_started_is_kept_and_stopped_as_before(tmp_path):
+    """The control: FSEvents as it is; the watcher is kept, sees a file written, and stops."""
+    from watchdog.events import FileSystemEventHandler
+    from jui_cli.viz.sources import fs_watch
+
+    seen = threading.Event()
+
+    class Handler(FileSystemEventHandler):
+        def on_any_event(self, event):
+            if event.src_path.endswith("a.json"):
+                seen.set()
+
+    obs = fs_watch.observer()
+    obs.schedule(Handler(), str(tmp_path), recursive=True)
+    obs.daemon = True
+    obs.start()
+    try:
+        assert fs_watch.kept_or_none(obs, "a test folder") is obs
+        (tmp_path / "a.json").write_text("{}")
+        assert seen.wait(10), "no event from FSEvents"
+    finally:
+        obs.stop()
+        obs.join(timeout=5)
+    assert not obs.is_alive()
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="FSEvents is macOS's")
+def test_a_watcher_whose_one_folder_did_not_start_keeps_the_others(tmp_path, monkeypatch):
+    """One folder's stream refused ("Cannot add watch ... already scheduled", another watcher holds it), the other
+    folder's started: the watcher stays for the folder it has, as watchdog left it before, and the refused folder is
+    never stopped through FSEvents."""
+    import _watchdog_fsevents as native
+    from watchdog.events import FileSystemEventHandler
+    from jui_cli.viz.sources import fs_watch
+
+    real_add, real_remove = native.add_watch, native.remove_watch
+    refused: list = []
+    (tmp_path / "good").mkdir()
+    (tmp_path / "bad").mkdir()
+
+    def add_watch(emitter, watch, *a):
+        if watch.path.endswith("bad"):
+            refused.append(watch.path)
+            raise RuntimeError(f"Cannot add watch {watch} - it is already scheduled")
+        return real_add(emitter, watch, *a)
+
+    def remove_watch(watch):
+        assert not watch.path.endswith("bad"), "the refused folder was stopped through FSEvents"
+        return real_remove(watch)
+
+    monkeypatch.setattr(native, "add_watch", add_watch)
+    monkeypatch.setattr(native, "remove_watch", remove_watch)
+    obs = fs_watch.observer()
+    for name in ("good", "bad"):
+        obs.schedule(FileSystemEventHandler(), str(tmp_path / name), recursive=True)
+    obs.daemon = True
+    obs.start()
+    try:
+        assert fs_watch.kept_or_none(obs, "a test room") is obs
+        assert len(refused) == 1
+    finally:
+        obs.stop()
+        obs.join(timeout=5)

@@ -483,6 +483,39 @@ def test_term_while_the_results_shelf_is_read_ends_it(home, where):
     assert len(left) == 1 and "jui-viz-serve_" in left[0], err[0][-2000:]
 
 
+#: the sessions folder's watcher held (ticket 2026-11-12-viz-loop-stalls-on-watcher-stop): FSEvents' start and stop took
+#: 20 to 68 s while fseventsd was busy, and both ran on the loop's thread until 2.5.31: the page, the channel's polls
+#: and a TERM waited. Each patch writes a marker once the held step is under way. name: the patch
+WATCHER_HELD = {
+    "its start": (
+        "import time; from jui_cli.viz.sources import session_files as S; o = S.watch\n"
+        "def held(*a, **k):\n    open({inside!r}, 'w').close(); time.sleep(20); return o(*a, **k)\n"
+        "S.watch = held"),
+    "its stop on the way out": (
+        "import time; from jui_cli.viz.sources import session_files as S; o = S.watch\n"
+        "def held(*a, **k):\n    ob = o(*a, **k)\n    s = ob.stop\n"
+        "    def stop():\n        time.sleep(20); s()\n    ob.stop = stop\n    open({inside!r}, 'w').close(); return ob\n"
+        "S.watch = held"),
+}
+
+
+@pytest.mark.parametrize("where", list(WATCHER_HELD))
+def test_a_file_watcher_held_does_not_hold_the_page_or_a_term(home, where):
+    inside = home / "watcher-held"
+    (home / ".claude" / "sessions").mkdir(parents=True, exist_ok=True)   # a folder to watch
+    port = _free_port()
+    proc = _serve_as(home, port, patch=WATCHER_HELD[where].format(inside=str(inside)))
+    deadline = time.monotonic() + 30
+    while not inside.exists() and proc.poll() is None and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert inside.exists(), f"the watcher's step was not reached ({where})"
+    t0 = time.monotonic()
+    code = _get(f"http://127.0.0.1:{port}/health")
+    took = time.monotonic() - t0
+    assert code == 200 and took < 2.0, f"/health took {took:.1f} s (rc {code}) while {where} was held"
+    _term_ends_it(proc)
+
+
 def test_term_while_it_still_starts_ends_it_with_its_files_cleared(home):
     """server.json is written before the rest of the start (the readers, the loops): a TERM in between is a stop like any
     other. Until 2.3.21 the handler came last and such a TERM ended the process outright (-15), its files left."""

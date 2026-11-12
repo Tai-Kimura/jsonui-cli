@@ -320,6 +320,8 @@ def test_the_watcher_passes_a_texts_file_on(tmp_path, monkeypatch):
     import watchdog.observers.polling
     monkeypatch.setattr(watchdog.observers, "Observer", FakeObserver)
     monkeypatch.setattr(watchdog.observers.polling, 'PollingObserver', FakeObserver)
+    from jui_cli.viz.sources import fs_watch
+    monkeypatch.setattr(fs_watch, "observer", FakeObserver)   # the room's watcher is built there (2.5.31)
     seen = []
     jsonui_project.watch(project, seen.append)
 
