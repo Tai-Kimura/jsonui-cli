@@ -34,7 +34,10 @@ setup(
     },
     python_requires=">=3.11",
     install_requires=[
-        "watchdog>=4.0.0",
+        # <7: the server's FSEvents guard (jui_cli/viz/sources/fs_watch.py) is written against 6.x's emitter; 7.x
+        # replaced it with a Stream object, and under 7.1.0 the guarded start waited forever (2.5.32, ticket
+        # 2026-11-13-viz-loop-stalls-on-spec-index). Following 7.x is its own ticket.
+        "watchdog>=4.0.0,<7",
         "aiohttp>=3.9.0",
         # YAML swagger input (`jui build` api-model sync). Imported lazily
         # by openapi_loader with a guided halt when missing, so consumers

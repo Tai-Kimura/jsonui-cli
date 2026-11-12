@@ -1160,6 +1160,8 @@ def watch(project: JsonUIProject, on_change):
             on_change(path)
 
     observer = fs_watch.observer()
+    if observer is None:   # a watchdog this server's guard does not know (fs_watch): the room goes without one
+        return None
     for folder in folders:
         observer.schedule(Handler(), str(folder), recursive=True)
     observer.daemon = True

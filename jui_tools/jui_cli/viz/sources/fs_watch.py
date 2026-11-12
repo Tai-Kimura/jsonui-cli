@@ -18,11 +18,35 @@ START_WAIT_SEC = 5.0
 
 
 def observer():
-    """A new observer (not started)."""
+    """A new observer (not started); None when the installed watchdog's FSEvents is not the shape the guard is written
+    for (6.x's _watchdog_fsevents.add_watch): 7.x replaced it with a Stream object, and the guarded emitter's start
+    then waited forever, the room unwatched and the watchers' thread held (2.5.32). setup.py pins watchdog<7; an
+    install the pin did not reach is told once, and its rooms go without a watcher rather than hang."""
     if sys.platform != "darwin":
         from watchdog.observers import Observer
         return Observer()
+    import _watchdog_fsevents as native
+    if not hasattr(native, "add_watch"):
+        _say_unknown_watchdog_once()
+        return None
     return _guarded_fsevents_observer()
+
+
+_told = []
+
+
+def _say_unknown_watchdog_once() -> None:
+    if _told:
+        return
+    _told.append(True)
+    try:
+        from watchdog.version import VERSION_STRING as version
+    except ImportError:  # pragma: no cover
+        version = "?"
+    print(f"jui viz: watchdog {version} is not the 6.x this server is written for: the rooms' files are not watched "
+          "(a session's own writes still show, through its hooks; other changes show after a restart); "
+          "install watchdog<7 (pip install 'watchdog>=4.0.0,<7')",
+          file=sys.stderr, flush=True)
 
 
 def outcome(obs, wait_sec: float = START_WAIT_SEC) -> tuple[int, list[str]]:

@@ -373,3 +373,19 @@ def test_a_watcher_whose_one_folder_did_not_start_keeps_the_others(tmp_path, mon
     finally:
         obs.stop()
         obs.join(timeout=5)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="FSEvents is macOS's")
+def test_a_watchdog_whose_fsevents_is_not_6x_is_told_once_and_watches_nothing(tmp_path, monkeypatch, capsys):
+    """watchdog 7.x replaced the FSEvents emitter with a Stream object (no _watchdog_fsevents.add_watch): the guarded
+    emitter's start waited forever under 7.1.0, the room unwatched and the watchers' thread held (2.5.32). setup.py
+    pins watchdog<7; an install the pin did not reach gets one line and no watcher, never a start that hangs."""
+    import _watchdog_fsevents as native
+    from jui_cli.viz.sources import fs_watch
+
+    monkeypatch.delattr(native, "add_watch")
+    monkeypatch.setattr(fs_watch, "_told", [])
+    assert fs_watch.observer() is None
+    assert fs_watch.observer() is None
+    lines = [line for line in capsys.readouterr().err.splitlines() if "is not the 6.x" in line]
+    assert len(lines) == 1 and "watchdog<7" in lines[0], lines
