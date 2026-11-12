@@ -516,6 +516,10 @@ class JsonUIProject:
         # changes (_specs_rev counts the specs' changes; facts is replaced whole when read again)
         self._specs_rev = 0
         self._touch_index: tuple | None = None   # (specs_rev, facts, {path: [spec id]})
+        self._touch_keys: dict = {}   # spec id -> (its path, its reading, its facts, the paths it answers to)
+        self.touch_keys_made = 0      # how many specs' keys were made (tests)
+        self._names: tuple | None = None   # (specs_rev, {name: {spec id}})
+        self.names_index_made = 0
         self.test_results: dict[str, dict] = {}  # spec id -> {passed, failed, running}
         self._tests_by_name: dict[str, list[tuple[Source, str]]] | None = None  # test file name -> (app, key)
 
@@ -889,24 +893,39 @@ class JsonUIProject:
 
     def _touching_index(self) -> dict:
         """specs_touching's table off the loop: every path a spec answers to (the spec itself, its Layout and its
-        relatedFiles under each of its roots, as the last build's facts have them) -> the spec ids, in the specs' order."""
+        relatedFiles under each of its roots, as the last build's facts have them) -> the spec ids, in the specs' order.
+
+        Rebuilt when a spec or the facts changed, from each spec's own keys kept between builds: only a spec whose
+        file, reading or facts changed has its keys made again (new Paths, each hashed once), so one spec read again
+        costs that spec plus a pass over keys already hashed, not every spec's relatedFiles under every root (the loop
+        stood 10 to 165 s in pathlib's hash on a busy machine, ticket 2026-11-13-viz-loop-stalls-on-spec-index)."""
         cached = self._touch_index
         if cached is not None and cached[0] == self._specs_rev and cached[1] is self.facts:
             return cached[2]
+        kept = self._touch_keys
+        fresh: dict = {}
         table: dict = {}
         for sid, entry in self.specs.items():
-            keys = {entry.path}
             facts = self.facts.get(sid)
-            if facts is not None:
-                lp, roots = facts["layout"], facts["roots"]
-                if lp:
-                    keys.add(lp)
-                data = entry.data or {}
-                declared = [Path(item["path"]) for item in data.get("relatedFiles") or []
-                            if isinstance(item, dict) and isinstance(item.get("path"), str)]
-                keys.update(d if d.is_absolute() else r / d for d in declared for r in roots)
-            for key in keys:
+            mine = kept.get(sid)
+            # the facts are read again whole (a new dict per spec), so an equal one keeps the keys
+            if mine is None or mine[0] is not entry.path or mine[1] is not entry.data \
+                    or (mine[2] is not facts and mine[2] != facts):
+                keys = {entry.path}
+                if facts is not None:
+                    lp, roots = facts["layout"], facts["roots"]
+                    if lp:
+                        keys.add(lp)
+                    data = entry.data or {}
+                    declared = [Path(item["path"]) for item in data.get("relatedFiles") or []
+                                if isinstance(item, dict) and isinstance(item.get("path"), str)]
+                    keys.update(d if d.is_absolute() else r / d for d in declared for r in roots)
+                mine = (entry.path, entry.data, facts, tuple(keys))
+                self.touch_keys_made += 1
+            fresh[sid] = mine
+            for key in mine[3]:
                 table.setdefault(key, []).append(sid)
+        self._touch_keys = fresh
         self._touch_index = (self._specs_rev, self.facts, table)
         return table
 
@@ -937,17 +956,27 @@ class JsonUIProject:
             keys = set()
         if not keys:
             keys = {Path(rel).name.replace(".test.json", "")}
-        hits = []
+        found = {sid for key in keys for sid in self._names_index().get(key, ())}
+        return [sid for sid, entry in self.specs.items() if sid in found and (not owners or entry.source in owners)]
+
+    def _names_index(self) -> dict:
+        """specs_for_test_file's table: each name a test file reaches a spec by (the spec file's name without
+        .spec.json, its layoutFile's name) -> the spec ids. Made again only when a spec changed: every saved result was
+        compared with every spec, on the loop, at each merge (ticket 2026-11-13-viz-loop-stalls-on-spec-index)."""
+        cached = self._names
+        if cached is not None and cached[0] == self._specs_rev:
+            return cached[1]
+        table: dict = {}
         for sid, entry in self.specs.items():
-            if owners and entry.source not in owners:
-                continue
             meta = (entry.data or {}).get("metadata") or {}
             names = {entry.path.name.replace(".spec.json", "")}
             if isinstance(meta.get("layoutFile"), str):
                 names.add(Path(meta["layoutFile"]).name)
-            if names & keys:
-                hits.append(sid)
-        return hits
+            for name in names:
+                table.setdefault(name, set()).add(sid)
+        self._names = (self._specs_rev, table)
+        self.names_index_made += 1
+        return table
 
     # ---------------------------------------------------------------- slice
 

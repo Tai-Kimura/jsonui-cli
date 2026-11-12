@@ -872,8 +872,8 @@ class World:
         elif target.name.endswith(".test.json"):
             self._forget_ties()  # which app has a test file decides where a saved row goes
             self._merge_due.update(self.jsonui)
-        for sid in project.specs_touching(path):
-            if by:
+        if by:   # only a robot's write tags its specs: a watcher's change (a build's storm) looks nothing up
+            for sid in project.specs_touching(path):
                 entry = project.specs[sid]
                 entry.by, entry.by_until = by, at + 10_000
         self._dirty.add("specs")
