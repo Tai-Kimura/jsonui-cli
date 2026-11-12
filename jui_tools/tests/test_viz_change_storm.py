@@ -14,6 +14,7 @@ process forgotten, so its hooks bringing it back do not end it again; one that i
 """
 from __future__ import annotations
 
+import sys
 import threading
 import time
 from pathlib import Path
@@ -255,3 +256,81 @@ def test_a_session_really_gone_still_ends_and_one_known_again_can_end_again():
     _hook(w, "s-dead", 6500)
     assert w.end_vanished({"s-dead", "s-alive"}, set(), 8000) == []
     assert w.end_vanished({"s-alive"}, set(), 11000) == ["s-dead"]
+
+
+def test_a_room_whose_watcher_did_not_start_is_tried_again_after_a_while():
+    """FSEvents would not start (fs_watch gave None): the room is without a watcher, and tried again on a watch at least
+    RETRY_SEC later, not at every one (fseventsd in trouble is not asked over and over)."""
+    log: list = []
+    folders = [Path("/r/specs")]
+
+    def start(project):
+        log.append("start")
+        return None
+
+    w = Watchers(lambda p: list(folders), start, [])
+    w.RETRY_SEC = 0.3
+    assert w.watch(_Room()) is True
+    w.settle(5)
+    assert w.watch(_Room()) is False          # too soon
+    time.sleep(0.4)
+    assert w.watch(_Room()) is True           # tried again
+    w.settle(5)
+    assert log == ["start", "start"]
+
+
+# ---------------------------------------------------------------- (e) a stream FSEvents would not start
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="FSEvents is macOS's")
+def test_a_stream_fsevents_did_not_start_is_let_go_without_stopping_it(tmp_path, monkeypatch):
+    """After fseventsd was restarted its streams would not start ("Cannot start fsevents stream"); the stream stays
+    registered unstarted, and stopping the observer called FSEventStreamStop on it: SIGSEGV (2026-11-12 16:36). The
+    observer is let go without that call, and the caller is told it has no watcher. The FSEvents calls are stand-ins
+    here, so the case cannot end the process."""
+    import _watchdog_fsevents as native
+    from watchdog.events import FileSystemEventHandler
+    from jui_cli.viz.sources import fs_watch
+
+    calls: list = []
+
+    def add_watch(*a):
+        calls.append("add_watch")
+        raise SystemError("Cannot start fsevents stream. Use a kqueue or polling observer instead.")
+
+    monkeypatch.setattr(native, "add_watch", add_watch)
+    monkeypatch.setattr(native, "remove_watch", lambda *a: calls.append("remove_watch"))
+    monkeypatch.setattr(native, "stop", lambda *a: calls.append("stop"))
+    obs = fs_watch.observer()
+    obs.schedule(FileSystemEventHandler(), str(tmp_path), recursive=True)
+    obs.daemon = True
+    obs.start()
+    assert fs_watch.kept_or_none(obs, "a test folder") is None
+    assert calls == ["add_watch"], calls      # never stopped through FSEvents
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="FSEvents is macOS's")
+def test_a_stream_that_started_is_kept_and_stopped_as_before(tmp_path):
+    """The control: FSEvents as it is; the watcher is kept, sees a file written, and stops."""
+    from watchdog.events import FileSystemEventHandler
+    from jui_cli.viz.sources import fs_watch
+
+    seen = threading.Event()
+
+    class Handler(FileSystemEventHandler):
+        def on_any_event(self, event):
+            if event.src_path.endswith("a.json"):
+                seen.set()
+
+    obs = fs_watch.observer()
+    obs.schedule(Handler(), str(tmp_path), recursive=True)
+    obs.daemon = True
+    obs.start()
+    try:
+        assert fs_watch.kept_or_none(obs, "a test folder") is obs
+        (tmp_path / "a.json").write_text("{}")
+        assert seen.wait(10), "no event from FSEvents"
+    finally:
+        obs.stop()
+        obs.join(timeout=5)
+    assert not obs.is_alive()

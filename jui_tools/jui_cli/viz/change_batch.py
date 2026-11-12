@@ -10,6 +10,7 @@ batch is being applied wait for the next one.
 from __future__ import annotations
 
 import threading
+import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Callable
 
@@ -64,6 +65,8 @@ class Watchers:
     """
 
     WORKER = "jui-viz-watchers"
+    #: How soon a room whose watcher did not start is tried again (on its next watch).
+    RETRY_SEC = 60.0
 
     def __init__(self, folders_of: Callable[[object], list], start: Callable[[object], object | None],
                  started: list | None = None, join_sec: float = 1.0):
@@ -75,7 +78,7 @@ class Watchers:
         self.started = started if started is not None else []
         self.lock = threading.Lock()
         self._join_sec = join_sec
-        self._by_room: dict[str, tuple[Future, list]] = {}
+        self._by_room: dict[str, tuple[Future, list, float]] = {}
         self._pool: ThreadPoolExecutor | None = None
         self._closed = False
 
@@ -84,7 +87,7 @@ class Watchers:
         one it has stands. Never waits for a watcher."""
         folders = self._folders_of(project)
         old = self._by_room.get(project.project_id)
-        if old is not None and old[1] == folders and not _failed(old[0]):
+        if old is not None and old[1] == folders and not self._retry(old):
             return False
         if self._closed:
             return False
@@ -92,8 +95,17 @@ class Watchers:
         if self._pool is None:
             self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix=self.WORKER)
         previous = old[0] if old is not None else None
-        self._by_room[project.project_id] = (self._pool.submit(self._swap, previous, project), folders)
+        self._by_room[project.project_id] = (self._pool.submit(self._swap, previous, project), folders,
+                                             time.monotonic())
         return True
+
+    def _retry(self, old: tuple) -> bool:
+        """The room's last start gave no watcher (it failed, or FSEvents would not start: fs_watch) though there are
+        folders, RETRY_SEC ago or more: started again."""
+        job, folders, at = old
+        if not folders or not job.done() or time.monotonic() - at < self.RETRY_SEC:
+            return False
+        return _failed(job) or job.result() is None
 
     def _swap(self, previous: Future | None, project):
         """On the worker: the room's old watcher stopped and joined, then the new one started."""

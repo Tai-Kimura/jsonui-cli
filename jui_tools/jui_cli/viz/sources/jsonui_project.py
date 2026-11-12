@@ -1107,7 +1107,7 @@ def watch(project: JsonUIProject, on_change):
     if not folders:
         return None
     from watchdog.events import FileSystemEventHandler
-    from watchdog.observers import Observer
+    from . import fs_watch
     # FSEvents (macOS) tells a change under the folder's real path: a room reached through a symlink (/var is one, to
     # /private/var) had its changes named under a path nothing looked for, and read as omitted. That made this watcher
     # poll every folder each second (10-28), a core's worth of CPU on a large room (90 000 entries, its tests' outputs;
@@ -1130,10 +1130,10 @@ def watch(project: JsonUIProject, on_change):
                 return
             on_change(path)
 
-    observer = Observer()
+    observer = fs_watch.observer()
     for folder in folders:
         observer.schedule(Handler(), str(folder), recursive=True)
     observer.daemon = True
     observer.start()
-    return observer
+    return fs_watch.kept_or_none(observer, "a room's files")
 
