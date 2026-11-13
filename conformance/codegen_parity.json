@@ -3,6 +3,15 @@
   "_comment": "Accepted dynamic≢codegen deviations, per screenshot, platform and render environment (a deviation measured against the local baselines says nothing about the CI renderer's). The codegen host's render of this screenshot does NOT match the committed dynamic baseline (status 'mismatch', with the measured distance) or was never produced (status 'missing'). Every entry needs a reason: fix the codegen and drop the entry, or justify the difference here. Unrecorded deviations fail `jui conformance gate --parity`; entries the measurement no longer supports are stale and must be pruned (re-run `jui conformance parity --update`). Reason 'unreviewed-initial-measurement' marks the initial-measurement backlog — consume it.",
   "entries": [
     {
+      "screenshot": "control_TextView__root.textScale-2.0_text-Sample.png",
+      "platform": "android",
+      "env": "ci",
+      "status": "mismatch",
+      "distance": 13,
+      "reason": "kjui-textview-default-size (owner: triage サポート2, KotlinJsonUI / kjui_tools): a TextView that declares no fontSize and none of fontScaling / maxFontScale keeps each face's own default, as rule.noFontSize leaves it (shared/core/font_scale_vectors.json: 'A component that declares neither keeps the face's own default font, as before'). The two Android faces' defaults have differed since before 2.5.36: the Dynamic TextView draws Configuration.TextField.defaultFontSize (14) on a bare TextStyle, the generated one CustomTextField's LocalTextStyle (bodyLarge 16sp on a 24sp line). At 1.0 the distance stays under the tolerance; the textScale-2.0 control (new in 2.5.36) doubles it to 13. Aligning the generated default would change every TextView in the distribution lanes' generated code, so it is not done inside 2.5.36: ticket kjui-textview-default-size-differs-from-dynamic carries it to 2.5.37, which removes this entry.",
+      "note": "jsonui-cli 2.5.36 (run 43488822719)"
+    },
+    {
       "screenshot": "TabView_selectedIndex__alias_selectedTabIndex.png",
       "platform": "android",
       "env": "local",
