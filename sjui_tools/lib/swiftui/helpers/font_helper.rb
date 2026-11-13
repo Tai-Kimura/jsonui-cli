@@ -153,9 +153,10 @@ module SjuiTools
             family_arg, weight_arg = pair
           end
 
+          # sjuiFont: the app's fontProvider (resolveFont) at the size the text size rule gives (fontScaling /
+          # maxFontScale, ticket sjui-label-font-size-ignores-dynamic-type).
           converter.add_modifier_line(
-            ".font(SwiftJsonUIConfiguration.shared.resolveFont(" \
-              "FontSpec(family: #{family_arg}, weight: #{weight_arg}, size: #{size_arg}, italic: false)))"
+            ".sjuiFont(FontSpec(family: #{family_arg}, weight: #{weight_arg}, size: #{size_arg}, italic: false))"
           )
         end
 

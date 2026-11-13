@@ -500,9 +500,10 @@ RSpec.describe 'bound-value emission (swiftui codegen)' do
       expect(code).to include('.frame(width: 100, height: CGFloat(data.n ?? 0))')
     end
 
-    it 'a bound Label fontSize reaches the font modifier as a CGFloat' do
+    it 'a bound Label fontSize reaches PartialAttributedText as a CGFloat, with no fixed .font on top' do
       code = convert(:LabelConverter, 'type' => 'Label', 'text' => 'a', 'fontSize' => '@{size}')
-      expect(code).to include('.font(.system(size: CGFloat(data.size ?? 0)))')
+      expect(code).to include('fontSize: CGFloat(data.size ?? 0)')
+      expect(code).not_to include('.font(.system(size:')
     end
 
     # `fontWeight` is declared `["string", "number", "binding"]`, and the two

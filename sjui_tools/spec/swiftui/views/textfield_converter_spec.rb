@@ -251,11 +251,11 @@ RSpec.describe SjuiTools::SwiftUI::Views::TextFieldConverter do
         }
       end
 
-      it 'adds font modifier' do
+      it 'adds the font through sjuiFont' do
         converter = described_class.new(component)
         code = converter.convert
 
-        expect(code).to include('.font(')
+        expect(code).to include('.sjuiFont(FontSpec(')
       end
     end
 
