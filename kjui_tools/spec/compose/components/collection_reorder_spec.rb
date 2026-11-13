@@ -6,6 +6,7 @@ require 'json'
 require_relative '../../../lib/compose/components/collection_component'
 require_relative '../../../lib/compose/reorder_handle_index'
 require_relative '../../../lib/compose/helpers/modifier_builder'
+require_relative '../../support/collection_first_frame'
 
 # A reorderable Collection in kjui's codegen (ticket jui-collection-drag-to-reorder, ruling B 2026-11-13): the vertical
 # single-column routes draw KotlinJsonUI's CollectionReorder — the Collection is the container, each row a
@@ -22,11 +23,11 @@ RSpec.describe 'kjui codegen: a reorderable Collection' do
     [KjuiTools::Compose::Components::CollectionComponent.generate(node, 1, imports, nil), imports]
   end
 
-  REORDER = { 'reorderable' => '@{editing}', 'onReorder' => '@{onStopMove}' }.freeze
-  ROUTES = { 'lazy none' => { 'lazy' => 'none' }, 'list' => {}, 'wrapContent' => { 'height' => 'wrapContent' } }.freeze
+  KJUI_REORDER_DECL = { 'reorderable' => '@{editing}', 'onReorder' => '@{onStopMove}' }.freeze
+  KJUI_REORDER_ROUTES = { 'lazy none' => { 'lazy' => 'none' }, 'list' => {}, 'wrapContent' => { 'height' => 'wrapContent' } }.freeze
 
   it 'without the declaration the emitted code is the route as it was (no reorder, false, or no handler)' do
-    ROUTES.each do |route, extra|
+    KJUI_REORDER_ROUTES.each do |route, extra|
       plain, = emit(extra)
       expect(plain).not_to include('Reorder'), route
       [{ 'reorderable' => false, 'onReorder' => '@{onStopMove}' }, { 'reorderable' => true }].each do |half|
@@ -38,8 +39,8 @@ RSpec.describe 'kjui codegen: a reorderable Collection' do
   end
 
   it 'each vertical single-column route opens the reorder: the state, the scope, the container, a row per cell' do
-    ROUTES.each do |route, extra|
-      code, imports = emit(extra.merge(REORDER))
+    KJUI_REORDER_ROUTES.each do |route, extra|
+      code, imports = emit(extra.merge(KJUI_REORDER_DECL))
       expect(imports).to include(:collection_reorder), route
       expect(code).to include('val stopListReorder = rememberCollectionReorder('), route
       expect(code).to include('if (data.editing == true) CollectionReorder(true, false) { s, f, t -> data.onStopMove?.invoke(s, f, t) } else null,'), route
@@ -52,9 +53,9 @@ RSpec.describe 'kjui codegen: a reorderable Collection' do
   end
 
   it 'the container scrolls itself unless an outer scroll carries it (lazy none)' do
-    expect(emit({ 'lazy' => 'none' }.merge(REORDER)).first).to include('scrollsItself = false,')
-    expect(emit({ 'height' => 'wrapContent' }.merge(REORDER)).first).to include('scrollsItself = true,')
-    expect(emit(REORDER).first).to match(/scrollsItself = .*CollectionStackMode\.\w+ != CollectionStackMode\.NONE,/)
+    expect(emit({ 'lazy' => 'none' }.merge(KJUI_REORDER_DECL)).first).to include('scrollsItself = false,')
+    expect(emit({ 'height' => 'wrapContent' }.merge(KJUI_REORDER_DECL)).first).to include('scrollsItself = true,')
+    expect(emit(KJUI_REORDER_DECL).first).to match(/scrollsItself = .*CollectionStackMode\.\w+ != CollectionStackMode\.NONE,/)
   end
 
   it 'a literal reorderable is on, a handle declared is used, the locked rows are read from the cell data' do
@@ -67,15 +68,15 @@ RSpec.describe 'kjui codegen: a reorderable Collection' do
 
   it 'a horizontal or grid Collection does not reorder (v1)' do
     [{ 'layout' => 'horizontal' }, { 'columns' => 2 }].each do |extra|
-      code, = emit(extra.merge(REORDER))
+      code, = emit(extra.merge(KJUI_REORDER_DECL))
       expect(code).not_to include('Reorder'), extra.to_s
     end
   end
 
   it 'the class-list shape (no sections) reorders too, each data section its own: the lazy-none Column and the grid' do
     legacy = { 'sections' => nil, 'cellClasses' => ['stop_cell'] }
-    none, = emit(legacy.merge('lazy' => 'none').merge(REORDER))
-    lazy, = emit(legacy.merge('height' => 400).merge(REORDER))
+    none, = emit(legacy.merge('lazy' => 'none').merge(KJUI_REORDER_DECL))
+    lazy, = emit(legacy.merge('height' => 400).merge(KJUI_REORDER_DECL))
     [none, lazy].each do |code|
       expect(code).to include('CollectionReorderScope(stopListReorder) {')
       expect(code).to include('.collectionReorderContainer(stopListReorder)')
@@ -85,6 +86,33 @@ RSpec.describe 'kjui codegen: a reorderable Collection' do
     end
     expect(none).to include('scrollsItself = false,')
     expect(lazy).to include('LazyVerticalGrid(')
+  end
+
+  describe 'compiled and run (the stub universe of spec/support/collection_first_frame.rb)' do
+    include CollectionFirstFrame
+
+    def frame_emit(extra)
+      node = { 'type' => 'Collection', 'id' => 'list', 'items' => '@{rows}',
+               'sections' => [{ 'cell' => 'ACell', 'header' => 'HCell', 'footer' => 'FCell' }, { 'cell' => 'BCell', 'header' => 'HCell' }] }
+      ComposeBoundedScrollStubs.unqualify(KjuiTools::Compose::Components::CollectionComponent.generate(node.merge(extra).compact, 1, Set.new, nil))
+    end
+
+    it 'every reorderable route compiles and draws its cells with their data, as the route does without it' do
+      routes = {
+        'none' => { 'lazy' => 'none', 'cellIdProperty' => 'id' }, 'list' => {}, 'wrap' => { 'height' => 'wrapContent' },
+        'classList' => { 'sections' => nil, 'cellClasses' => ['ACell'] }
+      }
+      functions = routes.flat_map do |name, extra|
+        [["plain#{name.capitalize}", frame_emit(extra)],
+         ["reorder#{name.capitalize}", frame_emit(extra.merge('reorderable' => '@{editing}', 'onReorder' => '@{onMove}', 'reorderLockedProperty' => 'fixed'))]]
+      end.to_h
+      expect(program(functions)).to compile_as_kotlin
+      frames = run(functions)
+      routes.each_key do |name|
+        expect(frames["reorder#{name.capitalize}"]).to eq(frames["plain#{name.capitalize}"]), name
+        expect(frames["reorder#{name.capitalize}"]).to include('Aa0'), name
+      end
+    end
   end
 
   describe 'the handle, marked in the cell layout' do

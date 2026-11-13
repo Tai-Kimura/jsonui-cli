@@ -28,14 +28,14 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
                           'sections' => [{ 'cell' => 'ACell' }] }.merge(extra).compact).convert.to_s
   end
 
-  REORDER = { 'reorderable' => '@{editing}', 'onReorder' => '@{onStopMove}' }.freeze
-  ROUTES = {
+  SJUI_REORDER_DECL = { 'reorderable' => '@{editing}', 'onReorder' => '@{onStopMove}' }.freeze
+  SJUI_REORDER_ROUTES = {
     'lazy none' => [{ 'lazy' => 'none' }, :stack], 'stack' => [{ 'height' => 400 }, :stack],
     'List' => [{ 'height' => 400, 'listStyle' => 'plain' }, :list]
   }.freeze
 
   it 'without the declaration the emitted code is the route as it was (no reorder, false, or no handler)' do
-    ROUTES.each do |route, (extra, _)|
+    SJUI_REORDER_ROUTES.each do |route, (extra, _)|
       plain = emit(extra)
       expect(plain).not_to include('Reorder'), route
       [{ 'reorderable' => false, 'onReorder' => '@{onStopMove}' }, { 'reorderable' => true }].each do |half|
@@ -45,8 +45,8 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
   end
 
   it "each route draws the section's rows through CollectionReorderRows, in its style" do
-    ROUTES.each do |route, (extra, style)|
-      code = emit(extra.merge(REORDER))
+    SJUI_REORDER_ROUTES.each do |route, (extra, style)|
+      code = emit(extra.merge(SJUI_REORDER_DECL))
       expect(code).to include('CollectionReorderRows(section: 0, ids: cellsData.enumerated().map { index, data in'), route
       expect(code).to include("style: .#{style}) { index in"), route
       expect(code).to include('reorder: CollectionReorder(isEnabled: data.editing == true, usesHandle: false, ' \
@@ -58,9 +58,9 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
   end
 
   it 'the container: CollectionReorder on the CollectionStackView, on the lazy-none VStack; none on a List' do
-    expect(emit({ 'height' => 400 }.merge(REORDER))).to match(/CollectionStackView\(\n(.*\n)*?\s*reorder: CollectionReorder\(/)
-    expect(emit({ 'lazy' => 'none' }.merge(REORDER))).to include('.collectionReorderContainer(CollectionReorder(')
-    list = emit({ 'height' => 400, 'listStyle' => 'plain' }.merge(REORDER))
+    expect(emit({ 'height' => 400 }.merge(SJUI_REORDER_DECL))).to match(/CollectionStackView\(\n(.*\n)*?\s*reorder: CollectionReorder\(/)
+    expect(emit({ 'lazy' => 'none' }.merge(SJUI_REORDER_DECL))).to include('.collectionReorderContainer(CollectionReorder(')
+    list = emit({ 'height' => 400, 'listStyle' => 'plain' }.merge(SJUI_REORDER_DECL))
     expect(list).not_to include('collectionReorderContainer')
     expect(list).not_to include('CollectionStackView(')
   end
@@ -74,20 +74,20 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
 
   it 'a horizontal or grid Collection does not reorder (v1)' do
     [{ 'layout' => 'horizontal', 'height' => 40 }, { 'columns' => 2 }].each do |extra|
-      expect(emit(extra.merge(REORDER))).not_to include('CollectionReorderRows'), extra.to_s
+      expect(emit(extra.merge(SJUI_REORDER_DECL))).not_to include('CollectionReorderRows'), extra.to_s
     end
   end
 
   # The class-list shape (no sections): each data section a reorderable section of its own, as SwiftJsonUI's Dynamic
   # draws it — the lazy-none VStack (.stack, the container on it) and the List (.list, none).
-  LEGACY = { 'sections' => nil, 'cellClasses' => ['ACell'] }.freeze
+  SJUI_REORDER_LEGACY = { 'sections' => nil, 'cellClasses' => ['ACell'] }.freeze
 
   it 'the class-list shape reorders too: the lazy-none VStack and the List' do
-    none = emit(LEGACY.merge('lazy' => 'none').merge(REORDER))
+    none = emit(SJUI_REORDER_LEGACY.merge('lazy' => 'none').merge(SJUI_REORDER_DECL))
     expect(none).to include('CollectionReorderRows(section: sectionIndex,')
     expect(none).to include('style: .stack) { index in')
     expect(none).to include('.collectionReorderContainer(CollectionReorder(')
-    list = emit(LEGACY.merge('height' => 400).merge(REORDER))
+    list = emit(SJUI_REORDER_LEGACY.merge('height' => 400).merge(SJUI_REORDER_DECL))
     expect(list).to include('CollectionReorderRows(section: sectionIndex,')
     expect(list).to include('style: .list) { index in')
     expect(list).not_to include('collectionReorderContainer')
@@ -132,8 +132,8 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
           func collectionReorderHandle() -> some View { self }
       }
     SWIFT
-    codes = ROUTES.values.map { |extra, _| emit(extra.merge(REORDER)) } +
-            [emit(LEGACY.merge('lazy' => 'none').merge(REORDER)), emit(LEGACY.merge('height' => 400).merge(REORDER))] +
+    codes = SJUI_REORDER_ROUTES.values.map { |extra, _| emit(extra.merge(SJUI_REORDER_DECL)) } +
+            [emit(SJUI_REORDER_LEGACY.merge('lazy' => 'none').merge(SJUI_REORDER_DECL)), emit(SJUI_REORDER_LEGACY.merge('height' => 400).merge(SJUI_REORDER_DECL))] +
             [emit({ 'lazy' => 'none', 'reorderable' => true, 'onReorder' => '@{onStopMove}', 'reorderHandle' => 'grip',
                     'reorderLockedProperty' => 'fixed', 'cellIdProperty' => 'id' })]
     data = ['var rows: CollectionDataSource? = nil', 'var editing: Bool = false', 'var onStopMove: ((Int, Int, Int) -> Void)? = nil']

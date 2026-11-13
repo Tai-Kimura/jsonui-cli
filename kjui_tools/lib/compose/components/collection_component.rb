@@ -3260,7 +3260,7 @@ module KjuiTools
               code += indent("val section#{idx} = #{sections_access(property_name)}.getOrNull(#{idx})", depth) + "\n"
               code += indent("val cellData#{idx} = section#{idx}?.cells", depth) + "\n"
               if @reorder
-                code += reorder_locked_line("(cellData#{idx}?.data ?: emptyList())", "reorderLocked#{idx}", depth) + "\n"
+                code += reorder_locked_line("cellData#{idx}?.data.orEmpty()", "reorderLocked#{idx}", depth) + "\n"
               end
               if auto_tracking && cell_id_prop
                 required_imports&.add(:remember_state)
