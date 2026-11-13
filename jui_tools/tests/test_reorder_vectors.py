@@ -26,10 +26,10 @@ def _named(rows):
 
 def test_the_rule_loads_and_every_section_has_vectors():
     assert RULE is not None, "shared/core/reorder_rule.py did not load"
-    for section in ("drop", "drag", "iosOnMove", "a11y", "release", "autoScroll"):
+    for section in ("drop", "drag", "iosOnMove", "a11y", "release", "autoScroll", "itemsChange"):
         assert DATA[section], section
     assert set(DATA["rule"]) == {"to", "drag", "locked", "fixed", "iosOnMove", "a11y", "a11yNames", "release",
-                                 "autoScroll"}
+                                 "autoScroll", "itemsChange"}
 
 
 @pytest.mark.parametrize("v", _named(DATA["drop"]))
@@ -80,3 +80,14 @@ def test_every_section_with_rows_has_a_fixed_example():
         assert any("fixed" in v for v in DATA[section]), section
     passed = [v for v in DATA["drop"] if v.get("fixed") and "order" in v]
     assert passed, "no drop moves a row past a fixed one"
+
+
+@pytest.mark.parametrize("v", _named(DATA["itemsChange"]))
+def test_items_change(v):
+    """A drag let go after the rows changed under it (rule.itemsChange): cancelled, or committed as it would."""
+    assert RULE.items_changed(v["start"], v["release"]) is v["cancelled"]
+
+
+def test_items_change_has_both_outcomes():
+    outcomes = {v["cancelled"] for v in DATA["itemsChange"]}
+    assert outcomes == {True, False}

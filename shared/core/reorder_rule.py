@@ -103,3 +103,11 @@ def auto_scroll(viewport: float, finger_y: float, band: float = BAND, max_speed:
     if top_depth >= bottom_depth:
         return -max_speed * min(1.0, top_depth)
     return max_speed * min(1.0, bottom_depth)
+
+
+def items_changed(start: dict, now: dict) -> bool:
+    """Whether a drag let go with the rows *now* is cancelled, having read *start* when it began (rule.itemsChange):
+    the ids differ in number or order, or the locked or the fixed rows differ. Each is {ids, locked, fixed}."""
+    return (list(start["ids"]) != list(now["ids"])
+            or sorted(start.get("locked", [])) != sorted(now.get("locked", []))
+            or sorted(start.get("fixed", [])) != sorted(now.get("fixed", [])))
