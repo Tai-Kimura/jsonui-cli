@@ -45,7 +45,8 @@ module KjuiTools
           if color
             args << "color = #{Helpers::ResourceResolver.process_color(color, required_imports)}"
           end
-          args << "fontSize = #{Helpers::BoundValue.sp(size)}" if size
+          args << "fontSize = #{Helpers::FontScale.wrap(Helpers::BoundValue.sp(size), json_data, required_imports)}" if size
+          args << "letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}" if size
           if (weight = font_weight_for(font))
             required_imports&.add(:font_weight)
             args << "fontWeight = #{weight}"
@@ -66,7 +67,7 @@ module KjuiTools
                              else
                                "#{format_sp(base_size.to_f * multiple.to_f)}.sp"
                              end
-            args << "style = LocalTextStyle.current.copy(lineHeight = #{line_height_sp})"
+            args << "style = LocalTextStyle.current.copy(lineHeight = #{Helpers::FontScale.wrap(line_height_sp, json_data, required_imports)})"
           end
 
           return "\n" + indent("placeholder = { Text(#{placeholder}) },", depth + 1) if args.length == 1
@@ -487,11 +488,14 @@ module KjuiTools
           # vocabulary rather than growing a fourth copy of it.
           tv_align = json_data['textAlign'] &&
                      TextComponent.compose_text_align(json_data['textAlign'], json_data['type'] || 'TextView')
-          if tv_resolved_var || json_data['fontColor'] || tv_align
+          # fontScaling / maxFontScale with no font attribute: the field's text size by them (the size it draws,
+          # the text style's), on the style the field already takes.
+          tv_undeclared = !tv_resolved_var && Helpers::FontScale.undeclared_size(json_data, required_imports)
+          if tv_resolved_var || json_data['fontColor'] || tv_align || tv_undeclared
             required_imports&.add(:text_style)
             style_parts = []
             if tv_resolved_var
-              style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(tv_resolved_var, required_imports))
+              style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(tv_resolved_var, required_imports, json_data))
             end
             if json_data['fontColor']
               font_color = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
@@ -501,8 +505,15 @@ module KjuiTools
               required_imports&.add(:text_align)
               style_parts << "textAlign = #{tv_align}"
             end
+            if tv_undeclared
+              style_parts << "fontSize = #{tv_undeclared}"
+              style_parts << "letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}"
+            end
             if style_parts.any?
-              code += "\n" + indent("textStyle = TextStyle(#{style_parts.join(', ')}),", depth + 1)
+              # The declarations alone keep the field's own style (LocalTextStyle, CustomTextField's default).
+              ctor = tv_undeclared && !json_data['fontColor'] && !tv_align ? 'LocalTextStyle.current.copy' : 'TextStyle'
+              required_imports&.add(:local_text_style) if ctor != 'TextStyle'
+              code += "\n" + indent("textStyle = #{ctor}(#{style_parts.join(', ')}),", depth + 1)
             end
           end
 

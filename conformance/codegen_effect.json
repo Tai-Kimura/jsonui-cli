@@ -171,6 +171,66 @@
       "owner": "reorder helper (rjui_tools CollectionConverter#reorder?, lib/react/templates/reorder.tsx)",
       "reason": "reorderLockedProperty is drawn only on a reorderable Collection (reorderable true or bound): the probe's Collection is not reorderable, so no value of it changes the output, by the rule (ticket jui-collection-drag-to-reorder). The tests that draw it are rjui_tools/spec/react/collection_reorder_spec.rb and conformance/hosts/web/scripts/collection_reorder_probe.mjs.",
       "note": "jsonui-cli 2.5.34 の候補"
+    },
+    {
+      "component": "Button",
+      "attribute": "accessibilitySelected",
+      "platform": "web",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "triage担当（rjui_tools の生成）",
+      "reason": "declared in 2.5.37 (ticket jui-view-accessibility-selected-state-missing): the shared rule, its vectors and the ios / android emitters land with the declaration; rjui's aria-pressed is the same train's other branch, which deletes these rows when it reads the spelling",
+      "note": "jsonui-cli 2.5.37"
+    },
+    {
+      "component": "Button",
+      "attribute": "accessibilitySelected",
+      "platform": "web",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "triage担当（rjui_tools の生成）",
+      "reason": "declared in 2.5.37 (ticket jui-view-accessibility-selected-state-missing): the shared rule, its vectors and the ios / android emitters land with the declaration; rjui's aria-pressed is the same train's other branch, which deletes these rows when it reads the spelling",
+      "note": "jsonui-cli 2.5.37"
+    },
+    {
+      "component": "IconLabel",
+      "attribute": "accessibilitySelected",
+      "platform": "web",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "triage担当（rjui_tools の生成）",
+      "reason": "declared in 2.5.37 (ticket jui-view-accessibility-selected-state-missing): the shared rule, its vectors and the ios / android emitters land with the declaration; rjui's aria-pressed is the same train's other branch, which deletes these rows when it reads the spelling",
+      "note": "jsonui-cli 2.5.37"
+    },
+    {
+      "component": "IconLabel",
+      "attribute": "accessibilitySelected",
+      "platform": "web",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "triage担当（rjui_tools の生成）",
+      "reason": "declared in 2.5.37 (ticket jui-view-accessibility-selected-state-missing): the shared rule, its vectors and the ios / android emitters land with the declaration; rjui's aria-pressed is the same train's other branch, which deletes these rows when it reads the spelling",
+      "note": "jsonui-cli 2.5.37"
+    },
+    {
+      "component": "View",
+      "attribute": "accessibilitySelected",
+      "platform": "web",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "triage担当（rjui_tools の生成）",
+      "reason": "declared in 2.5.37 (ticket jui-view-accessibility-selected-state-missing): the shared rule, its vectors and the ios / android emitters land with the declaration; rjui's aria-pressed is the same train's other branch, which deletes these rows when it reads the spelling",
+      "note": "jsonui-cli 2.5.37"
+    },
+    {
+      "component": "View",
+      "attribute": "accessibilitySelected",
+      "platform": "web",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "triage担当（rjui_tools の生成）",
+      "reason": "declared in 2.5.37 (ticket jui-view-accessibility-selected-state-missing): the shared rule, its vectors and the ios / android emitters land with the declaration; rjui's aria-pressed is the same train's other branch, which deletes these rows when it reads the spelling",
+      "note": "jsonui-cli 2.5.37"
     }
   ]
 }

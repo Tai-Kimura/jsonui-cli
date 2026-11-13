@@ -1016,3 +1016,47 @@ class CollectFindingsIntegrationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ToolCopiesAreNotScannedTests(unittest.TestCase):
+    """The platform tools `jui sync_tool` copies under a face's root are the library's code, not the app's.
+
+    2.5.34 added rjui_tools/lib/react/templates/reorder.tsx and a consumer's admin face read
+    `usage scanned 2234 source file(s)` where 2.5.33 read 2233: the template was counted as the app's web source.
+    Measured on the eight consumer faces before the fix: 11 to 13 files per web face, all rjui_tools' templates;
+    none on the iOS and Android faces. A reference inside one would also count as a use (or a missing key).
+    """
+
+    GROUPS = {"screen": {"title": "T", "help": "H"}}
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_a_tool_copy_is_neither_counted_nor_read(self):
+        web = VmFixture(self.root / "web")
+        web.write("src/vm.ts", "const t = StringManager.currentLanguage.screenTitle;\n")
+        web.write("rjui_tools/lib/react/templates/reorder.tsx",
+                  "const h = StringManager.currentLanguage.screenHelp;\n"
+                  "const x = StringManager.currentLanguage.screenTypo;\n")
+        ios = VmFixture(self.root / "ios")
+        ios.write("App/Vm.swift", "let t = 1\n")
+        ios.write("sjui_tools/lib/templates/Probe.swift", "let h = StringManager.currentLanguage.screenHelp\n")
+        android = VmFixture(self.root / "android")
+        android.write("app/Vm.kt", "val t = 1\n")
+        android.write("kjui_tools/lib/templates/Probe.kt", "val h = StringManager.currentLanguage.screenHelp\n")
+        report = _usage(self.GROUPS, roots={"web": web.root, "ios": ios.root, "android": android.root})
+        self.assertEqual(report.scanned_files, 3)
+        self.assertEqual([f.site for f in report.unused], ["screen.help"])
+        self.assertEqual(report.missing, [])
+
+    def test_a_folder_the_app_names_otherwise_is_still_read(self):
+        web = VmFixture(self.root / "web")
+        web.write("src/rjui/vm.ts", "const h = StringManager.currentLanguage.screenHelp;\n")
+        web.write("src/tools/vm.ts", "const t = StringManager.currentLanguage.screenTitle;\n")
+        report = _usage(self.GROUPS, roots={"web": web.root})
+        self.assertEqual(report.scanned_files, 2)
+        self.assertEqual(report.unused, [])

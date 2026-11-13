@@ -17,6 +17,8 @@ module JsonUI
       ATTRS = [
         # What screen readers say for this control in place of what it shows (web aria-label, iOS accessibilityLabel, Android contentDescription): a strings.json key or text, localized like `text`, or a binding. Use it where the visible text does not say enough, as with a row's "Open" that should be read "Open the second image". Unset, the control is read as before (its text, label or value). The image's own name is `alt`, which takes these two spellings too.
         { name: 'accessibilityLabel', kind: :string, bindable: true, aliases: ['contentDescription'].freeze }.freeze,
+        # Whether screen readers are told this control is the selected one (iOS the .isSelected trait, Android semantics selected, web aria-pressed): a boolean or a binding, as with two buttons of which one is chosen. `false` tells nothing, on all three platforms (VoiceOver says nothing of a control that is not selected; the other two follow it). It takes effect where the control is one button to a screen reader: a Button, and a View or IconLabel whose onClick makes it one button (it holds no control of its own: the tap rule's button / combine shape, as accessibilityLabel's View). Elsewhere the build warns and nothing is told. Radio, CheckBox, Switch, Segment, TabView and SelectBox say their own state.
+        { name: 'accessibilitySelected', kind: :boolean, bindable: true }.freeze,
         # HTML button type
         { name: 'buttonType', kind: :enum, values: ['button', 'submit', 'reset'].freeze }.freeze,
         # Button configuration (iOS 15+)

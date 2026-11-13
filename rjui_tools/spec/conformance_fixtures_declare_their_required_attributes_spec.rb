@@ -52,6 +52,24 @@ RSpec.describe 'conformance fixtures declare their required attributes' do
     expect(found).to eq([]), "#{found.size} required attribute(s) missing:\n#{found.first(40).join("\n")}"
   end
 
+  # A SelectBox with no height takes its content's height on every face (ruling 2026-11-13), and the 2.5.36
+  # fixtures write none: its height is not required (common.height notRequiredFor). Every other component's
+  # still is (ticket rjui-selectbox-height-still-required-by-the-validator).
+  it 'does not require a SelectBox height, and still requires a Label height (control)' do
+    Dir.mktmpdir do |dir|
+      File.write(File.join(dir, 'x.layout.json'), JSON.generate(
+        { 'type' => 'View', 'id' => 'root', 'width' => 'matchParent', 'height' => 'matchParent',
+          'orientation' => 'vertical', 'child' => [
+            { 'type' => 'SelectBox', 'id' => 'pick', 'width' => 200, 'items' => %w[a b] },
+            { 'type' => 'Label', 'id' => 'after', 'width' => 100, 'text' => 'After' }
+          ] }
+      ))
+      _, found = missing_required(dir)
+      expect(found.grep(/SelectBox/)).to eq([])
+      expect(found.grep(/Label#after/).join).to include("Required attribute 'height'")
+    end
+  end
+
   # The validator sees a missing width on a node shaped like the old `after`
   # Label: the probe is alive.
   it 'reports a missing width on a widthless Label (control)' do

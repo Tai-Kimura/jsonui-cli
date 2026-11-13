@@ -34,3 +34,6 @@ screenshots/
 
 # the reorder probe's work tree (scripts/collection_reorder_probe.mjs)
 .collection-reorder-probe/
+
+# Collection cell root visibility probe scratch (scripts/collection_cell_root_visibility_probe.mjs)
+.cell-root-visibility-probe/

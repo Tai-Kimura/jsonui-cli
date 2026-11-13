@@ -132,7 +132,7 @@ RSpec.describe 'kjui: a Label\'s links stop with userInteractionEnabled' do
       val TextStyle.fontWeight: FontWeight? get() = null
       val TextStyle.fontStyle: FontStyle? get() = null
       fun TextStyle.copy(color: Color = this.color, fontFamily: FontFamily? = null, fontWeight: FontWeight? = null,
-                         fontSize: TextUnit = this.fontSize, fontStyle: FontStyle? = null): TextStyle = this
+                         fontSize: TextUnit = this.fontSize, fontStyle: FontStyle? = null, letterSpacing: Any? = null): TextStyle = this
       class PartialAttribute {
           companion object {
               fun fromJsonRange(range: Any, text: String, fontColor: String? = null, fontSize: Int? = null,

@@ -96,7 +96,7 @@ module RjuiTools
             classes << "placeholder:[font-family:#{hint_font.to_s.gsub(/\s+/, '_')}]"
           end
           if (hint_font_size = attributes['hintFontSize'])
-            classes << "placeholder:[font-size:#{TailwindMapper.rem(hint_font_size)}]"
+            classes << "placeholder:[font-size:#{TailwindMapper.font_size_css(hint_font_size, **font_scale_opts)}]"
           end
           # Declared for TextField as well as TextView, and only TextView read
           # it — the same pseudo-element reasoning applies, so it takes the

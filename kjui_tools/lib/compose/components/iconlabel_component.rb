@@ -199,7 +199,11 @@ module KjuiTools
           end
           if (size = json_data['fontSize'])
             required_imports&.add(:text_unit) if Helpers::BoundValue.bound?(size)
-            code += "\n" + indent("fontSize = #{Helpers::BoundValue.sp(size, null_expr: 'TextUnit.Unspecified')},", depth + 1)
+            code += "\n" + indent("fontSize = #{Helpers::FontScale.wrap(Helpers::BoundValue.sp(size, null_expr: 'TextUnit.Unspecified'), json_data, required_imports)},", depth + 1)
+            code += "\n" + indent("letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)},", depth + 1)
+          elsif (undeclared = Helpers::FontScale.undeclared_size(json_data, required_imports))
+            code += "\n" + indent("fontSize = #{undeclared},", depth + 1)
+            code += "\n" + indent("letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)},", depth + 1)
           end
           if (weight = font_weight(json_data))
             required_imports&.add(:font_weight)

@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Button/accessibilitySelected__false.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Button.accessibilitySelected (false)",
+    "description": "Conformance fixture for 'accessibilitySelected' on Button (section: Button, class: visual). Value under test: false.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Button"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "accessibilitySelected__false",
+      "description": "Conformance fixture for 'accessibilitySelected' on Button (section: Button, class: visual). Value under test: false.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Button_accessibilitySelected__false"
+        }
+      ]
+    }
+  ]
+}

@@ -917,6 +917,11 @@ module KjuiTools
         #                             block is not.
         #   accessibilityLiveRegion — `liveRegion = LiveRegionMode.Polite` /
         #                             `Assertive`
+        #   accessibilitySelected   — `selected = true` while it is true (a
+        #                             binding gates the modifier); false tells
+        #                             nothing, as on iOS. Where it takes effect
+        #                             is the rule's (a Button, or a View /
+        #                             IconLabel the tap rule makes one button).
         def self.build_control_accessibility(json_data, required_imports = nil)
           rule = JsonUIShared::ControlAccessibility
           modifiers = []
@@ -928,6 +933,12 @@ module KjuiTools
           if (live = rule.live(json_data))
             required_imports&.add(:semantics_live_region)
             modifiers << ".semantics { liveRegion = LiveRegionMode.#{live.capitalize} }"
+          end
+          unless (selected = rule.selected(json_data)).nil?
+            required_imports&.add(:semantics_selected)
+            told = 'Modifier.semantics { selected = true }'
+            gate = selected == true ? nil : boolean_expression(selected)
+            modifiers << (gate.nil? ? ".then(#{told})" : ".then(if (#{gate}) #{told} else Modifier)")
           end
           modifiers
         end

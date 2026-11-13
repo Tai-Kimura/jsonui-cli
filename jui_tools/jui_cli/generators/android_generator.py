@@ -121,14 +121,16 @@ class AndroidGenerator:
         spec_types: list[str] | None = None,
         names: list[str] | None = None,
         current_package: str = "",
+        fallback: dict[str, str] | None = None,
     ) -> list[str]:
         """Compute imports for a mix of spec-typed values and bare class names.
 
         *spec_types* are resolved through the type mapper so generic
         patterns and import hints apply. *names* are looked up directly
-        in the project symbol index (for things like ``{Name}Data``).
+        in the project symbol index (for things like ``{Name}Data``);
+        *fallback* gives the FQN of a name the index may not know yet.
         """
-        return self._build_imports(spec_types or [], set(names or []), current_package)
+        return self._build_imports(spec_types or [], set(names or []), current_package, fallback)
 
     def viewmodel_type_imports(self, spec: ScreenSpec, current_package: str,
                                names: list[str] | None = None) -> list[str]:
@@ -148,13 +150,16 @@ class AndroidGenerator:
         for m in vm.methods:
             types += [p.type for p in m.params] + ([m.return_type] if m.return_type else [])
         types += [v.type for v in vm.vars]
-        imports = self._imports_for_names(spec_types=types, names=[data_class, *(names or [])],
-                                          current_package=current_package)
-        if not any(line.endswith(f".{data_class}") for line in imports):
-            data_pkg = f"{self._package}.data"
-            if data_pkg != current_package:
-                imports.append(f"import {data_pkg}.{data_class}")
-        return imports
+        # The Data class's FQN when the index does not know it, in the SAME
+        # place the index would have put it (the names are imported in name
+        # order). Appended at the end, it moved whenever the Data file came or
+        # went between two builds — a layout deleted with its spec kept, whose
+        # Data kjui then removes — and the next build reordered the protocol
+        # (ticket kotlin-protocol-import-order-settles-on-the-second-build-
+        # after-a-screen-removal).
+        return self._imports_for_names(spec_types=types, names=[data_class, *(names or [])],
+                                       current_package=current_package,
+                                       fallback={data_class: f"{self._package}.data.{data_class}"})
 
     def viewmodel_impl_imports(self, spec: ScreenSpec) -> list[str]:
         """What `jui build` makes sure a ViewModel Impl imports (build_cmd's sync)."""
@@ -173,6 +178,7 @@ class AndroidGenerator:
         spec_types: list[str],
         extra_refs: set[str],
         current_package: str,
+        fallback: dict[str, str] | None = None,
     ) -> list[str]:
         imports: list[str] = []
         seen: set[str] = set()
@@ -206,7 +212,7 @@ class AndroidGenerator:
         for ref in sorted(refs):
             if ref in self._KOTLIN_BUILTINS:
                 continue
-            fqn = index.get(ref)
+            fqn = index.get(ref) or (fallback or {}).get(ref)
             if not fqn:
                 continue
             if fqn.rsplit(".", 1)[0] == package:

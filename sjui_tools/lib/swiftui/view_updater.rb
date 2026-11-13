@@ -40,7 +40,7 @@ module SjuiTools
         false
       end
 
-      def update_generated_body(swift_file_path, new_body_code, state_variables: [], root_children: nil, responsive_functions: [], variant_dispatch: nil, force_typed_view_model: false, view_model_type: nil, source_name: nil, screen_id: nil)
+      def update_generated_body(swift_file_path, new_body_code, state_variables: [], root_children: nil, responsive_functions: [], variant_dispatch: nil, force_typed_view_model: false, view_model_type: nil, source_name: nil, screen_id: nil, root_visibility: nil)
         unless File.exist?(swift_file_path)
           puts "Error: Swift file not found: #{swift_file_path}"
           return not_updated(swift_file_path, 'it is not there')
@@ -126,6 +126,7 @@ module SjuiTools
         # exactly the shape the device-stack bound cares about.
         line_count = new_body_code.count("\n") + 1
         body_depth = SectionBounder.max_brace_depth(new_body_code.split("\n"))
+        body_depth += 1 if root_visibility   # the root's VisibilityWrapper below is one more level
         needs_split = line_count > LINE_THRESHOLD ||
                       body_depth > SectionBounder::MAX_DEPTH - 1
 
@@ -141,6 +142,13 @@ module SjuiTools
         else
           body_code = new_body_code
           section_functions = ""
+        end
+
+        # The root's own `visibility` (JsonToSwiftUIConverter#root_visibility):
+        # around the whole body, after the split, so a split root keeps its
+        # shape (generate_split_code reads the root container off line 1).
+        if root_visibility && !body_code.empty?
+          body_code = ["VisibilityWrapper(#{root_visibility}) {", indent_body_code(body_code, "    "), "}"].join("\n")
         end
 
         # Wrap the (possibly split) body in the variant-file dispatch.

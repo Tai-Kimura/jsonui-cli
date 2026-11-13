@@ -91,6 +91,9 @@
         "binding"
       ],
       "required": true,
+      "notRequiredFor": {
+        "SelectBox": "A SelectBox with no height takes its content's height on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height), so leaving it out is a declared layout, not a missing one."
+      },
       "description": "Height (number, 'matchParent', 'wrapContent') - binding supported. Not required if weight is specified."
     },
     "minWidth": {
@@ -2497,6 +2500,13 @@
     "_comment": "Component alias of TextField (web naming). Resolved by the L1 normalizer type rewrite and by every validator/codegen consumer - do not add attribute copies here."
   },
   "Button": {
+    "accessibilitySelected": {
+      "type": [
+        "boolean",
+        "binding"
+      ],
+      "description": "Whether screen readers are told this control is the selected one (iOS the .isSelected trait, Android semantics selected, web aria-pressed): a boolean or a binding, as with two buttons of which one is chosen. `false` tells nothing, on all three platforms (VoiceOver says nothing of a control that is not selected; the other two follow it). It takes effect where the control is one button to a screen reader: a Button, and a View or IconLabel whose onClick makes it one button (it holds no control of its own: the tap rule's button / combine shape, as accessibilityLabel's View). Elsewhere the build warns and nothing is told. Radio, CheckBox, Switch, Segment, TabView and SelectBox say their own state."
+    },
     "accessibilityLabel": {
       "type": [
         "string",
@@ -3773,6 +3783,13 @@
     }
   },
   "View": {
+    "accessibilitySelected": {
+      "type": [
+        "boolean",
+        "binding"
+      ],
+      "description": "Whether screen readers are told this control is the selected one (iOS the .isSelected trait, Android semantics selected, web aria-pressed): a boolean or a binding, as with two buttons of which one is chosen. `false` tells nothing, on all three platforms (VoiceOver says nothing of a control that is not selected; the other two follow it). It takes effect where the control is one button to a screen reader: a Button, and a View or IconLabel whose onClick makes it one button (it holds no control of its own: the tap rule's button / combine shape, as accessibilityLabel's View). Elsewhere the build warns and nothing is told. Radio, CheckBox, Switch, Segment, TabView and SelectBox say their own state."
+    },
     "accessibilityLabel": {
       "type": [
         "string",
@@ -5079,6 +5096,13 @@
         "array"
       ],
       "description": "Icon size. A number sizes both edges; a two-element [width, height] sizes them separately (rjui icon_label_converter.rb:130-138 reads both, and its spec covers both). NOT the same shape as CheckBox.iconSize, which is a square glyph and takes a number only. sjui icon_label_converter.rb:50-51 interpolates the value straight into `iconSize:`, so the array form is web-only today — declared here because the attribute's value space is a property of the attribute, not of whichever face lags (plan 51-E)."
+    },
+    "accessibilitySelected": {
+      "type": [
+        "boolean",
+        "binding"
+      ],
+      "description": "Whether screen readers are told this control is the selected one (iOS the .isSelected trait, Android semantics selected, web aria-pressed): a boolean or a binding, as with two buttons of which one is chosen. `false` tells nothing, on all three platforms (VoiceOver says nothing of a control that is not selected; the other two follow it). It takes effect where the control is one button to a screen reader: a Button, and a View or IconLabel whose onClick makes it one button (it holds no control of its own: the tap rule's button / combine shape, as accessibilityLabel's View). Elsewhere the build warns and nothing is told. Radio, CheckBox, Switch, Segment, TabView and SelectBox say their own state."
     },
     "contentDescription": {
       "type": "string",

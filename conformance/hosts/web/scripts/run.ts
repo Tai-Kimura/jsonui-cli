@@ -64,6 +64,12 @@ interface ManifestFixture {
   layout: string;
   state?: { afterFirstDraw?: { name: string; set: { var: string; value: string } } } | null;
   testBridge?: TestBridgeSpec | null;
+  /**
+   * The text size this fixture is drawn at, as a multiple of the standard
+   * one (fontScaling / maxFontScale fixtures and their controls; absent: 1).
+   * The browser's text size is the root font size: 16px x textScale.
+   */
+  textScale?: number;
 }
 
 /** INTERACTIVE_HOST_CONTRACT.md §6. */
@@ -411,6 +417,16 @@ async function runFixture(page: Page, fixture: ManifestFixture, launchId: string
     // root's empty bottom edge before anything is captured.
     const viewport = page.viewportSize();
     await page.mouse.move(0, (viewport?.height ?? 600) - 1);
+
+    // The text size (fontScaling / maxFontScale): what a reader who raised the
+    // browser's text size sees. Every rem follows the root; a px does not.
+    // The page is reloaded per fixture, so the root goes back to 16px.
+    if (fixture.textScale && fixture.textScale !== 1) {
+      await page.evaluate((scale) => {
+        document.documentElement.style.fontSize = `${16 * scale}px`;
+      }, fixture.textScale);
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null)))));
+    }
 
     if (!platformIncludes(test.platform, 'web')) {
       return { id: fixture.id, status: 'skipped', detail: `test platform ${JSON.stringify(test.platform)} excludes web` };

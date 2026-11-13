@@ -17,6 +17,7 @@
       "id": "target",
       "width": "wrapContent",
       "height": "wrapContent",
+      "label": "Sample",
       "fontScaling": false
     }
   ]

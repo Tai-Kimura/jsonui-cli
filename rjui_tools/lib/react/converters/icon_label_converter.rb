@@ -69,7 +69,7 @@ module RjuiTools
           classes = []
 
           # Font size
-          classes << TailwindMapper.map_font_size(attributes['fontSize']) if attributes['fontSize']
+          classes << TailwindMapper.map_font_size(attributes['fontSize'], **font_scale_opts) if attributes['fontSize']
 
           # Font weight
           classes << TailwindMapper.map_font_weight(attributes['fontWeight']) if attributes['fontWeight']

@@ -78,11 +78,21 @@ module JsTemplates
     out
   end
 
+  # The END AUTO-GENERATED footer closes a template as its header opens it:
+  # esbuild drops a trailing comment with the rest of the body's, so the
+  # twins of reorder.tsx and use_color_mode.ts lost theirs and failed
+  # `jui lint-generated` (exit 3) in every project that wrote them (ticket
+  # rjui-reorder-helper-missing-end-footer-fails-lint-generated).
+  FOOTER = /\n*(\/\/ ══ END AUTO-GENERATED[^\n]*)\n*\z/.freeze
+
   def render(template)
     source = File.read(File.join(DIR, template), encoding: 'UTF-8')
+    footer = source[FOOTER, 1]
+    source = source.sub(FOOTER, "\n") if footer
     header, body = split(source)
     header = header.sub(/\n*\z/, "\n\n")
-    header + strip_types(body, template.end_with?('.tsx') ? 'tsx' : 'ts')
+    out = header + strip_types(body, template.end_with?('.tsx') ? 'tsx' : 'ts')
+    footer ? "#{out.sub(/\n*\z/, "\n")}\n#{footer}\n" : out
   end
 
   def write!

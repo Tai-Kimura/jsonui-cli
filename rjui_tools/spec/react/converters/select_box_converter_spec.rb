@@ -358,7 +358,8 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
         result = listbox
         expect(result).not_to include('pr-8')
         expect(result).not_to include('cursor-pointer')
-        expect(result).to include('px-3 py-2')
+        expect(result).to include('px-3')
+        expect(result).not_to include('py-2')
       end
 
       it 'leaves a single select alone' do
@@ -421,19 +422,33 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
         ).convert
       end
 
-      it 'changes nothing when the object is absent' do
+      # The three faces draw one caret (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-
+      # height): a 16 x 16 chevron box 12 from the trailing edge, 8 from the text, nothing above or below the text,
+      # 12 on the left. The browser's arrow is gone.
+      it 'draws the library caret when the object is absent' do
         plain = create_converter({ 'class' => 'SelectBox', 'id' => 'pick', 'items' => %w[One Two Three] }).convert
-        expect(plain).to include('pl-3 pr-8 py-2')
-        expect(plain).not_to include('appearance-none')
-        expect(plain).not_to include('backgroundImage')
-        expect(plain).not_to include('paddingRight')
+        expect(plain).to include('appearance-none')
+        expect(plain).to include("backgroundPosition: 'right 12px center'")
+        expect(plain).to include("backgroundSize: '16px 16px'")
+        expect(plain).to include("paddingRight: '36px'")
+        expect(plain).to include('pl-3')
+        expect(plain).not_to match(/\b(pr-8|py-2)\b/)
+      end
+
+      it "puts the caret at the layout's right padding, side by side as the three faces read it" do
+        at = ->(extra) { create_converter({ 'class' => 'SelectBox', 'id' => 'pick', 'items' => %w[a] }.merge(extra)).convert }
+        expect(at.call('padding' => 10)).to include("backgroundPosition: 'right 10px center'")
+        expect(at.call('paddings' => [0, 16])).to include("backgroundPosition: 'right 16px center'")
+        expect(at.call('padding' => 10, 'paddingRight' => 4)).to include("backgroundPosition: 'right 4px center'")
+        expect(at.call('paddingRight' => 4, 'caretAttributes' => { 'rightMargin' => 20 }))
+          .to include("backgroundPosition: 'right 20px center'")
       end
 
       it 'moves the arrow in from the edge with rightMargin alone (the reported case)' do
         result = select_with('rightMargin' => 12)
         expect(result).to include('appearance-none')
         expect(result).not_to include('pr-8')
-        expect(result).to include('pl-3 py-2')
+        expect(result).to include('pl-3')
         expect(result).to include("backgroundPosition: 'right 12px center'")
         expect(result).to include("backgroundSize: '16px 16px'")
         expect(result).to include("paddingRight: '36px'")
@@ -453,10 +468,10 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
         expect(result).not_to include('linear-gradient(#FF0000')
       end
 
-      it 'treats an empty object as present and draws the default glyph flush' do
+      it 'treats an empty object as the default caret' do
         result = select_with({})
         expect(result).to include('appearance-none')
-        expect(result).to include("backgroundPosition: 'right 0px center'")
+        expect(result).to include("backgroundPosition: 'right 12px center'")
         expect(result).not_to include('linear-gradient(')
       end
 
@@ -486,14 +501,38 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
         result = select_with({ 'rightMargin' => 12 }, 'multiple' => true)
         expect(result).not_to include('appearance-none')
         expect(result).not_to include('backgroundImage')
-        expect(result).to include('px-3 py-2')
+        expect(result).to include('px-3')
       end
 
-      it 'is ignored on a date picker' do
-        result = select_with({ 'rightMargin' => 12 }, 'selectItemType' => 'Date')
+      # The date input draws the same caret in place of the browser's calendar mark (ruling 2026-11-13); a tap
+      # anywhere still opens the picker (showPicker).
+      it 'draws on a date picker too, with the calendar mark removed' do
+        result = select_with({ 'rightMargin' => 20 }, 'selectItemType' => 'Date')
         expect(result).to include('<input')
-        expect(result).not_to include('appearance-none')
-        expect(result).not_to include('backgroundImage')
+        expect(result).to include('appearance-none')
+        expect(result).to include('[&::-webkit-calendar-picker-indicator]:hidden')
+        expect(result).to include("backgroundPosition: 'right 20px center'")
+        expect(result).to include('showPicker')
+      end
+
+      # colorScheme "dark" is the Date input's key for a dark background: the browser's calendar mark turned light
+      # under it, and the library's caret that replaced the mark does the same (ticket
+      # rjui-selectbox-color-scheme-dark-lost-with-the-library-caret). A tintColor still wins; a select (no Date)
+      # never read colorScheme and keeps the default.
+      it 'tints the default caret light on a Date input with a dark colorScheme' do
+        dark_svg = 'stroke=%22%23FFFFFF%22'
+        light_svg = 'stroke=%22%23000000%22'
+        base = { 'class' => 'SelectBox', 'id' => 'when', 'items' => %w[a], 'selectItemType' => 'Date' }
+        dark = create_converter(base.merge('colorScheme' => 'dark')).convert
+        expect(dark).to include(dark_svg)
+        expect(dark).not_to include(light_svg)
+        expect(dark).to include("colorScheme: 'dark'")
+        expect(create_converter(base.merge('colorScheme' => 'light')).convert).to include(light_svg)
+        expect(create_converter(base).convert).to include(light_svg)
+        tinted = create_converter(base.merge('colorScheme' => 'dark', 'caretAttributes' => { 'tintColor' => '#00FF00' })).convert
+        expect(tinted).to include('stroke=%22%2300FF00%22')
+        select = create_converter(base.merge('selectItemType' => nil, 'colorScheme' => 'dark').compact).convert
+        expect(select).to include(light_svg)
       end
     end
 
@@ -573,6 +612,7 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
               onChange?: (e: { target: HTMLInputElement }) => void;
               onFocus?: (e: { currentTarget: HTMLInputElement }) => void;
               onClick?: (e: { currentTarget: HTMLInputElement }) => void;
+              style?: { [key: string]: string };
             };
           }
         }

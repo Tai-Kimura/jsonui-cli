@@ -1006,7 +1006,7 @@ RSpec.describe 'pair-scan closure (web)' do
                   'hint' => 'Nothing here', 'hintColor' => '#999999',
                   'hintAttributes' => { 'fontSize' => 12 }).convert
     expect(hinted).to include('Nothing here')
-    expect(hinted).to include("fontSize: '0.75rem'")
+    expect(hinted).to include("fontSize: '#{RjuiTools::React::TailwindMapper.font_size_css(12)}'")
     expect(hinted).to include("color: '#999999'")
 
     # binding text: runtime emptiness ternary, one span per state

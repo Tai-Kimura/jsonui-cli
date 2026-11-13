@@ -756,7 +756,7 @@ module SjuiTools
               next if swiftui_code.nil?
 
               # Update the existing Swift file's generatedBody
-              updater.update_generated_body(swift_file, swiftui_code, state_variables: state_variables || [], root_children: root_children, responsive_functions: responsive_functions || [], screen_id: screen_id_for(screen_index, json_file), **variant_kwargs)
+              updater.update_generated_body(swift_file, swiftui_code, state_variables: state_variables || [], root_children: root_children, responsive_functions: responsive_functions || [], screen_id: screen_id_for(screen_index, json_file), **variant_kwargs, root_visibility: converter.root_visibility)
 
               Core::Logger.info "  Updated: #{swift_file}"
             else
@@ -806,7 +806,7 @@ module SjuiTools
               next if swiftui_code.nil?
 
               File.write(swift_file, stub_content)
-              updater.update_generated_body(swift_file, swiftui_code, state_variables: state_variables || [], root_children: root_children, responsive_functions: responsive_functions || [], screen_id: screen_id_for(screen_index, json_file), **variant_kwargs)
+              updater.update_generated_body(swift_file, swiftui_code, state_variables: state_variables || [], root_children: root_children, responsive_functions: responsive_functions || [], screen_id: screen_id_for(screen_index, json_file), **variant_kwargs, root_visibility: converter.root_visibility)
               Core::Logger.info "  Created and updated: #{swift_file}"
             end
 
@@ -874,7 +874,7 @@ module SjuiTools
                 FileUtils.mkdir_p(File.dirname(variant_swift_file))
                 File.write(variant_swift_file, variant_stub_pending)
               end
-              updater.update_generated_body(variant_swift_file, v_code, state_variables: v_state || [], root_children: v_children, responsive_functions: v_responsive || [], force_typed_view_model: true, view_model_type: "#{view_name}ViewModel", source_name: variant_source)
+              updater.update_generated_body(variant_swift_file, v_code, state_variables: v_state || [], root_children: v_children, responsive_functions: v_responsive || [], force_typed_view_model: true, view_model_type: "#{view_name}ViewModel", source_name: variant_source, root_visibility: converter.root_visibility)
               Core::Logger.info "  Updated variant: #{variant_swift_file}"
             end
           end
