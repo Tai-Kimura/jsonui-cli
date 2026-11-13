@@ -184,6 +184,10 @@ module RjuiTools
         # ticket jui-font-provider-not-reached-without-font-attributes-android-web).
         FONT_PROVIDER_TYPES = %w[Label Button TextField TextView SelectBox Switch CheckBox Radio IconLabel Segment].freeze
 
+        # The dynamic-style key the font spread rides under (format_dynamic_style_pair renders it as a spread). A
+        # style key, not an attribute: named here so the converter-read scan does not read it as one.
+        FONT_SPREAD_KEY = "#{Helpers::FontSpecHelper::SPREAD_KEY_PREFIX}font"
+
         # The weight a component draws its text at when it writes none (its
         # own class), handed to the provider as the spec's weight: a provider
         # that maps a weight to a face (client / bar return Regular for none)
@@ -510,7 +514,7 @@ module RjuiTools
             # KotlinJsonUI Configuration.Font.resolve do. The classes above stay:
             # with no provider and no family, the spread writes the lengths
             # they write and nothing else, so the page draws as before.
-            if FONT_PROVIDER_TYPES.include?(json['type']) && !@dynamic_styles.key?('__SPREAD__font')
+            if FONT_PROVIDER_TYPES.include?(json['type']) && !@dynamic_styles.key?(FONT_SPREAD_KEY)
               @dynamic_styles['__SPREAD__font'] = text_font_spread
             end
 
