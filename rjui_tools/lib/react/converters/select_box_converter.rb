@@ -50,7 +50,8 @@ module RjuiTools
           # Default select styling
           classes << 'border'
           classes << 'rounded-md'
-          classes << 'pl-3 pr-8 py-2'
+          # The left side's default; the right side is the caret's (apply_caret_attributes).
+          classes << default_paddings(left: 'pl-3', all: 'pl-3')
           classes << 'bg-white' unless attributes['background']
           classes << 'cursor-pointer'
           classes << 'outline-none'
@@ -86,8 +87,8 @@ module RjuiTools
           # A multi-select is a list box: it has no closed state, so the arrow
           # gutter and the pointer cursor are both wrong.
           if multiple_select?
-            classes.reject! { |c| c == 'pl-3 pr-8 py-2' || c == 'cursor-pointer' }
-            classes << 'px-3 py-2'
+            classes.reject! { |c| c == 'cursor-pointer' || c == 'pl-3' }
+            classes << default_paddings(right: 'pr-3', left: 'pl-3', all: 'px-3')
           end
 
           # caretAttributes: present → the native arrow goes and the caret is
@@ -209,10 +210,11 @@ module RjuiTools
         # position. That is the observation this object was promoted for — an
         # arrow stuck to the trailing edge with no key that pushes it in.
         #
-        # Absent → not one byte of the class list or the style changes; the
-        # SelectBox baselines that predate this are the evidence. Present →
-        # `appearance-none` removes the native arrow and the caret is redrawn
-        # as background layers on the <select> itself:
+        # From 2.5.35 the caret is drawn whether or not the object is there
+        # (the three faces' one caret, ruling 2026-11-13; apply_caret_attributes):
+        # `appearance-none` removes the native arrow (and a date input's
+        # calendar mark) and the caret is drawn as background layers on the
+        # element itself:
         #
         #   layer 1  the glyph — an inline-SVG chevron by default, `src` if given
         #   layer 2  the `background` box, a solid two-stop gradient, only when
@@ -231,10 +233,9 @@ module RjuiTools
         # color_style_expr already takes), which turns the value into a
         # template literal; a CSS literal is baked in.
         #
-        # The list box (`multiple`) and the Date mode have no closed-state
-        # caret (SSoT), so both are out — the same predicate that drops the
-        # arrow gutter above. A bound width/height/rightMargin is not resolved
-        # here and falls to the default.
+        # The list box (`multiple`) has no closed-state caret and is out. A
+        # bound width/height/rightMargin is not resolved here and falls to the
+        # default.
         #
         # Known limit: a gradient `background` on the select itself lands in
         # `@dynamic_styles['background']` (the shorthand), and a shorthand plus
@@ -245,6 +246,33 @@ module RjuiTools
         CARET_TEXT_GAP = 8
         CARET_CHEVRON_PATH = 'M6 9l6 6 6-6'
 
+        # The trailing edge to the caret's box when neither caretAttributes nor
+        # the layout says (the three faces' default).
+        CARET_DEFAULT_RIGHT = 12
+
+        # The layout's right padding, in the order the three faces apply them
+        # (the default, then padding, then paddings, then the side's own key),
+        # or the default. A bound value is not resolved here and the default
+        # stands for it.
+        def declared_right_padding
+          a = attributes
+          right = CARET_DEFAULT_RIGHT
+          right = caret_px(a['padding'], right) if a['padding'].is_a?(Numeric) || a['padding'].to_s.match?(/\A\d+(\.\d+)?\z/)
+          if (list = a['paddings']).is_a?(Array) && !list.empty?
+            value = case list.size
+                    when 1 then list[0]
+                    when 2, 3 then list[1]
+                    else list[1]
+                    end
+            right = caret_px(value, right)
+          elsif a['paddings'].is_a?(Numeric)
+            right = caret_px(a['paddings'], right)
+          end
+          side = a['rightPadding'] || a['paddingRight'] || a['paddingEnd']
+          right = caret_px(side, right) unless side.nil?
+          right
+        end
+
         def caret_attributes
           caret = attributes['caretAttributes']
           caret.is_a?(Hash) ? caret : nil
@@ -254,16 +282,56 @@ module RjuiTools
           attributes['selectItemType'] == 'Date'
         end
 
-        def apply_caret_attributes(classes)
-          caret = caret_attributes
-          return classes if caret.nil? || multiple_select? || date_picker?
+        # The select's own padding — none above and below (the default the
+        # three faces share, ruling 2026-11-13: the text's own line is its
+        # height), 12 on the left, 32 on the right for the arrow — on the sides
+        # the layout does not pad. Every side's class
+        # was written whatever the layout said, and one value (`padding: 10`,
+        # Tailwind's p-) comes before py- / pl- / pr- in the stylesheet, so the
+        # layout's padding lost on all four sides (ticket kjui-selectbox-fixed-
+        # 56dp-ignores-wrap-content-height, the web's part). Nothing declared:
+        # the classes as they were (`all`).
+        def default_paddings(all:, top: nil, right: nil, bottom: nil, left: nil)
+          declared = declared_padding_sides
+          return all if declared.empty?
 
+          { top: top, right: right, bottom: bottom, left: left }
+            .reject { |side, cls| cls.nil? || declared.include?(side) }.values.join(' ')
+        end
+
+        # The sides the layout pads, by any of the padding spellings the base
+        # converter writes (one value or an array, a side's own key, start /
+        # end, insets).
+        def declared_padding_sides
+          a = attributes
+          sides = []
+          sides.concat(%i[top right bottom left]) if a['padding'] || a['paddings'] || a['insets']
+          sides.concat(%i[left right]) if a['insetHorizontal']
+          sides << :top if a['topPadding'] || a['paddingTop']
+          sides << :right if a['rightPadding'] || a['paddingRight'] || a['paddingEnd']
+          sides << :bottom if a['bottomPadding'] || a['paddingBottom']
+          sides << :left if a['leftPadding'] || a['paddingLeft'] || a['paddingStart']
+          sides.uniq
+        end
+
+        # The caret, drawn by the library on every closed SelectBox and Date
+        # (ruling 2026-11-13: the three faces draw one 16 x 16 chevron box,
+        # centred vertically, `right` from the trailing edge, and keep 8
+        # between the text and the box). The browser's own arrow and the date
+        # input's calendar mark are removed. caretAttributes replaces any of
+        # it: width / height are the box, rightMargin the edge-to-box distance
+        # (over the layout's right padding), src the glyph. The list box has
+        # no caret.
+        def apply_caret_attributes(classes)
+          return classes if multiple_select?
+
+          caret = caret_attributes || {}
           width = caret_px(caret['width'], CARET_DEFAULT_SIZE)
           height = caret_px(caret['height'], CARET_DEFAULT_SIZE)
-          right = caret_px(caret['rightMargin'], 0)
+          right = caret.key?('rightMargin') ? caret_px(caret['rightMargin'], CARET_DEFAULT_RIGHT) : declared_right_padding
 
-          classes = drop_class(classes, 'pr-8')
           classes << 'appearance-none'
+          classes << '[&::-webkit-calendar-picker-indicator]:hidden' if date_picker?
 
           layers = caret_glyph_layer(caret)
           layers += [[:lit, ', ']] + caret_box_layer(caret['background']) if caret['background']
