@@ -53,6 +53,14 @@
       ]
     },
     {
+      "fixture": "Button/fontScaling__false",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+    },
+    {
       "fixture": "Button/fontSize__static",
       "platforms": [
         "android",
@@ -83,6 +91,14 @@
         "ios",
         "web"
       ]
+    },
+    {
+      "fixture": "Button/maxFontScale__static",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
     },
     {
       "fixture": "Button/textAlign__left",
@@ -119,6 +135,14 @@
         "ios",
         "web"
       ]
+    },
+    {
+      "fixture": "CheckBox/fontScaling__false",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
     },
     {
       "fixture": "CheckBox/fontSize__binding",
@@ -188,6 +212,14 @@
         "ios",
         "web"
       ]
+    },
+    {
+      "fixture": "CheckBox/maxFontScale__static",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
     },
     {
       "fixture": "CheckBox/selectedIcon__alias_onSrc",
@@ -423,6 +455,14 @@
       ]
     },
     {
+      "fixture": "IconLabel/fontScaling__false",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+    },
+    {
       "fixture": "IconLabel/fontSize__static",
       "platforms": [
         "android",
@@ -485,6 +525,14 @@
         "ios",
         "web"
       ]
+    },
+    {
+      "fixture": "IconLabel/maxFontScale__static",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
     },
     {
       "fixture": "IconLabel/selectedFontColor__static",
@@ -713,6 +761,14 @@
       ]
     },
     {
+      "fixture": "Label/fontScaling__false",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+    },
+    {
       "fixture": "Label/fontSize__binding",
       "platforms": [
         "android",
@@ -901,6 +957,14 @@
         "ios",
         "web"
       ]
+    },
+    {
+      "fixture": "Label/maxFontScale__static",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
     },
     {
       "fixture": "Label/minimumScaleFactor__binding",
@@ -1194,6 +1258,14 @@
       ]
     },
     {
+      "fixture": "Radio/fontScaling__false",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+    },
+    {
       "fixture": "Radio/fontSize__binding",
       "platforms": [
         "android",
@@ -1267,6 +1339,14 @@
         "ios",
         "web"
       ]
+    },
+    {
+      "fixture": "Radio/maxFontScale__static",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
     },
     {
       "fixture": "Radio/selectedIcon__alias_selected_icon",
@@ -1380,12 +1460,26 @@
       ]
     },
     {
+      "fixture": "Segment/fontScaling__false",
+      "platforms": [
+        "web"
+      ],
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+    },
+    {
       "fixture": "Segment/items__static",
       "platforms": [
         "android",
         "ios",
         "web"
       ]
+    },
+    {
+      "fixture": "Segment/maxFontScale__static",
+      "platforms": [
+        "web"
+      ],
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
     },
     {
       "fixture": "Segment/selectedFontColor__alias_selectedColor",
@@ -1446,6 +1540,13 @@
       ]
     },
     {
+      "fixture": "SelectBox/fontScaling__false",
+      "platforms": [
+        "web"
+      ],
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+    },
+    {
       "fixture": "SelectBox/fontSize__static",
       "platforms": [
         "android",
@@ -1498,6 +1599,13 @@
         "ios",
         "web"
       ]
+    },
+    {
+      "fixture": "SelectBox/maxFontScale__static",
+      "platforms": [
+        "web"
+      ],
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
     },
     {
       "fixture": "SelectBox/multiple__true",
@@ -1891,6 +1999,14 @@
       ]
     },
     {
+      "fixture": "TextField/fontScaling__false",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+    },
+    {
       "fixture": "TextField/fontSize__binding",
       "platforms": [
         "android",
@@ -1969,6 +2085,14 @@
         "ios",
         "web"
       ]
+    },
+    {
+      "fixture": "TextField/maxFontScale__static",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
     },
     {
       "fixture": "TextField/placeholder__static",
@@ -2082,6 +2206,14 @@
       ]
     },
     {
+      "fixture": "TextView/fontScaling__false",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+    },
+    {
       "fixture": "TextView/fontSize__binding",
       "platforms": [
         "android",
@@ -2159,6 +2291,14 @@
         "ios",
         "web"
       ]
+    },
+    {
+      "fixture": "TextView/maxFontScale__static",
+      "platforms": [
+        "ios",
+        "web"
+      ],
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
     },
     {
       "fixture": "TextView/placeholder__static",
