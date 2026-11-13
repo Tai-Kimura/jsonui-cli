@@ -8,15 +8,15 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "d0beb2a945282a8220d152f723b41b26ff632ab75a56c3bdb7f63d8c3dcaa8b2",
+  "generatedFrom": "d79b292ff3d97045321b5e1cce60228b73dc8a72dee927f58272bdb2d13085d5",
   "counts": {
-    "fixtures": 1296,
+    "fixtures": 1300,
     "assertable": 54,
-    "visual": 987,
+    "visual": 991,
     "interactive": 41,
     "control": 136,
     "declarationOnly": 77,
-    "skipped": 158,
+    "skipped": 159,
     "promoted": {
       "callback": 11
     }
@@ -22218,6 +22218,122 @@
       ]
     },
     {
+      "id": "Collection/reorderable__true",
+      "component": "Collection",
+      "attribute": "reorderable",
+      "case": "true",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "reorderable",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/reorderable__true.layout.json",
+      "test": "fixtures/Collection/reorderable__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Collection/reorderable@Collection",
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/reorderable__false",
+      "component": "Collection",
+      "attribute": "reorderable",
+      "case": "false",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "reorderable",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/reorderable__false.layout.json",
+      "test": "fixtures/Collection/reorderable__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Collection/reorderable@Collection",
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/reorderHandle__static",
+      "component": "Collection",
+      "attribute": "reorderHandle",
+      "case": "static",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "reorderHandle",
+      "aliasOf": null,
+      "value": "sample",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/reorderHandle__static.layout.json",
+      "test": "fixtures/Collection/reorderHandle__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/reorderLockedProperty__static",
+      "component": "Collection",
+      "attribute": "reorderLockedProperty",
+      "case": "static",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "reorderLockedProperty",
+      "aliasOf": null,
+      "value": "sample",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/reorderLockedProperty__static.layout.json",
+      "test": "fixtures/Collection/reorderLockedProperty__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
       "id": "Collection/containerInset__static",
       "component": "Collection",
       "attribute": "containerInset",
@@ -32438,6 +32554,11 @@
     {
       "component": "Collection",
       "attribute": "onItemAppear",
+      "reason": "callback"
+    },
+    {
+      "component": "Collection",
+      "attribute": "onReorder",
       "reason": "callback"
     },
     {
