@@ -793,3 +793,79 @@ def test_the_same_error_again_is_one_entry_counted_and_the_others_stay(tmp_path)
     for i in range(I.ERRORS_KEPT + 5):
         st.error(f"many: {i}")
     assert len(st.data["errors"]) == I.ERRORS_KEPT
+
+
+# ---- a failed scheduled fetch is tried again sooner (ticket 2026-11-13-viz-weather-waits-30-min-after-a-failure, its
+# family): until jsonui-cli 2.5.33 a slot whose fetch failed (Slack unreachable for a moment) waited for the next slot,
+# hours later, and a run that raised was run again on every pass. The clock is passed in: no real time is waited for.
+DAILY = {"everyHours": 24, "at": "09:00"}
+T0 = 1_800_000_000_000
+
+
+def test_a_failed_scheduled_fetch_is_tried_again_after_1_2_4_8_16_minutes_then_at_the_slot():
+    data = {}
+    at, waits = T0, []
+    for _ in range(6):
+        I.record_outcome(data, "schedule" if not data else "retry", True, at, DAILY)
+        nxt = data["retry"]["nextTryAt"]
+        waits.append(nxt - at)
+        at = nxt
+    assert waits[:5] == [60_000, 120_000, 240_000, 480_000, 960_000]
+    assert data["retry"]["failures"] == 6
+    assert data["retry"]["nextTryAt"] == int(I.next_run(at - waits[5], (at - waits[5]) / 1000, DAILY) * 1000)
+
+
+def test_an_answer_without_an_error_ends_the_steps_and_by_hand_is_as_it_was():
+    data = {}
+    I.record_outcome(data, "schedule", True, T0, DAILY)
+    assert data["retry"] == {"failures": 1, "nextTryAt": T0 + 60_000}
+    I.record_outcome(data, "manual", True, T0 + 1, DAILY)            # a failed press: the steps are not touched
+    assert data["retry"] == {"failures": 1, "nextTryAt": T0 + 60_000}
+    I.record_outcome(data, "retry", False, T0 + 60_000, DAILY)
+    assert "retry" not in data
+    I.record_outcome(data, "manual", True, T0 + 2, DAILY)            # a failed press starts no steps
+    assert "retry" not in data
+    I.record_outcome(data, "schedule", True, T0, DAILY)
+    I.record_outcome(data, "manual", False, T0 + 3, DAILY)           # a press that worked ends them too
+    assert "retry" not in data
+
+
+def test_a_waiting_step_runs_at_its_time_and_holds_back_a_slot_that_stays_due():
+    base = T0 - 2 * 86_400_000                                       # a slot has passed since: the slot is due
+    now = T0 / 1000
+    assert I.due_trigger({}, base, now, DAILY) == "schedule"         # as before
+    data = {"retry": {"failures": 1, "nextTryAt": T0 + 60_000}}
+    assert I.due_trigger(data, base, now, DAILY) is None             # a run that raised: not again on every pass
+    assert I.due_trigger(data, base, now + 59.999, DAILY) is None
+    assert I.due_trigger(data, base, now + 60, DAILY) == "retry"
+    assert I.due_trigger({}, base, now, {"everyHours": 0}) is None  # by hand only: nothing runs by itself
+
+
+def test_a_scheduled_fetch_that_fails_writes_lastrun_as_before_and_the_next_step(tmp_path):
+    cfg = cfg_of(tmp_path, schedule=DAILY)
+    root = C.orchestration_dir(cfg)
+    down = FakeSlack(history=[[]], fail=lambda method, params: True)
+    I.run_once(cfg, root, "schedule", get=down, route=FakeRoute([]))
+    st = I.Status(root).data
+    assert st["lastRun"]["trigger"] == "schedule" and st["lastRun"]["errors"]   # lastRun is the last run, as before
+    assert st["retry"] == {"failures": 1, "nextTryAt": st["lastRun"]["at"] + 60_000}
+    snap = I.snapshot(cfg, None, False, now=st["lastRun"]["at"] / 1000)
+    assert snap["nextRun"] == st["retry"]["nextTryAt"] and snap["retry"]["failures"] == 1
+    I.run_once(cfg, root, "retry", get=FakeSlack(history=[[]]), route=FakeRoute([]))
+    st = I.Status(root).data
+    assert "retry" not in st and st["lastRun"]["trigger"] == "retry" and not st["lastRun"]["errors"]
+
+
+def test_a_scheduled_run_that_raises_takes_the_next_step_instead_of_running_on_every_pass(tmp_path):
+    cfg = cfg_of(tmp_path, schedule=DAILY)
+    root = C.orchestration_dir(cfg)
+
+    def broken(method, token, params):
+        raise RuntimeError("the disk")
+    svc = I.Service(loader=lambda: cfg, work_kw={"get": broken})
+    status, body = asyncio.run(svc.fetch_now("schedule"))
+    assert status == 500 and "RuntimeError" in body["error"]
+    st = I.Status(root).data
+    assert st["retry"]["failures"] == 1 and "lastRun" not in st
+    assert I.due_trigger(st, int(st["retry"]["nextTryAt"]) - 2 * 86_400_000,
+                         (st["retry"]["nextTryAt"] - 1) / 1000, DAILY) is None

@@ -2147,7 +2147,10 @@ def _doctor_checks() -> list[dict]:
     else:
         ok_at, err = w_status.get("lastOkAt"), w_status.get("lastError")
         when = time.strftime("%m-%d %H:%M", time.localtime(ok_at / 1000)) if isinstance(ok_at, (int, float)) else "not fetched yet"
-        add("weather", not err, f"nearby weather: on (fetched: {when})" + (f"; failed: {err}" if err else ""))
+        nxt = w_status.get("nextTryAt")
+        again = (f"; tried again at {time.strftime('%H:%M', time.localtime(nxt / 1000))}"
+                 if err and isinstance(nxt, (int, float)) else "")
+        add("weather", not err, f"nearby weather: on (fetched: {when})" + (f"; failed: {err}" if err else "") + again)
 
     from ..viz.sources import cloud_prices as cloud_prices_src
 

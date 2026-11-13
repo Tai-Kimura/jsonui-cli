@@ -149,6 +149,112 @@ def test_on_asks_at_once_then_every_thirty_minutes_with_the_rounded_position(tmp
     assert status["on"] is True and status["lastOkAt"] == clock.t and "35.6" not in json.dumps(status)
 
 
+# Ticket 2026-11-13-viz-weather-waits-30-min-after-a-failure: a failure waited the full QUERY_EVERY_MS before the
+# next query, so a morning whose load made the TLS handshake miss the 5 s timeout left the outside without weather for
+# hours after the load had gone. The clock is the book's own (``now``): no real time is waited for.
+_ANSWER = {"kind": "clear", "isDay": True, "tempC": 20.0, "precipitation": 0.0, "cloud": 5.0}
+
+
+def _until_asked(book, clock, calls, step_ms=1_000, limit_ms=2 * 3_600_000):
+    """Move the clock until the book asks again; how long that took (ms)."""
+    start, n = clock.t, len(calls)
+    while len(calls) == n:
+        assert clock.t - start <= limit_ms, "never asked again"
+        clock.t += step_ms
+        book.ask()
+    return clock.t - start
+
+
+def test_after_a_failure_it_asks_again_sooner_each_time_longer_and_never_past_thirty_minutes(tmp_path):
+    clock, calls = _Clock(), []
+
+    def fetcher(lat, lon):
+        calls.append(clock.t)
+        raise TimeoutError("_ssl.c:1063: The handshake operation timed out")
+    book = _book(tmp_path, fetcher, clock)
+    book.set(True, LAT, LON)
+    assert book.ask() is True and book.source()[0] == "degraded"
+    waits = [_until_asked(book, clock, calls) for _ in range(7)]
+    assert waits == [60_000, 120_000, 240_000, 480_000, 960_000, W.QUERY_EVERY_MS, W.QUERY_EVERY_MS]
+
+
+def test_an_answer_after_failures_brings_back_the_thirty_minutes(tmp_path):
+    clock, calls = _Clock(), []
+    results = [OSError("x"), OSError("y"), _ANSWER, OSError("z")]
+
+    def fetcher(lat, lon):
+        calls.append(clock.t)
+        got = results.pop(0) if results else _ANSWER
+        if isinstance(got, Exception):
+            raise got
+        return got
+    book = _book(tmp_path, fetcher, clock)
+    book.set(True, LAT, LON)
+    book.ask()                                                     # 1st failure
+    assert _until_asked(book, clock, calls) == 60_000             # 2nd failure
+    assert _until_asked(book, clock, calls) == 120_000            # the answer
+    assert book.source() == ("running", None) and book.view()["kind"] == "clear"
+    assert _until_asked(book, clock, calls) == W.QUERY_EVERY_MS   # back to every 30 minutes
+    assert book.source()[0] == "degraded"                          # a failure again: the first step again
+    assert _until_asked(book, clock, calls) == 60_000
+
+
+def test_turning_it_on_again_starts_the_steps_from_the_first(tmp_path):
+    clock, calls = _Clock(), []
+
+    def fetcher(lat, lon):
+        calls.append(clock.t)
+        raise OSError("down")
+    book = _book(tmp_path, fetcher, clock)
+    book.set(True, LAT, LON)
+    book.ask()
+    for _ in range(3):
+        _until_asked(book, clock, calls)
+    book.set(False)
+    book.set(True, LAT, LON)
+    assert book.ask() is True                                      # at once, as on any turning on
+    assert _until_asked(book, clock, calls) == 60_000
+
+
+def test_the_status_says_when_it_tries_again_and_the_doctor_says_it(tmp_path, monkeypatch):
+    clock = _Clock()
+    book = _book(tmp_path, lambda lat, lon: (_ for _ in ()).throw(OSError("down")), clock)
+    book.set(True, LAT, LON)
+    book.ask()
+    status = json.loads((tmp_path / "weather-status.json").read_text())
+    assert status["nextTryAt"] == clock.t + 60_000 and "OSError" in status["lastError"]
+    for k in ISOLATE:
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    from jui_cli.commands import viz_cmd
+    W.save_setting(True, LAT, LON)
+    W._write_json(W.status_json(), status)
+    line = next(c for c in viz_cmd._doctor_checks() if c["name"] == "weather")
+    assert line["ok"] is False and "tried again at" in line["detail"] and "35.6" not in line["detail"]
+
+
+def test_one_query_waits_long_enough_for_a_slow_handshake(monkeypatch):
+    """5 s missed the handshake on a loaded machine; the query runs on an executor (a stop does not wait for it)."""
+    assert W.TIMEOUT_SEC >= 20
+    seen = {}
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self, n):
+            return json.dumps({"current": {"weather_code": 0, "is_day": 1}}).encode()
+
+    def urlopen(req, timeout):
+        seen["timeout"] = timeout
+        return _Resp()
+    monkeypatch.setattr(W.urllib.request, "urlopen", urlopen)
+    assert W.fetch(RLAT, RLON)["kind"] == "clear" and seen["timeout"] == W.TIMEOUT_SEC
+
+
 def test_a_failure_keeps_the_last_answer_for_three_hours_then_the_season_alone(tmp_path):
     clock = _Clock()
     answers = [{"kind": "rain", "isDay": True, "tempC": 9.0, "precipitation": 1.2, "cloud": 100.0}]
