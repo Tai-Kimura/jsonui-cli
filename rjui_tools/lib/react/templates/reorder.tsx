@@ -396,3 +396,5 @@ export function JsonuiReorderItem({ index, children }: { index: number; children
     </div>
   );
 }
+
+// ══ END AUTO-GENERATED — DO NOT APPEND BELOW THIS LINE ══

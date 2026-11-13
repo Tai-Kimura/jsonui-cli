@@ -17,3 +17,5 @@ export function useColorMode() {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 export default useColorMode;
+
+// ══ END AUTO-GENERATED — DO NOT APPEND BELOW THIS LINE ══

@@ -360,3 +360,5 @@ export function JsonuiReorderItem({ index, children }) {
       {down !== null && <MoveButton label={ctx.words.down} onPress={() => ctx.step(index, "down")} />}
     </div>;
 }
+
+// ══ END AUTO-GENERATED — DO NOT APPEND BELOW THIS LINE ══
