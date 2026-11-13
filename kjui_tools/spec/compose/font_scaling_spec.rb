@@ -68,7 +68,7 @@ RSpec.describe 'kjui codegen: text size following' do
     # codegen_effect C0/unread-spelling (release-check 43471698693): Button, TextView, IconLabel, Switch, CheckBox and
     # Radio emitted a size only beside a fontSize, so fontScaling / maxFontScale on a component with none (the
     # conformance fixtures' shape) read nothing.
-    FONT_SCALING_TYPES.except('Label', 'TextField').each do |type, extra|
+    FONT_SCALING_TYPES.except('Label', 'TextField', 'TextView').each do |type, extra|
       declared = emit({ 'type' => type, 'fontScaling' => false, 'maxFontScale' => 1.5 }.merge(extra))
       expect(declared).to include('fontSize = jsonUIFontSize(TextUnit.Unspecified, fontScaling = false, maxFontScale = 1.5f)'), type
       expect(declared).to include('letterSpacing = jsonUILetterSpacing(fontScaling = false, maxFontScale = 1.5f)'), type
@@ -76,9 +76,10 @@ RSpec.describe 'kjui codegen: text size following' do
       # The library leaves an unspecified size alone when nothing is declared: the plain emit stays as it was.
       expect(emit({ 'type' => type }.merge(extra))).not_to include('jsonUIFontSize('), type
     end
-    # A TextView with nothing else on its style keeps the field's own (LocalTextStyle), its size by the declarations.
+    # A TextView draws Configuration.TextField.defaultFontSize without a size (rule.noFontSize), on a bare TextStyle as
+    # the Dynamic TextView does (codegen parity, run 43488822719).
     expect(emit('type' => 'TextView', 'text' => '@{t}', 'fontScaling' => false))
-      .to include('textStyle = LocalTextStyle.current.copy(fontSize = jsonUIFontSize(TextUnit.Unspecified, fontScaling = false)')
+      .to include('textStyle = TextStyle(fontSize = jsonUIFontSize(Configuration.TextField.defaultFontSize.sp, fontScaling = false), letterSpacing = jsonUILetterSpacing(fontScaling = false))')
   end
 
   it "a Label's line heights follow as its size does" do
