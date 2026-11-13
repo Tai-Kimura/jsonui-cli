@@ -8,6 +8,7 @@ require_relative '../support/headless_chromium'
 require_relative '../support/typescript_compiler'
 require 'cli/commands/build_command'
 require 'react/converters/label_converter'
+require 'react/converters/segment_converter'
 
 # fontScaling / maxFontScale on the web (ticket sjui-label-font-size-ignores-dynamic-type, ruling 2026-11-13):
 # a component's text follows the browser's text size by its declaration, else by the app default
@@ -133,6 +134,25 @@ RSpec.describe 'fontScaling / maxFontScale (rjui)' do
       expect(label('fontScaling' => true, 'maxFontScale' => 1.5)).to include('text-[length:min(0.9375rem,22.5px)]')
       expect(label({})).to include("text-[length:#{TMF.font_size_css(15)}]")
       expect(label('maxFontScale' => 2)).to include('text-[length:min(calc(15*var(--jui-font-unit,0.0625rem)),30px)]')
+    end
+
+    # No fontSize: the size the browser draws the text at (16) is the fontSize a declaration applies to; with no
+    # declaration nothing is written and the text inherits, as before (ruling 2026-11-13).
+    it 'treats a declared component with no fontSize as 16, and writes nothing for an undeclared one' do
+      plain = RjuiTools::React::Converters::LabelConverter.new({ 'type' => 'Label', 'id' => 'l', 'text' => 'a' },
+                                                              { 'use_tailwind' => true })
+      expect(plain.convert).not_to include('font-size')
+      expect(plain.convert).not_to match(/\btext-(base|\[length)/)
+      declared = ->(extra) {
+        RjuiTools::React::Converters::LabelConverter.new({ 'type' => 'Label', 'id' => 'l', 'text' => 'a' }.merge(extra),
+                                                         { 'use_tailwind' => true }).convert
+      }
+      expect(declared.call('fontScaling' => false)).to include('text-base [font-size:16px]')
+      expect(declared.call('maxFontScale' => 1.2)).to include('[font-size:min(calc(16*var(--jui-font-unit,0.0625rem)),19.2px)]')
+      segment = RjuiTools::React::Converters::SegmentConverter.new(
+        { 'type' => 'Segment', 'id' => 's', 'items' => %w[a b], 'fontScaling' => false }, { 'use_tailwind' => true }
+      ).convert
+      expect(segment).to include('text-sm [font-size:14px]')
     end
 
     it "gives partialAttributes' sizes their component's declaration" do

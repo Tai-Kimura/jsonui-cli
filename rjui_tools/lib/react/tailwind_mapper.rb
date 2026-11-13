@@ -22,6 +22,9 @@ module RjuiTools
       FONT_MAX_VAR = '--jui-font-max'
       FONT_UNIT_DEFAULT = '0.0625rem'
       FONT_MAX_DEFAULT = '10000px'
+      # What a text with no fontSize is drawn at (the browser's default, 1rem):
+      # the fontSize a declared fontScaling / maxFontScale applies to.
+      DEFAULT_TEXT_SIZE = 16
 
       # Corner radius mapping
       RADIUS_MAP = {

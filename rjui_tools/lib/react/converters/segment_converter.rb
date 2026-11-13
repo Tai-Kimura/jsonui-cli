@@ -175,6 +175,10 @@ module RjuiTools
           # Build font size class
           font_size_class = if attributes['fontSize']
             TailwindMapper.map_font_size(attributes['fontSize'], **font_scale_opts)
+          elsif font_scale_declared?
+            # The segment's own default (text-sm, 14) is the size the
+            # declaration applies to.
+            TailwindMapper.map_font_size(14, **font_scale_opts)
           else
             'text-sm'
           end

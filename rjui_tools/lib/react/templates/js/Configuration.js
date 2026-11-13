@@ -26,6 +26,8 @@ const FontConfig = {
    * Change them with `configureScaling`, which also sets the two custom
    * properties the generated sizes read (--jui-font-unit, --jui-font-max);
    * a page that never calls it draws every size as N / 16 rem, uncapped.
+   * A component with neither a fontSize nor a declaration writes no size and
+   * inherits the browser's, so `scaling: false` does not pin it.
    */
   scaling: true,
   maxScale: void 0,
