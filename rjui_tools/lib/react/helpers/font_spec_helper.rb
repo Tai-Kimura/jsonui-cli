@@ -48,7 +48,10 @@ module RjuiTools
         #
         # Returns nil when no font_spec field is set — caller should skip the
         # Configuration emission entirely in that case.
-        def build_resolve_spread(family: nil, weight: nil, size: nil, italic: false)
+        # scaling / max_scale: the component's fontScaling / maxFontScale, only
+        # when it declares them (the provider and the default css read them;
+        # undeclared, the app default applies).
+        def build_resolve_spread(family: nil, weight: nil, size: nil, italic: false, scaling: nil, max_scale: nil)
           return nil if family.nil? && weight.nil? && size.nil? && !italic
 
           fields = []
@@ -56,6 +59,8 @@ module RjuiTools
           fields << "weight: #{format_weight(weight)}" unless weight.nil?
           fields << "size: #{size}" unless size.nil?
           fields << "italic: #{italic ? 'true' : 'false'}"
+          fields << "scaling: #{scaling}" unless scaling.nil?
+          fields << "maxScale: #{max_scale}" unless max_scale.nil?
 
           "...Configuration.Font.resolve({ #{fields.join(', ')} })"
         end

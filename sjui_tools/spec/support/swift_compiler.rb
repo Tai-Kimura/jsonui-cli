@@ -136,6 +136,15 @@ module SwiftCompiler
             let colors = Colors()
         }
         extension Color { init(_ color: SwiftJsonUIConfiguration.PlatformColor) { self = .gray } }
+        // SwiftJsonUI FontSpec.swift / FontScaling.swift (2.5.36): every text the
+        // generator sets a font on goes through sjuiFont, a font set or not.
+        struct FontSpec {
+            init(family: String? = nil, weight: Font.Weight? = nil, size: CGFloat? = nil, italic: Bool = false) {}
+        }
+        extension View {
+            func sjuiFont(_ spec: FontSpec) -> some View { self }
+            func fontScaling(_ scaling: Bool?, maxFontScale: CGFloat? = nil) -> some View { self }
+        }
         class ViewModel: ObservableObject {}
         // SwiftJsonUI 10.30.0 TestBridge (JsonUITestValue.swift,
         // StateBridgeModifier.swift), transcribed: the signatures, not the

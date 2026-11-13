@@ -38,6 +38,7 @@ DEFINITION = "a key of the attribute definitions themselves, read by the convert
 NOT_ATTRIBUTES = {
     ("ios", "Button", "parent_orientation"): INTERNAL + " (view_converter hands each child its parent's orientation)",
     ("ios", "Label", "parent_orientation"): INTERNAL + " (as Button)",
+    ("ios", "SelectBox", "parent_orientation"): INTERNAL + " (as Button: a vertical weight sizes its height)",
     ("ios", "View", "parent_orientation"): INTERNAL + " (view_converter.rb writes child['parent_orientation'])",
     ("ios", "View", "_skip_trailing_spacer"): INTERNAL + " (the stack's own trailing Spacer decision)",
     ("web", "View", "_overlay"): INTERNAL + " (view_converter marks an overlay child 'stack')",

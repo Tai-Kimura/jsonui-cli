@@ -112,16 +112,17 @@ console.log('[generate] vendored use_media_query.ts template into src/hooks/');
 // into consumer projects by `rjui init`). Vendor the current template so
 // the host always matches the codegen it just ran (template v2 for
 // isolated). Emitted as a build artifact next to src/, gitignored.
+// Always, not only with companion layouts: src/conformanceState.tsx imports
+// it (getEmbedNavigator), so an `only` run whose fixtures have no companion
+// failed the vite build (conformance-mobile 43450817884).
 const extensionsDir = path.join(hostDir, 'src/components/extensions');
 fs.rmSync(extensionsDir, { recursive: true, force: true });
-if (companionPaths.size > 0) {
-  fs.mkdirSync(extensionsDir, { recursive: true });
-  fs.copyFileSync(
-    path.join(rjuiDir, 'lib/react/templates/EmbedContainer.tsx'),
-    path.join(extensionsDir, 'EmbedContainer.tsx')
-  );
-  console.log('[generate] vendored EmbedContainer.tsx template into src/components/extensions/');
-}
+fs.mkdirSync(extensionsDir, { recursive: true });
+fs.copyFileSync(
+  path.join(rjuiDir, 'lib/react/templates/EmbedContainer.tsx'),
+  path.join(extensionsDir, 'EmbedContainer.tsx')
+);
+console.log('[generate] vendored EmbedContainer.tsx template into src/components/extensions/');
 
 // ---------------------------------------------------------------- rjui build
 const rjuiBin = path.join(rjuiDir, 'bin/rjui');

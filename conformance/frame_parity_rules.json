@@ -3,6 +3,39 @@
   "_comment": "The hand-written half of frame_parity.json: which cross-platform frame disagreements are a platform idiom (category 3), on which fields, and why. `jui conformance frame-parity --update` measures, applies these rules (the first rule whose fixture / id globs match wins; fields: the fields allowed to differ), and writes frame_parity.json. A matched id that also differs OUTSIDE its rule's fields is not ledgered and is named, so a defect cannot ride in with an idiom on the same id. A rule with no fields keeps its ids out on purpose. `expected` ({host: {field: value}}) pins the named faces to a stated amount within the gate's tolerance, the unnamed faces must agree, or the id is refused. HAND-MAINTAINED.",
   "rules": [
     {
+      "fixture": "*/fontScaling__*",
+      "id": "target",
+      "fields": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
+      "fixture": "*/maxFontScale__*",
+      "id": "target",
+      "fields": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
+      "fixture": "__control/*textScale-2.0*",
+      "id": "target",
+      "fields": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
       "fixture": "Label/lineHeightMultiple__*",
       "id": "target",
       "fields": [
@@ -55,7 +88,7 @@
         "y",
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "__control/SelectBox*",
@@ -64,7 +97,7 @@
         "y",
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "common/border*_on_TextField__*",

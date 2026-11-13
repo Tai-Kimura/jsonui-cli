@@ -90,7 +90,8 @@ RSpec.describe 'a bound number reaches Swift as an expression' do
     [{ 'type' => 'TextView', 'containerInset' => BOUND }] => 'containerInset: EdgeInsets(top: CGFloat(data.v ?? 0)',
     [{ 'type' => 'TextView', 'padding' => BOUND }] => 'containerInset: EdgeInsets(top: CGFloat(data.v ?? 0)',
     [{ 'type' => 'TextView', 'hintFontSize' => BOUND }] => 'hintFontSize: CGFloat(data.v ?? 0),',
-    [{ 'type' => 'SelectBox', 'paddingTop' => BOUND }] => 'padding: EdgeInsets(top: CGFloat(data.v ?? 0), leading: 0',
+    # the sides it does not name keep SelectBoxView's default (0 / 12; ruling 2026-11-13)
+    [{ 'type' => 'SelectBox', 'paddingTop' => BOUND }] => 'padding: EdgeInsets(top: CGFloat(data.v ?? 0), leading: 12',
     [{ 'type' => 'SelectBox', 'paddings' => [BOUND, 2] }] => 'padding: EdgeInsets(top: CGFloat(data.v ?? 0), leading: 2',
     [{ 'type' => 'SelectBox', 'fontSize' => BOUND }] => 'fontSize: CGFloat(data.v ?? 0),',
     [{ 'type' => 'SelectBox', 'caretAttributes' => { 'width' => BOUND } }] => 'CaretAttributes(width: CGFloat(data.v ?? 0))',

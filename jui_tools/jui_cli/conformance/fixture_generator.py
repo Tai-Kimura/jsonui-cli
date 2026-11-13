@@ -172,8 +172,10 @@ def build_layout(plan: AttributePlan, case: CasePlan, *, source_label: str) -> d
     children = base.pop("child", None) or rules.BASE_CHILDREN.get(plan.host)
 
     target: dict[str, Any] = {"type": plan.host, "id": rules.TARGET_ID}
-    target["width"] = base.get("width", "wrapContent")
-    target["height"] = base.get("height", "wrapContent")
+    for side in ("width", "height"):
+        value = base.get(side, "wrapContent")
+        if value != rules.OMIT:
+            target[side] = value
     for key, value in base.items():
         if key in ("width", "height"):
             continue
@@ -334,8 +336,10 @@ def build_interactive_layout(
     base = rules.BASE_ATTRS.get(spec.host, {})
 
     target: dict[str, Any] = {"type": spec.host, "id": rules.TARGET_ID}
-    target["width"] = base.get("width", "wrapContent")
-    target["height"] = base.get("height", "wrapContent")
+    for side in ("width", "height"):
+        value = base.get(side, "wrapContent")
+        if value != rules.OMIT:
+            target[side] = value
     for key, value in base.items():
         if key in ("width", "height"):
             continue
@@ -496,6 +500,9 @@ def build_manifest_entry(
     companions = rules.BASE_COMPANIONS.get(plan.host)
     if companions:
         entry["companions"] = list(companions)
+    scale = rules.text_scale(rules.base_attrs_for(plan.host, plan.attribute, case.name))
+    if scale is not None:
+        entry["textScale"] = scale
     return entry
 
 
@@ -584,8 +591,10 @@ def build_control_layout(
     children = base.pop("child", None) or rules.BASE_CHILDREN.get(host)
 
     target: dict[str, Any] = {"type": host, "id": rules.TARGET_ID}
-    target["width"] = base.get("width", "wrapContent")
-    target["height"] = base.get("height", "wrapContent")
+    for side in ("width", "height"):
+        value = base.get(side, "wrapContent")
+        if value != rules.OMIT:
+            target[side] = value
     for key, value in base.items():
         if key not in ("width", "height"):
             target[key] = value
@@ -643,7 +652,7 @@ def build_control_test(
 
 def build_control_manifest_entry(
     host: str, needs_anchor: bool, layout_rel: str, test_rel: str, shape: str = "",
-    platforms: set | None = None,
+    platforms: set | None = None, extra: dict | None = None,
 ) -> dict:
     # Canonical platform ordering, restricted to the consumers' union.
     platform_list = (
@@ -673,6 +682,9 @@ def build_control_manifest_entry(
     companions = rules.BASE_COMPANIONS.get(host)
     if companions:
         entry["companions"] = list(companions)
+    scale = rules.text_scale(extra)
+    if scale is not None:
+        entry["textScale"] = scale
     return entry
 
 
@@ -881,7 +893,7 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
         fixture_entries.append(
             build_control_manifest_entry(
                 host, needs_anchor, layout_rel, test_rel, shape,
-                platforms=control_platforms,
+                platforms=control_platforms, extra=extra,
             )
         )
         summary.fixture_count += 1

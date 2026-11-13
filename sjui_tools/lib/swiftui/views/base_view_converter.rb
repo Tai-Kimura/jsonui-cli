@@ -392,9 +392,31 @@ module SjuiTools
           elsif collection_cell_root_without_id?
             apply_collection_cell_root_container
           end
+          # A text component's fontScaling / maxFontScale, for every font inside it (FontScaling in SwiftJsonUI).
+          apply_font_scaling
           # Last, on the element the chain formed (ControlAccessibilityModifiers).
           apply_control_accessibility
           @generated_code.join("\n")
+        end
+
+        # The components whose text sizes `fontScaling` / `maxFontScale` govern (downcased; aliases included).
+        FONT_SCALING_TYPES = %w[
+          label iconlabel button textfield edittext input textview selectbox
+          switch toggle checkbox check radio
+        ].freeze
+
+        # `.fontScaling(_:maxFontScale:)` when the component declares either (ticket
+        # sjui-label-font-size-ignores-dynamic-type): SwiftJsonUI reads it from the environment for every font the
+        # component draws. Undeclared: nothing, so the app default (SwiftJsonUIConfiguration font.scaling / maxScale)
+        # applies.
+        def apply_font_scaling
+          return unless FONT_SCALING_TYPES.include?(@component['type'].to_s.downcase)
+          scaling = @component['fontScaling']
+          max = @component['maxFontScale']
+          return if scaling.nil? && max.nil?
+          scaling_arg = scaling.nil? ? 'nil' : (scaling == true ? 'true' : 'false')
+          max_arg = max.is_a?(Numeric) ? "CGFloat(#{max})" : 'nil'
+          add_modifier_line ".fontScaling(#{scaling_arg}, maxFontScale: #{max_arg})"
         end
 
         # `.disabled` again, OUTSIDE the accessibility element.

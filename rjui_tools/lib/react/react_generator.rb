@@ -890,7 +890,9 @@ module RjuiTools
             found << {
               ref: auto_shrink_ref_name(id),
               font_size: json['fontSize'],
-              min_scale: json['minimumScaleFactor']
+              min_scale: json['minimumScaleFactor'],
+              font_scaling: ([true, false].include?(json['fontScaling']) ? json['fontScaling'] : nil),
+              max_font_scale: (json['maxFontScale'].is_a?(Numeric) ? json['maxFontScale'] : nil)
             }
           end
 
@@ -929,6 +931,15 @@ module RjuiTools
         if size
           options << "fontSize: #{size[:expr]}"
           deps << size[:expr] if size[:bound]
+          # The length the Label's class or style draws (TailwindMapper
+          # .font_size_css): the helper shrinks a fraction of it, so the text
+          # keeps its fontScaling / maxFontScale (2.5.35).
+          scale_opts = { scaling: target[:font_scaling], max: target[:max_font_scale] }
+          options << if size[:bound]
+                       "fontCss: `#{TailwindMapper.font_size_css(size[:expr], bound: true, **scale_opts)}`"
+                     else
+                       "fontCss: '#{TailwindMapper.font_size_css(size[:expr], **scale_opts)}'"
+                     end
         end
         if scale
           options << "minimumScaleFactor: #{scale[:expr]}"

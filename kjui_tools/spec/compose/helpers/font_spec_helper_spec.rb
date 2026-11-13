@@ -280,7 +280,7 @@ RSpec.describe KjuiTools::Compose::Helpers::FontSpecHelper do
       lines = described_class.text_arg_lines('resolved_text7', 0, Set.new)
       expect(lines).to include('fontFamily = resolved_text7.family,')
       expect(lines).to include('fontWeight = resolved_text7.weight,')
-      expect(lines).to include('fontSize = resolved_text7.size ?: TextUnit.Unspecified,')
+      expect(lines).to include('fontSize = jsonUIFontSize(resolved_text7.size ?: TextUnit.Unspecified),')
       expect(lines).to include('fontStyle = resolved_text7.style ?: FontStyle.Normal,')
     end
 
@@ -293,14 +293,15 @@ RSpec.describe KjuiTools::Compose::Helpers::FontSpecHelper do
   end
 
   describe '.style_arg_fragments' do
-    it 'returns four key=value fragments without trailing commas' do
+    it 'returns five key=value fragments without trailing commas (the letter spacing beside the size)' do
       fragments = described_class.style_arg_fragments('resolved_text2', Set.new)
       expect(fragments).to be_an(Array)
-      expect(fragments.size).to eq(4)
+      expect(fragments.size).to eq(5)
       expect(fragments).to include('fontFamily = (resolved_text2.family ?: LocalTextStyle.current.fontFamily)')
       expect(fragments).to include('fontWeight = (resolved_text2.weight ?: LocalTextStyle.current.fontWeight)')
-      expect(fragments).to include('fontSize = (resolved_text2.size ?: LocalTextStyle.current.fontSize)')
+      expect(fragments).to include('fontSize = jsonUIFontSize(resolved_text2.size ?: LocalTextStyle.current.fontSize)')
       expect(fragments).to include('fontStyle = (resolved_text2.style ?: LocalTextStyle.current.fontStyle)')
+      expect(fragments).to include('letterSpacing = jsonUILetterSpacing()')
     end
   end
 end

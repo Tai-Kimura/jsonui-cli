@@ -107,6 +107,30 @@
       "reason": "Button control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (Material minimum height) — triage K"
     },
     {
+      "fixture": "Button/fontScaling__false",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
+      "fixture": "Button/fontScaling__true",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
       "fixture": "Button/fontSize__static",
       "id": "target",
       "outliers": [
@@ -248,6 +272,19 @@
         "height"
       ],
       "reason": "Button control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (Material minimum height) — triage K"
+    },
+    {
+      "fixture": "Button/maxFontScale__static",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
     },
     {
       "fixture": "Button/tapBackground__static",
@@ -415,6 +452,28 @@
       "reason": "CheckBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (touch-target height) — triage K"
     },
     {
+      "fixture": "CheckBox/fontScaling__false",
+      "id": "target",
+      "outliers": [
+        "android"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
+      "fixture": "CheckBox/fontScaling__true",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
       "fixture": "CheckBox/fontSize__binding",
       "id": "target",
       "outliers": [
@@ -576,6 +635,19 @@
       "reason": "CheckBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (touch-target height) — triage K"
     },
     {
+      "fixture": "CheckBox/maxFontScale__static",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
       "fixture": "CheckBox/selectedIcon__alias_onSrc",
       "id": "target",
       "outliers": [
@@ -678,6 +750,32 @@
       "reason": "an IconLabel's text line is its OS's Label line (user ruling 2026-10-05; iOS measured 19.33, its IconLabel default font): ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
     },
     {
+      "fixture": "IconLabel/fontScaling__false",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
+      "fixture": "IconLabel/fontScaling__true",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
       "fixture": "IconLabel/fontSize__static",
       "id": "target",
       "outliers": [
@@ -733,6 +831,19 @@
         "height"
       ],
       "reason": "an IconLabel's text line is its OS's Label line (user ruling 2026-10-05; iOS measured 19.33, its IconLabel default font): ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "IconLabel/maxFontScale__static",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
     },
     {
       "fixture": "IconLabel/selectedFontColor__static",
@@ -953,6 +1064,32 @@
         "height"
       ],
       "reason": "a declared font family's own line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "Label/fontScaling__false",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
+      "fixture": "Label/fontScaling__true",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
     },
     {
       "fixture": "Label/fontSize__binding",
@@ -1295,6 +1432,19 @@
         "height"
       ],
       "reason": "each OS's own line-break opportunities, not glyph width: 'See https://example.com/conformance for details' at 200 — iOS breaks the URL after '/', 2 lines; android moves the URL to the next line and splits the word (conf|ormance), 3 lines; web moves it and lets the unbreakable URL run past the box (overflow-wrap normal), 3 lines; ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "Label/maxFontScale__static",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
     },
     {
       "fixture": "Label/partialAttributes__static",
@@ -1745,6 +1895,30 @@
       "reason": "Radio control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (touch-target height; a group sums the per-row gap) — triage K, support lane 1 (__control/Radio__no-text)"
     },
     {
+      "fixture": "Radio/fontScaling__false",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
+      "fixture": "Radio/fontScaling__true",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
       "fixture": "Radio/fontSize__binding",
       "id": "target",
       "outliers": [
@@ -1882,6 +2056,17 @@
         "height"
       ],
       "reason": "Radio control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (touch-target height; a group sums the per-row gap) — triage K, support lane 1 (__control/Radio__no-text)"
+    },
+    {
+      "fixture": "Radio/maxFontScale__static",
+      "id": "target",
+      "outliers": [
+        "android"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
     },
     {
       "fixture": "Radio/selectedIcon__alias_selected_icon",
@@ -2176,7 +2361,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/accessibilityLabel__static",
@@ -2189,20 +2374,18 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/caretAttributes__static",
       "id": "target",
       "outliers": [
-        "android",
-        "ios",
         "web"
       ],
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/datePickerMode__countdown",
@@ -2215,7 +2398,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/datePickerMode__date",
@@ -2228,7 +2411,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/datePickerMode__dateandtime",
@@ -2241,7 +2424,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/datePickerMode__time",
@@ -2254,7 +2437,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/datePickerStyle__automatic",
@@ -2267,7 +2450,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/datePickerStyle__compact",
@@ -2280,7 +2463,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/datePickerStyle__graphical",
@@ -2293,7 +2476,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/datePickerStyle__inline",
@@ -2306,7 +2489,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/datePickerStyle__wheel",
@@ -2319,7 +2502,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/datePickerStyle__wheels",
@@ -2332,7 +2515,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/dateStringFormat__alias_dateFormat",
@@ -2345,7 +2528,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/dateStringFormat__static",
@@ -2358,7 +2541,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/doneButtonText__static",
@@ -2370,7 +2553,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/fontColor__static",
@@ -2383,10 +2566,10 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
-      "fixture": "SelectBox/fontSize__static",
+      "fixture": "SelectBox/fontScaling__false",
       "id": "target",
       "outliers": [
         "android",
@@ -2396,7 +2579,31 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
+      "fixture": "SelectBox/fontScaling__true",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
+      "fixture": "SelectBox/fontSize__static",
+      "id": "target",
+      "outliers": [
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/font__static",
@@ -2409,7 +2616,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/hintColor__binding",
@@ -2422,7 +2629,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/hintColor__static",
@@ -2435,7 +2642,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/hint__static",
@@ -2448,7 +2655,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/items__static",
@@ -2461,10 +2668,21 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/labelAttributes__static",
+      "id": "target",
+      "outliers": [
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
+    },
+    {
+      "fixture": "SelectBox/maxFontScale__static",
       "id": "target",
       "outliers": [
         "android",
@@ -2474,7 +2692,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
     },
     {
       "fixture": "SelectBox/maximumDate__binding",
@@ -2487,7 +2705,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/maximumDate__static",
@@ -2500,7 +2718,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/minimumDate__binding",
@@ -2513,7 +2731,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/minimumDate__static",
@@ -2526,7 +2744,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/minuteInterval__1",
@@ -2539,7 +2757,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/minuteInterval__10",
@@ -2552,7 +2770,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/minuteInterval__12",
@@ -2565,7 +2783,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/minuteInterval__15",
@@ -2578,7 +2796,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/minuteInterval__2",
@@ -2591,7 +2809,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/minuteInterval__20",
@@ -2604,7 +2822,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/minuteInterval__3",
@@ -2617,7 +2835,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/minuteInterval__30",
@@ -2630,7 +2848,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/minuteInterval__4",
@@ -2643,7 +2861,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/minuteInterval__5",
@@ -2656,7 +2874,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/minuteInterval__6",
@@ -2669,7 +2887,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/minuteInterval__static",
@@ -2682,7 +2900,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/placeholder__static",
@@ -2695,7 +2913,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/prompt__static",
@@ -2708,7 +2926,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/selectItemType__date",
@@ -2721,7 +2939,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/selectItemType__normal",
@@ -2734,7 +2952,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/selectedIndex__binding",
@@ -2747,7 +2965,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/selectedIndex__static",
@@ -2760,7 +2978,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/selectedItem__binding",
@@ -2772,7 +2990,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/selectedItem__static",
@@ -2784,7 +3002,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/selectedValue__binding",
@@ -2797,7 +3015,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/selectedValue__static",
@@ -2810,7 +3028,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "SelectBox/selectedValue__three",
@@ -2823,7 +3041,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "Slider/accessibilityLabel__alias_contentDescription",
@@ -3119,6 +3337,34 @@
       "reason": "labelled Switch: the thumb (Material3 52 wide) and the label's text width differ by about 7; the declared wrapContent is honoured on every face (the 1280-wide fill was the defect, fixed in KotlinJsonUI 2.43.5) — support lane 1"
     },
     {
+      "fixture": "Switch/fontScaling__false",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height",
+        "width"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
+      "fixture": "Switch/fontScaling__true",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height",
+        "width"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
       "fixture": "Switch/fontSize__binding",
       "id": "target",
       "outliers": [
@@ -3229,6 +3475,20 @@
         "width"
       ],
       "reason": "labelled Switch: the thumb (Material3 52 wide) and the label's text width differ by about 7; the declared wrapContent is honoured on every face (the 1280-wide fill was the defect, fixed in KotlinJsonUI 2.43.5) — support lane 1"
+    },
+    {
+      "fixture": "Switch/maxFontScale__static",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height",
+        "width"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
     },
     {
       "fixture": "Switch/onTintColor__static",
@@ -3861,6 +4121,32 @@
       "reason": "TextField control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (skinIdioms; TextField.borderStyle is a member) — triage K"
     },
     {
+      "fixture": "TextField/fontScaling__false",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
+      "fixture": "TextField/fontScaling__true",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
       "fixture": "TextField/fontSize__binding",
       "id": "target",
       "outliers": [
@@ -4171,6 +4457,19 @@
         "height"
       ],
       "reason": "TextField control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (skinIdioms; TextField.borderStyle is a member) — triage K"
+    },
+    {
+      "fixture": "TextField/maxFontScale__static",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
     },
     {
       "fixture": "TextField/maxLength__static",
@@ -4539,6 +4838,17 @@
       "reason": "Button control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (Material minimum height) — triage K"
     },
     {
+      "fixture": "__control/Button__root.textScale-2.0",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
       "fixture": "__control/CheckBox",
       "id": "target",
       "outliers": [
@@ -4585,6 +4895,17 @@
       "reason": "CheckBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (touch-target height) — triage K"
     },
     {
+      "fixture": "__control/CheckBox__root.textScale-2.0",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
       "fixture": "__control/IconLabel",
       "id": "target",
       "outliers": [
@@ -4594,6 +4915,19 @@
         "height"
       ],
       "reason": "an IconLabel's text line is its OS's Label line (see IconLabel/*): ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "__control/IconLabel__root.textScale-2.0",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
     },
     {
       "fixture": "__control/IconLabel__selected-True",
@@ -4733,6 +5067,19 @@
       "reason": "one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
     },
     {
+      "fixture": "__control/Label__root.textScale-2.0",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
       "fixture": "__control/Label__selected-True",
       "id": "target",
       "outliers": [
@@ -4866,6 +5213,17 @@
       "reason": "Radio control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (touch-target height; a group sums the per-row gap) — triage K, support lane 1 (__control/Radio__no-text)"
     },
     {
+      "fixture": "__control/Radio__root.textScale-2.0",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
       "fixture": "__control/Segment",
       "id": "target",
       "outliers": [
@@ -4889,7 +5247,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "__control/SelectBox__borderColor--FF0000",
@@ -4902,7 +5260,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "__control/SelectBox__borderWidth-2",
@@ -4915,7 +5273,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "__control/SelectBox__datePickerMode-date_selectItemType-Date",
@@ -4928,7 +5286,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "__control/SelectBox__prompt-Choose",
@@ -4941,7 +5299,20 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
+    },
+    {
+      "fixture": "__control/SelectBox__root.textScale-2.0",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
     },
     {
       "fixture": "__control/SelectBox__selectItemType-Date",
@@ -4954,7 +5325,7 @@
       "fields": [
         "height"
       ],
-      "reason": "SelectBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face; two closed-face heights (+14 / +18) — triage K"
+      "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
       "fixture": "__control/Slider",
@@ -5025,6 +5396,20 @@
       "reason": "labelled Switch: the thumb (Material3 52 wide) and the label's text width differ by about 7; the declared wrapContent is honoured on every face (the 1280-wide fill was the defect, fixed in KotlinJsonUI 2.43.5) — support lane 1"
     },
     {
+      "fixture": "__control/Switch__root.textScale-2.0",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height",
+        "width"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
+    },
+    {
       "fixture": "__control/TextField",
       "id": "target",
       "outliers": [
@@ -5075,6 +5460,19 @@
         "height"
       ],
       "reason": "TextField control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (skinIdioms; TextField.borderStyle is a member) — triage K"
+    },
+    {
+      "fixture": "__control/TextField__root.textScale-2.0_text-Sample",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Text size following (ticket sjui-label-font-size-ignores-dynamic-type): these fixtures and their controls are drawn at textScale 2.0, and each face scales text its own way, so the text's box differs by face by design: iOS rounds 2.0 down to a Dynamic Type step (accessibility2, x1.82 on iOS 27.2), Android 14+ scales sp non-linearly (15sp draws 27dp at 2.0), the web multiplies the root font size by 2.0; a cap (maxFontScale) rounds to a step on iOS as well. What is pinned per face is the baseline and control_diff, not the box"
     },
     {
       "fixture": "__control/TextField__text-Sample",

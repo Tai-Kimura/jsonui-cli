@@ -21,13 +21,13 @@ RSpec.describe 'kjui Label auto-size: fontSize is the ceiling' do
   it 'passes fontSize as maxFontSize, the factor of it as minFontSize' do
     # Through 1.9.5: autoSize = TextAutoSize.StepBased(minFontSize = 7.2.sp),
     expect(auto_size('fontSize' => 12, 'minimumScaleFactor' => 0.6))
-      .to eq('autoSize = TextAutoSize.StepBased(minFontSize = 7.2.sp, maxFontSize = 12.0.sp)')
+      .to eq('autoSize = TextAutoSize.StepBased(minFontSize = jsonUIFontSize(7.2.sp), maxFontSize = jsonUIFontSize(12.0.sp))')
     expect(auto_size('autoShrink' => true))
-      .to eq('autoSize = TextAutoSize.StepBased(minFontSize = 7.0.sp, maxFontSize = 14.0.sp)')
+      .to eq('autoSize = TextAutoSize.StepBased(minFontSize = jsonUIFontSize(7.0.sp), maxFontSize = jsonUIFontSize(14.0.sp))')
   end
 
   it 'passes a bound fontSize as both bounds' do
-    expect(auto_size('fontSize' => '@{fs}', 'minimumScaleFactor' => 0.5)).to include('maxFontSize = ((data.fs?.toFloat() ?: 14.0f) * 1f).sp')
+    expect(auto_size('fontSize' => '@{fs}', 'minimumScaleFactor' => 0.5)).to include('maxFontSize = jsonUIFontSize(((data.fs?.toFloat() ?: 14.0f) * 1f).sp)')
   end
 
   it 'emits no autoSize without minimumScaleFactor or autoShrink (control)' do
@@ -38,11 +38,13 @@ RSpec.describe 'kjui Label auto-size: fontSize is the ceiling' do
     lines = [auto_size('fontSize' => 12, 'minimumScaleFactor' => 0.6), auto_size('fontSize' => '@{fs}', 'minimumScaleFactor' => 0.5)]
     expect(<<~KT).to compile_as_kotlin
       class TextUnit
+      fun <T> jsonUIFontSize(size: T, fontScaling: Boolean? = null, maxFontScale: Float? = null): T = size
+      fun jsonUILetterSpacing(fontScaling: Boolean? = null, maxFontScale: Float? = null): Any? = null
       val Double.sp: TextUnit get() = TextUnit()
       val Float.sp: TextUnit get() = TextUnit()
       interface TextAutoSize { companion object { fun StepBased(minFontSize: TextUnit, maxFontSize: TextUnit): TextAutoSize = object : TextAutoSize {} } }
       class Data(val fs: Int? = null)
-      fun Text(autoSize: TextAutoSize? = null) {}
+      fun Text(autoSize: TextAutoSize? = null, letterSpacing: Any? = null) {}
       fun host(data: Data) {
           Text(
               #{lines[0]}

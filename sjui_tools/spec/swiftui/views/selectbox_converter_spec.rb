@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'swiftui/views/selectbox_converter'
+require 'swiftui/converter_factory'
 
 RSpec.describe SjuiTools::SwiftUI::Views::SelectBoxConverter do
   before(:all) do
@@ -506,5 +507,38 @@ RSpec.describe SjuiTools::SwiftUI::Views::SelectBoxConverter do
         expect(code).to include('data.onSelectionChange?("countrySelect", data.countryIndex)')
       end
     end
+  end
+end
+
+# A SelectBox's height and insets (ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height, ruling 2026-11-13;
+# Dynamic's SelectBoxConverter the same): no height or wrapContent takes the content's height (fixedSize vertical,
+# since SelectBoxView fills the height it is offered); the insets are worked out side by side from SelectBoxView's
+# default (0 / 12), `padding`, `paddings`, then each side's key.
+RSpec.describe 'sjui SelectBox height and insets' do
+  before(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false }
+  after(:all) { SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = true }
+
+  def emit(extra)
+    SjuiTools::SwiftUI::ConverterFactory.new
+      .create_converter({ 'type' => 'SelectBox', 'id' => 'a', 'width' => 240, 'items' => ['x'] }.merge(extra), 0)
+      .convert.to_s
+  end
+
+  it 'no height and wrapContent take the content height; a fixed one and a min one do as before' do
+    expect(emit({})).to include('.fixedSize(horizontal: false, vertical: true)')
+    expect(emit('height' => 'wrapContent')).to include('.fixedSize(horizontal: false, vertical: true)')
+    expect(emit('height' => 48)).not_to include('.fixedSize(')
+    min = emit('height' => 'wrapContent', 'minHeight' => 48)
+    expect(min).to include('.frame(minHeight: 48)')
+    expect(min.scan('.fixedSize(').size).to eq(1)
+  end
+
+  it 'the insets: default, padding, paddings, then a side' do
+    expect(emit({})).not_to include('padding: EdgeInsets')
+    expect(emit('padding' => 10)).to include('padding: EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10)')
+    expect(emit('paddings' => [4, 6])).to include('padding: EdgeInsets(top: 4, leading: 6, bottom: 4, trailing: 6)')
+    expect(emit('paddingTop' => 2)).to include('padding: EdgeInsets(top: 2, leading: 12, bottom: 0, trailing: 12)')
+    expect(emit('padding' => 10, 'paddingLeft' => 3))
+      .to include('padding: EdgeInsets(top: 10, leading: 3, bottom: 10, trailing: 10)')
   end
 end

@@ -105,7 +105,7 @@ RSpec.describe KjuiTools::Compose::Components::TextFieldComponent do
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('Configuration.Font.resolve(FontSpec(')
       expect(result).to include('size = 16.sp')
-      expect(result).to match(/fontSize = \(resolved_textfield\d+\.size \?: LocalTextStyle\.current\.fontSize\)/)
+      expect(result).to match(/fontSize = jsonUIFontSize\(resolved_textfield\d+\.size \?: LocalTextStyle\.current\.fontSize\)/)
     end
 
     it 'generates TextField with fontColor' do

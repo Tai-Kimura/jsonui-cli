@@ -390,6 +390,8 @@ module RjuiTools
             end
 
             spec_size = font_size_attr.is_a?(Numeric) ? font_size_attr : nil
+            # No fontSize but a declaration: 16, what the browser draws it at.
+            spec_size ||= TailwindMapper::DEFAULT_TEXT_SIZE if font_size_attr.nil? && font_scale_declared?
 
             spec_family = font_family_attr
             if has_binding?(spec_family)
@@ -400,7 +402,9 @@ module RjuiTools
               family: spec_family,
               weight: spec_weight,
               size:   spec_size,
-              italic: false
+              italic: false,
+              scaling: font_scale_opts[:scaling],
+              max_scale: font_scale_opts[:max]
             )
             if spread
               # Sentinel key — `format_dynamic_style_pair` renders this as
@@ -411,8 +415,12 @@ module RjuiTools
             # Bindings still need a regular CSS prop entry so the runtime
             # value can update; the provider only sees the static spec.
             if font_size_attr && !font_size_attr.is_a?(Numeric) && has_binding?(font_size_attr.to_s)
-              bound_rem_style('fontSize', font_size_attr)
+              bound_font_size_style(font_size_attr)
             end
+            # A static size is the spec's: Font.resolve draws it by the
+            # component's scaling / maxScale (the default css the same length
+            # TailwindMapper.font_size_css writes), and an app's provider still
+            # has the last word on it, as before.
             if font_weight_attr.is_a?(String) && has_binding?(font_weight_attr)
               @dynamic_styles['fontWeight'] = convert_binding(font_weight_attr)
             end
@@ -420,8 +428,13 @@ module RjuiTools
             # Font size. A bound size is a rem inline style — no Tailwind
             # class can carry a value that exists only at runtime, and
             # `map_font_size` used to build the dead class `text-[@{v}px]`.
-            font_size_value = bound_rem_style('fontSize', font_size_attr)
-            classes << TailwindMapper.map_font_size(font_size_value) if font_size_value
+            font_size_value = bound_font_size_style(font_size_attr)
+            # No fontSize but a declaration: the size the browser draws it at
+            # (its default, 16) is the fontSize the declaration applies to
+            # (font_scale_vectors.json rule; ruling 2026-11-13). Undeclared,
+            # nothing is written and the text inherits, as before.
+            font_size_value ||= TailwindMapper::DEFAULT_TEXT_SIZE if font_size_attr.nil? && font_scale_declared?
+            classes << TailwindMapper.map_font_size(font_size_value, **font_scale_opts) if font_size_value
 
             # Font - can be weight name (bold, semibold) or font family alias (monospace).
             # TailwindMapper.map_font already discriminates between the two.
@@ -1846,6 +1859,33 @@ module RjuiTools
 
           dynamic_styles[css_property] = "`${Number(#{expr}) / 16}rem`"
           nil
+        end
+
+        # A bound fontSize: the same length the static class draws
+        # (TailwindMapper.font_size_css), as an inline style. Returns the value
+        # when it is not a binding, as bound_rem_style does.
+        def bound_font_size_style(value)
+          expr = bound_value_expr(value)
+          return value unless expr
+
+          dynamic_styles['fontSize'] = "`#{TailwindMapper.font_size_css(expr, bound: true, **font_scale_opts)}`"
+          nil
+        end
+
+        # This component's declaration of how its text follows the browser's
+        # text size (fontScaling true / false, maxFontScale), nil where it
+        # declares none (the app default, read at run time). partialAttributes'
+        # sizes use their component's.
+        def font_scale_opts
+          scaling = attributes['fontScaling']
+          max = attributes['maxFontScale']
+          { scaling: (scaling == true || scaling == false) ? scaling : nil,
+            max: max.is_a?(Numeric) ? max : nil }
+        end
+
+        # Whether this component declares fontScaling or maxFontScale.
+        def font_scale_declared?
+          font_scale_opts.values.any? { |v| !v.nil? }
         end
 
         # Unitless number (lineHeight, flexGrow, …).

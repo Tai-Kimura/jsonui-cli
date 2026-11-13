@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/CheckBox/maxFontScale__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance CheckBox.maxFontScale (static)",
+    "description": "Conformance fixture for 'maxFontScale' on CheckBox (section: CheckBox, class: visual). Value under test: 1.2.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "CheckBox"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "maxFontScale__static",
+      "description": "Conformance fixture for 'maxFontScale' on CheckBox (section: CheckBox, class: visual). Value under test: 1.2.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "CheckBox_maxFontScale__static"
+        }
+      ]
+    }
+  ]
+}

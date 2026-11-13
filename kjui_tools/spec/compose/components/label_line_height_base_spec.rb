@@ -21,7 +21,7 @@ RSpec.describe 'kjui codegen: a Label line height starts from one undeclared lin
 
   it 'multiplies L, not the font size (no fontSize: the theme decides L)' do
     out = label('lineHeightMultiple' => 1.8)
-    expect(out).to include('lineHeight = LabelLineHeight.multiple(null, 1.8f, LocalTextStyle.current, LocalDensity.current)')
+    expect(out).to include('lineHeight = jsonUIFontSize(LabelLineHeight.multiple(null, 1.8f, LocalTextStyle.current, LocalDensity.current))')
     expect(out).not_to include('25.2')
     expect(required_imports).to include(:label_line_height, :local_text_style)
     expect(out).to include('// Requires KotlinJsonUI >= 2.43.5 (LabelLineHeight, lineSpacingBetween)')
@@ -34,7 +34,7 @@ RSpec.describe 'kjui codegen: a Label line height starts from one undeclared lin
 
   it 'adds lineSpacing to L and takes it back after the last line' do
     out = label('lineSpacing' => 16)
-    expect(out).to include('lineHeight = LabelLineHeight.spaced(null, 16f, LocalTextStyle.current, LocalDensity.current)')
+    expect(out).to include('lineHeight = jsonUIFontSize(LabelLineHeight.spaced(null, 16f, LocalTextStyle.current, LocalDensity.current))')
     expect(out).to include('.lineSpacingBetween(16f)')
     expect(required_imports).to include(:line_spacing_between)
   end
@@ -64,7 +64,7 @@ RSpec.describe 'kjui codegen: a Label line height starts from one undeclared lin
     out = KjuiTools::Compose::Components::TextComponent.generate(
       { 'type' => 'Label', 'hint' => 'h', 'hintAttributes' => { 'fontSize' => 12 } }, 0, required_imports
     )
-    expect(out).to match(/lineHeight = if \(\w+\.isEmpty\(\)\) 15\.6\.sp else LocalTextStyle\.current\.lineHeight/)
+    expect(out).to match(/lineHeight = if \(\w+\.isEmpty\(\)\) jsonUIFontSize\(15\.6\.sp\) else LocalTextStyle\.current\.lineHeight/)
   end
 
   # The emitted style and modifier type-check against the library's API. The
@@ -90,9 +90,11 @@ RSpec.describe 'kjui codegen: a Label line height starts from one undeclared lin
     end.join("\n")
     expect(<<~KOTLIN).to compile_as_kotlin
       class TextUnit(val value: Float)
+      fun <T> jsonUIFontSize(size: T, fontScaling: Boolean? = null, maxFontScale: Float? = null): T = size
+      fun jsonUILetterSpacing(fontScaling: Boolean? = null, maxFontScale: Float? = null): Any? = null
       val Double.sp: TextUnit get() = TextUnit(toFloat())
-      class TextStyle(val lineHeight: TextUnit = TextUnit(0f)) {
-          fun copy(lineHeight: TextUnit = this.lineHeight): TextStyle = TextStyle(lineHeight)
+      class TextStyle(val lineHeight: TextUnit = TextUnit(0f), letterSpacing: Any? = null) {
+          fun copy(lineHeight: TextUnit = this.lineHeight, letterSpacing: Any? = null): TextStyle = TextStyle(lineHeight)
       }
       object LocalTextStyle { val current: TextStyle = TextStyle() }
       class Density(val density: Float, val fontScale: Float = 1f)

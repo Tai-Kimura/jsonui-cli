@@ -130,9 +130,14 @@ module SjuiTools
         def apply_font_modifiers(component, converter)
           family_literal, weight_literal, size_literal = build_font_spec_args(component)
 
-          # Skip emission entirely when nothing was specified — the view will
-          # pick up the system default.
-          return if family_literal.nil? && weight_literal.nil? && size_literal.nil?
+          # Nothing specified: the configured size through sjuiFont all the
+          # same, so every text is the provider's typeface and held to the text
+          # size rule (ruling 2026-11-13, P1; font_scale_vectors.json
+          # rule.noFontSize). It used to emit nothing and leave SwiftUI's .body.
+          if family_literal.nil? && weight_literal.nil? && size_literal.nil?
+            converter.add_modifier_line('.sjuiFont(FontSpec(family: nil, weight: nil, size: nil, italic: false))')
+            return
+          end
 
           # A bound family used to be quoted like a literal, which compiled
           # and then asked the font provider for a family called
@@ -153,9 +158,10 @@ module SjuiTools
             family_arg, weight_arg = pair
           end
 
+          # sjuiFont: the app's fontProvider (resolveFont) at the size the text size rule gives (fontScaling /
+          # maxFontScale, ticket sjui-label-font-size-ignores-dynamic-type).
           converter.add_modifier_line(
-            ".font(SwiftJsonUIConfiguration.shared.resolveFont(" \
-              "FontSpec(family: #{family_arg}, weight: #{weight_arg}, size: #{size_arg}, italic: false)))"
+            ".sjuiFont(FontSpec(family: #{family_arg}, weight: #{weight_arg}, size: #{size_arg}, italic: false))"
           )
         end
 

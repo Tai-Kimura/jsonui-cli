@@ -827,7 +827,7 @@ RSpec.describe RjuiTools::React::Converters::LabelConverter do
         ]
       })
       result = converter.convert
-      expect(result).to include("fontSize: '1.5rem'")
+      expect(result).to include("fontSize: '#{RjuiTools::React::TailwindMapper.font_size_css(24)}'")
     end
 
     it 'ignores `background`, which partialAttributes does not declare' do

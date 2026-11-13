@@ -477,6 +477,11 @@ IMAGE_ATTRS = {
     "maximumValueImage",
 }
 
+#: A base value meaning "write no such key": the target is generated without it (the generator would otherwise
+#: write `wrapContent` for a missing width / height).
+OMIT = "__omit__"
+
+
 #: Per-attribute value overrides (fallback table, any section).
 VALUE_OVERRIDES: dict[str, Any] = {
     "width": 100,
@@ -513,6 +518,8 @@ VALUE_OVERRIDES: dict[str, Any] = {
     # default and from each other.
     "lineHeightMultiple": 1.8,
     "lineSpacing": 16,
+    # Drawn at textScale 2.0 (BASE_ATTRS_BY_ATTRIBUTE): a cap below it, so the capped text differs from its control.
+    "maxFontScale": 1.2,
     "font": "bold",
     "fontWeight": "bold",
     # The SSoT types hintFont as a bare string, so the generic fallback
@@ -1529,7 +1536,10 @@ BASE_ATTRS: dict[str, dict[str, Any]] = {
     "CheckBox": {"text": "Sample", "width": 200},
     "Check": {"text": "Sample", "width": 200},
     "Segment": {"items": ["One", "Two"], "width": 200},
-    "SelectBox": {"items": ["One", "Two", "Three"], "width": 200},
+    # No height (OMIT): a SelectBox's height when the layout writes none is the rule under test on every
+    # SelectBox fixture — the content's height, as wrapContent (ticket
+    # kjui-selectbox-fixed-56dp-ignores-wrap-content-height: iOS took all the free height, Android fixed 56dp).
+    "SelectBox": {"items": ["One", "Two", "Three"], "width": 200, "height": OMIT},
     "Slider": {"width": 200},
     "Progress": {"width": 200},
     # Deliberately NOT square: the bundled asset is 96x96, so in a square box
@@ -1613,6 +1623,14 @@ def _striped_backdrop(width: int = 100, height: int = 100) -> list[dict[str, Any
 #:
 #: Overlay mode is worth testing, but not by the fixture for a flow attribute.
 BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
+    # Text size following: drawn at twice the standard text size (root.textScale, see text_scale), with text to
+    # draw where the base has none.
+    "fontScaling": {"root.textScale": 2.0},
+    "maxFontScale": {"root.textScale": 2.0},
+    "TextView.fontScaling": {"text": "Sample", "root.textScale": 2.0},
+    "TextView.maxFontScale": {"text": "Sample", "root.textScale": 2.0},
+    "TextField.fontScaling": {"text": "Sample", "root.textScale": 2.0},
+    "TextField.maxFontScale": {"text": "Sample", "root.textScale": 2.0},
     # Text-styling attributes need TEXT to style: the TextField/TextView base
     # is hint-only, so font/fontColor/... rendered nothing to look at and the
     # 33 cross-effect sweep measured platform-dependent placeholder
@@ -2735,7 +2753,19 @@ def apply_base_overrides(base: dict[str, Any], extra: dict[str, Any] | None) -> 
 
 #: `root.` keys that describe the root's CHILDREN rather than its attributes.
 #: Handled structurally by the layout builders; never written as JSON keys.
-ROOT_STRUCTURE_KEYS = ("backdrop", "anchorLast", "cover")
+ROOT_STRUCTURE_KEYS = ("backdrop", "anchorLast", "cover", "textScale")
+
+
+def text_scale(extra: dict[str, Any] | None) -> float | None:
+    """The text size the host draws the fixture at (`root.textScale`), or None for the standard size.
+
+    fontScaling / maxFontScale change the picture only at a text size other than the standard one (ticket
+    sjui-label-font-size-ignores-dynamic-type), so their fixtures and controls carry it; the manifest records it
+    as `textScale` and each host applies it before drawing (iOS: the Dynamic Type step at most it; Android: the
+    configuration's fontScale; the web: the root font size).
+    """
+    value = split_root_attrs(extra).get("textScale")
+    return float(value) if value is not None else None
 
 
 def root_backdrop(extra: dict[str, Any] | None) -> list[dict[str, Any]]:

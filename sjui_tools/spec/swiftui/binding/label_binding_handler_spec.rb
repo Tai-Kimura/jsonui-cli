@@ -20,11 +20,11 @@ RSpec.describe SjuiTools::SwiftUI::Binding::LabelBindingHandler do
       expect(result).to include('.foregroundColor(')
     end
 
-    it 'handles fontSize binding' do
+    it 'adds nothing for a fontSize binding (PartialAttributedText draws the bound size)' do
       component = { 'type' => 'Label', 'fontSize' => '@{size}' }
       result = handler.handle_specific_binding(component, 'fontSize', '@{size}')
 
-      expect(result).to include('.font(.system(size:')
+      expect(result).to be_nil
     end
 
     it 'handles font binding' do

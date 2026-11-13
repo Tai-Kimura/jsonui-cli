@@ -133,7 +133,7 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent do
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('Configuration.Font.resolve(FontSpec(')
       expect(result).to include('size = 16.sp')
-      expect(result).to match(/textStyle = TextStyle\(.*fontSize = \(resolved_textview\d+\.size \?: LocalTextStyle\.current\.fontSize\)/)
+      expect(result).to match(/textStyle = TextStyle\(.*fontSize = jsonUIFontSize\(resolved_textview\d+\.size \?: LocalTextStyle\.current\.fontSize\)/)
       expect(required_imports).to include(:text_style)
     end
 
@@ -149,7 +149,7 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent do
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('textStyle = TextStyle(')
       expect(result).to include('size = 14.sp')
-      expect(result).to match(/fontSize = \(resolved_textview\d+\.size \?: LocalTextStyle\.current\.fontSize\)/)
+      expect(result).to match(/fontSize = jsonUIFontSize\(resolved_textview\d+\.size \?: LocalTextStyle\.current\.fontSize\)/)
       expect(result).to include('color =')
     end
 
@@ -546,14 +546,14 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent, 'hintAttribute
   it 'styles the placeholder from the object form' do
     result = field('hintAttributes' => { 'fontColor' => '#999999', 'fontSize' => 14, 'font' => 'bold' })
     expect(result).to match(/color = Color\(.*999999/)
-    expect(result).to include('fontSize = 14.sp')
+    expect(result).to include('fontSize = jsonUIFontSize(14.sp)')
     expect(result).to include('fontWeight = FontWeight.Bold')
   end
 
   it 'still honours the flat keys' do
     result = field('hintColor' => '#999999', 'hintFontSize' => 14)
     expect(result).to match(/color = Color\(.*999999/)
-    expect(result).to include('fontSize = 14.sp')
+    expect(result).to include('fontSize = jsonUIFontSize(14.sp)')
   end
 
   it 'lets the object win per key' do
@@ -565,7 +565,7 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent, 'hintAttribute
   # Compose has no multiplier, so it resolves against the hint's own size.
   it 'resolves lineHeightMultiple against the hint size' do
     expect(field('hintAttributes' => { 'fontSize' => 14, 'lineHeightMultiple' => 1.4 }))
-      .to include('lineHeight = 19.6.sp')
+      .to include('lineHeight = jsonUIFontSize(19.6.sp)')
   end
 
   # 19.599999999999998.sp is float noise, not a measurement.

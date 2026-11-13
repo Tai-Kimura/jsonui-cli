@@ -21,15 +21,10 @@ module SjuiTools
               ".foregroundColor(#{color_expr})"
             end
           when 'fontSize'
-            if is_binding?(value)
-              # `.system(size:)` takes a CGFloat, and `parse_binding` hands
-              # back the read-only VALUE expression — an Optional for any
-              # property without a data-section default, which does not
-              # compile. `swift_number_expr` fixes the optionality and not the
-              # TYPE: a `fontSize` declared `Int` still is not a CGFloat.
-              # `bound_number` does both.
-              ".font(.system(size: #{bound_number(value)}))"
-            end
+            # A bound size reaches PartialAttributedText's `fontSize:` (the Label converter passes it), which draws it
+            # through the provider at the text size rule's size. A `.font(.system(size:))` on top fixed the size and
+            # the typeface again (ticket sjui-label-font-size-ignores-dynamic-type), so nothing is added here.
+            nil
           when 'font'
             if is_binding?(value)
               binding = parse_binding(value, read_only: true)

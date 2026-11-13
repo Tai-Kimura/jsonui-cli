@@ -262,32 +262,46 @@ module SjuiTools
               end
             end
 
-            # paddings - should come after selectItemType and items（UIKitに合わせてpaddingsに統一）
+            # The insets, side by side (ruling 2026-11-13, ticket
+            # kjui-selectbox-fixed-56dp-ignores-wrap-content-height; Dynamic's
+            # SelectBoxConverter.padding the same): SelectBoxView's default (0
+            # above and below, 12 at the sides), then `padding` on every side,
+            # then `paddings`, then each side's own key. A side nothing names
+            # keeps the default. Nothing declared: no argument (the view's
+            # default).
+            sides = { top: '0', leading: '12', bottom: '0', trailing: '12' }
+            declared = false
+            unless @component['padding'].nil?
+              all = number_slot(@component['padding'])
+              sides = { top: all, leading: all, bottom: all, trailing: all }
+              declared = true
+            end
             if @component['paddings']
               padding = @component['paddings']
-              padding = padding.is_a?(Array) ? padding.map { |v| number_slot(v) } : number_slot(padding)
-              if padding.is_a?(Array)
-                case padding.length
-                when 1
-                  add_line "padding: EdgeInsets(top: #{padding[0]}, leading: #{padding[0]}, bottom: #{padding[0]}, trailing: #{padding[0]})"
-                when 2
-                  add_line "padding: EdgeInsets(top: #{padding[0]}, leading: #{padding[1]}, bottom: #{padding[0]}, trailing: #{padding[1]})"
-                when 4
-                  # [top, right, bottom, left], as spacing_helper reads it
-                  # (until jsonui-cli 1.9.14: [top, left, bottom, right]).
-                  add_line "padding: EdgeInsets(top: #{padding[0]}, leading: #{padding[3]}, bottom: #{padding[2]}, trailing: #{padding[1]})"
-                end
-              else
-                add_line "padding: EdgeInsets(top: #{padding}, leading: #{padding}, bottom: #{padding}, trailing: #{padding})"
+              padding = padding.is_a?(Array) ? padding.map { |v| number_slot(v) } : [number_slot(padding)]
+              case padding.length
+              when 1
+                sides = { top: padding[0], leading: padding[0], bottom: padding[0], trailing: padding[0] }
+              when 2
+                sides = { top: padding[0], leading: padding[1], bottom: padding[0], trailing: padding[1] }
+              when 4
+                # [top, right, bottom, left], as spacing_helper reads it
+                # (until jsonui-cli 1.9.14: [top, left, bottom, right]).
+                sides = { top: padding[0], leading: padding[3], bottom: padding[2], trailing: padding[1] }
               end
-            elsif @component['paddingTop'] || @component['paddingBottom'] ||
-                  @component['paddingLeft'] || @component['paddingRight']
-              # UIKitに合わせてpaddingTop形式に統一
-              top = number_slot(@component['paddingTop'] || 0)
-              bottom = number_slot(@component['paddingBottom'] || 0)
-              left = number_slot(@component['paddingLeft'] || 0)
-              right = number_slot(@component['paddingRight'] || 0)
-              add_line "padding: EdgeInsets(top: #{top}, leading: #{left}, bottom: #{bottom}, trailing: #{right})"
+              declared = true
+            end
+            { top: %w[paddingTop topPadding], bottom: %w[paddingBottom bottomPadding],
+              leading: %w[paddingStart paddingLeft leftPadding],
+              trailing: %w[paddingEnd paddingRight rightPadding] }.each do |side, keys|
+              key = keys.find { |k| !@component[k].nil? }
+              next unless key
+
+              sides[side] = number_slot(@component[key])
+              declared = true
+            end
+            if declared
+              add_line "padding: EdgeInsets(top: #{sides[:top]}, leading: #{sides[:leading]}, bottom: #{sides[:bottom]}, trailing: #{sides[:trailing]})"
             end
 
             # A normal picker reports the pick through the same closure, after
@@ -327,6 +341,16 @@ module SjuiTools
           # Apply frame modifiers
           apply_frame_constraints
           apply_frame_size
+          # No height or wrapContent: the content's height (ticket
+          # kjui-selectbox-fixed-56dp-ignores-wrap-content-height). SelectBoxView
+          # fills the height it is offered (so a fixed height centres the text on
+          # its background), and in a stack it was offered all the free height.
+          # A min / max already sized it through apply_frame_constraints.
+          height = @component['height']
+          if (height.nil? || %w[wrapcontent wrap_content].include?(height.to_s.downcase)) &&
+             !@component['heightWeight'] && !(@component['weight'] && @component['parent_orientation'] == 'vertical')
+            @modifier_bag.register_unless_exists(:fixed_size, '.fixedSize(horizontal: false, vertical: true)')
+          end
 
           # Note: padding, background and cornerRadius are handled internally by SelectBoxView
 

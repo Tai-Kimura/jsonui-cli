@@ -57,14 +57,14 @@ RSpec.describe SjuiTools::SwiftUI::Helpers::FontHelper do
   end
 
   describe '#apply_font_modifiers' do
-    let(:resolve_call) { /SwiftJsonUIConfiguration\.shared\.resolveFont\(FontSpec\(/ }
+    let(:resolve_call) { /\.sjuiFont\(FontSpec\(/ }
 
     context 'with no font attributes' do
       let(:component) { { 'text' => 'Hello' } }
 
-      it 'emits no modifier' do
+      it 'emits the configured size through sjuiFont (P1: every text is the provider\'s)' do
         described_class.apply_font_modifiers(component, mock_converter)
-        expect(mock_converter.modifiers).to be_empty
+        expect(mock_converter.modifiers).to eq(['.sjuiFont(FontSpec(family: nil, weight: nil, size: nil, italic: false))'])
       end
     end
 
@@ -75,8 +75,8 @@ RSpec.describe SjuiTools::SwiftUI::Helpers::FontHelper do
         described_class.apply_font_modifiers(component, mock_converter)
         expect(mock_converter.modifiers.size).to eq(1)
         expect(mock_converter.modifiers.first).to eq(
-          '.font(SwiftJsonUIConfiguration.shared.resolveFont(' \
-            'FontSpec(family: nil, weight: .bold, size: nil, italic: false)))'
+          '.sjuiFont(' \
+            'FontSpec(family: nil, weight: .bold, size: nil, italic: false))'
         )
       end
 
@@ -92,8 +92,8 @@ RSpec.describe SjuiTools::SwiftUI::Helpers::FontHelper do
       it 'emits a resolveFont call with the resolved weight' do
         described_class.apply_font_modifiers(component, mock_converter)
         expect(mock_converter.modifiers).to eq([
-          '.font(SwiftJsonUIConfiguration.shared.resolveFont(' \
-            'FontSpec(family: nil, weight: .semibold, size: nil, italic: false)))'
+          '.sjuiFont(' \
+            'FontSpec(family: nil, weight: .semibold, size: nil, italic: false))'
         ])
       end
     end
@@ -104,8 +104,8 @@ RSpec.describe SjuiTools::SwiftUI::Helpers::FontHelper do
       it 'emits a resolveFont call with family literal and weight/size nil' do
         described_class.apply_font_modifiers(component, mock_converter)
         expect(mock_converter.modifiers).to eq([
-          '.font(SwiftJsonUIConfiguration.shared.resolveFont(' \
-            'FontSpec(family: "Noto Sans JP", weight: nil, size: nil, italic: false)))'
+          '.sjuiFont(' \
+            'FontSpec(family: "Noto Sans JP", weight: nil, size: nil, italic: false))'
         ])
       end
     end
@@ -116,8 +116,8 @@ RSpec.describe SjuiTools::SwiftUI::Helpers::FontHelper do
       it 'treats `font` as the family' do
         described_class.apply_font_modifiers(component, mock_converter)
         expect(mock_converter.modifiers).to eq([
-          '.font(SwiftJsonUIConfiguration.shared.resolveFont(' \
-            'FontSpec(family: "Helvetica", weight: nil, size: nil, italic: false)))'
+          '.sjuiFont(' \
+            'FontSpec(family: "Helvetica", weight: nil, size: nil, italic: false))'
         ])
       end
     end
@@ -128,8 +128,8 @@ RSpec.describe SjuiTools::SwiftUI::Helpers::FontHelper do
       it 'emits a resolveFont call with size set and family/weight nil' do
         described_class.apply_font_modifiers(component, mock_converter)
         expect(mock_converter.modifiers).to eq([
-          '.font(SwiftJsonUIConfiguration.shared.resolveFont(' \
-            'FontSpec(family: nil, weight: nil, size: CGFloat(18), italic: false)))'
+          '.sjuiFont(' \
+            'FontSpec(family: nil, weight: nil, size: CGFloat(18), italic: false))'
         ])
       end
     end
@@ -146,8 +146,8 @@ RSpec.describe SjuiTools::SwiftUI::Helpers::FontHelper do
       it 'emits a single resolveFont call with all three populated' do
         described_class.apply_font_modifiers(component, mock_converter)
         expect(mock_converter.modifiers).to eq([
-          '.font(SwiftJsonUIConfiguration.shared.resolveFont(' \
-            'FontSpec(family: "Inter", weight: .bold, size: CGFloat(16), italic: false)))'
+          '.sjuiFont(' \
+            'FontSpec(family: "Inter", weight: .bold, size: CGFloat(16), italic: false))'
         ])
       end
 
@@ -163,8 +163,8 @@ RSpec.describe SjuiTools::SwiftUI::Helpers::FontHelper do
       it 'merges the keyword weight into the FontSpec' do
         described_class.apply_font_modifiers(component, mock_converter)
         expect(mock_converter.modifiers).to eq([
-          '.font(SwiftJsonUIConfiguration.shared.resolveFont(' \
-            'FontSpec(family: "Inter", weight: .semibold, size: CGFloat(14), italic: false)))'
+          '.sjuiFont(' \
+            'FontSpec(family: "Inter", weight: .semibold, size: CGFloat(14), italic: false))'
         ])
       end
     end
@@ -178,8 +178,8 @@ RSpec.describe SjuiTools::SwiftUI::Helpers::FontHelper do
         }.to output(/^WARNING: \[FontHelper\] unknown font weight 'extra-extra-bold'/).to_stdout
 
         expect(mock_converter.modifiers).to eq([
-          '.font(SwiftJsonUIConfiguration.shared.resolveFont(' \
-            'FontSpec(family: nil, weight: .regular, size: CGFloat(12), italic: false)))'
+          '.sjuiFont(' \
+            'FontSpec(family: nil, weight: .regular, size: CGFloat(12), italic: false))'
         ])
       end
     end
