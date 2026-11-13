@@ -85,7 +85,10 @@ RSpec.describe 'rjui text lengths follow the root font size' do
   it 'the Configuration font fallback writes rem in both languages' do
     %w[Configuration.ts js/Configuration.js].each do |name|
       text = File.read(File.expand_path("../../lib/react/templates/#{name}", __dir__))
-      expect(text).to include('css.fontSize = `${spec.size / 16}rem`;'), name
+      # From 2.5.35 through fontLength, the component's declaration or the app default (font_scaling_spec);
+      # undeclared, N x the unit whose fallback is 1/16 rem.
+      expect(text).to include('css.fontSize = fontLength(spec.size, spec.scaling, spec.maxScale);'), name
+      expect(text).to include('`calc(${size}*var(--jui-font-unit,0.0625rem))`'), name
       expect(text).not_to include('${spec.size}px'), name
     end
   end

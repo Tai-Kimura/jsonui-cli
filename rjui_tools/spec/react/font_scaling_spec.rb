@@ -99,6 +99,30 @@ RSpec.describe 'fontScaling / maxFontScale (rjui)' do
     expect(drawn['declared wins over off']).to eq(30)
   end
 
+  # An element with a fontFamily is sized by Configuration.Font.resolve (an app's provider may replace it); its
+  # default css writes the same length the classes do.
+  it "the Configuration default css writes TailwindMapper's length" do
+    config = File.read(configuration_js).gsub(/^export /, '')
+    cases = [[15, nil, nil], [15, false, nil], [15, true, nil], [16, true, 1.5], [16, nil, 2], [13, false, 2]]
+    HeadlessChromium.ensure!(self)
+    Dir.mktmpdir('rjui_font_default_css') do |dir|
+      File.write(File.join(dir, 'page.html'), <<~HTML)
+        <html><body><script>
+        #{config}
+        const cases = #{JSON.generate(cases)};
+        const out = cases.map(([size, scaling, maxScale]) => Configuration.Font.resolve(
+          Object.assign({ size }, scaling === null ? {} : { scaling }, maxScale === null ? {} : { maxScale })).fontSize);
+        document.body.textContent = 'AT' + JSON.stringify(out);
+        </script></body></html>
+      HTML
+      dom, = Open3.capture2e(HeadlessChromium.path, *HeadlessChromium::FLAGS, '--dump-dom',
+                             "file://#{File.join(dir, 'page.html')}")
+      written = JSON.parse(dom[/AT(\[.*?\])\s*</m, 1] || raise("no result in:\n#{dom}"))
+      expected = cases.map { |size, scaling, max| TMF.font_size_css(size, scaling: scaling, max: max) }
+      expect(written).to eq(expected)
+    end
+  end
+
   it 'configureScaling writes the custom properties the sizes read' do
     config = File.read(configuration_js).gsub(/^export /, '')
     HeadlessChromium.ensure!(self)

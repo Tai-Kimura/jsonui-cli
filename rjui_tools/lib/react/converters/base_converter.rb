@@ -390,6 +390,8 @@ module RjuiTools
             end
 
             spec_size = font_size_attr.is_a?(Numeric) ? font_size_attr : nil
+            # No fontSize but a declaration: 16, what the browser draws it at.
+            spec_size ||= TailwindMapper::DEFAULT_TEXT_SIZE if font_size_attr.nil? && font_scale_declared?
 
             spec_family = font_family_attr
             if has_binding?(spec_family)
@@ -400,7 +402,9 @@ module RjuiTools
               family: spec_family,
               weight: spec_weight,
               size:   spec_size,
-              italic: false
+              italic: false,
+              scaling: font_scale_opts[:scaling],
+              max_scale: font_scale_opts[:max]
             )
             if spread
               # Sentinel key — `format_dynamic_style_pair` renders this as
@@ -412,11 +416,11 @@ module RjuiTools
             # value can update; the provider only sees the static spec.
             if font_size_attr && !font_size_attr.is_a?(Numeric) && has_binding?(font_size_attr.to_s)
               bound_font_size_style(font_size_attr)
-            elsif (spec_size ||= (TailwindMapper::DEFAULT_TEXT_SIZE if font_size_attr.nil? && font_scale_declared?))
-              # After the spread, so it wins over Font.resolve's plain rem:
-              # the size by this component's fontScaling / maxFontScale.
-              @dynamic_styles['fontSize'] = "'#{TailwindMapper.font_size_css(spec_size, **font_scale_opts)}'"
             end
+            # A static size is the spec's: Font.resolve draws it by the
+            # component's scaling / maxScale (the default css the same length
+            # TailwindMapper.font_size_css writes), and an app's provider still
+            # has the last word on it, as before.
             if font_weight_attr.is_a?(String) && has_binding?(font_weight_attr)
               @dynamic_styles['fontWeight'] = convert_binding(font_weight_attr)
             end
