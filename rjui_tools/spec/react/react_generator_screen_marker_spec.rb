@@ -70,12 +70,17 @@ RSpec.describe RjuiTools::React::ReactGenerator do
         .to eq(first)
     end
 
-    it 'skips an expression-container root, like id injection does' do
+    # A root that binds its visibility is an expression container; the marker
+    # goes on the element inside it, as the id does (until 2.5.34 both were
+    # skipped and such a screen had no marker; ticket
+    # sjui-cell-root-visibility-binding-dropped).
+    it 'marks the element inside an expression-container root, like id injection does' do
       hidden = layout.merge('visibility' => '@{isVisible}')
       output = generator.generate('Home', hidden, screen_id: 'home')
 
-      # No crash, and nothing injected into a fragment.
       expect(output).not_to include('<> {...screenMarker')
+      expect(output).to match(/\{data\.isVisible !== "gone" && \(\n\s*<\w+ \{\.\.\.screenMarker\("home"\)\}/)
+      expect(output.scan('screenMarker("home")').size).to eq(1)
     end
   end
 end

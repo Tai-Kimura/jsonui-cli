@@ -28,6 +28,9 @@ require_relative 'views/color_helper'
 module SjuiTools
   module SwiftUI
     class JsonToSwiftUIConverter
+      # The VisibilityWrapper argument for the last converted layout's root, nil when it declares none.
+      attr_reader :root_visibility
+
       def initialize
         @indent_level = 0
         @generated_code = []
@@ -275,6 +278,7 @@ module SjuiTools
 
       # Simple method to convert JSON file to SwiftUI view code only
       def convert_json_to_view(json_file_path)
+        @root_visibility = nil
         unless File.exist?(json_file_path)
           raise "JSON file not found: #{json_file_path}"
         end
@@ -337,6 +341,15 @@ module SjuiTools
 
         # Convert the main component
         view_code = convert_component(json_data, 0)  # Indent level 0, will be indented by view_updater
+
+        # A parent wraps its child's `visibility` (child_renderer); the root has
+        # no parent, so it was drawn by nobody and a cell's, a header's or a
+        # screen's root `visibility` was dropped (ticket
+        # sjui-cell-root-visibility-binding-dropped). The same argument a parent
+        # would pass; view_updater wraps the body in it after any split.
+        @root_visibility = if Views::ResponsiveHelper.visibility_declared?(json_data)
+                             Views::ResponsiveHelper.visibility_param(json_data)
+                           end
 
         # Add @Environment vars if responsive is used
         if has_responsive

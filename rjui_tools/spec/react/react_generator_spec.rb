@@ -301,12 +301,25 @@ RSpec.describe RjuiTools::React::ReactGenerator do
       expect(result).to include('<div id={id ?? "own_root"} className="cell">')
     end
 
-    it 'skips injection for an expression-container root but keeps id in the interface' do
+    # A root that binds its visibility is the expression container
+    # `{cond !== "gone" && (<element>)}`; the id goes on the element inside it.
+    # Until 2.5.34 it was skipped, and a cell whose root bound its visibility
+    # lost the `<collectionId>_item_<n>` id its Collection passes — the test
+    # driver's tapItem and `within` then found no cell (measured in Chromium by
+    # conformance/hosts/web/scripts/collection_cell_root_visibility_probe.mjs;
+    # ticket sjui-cell-root-visibility-binding-dropped).
+    it 'injects id={id} into the element inside an expression-container root' do
       jsx = "    {data.visible !== \"gone\" && (\n    <div>x</div>\n    )}"
       result = generator.send(:generate_component_file, 'CondRoot', jsx, minimal_json)
       expect(result).to include('id?: string;')
-      expect(result).not_to include('id={id}')
-      expect(result).to include('({ data: dataProp }: CondRootProps)')
+      expect(result).to include("{data.visible !== \"gone\" && (\n    <div id={id}>x</div>\n    )}")
+      expect(result).to include('({ data: dataProp, id }: CondRootProps)')
+    end
+
+    it 'keeps a layout-declared root id as the fallback inside an expression-container root' do
+      jsx = "    {data.visible !== \"gone\" && (\n    <div id=\"r\" className={`a ${data.visible === \"invisible\" ? \"invisible\" : \"\"}`}>x</div>\n    )}"
+      result = generator.send(:generate_component_file, 'CondOwn', jsx, minimal_json)
+      expect(result).to include('<div id={id ?? "r"} className=')
     end
   end
 
