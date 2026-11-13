@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../../support/font_provider_stub'
+
 require 'compose/components/radio_component'
 require 'compose/helpers/modifier_builder'
 require 'compose/helpers/resource_resolver'
@@ -435,6 +437,9 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
         "fun shape#{i}(data: Data, viewModel: ViewModel) {\n#{described_class.generate(node, 0, Set.new)}\n}"
       end.join("\n\n")
       expect(<<~KOTLIN).to compile_as_kotlin
+        #{FontProviderStub::FONT}
+        #{FontProviderStub::SIZE}
+        #{FontProviderStub::TEXT_STYLE}
         interface Modifier { companion object : Modifier }
         class Dp
         val Int.dp: Dp get() = Dp()
@@ -455,7 +460,7 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
         object MaterialTheme { val colorScheme = ColorScheme() }
         fun jsonUITintOr(fallback: Color): Color = fallback
         fun Spacer(modifier: Modifier) {}
-        fun Text(text: String, color: Color = Color(), letterSpacing: Any? = null) {}
+        fun Text(text: String, color: Color = Color(), fontFamily: Any? = null, fontWeight: Any? = null, fontStyle: Any? = null, fontSize: Any? = null, letterSpacing: Any? = null) {}
         class MutableState<T>(var value: T)
         operator fun <T> MutableState<T>.getValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>): T = value
         operator fun <T> MutableState<T>.setValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>, v: T) { value = v }
@@ -474,9 +479,12 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
     it 'draws each option label with the declared size and colour' do
       code = described_class.generate({ 'type' => 'Radio', 'id' => 'r', 'items' => %w[a b],
                                         'fontSize' => 18, 'fontColor' => '#FF0000' }, 0, Set.new)
-      expect(code.scan(/Text\("[ab]", color = [^\n]*fontSize = jsonUIFontSize\(18\.sp\), letterSpacing = jsonUILetterSpacing\(\)\)/).size).to eq(2)
+      # Through the app's fontProvider (P1): the declared size is each option's FontSpec, drawn from what resolve gives.
+      expect(code.scan(/size = 18\.sp,/).size).to eq(2)
+      expect(code.scan(/Text\("[ab]", color = [^\n]*fontSize = jsonUIFontSize\(radioFont\.size \?: TextUnit\.Unspecified\), letterSpacing = jsonUILetterSpacing\(\)/).size).to eq(2)
       bare = described_class.generate({ 'type' => 'Radio', 'id' => 'r', 'items' => %w[a] }, 0, Set.new)
-      expect(bare).to include('Text("a", color = Color.Black)')
+      expect(bare).to include('Text("a", color = Color.Black, fontFamily = radioFont.family, fontWeight = radioFont.weight')
+      expect(bare).not_to include('size = 18.sp')
     end
   end
 end

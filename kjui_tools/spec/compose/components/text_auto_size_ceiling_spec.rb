@@ -44,7 +44,7 @@ RSpec.describe 'kjui Label auto-size: fontSize is the ceiling' do
       val Float.sp: TextUnit get() = TextUnit()
       interface TextAutoSize { companion object { fun StepBased(minFontSize: TextUnit, maxFontSize: TextUnit): TextAutoSize = object : TextAutoSize {} } }
       class Data(val fs: Int? = null)
-      fun Text(autoSize: TextAutoSize? = null, letterSpacing: Any? = null) {}
+      fun Text(autoSize: TextAutoSize? = null, fontFamily: Any? = null, fontWeight: Any? = null, fontStyle: Any? = null, fontSize: Any? = null, letterSpacing: Any? = null) {}
       fun host(data: Data) {
           Text(
               #{lines[0]}

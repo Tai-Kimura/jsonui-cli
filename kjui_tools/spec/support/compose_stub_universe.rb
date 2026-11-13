@@ -55,7 +55,7 @@ module ComposeStubUniverse
       fun Icon(painter: Painter, contentDescription: String?) {}
       fun BadgedBox(badge: () -> Unit, content: () -> Unit) {}
       fun Badge(content: () -> Unit) {}
-      fun Text(text: String, letterSpacing: Any? = null) {}
+      fun Text(text: String, fontFamily: Any? = null, fontWeight: Any? = null, fontStyle: Any? = null, fontSize: Any? = null, letterSpacing: Any? = null) {}
       fun Box(modifier: Modifier = Modifier, content: () -> Unit) {}
       class ProvidedValue
       class SafeAreaConfig(val ignoreBottom: Boolean = false)
@@ -118,12 +118,21 @@ module ComposeStubUniverse
       val Float.sp: TextUnit get() = TextUnit()
       val Double.sp: TextUnit get() = TextUnit()
       class FontFamily
-      class FontWeight
-      class FontStyle { companion object { val Normal = FontStyle() } }
-      class FontSpec(val family: String?, val weight: String?, val size: Int?, val italic: Boolean)
+      class FontWeight { companion object {
+          val Thin = FontWeight(); val ExtraLight = FontWeight(); val Light = FontWeight(); val Normal = FontWeight()
+          val Medium = FontWeight(); val SemiBold = FontWeight(); val Bold = FontWeight(); val ExtraBold = FontWeight()
+          val Black = FontWeight()
+      } }
+      class FontStyle { companion object { val Normal = FontStyle(); val Italic = FontStyle() } }
+      // KotlinJsonUI's FontSpec: what a component declares, handed to Configuration.Font.resolve (the app's fontProvider).
+      class FontSpec(val family: String? = null, val weight: FontWeight? = null, val size: TextUnit? = null, val italic: Boolean = false)
       class ResolvedFont(val family: FontFamily?, val weight: FontWeight?, val size: TextUnit?, val style: FontStyle?)
-      class TextStyle(val color: Color = Color(), val fontSize: TextUnit = TextUnit(), letterSpacing: Any? = null) {
-          fun copy(lineHeight: TextUnit = TextUnit(), letterSpacing: Any? = null, fontSize: TextUnit = TextUnit()): TextStyle = this
+      class TextStyle(val color: Color = Color(), val fontSize: TextUnit = TextUnit(), val letterSpacing: Any? = null,
+                      val fontFamily: FontFamily? = null, val fontWeight: FontWeight? = null, val fontStyle: FontStyle? = null,
+                      textAlign: Any? = null, lineHeight: TextUnit? = null, shadow: Any? = null) {
+          fun copy(lineHeight: TextUnit = TextUnit(), letterSpacing: Any? = null, fontSize: TextUnit = TextUnit(),
+                   fontFamily: FontFamily? = null, fontWeight: FontWeight? = null, fontStyle: FontStyle? = null,
+                   color: Color = Color(), textAlign: Any? = null, shadow: Any? = null): TextStyle = this
       }
       object LocalTextStyle { val current = TextStyle() }
       interface Shape
@@ -289,10 +298,10 @@ module ComposeStubUniverse
       fun LinearProgressIndicator(progress: () -> Float, modifier: Modifier = Modifier, color: Color = Color(), trackColor: Color = Color()) {}
       fun CircularProgressIndicator(modifier: Modifier = Modifier, color: Color = Color(), trackColor: Color = Color(),
                                     strokeWidth: Dp = 0.dp) {}
-      fun SelectBox(value: String, onValueChange: (String) -> Unit, options: List<String>, modifier: Modifier = Modifier,
+      fun SelectBox(value: String, onValueChange: (String) -> Unit, resolvedFont: Any? = null, options: List<String>, modifier: Modifier = Modifier,
                     enabled: Boolean = true, backgroundColor: Color? = null, borderColor: Color? = null,
                     cornerRadius: Int? = null, contentPadding: PaddingValues? = null, fontSize: Int = 16) {}
-      fun DateSelectBox(value: String, onValueChange: (String) -> Unit, modifier: Modifier = Modifier,
+      fun DateSelectBox(value: String, onValueChange: (String) -> Unit, resolvedFont: Any? = null, modifier: Modifier = Modifier,
                         datePickerMode: String = "date", minuteInterval: Int = 1, enabled: Boolean = true,
                         cornerRadius: Int? = null, fontSize: Int = 16) {}
       fun Segment(selectedTabIndex: Int, modifier: Modifier = Modifier, enabled: Boolean = true,

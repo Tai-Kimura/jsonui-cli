@@ -169,12 +169,13 @@ module KjuiTools
           # Build FontSpec resolve block ahead of CustomTextField(...) so the
           # textStyle parameter can reference the resolved local. Emits only when
           # at least one font attribute is set.
-          tv_font_args = Helpers::FontSpecHelper.build_font_spec_args(json_data, required_imports)
-          tv_resolved_var = nil
-          if tv_font_args[:has_any]
-            tv_resolved_var = next_resolved_var
-            code += Helpers::FontSpecHelper.emit_resolve_block(tv_resolved_var, tv_font_args, depth, required_imports) + "\n"
-          end
+          # Always, a font attribute or not: every text goes through the app's fontProvider (the requester's P1,
+          # ticket jui-font-provider-not-reached-without-font-attributes-android-web).
+          tv_font_args = Helpers::FontSpecHelper.with_drawn_weight(
+            Helpers::FontSpecHelper.build_font_spec_args(json_data, required_imports), required_imports
+          )
+          tv_resolved_var = next_resolved_var
+          code += Helpers::FontSpecHelper.emit_resolve_block(tv_resolved_var, tv_font_args, depth, required_imports) + "\n"
 
           # ViewModel-driven focus binding — same wiring as TextFieldComponent
           # (kjui-textfield-isfocused-focus-binding-not-generated, extended to
@@ -490,12 +491,18 @@ module KjuiTools
                      TextComponent.compose_text_align(json_data['textAlign'], json_data['type'] || 'TextView')
           # fontScaling / maxFontScale with no font attribute: the field's text size by them (the size it draws,
           # the text style's), on the style the field already takes.
-          tv_undeclared = !tv_resolved_var && Helpers::FontScale.undeclared_size(json_data, required_imports)
-          if tv_resolved_var || json_data['fontColor'] || tv_align || tv_undeclared
+          tv_has_font = tv_font_args[:has_any]
+          tv_undeclared = !tv_has_font && Helpers::FontScale.undeclared_size(json_data, required_imports)
+          # Without a font attribute the style is the one the field took before — its own (LocalTextStyle, a copy)
+          # when nothing else is declared, a fresh TextStyle beside fontColor / textAlign — with the provider's
+          # slots over it (a null one leaves the style's).
+          tv_fresh = !tv_has_font && (json_data['fontColor'] || tv_align) && !tv_undeclared
+          begin
             required_imports&.add(:text_style)
             style_parts = []
-            if tv_resolved_var
-              style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(tv_resolved_var, required_imports, json_data))
+            unless tv_undeclared
+              style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(tv_resolved_var, required_imports, json_data,
+                                                                             unset: tv_fresh))
             end
             if json_data['fontColor']
               font_color = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
@@ -506,12 +513,23 @@ module KjuiTools
               style_parts << "textAlign = #{tv_align}"
             end
             if tv_undeclared
-              style_parts << "fontSize = #{tv_undeclared}"
+              # fontScaling / maxFontScale and no font attribute: the provider's family / weight / style, the size by
+              # the declarations over the provider's or the style's.
+              # A copy of the field's style keeps its slots under a null; a fresh TextStyle (beside fontColor /
+              # textAlign) leaves them unspecified, as before.
+              keep = ->(slot) { json_data['fontColor'] || tv_align ? "#{tv_resolved_var}.#{slot}" : "(#{tv_resolved_var}.#{slot} ?: LocalTextStyle.current.font#{slot.capitalize})" }
+              style_parts << "fontFamily = #{keep.call('family')}"
+              style_parts << "fontWeight = #{keep.call('weight')}"
+              style_parts << "fontSize = #{Helpers::FontScale.wrap("#{tv_resolved_var}.size ?: TextUnit.Unspecified", json_data, required_imports)}"
               style_parts << "letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}"
+              style_parts << "fontStyle = #{keep.call('style')}"
+              required_imports&.add(:local_text_style)
+              required_imports&.add(:text_unit)
             end
             if style_parts.any?
-              # The declarations alone keep the field's own style (LocalTextStyle, CustomTextField's default).
-              ctor = tv_undeclared && !json_data['fontColor'] && !tv_align ? 'LocalTextStyle.current.copy' : 'TextStyle'
+              # The declarations alone keep the field's own style (LocalTextStyle, CustomTextField's default), and so
+              # does a field with no font attribute and nothing else declared.
+              ctor = !tv_has_font && !json_data['fontColor'] && !tv_align ? 'LocalTextStyle.current.copy' : 'TextStyle'
               required_imports&.add(:local_text_style) if ctor != 'TextStyle'
               code += "\n" + indent("textStyle = #{ctor}(#{style_parts.join(', ')}),", depth + 1)
             end

@@ -417,7 +417,9 @@ module KjuiTools
         # Configuration.Font.resolve(FontSpec(...)) hook so the app's fontProvider sees
         # the full context.
         def self.build_text_code(json_data, text, depth, required_imports, fills: false)
-          font_args = Helpers::FontSpecHelper.build_font_spec_args(json_data, required_imports)
+          font_args = Helpers::FontSpecHelper.with_drawn_weight(
+            Helpers::FontSpecHelper.build_font_spec_args(json_data, required_imports), required_imports
+          )
           # `textAlign` is declared on Button and no converter read the
           # spelling on either mobile platform (plan 49 lane C:
           # Button.textAlign). The vocabulary is the shared one Label uses.
@@ -436,20 +438,10 @@ module KjuiTools
             align_arg += "\n" + indent("modifier = Modifier.fillMaxWidth(),", depth + 1)
           end
 
-          unless font_args[:has_any]
-            # fontScaling / maxFontScale with no font attribute: the button's own text size by them.
-            if (undeclared = Helpers::FontScale.undeclared_size(json_data, required_imports))
-              align_arg += "\n" + indent("fontSize = #{undeclared},", depth + 1) +
-                           "\n" + indent("letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)},", depth + 1)
-            end
-            return indent("Text(#{text})", depth) if align_arg.empty?
-
-            return indent("Text(", depth) +
-                   "\n" + indent("text = #{text},", depth + 1) +
-                   align_arg.chomp(',') +
-                   "\n" + indent(")", depth)
-          end
-
+          # Every button's text goes through the app's fontProvider, a font attribute or not (the requester's P1,
+          # 2026-11-13; ticket jui-font-provider-not-reached-without-font-attributes-android-web): with none,
+          # FontSpec is all null and each slot the provider leaves null falls to what the Text drew before (the
+          # button's text style), so an app without a provider draws the same.
           var_name = next_resolved_var
           resolve_block = Helpers::FontSpecHelper.emit_resolve_block(var_name, font_args, depth, required_imports)
           text_arg_lines = Helpers::FontSpecHelper.text_arg_lines(var_name, depth, required_imports, json_data)

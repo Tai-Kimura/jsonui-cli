@@ -239,13 +239,15 @@ module KjuiTools
             # Radio.spacing, C0 unread + C1 dropped).
             code += "\n" + indent("    Spacer(modifier = Modifier.width(#{radio_spacing_dp(json_data)}))", depth)
             # Add text with color
+            radio_var = label_resolve(json_data, required_imports)
+            code += "\n" + Helpers::FontSpecHelper.emit_resolve_block(radio_var, label_spec(json_data, required_imports), depth + 1, required_imports)
             if json_data['fontColor']
               text_color = json_data['fontColor']
               color_resolved = Helpers::ResourceResolver.process_color(text_color, required_imports)
-              code += "\n" + indent("    Text(#{text_expr}, color = #{color_resolved}#{label_font_args(json_data, required_imports)})", depth)
+              code += "\n" + indent("    Text(#{text_expr}, color = #{color_resolved}#{label_font_args(json_data, required_imports, radio_var)})", depth)
             else
               # Default to black color
-              code += "\n" + indent("    Text(#{text_expr}, color = Color.Black#{label_font_args(json_data, required_imports)})", depth)
+              code += "\n" + indent("    Text(#{text_expr}, color = Color.Black#{label_font_args(json_data, required_imports, radio_var)})", depth)
             end
           end
           
@@ -416,13 +418,15 @@ module KjuiTools
             # The option's label: fontColor, and fontSize / font as the single
             # radio's label reads them (label_font_args) — the options drew
             # the colour only.
+            option_var = label_resolve(json_data, required_imports)
+            code += "\n" + Helpers::FontSpecHelper.emit_resolve_block(option_var, label_spec(json_data, required_imports), depth + 2, required_imports)
             if json_data['fontColor']
               text_color = json_data['fontColor']
               color_resolved = Helpers::ResourceResolver.process_color(text_color, required_imports)
-              code += "\n" + indent("        Text(#{item_text}, color = #{color_resolved}#{label_font_args(json_data, required_imports)})", depth)
+              code += "\n" + indent("        Text(#{item_text}, color = #{color_resolved}#{label_font_args(json_data, required_imports, option_var)})", depth)
             else
               # Default to black color
-              code += "\n" + indent("        Text(#{item_text}, color = Color.Black#{label_font_args(json_data, required_imports)})", depth)
+              code += "\n" + indent("        Text(#{item_text}, color = Color.Black#{label_font_args(json_data, required_imports, option_var)})", depth)
             end
             code += "\n" + indent("    }", depth)
           end
@@ -520,26 +524,21 @@ module KjuiTools
         # weight spelling (bold/semibold/medium), `fontSize` a declared sp
         # size. Both were dropped on the codegen label (33 cross-effect;
         # dynamic reads them since the parse-but-never-read wave).
-        def self.label_font_args(json_data, required_imports)
-          args = ''
-          # The local three-way `case` both duplicated the shared weight
-          # vocabulary (40: duplicated vocabulary drifts) and could not match a
-          # `"@{...}"`, so a bound font emitted no weight at all.
+        def self.label_font_args(json_data, required_imports, var)
+          # Through the app's fontProvider whatever the label declares (the requester's P1, ticket
+          # jui-font-provider-not-reached-without-font-attributes-android-web): a slot it leaves null draws as before.
+          ', ' + Helpers::FontSpecHelper.text_arg_fragments(var, required_imports, json_data).join(', ')
+        end
+
+        # The label's FontSpec: `font` the weight spelling (the shared vocabulary, bound or not), `fontSize` a
+        # declared sp size.
+        def self.label_spec(json_data, required_imports)
           weight = json_data['font'] && Helpers::FontSpecHelper.weight_expression(json_data['font'])
-          if weight
-            required_imports&.add(:font_weight)
-            args += ", fontWeight = #{weight}"
-          end
-          if json_data['fontSize']
-            # `#{...}.sp` raw put `@{v}.sp` in code position.
-            required_imports&.add(:text_unit) if Helpers::BoundValue.bound?(json_data['fontSize'])
-            args += ", fontSize = #{Helpers::FontScale.wrap(Helpers::BoundValue.sp(json_data['fontSize'], null_expr: 'TextUnit.Unspecified'), json_data, required_imports)}"
-            args += ", letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}"
-          elsif (undeclared = Helpers::FontScale.undeclared_size(json_data, required_imports))
-            args += ", fontSize = #{undeclared}"
-            args += ", letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}"
-          end
-          args
+          Helpers::FontSpecHelper.plain_spec(weight, json_data['fontSize'], required_imports)
+        end
+
+        def self.label_resolve(_json_data, _required_imports)
+          'radioFont'  # its own Row's lambda: one per scope, so a fixed name
         end
 
         # This item's selected state. A declared `checked` wins; otherwise the

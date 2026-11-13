@@ -70,7 +70,7 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
       class FontSpec(val size: Int = 0)
       class Resolved(val size: TextUnit? = null)
       object Configuration { object Font { fun resolve(spec: FontSpec): Resolved = Resolved() } }
-      fun Text(text: String, fontSize: TextUnit = TextUnit.Unspecified, letterSpacing: Any? = null) {}
+      fun Text(text: String, fontSize: TextUnit = TextUnit.Unspecified, fontFamily: Any? = null, fontWeight: Any? = null, fontStyle: Any? = null, letterSpacing: Any? = null) {}
       fun SelectBox(items: List<String>, onValueChange: (String) -> Unit) {}
       class FormData(#{data})
       class FormViewModel { fun updateData(values: Map<String, Any>) {} }

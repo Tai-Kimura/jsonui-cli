@@ -76,16 +76,18 @@ RSpec.describe KjuiTools::Compose::Components::ButtonComponent do
     # an enabled button (attribute_definitions.json common.canTap).
     describe 'canTap' do
       let(:open) { described_class.generate({ 'type' => 'Button', 'text' => 'Go', 'onClick' => '@{onTap}' }, 0, Set.new) }
+      # Every button's text resolves through the font provider (P1), under a name numbered per file.
+      def same_names(code) = code.gsub(/resolved_button\d+/, 'resolved_button')
 
       it 'false leaves the onClick empty, as no handler does' do
         shut = described_class.generate({ 'type' => 'Button', 'text' => 'Go', 'onClick' => '@{onTap}', 'canTap' => false }, 0, Set.new)
-        expect(shut).to eq(described_class.generate({ 'type' => 'Button', 'text' => 'Go' }, 0, Set.new))
+        expect(same_names(shut)).to eq(same_names(described_class.generate({ 'type' => 'Button', 'text' => 'Go' }, 0, Set.new)))
       end
 
       it 'a binding gates the call inside onClick, and changes nothing else' do
         bound = described_class.generate({ 'type' => 'Button', 'text' => 'Go', 'onClick' => '@{onTap}', 'canTap' => '@{c}' }, 0, Set.new)
         expect(open).to include('onClick = { data.onTap?.invoke() }')
-        expect(bound).to eq(open.sub('onClick = { data.onTap?.invoke() }', 'onClick = { if ((data.c ?: false)) { data.onTap?.invoke() } }'))
+        expect(same_names(bound)).to eq(same_names(open.sub('onClick = { data.onTap?.invoke() }', 'onClick = { if ((data.c ?: false)) { data.onTap?.invoke() } }')))
       end
 
       it 'the gated onClick compiles' do

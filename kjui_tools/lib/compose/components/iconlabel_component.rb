@@ -187,7 +187,16 @@ module KjuiTools
           text = json_data['text']
           return nil if text.nil?
 
-          code = indent("Text(", depth) + "\n"
+          # The text goes through the app's fontProvider whatever it declares (the requester's P1, ticket
+          # jui-font-provider-not-reached-without-font-attributes-android-web): FontSpec carries the weight and size it
+          # declares, and a slot the provider leaves null draws as before (the Text's style).
+          size = json_data['fontSize']
+          required_imports&.add(:text_unit)
+          required_imports&.add(:font_style)
+          spec = Helpers::FontSpecHelper.plain_spec(font_weight(json_data), size, required_imports)
+          var = Helpers::FontSpecHelper.next_var('iconlabel')
+          code = Helpers::FontSpecHelper.emit_resolve_block(var, spec, depth, required_imports) + "\n"
+          code += indent("Text(", depth) + "\n"
           # required_imports must ride along: when the extractor externalized
           # this text, the resolver emits stringResource(R.string.…) and the
           # imports have to register with it (missing them left every
@@ -197,18 +206,7 @@ module KjuiTools
           if (color = text_color(json_data, required_imports))
             code += "\n" + indent("color = #{color},", depth + 1)
           end
-          if (size = json_data['fontSize'])
-            required_imports&.add(:text_unit) if Helpers::BoundValue.bound?(size)
-            code += "\n" + indent("fontSize = #{Helpers::FontScale.wrap(Helpers::BoundValue.sp(size, null_expr: 'TextUnit.Unspecified'), json_data, required_imports)},", depth + 1)
-            code += "\n" + indent("letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)},", depth + 1)
-          elsif (undeclared = Helpers::FontScale.undeclared_size(json_data, required_imports))
-            code += "\n" + indent("fontSize = #{undeclared},", depth + 1)
-            code += "\n" + indent("letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)},", depth + 1)
-          end
-          if (weight = font_weight(json_data))
-            required_imports&.add(:font_weight)
-            code += "\n" + indent("fontWeight = #{weight},", depth + 1)
-          end
+          code += "\n" + Helpers::FontSpecHelper.text_arg_lines(var, depth, required_imports, json_data)
           # `textShadow` — same `{color, blur, offset: [x, y]}` contract as
           # Label (the UIKit runtime passes the identical JSON to both), and
           # this component never reached ANY shadow path (plan 49 lane C:

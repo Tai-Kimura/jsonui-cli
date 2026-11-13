@@ -150,19 +150,24 @@ RSpec.describe KjuiTools::Compose::Components::IconLabelComponent do
   end
 
   describe 'text style' do
+    # The text goes through the app's fontProvider (P1): the declared size and weight are the FontSpec's, and the
+    # Text draws what resolve gives back.
     it 'passes fontSize through' do
-      expect(generate('fontSize' => 12)).to include('fontSize = jsonUIFontSize(12.sp)')
+      out = generate('fontSize' => 12)
+      expect(out).to include('size = 12.sp,')
+      expect(out).to match(/fontSize = jsonUIFontSize\(resolved_iconlabel\d+\.size \?: TextUnit\.Unspecified\)/)
     end
 
     # IconLabelConverter treats `font: "bold"` as a weight, not a family.
     it 'reads a weight from font and from the legacy fontWeight' do
-      expect(generate('font' => 'bold')).to include('fontWeight = FontWeight.Bold')
-      expect(generate('fontWeight' => 'medium')).to include('fontWeight = FontWeight.Medium')
+      expect(generate('font' => 'bold')).to include('weight = FontWeight.Bold,')
+      expect(generate('fontWeight' => 'medium')).to include('weight = FontWeight.Medium,')
       expect(required_imports).to include(:font_weight)
     end
 
     it 'omits the weight for a font name that is not one' do
-      expect(generate('font' => 'Helvetica')).not_to include('fontWeight')
+      # No weight declared: the provider is asked with the weight the text draws (its style's).
+      expect(generate('font' => 'Helvetica')).to include('weight = LocalTextStyle.current.fontWeight,')
     end
 
     # A shadow does not change the size. A bare TextStyle(shadow = …) dropped

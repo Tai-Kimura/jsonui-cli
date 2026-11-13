@@ -70,15 +70,17 @@ RSpec.describe 'kjui codegen: text size following' do
     # conformance fixtures' shape) read nothing.
     FONT_SCALING_TYPES.except('Label', 'TextField').each do |type, extra|
       declared = emit({ 'type' => type, 'fontScaling' => false, 'maxFontScale' => 1.5 }.merge(extra))
-      expect(declared).to include('fontSize = jsonUIFontSize(TextUnit.Unspecified, fontScaling = false, maxFontScale = 1.5f)'), type
+      # Every text goes through the app's fontProvider (P1): the size is the provider's, else the component's own
+      # (TextUnit.Unspecified, the text style's), drawn by the declarations.
+      expect(declared).to match(/fontSize = jsonUIFontSize\(\w+\.size \?: TextUnit\.Unspecified, fontScaling = false, maxFontScale = 1\.5f\)/), type
       expect(declared).to include('letterSpacing = jsonUILetterSpacing(fontScaling = false, maxFontScale = 1.5f)'), type
-      expect(emit({ 'type' => type, 'maxFontScale' => 2 }.merge(extra))).to include('jsonUIFontSize(TextUnit.Unspecified, maxFontScale = 2f)'), type
-      # The library leaves an unspecified size alone when nothing is declared: the plain emit stays as it was.
-      expect(emit({ 'type' => type }.merge(extra))).not_to include('jsonUIFontSize('), type
+      expect(emit({ 'type' => type, 'maxFontScale' => 2 }.merge(extra))).to match(/jsonUIFontSize\(\w+\.size \?: TextUnit\.Unspecified, maxFontScale = 2f\)/), type
+      # Undeclared, no declaration reaches the call: the library leaves an unspecified size alone.
+      expect(emit({ 'type' => type }.merge(extra))).not_to match(/jsonUIFontSize\([^)]*fontScaling|maxFontScale =/), type
     end
     # A TextView with nothing else on its style keeps the field's own (LocalTextStyle), its size by the declarations.
     expect(emit('type' => 'TextView', 'text' => '@{t}', 'fontScaling' => false))
-      .to include('textStyle = LocalTextStyle.current.copy(fontSize = jsonUIFontSize(TextUnit.Unspecified, fontScaling = false)')
+      .to match(/textStyle = LocalTextStyle\.current\.copy\(fontFamily = [^\n]*fontSize = jsonUIFontSize\(\w+\.size \?: TextUnit\.Unspecified, fontScaling = false\)/)
   end
 
   it "a Label's line heights follow as its size does" do

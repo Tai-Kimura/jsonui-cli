@@ -915,7 +915,7 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
       fun Row(modifier: Modifier = Modifier, content: RowScope.() -> Unit) {}
       fun LazyColumn(modifier: Modifier = Modifier, content: LazyListScope.() -> Unit) {}
       fun BoxWithConstraints(modifier: Modifier = Modifier, content: BoxWithConstraintsScope.() -> Unit) {}
-      fun Text(text: String, modifier: Modifier = Modifier, letterSpacing: Any? = null) {}
+      fun Text(text: String, modifier: Modifier = Modifier, fontFamily: Any? = null, fontWeight: Any? = null, fontStyle: Any? = null, fontSize: Any? = null, letterSpacing: Any? = null) {}
       fun LaunchedEffect(key1: Any?, block: suspend () -> Unit) {}
       class Context
       class WebSettings { var javaScriptEnabled: Boolean = false }

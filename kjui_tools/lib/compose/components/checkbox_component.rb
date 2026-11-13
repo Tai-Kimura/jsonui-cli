@@ -114,26 +114,23 @@ module KjuiTools
             label_expr = Helpers::BoundValue.text(label_text)
             text_params = ["text = #{label_expr}"]
 
-            if json_data['fontSize']
-              required_imports&.add(:text_unit) if Helpers::BoundValue.bound?(json_data['fontSize'])
-              text_params << "fontSize = #{Helpers::FontScale.wrap(Helpers::BoundValue.sp(json_data['fontSize'], null_expr: 'TextUnit.Unspecified'), json_data, required_imports)}"
-              text_params << "letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}"
-            elsif (undeclared = Helpers::FontScale.undeclared_size(json_data, required_imports))
-              text_params << "fontSize = #{undeclared}"
-              text_params << "letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}"
-            end
+            # The label goes through the app's fontProvider whatever it declares (the requester's P1, ticket
+            # jui-font-provider-not-reached-without-font-attributes-android-web): a slot the provider leaves null
+            # draws as before (the Text's style). `fontWeight` (declared 51-E) outranks the legacy `font` weight
+            # spelling.
+            weight_spelling = json_data['fontWeight'] || json_data['font']
+            spec = Helpers::FontSpecHelper.plain_spec(
+              weight_spelling && Helpers::FontSpecHelper.weight_expression(weight_spelling), json_data['fontSize'], required_imports
+            )
+            var = 'checkBoxFont'  # its own Row's lambda: one per scope, so a fixed name
+            code += "\n" + Helpers::FontSpecHelper.emit_resolve_block(var, spec, depth + 1, required_imports)
+            text_params.concat(Helpers::FontSpecHelper.text_arg_fragments(var, required_imports, json_data))
 
             if json_data['fontColor']
               font_color = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
               text_params << "color = #{font_color}"
             end
 
-            # `fontWeight` (declared 51-E) outranks the legacy `font` weight
-            # spelling — only `font` was read, so a declared fontWeight was
-            # inert on this face (codegen_effect CheckBox.fontWeight android).
-            if (weight_spelling = json_data['fontWeight'] || json_data['font'])
-              text_params << "fontWeight = #{Helpers::FontSpecHelper.weight_expression(weight_spelling)}"
-            end
 
             if text_params.size == 1
               code += "\n" + indent("Text(#{label_expr})", depth + 1)

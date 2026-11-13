@@ -47,7 +47,7 @@ RSpec.describe 'the three kjui converter scaffolds agree' do
     class SemanticsScope { var testTagsAsResourceId: Boolean = false }
     fun Modifier.semantics(block: SemanticsScope.() -> Unit): Modifier = this
     @Composable fun Box(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) { BoxScopeImpl.content() }
-    @Composable fun Text(text: String, letterSpacing: Any? = null) {}
+    @Composable fun Text(text: String, fontFamily: Any? = null, fontWeight: Any? = null, fontStyle: Any? = null, fontSize: Any? = null, letterSpacing: Any? = null) {}
     class JsonElement {
         val isJsonObject = true; val isJsonArray = false; val isJsonPrimitive = false; val asString = ""
         val asJsonObject: JsonObject get() = JsonObject(); val asJsonArray: JsonArray get() = JsonArray()
@@ -61,7 +61,7 @@ RSpec.describe 'the three kjui converter scaffolds agree' do
     @Composable fun DynamicView(json: JsonObject, data: Map<String, Any>) {}
     object Log { fun w(tag: String, message: String): Int = 0 }
     class Color { companion object { val Red = Color() } }
-    @Composable fun Text(text: String, color: Color, letterSpacing: Any? = null) {}
+    @Composable fun Text(text: String, color: Color, fontFamily: Any? = null, fontWeight: Any? = null, fontStyle: Any? = null, fontSize: Any? = null, letterSpacing: Any? = null) {}
   KT
   end
 

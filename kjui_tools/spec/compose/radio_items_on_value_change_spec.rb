@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../support/font_provider_stub'
+
 require 'set'
 require 'compose/compose_builder'
 require 'compose/components/radio_component'
@@ -58,6 +60,9 @@ RSpec.describe 'kjui Radio items: a tap calls onValueChange with the item' do
     static = emit(static_items, '((String, String) -> Void)?')
     bound = emit(bound_items, '((String, String) -> Void)?')
     source = <<~KT
+      #{FontProviderStub::FONT}
+      #{FontProviderStub::SIZE}
+      #{FontProviderStub::TEXT_STYLE}
       val taps = mutableListOf<() -> Unit>()
       interface Modifier { companion object : Modifier }
       class Dp
@@ -79,7 +84,7 @@ RSpec.describe 'kjui Radio items: a tap calls onValueChange with the item' do
       object MaterialTheme { val colorScheme = ColorScheme() }
       fun jsonUITintOr(fallback: Color): Color = fallback
       fun Spacer(modifier: Modifier) {}
-      fun Text(text: String, color: Color = Color(), letterSpacing: Any? = null) {}
+      fun Text(text: String, color: Color = Color(), fontFamily: Any? = null, fontWeight: Any? = null, fontStyle: Any? = null, fontSize: Any? = null, letterSpacing: Any? = null) {}
       class Data(val sel: String = "", val list: List<String> = listOf("x", "y"), val h: ((String, String) -> Unit)? = null)
       class ViewModel { val writes = mutableListOf<String>(); fun updateData(values: Map<String, Any?>) { writes += values.values.map { it.toString() } } }
       fun staticGroup(data: Data, viewModel: ViewModel) {

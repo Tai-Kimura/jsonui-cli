@@ -4,6 +4,7 @@ require_relative '../helpers/modifier_builder'
 require_relative '../helpers/static_seed'
 require_relative '../helpers/resource_resolver'
 require_relative '../../core/attribute_validator_core'
+require_relative '../helpers/font_spec_helper'
 
 module KjuiTools
   module Compose
@@ -71,6 +72,12 @@ module KjuiTools
           raw_items = json_data['items']
           segments = raw_items.is_a?(Array) ? raw_items.select { |item| JsonUIShared::AttributeValidatorCore.scalar_item?(item) } : []
           
+          # The tabs' text goes through the app's fontProvider (the requester's P1, ticket
+          # jui-font-provider-not-reached-without-font-attributes-android-web). A Segment declares no font
+          # attribute: FontSpec is empty, and a slot the provider leaves null draws as before (the tab's style).
+          # Resolved inside each tab's text, where the tab's text style (its weight) is the current one.
+          font_var = 'segmentFont'
+          font_spec = Helpers::FontSpecHelper.plain_spec(nil, nil, required_imports)
           code = indent("Segment(", depth)
           # For display in Segment parameter, always output as string
           selected_tab_param = is_dynamic_index ? selected_index : selected_index.to_s
@@ -264,8 +271,10 @@ module KjuiTools
                 # Need to handle text color based on selection
                 resolved_text = Helpers::ResourceResolver.process_text(segment, required_imports)
                 code += "\n" + indent("text = {", depth + 2)
+                code += "\n" + Helpers::FontSpecHelper.emit_resolve_block(font_var, font_spec, depth + 3, required_imports)
                 code += "\n" + indent("Text(", depth + 3)
                 code += "\n" + indent("#{resolved_text},", depth + 4)
+                code += "\n" + Helpers::FontSpecHelper.text_arg_lines(font_var, depth + 3, required_imports, json_data)
                 
                 # Use conditional color based on selection
                 if is_dynamic_index
@@ -296,7 +305,10 @@ module KjuiTools
                 code += "\n" + indent("}", depth + 2)
               else
                 resolved_text = Helpers::ResourceResolver.process_text(segment, required_imports)
-                code += "\n" + indent("text = { Text(#{resolved_text}) }", depth + 2)
+                code += "\n" + indent("text = {", depth + 2)
+                code += "\n" + Helpers::FontSpecHelper.emit_resolve_block(font_var, font_spec, depth + 3, required_imports)
+                code += "\n" + indent("Text(#{resolved_text}, #{segment_font_args(json_data, required_imports, font_var)})", depth + 3)
+                code += "\n" + indent("}", depth + 2)
               end
               
               code += "\n" + indent(")", depth + 1)
@@ -369,8 +381,10 @@ module KjuiTools
             
             if normal_color || selected_color
               code += "\n" + indent("text = {", depth + 3)
+              code += "\n" + Helpers::FontSpecHelper.emit_resolve_block(font_var, font_spec, depth + 4, required_imports)
               code += "\n" + indent("Text(", depth + 4)
               code += "\n" + indent("segment,", depth + 5)
+              code += "\n" + Helpers::FontSpecHelper.text_arg_lines(font_var, depth + 4, required_imports, json_data)
               
               # Use conditional color based on selection
               if selected_color && normal_color
@@ -388,7 +402,10 @@ module KjuiTools
               code += "\n" + indent(")", depth + 4)
               code += "\n" + indent("}", depth + 3)
             else
-              code += "\n" + indent("text = { Text(segment) }", depth + 3)
+              code += "\n" + indent("text = {", depth + 3)
+              code += "\n" + Helpers::FontSpecHelper.emit_resolve_block(font_var, font_spec, depth + 4, required_imports)
+              code += "\n" + indent("Text(segment, #{segment_font_args(json_data, required_imports, font_var)})", depth + 4)
+              code += "\n" + indent("}", depth + 3)
             end
             
             code += "\n" + indent(")", depth + 2)
@@ -417,6 +434,11 @@ module KjuiTools
 
         def self.camelize_selector(name)
           name.split('_').each_with_index.map { |w, i| i.zero? ? w : w.capitalize }.join
+        end
+
+        # The resolved font as Text(...) arguments on one line.
+        def self.segment_font_args(json_data, required_imports, font_var)
+          Helpers::FontSpecHelper.text_arg_fragments(font_var, required_imports, json_data).join(', ')
         end
 
         def self.indent(text, level)
