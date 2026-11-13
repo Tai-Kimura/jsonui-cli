@@ -477,6 +477,11 @@ IMAGE_ATTRS = {
     "maximumValueImage",
 }
 
+#: A base value meaning "write no such key": the target is generated without it (the generator would otherwise
+#: write `wrapContent` for a missing width / height).
+OMIT = "__omit__"
+
+
 #: Per-attribute value overrides (fallback table, any section).
 VALUE_OVERRIDES: dict[str, Any] = {
     "width": 100,
@@ -1531,7 +1536,10 @@ BASE_ATTRS: dict[str, dict[str, Any]] = {
     "CheckBox": {"text": "Sample", "width": 200},
     "Check": {"text": "Sample", "width": 200},
     "Segment": {"items": ["One", "Two"], "width": 200},
-    "SelectBox": {"items": ["One", "Two", "Three"], "width": 200},
+    # No height (OMIT): a SelectBox's height when the layout writes none is the rule under test on every
+    # SelectBox fixture — the content's height, as wrapContent (ticket
+    # kjui-selectbox-fixed-56dp-ignores-wrap-content-height: iOS took all the free height, Android fixed 56dp).
+    "SelectBox": {"items": ["One", "Two", "Three"], "width": 200, "height": OMIT},
     "Slider": {"width": 200},
     "Progress": {"width": 200},
     # Deliberately NOT square: the bundled asset is 96x96, so in a square box

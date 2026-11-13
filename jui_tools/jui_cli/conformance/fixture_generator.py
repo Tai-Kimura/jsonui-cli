@@ -172,8 +172,10 @@ def build_layout(plan: AttributePlan, case: CasePlan, *, source_label: str) -> d
     children = base.pop("child", None) or rules.BASE_CHILDREN.get(plan.host)
 
     target: dict[str, Any] = {"type": plan.host, "id": rules.TARGET_ID}
-    target["width"] = base.get("width", "wrapContent")
-    target["height"] = base.get("height", "wrapContent")
+    for side in ("width", "height"):
+        value = base.get(side, "wrapContent")
+        if value != rules.OMIT:
+            target[side] = value
     for key, value in base.items():
         if key in ("width", "height"):
             continue
@@ -334,8 +336,10 @@ def build_interactive_layout(
     base = rules.BASE_ATTRS.get(spec.host, {})
 
     target: dict[str, Any] = {"type": spec.host, "id": rules.TARGET_ID}
-    target["width"] = base.get("width", "wrapContent")
-    target["height"] = base.get("height", "wrapContent")
+    for side in ("width", "height"):
+        value = base.get(side, "wrapContent")
+        if value != rules.OMIT:
+            target[side] = value
     for key, value in base.items():
         if key in ("width", "height"):
             continue
@@ -587,8 +591,10 @@ def build_control_layout(
     children = base.pop("child", None) or rules.BASE_CHILDREN.get(host)
 
     target: dict[str, Any] = {"type": host, "id": rules.TARGET_ID}
-    target["width"] = base.get("width", "wrapContent")
-    target["height"] = base.get("height", "wrapContent")
+    for side in ("width", "height"):
+        value = base.get(side, "wrapContent")
+        if value != rules.OMIT:
+            target[side] = value
     for key, value in base.items():
         if key not in ("width", "height"):
             target[key] = value

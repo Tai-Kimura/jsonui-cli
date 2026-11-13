@@ -25,7 +25,6 @@
       "type": "SelectBox",
       "id": "target",
       "width": 200,
-      "height": "wrapContent",
       "items": [
         "One",
         "Two",
