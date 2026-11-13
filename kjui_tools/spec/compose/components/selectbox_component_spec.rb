@@ -29,8 +29,25 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
         json_data = { 'type' => 'SelectBox', 'paddings' => [1, 2, 3, 4] }
         result = described_class.generate(json_data, 0, required_imports)
         expect(result).to include(
-          'contentPadding = PaddingValues(top = 1.dp, end = 2.dp, bottom = 3.dp, start = 4.dp)'
+          'contentPadding = PaddingValues(start = 4.dp, top = 1.dp, end = 2.dp, bottom = 3.dp)'
         )
+      end
+
+      # The three faces' rule (ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height): SelectBoxDefaults
+      # 12 / 0 / 12 / 0, then padding, then paddings, then each side's key; a side nothing writes keeps the default.
+      it 'writes the content padding side by side, a side nothing writes keeping the default' do
+        pad = lambda do |extra|
+          described_class.generate({ 'type' => 'SelectBox' }.merge(extra), 0, required_imports)[/contentPadding = PaddingValues\([^)]*\)/]
+        end
+        expect(pad.call({})).to be_nil
+        expect(pad.call('paddings' => [0, 16])).to eq('contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 0.dp)')
+        expect(pad.call('paddingTop' => 4)).to eq('contentPadding = PaddingValues(start = 12.dp, top = 4.dp, end = 12.dp, bottom = 0.dp)')
+        expect(pad.call('padding' => 8, 'paddingLeft' => 20)).to eq('contentPadding = PaddingValues(start = 20.dp, top = 8.dp, end = 8.dp, bottom = 8.dp)')
+        expect(pad.call('paddingLeft' => 20, 'paddingStart' => 6)).to eq('contentPadding = PaddingValues(start = 6.dp, top = 0.dp, end = 12.dp, bottom = 0.dp)')
+        # A date select takes the same (DateSelectBox's contentPadding).
+        date = described_class.generate({ 'type' => 'SelectBox', 'selectItemType' => 'Date', 'paddingTop' => 4 }, 0, required_imports)
+        expect(date).to include('DateSelectBox(')
+        expect(date).to include('contentPadding = PaddingValues(start = 12.dp, top = 4.dp, end = 12.dp, bottom = 0.dp)')
       end
 
       it 'generates SelectBox with static options array' do
