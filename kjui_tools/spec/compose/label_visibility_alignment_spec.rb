@@ -71,6 +71,7 @@ RSpec.describe 'kjui codegen: a Label with a visibility and an alignment in its 
       object LocalDensity { val current = Density() }
       class TextUnit { companion object { val Unspecified = TextUnit() } }
       fun <T> jsonUIFontSize(size: T, fontScaling: Boolean? = null, maxFontScale: Float? = null): T = size
+      fun jsonUILetterSpacing(fontScaling: Boolean? = null, maxFontScale: Float? = null): Any? = null
       class FontFamily
       class FontWeight
       class FontStyle { companion object { val Normal = FontStyle() } }
@@ -78,7 +79,7 @@ RSpec.describe 'kjui codegen: a Label with a visibility and an alignment in its 
       class ResolvedFont(val family: FontFamily?, val weight: FontWeight?, val size: TextUnit?, val style: FontStyle?)
       object Configuration { object Font { fun resolve(spec: FontSpec): ResolvedFont = ResolvedFont(null, null, null, null) } }
       fun Text(text: String, fontFamily: FontFamily? = null, fontWeight: FontWeight? = null, fontSize: TextUnit = TextUnit(),
-               fontStyle: FontStyle? = null, modifier: Modifier = Modifier) {}
+               fontStyle: FontStyle? = null, modifier: Modifier = Modifier, letterSpacing: Any? = null) {}
       class Data(val v: String? = null)
       fun emitted(data: Data) {
       #{code}

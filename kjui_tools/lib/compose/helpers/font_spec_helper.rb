@@ -93,6 +93,7 @@ module KjuiTools
             indent("fontFamily = #{var_name}.family,", depth + 1),
             indent("fontWeight = #{var_name}.weight,", depth + 1),
             indent("fontSize = #{FontScale.wrap("#{var_name}.size ?: TextUnit.Unspecified", json_data, required_imports)},", depth + 1),
+            indent("letterSpacing = #{FontScale.letter_spacing(json_data, required_imports)},", depth + 1),
             indent("fontStyle = #{var_name}.style ?: FontStyle.Normal,", depth + 1)
           ].join("\n")
         end
@@ -115,6 +116,7 @@ module KjuiTools
             "fontFamily = (#{var_name}.family ?: LocalTextStyle.current.fontFamily)",
             "fontWeight = (#{var_name}.weight ?: LocalTextStyle.current.fontWeight)",
             "fontSize = #{FontScale.wrap("#{var_name}.size ?: LocalTextStyle.current.fontSize", json_data, required_imports)}",
+            "letterSpacing = #{FontScale.letter_spacing(json_data, required_imports)}",
             "fontStyle = (#{var_name}.style ?: LocalTextStyle.current.fontStyle)"
           ]
         end

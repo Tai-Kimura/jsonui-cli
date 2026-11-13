@@ -91,9 +91,10 @@ RSpec.describe 'kjui codegen: a Label line height starts from one undeclared lin
     expect(<<~KOTLIN).to compile_as_kotlin
       class TextUnit(val value: Float)
       fun <T> jsonUIFontSize(size: T, fontScaling: Boolean? = null, maxFontScale: Float? = null): T = size
+      fun jsonUILetterSpacing(fontScaling: Boolean? = null, maxFontScale: Float? = null): Any? = null
       val Double.sp: TextUnit get() = TextUnit(toFloat())
-      class TextStyle(val lineHeight: TextUnit = TextUnit(0f)) {
-          fun copy(lineHeight: TextUnit = this.lineHeight): TextStyle = TextStyle(lineHeight)
+      class TextStyle(val lineHeight: TextUnit = TextUnit(0f), letterSpacing: Any? = null) {
+          fun copy(lineHeight: TextUnit = this.lineHeight, letterSpacing: Any? = null): TextStyle = TextStyle(lineHeight)
       }
       object LocalTextStyle { val current: TextStyle = TextStyle() }
       class Density(val density: Float, val fontScale: Float = 1f)

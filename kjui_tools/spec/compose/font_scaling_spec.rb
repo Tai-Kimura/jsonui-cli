@@ -53,6 +53,9 @@ RSpec.describe 'kjui codegen: text size following' do
       declared = emit({ 'type' => type, 'fontSize' => 15, 'fontScaling' => false, 'maxFontScale' => 1.5 }.merge(extra))
       expect(declared).to match(/jsonUIFontSize\([^\n]*, fontScaling = false, maxFontScale = 1\.5f\)/), type
       expect(declared.scan(/jsonUIFontSize\(/).size).to eq(plain.scan(/jsonUIFontSize\(/).size), type
+      # The letter spacing beside the size, by the same declarations (rule.letterSpacing).
+      expect(declared).to include('jsonUILetterSpacing(fontScaling = false, maxFontScale = 1.5f)'), type
+      expect(plain).to include('jsonUILetterSpacing()'), type
     end
   end
 

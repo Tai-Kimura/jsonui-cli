@@ -46,6 +46,7 @@ module KjuiTools
             args << "color = #{Helpers::ResourceResolver.process_color(color, required_imports)}"
           end
           args << "fontSize = #{Helpers::FontScale.wrap(Helpers::BoundValue.sp(size), json_data, required_imports)}" if size
+          args << "letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}" if size
           if (weight = font_weight_for(font))
             required_imports&.add(:font_weight)
             args << "fontWeight = #{weight}"
