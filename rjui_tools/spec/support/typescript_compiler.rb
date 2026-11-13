@@ -32,6 +32,8 @@ require 'fileutils'
 # When the install is absent the example SKIPS — recorded through
 # `mark_skipped!`, never a bare raise, because a bare raise ends an example as
 # PASSED and "no compiler here" would then look exactly like "compiled fine".
+require_relative 'configuration_runtime'
+
 module TypeScriptCompiler
   module_function
 
@@ -129,7 +131,10 @@ module TypeScriptCompiler
   # what the consumer rejects.
   def compile(source, ambient: AMBIENT)
     Dir.mktmpdir('rjui_ts') do |dir|
-      File.write(File.join(dir, 'ambient.d.ts'), "#{ambient}\n#{TestBridge.declarations}")
+      # Every text's emit reads Configuration.Font.resolve (P1); a spec that
+      # declares its own Configuration keeps it.
+      config = ambient.match?(/declare const Configuration\b/) ? '' : ConfigurationRuntime.declarations
+      File.write(File.join(dir, 'ambient.d.ts'), "#{ambient}\n#{config}#{TestBridge.declarations}")
       # A Data model imports '../jsonuiTestBridge' (it sits one level below
       # the generated root): the emitted helper itself is written there, so
       # the import compiles against the real module, not a stub.

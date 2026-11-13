@@ -38,7 +38,7 @@ module RjuiTools
           if existing_style.empty?
             " style={{ background: '#{gradient_css}' }}"
           else
-            existing_style.sub(/\}\}$/, ", background: '#{gradient_css}' }}")
+            existing_style.sub(/\}\}$/) { ", background: '#{gradient_css}' }}" }
           end
         end
 

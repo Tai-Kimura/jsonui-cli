@@ -4,6 +4,7 @@ require 'json'
 require 'open3'
 require 'tmpdir'
 require_relative '../../spec_helper'
+require_relative '../../support/configuration_runtime'
 require_relative '../../support/typescript_compiler'
 require 'react/react_generator'
 
@@ -49,6 +50,7 @@ RSpec.describe 'a control calls its declared onClick from its own operation' do
   end
 
   node_program = <<~JS
+    #{ConfigurationRuntime.global_js}
     const fs = require('fs');
     const esbuild = require(process.argv[2]);
     const jobs = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../spec_helper'
+require_relative '../support/configuration_runtime'
 require 'json'
 require 'open3'
 require 'tmpdir'
@@ -58,6 +59,7 @@ RSpec.describe 'rjui: a focused input keeps its border colour (in a browser)' do
       raise "tailwindcss: #{log}" unless st.success?
 
       File.write(File.join(dir, 'app.jsx'), <<~JSX)
+        #{ConfigurationRuntime.global_js}
         const h = (tag, props, ...kids) => {
           const el = document.createElement(tag);
           for (const [k, v] of Object.entries(props || {})) {

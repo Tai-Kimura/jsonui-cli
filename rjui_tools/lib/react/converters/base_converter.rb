@@ -179,6 +179,49 @@ module RjuiTools
           TailwindMapper.map_gravity(attributes['gravity'], attributes['orientation'])
         end
 
+        # The components that draw text: each one's font goes through
+        # Configuration.Font.resolve, written fontFamily or not (P1;
+        # ticket jui-font-provider-not-reached-without-font-attributes-android-web).
+        FONT_PROVIDER_TYPES = %w[Label Button TextField TextView SelectBox Switch CheckBox Radio IconLabel Segment].freeze
+
+        # The weight a component draws its text at when it writes none (its
+        # own class), handed to the provider as the spec's weight: a provider
+        # that maps a weight to a face (client / bar return Regular for none)
+        # would otherwise draw a medium text in the regular face. KotlinJsonUI
+        # passes the weight each component draws the same way.
+        DEFAULT_TEXT_WEIGHT = { 'Segment' => 'medium' }.freeze
+
+        # The text's FontSpec spread when it writes no fontFamily (P1): what
+        # it wrote — a weight name (fontWeight over font; a family alias or a
+        # custom name in `font` is not a weight), a static size (16 when only
+        # a declaration is written), the declaration — and no family.
+        # `weight:` names the weight of a part the component draws on its own
+        # (Radio's title, `font-medium`), in place of the written one.
+        def text_font_spread(weight: nil)
+          font_attr = attributes['font']
+          font_size_attr = attributes['fontSize']
+          font_weight_attr = attributes['fontWeight']
+          weight ||=
+            if font_weight_attr.is_a?(String) && !has_binding?(font_weight_attr)
+              font_weight_attr
+            elsif font_weight_attr.nil? && font_attr.is_a?(String) && !has_binding?(font_attr) &&
+                  !Helpers::FontSpecHelper.font_string_is_family?(font_attr) &&
+                  !%w[monospace mono sans sans-serif serif].include?(font_attr.downcase)
+              font_attr
+            end
+          weight ||= DEFAULT_TEXT_WEIGHT[json['type']] if font_weight_attr.nil? && font_attr.nil?
+          size = font_size_attr.is_a?(Numeric) ? font_size_attr : nil
+          size ||= TailwindMapper::DEFAULT_TEXT_SIZE if font_size_attr.nil? && font_scale_declared?
+          Helpers::FontSpecHelper.build_resolve_spread(
+            weight: weight,
+            size: size,
+            italic: false,
+            scaling: font_scale_opts[:scaling],
+            max_scale: font_scale_opts[:max],
+            always: true
+          )
+        end
+
         def build_class_name
           classes = []
           @dynamic_styles = {}
@@ -458,6 +501,17 @@ module RjuiTools
             elsif font_attr
               font_class = TailwindMapper.map_font(font_attr)
               classes << font_class if font_class && !font_class.empty?
+            end
+
+            # P1 (ruling 2026-11-13): every text is the app's font. A text
+            # component with no fontFamily still calls Configuration.Font.resolve
+            # with what it wrote — the provider (or Configuration.Font.family)
+            # picks the family, as iOS sjuiFont(FontSpec(family: nil, ...)) and
+            # KotlinJsonUI Configuration.Font.resolve do. The classes above stay:
+            # with no provider and no family, the spread writes the lengths
+            # they write and nothing else, so the page draws as before.
+            if FONT_PROVIDER_TYPES.include?(json['type']) && !@dynamic_styles.key?('__SPREAD__font')
+              @dynamic_styles['__SPREAD__font'] = text_font_spread
             end
 
             # Font weight (fontWeight attribute takes precedence if both specified)

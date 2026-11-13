@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../spec_helper'
+require_relative '../support/configuration_runtime'
 require 'json'
 require 'open3'
 require 'stringio'
@@ -146,6 +147,7 @@ RSpec.describe 'a size class key no mapper draws is carried by the converter' do
 
         refs = elements.join("\n").scan(/ref=\{(\w+)\}/).flatten.uniq.map { |r| "const #{r} = { current: null };" }.join("\n")
         File.write(File.join(dir, 'app.jsx'), <<~JSX)
+          #{ConfigurationRuntime.global_js}
           const h = (tag, props, ...kids) => {
             props = props || {};
             if (typeof tag === 'function') return tag({ ...props, children: kids });

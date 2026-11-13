@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../spec_helper'
+require_relative '../support/configuration_runtime'
 require 'json'
 require 'open3'
 require 'tmpdir'
@@ -69,6 +70,7 @@ RSpec.describe 'rjui disabled colours follow a bound enabled (in a browser)' do
         "(() => { const data = { bg: '#{BoundEnabledDisabledColours::BG}', fg: '#{BoundEnabledDisabledColours::FG}', on: #{on}, go: () => {} }; return (#{element}); })()"
       end
       File.write(File.join(dir, 'app.jsx'), <<~JSX)
+        #{ConfigurationRuntime.global_js}
         const h = (tag, props, ...kids) => {
           const el = document.createElement(tag);
           for (const [k, v] of Object.entries(props || {})) {
