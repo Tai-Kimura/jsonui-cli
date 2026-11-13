@@ -65,6 +65,7 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       onValueChange
       orientation
       paging
+      reorderFixedProperty
       reorderHandle
       reorderLockedProperty
       reorderable
