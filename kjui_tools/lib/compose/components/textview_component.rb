@@ -490,7 +490,14 @@ module KjuiTools
                      TextComponent.compose_text_align(json_data['textAlign'], json_data['type'] || 'TextView')
           # fontScaling / maxFontScale with no font attribute: the field's text size by them (the size it draws,
           # the text style's), on the style the field already takes.
-          tv_undeclared = !tv_resolved_var && Helpers::FontScale.undeclared_size(json_data, required_imports)
+          # The size a TextView draws without one is Configuration.TextField.defaultFontSize, as KotlinJsonUI's Dynamic
+          # TextView draws it (shared/core/font_scale_vectors.json rule.noFontSize: Android TextField and TextView 14);
+          # on a bare TextStyle, as the Dynamic face's, so the two draw the same text (codegen parity, run 43488822719:
+          # LocalTextStyle's 16 on its 24sp line drew it larger and lower).
+          tv_undeclared = if !tv_resolved_var && !Helpers::FontScale.declaration_args(json_data).empty?
+                            required_imports&.add(:configuration)
+                            Helpers::FontScale.wrap('Configuration.TextField.defaultFontSize.sp', json_data, required_imports)
+                          end
           if tv_resolved_var || json_data['fontColor'] || tv_align || tv_undeclared
             required_imports&.add(:text_style)
             style_parts = []
@@ -510,10 +517,7 @@ module KjuiTools
               style_parts << "letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}"
             end
             if style_parts.any?
-              # The declarations alone keep the field's own style (LocalTextStyle, CustomTextField's default).
-              ctor = tv_undeclared && !json_data['fontColor'] && !tv_align ? 'LocalTextStyle.current.copy' : 'TextStyle'
-              required_imports&.add(:local_text_style) if ctor != 'TextStyle'
-              code += "\n" + indent("textStyle = #{ctor}(#{style_parts.join(', ')}),", depth + 1)
+              code += "\n" + indent("textStyle = TextStyle(#{style_parts.join(', ')}),", depth + 1)
             end
           end
 
