@@ -80,7 +80,10 @@ RSpec.describe 'kjui codegen: a Label with a visibility and an alignment in its 
       class ResolvedFont(val family: FontFamily?, val weight: FontWeight?, val size: TextUnit?, val style: FontStyle?)
       object Configuration { object Font { fun resolve(spec: FontSpec): ResolvedFont = ResolvedFont(null, null, null, null) } }
       fun Text(text: String, fontFamily: FontFamily? = null, fontWeight: FontWeight? = null, fontSize: TextUnit = TextUnit(),
-               fontStyle: FontStyle? = null, modifier: Modifier = Modifier, letterSpacing: Any? = null, lineHeight: Any? = null) {}
+               fontStyle: FontStyle? = null, modifier: Modifier = Modifier, letterSpacing: Any? = null, lineHeight: Any? = null,
+               style: TextStyle? = null) {}
+      class TextStyle { fun copy(lineHeight: Any? = null): TextStyle = this }
+      object LocalTextStyle { val current = TextStyle() }
       class Data(val v: String? = null)
       fun emitted(data: Data) {
       #{code}
