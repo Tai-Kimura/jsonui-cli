@@ -7,8 +7,7 @@
       "attribute": "fontScaling",
       "platforms": [
         "ios",
-        "android",
-        "web"
+        "android"
       ],
       "reason": "unimplemented",
       "note": "文字の大きさへの追従（ticket sjui-label-font-size-ignores-dynamic-type、依頼者の裁定 2026-11-13: 既定は追従・部品ごとに上書き・書体は provider）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）、web は triage担当（rjui）。閉じた面はこの行から外す"
@@ -18,8 +17,7 @@
       "attribute": "maxFontScale",
       "platforms": [
         "ios",
-        "android",
-        "web"
+        "android"
       ],
       "reason": "unimplemented",
       "note": "文字の大きさへの追従（ticket sjui-label-font-size-ignores-dynamic-type、依頼者の裁定 2026-11-13: 既定は追従・部品ごとに上書き・書体は provider）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）、web は triage担当（rjui）。閉じた面はこの行から外す"
@@ -29,8 +27,7 @@
       "attribute": "fontScaling",
       "platforms": [
         "ios",
-        "android",
-        "web"
+        "android"
       ],
       "reason": "unimplemented",
       "note": "文字の大きさへの追従（ticket sjui-label-font-size-ignores-dynamic-type、依頼者の裁定 2026-11-13: 既定は追従・部品ごとに上書き・書体は provider）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）、web は triage担当（rjui）。閉じた面はこの行から外す"
@@ -40,8 +37,7 @@
       "attribute": "maxFontScale",
       "platforms": [
         "ios",
-        "android",
-        "web"
+        "android"
       ],
       "reason": "unimplemented",
       "note": "文字の大きさへの追従（ticket sjui-label-font-size-ignores-dynamic-type、依頼者の裁定 2026-11-13: 既定は追従・部品ごとに上書き・書体は provider）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）、web は triage担当（rjui）。閉じた面はこの行から外す"
@@ -51,8 +47,7 @@
       "attribute": "fontScaling",
       "platforms": [
         "ios",
-        "android",
-        "web"
+        "android"
       ],
       "reason": "unimplemented",
       "note": "文字の大きさへの追従（ticket sjui-label-font-size-ignores-dynamic-type、依頼者の裁定 2026-11-13: 既定は追従・部品ごとに上書き・書体は provider）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）、web は triage担当（rjui）。閉じた面はこの行から外す"
@@ -62,8 +57,7 @@
       "attribute": "maxFontScale",
       "platforms": [
         "ios",
-        "android",
-        "web"
+        "android"
       ],
       "reason": "unimplemented",
       "note": "文字の大きさへの追従（ticket sjui-label-font-size-ignores-dynamic-type、依頼者の裁定 2026-11-13: 既定は追従・部品ごとに上書き・書体は provider）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）、web は triage担当（rjui）。閉じた面はこの行から外す"
@@ -73,8 +67,7 @@
       "attribute": "fontScaling",
       "platforms": [
         "ios",
-        "android",
-        "web"
+        "android"
       ],
       "reason": "unimplemented",
       "note": "文字の大きさへの追従（ticket sjui-label-font-size-ignores-dynamic-type、依頼者の裁定 2026-11-13: 既定は追従・部品ごとに上書き・書体は provider）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）、web は triage担当（rjui）。閉じた面はこの行から外す"
@@ -84,8 +77,7 @@
       "attribute": "maxFontScale",
       "platforms": [
         "ios",
-        "android",
-        "web"
+        "android"
       ],
       "reason": "unimplemented",
       "note": "文字の大きさへの追従（ticket sjui-label-font-size-ignores-dynamic-type、依頼者の裁定 2026-11-13: 既定は追従・部品ごとに上書き・書体は provider）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）、web は triage担当（rjui）。閉じた面はこの行から外す"
@@ -95,8 +87,7 @@
       "attribute": "fontScaling",
       "platforms": [
         "ios",
-        "android",
-        "web"
+        "android"
       ],
       "reason": "unimplemented",
       "note": "文字の大きさへの追従（ticket sjui-label-font-size-ignores-dynamic-type、依頼者の裁定 2026-11-13: 既定は追従・部品ごとに上書き・書体は provider）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）、web は triage担当（rjui）。閉じた面はこの行から外す"
@@ -106,8 +97,7 @@
       "attribute": "maxFontScale",
       "platforms": [
         "ios",
-        "android",
-        "web"
+        "android"
       ],
       "reason": "unimplemented",
       "note": "文字の大きさへの追従（ticket sjui-label-font-size-ignores-dynamic-type、依頼者の裁定 2026-11-13: 既定は追従・部品ごとに上書き・書体は provider）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）、web は triage担当（rjui）。閉じた面はこの行から外す"
@@ -122,30 +112,11 @@
       "note": "codegen 未対応。ランタイム側に実装あり (ios: UIKit) — この検査は Ruby codegen しか走査しないので、実装の有無ではなく codegen 対応の有無を表す"
     },
     {
-      "component": "Segment",
-      "attribute": "fontScaling",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "文字の大きさへの追従（ticket sjui-label-font-size-ignores-dynamic-type、依頼者の裁定 2026-11-13: 既定は追従・部品ごとに上書き・書体は provider）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）、web は triage担当（rjui）。閉じた面はこの行から外す"
-    },
-    {
-      "component": "Segment",
-      "attribute": "maxFontScale",
-      "platforms": [
-        "web"
-      ],
-      "reason": "unimplemented",
-      "note": "文字の大きさへの追従（ticket sjui-label-font-size-ignores-dynamic-type、依頼者の裁定 2026-11-13: 既定は追従・部品ごとに上書き・書体は provider）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）、web は triage担当（rjui）。閉じた面はこの行から外す"
-    },
-    {
       "component": "SelectBox",
       "attribute": "fontScaling",
       "platforms": [
         "ios",
-        "android",
-        "web"
+        "android"
       ],
       "reason": "unimplemented",
       "note": "文字の大きさへの追従（ticket sjui-label-font-size-ignores-dynamic-type、依頼者の裁定 2026-11-13: 既定は追従・部品ごとに上書き・書体は provider）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）、web は triage担当（rjui）。閉じた面はこの行から外す"
@@ -155,8 +126,7 @@
       "attribute": "maxFontScale",
       "platforms": [
         "ios",
-        "android",
-        "web"
+        "android"
       ],
       "reason": "unimplemented",
       "note": "文字の大きさへの追従（ticket sjui-label-font-size-ignores-dynamic-type、依頼者の裁定 2026-11-13: 既定は追従・部品ごとに上書き・書体は provider）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）、web は triage担当（rjui）。閉じた面はこの行から外す"
@@ -175,8 +145,7 @@
       "attribute": "fontScaling",
       "platforms": [
         "ios",
-        "android",
-        "web"
+        "android"
       ],
       "reason": "unimplemented",
       "note": "文字の大きさへの追従（ticket sjui-label-font-size-ignores-dynamic-type、依頼者の裁定 2026-11-13: 既定は追従・部品ごとに上書き・書体は provider）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）、web は triage担当（rjui）。閉じた面はこの行から外す"
@@ -186,8 +155,7 @@
       "attribute": "maxFontScale",
       "platforms": [
         "ios",
-        "android",
-        "web"
+        "android"
       ],
       "reason": "unimplemented",
       "note": "文字の大きさへの追従（ticket sjui-label-font-size-ignores-dynamic-type、依頼者の裁定 2026-11-13: 既定は追従・部品ごとに上書き・書体は provider）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）、web は triage担当（rjui）。閉じた面はこの行から外す"
@@ -197,8 +165,7 @@
       "attribute": "fontScaling",
       "platforms": [
         "ios",
-        "android",
-        "web"
+        "android"
       ],
       "reason": "unimplemented",
       "note": "文字の大きさへの追従（ticket sjui-label-font-size-ignores-dynamic-type、依頼者の裁定 2026-11-13: 既定は追従・部品ごとに上書き・書体は provider）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）、web は triage担当（rjui）。閉じた面はこの行から外す"
@@ -208,8 +175,7 @@
       "attribute": "maxFontScale",
       "platforms": [
         "ios",
-        "android",
-        "web"
+        "android"
       ],
       "reason": "unimplemented",
       "note": "文字の大きさへの追従（ticket sjui-label-font-size-ignores-dynamic-type、依頼者の裁定 2026-11-13: 既定は追従・部品ごとに上書き・書体は provider）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）、web は triage担当（rjui）。閉じた面はこの行から外す"
@@ -219,8 +185,7 @@
       "attribute": "fontScaling",
       "platforms": [
         "ios",
-        "android",
-        "web"
+        "android"
       ],
       "reason": "unimplemented",
       "note": "文字の大きさへの追従（ticket sjui-label-font-size-ignores-dynamic-type、依頼者の裁定 2026-11-13: 既定は追従・部品ごとに上書き・書体は provider）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）、web は triage担当（rjui）。閉じた面はこの行から外す"
@@ -230,8 +195,7 @@
       "attribute": "maxFontScale",
       "platforms": [
         "ios",
-        "android",
-        "web"
+        "android"
       ],
       "reason": "unimplemented",
       "note": "文字の大きさへの追従（ticket sjui-label-font-size-ignores-dynamic-type、依頼者の裁定 2026-11-13: 既定は追従・部品ごとに上書き・書体は provider）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）、web は triage担当（rjui）。閉じた面はこの行から外す"

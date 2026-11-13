@@ -63,14 +63,16 @@ module RjuiTools
         'spacing' => ->(v, prefix) {
           "#{prefix}gap-#{TailwindMapper.spacing_value(v)}"
         },
-        'fontSize' => ->(v, prefix) {
-          mapped = TailwindMapper::FONT_SIZE_MAP[v]
-          if mapped
-            # text-sm -> md:text-sm
-            "#{prefix}#{mapped}"
-          else
-            "#{prefix}text-[#{TailwindMapper.rem(v)}]"
-          end
+        # A size class's fontSize, drawn by the component's own fontScaling /
+        # maxFontScale like its base size (TailwindMapper.map_font_size), each
+        # token behind the prefix: text-sm -> md:text-sm md:[font-size:...].
+        # The declaration is the component's (call_mapper hands it in).
+        'fontSize' => ->(v, prefix, _type, component) {
+          scaling = component['fontScaling']
+          max = component['maxFontScale']
+          TailwindMapper.map_font_size(v, scaling: [true, false].include?(scaling) ? scaling : nil,
+                                          max: max.is_a?(Numeric) ? max : nil)
+                        .split(' ').map { |token| "#{prefix}#{token}" }.join(' ')
         },
         'padding' => ->(v, prefix) {
           map_responsive_padding(v, prefix)
@@ -236,7 +238,11 @@ module RjuiTools
         end
 
         def call_mapper(mapper, value, prefix, component)
-          mapper.arity == 3 ? mapper.call(value, prefix, component['type']) : mapper.call(value, prefix)
+          case mapper.arity
+          when 4 then mapper.call(value, prefix, component['type'], component)
+          when 3 then mapper.call(value, prefix, component['type'])
+          else mapper.call(value, prefix)
+          end
         end
 
         # *carry*: a callable (BaseConverter#carry_size_class) given the keys

@@ -55,6 +55,28 @@ const FontConfig = {
   fontProvider: undefined as FontProvider | undefined,
 
   /**
+   * Whether text follows the browser's text size, for every component that
+   * does not declare `fontScaling` (the app default; true unless the app sets
+   * it), and the largest multiple of its fontSize it grows to, for every
+   * component that does not declare `maxFontScale` (undefined: no cap).
+   * Change them with `configureScaling`, which also sets the two custom
+   * properties the generated sizes read (--jui-font-unit, --jui-font-max);
+   * a page that never calls it draws every size as N / 16 rem, uncapped.
+   */
+  scaling: true as boolean,
+  maxScale: undefined as number | undefined,
+
+  configureScaling(options: { scaling?: boolean; maxScale?: number }): void {
+    if (options.scaling !== undefined) this.scaling = options.scaling;
+    if ('maxScale' in options) this.maxScale = options.maxScale;
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement.style;
+    root.setProperty('--jui-font-unit', this.scaling ? '0.0625rem' : '1px');
+    if (this.scaling && this.maxScale !== undefined) root.setProperty('--jui-font-max', `${this.maxScale}px`);
+    else root.removeProperty('--jui-font-max');
+  },
+
+  /**
    * Generator entry point. Generated components call
    * `Configuration.Font.resolve(spec)` and spread the result into their
    * inline style attribute. Do not call directly from app code unless you

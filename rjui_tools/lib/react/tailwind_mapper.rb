@@ -15,6 +15,14 @@ module RjuiTools
         60 => 'text-6xl'
       }.freeze
 
+      # The custom properties an undeclared text size reads the app default
+      # through (font_size_css; Configuration.Font.configureScaling sets them),
+      # and their fallbacks: the library default, N / 16 rem, no cap.
+      FONT_UNIT_VAR = '--jui-font-unit'
+      FONT_MAX_VAR = '--jui-font-max'
+      FONT_UNIT_DEFAULT = '0.0625rem'
+      FONT_MAX_DEFAULT = '10000px'
+
       # Corner radius mapping
       RADIUS_MAP = {
         0 => 'rounded-none', 2 => 'rounded-sm', 4 => 'rounded',
@@ -155,8 +163,54 @@ module RjuiTools
           classes.join(' ')
         end
 
-        def map_font_size(size)
-          FONT_SIZE_MAP[size] || "text-[#{rem(size)}]"
+        # A text's size follows the browser's text size by its component's
+        # declaration (fontScaling / maxFontScale; shared/core/
+        # font_scale_vectors.json, ticket sjui-label-font-size-ignores-dynamic-
+        # type): `scaling` true / false / nil (undeclared: the app default),
+        # `max` a number or nil (undeclared: the app default).
+        #
+        # Not following: px. Following: rem (N / 16). Capped: min(rem, N x max
+        # px). An undeclared side reads the app default at run time from two
+        # custom properties the generated Configuration sets
+        # (configureFontScaling): --jui-font-unit (1/16 rem when following, 1px
+        # when not) and --jui-font-max (max px per declared px; unset, no cap).
+        # Their fallbacks are the library default, so a page whose app sets
+        # nothing draws every size as it did: N / 16 rem, no cap.
+
+        # CSS length for a text of `size` (a number, or a JS expression when
+        # `bound`, written into a template literal as ${...}).
+        def font_size_css(size, scaling: nil, max: nil, bound: false)
+          n = bound ? "${Number(#{size})}" : css_number(size)
+          unit = case scaling
+                 when false then bound ? "#{n}px" : "#{n}px"
+                 when true then bound ? "calc(#{n}rem/16)" : rem(size)
+                 else "calc(#{n}*var(#{FONT_UNIT_VAR},#{FONT_UNIT_DEFAULT}))"
+                 end
+          return unit if scaling == false
+
+          cap = if max
+                  bound ? "calc(#{n}px*#{css_number(max)})" : "#{css_number(BigDecimal(size.to_s) * BigDecimal(max.to_s))}px"
+                else
+                  "calc(#{n}*var(#{FONT_MAX_VAR},#{FONT_MAX_DEFAULT}))"
+                end
+          "min(#{unit},#{cap})"
+        end
+
+        # The class(es) for a static size. A size Tailwind names (text-sm, ...)
+        # keeps its class for the line height that class carries, and the
+        # font-size is set after it by an arbitrary property (emitted later in
+        # the utilities layer, so it wins).
+        def map_font_size(size, scaling: nil, max: nil)
+          number = size.is_a?(Numeric) ? size : (Float(size.to_s) rescue nil)
+          return(FONT_SIZE_MAP[size] || "text-[#{rem(size)}]") if number.nil?
+
+          css = font_size_css(number, scaling: scaling, max: max)
+          named = FONT_SIZE_MAP[size]
+          named ? "#{named} [font-size:#{css}]" : "text-[length:#{css}]"
+        end
+
+        def css_number(value)
+          BigDecimal(value.to_s).to_s('F').sub(/\.0\z/, '')
         end
 
         def map_corner_radius(radius)

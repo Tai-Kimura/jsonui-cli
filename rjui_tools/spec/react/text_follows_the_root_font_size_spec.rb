@@ -20,7 +20,10 @@ require 'react/responsive_helper'
 # underline's lineOffset, partialAttributes' fontSize, the placeholder's
 # size, a bound fontSize, the Configuration font fallback and the autoShrink
 # helper. Each now writes N / 16 rem: the same pixels at the default 16px
-# root.
+# root. From 2.5.35 a component that declares no fontScaling reads the app
+# default at run time (--jui-font-unit, --jui-font-max; TailwindMapper
+# .font_size_css), whose fallbacks are this: N / 16 rem, no cap. Declared
+# sizes are spec/react/font_scaling_spec.rb's.
 RSpec.describe 'rjui text lengths follow the root font size' do
   TM2 = RjuiTools::React::TailwindMapper
   RC = RjuiTools::React::Converters
@@ -29,22 +32,28 @@ RSpec.describe 'rjui text lengths follow the root font size' do
     converter.new({ 'id' => 'x' }.merge(json), { 'use_tailwind' => true }).convert
   end
 
-  it 'a fontSize off the scale is its rem value; one on the scale keeps its class' do
-    expect(TM2.map_font_size(15)).to eq('text-[0.9375rem]')
-    expect(TM2.map_font_size(13)).to eq('text-[0.8125rem]')
-    expect(TM2.map_font_size(14)).to eq('text-sm')
+  def undeclared(n) = TM2.font_size_css(n)
+
+  it 'a fontSize off the scale is its length; one on the scale keeps its class for the line height' do
+    expect(TM2.map_font_size(15)).to eq("text-[length:#{undeclared(15)}]")
+    expect(TM2.map_font_size(13)).to eq("text-[length:#{undeclared(13)}]")
+    expect(TM2.map_font_size(14)).to eq("text-sm [font-size:#{undeclared(14)}]")
+    expect(undeclared(15)).to eq('min(calc(15*var(--jui-font-unit,0.0625rem)),calc(15*var(--jui-font-max,10000px)))')
   end
 
-  it 'is exact for every size off the scale: rem x 16 == the declared px' do
-    ((1..200).to_a + (1..200).map { |n| n + 0.5 }).reject { |v| TM2::FONT_SIZE_MAP.key?(v) }.each do |v|
-      written = TM2.map_font_size(v)[/\Atext-\[([\d.]+)rem\]\z/, 1]
+  it 'is exact for every size: N x the unit, whose fallback is 1/16 rem' do
+    ((1..200).to_a + (1..200).map { |n| n + 0.5 }).each do |v|
+      written = TM2.map_font_size(v)[/calc\(([\d.]+)\*var\(--jui-font-unit,0\.0625rem\)\)/, 1]
       expect(written).not_to be_nil, v.inspect
-      expect(BigDecimal(written) * 16).to eq(BigDecimal(v.to_s)), "#{v} -> #{written}"
+      expect(BigDecimal(written)).to eq(BigDecimal(v.to_s)), "#{v} -> #{written}"
     end
   end
 
-  it 'the responsive override spells it the same way' do
-    expect(RjuiTools::React::ResponsiveHelper::ATTRIBUTE_MAPPERS['fontSize'].call(15, 'md:')).to eq('md:text-[0.9375rem]')
+  it 'the responsive override spells it the same way, behind the prefix' do
+    mapper = RjuiTools::React::ResponsiveHelper::ATTRIBUTE_MAPPERS['fontSize']
+    expect(mapper.call(15, 'md:', 'Label', {})).to eq("md:text-[length:#{undeclared(15)}]")
+    expect(mapper.call(14, 'md:', 'Label', {})).to eq("md:text-sm md:[font-size:#{undeclared(14)}]")
+    expect(mapper.call(15, 'md:', 'Label', { 'fontScaling' => false })).to eq('md:text-[length:15px]')
   end
 
   it "a Label's lineHeight and underline lineOffset are rem" do
@@ -56,21 +65,21 @@ RSpec.describe 'rjui text lengths follow the root font size' do
   it "partialAttributes' fontSize is rem" do
     out = convert(RC::LabelConverter, 'type' => 'Label', 'text' => 'Big Text',
                                       'partialAttributes' => [{ 'range' => [0, 3], 'fontSize' => 24 }])
-    expect(out).to include("fontSize: '1.5rem'")
+    expect(out).to include("fontSize: '#{undeclared(24)}'")
   end
 
   it "the placeholder's size is rem on TextField and TextView" do
     expect(convert(RC::TextFieldConverter, 'type' => 'TextField', 'hint' => 'h', 'hintFontSize' => 13))
-      .to include('placeholder:[font-size:0.8125rem]')
+      .to include("placeholder:[font-size:#{undeclared(13)}]")
     expect(convert(RC::TextViewConverter, 'type' => 'TextView', 'hint' => 'h', 'hintFontSize' => 13))
-      .to include('placeholder:text-[0.8125rem]')
+      .to include("placeholder:text-[length:#{undeclared(13)}]")
   end
 
   it 'a bound fontSize is rem, with or without a font family' do
     expect(convert(RC::LabelConverter, 'type' => 'Label', 'text' => 'a', 'fontSize' => '@{size}'))
-      .to include('fontSize: `${Number(data.size) / 16}rem`')
+      .to include("fontSize: `#{TM2.font_size_css('data.size', bound: true)}`")
     expect(convert(RC::LabelConverter, 'type' => 'Label', 'text' => 'a', 'fontSize' => '@{size}', 'fontFamily' => 'Helvetica'))
-      .to include('fontSize: `${Number(data.size) / 16}rem`')
+      .to include("fontSize: `#{TM2.font_size_css('data.size', bound: true)}`")
   end
 
   it 'the Configuration font fallback writes rem in both languages' do

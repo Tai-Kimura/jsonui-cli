@@ -44,7 +44,7 @@ RSpec.describe 'bound value emitters' do
     it 'sends a bound fontSize to the inline style instead of text-[@{v}px]' do
       out = label('fontSize' => '@{size}')
       expect(out).not_to include('@{')
-      expect(out).to include('fontSize: `${Number(data.size) / 16}rem`')
+      expect(out).to include('fontSize: `' + RjuiTools::React::TailwindMapper.font_size_css('data.size', bound: true) + '`')
     end
 
     it 'sends a bound cornerRadius to borderRadius instead of rounded-[@{v}px]' do

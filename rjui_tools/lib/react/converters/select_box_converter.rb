@@ -161,9 +161,12 @@ module RjuiTools
           end
 
           if (size = label['fontSize'])
-            classes = drop_class(classes, TailwindMapper.map_font_size(attributes['fontSize'])) if
-              attributes['fontSize']
-            classes << TailwindMapper.map_font_size(size)
+            if attributes['fontSize']
+              TailwindMapper.map_font_size(attributes['fontSize'], **font_scale_opts).split(' ').each do |token|
+                classes = drop_class(classes, token)
+              end
+            end
+            classes << TailwindMapper.map_font_size(size, **font_scale_opts)
           end
 
           if (align = label['textAlign'])

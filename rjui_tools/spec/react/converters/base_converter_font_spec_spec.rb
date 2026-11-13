@@ -104,7 +104,7 @@ RSpec.describe 'BaseConverter FontSpec routing' do
       style_attr = converter.send(:build_style_attr)
       expect(style_attr).not_to match(/size:/)
       # The binding still flows into the inline style as a regular fontSize entry.
-      expect(style_attr).to include('fontSize: `${Number(data.size) / 16}rem`')
+      expect(style_attr).to include('fontSize: `' + RjuiTools::React::TailwindMapper.font_size_css('data.size', bound: true) + '`')
     end
   end
 

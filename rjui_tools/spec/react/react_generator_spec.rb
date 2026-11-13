@@ -575,7 +575,7 @@ RSpec.describe RjuiTools::React::ReactGenerator, 'autoShrink' do
     expect(out).to include('const titleShrinkRef = useRef<HTMLElement | null>(null);')
     expect(out).to include(
       'useEffect(() => applyAutoShrink(titleShrinkRef.current, ' \
-      '{ fontSize: 16, minimumScaleFactor: 0.25 }), []);'
+      "{ fontSize: 16, fontCss: '#{RjuiTools::React::TailwindMapper.font_size_css(16)}', minimumScaleFactor: 0.25 }), []);"
     )
     expect(out).to include('ref={titleShrinkRef}')
   end
@@ -589,7 +589,8 @@ RSpec.describe RjuiTools::React::ReactGenerator, 'autoShrink' do
                    'minimumScaleFactor' => '@{minScale}' })
     expect(out).to include(
       'useEffect(() => applyAutoShrink(titleShrinkRef.current, ' \
-      '{ fontSize: 16, minimumScaleFactor: data.minScale }), [data.minScale]);'
+      "{ fontSize: 16, fontCss: '#{RjuiTools::React::TailwindMapper.font_size_css(16)}', " \
+      'minimumScaleFactor: data.minScale }), [data.minScale]);'
     )
   end
 

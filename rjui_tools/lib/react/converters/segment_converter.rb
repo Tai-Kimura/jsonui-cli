@@ -174,7 +174,7 @@ module RjuiTools
 
           # Build font size class
           font_size_class = if attributes['fontSize']
-            TailwindMapper.map_font_size(attributes['fontSize'])
+            TailwindMapper.map_font_size(attributes['fontSize'], **font_scale_opts)
           else
             'text-sm'
           end
