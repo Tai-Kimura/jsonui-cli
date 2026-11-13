@@ -44,14 +44,17 @@ def drag_to(heights: Sequence[float], start: int, dy: float, locked: Sequence[in
     """Which `to` a finger *dy* below (negative: above) the row at *start* means; None when the row is locked or fixed."""
     if start in locked or start in fixed:
         return None
-    centres, top = [], 0.0
+    tops, top = [], 0.0
     for height in heights:
-        centres.append(top + height / 2)
+        tops.append(top)
         top += height
-    dragged = centres[start] + dy
+    dragged = tops[start] + heights[start] / 2 + dy
     to = start
-    to += sum(1 for i in range(start + 1, len(heights)) if centres[i] < dragged)
-    to -= sum(1 for i in range(start) if centres[i] > dragged)
+    # A row below is passed when the dragged centre goes strictly beyond its resting top edge, a row above when it
+    # goes strictly beyond its resting bottom edge: the gap is always under the dragged centre (iOS 27's standard
+    # reorderable, measured 2026-11-14 — at 0.5 of a row not passed, at 0.55 passed).
+    to += sum(1 for i in range(start + 1, len(heights)) if tops[i] < dragged)
+    to -= sum(1 for i in range(start) if tops[i] + heights[i] > dragged)
     low, high = bounds(len(heights), locked, start)
     return max(low, min(high, to))
 
