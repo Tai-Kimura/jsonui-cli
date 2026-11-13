@@ -91,6 +91,9 @@
         "binding"
       ],
       "required": true,
+      "notRequiredFor": {
+        "SelectBox": "A SelectBox with no height takes its content's height on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height), so leaving it out is a declared layout, not a missing one."
+      },
       "description": "Height (number, 'matchParent', 'wrapContent') - binding supported. Not required if weight is specified."
     },
     "minWidth": {

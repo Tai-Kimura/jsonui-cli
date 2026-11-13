@@ -258,6 +258,9 @@ module JsonUIShared
         if attr_def['required'] && !merged_component.key?(attr_name)
           # Skip width/height required check if weight is set and parent orientation allows it
           next if skip_dimension_required?(attr_name, merged_component, parent_orientation)
+          # A component the declaration exempts by name (`notRequiredFor`: section -> reason): a
+          # SelectBox's height, which it takes from its content when it is left out.
+          next if not_required_for?(attr_def, type)
 
           add_warning("Required attribute '#{attr_name}' is missing for component type '#{type}'")
         end
@@ -540,6 +543,12 @@ module JsonUIShared
       return unless Array(info['platform']).include?(self.class::PLATFORM)
 
       add_kept_info(@binding_infos, "'#{key}' on #{type} is bound: #{info['note']}")
+    end
+
+    # Whether `required` does not hold for this component (`notRequiredFor`: section -> reason).
+    def not_required_for?(attr_def, type)
+      table = attr_def['notRequiredFor']
+      table.is_a?(Hash) && table.key?(map_type_to_definition(type))
     end
 
     def not_applicable_reason(attr_def, type)
