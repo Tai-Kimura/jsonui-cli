@@ -123,7 +123,7 @@ module ComposeStubUniverse
       class FontSpec(val family: String?, val weight: String?, val size: Int?, val italic: Boolean)
       class ResolvedFont(val family: FontFamily?, val weight: FontWeight?, val size: TextUnit?, val style: FontStyle?)
       class TextStyle(val color: Color = Color(), val fontSize: TextUnit = TextUnit(), letterSpacing: Any? = null) {
-          fun copy(lineHeight: TextUnit = TextUnit(), letterSpacing: Any? = null): TextStyle = this
+          fun copy(lineHeight: TextUnit = TextUnit(), letterSpacing: Any? = null, fontSize: TextUnit = TextUnit()): TextStyle = this
       }
       object LocalTextStyle { val current = TextStyle() }
       interface Shape

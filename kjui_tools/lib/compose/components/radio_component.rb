@@ -535,6 +535,9 @@ module KjuiTools
             required_imports&.add(:text_unit) if Helpers::BoundValue.bound?(json_data['fontSize'])
             args += ", fontSize = #{Helpers::FontScale.wrap(Helpers::BoundValue.sp(json_data['fontSize'], null_expr: 'TextUnit.Unspecified'), json_data, required_imports)}"
             args += ", letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}"
+          elsif (undeclared = Helpers::FontScale.undeclared_size(json_data, required_imports))
+            args += ", fontSize = #{undeclared}"
+            args += ", letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}"
           end
           args
         end
