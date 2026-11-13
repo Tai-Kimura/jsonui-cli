@@ -593,6 +593,8 @@ def cmd_build(args: argparse.Namespace) -> int:
             # Where a tap may not land on iOS (core/small_tap_info.py): INFO,
             # not counted with the warnings, the exit code or the stages.
             _print_small_tap_info(config_mgr)
+            # A reorderable Collection's two drags below iOS 27 (core/reorder_info.py): INFO too.
+            _print_reorder_info(config_mgr, platforms["ios"])
             print(f"\n--- Building iOS ({ios_root}) ---", flush=True)
             with clock.stage("iOS: sjui build", announce=False):
                 if not _run_tool(["sjui", "build"] + clean, ios_root):
@@ -2264,6 +2266,15 @@ def _print_small_tap_info(config_mgr: ConfigManager) -> None:
     from ..core.small_tap_info import directory_lines
 
     for line in directory_lines(config_mgr.layouts_directory, config_mgr.styles_directory):
+        print(line)
+
+
+def _print_reorder_info(config_mgr: ConfigManager, ios_config: dict) -> None:
+    """The INFO lines for reorderable Collections on a build that builds iOS (core/reorder_info.py)."""
+    from ..core.reorder_info import directory_lines
+
+    for line in directory_lines(config_mgr.layouts_directory, config_mgr.styles_directory,
+                                config_mgr.project_root, ios_config):
         print(line)
 
 

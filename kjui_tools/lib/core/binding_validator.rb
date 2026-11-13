@@ -133,6 +133,11 @@ module KjuiTools
         # Callbacks with Int parameter
         return '((Int) -> Unit)?' if %w[onTabChange onItemAppear].include?(var_name) || %w[onTabChange onItemAppear].include?(attribute_name)
 
+        # Collection.onReorder: (section, from, to), `to` counted after the move (ticket jui-collection-drag-to-reorder)
+        return '((Int, Int, Int) -> Unit)?' if attribute_name == 'onReorder'
+        # Collection.reorderable bound: on / off
+        return 'Boolean' if attribute_name == 'reorderable'
+
         # onClick, onXxx -> (() -> Unit)? (Kotlin callback type)
         return '(() -> Unit)?' if var_name.start_with?('on') && var_name[2]&.match?(/[A-Z]/)
 
