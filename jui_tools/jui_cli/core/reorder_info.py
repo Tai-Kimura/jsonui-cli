@@ -5,7 +5,9 @@ SwiftUI reorders a stack's rows with ``reorderable()`` and ``reorderContainer(fo
 Collection on the stack paths (no listStyle: ScrollView with LazyVStack / VStack, or none) uses them from iOS 27 and the
 library's own drag below it, so an app whose minimum iOS is below 27 runs two implementations of the same gesture. A
 Collection with a reorderHandle is not named: it uses the library's drag on every iOS, since reorderable() picks a row up
-anywhere and has no handle-only form (support 1's measurement on iOS 27.2; the orchestrator's ruling, 2026-11-13). The
+anywhere and has no handle-only form (support 1's measurement on iOS 27.2; the orchestrator's ruling, 2026-11-13).
+Nor is one with a reorderLockedProperty, for the same reason: reorderable() draws a locked row moving during the drag
+and has no way to hold it (the orchestrator's ruling, 2026-11-13). The
 user asked for that to be said at build time as INFO, not as a warning (2026-11-13: "ビルドの時はInfoでiOS 27以上でしか
 意味ないよって出す形で"): it is not counted with the warnings, does not change the exit code and is not a stage
 failure, the same as core/small_tap_info.py. The List path (listStyle declared) uses onMove on every iOS and is not
@@ -97,6 +99,8 @@ def on_the_stack_path(node: dict) -> bool:
     if node.get("lazy") != "none" and (node.get("listStyle") or not node.get("sections")):
         return False
     if node.get("reorderHandle"):   # the library's drag on every iOS: SwiftUI's reorderable() has no handle-only form
+        return False
+    if node.get("reorderLockedProperty"):   # the library's drag on every iOS: reorderable() moves a locked row too
         return False
     horizontal = node.get("orientation") == "horizontal" or node.get("horizontalScroll") is True \
         or node.get("layout") == "horizontal"

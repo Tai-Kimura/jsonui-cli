@@ -82,6 +82,7 @@ SECTIONS = {"sections": [{"cell": "StopCell"}], "lazy": "lazy"}
     (dict(SECTIONS, lazy="eager"), True),
     (dict(SECTIONS, listStyle="plain"), False),          # sections and a listStyle: the List path
     ({"reorderHandle": "grip"}, False),                  # a handle: the library's drag on every iOS
+    ({"reorderLockedProperty": "isDivider"}, False),     # locked rows: the library's drag on every iOS
     ({"columns": 2}, False),                             # v1 reorders one vertical column only
     ({"orientation": "horizontal"}, False),
     ({"type": "View"}, False),
