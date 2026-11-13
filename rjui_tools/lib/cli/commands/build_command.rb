@@ -1371,6 +1371,9 @@ module RjuiTools
 
             export const StringManager = new StringManagerClass();
             export default StringManager;
+            // The library's own generated helpers read the app's strings by name through this, with no import of a
+            // file an app without strings does not have (reorder's screen reader names: jsonui_reorder_*).
+            globalThis.__jsonuiStrings = StringManager;
 
             // Reactive hook — generated components consume this as `const $s = useStringManager()`.
             // Subscribes to `setLanguage` events so every call site re-renders on language change.
@@ -1499,6 +1502,9 @@ module RjuiTools
 
             export const StringManager = new StringManagerClass();
             export default StringManager;
+            // The library's own generated helpers read the app's strings by name through this, with no import of a
+            // file an app without strings does not have (reorder's screen reader names: jsonui_reorder_*).
+            (globalThis as { __jsonuiStrings?: unknown }).__jsonuiStrings = StringManager;
 
             // Reactive hook — generated components consume this as `const $s = useStringManager()`.
             // Subscribes to `setLanguage` events so every call site re-renders on language change.

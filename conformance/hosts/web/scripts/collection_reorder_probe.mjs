@@ -38,10 +38,11 @@ const VIDEO = arg('--video', 'REORDER_PROBE_VIDEO', '')
 // ------------------------------------------------------------ the layouts
 const CELL = {
   type: 'View', width: 'matchParent', height: 48, background: '#FFFFFF', orientation: 'horizontal', onClick: '@{onTap}',
-  data: [{ name: 'name', class: 'String', defaultValue: '' }, { name: 'onTap', class: '(() -> Void)?' }],
+  data: [{ name: 'name', class: 'String', defaultValue: '' }, { name: 'onTap', class: '(() -> Void)?' },
+         { name: 'gripVisibility', class: 'String', defaultValue: 'visible' }],
   child: [
     { type: 'Label', text: '@{name}', fontSize: 16, weight: 1, paddingLeft: 12, gravity: 'centerVertical', height: 'matchParent' },
-    { type: 'View', id: 'grip', width: 44, height: 'matchParent', background: '#DDDDDD',
+    { type: 'View', id: 'grip', width: 44, height: 'matchParent', background: '#DDDDDD', visibility: '@{gripVisibility}',
       child: [{ type: 'Label', text: '≡', fontSize: 18, centerInParent: true }] },
   ],
 }
@@ -54,7 +55,9 @@ const LAYOUT = {
   type: 'View', id: 'root', width: 'matchParent', orientation: 'vertical', spacing: 24, paddingTop: 16, paddingBottom: 600,
   data: [
     { name: 'free', class: 'CollectionDataSource' }, { name: 'held', class: 'CollectionDataSource' },
+    { name: 'skip', class: 'CollectionDataSource' },
     { name: 'onMoveFree', class: '((Int, Int, Int) -> Void)?' }, { name: 'onMoveHeld', class: '((Int, Int, Int) -> Void)?' },
+    { name: 'onMoveSkip', class: '((Int, Int, Int) -> Void)?' },
   ],
   child: [
     { type: 'Collection', id: 'free', width: 'matchParent', lazy: 'none', items: '@{free}', cellIdProperty: 'cellId',
@@ -63,7 +66,22 @@ const LAYOUT = {
     { type: 'Collection', id: 'held', width: 'matchParent', lazy: 'none', items: '@{held}', cellIdProperty: 'cellId',
       sections: [{ cell: 'probe_reorder_cell' }],
       reorderable: true, onReorder: '@{onMoveHeld}', reorderHandle: 'grip', reorderLockedProperty: 'locked' },
+    // 2.5.36: a fixed row (skipped) is passed; a row whose grip is not drawn is fixed the same way
+    { type: 'Collection', id: 'skip', width: 'matchParent', lazy: 'none', items: '@{skip}', cellIdProperty: 'cellId',
+      sections: [{ cell: 'probe_reorder_cell' }],
+      reorderable: true, onReorder: '@{onMoveSkip}', reorderHandle: 'grip', reorderFixedProperty: 'skipped' },
   ],
+}
+// The app's names for the screen reader's actions. English the same as the library's own (the steps above read them),
+// German its own: a step switches the app to German. rjui writes the languages the config names (en, de here) and
+// fills a language a key lacks from another, so the library's fallback (no key at all) is
+// rjui_tools/spec/react/reorder_helper_follows_the_shared_rule_spec.rb's.
+const STRINGS = {
+  jsonui: {
+    reorder_move_up: { en: 'Move up', de: 'Nach oben' },
+    reorder_move_down: { en: 'Move down', de: 'Nach unten' },
+    reorder_moved_to: { en: 'Moved to position {count}', de: 'Auf Platz {count}' },
+  },
 }
 
 // The page: the generated component with a view model that moves its rows as onReorder says.
@@ -72,23 +90,30 @@ import React, { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import { CollectionReorderProbe } from './generated/components/CollectionReorderProbe'
-type Row = { cellId: string; name: string; locked?: boolean }
-const w = window as unknown as { __calls: unknown[]; __reset: () => void }
+import { StringManager } from './generated/StringManager'
+type Row = { cellId: string; name: string; locked?: boolean; skipped?: boolean; gripVisibility?: string }
+const w = window as unknown as { __calls: unknown[]; __reset: () => void; __lang: (l: string) => void }
+w.__lang = (l) => StringManager.setLanguage(l)
 w.__calls = []
 const rows = (names: string[], locked: number[] = []) =>
   names.map((name, i) => ({ cellId: 'id-' + name, name, onTap: () => w.__calls.push(['tap', name]),
                             ...(locked.includes(i) ? { locked: true } : {}) }))
 const FREE = rows(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'])
 const HELD = rows(['P', 'Q', '— locked —', 'R', 'S'], [2])
+const SKIP: Row[] = rows(['p1', 's (skipped)', 'p2', 'q (no grip)', 'r']).map((r, i) =>
+  i === 1 ? { ...r, skipped: true } : i === 3 ? { ...r, gripVisibility: 'gone' } : r)
 const move = (list: Row[], from: number, to: number) => { const next = list.slice(); next.splice(to, 0, next.splice(from, 1)[0]); return next }
 function Probe() {
   const [free, setFree] = useState<Row[]>(FREE)
   const [held, setHeld] = useState<Row[]>(HELD)
-  w.__reset = () => { setFree(FREE); setHeld(HELD); w.__calls = [] }
+  const [skip, setSkip] = useState<Row[]>(SKIP)
+  w.__reset = () => { setFree(FREE); setHeld(HELD); setSkip(SKIP); w.__calls = [] }
   const data = {
     free: { sections: [{ header: { title: 'Header (release here: first place)' }, cells: { data: free },
                          footer: { title: 'Footer (release here: last place)' } }] },
     held: { sections: [{ cells: { data: held } }] },
+    skip: { sections: [{ cells: { data: skip } }] },
+    onMoveSkip: (section: number, from: number, to: number) => { w.__calls.push(['skip', section, from, to]); setSkip((l) => move(l, from, to)) },
     onMoveFree: (section: number, from: number, to: number) => { w.__calls.push(['free', section, from, to]); setFree((l) => move(l, from, to)) },
     onMoveHeld: (section: number, from: number, to: number) => { w.__calls.push(['held', section, from, to]); setHeld((l) => move(l, from, to)) },
   }
@@ -103,10 +128,12 @@ function prepare() {
   mkdirSync(join(WORK, 'src/Layouts/Resources'), { recursive: true })
   cpSync(join(HOST_ROOT, 'src/Strings'), join(WORK, 'src/Strings'), { recursive: true })
   const config = JSON.parse(readFileSync(join(HOST_ROOT, 'rjui.config.json'), 'utf8'))
+  config.languages = [...new Set([...(config.languages ?? ['en']), 'de'])]
   writeFileSync(join(WORK, 'rjui.config.json'), JSON.stringify(config, null, 2))
   writeFileSync(join(WORK, 'src/Layouts/pages/collection_reorder_probe.json'), JSON.stringify(LAYOUT, null, 1))
   writeFileSync(join(WORK, 'src/Layouts/probe_reorder_cell.json'), JSON.stringify(CELL, null, 1))
   writeFileSync(join(WORK, 'src/Layouts/probe_reorder_edge.json'), JSON.stringify(EDGE, null, 1))
+  writeFileSync(join(WORK, 'src/Layouts/Resources/strings.json'), JSON.stringify(STRINGS, null, 1))
   writeFileSync(join(WORK, 'src/main.tsx'), MAIN)
   writeFileSync(join(WORK, 'src/index.css'), '@import "tailwindcss";\n@source "./generated";\n@import "./generated/theme.css";\n')
   writeFileSync(join(WORK, 'index.html'),
@@ -263,6 +290,61 @@ async function a11ySteps(page) {
     nextToLocked === 0, `firstUp=${firstUp} locked=${lockedButtons} beside=${nextToLocked}`)
 }
 
+// 2.5.36: reorderFixedProperty and a row whose handle is not drawn (rule.fixed), and the app's names (rule.a11yNames)
+// The skip Collection in the middle of the window: a finger near the window's edge would auto-scroll the page.
+const centre = (page, id) => page.evaluate((cid) => {
+  const el = document.getElementById(cid); const r = el.getBoundingClientRect()
+  window.scrollBy(0, r.top + r.height / 2 - window.innerHeight / 2)
+}, id)
+async function fixedSteps(page) {
+  await reset(page)
+  await centre(page, 'skip')
+  const buttons = async (id) => row(page, id).getByRole('button', { name: /^(Move (up|down)|Nach (oben|unten))$/ }).count()
+  const fixedButtons = await buttons('skip_item_1')
+  const gripless = await buttons('skip_item_3')
+  const besideFixed = await row(page, 'skip_item_2').getByRole('button', { name: 'Move up' }).count()
+  report('screen reader: no move on a fixed row nor on a row whose grip is not drawn; the row below a fixed one has one',
+    fixedButtons === 0 && gripless === 0 && besideFixed === 1, `fixed=${fixedButtons} gripless=${gripless} besideFixed=${besideFixed}`)
+  // p2's "Move up" passes the fixed row
+  await row(page, 'skip_item_2').getByRole('button', { name: 'Move up' }).focus()
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(200)
+  report('screen reader: "Move up" passes a fixed row -> to 1', JSON.stringify(await calls(page)) === '[["skip",0,2,1]]',
+    `calls=${JSON.stringify(await calls(page))}`)
+  // a drag by p2's grip up over p1 passes the fixed row; the fixed row's grip does not drag. The move button the
+  // step above focused shows itself over the row's end (where the grip is) until focus leaves it.
+  await page.evaluate(() => document.activeElement?.blur())
+  await reset(page)
+  await centre(page, 'skip')
+  const grip2 = await box(page, '#skip_item_2 #grip')
+  const p1 = await box(page, '#skip_item_0')
+  await mouseDrag(page, grip2.x + 10, grip2.y + grip2.height / 2, grip2.x + 10, p1.y + p1.height * 0.25)
+  const passed = JSON.stringify(await calls(page))
+  await reset(page)
+  await centre(page, 'skip')
+  const grip1 = await box(page, '#skip_item_1 #grip')
+  const q = await box(page, '#skip_item_3')
+  await mouseDrag(page, grip1.x + 10, grip1.y + grip1.height / 2, grip1.x + 10, q.y + q.height * 0.75)
+  const stayed = JSON.stringify(await calls(page))
+  report('mouse: p2 dragged by its grip passes the fixed row -> to 0; the fixed row does not drag',
+    passed === '[["skip",0,2,0]]' && stayed === '[]', `passed=${passed} fixedDrag=${stayed}`)
+  // the app's words, in German
+  await reset(page)
+  await page.evaluate(() => window.__lang('de'))
+  await page.waitForTimeout(200)
+  const german = row(page, 'free_item_0').getByRole('button', { name: 'Nach unten' })
+  const named = await german.count()
+  await german.focus()
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(200)
+  const said = await page.locator('#free [role="status"]').first().textContent()
+  await page.evaluate(() => window.__lang('en'))
+  await page.waitForTimeout(200)
+  const back = await row(page, 'free_item_1').getByRole('button', { name: 'Move down' }).count()
+  report('screen reader: the app\'s strings name the actions and the announcement in its language; English again after',
+    named === 1 && said === 'Auf Platz 2' && back === 1, `named=${named} said="${said}" englishAfter=${back}`)
+}
+
 async function touchSteps(page, cdp) {
   // a long press then a move drags, and the page does not scroll
   await reset(page)
@@ -297,6 +379,7 @@ try {
   await mouseSteps(page, false)
   await tapSteps(page)
   await a11ySteps(page)
+  await fixedSteps(page)
   await page.close()
 
   const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
