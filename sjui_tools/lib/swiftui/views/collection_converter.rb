@@ -2978,8 +2978,17 @@ module SjuiTools
           # Fixed rows (reorderFixedProperty) keep the library's drag too; the argument only when declared, so a
           # Collection without it is emitted as it was.
           fixed = reorder_fixed_property ? 'hasFixedRows: true, ' : ''
+          # onReorderStart (section, index) / onReorderEnd (section), only when declared (rule.callbacks; ticket
+          # jui-collection-reorder-start-callback-missing): a Collection without them is emitted as it was.
+          callbacks = +''
+          if handler_reference?(@component['onReorderStart'])
+            callbacks << "onReorderStart: { section, index in data.#{handler_property(@component['onReorderStart'])}?(section, index) }, "
+          end
+          if handler_reference?(@component['onReorderEnd'])
+            callbacks << "onReorderEnd: { section in data.#{handler_property(@component['onReorderEnd'])}?(section) }, "
+          end
           "CollectionReorder(isEnabled: #{enabled}, usesHandle: #{uses_handle}, hasLockedRows: #{locked}, #{fixed}" \
-            "onReorder: { section, from, to in data.#{name}?(section, from, to) })"
+            "#{callbacks}onReorder: { section, from, to in data.#{name}?(section, from, to) })"
         end
 
         # reorderFixedProperty's key, or nil (ticket jui-collection-reorder-fixed-row-vs-barrier-row).
