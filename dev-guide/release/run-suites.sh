@@ -671,6 +671,42 @@ else
 fi
 rm -rf "$CISHAPE"
 
+# --- the rooms' file watchers on watchdog 7.x (macOS) ----------------------
+# 🔻 THE ROAD MOST INSTALLS TAKE, AND NOTHING ELSE RUNS IT (2.5.33, ticket
+# 2026-11-13-viz-watchdog-7-follow; the orchestrator's ruling (a)). setup.py
+# allows watchdog>=4.0.0,<8, so a new machine's bootstrap installs 7.x, while
+# this machine's python3 keeps the 6.0.0 the legs above ran with and CI is
+# Linux (no FSEvents at all). fs_watch has one road per major: 6.x's guarded
+# emitter, 7.x's own FSEventsObserver. This leg runs the 7.x road: the arms that
+# touch fs_watch (test_viz_change_storm, test_viz_spec_lists) in a venv made
+# HERE and removed at the end of the leg (not kept between runs: a kept venv
+# goes stale against this python3 and nobody would notice), on python3's own
+# site-packages with watchdog 7.1.0 installed over them. Red if the venv cannot
+# be made, if the arms fail, or if the 7.x arms skipped (the venv did not get
+# 7.x, so the leg measured nothing). ALLOWED_SKIP_REASONS' "watchdog's FSEvents
+# here is the" points here.
+say "== the rooms' file watchers on watchdog 7.x (macOS only: FSEvents)"
+if [ "$(uname -s)" != "Darwin" ]; then
+    say "   not macOS: skipped (FSEvents is macOS's)"
+else
+    WD7=$(mktemp -d "${TMPDIR:-/tmp}/run-suites.watchdog7.XXXXXX")
+    if ! python3 -m venv --system-site-packages "$WD7/venv" > "$WD7/make.log" 2>&1 \
+       || ! "$WD7/venv/bin/python" -m pip install -q --disable-pip-version-check 'watchdog==7.1.0' >> "$WD7/make.log" 2>&1; then
+        bad "watchdog 7.x: the venv could not be made: $(tail -3 "$WD7/make.log" | tr '\n' ' ')"
+    else
+        wv=$("$WD7/venv/bin/python" -c 'import watchdog.version as v; print(v.VERSION_STRING)' 2>&1)
+        ( cd "$C/jui_tools" && PYTHONPATH="$C/jui_tools" "$WD7/venv/bin/python" -m pytest -q -rs -p no:cacheprovider \
+            tests/test_viz_change_storm.py tests/test_viz_spec_lists.py ) > "$WD7/pytest.log" 2>&1
+        rc=$?
+        say "   watchdog $wv: $(grep -E '[0-9]+ (passed|failed).* in [0-9.]+s' "$WD7/pytest.log" | tail -1)  exit=$rc"
+        ran7=$(grep -c "the arm is the 7.x one" "$WD7/pytest.log")
+        case "$wv" in 7.*) ;; *) bad "watchdog 7.x: the venv has watchdog $wv, not 7.x" ;; esac
+        [ "$rc" = 0 ] || { bad "watchdog 7.x: pytest exit $rc"; grep -E '^(FAILED|ERROR) ' "$WD7/pytest.log" | head -10; }
+        [ "$ran7" = 0 ] || bad "watchdog 7.x: $ran7 arm(s) of the 7.x shape skipped — this leg ran nothing of 7.x"
+    fi
+    rm -rf "$WD7"
+fi
+
 # --- the python suites at the next stamp ------------------------------------
 # 🔻 THE STAMP IS A SWITCH. validate gates on contracts coverage from
 # VALIDATE_GATE_FROM, and the other *_GATE_FROM literals switch jui_tools /
