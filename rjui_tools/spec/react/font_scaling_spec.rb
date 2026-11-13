@@ -5,6 +5,7 @@ require 'json'
 require 'open3'
 require 'tmpdir'
 require_relative '../support/headless_chromium'
+require_relative '../support/typescript_compiler'
 require 'cli/commands/build_command'
 require 'react/converters/label_converter'
 
@@ -18,8 +19,10 @@ require 'react/converters/label_converter'
 # before 2.5.35 — at the standard size and at 200%.
 RSpec.describe 'fontScaling / maxFontScale (rjui)' do
   TMF = RjuiTools::React::TailwindMapper
-  VECTORS = JSON.parse(File.read(File.expand_path('../../../shared/core/font_scale_vectors.json', __dir__)))
-  CONFIGURATION_JS = File.expand_path('../../lib/react/templates/js/Configuration.js', __dir__)
+  # Methods, not constants: a top-level constant of the same name in another spec file is one constant
+  # (spec_constants_are_scoped_spec).
+  def font_vectors = JSON.parse(File.read(File.expand_path('../../../shared/core/font_scale_vectors.json', __dir__)))
+  def configuration_js = File.expand_path('../../lib/react/templates/js/Configuration.js', __dir__)
 
   # Each probe: [key, root px, css custom properties on the root, the element's font-size].
   def drawn_in_chromium(probes, script: '')
@@ -56,12 +59,12 @@ RSpec.describe 'fontScaling / maxFontScale (rjui)' do
   end
 
   it 'draws every shared vector at the size it names' do
-    probes = VECTORS['drawn'].map do |c|
+    probes = font_vectors['drawn'].map do |c|
       css = TMF.font_size_css(c['size'], scaling: c.key?('declared') ? c['declared'] : nil, max: c['max'])
       [c['name'], 16 * c['scale'], app_vars(c['appDefault']), css]
     end
     drawn = drawn_in_chromium(probes)
-    VECTORS['drawn'].each do |c|
+    font_vectors['drawn'].each do |c|
       expect(drawn[c['name']]).to be_within(0.05).of(c['drawn']), "#{c['name']}: #{probes.assoc(c['name']).last}"
     end
   end
@@ -80,7 +83,7 @@ RSpec.describe 'fontScaling / maxFontScale (rjui)' do
 
   # The app default is set through the generated Configuration, which writes the two custom properties.
   it 'follows the app default an app sets with Configuration.Font.configureScaling' do
-    config = File.read(CONFIGURATION_JS).gsub(/^export /, '')
+    config = File.read(configuration_js).gsub(/^export /, '')
     probes = [['unset', 32, {}, TMF.font_size_css(15)]]
     drawn = drawn_in_chromium(probes, script: config)
     expect(drawn['unset']).to eq(30)
@@ -96,7 +99,7 @@ RSpec.describe 'fontScaling / maxFontScale (rjui)' do
   end
 
   it 'configureScaling writes the custom properties the sizes read' do
-    config = File.read(CONFIGURATION_JS).gsub(/^export /, '')
+    config = File.read(configuration_js).gsub(/^export /, '')
     HeadlessChromium.ensure!(self)
     Dir.mktmpdir('rjui_font_configure') do |dir|
       File.write(File.join(dir, 'page.html'), <<~HTML)
@@ -135,6 +138,24 @@ RSpec.describe 'fontScaling / maxFontScale (rjui)' do
     it "gives partialAttributes' sizes their component's declaration" do
       out = label('fontScaling' => false, 'partialAttributes' => [{ 'range' => [0, 1], 'fontSize' => 24 }])
       expect(out).to include("fontSize: '24px'")
+    end
+
+    it 'type-checks what it writes' do
+      ts = { 'use_tailwind' => true, 'typescript' => true }
+      elements = [
+        { 'fontScaling' => false }, { 'fontScaling' => true, 'maxFontScale' => 1.5 }, { 'maxFontScale' => 2 },
+        { 'fontSize' => '@{size}', 'fontScaling' => false }, { 'fontSize' => '@{size}', 'maxFontScale' => 1.5 },
+        { 'fontScaling' => false, 'partialAttributes' => [{ 'range' => [0, 1], 'fontSize' => 24 }] }
+      ].map do |extra|
+        RjuiTools::React::Converters::LabelConverter.new(
+          { 'type' => 'Label', 'id' => 'l', 'text' => 'a', 'fontSize' => 15 }.merge(extra), ts
+        ).convert
+      end
+      expect(TypeScriptCompiler.component(*elements)).to compile_as_typescript.with_ambient(<<~TS)
+        declare const data: { size?: number; [key: string]: any };
+        declare const Configuration: any;
+        declare const partialText: any;
+      TS
     end
 
     it "draws a size class's fontSize by the component's declaration" do
