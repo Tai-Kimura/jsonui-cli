@@ -1007,6 +1007,44 @@
         }
       },
       "reason": "the Label `after` below the empty View is one undeclared line (it declares width / height wrapContent): one undeclared line: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "common/height__*_weighted_row",
+      "id": "weighted_b",
+      "fields": [
+        "x"
+      ],
+      "expected": {
+        "android": {
+          "x": 120.0
+        },
+        "ios": {
+          "x": 120.0
+        },
+        "web": {
+          "x": 120.0
+        }
+      },
+      "reason": "The weighted children sit in the 200-wide target, not in the root: frame_parity's weighted reading takes a weighted child's start as a fraction of the ROOT (proportional_agrees), which holds for weight__* where the row is the root and not here. weighted_b starts at 3/5 of the target on every face (120 of 200; weights 3:2, ticket sjui-weighted-hstack-wrap-content-takes-proposed-height), measured on run 43371967349. All three are pinned: any other x on any face is refused"
+    },
+    {
+      "fixture": "__control/View__child-7ce36585_orientation-horizontal",
+      "id": "weighted_b",
+      "fields": [
+        "x"
+      ],
+      "expected": {
+        "android": {
+          "x": 120.0
+        },
+        "ios": {
+          "x": 120.0
+        },
+        "web": {
+          "x": 120.0
+        }
+      },
+      "reason": "The weighted children sit in the 200-wide target, not in the root: frame_parity's weighted reading takes a weighted child's start as a fraction of the ROOT (proportional_agrees), which holds for weight__* where the row is the root and not here. weighted_b starts at 3/5 of the target on every face (120 of 200; weights 3:2, ticket sjui-weighted-hstack-wrap-content-takes-proposed-height), measured on run 43371967349. All three are pinned: any other x on any face is refused"
     }
   ]
 }

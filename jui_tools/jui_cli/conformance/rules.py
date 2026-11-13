@@ -2451,6 +2451,43 @@ VARIANT_CASES: dict[tuple[str, str], dict[str, dict[str, Any]]] = {
     # registered before it is run: ACTIVE on ios and web, INERT on android,
     # and the android half turns active with no fixture change on the day
     # kjui honours an oversized explicit size. Owner of that half: C/G.
+    # A weighted stack's CROSS axis. With unequal weights SwiftJsonUI lays the
+    # stack out through its Layout-protocol path (WeightedHStackLayout /
+    # WeightedVStackLayout), which returned the height (width) the parent
+    # proposed whatever the stack declared: a 3:2 row of 56pt buttons grew to
+    # its column's remaining height on iOS while Android's Row and web's flex
+    # row stayed as tall as their tallest child (ticket
+    # sjui-weighted-hstack-wrap-content-takes-proposed-height). The plain
+    # `height__*` / `width__*` fixtures stack six 40pt boxes with no weight, so
+    # none of them reached that path.
+    #
+    # The target is the stack itself: two weighted children, 3:2, of different
+    # cross sizes, under each declared cross size. wrapContent must come out
+    # as the larger child (56 tall, 120 wide); a number and matchParent keep
+    # their box. The overlay root proposes its whole size, which is what
+    # exposed the iOS reading.
+    ("common", "height"): {
+        "weighted_row": {
+            "orientation": "horizontal",
+            "child": [
+                {"type": "View", "id": "weighted_a", "width": 0, "weight": 3,
+                 "height": 56, "background": "#FF0000"},
+                {"type": "View", "id": "weighted_b", "width": 0, "weight": 2,
+                 "height": 40, "background": "#0000FF"},
+            ],
+        },
+    },
+    ("common", "width"): {
+        "weighted_column": {
+            "orientation": "vertical",
+            "child": [
+                {"type": "View", "id": "weighted_a", "height": 0, "weight": 3,
+                 "width": 120, "background": "#FF0000"},
+                {"type": "View", "id": "weighted_b", "height": 0, "weight": 2,
+                 "width": 80, "background": "#0000FF"},
+            ],
+        },
+    },
     ("common", "clipToBounds"): {
         "overflow": {
             "orientation": None,

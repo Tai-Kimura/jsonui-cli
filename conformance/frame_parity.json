@@ -5090,6 +5090,17 @@
       "reason": "TextField control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (skinIdioms; TextField.borderStyle is a member) — triage K"
     },
     {
+      "fixture": "__control/View__child-7ce36585_orientation-horizontal",
+      "id": "weighted_b",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [],
+      "reason": "The weighted children sit in the 200-wide target, not in the root: frame_parity's weighted reading takes a weighted child's start as a fraction of the ROOT (proportional_agrees), which holds for weight__* where the row is the root and not here. weighted_b starts at 3/5 of the target on every face (120 of 200; weights 3:2, ticket sjui-weighted-hstack-wrap-content-takes-proposed-height), measured on run 43371967349. All three are pinned: any other x on any face is refused"
+    },
+    {
       "fixture": "__control/View__child-d271b446_orientation-horizontal_width-300",
       "id": "box_b",
       "outliers": [
@@ -5413,6 +5424,39 @@
         "height"
       ],
       "reason": "the two Label children are one undeclared line high, ios 20.33 / android 24 (their widths agree); web does not render common.distribution (platform swift / kotlin), so expected cannot name all three faces: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "common/height__matchparent_weighted_row",
+      "id": "weighted_b",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [],
+      "reason": "The weighted children sit in the 200-wide target, not in the root: frame_parity's weighted reading takes a weighted child's start as a fraction of the ROOT (proportional_agrees), which holds for weight__* where the row is the root and not here. weighted_b starts at 3/5 of the target on every face (120 of 200; weights 3:2, ticket sjui-weighted-hstack-wrap-content-takes-proposed-height), measured on run 43371967349. All three are pinned: any other x on any face is refused"
+    },
+    {
+      "fixture": "common/height__static_weighted_row",
+      "id": "weighted_b",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [],
+      "reason": "The weighted children sit in the 200-wide target, not in the root: frame_parity's weighted reading takes a weighted child's start as a fraction of the ROOT (proportional_agrees), which holds for weight__* where the row is the root and not here. weighted_b starts at 3/5 of the target on every face (120 of 200; weights 3:2, ticket sjui-weighted-hstack-wrap-content-takes-proposed-height), measured on run 43371967349. All three are pinned: any other x on any face is refused"
+    },
+    {
+      "fixture": "common/height__wrapcontent_weighted_row",
+      "id": "weighted_b",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [],
+      "reason": "The weighted children sit in the 200-wide target, not in the root: frame_parity's weighted reading takes a weighted child's start as a fraction of the ROOT (proportional_agrees), which holds for weight__* where the row is the root and not here. weighted_b starts at 3/5 of the target on every face (120 of 200; weights 3:2, ticket sjui-weighted-hstack-wrap-content-takes-proposed-height), measured on run 43371967349. All three are pinned: any other x on any face is refused"
     },
     {
       "fixture": "common/highlightBackground__binding",
