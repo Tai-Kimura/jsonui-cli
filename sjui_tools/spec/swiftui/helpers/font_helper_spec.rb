@@ -62,9 +62,9 @@ RSpec.describe SjuiTools::SwiftUI::Helpers::FontHelper do
     context 'with no font attributes' do
       let(:component) { { 'text' => 'Hello' } }
 
-      it 'emits no modifier' do
+      it 'emits the configured size through sjuiFont (P1: every text is the provider\'s)' do
         described_class.apply_font_modifiers(component, mock_converter)
-        expect(mock_converter.modifiers).to be_empty
+        expect(mock_converter.modifiers).to eq(['.sjuiFont(FontSpec(family: nil, weight: nil, size: nil, italic: false))'])
       end
     end
 
