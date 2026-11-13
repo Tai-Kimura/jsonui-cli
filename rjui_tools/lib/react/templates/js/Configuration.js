@@ -51,20 +51,12 @@ const FontConfig = {
     return defaultCss(spec);
   }
 };
-/**
- * The length a text of `size` (layout px) is drawn at by its component's
- * fontScaling / maxFontScale — the same length the generated classes write
- * (rjui TailwindMapper.font_size_css): px when it does not follow the
- * browser's text size, rem when it does, capped at size x maxScale px; an
- * undeclared side reads the app default (configureScaling's properties).
- */
 function fontLength(size, scaling, maxScale) {
   if (scaling === false) return `${size}px`;
   const unit = scaling === true ? `${size / 16}rem` : `calc(${size}*var(--jui-font-unit,0.0625rem))`;
   const cap = maxScale !== void 0 ? `${size * maxScale}px` : `calc(${size}*var(--jui-font-max,10000px))`;
   return `min(${unit},${cap})`;
 }
-
 function defaultCss(spec) {
   const css = {};
   if (spec.family) css.fontFamily = spec.family;
