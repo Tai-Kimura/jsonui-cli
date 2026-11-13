@@ -45,7 +45,8 @@ RSpec.describe 'sjui fontScaling / maxFontScale' do
   it 'a declaration without a fontSize still holds the text to the rule (rule.noFontSize)' do
     expect(emit('type' => 'TextField', 'text' => '@{t}', 'fontScaling' => false))
       .to include('.sjuiFont(FontSpec(family: nil, weight: nil, size: nil, italic: false))')
-    expect(emit('type' => 'TextField', 'text' => '@{t}')).not_to include('.sjuiFont(')
+    # undeclared too (P1, 2026-11-13): every text the generator sets a font on is the provider's
+    expect(emit('type' => 'TextField', 'text' => '@{t}')).to include('.sjuiFont(FontSpec(family: nil, weight: nil, size: nil, italic: false))')
   end
 
   it 'a component without text does not carry it' do
@@ -60,16 +61,7 @@ RSpec.describe 'sjui fontScaling / maxFontScale' do
   end
 
   it 'type-checks against the library declarations', :swift_compile do
-    stubs = <<~SWIFT
-      // SwiftJsonUI FontScaling.swift / FontSpec.swift (feature/font-scaling), the public declarations used.
-      struct FontSpec {
-          init(family: String? = nil, weight: Font.Weight? = nil, size: CGFloat? = nil, italic: Bool = false) {}
-      }
-      extension View {
-          func sjuiFont(_ spec: FontSpec) -> some View { self }
-          func fontScaling(_ scaling: Bool?, maxFontScale: CGFloat? = nil) -> some View { self }
-      }
-    SWIFT
+    stubs = '' # FontSpec / sjuiFont / fontScaling are in swift_compiler.rb's mock types
     codes = [
       emit('type' => 'Label', 'text' => 'a', 'fontSize' => 13, 'fontScaling' => false),
       emit('type' => 'Label', 'text' => 'a', 'fontSize' => 13, 'maxFontScale' => 1.5)
