@@ -7,7 +7,6 @@
       "attribute": "fontScaling",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -18,7 +17,6 @@
       "attribute": "maxFontScale",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -29,7 +27,6 @@
       "attribute": "fontScaling",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -40,7 +37,6 @@
       "attribute": "maxFontScale",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -51,7 +47,6 @@
       "attribute": "fontScaling",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -62,7 +57,6 @@
       "attribute": "maxFontScale",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -73,7 +67,6 @@
       "attribute": "fontScaling",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -84,7 +77,6 @@
       "attribute": "maxFontScale",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -95,7 +87,6 @@
       "attribute": "fontScaling",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -106,7 +97,6 @@
       "attribute": "maxFontScale",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -144,7 +134,6 @@
       "attribute": "fontScaling",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -155,7 +144,6 @@
       "attribute": "maxFontScale",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -175,7 +163,6 @@
       "attribute": "fontScaling",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -186,7 +173,6 @@
       "attribute": "maxFontScale",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -197,7 +183,6 @@
       "attribute": "fontScaling",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -208,7 +193,6 @@
       "attribute": "maxFontScale",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -219,7 +203,6 @@
       "attribute": "fontScaling",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -230,7 +213,6 @@
       "attribute": "maxFontScale",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
