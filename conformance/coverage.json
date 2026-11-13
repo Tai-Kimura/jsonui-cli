@@ -33,9 +33,7 @@
       "component": "Collection",
       "attribute": "reorderFixedProperty",
       "platforms": [
-        "ios",
-        "android",
-        "web"
+        "ios"
       ],
       "reason": "unimplemented",
       "note": "越えられる動かない行（ticket jui-collection-reorder-fixed-row-vs-barrier-row、裁定 2026-11-14、2.5.36）。shared の宣言と規則（reorder_vectors.json rule.fixed）を先に入れた。各面の実装で閉じる（triage担当: web → Android → iOS）。閉じた面はこの行から外す"

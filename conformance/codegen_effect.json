@@ -188,7 +188,7 @@
       "platform": "android",
       "check": "C0",
       "class": "unenumerated-vocabulary",
-      "owner": "triage担当（kjui_tools・KotlinJsonUI。2.5.36）",
+      "owner": "reorder (kjui_tools CollectionComponent reorder_fixed_arg, KotlinJsonUI CollectionReorder)",
       "reason": "値は cell データの鍵で値の集合が無く、効くのも reorderable・onReorder と組の時だけ（reorderLockedProperty と同じ形。ticket jui-collection-reorder-fixed-row-vs-barrier-row）。決まりは shared/core/reorder_vectors.json の rule.fixed と、drop・drag・release・a11y の fixed の例",
       "note": "jsonui-cli 2.5.36 の候補"
     },
