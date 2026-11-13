@@ -20,7 +20,8 @@
         "One",
         "Two",
         "Three"
-      ]
+      ],
+      "selectedIndex": 0
     }
   ]
 }

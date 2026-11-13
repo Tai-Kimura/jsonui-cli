@@ -17547,8 +17547,8 @@
       "test": "fixtures/SelectBox/fontScaling__true.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "SelectBox/fontScaling@SelectBox__root.textScale-2.0",
-      "control": "__control/SelectBox__root.textScale-2.0",
+      "peerGroup": "SelectBox/fontScaling@SelectBox__root.textScale-2.0_selectedIndex-0",
+      "control": "__control/SelectBox__root.textScale-2.0_selectedIndex-0",
       "textScale": 2.0
     },
     {
@@ -17572,8 +17572,8 @@
       "test": "fixtures/SelectBox/fontScaling__false.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "SelectBox/fontScaling@SelectBox__root.textScale-2.0",
-      "control": "__control/SelectBox__root.textScale-2.0",
+      "peerGroup": "SelectBox/fontScaling@SelectBox__root.textScale-2.0_selectedIndex-0",
+      "control": "__control/SelectBox__root.textScale-2.0_selectedIndex-0",
       "textScale": 2.0
     },
     {
@@ -17598,7 +17598,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
-      "control": "__control/SelectBox__root.textScale-2.0",
+      "control": "__control/SelectBox__root.textScale-2.0_selectedIndex-0",
       "textScale": 2.0
     },
     {
@@ -18968,8 +18968,8 @@
       "test": "fixtures/Switch/fontScaling__true.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Switch/fontScaling@Switch__root.textScale-2.0",
-      "control": "__control/Switch__root.textScale-2.0",
+      "peerGroup": "Switch/fontScaling@Switch__label-Sample_root.textScale-2.0",
+      "control": "__control/Switch__label-Sample_root.textScale-2.0",
       "textScale": 2.0
     },
     {
@@ -18993,8 +18993,8 @@
       "test": "fixtures/Switch/fontScaling__false.test.json",
       "state": null,
       "promotedFrom": null,
-      "peerGroup": "Switch/fontScaling@Switch__root.textScale-2.0",
-      "control": "__control/Switch__root.textScale-2.0",
+      "peerGroup": "Switch/fontScaling@Switch__label-Sample_root.textScale-2.0",
+      "control": "__control/Switch__label-Sample_root.textScale-2.0",
       "textScale": 2.0
     },
     {
@@ -19019,7 +19019,7 @@
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,
-      "control": "__control/Switch__root.textScale-2.0",
+      "control": "__control/Switch__label-Sample_root.textScale-2.0",
       "textScale": 2.0
     },
     {
@@ -29650,7 +29650,7 @@
       "isControl": true
     },
     {
-      "id": "__control/SelectBox__root.textScale-2.0",
+      "id": "__control/SelectBox__root.textScale-2.0_selectedIndex-0",
       "component": "__control",
       "attribute": null,
       "case": "SelectBox",
@@ -29666,8 +29666,8 @@
       ],
       "mode": null,
       "deprecated": null,
-      "layout": "fixtures/__control/SelectBox__root.textScale-2.0.layout.json",
-      "test": "fixtures/__control/SelectBox__root.textScale-2.0.test.json",
+      "layout": "fixtures/__control/SelectBox__root.textScale-2.0_selectedIndex-0.layout.json",
+      "test": "fixtures/__control/SelectBox__root.textScale-2.0_selectedIndex-0.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
@@ -29819,6 +29819,31 @@
       "isControl": true
     },
     {
+      "id": "__control/Switch__label-Sample_root.textScale-2.0",
+      "component": "__control",
+      "attribute": null,
+      "case": "Switch",
+      "class": "visual",
+      "host": "Switch",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Switch__label-Sample_root.textScale-2.0.layout.json",
+      "test": "fixtures/__control/Switch__label-Sample_root.textScale-2.0.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "textScale": 2.0
+    },
+    {
       "id": "__control/Switch__labelAttributes--text-Sample",
       "component": "__control",
       "attribute": null,
@@ -29839,31 +29864,6 @@
       "promotedFrom": null,
       "control": null,
       "isControl": true
-    },
-    {
-      "id": "__control/Switch__root.textScale-2.0",
-      "component": "__control",
-      "attribute": null,
-      "case": "Switch",
-      "class": "visual",
-      "host": "Switch",
-      "writtenKey": null,
-      "aliasOf": null,
-      "value": null,
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/__control/Switch__root.textScale-2.0.layout.json",
-      "test": "fixtures/__control/Switch__root.textScale-2.0.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "control": null,
-      "isControl": true,
-      "textScale": 2.0
     },
     {
       "id": "__control/TabView",

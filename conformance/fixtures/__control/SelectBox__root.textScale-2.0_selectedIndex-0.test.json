@@ -1,7 +1,7 @@
 {
   "type": "screen",
   "source": {
-    "layout": "fixtures/__control/SelectBox__root.textScale-2.0.layout.json"
+    "layout": "fixtures/__control/SelectBox__root.textScale-2.0_selectedIndex-0.layout.json"
   },
   "metadata": {
     "name": "conformance control SelectBox",
@@ -15,7 +15,7 @@
   "platform": "all",
   "cases": [
     {
-      "name": "SelectBox__root.textScale-2.0",
+      "name": "SelectBox__root.textScale-2.0_selectedIndex-0",
       "description": "Control for SelectBox: base attributes only, no attribute under test. Every visual fixture on this host must render differently from it — an identical render means the attribute was dropped.",
       "steps": [
         {
@@ -24,7 +24,7 @@
         },
         {
           "action": "screenshot",
-          "name": "control_SelectBox__root.textScale-2.0"
+          "name": "control_SelectBox__root.textScale-2.0_selectedIndex-0"
         }
       ]
     }

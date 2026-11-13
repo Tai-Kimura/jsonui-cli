@@ -16,7 +16,8 @@
       "type": "Switch",
       "id": "target",
       "width": "wrapContent",
-      "height": "wrapContent"
+      "height": "wrapContent",
+      "label": "Sample"
     }
   ]
 }

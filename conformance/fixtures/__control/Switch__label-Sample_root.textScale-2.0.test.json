@@ -1,7 +1,7 @@
 {
   "type": "screen",
   "source": {
-    "layout": "fixtures/__control/Switch__root.textScale-2.0.layout.json"
+    "layout": "fixtures/__control/Switch__label-Sample_root.textScale-2.0.layout.json"
   },
   "metadata": {
     "name": "conformance control Switch",
@@ -15,7 +15,7 @@
   "platform": "all",
   "cases": [
     {
-      "name": "Switch__root.textScale-2.0",
+      "name": "Switch__label-Sample_root.textScale-2.0",
       "description": "Control for Switch: base attributes only, no attribute under test. Every visual fixture on this host must render differently from it — an identical render means the attribute was dropped.",
       "steps": [
         {
@@ -24,7 +24,7 @@
         },
         {
           "action": "screenshot",
-          "name": "control_Switch__root.textScale-2.0"
+          "name": "control_Switch__label-Sample_root.textScale-2.0"
         }
       ]
     }
