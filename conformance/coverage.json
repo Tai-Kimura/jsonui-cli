@@ -34,7 +34,6 @@
       "attribute": "onReorderStart",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -45,7 +44,6 @@
       "attribute": "onReorderEnd",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
