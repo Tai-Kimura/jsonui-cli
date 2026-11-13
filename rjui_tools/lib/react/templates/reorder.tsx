@@ -201,6 +201,10 @@ export interface JsonuiReorderSectionProps {
   count: number;
   enabled?: boolean | null;
   onReorder?: ((section: number, from: number, to: number) => void) | null;
+  /** A row was picked up (rule.callbacks): (section, index). */
+  onReorderStart?: ((section: number, index: number) => void) | null;
+  /** That drag is over, once: after onReorder when it moved, alone otherwise (rule.callbacks). */
+  onReorderEnd?: ((section: number) => void) | null;
   handleId?: string;
   locked?: readonly number[];
   fixed?: readonly number[];
@@ -230,6 +234,9 @@ export function JsonuiReorderSection(props: JsonuiReorderSectionProps) {
       latest.current.onReorder?.(latest.current.section, from, to);
       setSaid(words.moved(to + 1));
     };
+    // rule.callbacks: a drag that began is start .. end, with onReorder between when the row moved.
+    const begin = (index: number) => latest.current.onReorderStart?.(latest.current.section, index);
+    const over = () => latest.current.onReorderEnd?.(latest.current.section);
 
     const pointerDown = (event: React.PointerEvent<HTMLElement>, index: number) => {
       const { enabled: on = true, count: n, locked: fixed = [], fixed: still = [], handleId: handle } = latest.current;
@@ -254,6 +261,8 @@ export function JsonuiReorderSection(props: JsonuiReorderSectionProps) {
       let scroller: HTMLElement = document.documentElement;
       // The rows as the drag read them when it began (rule.itemsChange): compared again when it is let go.
       let started: { ids: HTMLElement[]; locked: number[]; fixed: number[] } | null = null;
+      let begun = false;   // onReorderStart was called: onReorderEnd is owed once
+      const end = () => { if (begun) { begun = false; over(); } };
       const rowsNow = () => {
         const { count: c, locked: l = [], fixed: f = [], handleId: h } = latest.current;
         const ids: HTMLElement[] = [];
@@ -312,6 +321,8 @@ export function JsonuiReorderSection(props: JsonuiReorderSectionProps) {
         scroll0 = scroller.scrollTop;
         started = rowsNow();
         active = true;
+        begun = true;
+        begin(index);
         els.forEach((el, i) => {
           el.style.transition = i === index ? 'none' : 'transform 150ms ease';
           if (i === index) {
@@ -342,8 +353,9 @@ export function JsonuiReorderSection(props: JsonuiReorderSectionProps) {
         const changed = started !== null && jsonuiReorderItemsChanged(started, rowsNow());
         finish(true);
         if (!changed && to !== null && to !== index) call(index, to);
+        end();
       };
-      const cancel = (e: PointerEvent) => { if (e.pointerId === pointerId) finish(active); };
+      const cancel = (e: PointerEvent) => { if (e.pointerId === pointerId) { finish(active); end(); } };
       function finish(dragged: boolean) {
         window.clearTimeout(timer);
         cancelAnimationFrame(frame);
@@ -381,7 +393,7 @@ export function JsonuiReorderSection(props: JsonuiReorderSectionProps) {
     const step = (index: number, action: 'up' | 'down') => {
       const { count: n, locked: fixed = [], fixed: still = [] } = latest.current;
       const to = jsonuiReorderA11y(n, index, action, fixed, still);
-      if (to !== null) call(index, to);
+      if (to !== null) { begin(index); call(index, to); over(); }
     };
 
     const register = (index: number, el: HTMLElement | null) => {

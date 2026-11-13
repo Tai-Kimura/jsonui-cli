@@ -176,6 +176,8 @@ export function JsonuiReorderSection(props) {
       latest.current.onReorder?.(latest.current.section, from, to);
       setSaid(words.moved(to + 1));
     };
+    const begin = (index) => latest.current.onReorderStart?.(latest.current.section, index);
+    const over = () => latest.current.onReorderEnd?.(latest.current.section);
     const pointerDown = (event, index) => {
       const { enabled: on = true, count: n, locked: fixed2 = [], fixed: still = [], handleId: handle } = latest.current;
       if (!on || fixed2.includes(index) || still.includes(index) || event.pointerType === "mouse" && event.button !== 0) return;
@@ -198,6 +200,13 @@ export function JsonuiReorderSection(props) {
       let grabAt = 0;
       let scroller = document.documentElement;
       let started = null;
+      let begun = false;
+      const end = () => {
+        if (begun) {
+          begun = false;
+          over();
+        }
+      };
       const rowsNow = () => {
         const { count: c, locked: l = [], fixed: f = [], handleId: h } = latest.current;
         const ids = [];
@@ -259,6 +268,8 @@ export function JsonuiReorderSection(props) {
         scroll0 = scroller.scrollTop;
         started = rowsNow();
         active = true;
+        begun = true;
+        begin(index);
         els.forEach((el, i) => {
           el.style.transition = i === index ? "none" : "transform 150ms ease";
           if (i === index) {
@@ -290,9 +301,13 @@ export function JsonuiReorderSection(props) {
         const changed = started !== null && jsonuiReorderItemsChanged(started, rowsNow());
         finish(true);
         if (!changed && to !== null && to !== index) call(index, to);
+        end();
       };
       const cancel = (e) => {
-        if (e.pointerId === pointerId) finish(active);
+        if (e.pointerId === pointerId) {
+          finish(active);
+          end();
+        }
       };
       function finish(dragged) {
         window.clearTimeout(timer);
@@ -330,7 +345,11 @@ export function JsonuiReorderSection(props) {
     const step = (index, action) => {
       const { count: n, locked: fixed2 = [], fixed: still = [] } = latest.current;
       const to = jsonuiReorderA11y(n, index, action, fixed2, still);
-      if (to !== null) call(index, to);
+      if (to !== null) {
+        begin(index);
+        call(index, to);
+        over();
+      }
     };
     const register = (index, el) => {
       if (el) rows.current.set(index, el);

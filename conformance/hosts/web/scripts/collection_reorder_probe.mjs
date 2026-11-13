@@ -58,11 +58,12 @@ const LAYOUT = {
     { name: 'skip', class: 'CollectionDataSource' },
     { name: 'onMoveFree', class: '((Int, Int, Int) -> Void)?' }, { name: 'onMoveHeld', class: '((Int, Int, Int) -> Void)?' },
     { name: 'onMoveSkip', class: '((Int, Int, Int) -> Void)?' },
+    { name: 'onStartFree', class: '((Int, Int) -> Void)?' }, { name: 'onEndFree', class: '((Int) -> Void)?' },
   ],
   child: [
     { type: 'Collection', id: 'free', width: 'matchParent', lazy: 'none', items: '@{free}', cellIdProperty: 'cellId',
       sections: [{ header: 'probe_reorder_edge', cell: 'probe_reorder_cell', footer: 'probe_reorder_edge' }],
-      reorderable: true, onReorder: '@{onMoveFree}' },
+      reorderable: true, onReorder: '@{onMoveFree}', onReorderStart: '@{onStartFree}', onReorderEnd: '@{onEndFree}' },
     { type: 'Collection', id: 'held', width: 'matchParent', lazy: 'none', items: '@{held}', cellIdProperty: 'cellId',
       sections: [{ cell: 'probe_reorder_cell' }],
       reorderable: true, onReorder: '@{onMoveHeld}', reorderHandle: 'grip', reorderLockedProperty: 'locked' },
@@ -92,9 +93,10 @@ import './index.css'
 import { CollectionReorderProbe } from './generated/components/CollectionReorderProbe'
 import { StringManager } from './generated/StringManager'
 type Row = { cellId: string; name: string; locked?: boolean; skipped?: boolean; gripVisibility?: string }
-const w = window as unknown as { __calls: unknown[]; __reset: () => void; __lang: (l: string) => void; __rebuild: (k: string) => void }
+const w = window as unknown as { __events: unknown[]; __calls: unknown[]; __reset: () => void; __lang: (l: string) => void; __rebuild: (k: string) => void }
 w.__lang = (l) => StringManager.setLanguage(l)
 w.__calls = []
+w.__events = []
 const rows = (names: string[], locked: number[] = []) =>
   names.map((name, i) => ({ cellId: 'id-' + name, name, onTap: () => w.__calls.push(['tap', name]),
                             ...(locked.includes(i) ? { locked: true } : {}) }))
@@ -107,7 +109,7 @@ function Probe() {
   const [free, setFree] = useState<Row[]>(FREE)
   const [held, setHeld] = useState<Row[]>(HELD)
   const [skip, setSkip] = useState<Row[]>(SKIP)
-  w.__reset = () => { setFree(FREE); setHeld(HELD); setSkip(SKIP); w.__calls = [] }
+  w.__reset = () => { setFree(FREE); setHeld(HELD); setSkip(SKIP); w.__calls = []; w.__events = [] }
   // The data rebuilt while a row is dragged (rule.itemsChange): the text alone, a row added above, the order turned,
   // a row locked (held).
   w.__rebuild = (k) => {
@@ -122,7 +124,9 @@ function Probe() {
     held: { sections: [{ cells: { data: held } }] },
     skip: { sections: [{ cells: { data: skip } }] },
     onMoveSkip: (section: number, from: number, to: number) => { w.__calls.push(['skip', section, from, to]); setSkip((l) => move(l, from, to)) },
-    onMoveFree: (section: number, from: number, to: number) => { w.__calls.push(['free', section, from, to]); setFree((l) => move(l, from, to)) },
+    onMoveFree: (section: number, from: number, to: number) => { w.__calls.push(['free', section, from, to]); w.__events.push(['reorder', section, from, to]); setFree((l) => move(l, from, to)) },
+    onStartFree: (section: number, index: number) => { w.__events.push(['start', section, index]) },
+    onEndFree: (section: number) => { w.__events.push(['end', section]) },
     onMoveHeld: (section: number, from: number, to: number) => { w.__calls.push(['held', section, from, to]); setHeld((l) => move(l, from, to)) },
   }
   return <CollectionReorderProbe data={data as never} />
@@ -340,6 +344,31 @@ async function itemsChangeSteps(page) {
     `calls=${JSON.stringify(await calls(page))}`)
 }
 
+// rule.callbacks: the drag's start and end around onReorder (the free list declares both).
+const events = (page) => page.evaluate(() => window.__events)
+async function callbackSteps(page) {
+  const want = (name, got, expected) => report(`callbacks: ${name}`, JSON.stringify(got) === JSON.stringify(expected), `events=${JSON.stringify(got)}`)
+  await reset(page)
+  let a = await box(page, '#free_item_1'), c = await box(page, '#free_item_3')
+  await mouseDrag(page, ...at(a, 0.3), ...at(c, 0.3, 0.75))
+  want('moved -> start, reorder, end', await events(page), [['start', 0, 1], ['reorder', 0, 1, 3], ['end', 0]])
+  await reset(page)
+  a = await box(page, '#free_item_1')
+  await mouseDrag(page, ...at(a, 0.3), ...at(a, 0.3, 0.55))
+  want('let go where it started -> start, end', await events(page), [['start', 0, 1], ['end', 0]])
+  await reset(page)
+  a = await box(page, '#free_item_1')
+  await mouseDrag(page, ...at(a, 0.3), at(a, 0.3)[0], 2)
+  want('released outside -> start, end', await events(page), [['start', 0, 1], ['end', 0]])
+  await reset(page)
+  await rebuildDrag(page, 'insert', '#free_item_1', '#free_item_3')
+  want('rows changed under it -> start, end', await events(page), [['start', 0, 1], ['end', 0]])
+  await reset(page)
+  await row(page, 'free_item_2').getByRole('button', { name: 'Move up' }).evaluate((b) => b.click())
+  await page.waitForTimeout(150)
+  want('screen reader move up -> start, reorder, end', await events(page), [['start', 0, 2], ['reorder', 0, 2, 1], ['end', 0]])
+}
+
 async function fixedSteps(page) {
   await reset(page)
   await centre(page, 'skip')
@@ -425,6 +454,7 @@ try {
   await a11ySteps(page)
   await fixedSteps(page)
   await itemsChangeSteps(page)
+  await callbackSteps(page)
   await page.close()
 
   const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })

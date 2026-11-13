@@ -43,6 +43,14 @@ RSpec.describe 'a reorderable Collection (rjui)' do
       expect(out.index('</JsonuiReorderSection>')).to be < out.index('<Foot')
     end
 
+    # rule.callbacks (ticket jui-collection-reorder-start-callback-missing): the drag's start and end, when declared.
+    it 'passes onReorderStart and onReorderEnd when declared, and nothing of them otherwise' do
+      out = convert(SECTIONS.merge('onReorderStart' => '@{onStopStart}', 'onReorderEnd' => '@{onStopEnd}'))
+      expect(out).to include('onReorder={data.onMoveStop} onReorderStart={data.onStopStart} onReorderEnd={data.onStopEnd}')
+      expect(convert(SECTIONS)).not_to include('onReorderStart')
+      expect(convert(SECTIONS)).not_to include('onReorderEnd')
+    end
+
     it 'wraps every data section on the class-list path' do
       out = convert(CLASS_LIST)
       expect(out).to include('<JsonuiReorderSection key={sectionIndex} section={sectionIndex}')
@@ -88,7 +96,8 @@ RSpec.describe 'a reorderable Collection (rjui)' do
     # Checked against the helper's own props (lib/react/templates/reorder.tsx), strict, as a consumer compiles it.
     it 'compiles against the helper\'s declarations' do
       out = convert(SECTIONS.merge('reorderable' => '@{editing}', 'reorderHandle' => 'grip',
-                                   'reorderLockedProperty' => 'isDivider'))
+                                   'reorderLockedProperty' => 'isDivider',
+                                   'onReorderStart' => '@{onStopStart}', 'onReorderEnd' => '@{onStopEnd}'))
       props = TypeScriptCompiler.template_declarations('reorder.tsx', 'JsonuiReorderSectionProps')
                                 .gsub('React.ReactNode', 'unknown')
       ambient = <<~TS
@@ -100,6 +109,8 @@ RSpec.describe 'a reorderable Collection (rjui)' do
           rows?: { sections?: { header?: unknown; footer?: unknown; cells?: { data?: unknown[] } }[] };
           editing?: boolean;
           onMoveStop?: (section: number, from: number, to: number) => void;
+          onStopStart?: (section: number, index: number) => void;
+          onStopEnd?: (section: number) => void;
         };
         type RowCellData = { name?: string };
         declare function RowCell(props: { id?: string; data: RowCellData }): JSX.Element;
