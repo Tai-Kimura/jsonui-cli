@@ -1084,7 +1084,9 @@ module KjuiTools
             if is_horizontal
               return generate_non_lazy_row(json_data, sections, depth, required_imports, parent_type)
             else
-              return generate_non_lazy(json_data, sections, depth, required_imports, parent_type)
+              return with_reorder(json_data, depth, required_imports, 'false') do |d|
+                generate_non_lazy(json_data, sections, d, required_imports, parent_type)
+              end
             end
           end
 
@@ -1094,7 +1096,12 @@ module KjuiTools
           # 2026-09-27, round 12; generate_non_lazy's scroll_within_bounds).
           height_value = json_data['height']
           if !is_horizontal && height_value == 'wrapContent'
-            return generate_non_lazy(json_data, sections, depth, required_imports, parent_type, scroll_within_bounds: true)
+            bound = json_data['lazy'].is_a?(String) && json_data['lazy'][/\A@\{([^}]+)\}\z/, 1]
+            scrolls = bound ? "CollectionStackMode.fromJson(data.#{bound}) != CollectionStackMode.NONE" : 'true'
+            required_imports&.add(:collection_stack) if bound
+            return with_reorder(json_data, depth, required_imports, scrolls) do |d|
+              generate_non_lazy(json_data, sections, d, required_imports, parent_type, scroll_within_bounds: true)
+            end
           end
 
           # Single-column section-based collections route through CollectionStack
@@ -1102,6 +1109,13 @@ module KjuiTools
           # instead of branching the generator. Multi-column grids fall through
           # to the existing LazyVerticalGrid / LazyHorizontalGrid path.
           if sections.any? && single_column_sections?(sections, json_data)
+            unless is_horizontal
+              required_imports&.add(:collection_stack)
+              scrolls = "#{collection_stack_mode_expr(json_data)} != CollectionStackMode.NONE"
+              return with_reorder(json_data, depth, required_imports, scrolls) do |d|
+                generate_collection_stack(json_data, sections, d, required_imports, parent_type, is_horizontal: false)
+              end
+            end
             return generate_collection_stack(json_data, sections, depth, required_imports, parent_type, is_horizontal: is_horizontal)
           end
 
@@ -2685,6 +2699,7 @@ module KjuiTools
             end
           end
           modifiers << content_padding if content_padding
+          modifiers << ".collectionReorderContainer(#{@reorder[:var]})" if @reorder
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
           # Spacing
@@ -2751,6 +2766,7 @@ module KjuiTools
                 data_access = "#{cell_data_var}.data"
                 code += "\n" + indent(unique_keys_line(data_access, cell_id_prop, 'sectionKeys'), depth + 3) if cell_id_prop
               end
+              code += "\n" + reorder_locked_line(data_access, "reorderLocked#{index}", depth + 3) if @reorder
               # The cell, with `cellIndex` in scope, at depth `d`.
               cell = lambda do |d|
                 out = "\n" + indent("val currentCellData = #{data_access}[cellIndex]", d)
@@ -2775,7 +2791,7 @@ module KjuiTools
                         else
                           ''
                         end
-                out += "\n" + cell_test_tag_modifier(json_data['id'], 'cellIndex', d + 1, place)
+                out += "\n" + cell_test_tag_modifier(json_data['id'], 'cellIndex', d + 1, place + (@reorder ? '.collectionReorderActions()' : ''))
                 out + "\n" + indent(")", d)
               end
               # A grid per section: a section of more than one column (its own
@@ -2797,6 +2813,20 @@ module KjuiTools
                 code += "\n" + indent("}", depth + 5)
                 code += "\n" + indent("repeat(#{per_row} - rowCells.size) { Spacer(modifier = Modifier.weight(1f)) }", depth + 5)
                 code += "\n" + indent("}", depth + 4)
+                code += "\n" + indent("}", depth + 3)
+              elsif @reorder
+                # A reorderable row (ticket jui-collection-drag-to-reorder), keyed so a moved row keeps its state.
+                row_key = if cell_id_prop && !use_val_if
+                            'sectionKeys[cellIndex]'
+                          elsif cell_id_prop
+                            "(#{data_access}[cellIndex][\"cellId\"] as? String) ?: (#{data_access}[cellIndex][#{JsonUIShared::StringLiterals.kotlin(cell_id_prop)}] as? String) ?: cellIndex.toString()"
+                          else
+                            'cellIndex'
+                          end
+                code += "\n" + indent("#{data_access}.forEachIndexed { cellIndex, _ ->", depth + 3)
+                code += "\n" + indent("key(#{row_key}) { CollectionReorderRow(#{@reorder[:var]}, #{index}, cellIndex, #{data_access}.size, reorderLocked#{index}) {", depth + 4)
+                code += cell.call(depth + 5)
+                code += "\n" + indent("} }", depth + 4)
                 code += "\n" + indent("}", depth + 3)
               else
                 code += "\n" + indent("#{data_access}.forEachIndexed { cellIndex, _ ->", depth + 3)
@@ -2962,6 +2992,80 @@ module KjuiTools
         # Single-column CollectionStack emission. Wraps cell content in both
         # `lazyContent` (LazyListScope) and `eagerContent` (@Composable) so the
         # library can switch axes/modes without forcing the generator to fork.
+        # ---- Reorder (ticket jui-collection-drag-to-reorder, ruling B 2026-11-13) ----
+        # A vertical single-column Collection with `reorderable` (true or a binding) and an `onReorder` handler draws
+        # KotlinJsonUI's CollectionReorder: the Collection is the container (collectionReorderContainer on its own
+        # node, CollectionReorderScope around it: no layout node), each row is a CollectionReorderRow keyed by its
+        # key, and each cell's root takes the accessibility moves (collectionReorderActions on the modifier the cell
+        # view puts on its root). The handle (reorderHandle) is marked in the cell's own file (ReorderHandleIndex).
+        # Without the declaration nothing changes in the emitted code.
+        @reorder = nil
+
+        class << self
+          attr_reader :reorder
+        end
+
+        def self.reorder_declared?(json_data)
+          r = json_data['reorderable']
+          return false if r.nil? || r == false || r == 'false'
+          !Helpers::ModifierBuilder.string_event_name(json_data['onReorder']).nil?
+        end
+
+        def self.reorder_var(json_data)
+          id = json_data['id'].to_s.gsub(/[^A-Za-z0-9_]/, '_')
+          base = id.empty? ? 'collection' : id.split('_').reject(&:empty?).each_with_index.map { |w, i| i.zero? ? w : w[0].upcase + w[1..] }.join
+          base = "c#{base}" if base.match?(/\A\d/)
+          "#{base}Reorder"
+        end
+
+        # Opens the reorder around a Collection's code: the remembered state, then the scope. `scrolls` is the Kotlin
+        # Boolean of whether the container scrolls itself (NONE rides an outer scroll). Returns [prelude, closing].
+        def self.reorder_open(json_data, depth, required_imports, scrolls)
+          required_imports&.add(:collection_reorder)
+          required_imports&.add(:compose_key)
+          var = reorder_var(json_data)
+          r = json_data['reorderable']
+          enabled = if r == true || r == 'true'
+                      'true'
+                    elsif r.is_a?(String) && (prop = r[/\A@\{([^}]+)\}\z/, 1])
+                      "data.#{Helpers::BindingExpression.path_only(prop)} == true"
+                    else
+                      'false'
+                    end
+          name = Helpers::BindingExpression.path_only(Helpers::ModifierBuilder.string_event_name(json_data['onReorder']))
+          uses_handle = json_data['reorderHandle'].is_a?(String) && !json_data['reorderHandle'].empty?
+          @reorder = { var: var, locked: json_data['reorderLockedProperty'] }
+          prelude = indent("val #{var} = rememberCollectionReorder(", depth) + "\n" +
+                    indent("if (#{enabled}) CollectionReorder(true, #{uses_handle}) { s, f, t -> data.#{name}?.invoke(s, f, t) } else null,", depth + 1) + "\n" +
+                    indent("scrollsItself = #{scrolls},", depth + 1) + "\n" +
+                    indent(")", depth) + "\n" +
+                    indent("CollectionReorderScope(#{var}) {", depth) + "\n"
+          [prelude, "\n" + indent("}", depth)]
+        end
+
+        # The Collection's code, opened in the reorder when it declares one (else as it was).
+        def self.with_reorder(json_data, depth, required_imports, scrolls)
+          return yield(depth) unless reorder_declared?(json_data)
+
+          prelude, closing = reorder_open(json_data, depth, required_imports, scrolls)
+          begin
+            prelude + yield(depth + 1) + closing
+          ensure
+            @reorder = nil
+          end
+        end
+
+        # The rows' locked set of one section (`reorderLockedProperty`), hoisted where `remember` may run.
+        def self.reorder_locked_line(data_access, var_name, depth)
+          prop = @reorder && @reorder[:locked]
+          expr = if prop.is_a?(String) && !prop.empty?
+                   "remember(#{data_access}) { #{data_access}.indices.filter { #{data_access}[it][#{JsonUIShared::StringLiterals.kotlin(prop)}] == true }.toSet() }"
+                 else
+                   'emptySet<Int>()'
+                 end
+          indent("val #{var_name} = #{expr}", depth)
+        end
+
         def self.generate_collection_stack(json_data, sections, depth, required_imports, parent_type, is_horizontal:)
           required_imports&.add(:collection_stack)
           required_imports&.add(:launched_effect)
@@ -3061,6 +3165,7 @@ module KjuiTools
           # lazy content is, and its scroll runs from its bottom.
           eager_reversed = !is_horizontal && json_data['reverseLayout'] == true
           modifiers << '.onGloballyPositioned { collectionViewport[0] = it }' if eager_scroll
+          modifiers << ".collectionReorderContainer(#{@reorder[:var]})" if @reorder
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
           # Multi-line modifier formatting so `wrap_with_visibility` regex can
           # detect and hoist `.weight(...)` onto the VisibilityWrapper. Single-
@@ -3108,6 +3213,9 @@ module KjuiTools
               next unless section['cell']
               code += indent("val section#{idx} = #{sections_access(property_name)}.getOrNull(#{idx})", depth) + "\n"
               code += indent("val cellData#{idx} = section#{idx}?.cells", depth) + "\n"
+              if @reorder
+                code += reorder_locked_line("(cellData#{idx}?.data ?: emptyList())", "reorderLocked#{idx}", depth) + "\n"
+              end
               if auto_tracking && cell_id_prop
                 required_imports&.add(:remember_state)
                 code += indent("val enrichedData#{idx} = if (cellData#{idx} != null) remember(cellData#{idx}.data) { com.kotlinjsonui.utils.CellIdGenerator.enrichCellIds(cellData#{idx}.data, \"#{cell_id_prop}\") } else null", depth) + "\n"
@@ -3353,6 +3461,8 @@ module KjuiTools
             else
               out += "\n" + indent("items(#{data_access}.size) { cellIndex ->", depth + 2)
             end
+            # A reorderable row (ticket jui-collection-drag-to-reorder): the item's root is the row.
+            out += "\n" + indent("CollectionReorderRow(#{@reorder[:var]}, #{index}, cellIndex, #{data_access}.size, reorderLocked#{index}) {", depth + 2) if @reorder
 
             on_item_appear = json_data['onItemAppear']
             if (appear_name = Helpers::ModifierBuilder.string_event_name(on_item_appear))
@@ -3381,7 +3491,7 @@ module KjuiTools
             out += "\n" + indent("viewModel = cellViewModel,", depth + 4)
             collection_id = json_data['id']
             # No fillMaxWidth on cells — see the grid path note above.
-            out += "\n" + cell_test_tag_modifier(collection_id, 'cellIndex', depth + 4)
+            out += "\n" + cell_test_tag_modifier(collection_id, 'cellIndex', depth + 4, "#{@reorder ? '.collectionReorderActions()' : ''}")
             out += "\n" + indent(")", depth + 3)
             if cell_size_box_open(json_data, nil)
               out += "\n" + indent("}", depth + 3)
@@ -3389,6 +3499,7 @@ module KjuiTools
             if chrome_open(json_data, nil)
               out += "\n" + indent("}", depth + 3)
             end
+            out += "\n" + indent("}", depth + 2) if @reorder
             out += "\n" + indent("}", depth + 2)
             out += "\n" + indent("}", depth + 1)
 
@@ -3465,6 +3576,17 @@ module KjuiTools
 
             out += "\n" + indent(unique_keys_line(data_access, cell_id_prop, "eagerKeys#{index}"), depth + 2) if cell_id_prop && !auto_tracking
             out += "\n" + indent("#{data_access}.forEachIndexed { cellIndex, _ ->", depth + 2)
+            if @reorder
+              # A reorderable row (ticket jui-collection-drag-to-reorder), keyed so a moved row keeps its state.
+              row_key = if cell_id_prop && !auto_tracking
+                          "eagerKeys#{index}[cellIndex]"
+                        elsif cell_id_prop
+                          "(#{data_access}[cellIndex][\"cellId\"] as? String) ?: (#{data_access}[cellIndex][#{JsonUIShared::StringLiterals.kotlin(cell_id_prop)}] as? String) ?: cellIndex.toString()"
+                        else
+                          'cellIndex'
+                        end
+              out += "\n" + indent("key(#{row_key}) { CollectionReorderRow(#{@reorder[:var]}, #{index}, cellIndex, #{data_access}.size, reorderLocked#{index}) {", depth + 2)
+            end
             on_item_appear = json_data['onItemAppear']
             if (appear_name = Helpers::ModifierBuilder.string_event_name(on_item_appear))
               out += "\n" + indent("LaunchedEffect(Unit) { #{index_handler_call(Helpers::BindingExpression.path_only(appear_name), json_data, 'cellIndex')} }", depth + 3)
@@ -3493,7 +3615,7 @@ module KjuiTools
             collection_id = json_data['id']
             # No fillMaxWidth on cells — see the grid path note above.
             place = places ? ".onGloballyPositioned { collectionCellPlaces[#{drawn_cells_before(sections, index) { |j| "section#{j}?.cells?.data?.size" }}cellIndex] = it }" : ''
-            out += "\n" + cell_test_tag_modifier(collection_id, 'cellIndex', depth + 4, place)
+            out += "\n" + cell_test_tag_modifier(collection_id, 'cellIndex', depth + 4, place + (@reorder ? '.collectionReorderActions()' : ''))
             out += "\n" + indent(")", depth + 3)
             if cell_size_box_open(json_data, nil)
               out += "\n" + indent("}", depth + 3)
@@ -3501,6 +3623,7 @@ module KjuiTools
             if chrome_open(json_data, nil)
               out += "\n" + indent("}", depth + 3)
             end
+            out += "\n" + indent("} }", depth + 2) if @reorder
             out += "\n" + indent("}", depth + 2)
             out += "\n" + indent("}", depth + 1)
 

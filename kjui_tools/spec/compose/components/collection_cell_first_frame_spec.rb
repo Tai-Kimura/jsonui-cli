@@ -46,7 +46,14 @@ RSpec.describe 'kjui codegen: a Collection cell composes with its own data from 
     'flowAtTheEnd' => { 'layout' => 'flow', 'flowAlignment' => 'trailing' },
     'row' => { 'layout' => 'horizontal', 'lazy' => 'none' },
     'paging' => { 'layout' => 'horizontal', 'paging' => true },
-    'classList' => { 'sections' => nil, 'cellClasses' => ['ACell'], 'headerClasses' => ['HCell'], 'footerClasses' => ['FCell'] }
+    'classList' => { 'sections' => nil, 'cellClasses' => ['ACell'], 'headerClasses' => ['HCell'], 'footerClasses' => ['FCell'] },
+    # A reorderable Collection (ticket jui-collection-drag-to-reorder): each row is a CollectionReorderRow, the
+    # Collection the container — the cells are drawn as on the same route without it.
+    'lazyNoneReorder' => { 'lazy' => 'none', 'cellIdProperty' => 'id', 'reorderable' => '@{editing}', 'onReorder' => '@{onMove}',
+                           'reorderLockedProperty' => 'fixed' },
+    'listReorder' => { 'reorderable' => true, 'onReorder' => '@{onMove}' },
+    'keyedListReorder' => { 'cellIdProperty' => 'id', 'reorderable' => true, 'onReorder' => '@{onMove}' },
+    'wrapContentReorder' => { 'height' => 'wrapContent', 'reorderable' => true, 'onReorder' => '@{onMove}' }
   }.freeze
 
   def emit(extra)
@@ -132,6 +139,14 @@ RSpec.describe 'kjui codegen: a Collection cell composes with its own data from 
         for (page in 0 until state.pageCount()) pageContent(page)
     }
     inline fun <T> key(vararg keys: Any?, block: () -> T): T = block()
+    // KotlinJsonUI's CollectionReorder API, the signatures as the library declares them, drawing nothing of its own.
+    class CollectionReorder(val isEnabled: Boolean, val usesHandle: Boolean = false, val onReorder: (Int, Int, Int) -> Unit)
+    class CollectionReorderState
+    fun rememberCollectionReorder(reorder: CollectionReorder?, scrollsItself: Boolean = true): CollectionReorderState = CollectionReorderState()
+    fun Modifier.collectionReorderContainer(state: CollectionReorderState): Modifier = this
+    fun CollectionReorderScope(state: CollectionReorderState, content: () -> Unit) { content() }
+    fun CollectionReorderRow(state: CollectionReorderState?, section: Int, index: Int, count: Int, locked: Set<Int> = emptySet(), content: () -> Unit) { content() }
+    fun Modifier.collectionReorderActions(): Modifier = this
     object com { object kotlinjsonui { object utils { object CellIdGenerator {
         fun enrichCellIds(data: List<Map<String, Any>>, property: String): List<Map<String, Any>> = data
     } } } }
@@ -194,7 +209,7 @@ RSpec.describe 'kjui codegen: a Collection cell composes with its own data from 
         class CellData(val viewName: String, val data: List<Map<String, Any>>)
         class HeaderFooterData(val viewName: String, val data: Map<String, Any>)
     }
-    class Data(val rows: CollectionDataSource? = null)
+    class Data(val rows: CollectionDataSource? = null, val editing: Boolean = true, val onMove: ((Int, Int, Int) -> Unit)? = null)
     fun cells(name: String, n: Int, rev: String) = CollectionDataSection.CellData(name, List(n) { mapOf<String, Any>("id" to "$name$it$rev") })
     fun edge(name: String, rev: String) = CollectionDataSection.HeaderFooterData(name, mapOf<String, Any>("id" to "$name$rev"))
     fun rows(rev: String) = Data(CollectionDataSource(listOf(

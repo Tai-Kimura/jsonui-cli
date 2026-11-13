@@ -7,7 +7,6 @@
       "attribute": "onReorder",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -18,7 +17,6 @@
       "attribute": "reorderHandle",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -29,7 +27,6 @@
       "attribute": "reorderLockedProperty",
       "platforms": [
         "ios",
-        "android",
         "web"
       ],
       "reason": "unimplemented",
