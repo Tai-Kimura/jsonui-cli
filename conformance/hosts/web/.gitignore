@@ -31,3 +31,6 @@ screenshots/
 
 # Collection padding probe scratch (scripts/collection_padding_probe.mjs)
 .collection-padding-probe/
+
+# Collection cell root visibility probe scratch (scripts/collection_cell_root_visibility_probe.mjs)
+.cell-root-visibility-probe/

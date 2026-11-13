@@ -586,8 +586,8 @@ module RjuiTools
         # {collectionId}_item_{index} via an `id` prop (kjui testTag
         # parity — the web test driver clicks `#id` and needs it on the
         # cell's real root box), and include sites may set id too. Inject
-        # before the visibility fragment wrap: an expression-container
-        # root can't carry an id, so injection is skipped there.
+        # before the visibility fragment wrap; an expression-container root
+        # gets it on the element inside (on_root_element).
         jsx_content, root_id_injected = inject_root_id_prop(jsx_content)
 
         # An included layout's root takes its place in the including layout
@@ -724,9 +724,33 @@ module RjuiTools
       # cells ({collectionId}_item_{index}) and include sites can address
       # the component's real root box. Returns [jsx, injected?]. A layout
       # root that declares its own id keeps it as the fallback
-      # (`id={id ?? "own"}`); an expression-container root (visibility
-      # binding) is left untouched.
+      # (`id={id ?? "own"}`); on an expression-container root (visibility
+      # binding), the element inside it (on_root_element).
+      # A root with a `visibility` binding is the expression container
+      # BaseConverter#wrap_with_visibility writes: `{cond !== "gone" && (`, the
+      # root element, `)}`. What goes on the root element goes on the element
+      # inside it: until 2.5.34 both injections below skipped this form, so a
+      # cell whose root bound its visibility lost the `<collectionId>_item_<n>`
+      # id its Collection passes (tapItem, within and moveItem find a cell by
+      # it) and a screen lost its marker (ticket
+      # sjui-cell-root-visibility-binding-dropped, the web's half).
+      VISIBILITY_ROOT = /\A(\s*\{[^\n]* !== "gone" && \(\n)(.*)(\n\s*\)\})(\s*)\z/m.freeze
+
+      def on_root_element(jsx_content)
+        match = VISIBILITY_ROOT.match(jsx_content)
+        return yield(jsx_content) unless match
+
+        result = yield(match[2])
+        inner, *rest = Array(result)
+        rebuilt = "#{match[1]}#{inner}#{match[3]}#{match[4]}"
+        result.is_a?(Array) ? [rebuilt, *rest] : rebuilt
+      end
+
       def inject_root_id_prop(jsx_content)
+        on_root_element(jsx_content) { |element| inject_root_id_into_element(element) }
+      end
+
+      def inject_root_id_into_element(jsx_content)
         stripped = jsx_content.lstrip
         return [jsx_content, false] unless stripped.start_with?('<') && stripped[1] =~ /[A-Za-z]/
 
@@ -743,8 +767,8 @@ module RjuiTools
       end
 
       # Inject `data-screen` into the root element's tag for SCREEN layouts
-      # (never cells or partials). Skipped for an expression-container root
-      # (visibility binding), exactly like `id` injection.
+      # (never cells or partials). On an expression-container root (visibility
+      # binding), on the element inside it, exactly like `id` injection.
       #
       # The value is gated on NODE_ENV: the marker is test scaffolding, and
       # React drops an attribute whose value is `undefined`, so a production
@@ -752,6 +776,11 @@ module RjuiTools
       # markers on iOS and Android.
       def inject_root_screen_marker(jsx_content, screen_id)
         return jsx_content unless screen_id
+
+        on_root_element(jsx_content) { |element| inject_screen_marker_into_element(element, screen_id) }
+      end
+
+      def inject_screen_marker_into_element(jsx_content, screen_id)
 
         stripped = jsx_content.lstrip
         return jsx_content unless stripped.start_with?('<') && stripped[1] =~ /[A-Za-z]/
