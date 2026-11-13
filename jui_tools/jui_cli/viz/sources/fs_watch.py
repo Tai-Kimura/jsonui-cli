@@ -18,7 +18,12 @@ START_WAIT_SEC = 5.0
 
 
 def observer():
-    """A new observer (not started), for the installed watchdog's FSEvents:
+    """A new observer (not started); None when the installed watchdog's FSEvents is not the shape the guard is written
+    for (6.x's _watchdog_fsevents.add_watch): 7.x replaced it with a Stream object, and the guarded emitter's start
+    then waited forever, the room unwatched and the watchers' thread held (2.5.32). setup.py pins watchdog<7; an
+    install the pin did not reach is told once, and its rooms go without a watcher rather than hang.
+
+    Since 2.5.33 (setup.py allows watchdog<8), by the installed watchdog's FSEvents:
 
     * 6.x (_watchdog_fsevents.add_watch): the guarded emitter below; a stream that did not start is never stopped.
     * 7.x (_watchdog_fsevents.Stream, one per emitter): watchdog's own FSEventsObserver. Its native run() lets go of

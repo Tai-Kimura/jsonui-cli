@@ -34,9 +34,12 @@ setup(
     },
     python_requires=">=3.11",
     install_requires=[
-        # 6.x and 7.x: the server's FSEvents watcher knows both shapes (jui_cli/viz/sources/fs_watch.py; 7.x
-        # replaced the emitter with a Stream object, ticket 2026-11-13-viz-watchdog-7-follow). <8: a next major
-        # may change it again; an unknown shape is told once and not watched, never hung on.
+        # <7: the server's FSEvents guard (jui_cli/viz/sources/fs_watch.py) is written against 6.x's emitter; 7.x
+        # replaced it with a Stream object, and under 7.1.0 the guarded start waited forever (2.5.32, ticket
+        # 2026-11-13-viz-loop-stalls-on-spec-index). Following 7.x is its own ticket.
+        # 2.5.32 pinned <7; 2.5.33 allows <8: the server's FSEvents watcher knows both shapes since (fs_watch: 6.x's
+        # guarded emitter, 7.x's own observer; ticket 2026-11-13-viz-watchdog-7-follow). <8: a next major may change
+        # it again; an unknown shape is told once and not watched, never hung on.
         "watchdog>=4.0.0,<8",
         "aiohttp>=3.9.0",
         # YAML swagger input (`jui build` api-model sync). Imported lazily
