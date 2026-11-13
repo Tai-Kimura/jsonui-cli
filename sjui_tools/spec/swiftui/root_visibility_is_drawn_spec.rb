@@ -94,7 +94,6 @@ RSpec.describe 'a layout root\'s visibility (sjui)' do
   end
 
   it 'type-checks against VisibilityWrapper\'s declaration' do
-    skip SwiftCompiler.unavailable_reason unless SwiftCompiler.swiftui_available?
     text = body_for({ 'visibility' => '@{keyVisibility}' })
     lines = text.lines
     open_at = lines.index { |l| l.include?('VisibilityWrapper(data.keyVisibility) {') }
@@ -116,7 +115,6 @@ RSpec.describe 'a layout root\'s visibility (sjui)' do
           }
       }
     SWIFT
-    result = SwiftCompiler.type_check(source, imports: ['SwiftUI'])
-    expect(result.success?).to be(true), result.errors.to_s
+    expect(source).to compile_as_swift.with_imports('SwiftUI')
   end
 end
