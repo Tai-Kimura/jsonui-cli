@@ -219,6 +219,55 @@ RSpec.describe JsonUIShared::GeneratedOrphans do
     end
   end
 
+  # A part-owned kind the face declares generated as a whole (a Compose
+  # GeneratedView, ruling 2026-11-13): it passes a scaffold test, and the file
+  # is deleted either way; one the test says held lines its scaffold does not
+  # have is named in one warning line, with the way back.
+  describe 'a part-owned kind with a scaffold test' do
+    let(:scaffold_kind) do
+      described_class::Kind.new(dir: views, owner: :block, pattern: /\A(?<name>\w+)GeneratedView\.swift\z/,
+                                scaffold: ->(path) { !File.read(path).include?('hand') })
+    end
+
+    before { kinds[1] = scaffold_kind }
+
+    it 'deletes one that is only its scaffold, and warns about nothing' do
+      gone = write(File.join(views, 'gone', 'GoneGeneratedView.swift'), 'scaffold')
+      result = sweep
+      expect(File.exist?(gone)).to be(false)
+      expect(result.removed).to eq([gone])
+      expect(result.altered).to be_empty
+      expect(described_class.report_lines(result, base: @root).map(&:first)).to all(eq(:info))
+    end
+
+    it 'deletes one that held other lines, and names it in one warning line' do
+      gone = write(File.join(views, 'gone', 'GoneGeneratedView.swift'), 'scaffold + hand-written')
+      result = sweep
+      expect(File.exist?(gone)).to be(false)
+      expect(result.altered).to eq([gone])
+      expect(described_class.report_lines(result, base: @root))
+        .to include([:warn, "View/gone/GoneGeneratedView.swift #{described_class::ALTERED_WARNING}"])
+    end
+
+    it 'deletes the copy a moved layout left behind, and not the current one' do
+      kinds[1] = described_class::Kind.new(dir: views, owner: :block, pattern: /\A(?<name>\w+)GeneratedView\.swift\z/,
+                                           home_dir: ->(rel) { File.join(views, File.dirname(rel), File.basename(rel, '.json')) },
+                                           scaffold: ->(_path) { true })
+      layout('section/moved_card.json')
+      stale = write(File.join(views, 'moved_card', 'moved_cardGeneratedView.swift'))
+      current = write(File.join(views, 'section', 'moved_card', 'moved_cardGeneratedView.swift'))
+      sweep
+      expect([File.exist?(stale), File.exist?(current)]).to eq([false, true])
+    end
+
+    it 'leaves a living layout\'s file alone, scaffold or not' do
+      live = write(File.join(views, 'home', 'homeGeneratedView.swift'), 'hand-written')
+      result = sweep
+      expect(File.exist?(live)).to be(true)
+      expect(result.removed + result.altered).to be_empty
+    end
+  end
+
   describe 'directories' do
     it 'removes a directory a deletion emptied, but never the declared one' do
       kinds[1] = described_class::Kind.new(dir: views, owner: :generator, pattern: /\A(?<name>\w+)GeneratedView\.swift\z/)

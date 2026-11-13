@@ -575,6 +575,12 @@ def cmd_build(args: argparse.Namespace) -> int:
         if synced is False:
             return _halt(1)
 
+        # A screen whose spec is gone leaves its protocols behind: the three
+        # syncs above walk the specs that exist (ticket
+        # jui-build-leaves-orphan-protocol-and-kjui-view-after-screen-removal).
+        with clock.stage("orphan protocol prune"):
+            _prune_orphan_protocols(config_mgr, platforms, args, specs=all_specs)
+
         # Hard gate for navigationMode:"isolated" — the embedded screen's spec
         # must not declare present-type transitions (sheet/modal/dialog/dismiss).
         with clock.stage("isolated embed check"):
@@ -2610,6 +2616,84 @@ def _ensure_impl_imports(platform: str, impl_path: Path, lines: list[str], args)
     if not getattr(args, "dry_run", False):
         impl_path.write_text(updated, encoding="utf-8")
     return True
+
+
+def _unloaded_spec_files(config_mgr: ConfigManager) -> list[str]:
+    """Spec files `_load_all_specs` skipped for a reason other than "not a screen": unreadable JSON, or a type
+    this build does not know. Their screens are absent from the loaded set without having been deleted."""
+    spec_dir = config_mgr.spec_directory
+    if not spec_dir.exists():
+        return []
+    unloaded = []
+    for sf in sorted(spec_dir.glob("*.spec.json")):
+        try:
+            data = json.loads(sf.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            unloaded.append(sf.name)
+            continue
+        if not isinstance(data, dict) or _describes_a_screen(data.get("type")) is None:
+            unloaded.append(sf.name)
+    return unloaded
+
+
+def _prune_orphan_protocols(config_mgr: ConfigManager, platforms: dict, args, specs: list | None = None) -> list:
+    """Delete the ViewModel / Repository / UseCase protocols (iOS, Android) whose spec is gone.
+
+    The rule is core/protocol_orphans.py's: a file goes only when it is where and as the generator writes that
+    kind, carries the generator's banner for its own name, and no loaded spec gives its path. Skipped, and said,
+    when a spec file could not be loaded; skipped when none was.
+    """
+    from ..core import protocol_orphans
+    from ..core.repository_aggregator import RepositoryAggregator
+    from ..core.type_mapper import TypeMapper
+
+    if specs is None:
+        specs = _load_all_specs(config_mgr)
+    if not specs:
+        return []
+    unloaded = _unloaded_spec_files(config_mgr)
+    if unloaded:
+        print(f"  note: orphan protocols were not pruned: {len(unloaded)} spec file(s) could not be loaded "
+              f"({', '.join(unloaded[:5])}{'...' if len(unloaded) > 5 else ''}), so a protocol whose spec is "
+              f"only unreadable would look deleted")
+        return []
+    aggregator = RepositoryAggregator()
+    for spec_file, screen_spec in specs:
+        aggregator.add_spec(spec_file.name, screen_spec)
+    try:
+        aggregated = aggregator.aggregate()
+    except ValueError:
+        return []   # the syncs above already reported it
+
+    screens = [(spec.name, _vm_subdir_for(spec)) for _sf, spec in specs]
+    type_mapper = TypeMapper(config_mgr.type_map_file)
+    dry_run = bool(getattr(args, "dry_run", False))
+    removed = []
+    for platform, pconfig in platforms.items():
+        if getattr(args, "ios_only", False) and platform != "ios":
+            continue
+        if getattr(args, "android_only", False) and platform != "android":
+            continue
+        if getattr(args, "web_only", False) and platform != "web":
+            continue
+        generator = _platform_generator(config_mgr.project_root, platform, pconfig, type_mapper)
+        if generator is None:
+            continue
+        kinds = protocol_orphans.kinds_for(
+            platform, generator, screens=screens,
+            repositories=aggregated.repositories.keys(), use_cases=aggregated.use_cases.keys())
+        removed += protocol_orphans.sweep(kinds, dry_run=dry_run)
+    if removed:
+        root = config_mgr.project_root
+        head = "Would prune" if dry_run else "Pruned"
+        print(f"{head} {len(removed)} generated protocol file(s) whose spec is gone:")
+        for path in removed:
+            try:
+                shown = path.relative_to(root)
+            except ValueError:
+                shown = path
+            print(f"  - {shown}")
+    return removed
 
 
 def _sync_usecase_protocols(
