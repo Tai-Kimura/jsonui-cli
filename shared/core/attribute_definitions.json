@@ -4358,6 +4358,10 @@
       "type": "string",
       "description": "A key of the cell data: a row whose value for it is true does not move, and no other row is moved past it (a divider row). Section headers and footers are not rows and never move (ticket jui-collection-drag-to-reorder, ruling B 2026-11-13)."
     },
+    "reorderFixedProperty": {
+      "type": "string",
+      "description": "A key of the cell data: a row whose value for it is true does not move and has no screen reader move up / down, but other rows are moved past it (a cancelled or skipped row). A row of a Collection with a reorderHandle whose handle is not drawn is fixed the same way. reorderLockedProperty wins when a row is both (ticket jui-collection-reorder-fixed-row-vs-barrier-row, ruling 2026-11-14)."
+    },
     "currentPage": {
       "type": "binding",
       "description": "Current page index for paging collections (binding supported)"

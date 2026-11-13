@@ -82,6 +82,8 @@ module JsonUI
         { name: 'orientation', kind: :enum, values: ['horizontal', 'vertical'].freeze }.freeze,
         # Enable paging
         { name: 'paging', kind: :boolean }.freeze,
+        # A key of the cell data: a row whose value for it is true does not move and has no screen reader move up / down, but other rows are moved past it (a cancelled or skipped row). A row of a Collection with a reorderHandle whose handle is not drawn is fixed the same way. reorderLockedProperty wins when a row is both (ticket jui-collection-reorder-fixed-row-vs-barrier-row, ruling 2026-11-14).
+        { name: 'reorderFixedProperty', kind: :string }.freeze,
         # The id of an element in the cell layout that starts the drag when long-pressed (e.g. a grip at the row's right edge). Without it, a long press anywhere on the row starts it. The rest of the row keeps its taps (ticket jui-collection-drag-to-reorder, ruling B 2026-11-13).
         { name: 'reorderHandle', kind: :string }.freeze,
         # A key of the cell data: a row whose value for it is true does not move, and no other row is moved past it (a divider row). Section headers and footers are not rows and never move (ticket jui-collection-drag-to-reorder, ruling B 2026-11-13).

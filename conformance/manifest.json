@@ -8,11 +8,11 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "d79b292ff3d97045321b5e1cce60228b73dc8a72dee927f58272bdb2d13085d5",
+  "generatedFrom": "185823f42b6260d5d01c88e24c98b2333c90f33e893fa59ce15b3e8bab4393e7",
   "counts": {
-    "fixtures": 1300,
+    "fixtures": 1301,
     "assertable": 54,
-    "visual": 991,
+    "visual": 992,
     "interactive": 41,
     "control": 136,
     "declarationOnly": 77,
@@ -22323,6 +22323,35 @@
       "deprecated": null,
       "layout": "fixtures/Collection/reorderLockedProperty__static.layout.json",
       "test": "fixtures/Collection/reorderLockedProperty__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/reorderFixedProperty__static",
+      "component": "Collection",
+      "attribute": "reorderFixedProperty",
+      "case": "static",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "reorderFixedProperty",
+      "aliasOf": null,
+      "value": "sample",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/reorderFixedProperty__static.layout.json",
+      "test": "fixtures/Collection/reorderFixedProperty__static.test.json",
       "state": null,
       "promotedFrom": null,
       "peerGroup": null,

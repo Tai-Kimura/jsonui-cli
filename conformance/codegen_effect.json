@@ -171,6 +171,36 @@
       "owner": "reorder helper (rjui_tools CollectionConverter#reorder?, lib/react/templates/reorder.tsx)",
       "reason": "reorderLockedProperty is drawn only on a reorderable Collection (reorderable true or bound): the probe's Collection is not reorderable, so no value of it changes the output, by the rule (ticket jui-collection-drag-to-reorder). The tests that draw it are rjui_tools/spec/react/collection_reorder_spec.rb and conformance/hosts/web/scripts/collection_reorder_probe.mjs.",
       "note": "jsonui-cli 2.5.34 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderFixedProperty",
+      "platform": "ios",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "triage担当（sjui_tools・SwiftJsonUI。2.5.36）",
+      "reason": "値は cell データの鍵で値の集合が無く、効くのも reorderable・onReorder と組の時だけ（reorderLockedProperty と同じ形。ticket jui-collection-reorder-fixed-row-vs-barrier-row）。決まりは shared/core/reorder_vectors.json の rule.fixed と、drop・drag・release・a11y の fixed の例",
+      "note": "jsonui-cli 2.5.36 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderFixedProperty",
+      "platform": "android",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "triage担当（kjui_tools・KotlinJsonUI。2.5.36）",
+      "reason": "値は cell データの鍵で値の集合が無く、効くのも reorderable・onReorder と組の時だけ（reorderLockedProperty と同じ形。ticket jui-collection-reorder-fixed-row-vs-barrier-row）。決まりは shared/core/reorder_vectors.json の rule.fixed と、drop・drag・release・a11y の fixed の例",
+      "note": "jsonui-cli 2.5.36 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderFixedProperty",
+      "platform": "web",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "reorder helper (rjui_tools CollectionConverter#reorder?, lib/react/templates/reorder.tsx)",
+      "reason": "値は cell データの鍵で値の集合が無く、効くのも reorderable・onReorder と組の時だけ（reorderLockedProperty と同じ形。ticket jui-collection-reorder-fixed-row-vs-barrier-row）。決まりは shared/core/reorder_vectors.json の rule.fixed と、drop・drag・release・a11y の fixed の例",
+      "note": "jsonui-cli 2.5.36 の候補"
     }
   ]
 }

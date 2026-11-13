@@ -80,6 +80,19 @@ _SKIP_DIRS = {
 }
 
 _WEB_SUFFIXES = (".ts", ".tsx", ".js", ".jsx")
+
+# The strings.json keys the libraries themselves read at run time, by name, on
+# every face (SwiftJsonUI from Localizable, KotlinJsonUI from the string
+# resources, rjui's generated helpers from StringManager): an app declares them
+# to translate what the library says, and nothing in its layouts or code names
+# them. The Collection reorder's screen reader actions and the web's
+# announcement (shared/core/reorder_vectors.json rule.a11yNames; ticket
+# jui-collection-reorder-accessibility-action-names-only-ja-en).
+LIBRARY_KEYS = frozenset({
+    ("jsonui", "reorder_move_up"),
+    ("jsonui", "reorder_move_down"),
+    ("jsonui", "reorder_moved_to"),
+})
 _IOS_SUFFIXES = (".swift",)
 _ANDROID_SUFFIXES = (".kt", ".java")
 
@@ -1260,6 +1273,10 @@ def collect_usage(
         collect_spec_branch_used(
             spec_dir, declared, report, used, harness_keys
         )
+
+    # Keys the libraries read at run time by their fixed names, from no layout
+    # and no app code (LIBRARY_KEYS): an app that declares one uses it.
+    used |= declared.pairs & LIBRARY_KEYS
 
     for section, key in sorted(declared.pairs - used):
         report.unused.append(UsageFinding(

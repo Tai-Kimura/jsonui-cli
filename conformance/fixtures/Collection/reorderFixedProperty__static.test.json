@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Collection/reorderFixedProperty__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Collection.reorderFixedProperty (static)",
+    "description": "Conformance fixture for 'reorderFixedProperty' on Collection (section: Collection, class: visual). Value under test: \"sample\".",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Collection"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "reorderFixedProperty__static",
+      "description": "Conformance fixture for 'reorderFixedProperty' on Collection (section: Collection, class: visual). Value under test: \"sample\".",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Collection_reorderFixedProperty__static"
+        }
+      ]
+    }
+  ]
+}
