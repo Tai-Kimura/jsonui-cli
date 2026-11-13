@@ -4,7 +4,7 @@
 //   npm run collection-reorder-probe            (add --video DIR to record a slow pass for people to watch)
 //
 // The rule is shared/core/reorder_vectors.json (ticket jui-collection-drag-to-reorder, ruling B 2026-11-13): a long
-// press picks a row up, it passes a row when its centre goes beyond that row's centre, a locked row is neither
+// press picks a row up, it passes a row when its centre goes beyond that row's edge, a locked row is neither
 // picked up nor passed, the list scrolls near its edges, and the release decides the move inside the Collection (its
 // header: the first place, its footer: the last) and cancels it outside. A screen reader gets "move up" / "move
 // down" on every row. The probe writes one layout, runs `rjui build` over it (the production codegen and its reorder

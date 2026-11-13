@@ -11,7 +11,8 @@
 
 // A reorderable Collection's rows on the web (ticket jui-collection-drag-to-reorder, ruling B 2026-11-13).
 // The rule is shared/core/reorder_vectors.json, the same one SwiftJsonUI and KotlinJsonUI drag by: a long press
-// picks a row up, it follows the finger, it passes a row when its centre goes strictly beyond that row's centre,
+// picks a row up, it follows the finger, it passes a row when its centre goes strictly beyond that row's edge (the
+// row's top below it, its bottom above it — the gap stays under the dragged centre, as iOS 27's standard draws it),
 // a locked row is neither picked up nor passed, a fixed row (reorderFixedProperty, or a row whose handle is not
 // drawn) is not picked up but is passed, the list scrolls near its edges, and the release decides the move
 // inside the Collection (over its header the first place, over its footer the last) and cancels it outside.
@@ -33,16 +34,16 @@ export function jsonuiReorderBounds(count, locked, start) {
 }
 export function jsonuiReorderDragTo(heights, start, dy, locked = [], fixed = []) {
   if (locked.includes(start) || fixed.includes(start)) return null;
-  const centres = [];
+  const tops = [];
   let top = 0;
   for (const height of heights) {
-    centres.push(top + height / 2);
+    tops.push(top);
     top += height;
   }
-  const dragged = centres[start] + dy;
+  const dragged = tops[start] + heights[start] / 2 + dy;
   let to = start;
-  for (let i = start + 1; i < heights.length; i++) if (centres[i] < dragged) to += 1;
-  for (let i = 0; i < start; i++) if (centres[i] > dragged) to -= 1;
+  for (let i = start + 1; i < heights.length; i++) if (tops[i] < dragged) to += 1;
+  for (let i = 0; i < start; i++) if (tops[i] + heights[i] > dragged) to -= 1;
   const [low, high] = jsonuiReorderBounds(heights.length, locked, start);
   return Math.max(low, Math.min(high, to));
 }
