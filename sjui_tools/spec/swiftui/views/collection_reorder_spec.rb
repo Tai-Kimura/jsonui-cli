@@ -72,10 +72,26 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     expect(code).to include('locked: Set(cellsData.indices.filter { (cellsData[$0]["fixed"] as? Bool) == true })')
   end
 
-  it 'a horizontal, grid or class-list Collection does not reorder (v1)' do
-    [{ 'layout' => 'horizontal', 'height' => 40 }, { 'columns' => 2 }, { 'sections' => nil, 'cellClasses' => ['ACell'] }].each do |extra|
+  it 'a horizontal or grid Collection does not reorder (v1)' do
+    [{ 'layout' => 'horizontal', 'height' => 40 }, { 'columns' => 2 }].each do |extra|
       expect(emit(extra.merge(REORDER))).not_to include('CollectionReorderRows'), extra.to_s
     end
+  end
+
+  # The class-list shape (no sections): each data section a reorderable section of its own, as SwiftJsonUI's Dynamic
+  # draws it — the lazy-none VStack (.stack, the container on it) and the List (.list, none).
+  LEGACY = { 'sections' => nil, 'cellClasses' => ['ACell'] }.freeze
+
+  it 'the class-list shape reorders too: the lazy-none VStack and the List' do
+    none = emit(LEGACY.merge('lazy' => 'none').merge(REORDER))
+    expect(none).to include('CollectionReorderRows(section: sectionIndex,')
+    expect(none).to include('style: .stack) { index in')
+    expect(none).to include('.collectionReorderContainer(CollectionReorder(')
+    list = emit(LEGACY.merge('height' => 400).merge(REORDER))
+    expect(list).to include('CollectionReorderRows(section: sectionIndex,')
+    expect(list).to include('style: .list) { index in')
+    expect(list).not_to include('collectionReorderContainer')
+    [none, list].each { |code| expect(code).not_to include('ForEach(Array(cellsData') }
   end
 
   it 'ReorderHandleIndex maps each cell layout of a reorderable Collection to its handle id' do
@@ -117,6 +133,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       }
     SWIFT
     codes = ROUTES.values.map { |extra, _| emit(extra.merge(REORDER)) } +
+            [emit(LEGACY.merge('lazy' => 'none').merge(REORDER)), emit(LEGACY.merge('height' => 400).merge(REORDER))] +
             [emit({ 'lazy' => 'none', 'reorderable' => true, 'onReorder' => '@{onStopMove}', 'reorderHandle' => 'grip',
                     'reorderLockedProperty' => 'fixed', 'cellIdProperty' => 'id' })]
     data = ['var rows: CollectionDataSource? = nil', 'var editing: Bool = false', 'var onStopMove: ((Int, Int, Int) -> Void)? = nil']

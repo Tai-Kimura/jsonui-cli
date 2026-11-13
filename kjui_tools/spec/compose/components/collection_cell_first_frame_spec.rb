@@ -53,7 +53,11 @@ RSpec.describe 'kjui codegen: a Collection cell composes with its own data from 
                            'reorderLockedProperty' => 'fixed' },
     'listReorder' => { 'reorderable' => true, 'onReorder' => '@{onMove}' },
     'keyedListReorder' => { 'cellIdProperty' => 'id', 'reorderable' => true, 'onReorder' => '@{onMove}' },
-    'wrapContentReorder' => { 'height' => 'wrapContent', 'reorderable' => true, 'onReorder' => '@{onMove}' }
+    'wrapContentReorder' => { 'height' => 'wrapContent', 'reorderable' => true, 'onReorder' => '@{onMove}' },
+    'classListReorder' => { 'sections' => nil, 'cellClasses' => ['ACell'], 'headerClasses' => ['HCell'], 'footerClasses' => ['FCell'],
+                            'reorderable' => true, 'onReorder' => '@{onMove}' },
+    'classListNoneReorder' => { 'sections' => nil, 'cellClasses' => ['ACell'], 'lazy' => 'none', 'reorderable' => '@{editing}',
+                                'onReorder' => '@{onMove}', 'reorderLockedProperty' => 'fixed' }
   }.freeze
 
   def emit(extra)
@@ -299,7 +303,7 @@ RSpec.describe 'kjui codegen: a Collection cell composes with its own data from 
     frames.each do |route, line|
       # The class-list shape's header / footer carry no data (its section has
       # none to give them): its cells are what it feeds.
-      line = line.split(' | ').map { |f| f.split.grep_v(/\A[HF]-\z/).join(' ') }.join(' | ') if route == 'classList'
+      line = line.split(' | ').map { |f| f.split.grep_v(/\A[HF]-\z/).join(' ') }.join(' | ') if route.start_with?('classList')
       f1, f2, f3, f4 = line.split(' | ')
       # 1. No view composed from its ViewModel's defaults.
       expect(f1).not_to include('-'), "#{route}: #{line}"

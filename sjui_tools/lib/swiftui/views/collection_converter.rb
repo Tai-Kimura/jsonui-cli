@@ -328,6 +328,7 @@ module SjuiTools
             # the cells' ids — every data section's, generate_fallback_foreach);
             # until jsonui-cli 1.9.0 this route drew no scroll.
             generate_scroll_reader_open
+            @reorder_style = :list
             add_line "List {"
             indent do
               # Header
@@ -899,6 +900,7 @@ module SjuiTools
               end
             end
             add_line "}"
+            add_modifier_line ".collectionReorderContainer(#{reorder_value_expr})" if reorder_declared?
             apply_insets_only
           else
             # Multi-column grid — LazyVGrid without ScrollView renders eagerly
@@ -2533,6 +2535,12 @@ module SjuiTools
                       'if let cellsData = section.cells?.data, let viewName = section.cells?.viewName {'
                     end
             add_line guard
+            if reorder_declared? && cell_view && !columns_is_multi?
+              # The data's sections, each one a reorderable section of its own (its index at run time).
+              indent { emit_reorder_rows('cellsData', 'sectionIndex', cell_view, @reorder_style || :stack, equatable: false) }
+              add_line "}"
+              next # the rest of this block is the plain loop; the ForEach closes after it, as for the plain loop
+            end
             indent do
               if cell_view && @component['cellIdProperty']
                 # cellIdProperty is the cells' identity here too (the orchestrator's round 16):
@@ -2668,6 +2676,11 @@ module SjuiTools
           end
 
           add_line "if let #{legacy_first_cells_binding(property_name, is_property_optional?(property_name))} {"
+          if reorder_declared? && !columns_is_multi?
+            indent { emit_reorder_rows('cellsData', 0, cell_view, @reorder_style || :stack, equatable: false) }
+            add_line "}"
+            return
+          end
           indent do
             vars = open_cell_foreach('cellsData')
             indent do
@@ -2964,7 +2977,7 @@ module SjuiTools
         end
 
         # A section's rows through CollectionReorderRows; `style` is :list or :stack.
-        def emit_reorder_rows(cells_expr, section_index, cell_view_name, style)
+        def emit_reorder_rows(cells_expr, section_index, cell_view_name, style, equatable: true)
           locked_prop = @component['reorderLockedProperty']
           locked = if locked_prop.is_a?(String) && !locked_prop.empty?
                      "Set(#{cells_expr}.indices.filter { (#{cells_expr}[$0][\"#{locked_prop}\"] as? Bool) == true })"
@@ -2975,7 +2988,7 @@ module SjuiTools
           add_line "CollectionReorderRows(section: #{section_index}, ids: #{ids}, locked: #{locked}, reorder: #{reorder_value_expr}, style: .#{style}) { index in"
           indent do
             vars = { data_var: "#{cells_expr}[index]", index_var: 'index' }
-            add_line "#{cell_view_name}(data: #{cell_data_arg(vars)}).equatable()"
+            add_line "#{cell_view_name}(data: #{cell_data_arg(vars)})#{equatable ? '.equatable()' : ''}"
             apply_cell_frame(grid: false)
             apply_cell_item_identifier('index')
           end

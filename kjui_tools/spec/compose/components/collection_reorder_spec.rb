@@ -72,6 +72,21 @@ RSpec.describe 'kjui codegen: a reorderable Collection' do
     end
   end
 
+  it 'the class-list shape (no sections) reorders too, each data section its own: the lazy-none Column and the grid' do
+    legacy = { 'sections' => nil, 'cellClasses' => ['stop_cell'] }
+    none, = emit(legacy.merge('lazy' => 'none').merge(REORDER))
+    lazy, = emit(legacy.merge('height' => 400).merge(REORDER))
+    [none, lazy].each do |code|
+      expect(code).to include('CollectionReorderScope(stopListReorder) {')
+      expect(code).to include('.collectionReorderContainer(stopListReorder)')
+      expect(code).to match(/CollectionReorderRow\(stopListReorder, sectionIndex, cellIndex, [\w.]+\.size, reorderLocked\) \{/)
+      expect(code).to include('.collectionReorderActions()')
+      expect(code.scan('{').size).to eq(code.scan('}').size)
+    end
+    expect(none).to include('scrollsItself = false,')
+    expect(lazy).to include('LazyVerticalGrid(')
+  end
+
   describe 'the handle, marked in the cell layout' do
     after { KjuiTools::Compose::Helpers::ModifierBuilder.reorder_handle_ids = Set.new }
 

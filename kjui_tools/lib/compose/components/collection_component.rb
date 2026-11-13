@@ -1119,6 +1119,15 @@ module KjuiTools
             return generate_collection_stack(json_data, sections, depth, required_imports, parent_type, is_horizontal: is_horizontal)
           end
 
+          # The class-list shape (no sections) in one vertical column: reorderable as SwiftJsonUI's and KotlinJsonUI's
+          # Dynamic draw it (ticket jui-collection-drag-to-reorder) — the grid is the container, scrolling itself.
+          if @reorder.nil? && sections.empty? && !is_horizontal && reorder_declared?(json_data) &&
+             !columns_emit_info(json_data)[:is_binding] && columns_emit_info(json_data)[:literal] == 1
+            return with_reorder(json_data, depth, required_imports, 'true') do |d|
+              generate(json_data, d, required_imports, parent_type)
+            end
+          end
+
           required_imports&.add(:lazy_grid)
           required_imports&.add(:grid_item_span)
           required_imports&.add(:launched_effect)
@@ -1323,6 +1332,7 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_clickable(json_data, required_imports))
           # 4. Padding last (inner spacing)
           modifiers.concat(Helpers::ModifierBuilder.build_padding(json_data))
+          modifiers << ".collectionReorderContainer(#{@reorder[:var]})" if @reorder
           modifiers.concat(Helpers::ModifierBuilder.build_weight(json_data, parent_type))
 
           # onItemAppear support - callback with index when cell appears
@@ -1609,13 +1619,19 @@ module KjuiTools
             # The cells of the list `list` names, at depth `d`.
             cells = lambda do |d, list = 'cellData.data', key = nil|
               out = "\n" + indent("items(#{list}.size#{key ? ", key = #{key}" : ''}) { cellIndex ->", d)
+              if @reorder
+                # A reorderable row (ticket jui-collection-drag-to-reorder): the item's root is the row.
+                out += "\n" + reorder_locked_line(list, 'reorderLocked', d + 1)
+                out += "\n" + indent("CollectionReorderRow(#{@reorder[:var]}, sectionIndex, cellIndex, #{list}.size, reorderLocked) {", d + 1)
+              end
               out += "\n" + indent("Box(", d + 1)
               out += "\n" + indent("modifier = Modifier.fillMaxSize(),", d + 2)
               out += "\n" + indent("contentAlignment = #{gravity_alignment}", d + 2)
               out += "\n" + indent(") {", d + 1)
               out += "\n" + indent("val currentCellData = #{list}[cellIndex]", d + 2)
-              out += class_list_cell(json_data, cell_name, d + 2, required_imports)
+              out += class_list_cell(json_data, cell_name, d + 2, required_imports, cell_extra: @reorder ? '.collectionReorderActions()' : '')
               out += "\n" + indent("}", d + 1)
+              out += "\n" + indent("}", d + 1) if @reorder
               out + "\n" + indent("}", d)
             end
             if (array = class_list_array_expr(json_data, cell_name))
@@ -1674,7 +1690,18 @@ module KjuiTools
           code += class_list_edge_call(cell_class_name(header_name), 'header', depth) if header_name
           array = cell_name && property_name && class_list_array_expr(json_data, cell_name)
           place = ->(expr) { places ? ".onGloballyPositioned { collectionCellPlaces[#{expr}] = it }" : '' }
-          if array && !grid
+          if array && !grid && @reorder
+            # A reorderable row each (ticket jui-collection-drag-to-reorder), keyed so a moved row keeps its state.
+            code += "\n" + indent("// #{cell_name}: the declared list, one section", depth)
+            code += "\n" + indent("val reorderCells = #{array}", depth)
+            code += "\n" + reorder_locked_line('reorderCells', 'reorderLocked', depth)
+            code += "\n" + indent("reorderCells.forEachIndexed { cellIndex, currentCellData ->", depth)
+            code += "\n" + indent("val sectionIndex = 0", depth + 1)
+            code += "\n" + indent("key(#{reorder_row_key_expr(json_data, 'currentCellData')}) { CollectionReorderRow(#{@reorder[:var]}, 0, cellIndex, reorderCells.size, reorderLocked) {", depth + 1)
+            code += class_list_cell(json_data, cell_name, depth + 2, required_imports, cell_extra: cell_extra + place.call('cellIndex') + '.collectionReorderActions()')
+            code += "\n" + indent("} }", depth + 1)
+            code += "\n" + indent("}", depth)
+          elsif array && !grid
             code += "\n" + indent("// #{cell_name}: the declared list, one section", depth)
             code += "\n" + indent("#{array}.forEachIndexed { cellIndex, currentCellData ->", depth)
             code += "\n" + indent("val sectionIndex = 0", depth + 1)
@@ -1716,6 +1743,18 @@ module KjuiTools
               code += "\n" + indent("}", depth + 3)
               code += "\n" + indent("}", depth + 2)
               code += "\n" + indent("repeat(#{count} - rowCells.size) { Spacer(modifier = Modifier.weight(1f)) }", depth + 2)
+              code += "\n" + indent("}", depth + 1)
+              code += "\n" + indent("}", depth)
+            elsif @reorder
+              # Each data section a reorderable section of its own (ticket jui-collection-drag-to-reorder).
+              code += "\n" + indent("// #{cell_name}: every data section", depth)
+              code += "\n" + indent("#{sections_access(property_name)}.forEachIndexed { sectionIndex, section ->", depth)
+              code += "\n" + indent("val reorderCells = section.cells?.data.orEmpty()", depth + 1)
+              code += "\n" + reorder_locked_line('reorderCells', 'reorderLocked', depth + 1)
+              code += "\n" + indent("reorderCells.forEachIndexed { cellIndex, currentCellData ->", depth + 1)
+              code += "\n" + indent("key(#{reorder_row_key_expr(json_data, 'currentCellData')}) { CollectionReorderRow(#{@reorder[:var]}, sectionIndex, cellIndex, reorderCells.size, reorderLocked) {", depth + 2)
+              code += class_list_cell(json_data, cell_name, depth + 3, required_imports, cell_extra: cell_extra + '.collectionReorderActions()')
+              code += "\n" + indent("} }", depth + 2)
               code += "\n" + indent("}", depth + 1)
               code += "\n" + indent("}", depth)
             else
@@ -3053,6 +3092,13 @@ module KjuiTools
           ensure
             @reorder = nil
           end
+        end
+
+        # A row's key for `key(...)`: its cellId, its cellIdProperty value, else its index.
+        def self.reorder_row_key_expr(json_data, data_var)
+          cip = json_data['cellIdProperty']
+          by_prop = cip.is_a?(String) && !cip.empty? ? " ?: (#{data_var}[#{JsonUIShared::StringLiterals.kotlin(cip)}] as? String)" : ''
+          "(#{data_var}[\"cellId\"] as? String)#{by_prop} ?: cellIndex.toString()"
         end
 
         # The rows' locked set of one section (`reorderLockedProperty`), hoisted where `remember` may run.
