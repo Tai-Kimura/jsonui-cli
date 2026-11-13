@@ -27,7 +27,7 @@ def _named(rows):
 def test_the_rule_loads_and_every_section_has_vectors():
     assert RULE is not None, "shared/core/font_scale_rule.py did not load"
     assert DATA["drawn"] and DATA["iosCap"]["cases"]
-    assert set(DATA["rule"]) == {"follows", "drawn", "partial", "noFontSize", "iosCap"}
+    assert set(DATA["rule"]) == {"follows", "drawn", "partial", "noFontSize", "letterSpacing", "iosCap"}
 
 
 @pytest.mark.parametrize("v", _named(DATA["drawn"]))
