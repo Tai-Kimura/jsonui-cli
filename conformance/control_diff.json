@@ -55,10 +55,11 @@
     {
       "fixture": "Button/fontScaling__false",
       "platforms": [
+        "android",
         "ios",
         "web"
       ],
-      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
     },
     {
       "fixture": "Button/fontSize__static",
@@ -95,10 +96,11 @@
     {
       "fixture": "Button/maxFontScale__static",
       "platforms": [
+        "android",
         "ios",
         "web"
       ],
-      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
     },
     {
       "fixture": "Button/textAlign__left",
@@ -142,7 +144,7 @@
         "ios",
         "web"
       ],
-      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
     },
     {
       "fixture": "CheckBox/fontSize__binding",
@@ -219,7 +221,7 @@
         "ios",
         "web"
       ],
-      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
     },
     {
       "fixture": "CheckBox/selectedIcon__alias_onSrc",
@@ -457,10 +459,11 @@
     {
       "fixture": "IconLabel/fontScaling__false",
       "platforms": [
+        "android",
         "ios",
         "web"
       ],
-      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
     },
     {
       "fixture": "IconLabel/fontSize__static",
@@ -529,10 +532,11 @@
     {
       "fixture": "IconLabel/maxFontScale__static",
       "platforms": [
+        "android",
         "ios",
         "web"
       ],
-      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
     },
     {
       "fixture": "IconLabel/selectedFontColor__static",
@@ -763,10 +767,11 @@
     {
       "fixture": "Label/fontScaling__false",
       "platforms": [
+        "android",
         "ios",
         "web"
       ],
-      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
     },
     {
       "fixture": "Label/fontSize__binding",
@@ -961,10 +966,11 @@
     {
       "fixture": "Label/maxFontScale__static",
       "platforms": [
+        "android",
         "ios",
         "web"
       ],
-      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
     },
     {
       "fixture": "Label/minimumScaleFactor__binding",
@@ -1260,10 +1266,11 @@
     {
       "fixture": "Radio/fontScaling__false",
       "platforms": [
+        "android",
         "ios",
         "web"
       ],
-      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
     },
     {
       "fixture": "Radio/fontSize__binding",
@@ -1343,10 +1350,11 @@
     {
       "fixture": "Radio/maxFontScale__static",
       "platforms": [
+        "android",
         "ios",
         "web"
       ],
-      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
     },
     {
       "fixture": "Radio/selectedIcon__alias_selected_icon",
@@ -1464,7 +1472,7 @@
       "platforms": [
         "web"
       ],
-      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
     },
     {
       "fixture": "Segment/items__static",
@@ -1479,7 +1487,7 @@
       "platforms": [
         "web"
       ],
-      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
     },
     {
       "fixture": "Segment/selectedFontColor__alias_selectedColor",
@@ -1528,9 +1536,9 @@
     {
       "fixture": "SelectBox/datePickerMode__time",
       "platforms": [
-        "android",
         "web"
-      ]
+      ],
+      "note": "android out (2026-11-14): its closed time select drew a clock where the date one drew a calendar; the three faces' rule (ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height) draws the same 16 x 16 chevron for both, so the closed picture no longer tells the mode — the mode shows in the picker it opens"
     },
     {
       "fixture": "SelectBox/fontColor__static",
@@ -1544,7 +1552,7 @@
       "platforms": [
         "web"
       ],
-      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
     },
     {
       "fixture": "SelectBox/fontSize__static",
@@ -1605,7 +1613,7 @@
       "platforms": [
         "web"
       ],
-      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
     },
     {
       "fixture": "SelectBox/multiple__true",
@@ -2001,10 +2009,11 @@
     {
       "fixture": "TextField/fontScaling__false",
       "platforms": [
+        "android",
         "ios",
         "web"
       ],
-      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
     },
     {
       "fixture": "TextField/fontSize__binding",
@@ -2089,10 +2098,11 @@
     {
       "fixture": "TextField/maxFontScale__static",
       "platforms": [
+        "android",
         "ios",
         "web"
       ],
-      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
     },
     {
       "fixture": "TextField/placeholder__static",
@@ -2208,10 +2218,11 @@
     {
       "fixture": "TextView/fontScaling__false",
       "platforms": [
+        "android",
         "ios",
         "web"
       ],
-      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
     },
     {
       "fixture": "TextView/fontSize__binding",
@@ -2295,10 +2306,11 @@
     {
       "fixture": "TextView/maxFontScale__static",
       "platforms": [
+        "android",
         "ios",
         "web"
       ],
-      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android added with its rebake"
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
     },
     {
       "fixture": "TextView/placeholder__static",
