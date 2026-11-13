@@ -72,12 +72,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
-# Directories never scanned for VM references.
+# Directories never scanned for VM references. The platform tools a project
+# carries (`jui sync_tool` copies them under each face's root) are the
+# library's code, not the app's: rjui_tools' templates (reorder.tsx,
+# Configuration.ts, ...) were counted as the app's web sources, one more file
+# whenever a release added a template (2.5.34 reorder.tsx: 2233 -> 2234 on a
+# consumer's admin face).
+_TOOL_COPIES = {"rjui_tools", "sjui_tools", "kjui_tools"}
 _SKIP_DIRS = {
     "node_modules", ".git", ".next", "dist", "build", "out",
     "Pods", "DerivedData", ".gradle", ".idea", "vendor",
     "__pycache__",
-}
+} | _TOOL_COPIES
 
 _WEB_SUFFIXES = (".ts", ".tsx", ".js", ".jsx")
 _IOS_SUFFIXES = (".swift",)
