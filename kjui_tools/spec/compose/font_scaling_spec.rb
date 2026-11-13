@@ -95,8 +95,10 @@ RSpec.describe 'kjui codegen: text size following' do
       code = emit({ 'type' => type, 'fontScaling' => false }.merge(extra))
       expect(code).to match(/lineHeight = jsonUILineHeight\([^\n]*fontScaling = false/), type
     end
-    # A TextView's own style (LocalTextStyle) takes it; a TextField's placeholder too.
-    expect(emit('type' => 'TextView', 'text' => '@{t}', 'fontScaling' => false)).to include('lineHeight = jsonUILineHeight(jsonUIFontSize(TextUnit.Unspecified, fontScaling = false), fontScaling = false)')
+    # A TextField's placeholder with a hint size takes it.
+    # A TextView's text is on a bare TextStyle (as the Dynamic face's): no line height of its own to draw.
+    expect(emit('type' => 'TextView', 'text' => '@{t}', 'fontScaling' => false))
+      .to include('textStyle = TextStyle(fontSize = jsonUIFontSize(Configuration.TextField.defaultFontSize.sp, fontScaling = false), letterSpacing = jsonUILetterSpacing(fontScaling = false))')
     expect(emit('type' => 'TextField', 'text' => '@{t}', 'hint' => 'h', 'hintFontSize' => 12, 'fontScaling' => false))
       .to include('style = LocalTextStyle.current.copy(lineHeight = jsonUILineHeight(jsonUIFontSize(12.sp, fontScaling = false), fontScaling = false))')
     # An undeclared hint size follows the system, and so does its line: nothing is added there.

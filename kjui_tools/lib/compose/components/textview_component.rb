@@ -522,11 +522,8 @@ module KjuiTools
             if tv_undeclared
               style_parts << "fontSize = #{tv_undeclared}"
               style_parts << "letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}"
-              # On the field's own style (LocalTextStyle, its sp line height) the line too, by the same rule; a bare
-              # TextStyle has none, and the field's line is the font's own.
-              unless json_data['fontColor'] || tv_align
-                style_parts << "lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: tv_undeclared)}"
-              end
+              # No line height: on a bare TextStyle (as the Dynamic TextView's) the field's line is the font's own, which
+              # follows the size the rule draws.
             end
             if style_parts.any?
               code += "\n" + indent("textStyle = TextStyle(#{style_parts.join(', ')}),", depth + 1)
