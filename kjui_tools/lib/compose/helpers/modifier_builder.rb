@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+require 'set'
 
 require_relative 'effect_style_helper'
 require_relative 'binding_expression'
@@ -895,6 +896,12 @@ module KjuiTools
             modifiers << ".testTag(#{JsonUIShared::StringLiterals.kotlin(id_value)})"
             # Expose testTag as resource-id for UIAutomator compatibility (Compose 1.2+)
             modifiers << ".semantics { testTagsAsResourceId = true }"
+            # The element a reorderable Collection picks its rows up by (ReorderHandleIndex; ticket
+            # jui-collection-drag-to-reorder): in a cell layout whose Collection names it as reorderHandle.
+            if reorder_handle_ids.include?(id_value)
+              required_imports&.add(:collection_reorder_handle)
+              modifiers << ".collectionReorderHandle()"
+            end
           end
 
           modifiers + build_control_accessibility(json_data, required_imports)
@@ -1210,9 +1217,20 @@ module KjuiTools
         # control's operation call and a Button's onClick are lambdas, where a
         # CompositionLocal cannot be read.
         @reads_interaction_local = false
+        # Per-file: the ids of this layout's elements a reorderable Collection picks its rows up by
+        # (ReorderHandleIndex). Empty outside a jui build's file loop.
+        @reorder_handle_ids = Set.new
 
         class << self
           attr_reader :reads_interaction_local
+
+          def reorder_handle_ids
+            @reorder_handle_ids || Set.new
+          end
+
+          def reorder_handle_ids=(value)
+            @reorder_handle_ids = value || Set.new
+          end
 
           def reads_interaction_local=(value)
             @reads_interaction_local = value ? true : false

@@ -23,6 +23,7 @@ require_relative '../core/type_synonyms'
 require_relative 'style_loader'
 require_relative 'include_expander'
 require_relative 'interaction_stop_index'
+require_relative 'reorder_handle_index'
 require_relative 'data_model_updater'
 require_relative 'test_bridge_code'
 require_relative 'helpers/import_manager'
@@ -161,6 +162,13 @@ module KjuiTools
       def begin_interaction_local(json_file)
         id = JsonUIShared::ScreenIndex.screen_id_for_path(json_file)
         Helpers::ModifierBuilder.reads_interaction_local = interaction_stoppable_ids.include?(id)
+        # The reorder handles of this layout when a reorderable Collection draws its rows with it (ReorderHandleIndex).
+        Helpers::ModifierBuilder.reorder_handle_ids = reorder_handles.fetch(id, Set.new)
+      end
+
+      # { cell layout id => handle ids } over the whole tree (ReorderHandleIndex).
+      def reorder_handles
+        @reorder_handles ||= ReorderHandleIndex.build(@layouts_dir)
       end
 
       # Canonical screen id for a layout, or nil when it is not a screen.

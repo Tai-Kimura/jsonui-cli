@@ -325,6 +325,15 @@ module KjuiTools
             intrinsic_size: "import androidx.compose.foundation.layout.IntrinsicSize",
             distribution_fill: ["import com.kotlinjsonui.components.DistributionFillRow",
                                 "import com.kotlinjsonui.components.DistributionFillColumn"],
+            # A reorderable Collection (ticket jui-collection-drag-to-reorder): KotlinJsonUI's
+            # library (com.kotlinjsonui.components.CollectionReorder*).
+            collection_reorder: ["import com.kotlinjsonui.components.CollectionReorder",
+                                 "import com.kotlinjsonui.components.CollectionReorderRow",
+                                 "import com.kotlinjsonui.components.CollectionReorderScope",
+                                 "import com.kotlinjsonui.components.collectionReorderActions",
+                                 "import com.kotlinjsonui.components.collectionReorderContainer",
+                                 "import com.kotlinjsonui.components.rememberCollectionReorder"],
+            collection_reorder_handle: "import com.kotlinjsonui.components.collectionReorderHandle",
             collection_stack: ["import com.kotlinjsonui.components.CollectionStack",
                                "import com.kotlinjsonui.components.CollectionStackMode",
                                "import com.kotlinjsonui.components.CollectionStackAxis"],

@@ -81,7 +81,12 @@ RSpec.describe 'Collection cell identifier emit sites' do
     # Now 14 + 1. The added site is the class-list cell loop over a declared
     # list (`generate_legacy_array_cells`, jsonui-cli 1.9.0: Collection.items
     # is a CollectionDataSource or an array) — a path that renders a cell.
-    expect(callers).to eq(15)
+    #
+    # Now 15 + 1. The added site is a reorderable Collection's row
+    # (`emit_reorder_rows`, ticket jui-collection-drag-to-reorder): every
+    # route that reorders draws its cells through CollectionReorderRows, and
+    # each row it renders owes the address.
+    expect(callers).to eq(16)
   end
 
   it 'still emits the address for an id-bearing Collection' do

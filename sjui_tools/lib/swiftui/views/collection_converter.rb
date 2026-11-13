@@ -271,7 +271,9 @@ module SjuiTools
               # the modifier to every row it contains.
               add_line "Group {" if hide_separators
               maybe_indent(hide_separators) do
+                @reorder_style = :list
                 generate_collection_content_sections_vertical
+                @reorder_style = nil
               end
               if hide_separators
                 add_line "}"
@@ -326,6 +328,7 @@ module SjuiTools
             # the cells' ids — every data section's, generate_fallback_foreach);
             # until jsonui-cli 1.9.0 this route drew no scroll.
             generate_scroll_reader_open
+            @reorder_style = :list
             add_line "List {"
             indent do
               # Header
@@ -880,6 +883,7 @@ module SjuiTools
               generate_collection_content_sections_vertical
             end
             add_line "}"
+            add_modifier_line ".collectionReorderContainer(#{reorder_value_expr})" if reorder_declared?
             apply_insets_only
           elsif columns == 1 && !has_sections
             # Legacy single column without sections — plain VStack with ForEach
@@ -896,6 +900,7 @@ module SjuiTools
               end
             end
             add_line "}"
+            add_modifier_line ".collectionReorderContainer(#{reorder_value_expr})" if reorder_declared?
             apply_insets_only
           else
             # Multi-column grid — LazyVGrid without ScrollView renders eagerly
@@ -2443,6 +2448,11 @@ module SjuiTools
                 end
                 maybe_indent(own_columns) do
                   add_line "if let cellsData = section.cells?.data {"
+                  if reorder_declared? && !own_columns
+                    indent { emit_reorder_rows('cellsData', index, cell_view_name, @reorder_style || :stack) }
+                    add_line "}"
+                    next
+                  end
                   indent do
                     vars = open_cell_foreach('cellsData', section_index: index)
                     indent do
@@ -2525,6 +2535,12 @@ module SjuiTools
                       'if let cellsData = section.cells?.data, let viewName = section.cells?.viewName {'
                     end
             add_line guard
+            if reorder_declared? && cell_view && !columns_is_multi?
+              # The data's sections, each one a reorderable section of its own (its index at run time).
+              indent { emit_reorder_rows('cellsData', 'sectionIndex', cell_view, @reorder_style || :stack, equatable: false) }
+              add_line "}"
+              next # the rest of this block is the plain loop; the ForEach closes after it, as for the plain loop
+            end
             indent do
               if cell_view && @component['cellIdProperty']
                 # cellIdProperty is the cells' identity here too (the orchestrator's round 16):
@@ -2660,6 +2676,11 @@ module SjuiTools
           end
 
           add_line "if let #{legacy_first_cells_binding(property_name, is_property_optional?(property_name))} {"
+          if reorder_declared? && !columns_is_multi?
+            indent { emit_reorder_rows('cellsData', 0, cell_view, @reorder_style || :stack, equatable: false) }
+            add_line "}"
+            return
+          end
           indent do
             vars = open_cell_foreach('cellsData')
             indent do
@@ -2926,6 +2947,57 @@ module SjuiTools
 
         # Open a CollectionStackView(...) call. The caller is responsible for
         # emitting the trailing closing `}` after the cell-content block.
+        # ---- Reorder (ticket jui-collection-drag-to-reorder, ruling B 2026-11-13) ----
+        # A vertical single-column Collection with sections, `reorderable` (true or a binding) and an `onReorder`
+        # handler draws SwiftJsonUI's CollectionReorder: CollectionReorderRows in place of each section's ForEach
+        # (style .list in a List, .stack elsewhere), the container on the stack (CollectionStackView's `reorder:`, or
+        # .collectionReorderContainer on the lazy-none VStack; a List needs none). The handle is marked in the cell's
+        # own file (ReorderHandleIndex). The OS version's fork is the library's (no #available here). Without the
+        # declaration the emitted code is the route as it was. The class-list shape (no sections), grids and
+        # horizontal Collections do not reorder (v1).
+        def reorder_declared?
+          r = @component['reorderable']
+          return false if r.nil? || r == false || r == 'false'
+          handler_reference?(@component['onReorder'])
+        end
+
+        def reorder_value_expr
+          r = @component['reorderable']
+          enabled = if r == true || r == 'true'
+                      'true'
+                    elsif r.is_a?(String) && (prop = r[/\A@\{([^}]+)\}\z/, 1])
+                      "data.#{prop} == true"
+                    else
+                      'false'
+                    end
+          uses_handle = @component['reorderHandle'].is_a?(String) && !@component['reorderHandle'].empty?
+          # Locked rows keep the library's own drag on iOS 27 too (orchestrator's ruling 2026-11-13): the
+          # standard reorderable moves a locked row while the finger drags.
+          locked = @component['reorderLockedProperty'].is_a?(String) && !@component['reorderLockedProperty'].empty?
+          name = handler_property(@component['onReorder'])
+          "CollectionReorder(isEnabled: #{enabled}, usesHandle: #{uses_handle}, hasLockedRows: #{locked}, " \
+            "onReorder: { section, from, to in data.#{name}?(section, from, to) })"
+        end
+
+        # A section's rows through CollectionReorderRows; `style` is :list or :stack.
+        def emit_reorder_rows(cells_expr, section_index, cell_view_name, style, equatable: true)
+          locked_prop = @component['reorderLockedProperty']
+          locked = if locked_prop.is_a?(String) && !locked_prop.empty?
+                     "Set(#{cells_expr}.indices.filter { (#{cells_expr}[$0][\"#{locked_prop}\"] as? Bool) == true })"
+                   else
+                     '[]'
+                   end
+          ids = "#{cells_expr}.enumerated().map { index, data in #{cell_key_expr('data', 'index')} }"
+          add_line "CollectionReorderRows(section: #{section_index}, ids: #{ids}, locked: #{locked}, reorder: #{reorder_value_expr}, style: .#{style}) { index in"
+          indent do
+            vars = { data_var: "#{cells_expr}[index]", index_var: 'index' }
+            add_line "#{cell_view_name}(data: #{cell_data_arg(vars)})#{equatable ? '.equatable()' : ''}"
+            apply_cell_frame(grid: false)
+            apply_cell_item_identifier('index')
+          end
+          add_line "}"
+        end
+
         def generate_collection_stack_view_open(axis:)
           params = collection_stack_view_params(axis: axis)
           add_line "CollectionStackView("
@@ -3005,6 +3077,8 @@ module SjuiTools
           if axis != :vertical && fills_cross_axis? && !%w[.lazy .none].include?(mode_expr)
             params << 'fillsCrossAxis: true'
           end
+          # A reorderable Collection: the stack is its container (SwiftJsonUI CollectionReorder).
+          params << "reorder: #{reorder_value_expr}" if axis == :vertical && reorder_declared?
 
           params
         end

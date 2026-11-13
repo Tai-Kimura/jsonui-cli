@@ -78,8 +78,8 @@
       "platform": "ios",
       "check": "C0",
       "class": "unread-spelling",
-      "owner": "サポート1（sjui_tools・SwiftJsonUI）",
-      "reason": "並べ替え（ticket jui-collection-drag-to-reorder、裁定 B 2026-11-13）の土台で、宣言だけを先に入れた。各面の実装の前は何も読まない。実装した面は、この行を外す（測りが支えなくなると、この門が赤で知らせる）",
+      "owner": "サポート2（sjui_tools の生成）・サポート1（SwiftJsonUI）",
+      "reason": "実装済み（sjui の生成 collection_converter、SwiftJsonUI の CollectionReorder。ticket jui-collection-drag-to-reorder）。ただし並べ替えは onReorder と組で初めて描かれ、reorderable だけの probe では何も変わらない（宣言どおり）。生成は sjui_tools/spec/swiftui/views/collection_reorder_spec.rb（swiftc で型検査）、描画は SwiftJsonUI の腕が測る",
       "note": "jsonui-cli 2.5.34 の候補"
     },
     {
@@ -88,8 +88,8 @@
       "platform": "ios",
       "check": "C1",
       "class": "bound-dropped",
-      "owner": "サポート1（sjui_tools・SwiftJsonUI）",
-      "reason": "並べ替え（ticket jui-collection-drag-to-reorder、裁定 B 2026-11-13）の土台で、宣言だけを先に入れた。各面の実装の前は何も読まない。実装した面は、この行を外す（測りが支えなくなると、この門が赤で知らせる）",
+      "owner": "サポート2（sjui_tools の生成）・サポート1（SwiftJsonUI）",
+      "reason": "実装済み（sjui の生成 collection_converter、SwiftJsonUI の CollectionReorder。ticket jui-collection-drag-to-reorder）。ただし並べ替えは onReorder と組で初めて描かれ、reorderable だけの probe では何も変わらない（宣言どおり）。生成は sjui_tools/spec/swiftui/views/collection_reorder_spec.rb（swiftc で型検査）、描画は SwiftJsonUI の腕が測る",
       "note": "jsonui-cli 2.5.34 の候補"
     },
     {
@@ -98,8 +98,8 @@
       "platform": "ios",
       "check": "C0",
       "class": "unenumerated-vocabulary",
-      "owner": "サポート1（sjui_tools・SwiftJsonUI）",
-      "reason": "並べ替え（ticket jui-collection-drag-to-reorder、裁定 B 2026-11-13）の土台で、宣言だけを先に入れた。各面の実装の前は何も読まない。実装した面は、この行を外す（測りが支えなくなると、この門が赤で知らせる）",
+      "owner": "サポート2（sjui_tools の生成）・サポート1（SwiftJsonUI）",
+      "reason": "実装済み（sjui の生成、SwiftJsonUI の CollectionReorder。ticket jui-collection-drag-to-reorder）。値は cell の layout の id・cell データの鍵で、値の集合が無く、効くのも reorderable・onReorder と組の時だけ（reorderHandle は cell の layout の側のファイルに印が付く）。測りは sjui_tools/spec/swiftui/views/collection_reorder_spec.rb と SwiftJsonUI の腕",
       "note": "jsonui-cli 2.5.34 の候補"
     },
     {
@@ -108,8 +108,8 @@
       "platform": "ios",
       "check": "C0",
       "class": "unenumerated-vocabulary",
-      "owner": "サポート1（sjui_tools・SwiftJsonUI）",
-      "reason": "並べ替え（ticket jui-collection-drag-to-reorder、裁定 B 2026-11-13）の土台で、宣言だけを先に入れた。各面の実装の前は何も読まない。実装した面は、この行を外す（測りが支えなくなると、この門が赤で知らせる）",
+      "owner": "サポート2（sjui_tools の生成）・サポート1（SwiftJsonUI）",
+      "reason": "実装済み（sjui の生成、SwiftJsonUI の CollectionReorder。ticket jui-collection-drag-to-reorder）。値は cell の layout の id・cell データの鍵で、値の集合が無く、効くのも reorderable・onReorder と組の時だけ（reorderHandle は cell の layout の側のファイルに印が付く）。測りは sjui_tools/spec/swiftui/views/collection_reorder_spec.rb と SwiftJsonUI の腕",
       "note": "jsonui-cli 2.5.34 の候補"
     },
     {
@@ -119,7 +119,7 @@
       "check": "C0",
       "class": "unread-spelling",
       "owner": "サポート2（kjui_tools・KotlinJsonUI）",
-      "reason": "並べ替え（ticket jui-collection-drag-to-reorder、裁定 B 2026-11-13）の土台で、宣言だけを先に入れた。各面の実装の前は何も読まない。実装した面は、この行を外す（測りが支えなくなると、この門が赤で知らせる）",
+      "reason": "実装済み（kjui の生成 collection_component、KotlinJsonUI の CollectionReorder。ticket jui-collection-drag-to-reorder）。ただし並べ替えは onReorder と組で初めて描かれ、reorderable だけの probe では何も変わらない（宣言どおり）。組の probe（attribute_semantics の <x>Alone: no-draw）に載せるまでは、この行が測りの外を示す。生成は kjui_tools/spec/compose/components/collection_reorder_spec.rb と collection_cell_first_frame_spec.rb（kotlinc で compile して走らせる）、描画は KotlinJsonUI の CollectionReorderTest・DynamicCollectionReorderTest が測る",
       "note": "jsonui-cli 2.5.34 の候補"
     },
     {
@@ -129,7 +129,7 @@
       "check": "C1",
       "class": "bound-dropped",
       "owner": "サポート2（kjui_tools・KotlinJsonUI）",
-      "reason": "並べ替え（ticket jui-collection-drag-to-reorder、裁定 B 2026-11-13）の土台で、宣言だけを先に入れた。各面の実装の前は何も読まない。実装した面は、この行を外す（測りが支えなくなると、この門が赤で知らせる）",
+      "reason": "実装済み（kjui の生成 collection_component、KotlinJsonUI の CollectionReorder。ticket jui-collection-drag-to-reorder）。ただし並べ替えは onReorder と組で初めて描かれ、reorderable だけの probe では何も変わらない（宣言どおり）。組の probe（attribute_semantics の <x>Alone: no-draw）に載せるまでは、この行が測りの外を示す。生成は kjui_tools/spec/compose/components/collection_reorder_spec.rb と collection_cell_first_frame_spec.rb（kotlinc で compile して走らせる）、描画は KotlinJsonUI の CollectionReorderTest・DynamicCollectionReorderTest が測る",
       "note": "jsonui-cli 2.5.34 の候補"
     },
     {
@@ -139,7 +139,7 @@
       "check": "C0",
       "class": "unenumerated-vocabulary",
       "owner": "サポート2（kjui_tools・KotlinJsonUI）",
-      "reason": "並べ替え（ticket jui-collection-drag-to-reorder、裁定 B 2026-11-13）の土台で、宣言だけを先に入れた。各面の実装の前は何も読まない。実装した面は、この行を外す（測りが支えなくなると、この門が赤で知らせる）",
+      "reason": "実装済み（kjui の生成、KotlinJsonUI の CollectionReorder。ticket jui-collection-drag-to-reorder）。値は cell の layout の id・cell データの鍵で、値の集合が無く、効くのも reorderable・onReorder と組の時だけ（reorderHandle は cell の layout の側のファイルに印が付く）。測りは kjui_tools/spec/compose/components/collection_reorder_spec.rb と KotlinJsonUI の腕",
       "note": "jsonui-cli 2.5.34 の候補"
     },
     {
@@ -149,7 +149,7 @@
       "check": "C0",
       "class": "unenumerated-vocabulary",
       "owner": "サポート2（kjui_tools・KotlinJsonUI）",
-      "reason": "並べ替え（ticket jui-collection-drag-to-reorder、裁定 B 2026-11-13）の土台で、宣言だけを先に入れた。各面の実装の前は何も読まない。実装した面は、この行を外す（測りが支えなくなると、この門が赤で知らせる）",
+      "reason": "実装済み（kjui の生成、KotlinJsonUI の CollectionReorder。ticket jui-collection-drag-to-reorder）。値は cell の layout の id・cell データの鍵で、値の集合が無く、効くのも reorderable・onReorder と組の時だけ（reorderHandle は cell の layout の側のファイルに印が付く）。測りは kjui_tools/spec/compose/components/collection_reorder_spec.rb と KotlinJsonUI の腕",
       "note": "jsonui-cli 2.5.34 の候補"
     },
     {

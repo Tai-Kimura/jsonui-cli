@@ -660,6 +660,9 @@ module SjuiTools
           # reach (a Collection's cell, an Embed's screen, a TabView tab's
           # view): their views read the stop from the environment.
           converter.interaction_stoppable_ids = SjuiTools::SwiftUI::InteractionStopIndex.build(layouts_dir)
+          # The elements of cell layouts a reorderable Collection picks its rows up by (reorderHandle; ticket
+          # jui-collection-drag-to-reorder): marked in the cell's own file.
+          converter.reorder_handle_ids = SjuiTools::SwiftUI::ReorderHandleIndex.build(layouts_dir)
           updater = SjuiTools::SwiftUI::ViewUpdater.new
           updater.color_mode = !Core::ConfigManager.load_config['resource_manager_directory'].to_s.empty?
 

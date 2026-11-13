@@ -3,36 +3,6 @@
   "_comment": "Declared attributes no platform converter reads. Hand-maintained: close a gap by implementing it (then delete the entry) or by narrowing platform/mode in attribute_definitions.json. reason is one of: dynamic-key, legacy, platform-na, runtime-only, unimplemented, unreviewed.",
   "entries": [
     {
-      "component": "Collection",
-      "attribute": "onReorder",
-      "platforms": [
-        "ios",
-        "android"
-      ],
-      "reason": "unimplemented",
-      "note": "並べ替え（ticket jui-collection-drag-to-reorder、裁定 B 2026-11-13）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）。閉じた面はこの行から外す"
-    },
-    {
-      "component": "Collection",
-      "attribute": "reorderHandle",
-      "platforms": [
-        "ios",
-        "android"
-      ],
-      "reason": "unimplemented",
-      "note": "並べ替え（ticket jui-collection-drag-to-reorder、裁定 B 2026-11-13）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）。閉じた面はこの行から外す"
-    },
-    {
-      "component": "Collection",
-      "attribute": "reorderLockedProperty",
-      "platforms": [
-        "ios",
-        "android"
-      ],
-      "reason": "unimplemented",
-      "note": "並べ替え（ticket jui-collection-drag-to-reorder、裁定 B 2026-11-13）の土台で宣言だけを先に入れた。各面の実装で閉じる: iOS はサポート1（sjui・SwiftJsonUI）、Android はサポート2（kjui・KotlinJsonUI）。閉じた面はこの行から外す"
-    },
-    {
       "component": "ScrollView",
       "attribute": "minZoom",
       "platforms": [
