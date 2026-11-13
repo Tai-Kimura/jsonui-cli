@@ -2971,8 +2971,11 @@ module SjuiTools
                       'false'
                     end
           uses_handle = @component['reorderHandle'].is_a?(String) && !@component['reorderHandle'].empty?
+          # Locked rows keep the library's own drag on iOS 27 too (orchestrator's ruling 2026-11-13): the
+          # standard reorderable moves a locked row while the finger drags.
+          locked = @component['reorderLockedProperty'].is_a?(String) && !@component['reorderLockedProperty'].empty?
           name = handler_property(@component['onReorder'])
-          "CollectionReorder(isEnabled: #{enabled}, usesHandle: #{uses_handle}, " \
+          "CollectionReorder(isEnabled: #{enabled}, usesHandle: #{uses_handle}, hasLockedRows: #{locked}, " \
             "onReorder: { section, from, to in data.#{name}?(section, from, to) })"
         end
 

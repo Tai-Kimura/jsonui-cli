@@ -49,7 +49,7 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       code = emit(extra.merge(SJUI_REORDER_DECL))
       expect(code).to include('CollectionReorderRows(section: 0, ids: cellsData.enumerated().map { index, data in'), route
       expect(code).to include("style: .#{style}) { index in"), route
-      expect(code).to include('reorder: CollectionReorder(isEnabled: data.editing == true, usesHandle: false, ' \
+      expect(code).to include('reorder: CollectionReorder(isEnabled: data.editing == true, usesHandle: false, hasLockedRows: false, ' \
                               'onReorder: { section, from, to in data.onStopMove?(section, from, to) })'), route
       expect(code).to include('.accessibilityIdentifier("stop_list_item_\\(index)")'), route
       expect(code).not_to include('#available'), route
@@ -68,8 +68,17 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
   it 'a literal reorderable, a handle and the locked rows' do
     code = emit({ 'lazy' => 'none', 'reorderable' => true, 'onReorder' => '@{onStopMove}', 'reorderHandle' => 'grip',
                   'reorderLockedProperty' => 'fixed', 'cellIdProperty' => 'id' })
-    expect(code).to include('CollectionReorder(isEnabled: true, usesHandle: true,')
+    expect(code).to include('CollectionReorder(isEnabled: true, usesHandle: true, hasLockedRows: true,')
     expect(code).to include('locked: Set(cellsData.indices.filter { (cellsData[$0]["fixed"] as? Bool) == true })')
+  end
+
+  it 'a Collection with locked rows says so to CollectionReorder (the library keeps its own drag on iOS 27 for it)' do
+    SJUI_REORDER_ROUTES.each do |route, (extra, _style)|
+      locked = emit(extra.merge(SJUI_REORDER_DECL).merge('reorderLockedProperty' => 'fixed'))
+      expect(locked).to include('hasLockedRows: true, onReorder:'), route
+      expect(emit(extra.merge(SJUI_REORDER_DECL))).to include('hasLockedRows: false, onReorder:'), route
+      expect(emit(extra.merge(SJUI_REORDER_DECL).merge('reorderLockedProperty' => ''))).to include('hasLockedRows: false,'), route
+    end
   end
 
   it 'a horizontal or grid Collection does not reorder (v1)' do
