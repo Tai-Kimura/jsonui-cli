@@ -64,6 +64,23 @@ RSpec.describe 'kjui codegen: text size following' do
     expect(code).to match(/jsonUIFontSize\(resolved_text\d+\.size \?: TextUnit\.Unspecified, fontScaling = false\)/)
   end
 
+  it 'with no fontSize, every component draws its own size by its declarations; undeclared, nothing changes' do
+    # codegen_effect C0/unread-spelling (release-check 43471698693): Button, TextView, IconLabel, Switch, CheckBox and
+    # Radio emitted a size only beside a fontSize, so fontScaling / maxFontScale on a component with none (the
+    # conformance fixtures' shape) read nothing.
+    FONT_SCALING_TYPES.except('Label', 'TextField').each do |type, extra|
+      declared = emit({ 'type' => type, 'fontScaling' => false, 'maxFontScale' => 1.5 }.merge(extra))
+      expect(declared).to include('fontSize = jsonUIFontSize(TextUnit.Unspecified, fontScaling = false, maxFontScale = 1.5f)'), type
+      expect(declared).to include('letterSpacing = jsonUILetterSpacing(fontScaling = false, maxFontScale = 1.5f)'), type
+      expect(emit({ 'type' => type, 'maxFontScale' => 2 }.merge(extra))).to include('jsonUIFontSize(TextUnit.Unspecified, maxFontScale = 2f)'), type
+      # The library leaves an unspecified size alone when nothing is declared: the plain emit stays as it was.
+      expect(emit({ 'type' => type }.merge(extra))).not_to include('jsonUIFontSize('), type
+    end
+    # A TextView with nothing else on its style keeps the field's own (LocalTextStyle), its size by the declarations.
+    expect(emit('type' => 'TextView', 'text' => '@{t}', 'fontScaling' => false))
+      .to include('textStyle = LocalTextStyle.current.copy(fontSize = jsonUIFontSize(TextUnit.Unspecified, fontScaling = false)')
+  end
+
   it "a Label's line heights follow as its size does" do
     code = emit('type' => 'Label', 'text' => 't', 'fontSize' => 15, 'lineHeightMultiple' => 1.4, 'maxFontScale' => 1.2)
     expect(code).to include('lineHeight = jsonUIFontSize(LabelLineHeight.multiple(15f, 1.4f, LocalTextStyle.current, LocalDensity.current), maxFontScale = 1.2f)')
@@ -87,7 +104,7 @@ RSpec.describe 'kjui codegen: text size following' do
     # Without a fontSize: the common stub universe's FontSpec takes the size as an Int (the declared-size emits are
     # compiled by their own specs). What this arm holds is jsonUIFontSize's call with the declarations as named
     # arguments, on each type the universe draws in full.
-    compiled = FONT_SCALING_TYPES.slice(*%w[Label Button IconLabel Switch CheckBox Radio])
+    compiled = FONT_SCALING_TYPES.slice(*%w[Label Button TextView IconLabel Switch CheckBox Radio])
     nodes = compiled.flat_map do |type, extra|
       [{ 'type' => type }.merge(extra), { 'type' => type, 'fontScaling' => false, 'maxFontScale' => 1.5 }.merge(extra)]
     end

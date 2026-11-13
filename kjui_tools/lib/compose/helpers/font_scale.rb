@@ -39,6 +39,17 @@ module KjuiTools
           "jsonUILetterSpacing(#{declaration_args(json_data).sub(/\A, /, '')})"
         end
 
+        # `jsonUIFontSize(TextUnit.Unspecified, <declarations>)` for a component that declares fontScaling /
+        # maxFontScale but no fontSize: the size it draws (the text style's), by its declarations (rule.noFontSize);
+        # nil when it declares neither - the library leaves an unspecified size alone then, so nothing is emitted
+        # and the generated code stays as it was.
+        def undeclared_size(json_data, required_imports = nil)
+          return nil if declaration_args(json_data).empty?
+
+          required_imports&.add(:text_unit)
+          wrap('TextUnit.Unspecified', json_data, required_imports)
+        end
+
         # The declarations as named arguments of a call that takes them (PartialAttributesText): '' when none.
         def call_args(json_data)
           declaration_args(json_data)

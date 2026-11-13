@@ -317,6 +317,9 @@ module KjuiTools
             required_imports&.add(:text_unit) if Helpers::BoundValue.bound?(font_size)
             out += "\n" + indent("fontSize = #{Helpers::FontScale.wrap(Helpers::BoundValue.sp(font_size, null_expr: 'TextUnit.Unspecified'), json_data, required_imports)},", depth + 2)
             out += "\n" + indent("letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)},", depth + 2)
+          elsif (undeclared = Helpers::FontScale.undeclared_size(json_data, required_imports))
+            out += "\n" + indent("fontSize = #{undeclared},", depth + 2)
+            out += "\n" + indent("letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)},", depth + 2)
           end
 
           font_color = label_style_of(json_data, 'fontColor')
