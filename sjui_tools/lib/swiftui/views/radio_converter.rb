@@ -33,6 +33,10 @@ module SjuiTools
           # The declared onClick, called from a selection (operation_click_call).
           click = operation_click_call
 
+          # A single radio's selection expression, set inside its `indent`
+          # block and read by the accessibility modifiers after it.
+          single_selected = nil
+
           # Check if this is a radio group with items
           if bound_items || items.any?
             # Get selection binding
@@ -94,6 +98,12 @@ module SjuiTools
                   if @component['fontColor']
                     add_modifier_line ".foregroundColor(#{get_swiftui_color(@component['fontColor'])})"
                   end
+                  # The chosen option's label reads "selected" (ticket
+                  # sjui-radio-checkbox-selected-state-not-read). The option
+                  # stays its glyph and its label inside the `.contain` group,
+                  # as the dynamic face (RadioConverter.swift), so the state
+                  # goes on the label.
+                  add_modifier_line ".accessibilityAddTraits(#{selection_binding} == #{item} ? .isSelected : [])"
                 end
                 add_line "}"
               end
@@ -157,7 +167,8 @@ module SjuiTools
             # カスタムRadioButton実装
             add_line "HStack#{icon_text_spacing} {"
             indent do
-              add_radio_icon_lines("#{state_var} == #{swift_string_literal(radio_value)}#{seed}")
+              single_selected = "#{state_var} == #{swift_string_literal(radio_value)}#{seed}"
+              add_radio_icon_lines(single_selected)
               add_modifier_line ".onTapGesture {"
               indent do
                 add_line "#{state_var} = #{swift_string_literal(radio_value)}"
@@ -234,6 +245,12 @@ module SjuiTools
           elsif titled
             add_modifier_line ".accessibilityElement(children: .ignore)"
             add_modifier_line ".accessibilityLabel(#{label})"
+          end
+          # The chosen single radio reads "selected" (ticket
+          # sjui-radio-checkbox-selected-state-not-read): the state was only
+          # the glyph's picture. Not chosen adds nothing.
+          if single_selected
+            add_modifier_line ".accessibilityAddTraits((#{single_selected}) ? .isSelected : [])"
           end
 
           # 共通のモディファイアを適用
