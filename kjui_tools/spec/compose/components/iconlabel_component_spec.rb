@@ -180,13 +180,14 @@ RSpec.describe KjuiTools::Compose::Components::IconLabelComponent do
     # the theme's 24 under a 20sp font, where a Label is 26.
     it "gives a declared fontSize a Label's line" do
       out = generate('fontSize' => 20)
-      expect(out).to include('style = LocalTextStyle.current.copy(lineHeight = 26.0.sp)')
+      # By the text size rule, relative to the size drawn (ticket kjui-theme-line-height-scales-under-font-scaling-false).
+      expect(out).to include('style = LocalTextStyle.current.copy(lineHeight = jsonUILineHeight(jsonUIFontSize(20.sp), lineHeight = 26.0.sp))')
       expect(required_imports).to include(:local_text_style)
     end
 
     it 'puts the line and a textShadow in one style' do
       out = generate('fontSize' => 20, 'textShadow' => { 'color' => '#000000', 'blur' => 2, 'offset' => [1, 1] })
-      expect(out).to include('style = LocalTextStyle.current.copy(lineHeight = 26.0.sp, shadow = ')
+      expect(out).to include('style = LocalTextStyle.current.copy(lineHeight = jsonUILineHeight(jsonUIFontSize(20.sp), lineHeight = 26.0.sp), shadow = ')
       expect(out.scan('style = ').size).to eq(1)
     end
 

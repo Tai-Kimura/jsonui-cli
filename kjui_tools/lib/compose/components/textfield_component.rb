@@ -547,9 +547,10 @@ module KjuiTools
                                  "#{line_height == line_height.to_i ? line_height.to_i : line_height}.sp"
                                end
               placeholder_code += ",\n" + indent("style = LocalTextStyle.current.copy(lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: hint_drawn, line: line_height_sp)})", depth + 2)
-            else
+            elsif hint_drawn
               # The theme's line by the text size rule as the size is (ticket
-              # kjui-theme-line-height-scales-under-font-scaling-false).
+              # kjui-theme-line-height-scales-under-font-scaling-false); an undeclared hint size follows the system,
+              # and so does its line.
               required_imports&.add(:local_text_style)
               placeholder_code += ",\n" + indent("style = LocalTextStyle.current.copy(lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: hint_drawn)})", depth + 2)
             end

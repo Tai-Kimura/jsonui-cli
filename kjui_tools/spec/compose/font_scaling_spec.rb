@@ -96,7 +96,10 @@ RSpec.describe 'kjui codegen: text size following' do
     end
     # A TextView's own style (LocalTextStyle) takes it; a TextField's placeholder too.
     expect(emit('type' => 'TextView', 'text' => '@{t}', 'fontScaling' => false)).to include('lineHeight = jsonUILineHeight(jsonUIFontSize(TextUnit.Unspecified, fontScaling = false), fontScaling = false)')
-    expect(emit('type' => 'TextField', 'text' => '@{t}', 'hint' => 'h', 'fontScaling' => false)).to include('style = LocalTextStyle.current.copy(lineHeight = jsonUILineHeight(')
+    expect(emit('type' => 'TextField', 'text' => '@{t}', 'hint' => 'h', 'hintFontSize' => 12, 'fontScaling' => false))
+      .to include('style = LocalTextStyle.current.copy(lineHeight = jsonUILineHeight(jsonUIFontSize(12.sp, fontScaling = false), fontScaling = false))')
+    # An undeclared hint size follows the system, and so does its line: nothing is added there.
+    expect(emit('type' => 'TextField', 'text' => '@{t}', 'hint' => 'h', 'fontScaling' => false)).not_to include('lineHeight = jsonUILineHeight(')
   end
 
   it "partialAttributes' sizes follow the Label: PartialAttributesText takes its declarations" do

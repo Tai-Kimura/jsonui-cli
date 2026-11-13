@@ -21,7 +21,9 @@ RSpec.describe 'kjui codegen: a Label line height starts from one undeclared lin
 
   it 'multiplies L, not the font size (no fontSize: the theme decides L)' do
     out = label('lineHeightMultiple' => 1.8)
-    expect(out).to include('lineHeight = jsonUIFontSize(LabelLineHeight.multiple(null, 1.8f, LocalTextStyle.current, LocalDensity.current))')
+    # Drawn by the text size rule relative to the size drawn (jsonUILineHeight; ticket
+    # kjui-theme-line-height-scales-under-font-scaling-false).
+    expect(out).to match(/lineHeight = jsonUILineHeight\(jsonUIFontSize\(resolved_text\d+\.size \?: TextUnit\.Unspecified\), lineHeight = LabelLineHeight\.multiple\(null, 1\.8f, LocalTextStyle\.current, LocalDensity\.current\)\)/)
     expect(out).not_to include('25.2')
     expect(required_imports).to include(:label_line_height, :local_text_style)
     expect(out).to include('// Requires KotlinJsonUI >= 2.43.5 (LabelLineHeight, lineSpacingBetween)')
@@ -34,7 +36,7 @@ RSpec.describe 'kjui codegen: a Label line height starts from one undeclared lin
 
   it 'adds lineSpacing to L and takes it back after the last line' do
     out = label('lineSpacing' => 16)
-    expect(out).to include('lineHeight = jsonUIFontSize(LabelLineHeight.spaced(null, 16f, LocalTextStyle.current, LocalDensity.current))')
+    expect(out).to include('lineHeight = LabelLineHeight.spaced(null, 16f, LocalTextStyle.current, LocalDensity.current))')
     expect(out).to include('.lineSpacingBetween(16f)')
     expect(required_imports).to include(:line_spacing_between)
   end
@@ -51,9 +53,10 @@ RSpec.describe 'kjui codegen: a Label line height starts from one undeclared lin
     expect(out).to include('.lineSpacingBetween((data.gap?.toFloat() ?: 0.0f))')
   end
 
-  it 'leaves a label with none of the three on the theme line height' do
+  it 'leaves a label with none of the three on the theme line height (drawn by the text size rule)' do
     out = label({})
-    expect(out).not_to include('lineHeight =')
+    expect(out).to match(/lineHeight = jsonUILineHeight\(jsonUIFontSize\(resolved_text\d+\.size \?: TextUnit\.Unspecified\)\)\)/)
+    expect(out).not_to include('lineHeight = LabelLineHeight')
     expect(out).not_to include('.lineSpacingBetween(')
   end
 
@@ -64,7 +67,7 @@ RSpec.describe 'kjui codegen: a Label line height starts from one undeclared lin
     out = KjuiTools::Compose::Components::TextComponent.generate(
       { 'type' => 'Label', 'hint' => 'h', 'hintAttributes' => { 'fontSize' => 12 } }, 0, required_imports
     )
-    expect(out).to match(/lineHeight = if \(\w+\.isEmpty\(\)\) jsonUIFontSize\(15\.6\.sp\) else LocalTextStyle\.current\.lineHeight/)
+    expect(out).to match(/lineHeight = if \(\w+\.isEmpty\(\)\) jsonUILineHeight\([^\n]*lineHeight = 15\.6\.sp\) else jsonUILineHeight\(jsonUIFontSize\([^\n]*\)\)/)
   end
 
   # The emitted style and modifier type-check against the library's API. The
@@ -85,14 +88,16 @@ RSpec.describe 'kjui codegen: a Label line height starts from one undeclared lin
     body = shapes.each_with_index.map do |out, i|
       style = out[/style = (LocalTextStyle\.current\.copy\(.*\)),$/, 1] or raise "no style in shape #{i}:\n#{out}"
       spacing = out[/(\.lineSpacingBetween\(.*\))$/, 1]
-      vars = out.scan(/\b(labelText\d+)\.isEmpty\(\)/).flatten.uniq.map { |v| "val #{v} = \"\"" }
+      vars = out.scan(/\b(labelText\d+)\.isEmpty\(\)/).flatten.uniq.map { |v| "val #{v} = \"\"" } +
+             style.scan(/\b(resolved_text\d+)\b/).flatten.uniq.map { |v| "val #{v} = Resolved()" }
       "fun shape#{i}(data: Data) {\n  #{vars.join("\n  ")}\n  val style = #{style}\n  val modifier: Modifier = Modifier#{spacing}\n}"
     end.join("\n")
     expect(<<~KOTLIN).to compile_as_kotlin
-      class TextUnit(val value: Float)
+      class TextUnit(val value: Float) { companion object { val Unspecified = TextUnit(0f) } }
+      class Resolved(val size: TextUnit? = null)
       fun <T> jsonUIFontSize(size: T, fontScaling: Boolean? = null, maxFontScale: Float? = null): T = size
       fun jsonUILetterSpacing(fontScaling: Boolean? = null, maxFontScale: Float? = null): Any? = null
-      fun jsonUILineHeight(fontSize: Any? = null, fontScaling: Boolean? = null, maxFontScale: Float? = null, lineHeight: Any? = null): TextUnit = TextUnit()
+      fun jsonUILineHeight(fontSize: Any? = null, fontScaling: Boolean? = null, maxFontScale: Float? = null, lineHeight: Any? = null): Nothing = throw IllegalStateException()
       val Double.sp: TextUnit get() = TextUnit(toFloat())
       class TextStyle(val lineHeight: TextUnit = TextUnit(0f), letterSpacing: Any? = null) {
           fun copy(lineHeight: TextUnit = this.lineHeight, letterSpacing: Any? = null): TextStyle = TextStyle(lineHeight)

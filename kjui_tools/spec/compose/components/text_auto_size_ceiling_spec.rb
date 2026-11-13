@@ -40,7 +40,7 @@ RSpec.describe 'kjui Label auto-size: fontSize is the ceiling' do
       class TextUnit
       fun <T> jsonUIFontSize(size: T, fontScaling: Boolean? = null, maxFontScale: Float? = null): T = size
       fun jsonUILetterSpacing(fontScaling: Boolean? = null, maxFontScale: Float? = null): Any? = null
-      fun jsonUILineHeight(fontSize: Any? = null, fontScaling: Boolean? = null, maxFontScale: Float? = null, lineHeight: Any? = null): TextUnit = TextUnit()
+      fun jsonUILineHeight(fontSize: Any? = null, fontScaling: Boolean? = null, maxFontScale: Float? = null, lineHeight: Any? = null): Nothing = throw IllegalStateException()
       val Double.sp: TextUnit get() = TextUnit()
       val Float.sp: TextUnit get() = TextUnit()
       interface TextAutoSize { companion object { fun StepBased(minFontSize: TextUnit, maxFontSize: TextUnit): TextAutoSize = object : TextAutoSize {} } }

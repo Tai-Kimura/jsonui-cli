@@ -72,7 +72,7 @@ RSpec.describe 'kjui codegen: a Label with a visibility and an alignment in its 
       class TextUnit { companion object { val Unspecified = TextUnit() } }
       fun <T> jsonUIFontSize(size: T, fontScaling: Boolean? = null, maxFontScale: Float? = null): T = size
       fun jsonUILetterSpacing(fontScaling: Boolean? = null, maxFontScale: Float? = null): Any? = null
-      fun jsonUILineHeight(fontSize: Any? = null, fontScaling: Boolean? = null, maxFontScale: Float? = null, lineHeight: Any? = null): TextUnit = TextUnit()
+      fun jsonUILineHeight(fontSize: Any? = null, fontScaling: Boolean? = null, maxFontScale: Float? = null, lineHeight: Any? = null): Nothing = throw IllegalStateException()
       class FontFamily
       class FontWeight
       class FontStyle { companion object { val Normal = FontStyle() } }

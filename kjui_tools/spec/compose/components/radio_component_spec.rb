@@ -474,7 +474,7 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
     it 'draws each option label with the declared size and colour' do
       code = described_class.generate({ 'type' => 'Radio', 'id' => 'r', 'items' => %w[a b],
                                         'fontSize' => 18, 'fontColor' => '#FF0000' }, 0, Set.new)
-      expect(code.scan(/Text\("[ab]", color = [^\n]*fontSize = jsonUIFontSize\(18\.sp\), letterSpacing = jsonUILetterSpacing\(\)\)/).size).to eq(2)
+      expect(code.scan(/Text\("[ab]", color = [^\n]*fontSize = jsonUIFontSize\(18\.sp\), letterSpacing = jsonUILetterSpacing\(\), lineHeight = jsonUILineHeight\(jsonUIFontSize\(18\.sp\)\)\)/).size).to eq(2)
       bare = described_class.generate({ 'type' => 'Radio', 'id' => 'r', 'items' => %w[a] }, 0, Set.new)
       expect(bare).to include('Text("a", color = Color.Black)')
     end

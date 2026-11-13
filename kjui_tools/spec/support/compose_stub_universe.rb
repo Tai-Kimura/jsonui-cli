@@ -71,7 +71,7 @@ module ComposeStubUniverse
       // KotlinJsonUI's com.kotlinjsonui.core.jsonUIFontSize: every text size through the text size rule.
       fun <T> jsonUIFontSize(size: T, fontScaling: Boolean? = null, maxFontScale: Float? = null): T = size
       fun jsonUILetterSpacing(fontScaling: Boolean? = null, maxFontScale: Float? = null): Any? = null
-      fun jsonUILineHeight(fontSize: Any? = null, fontScaling: Boolean? = null, maxFontScale: Float? = null, lineHeight: Any? = null): TextUnit = TextUnit()
+      fun jsonUILineHeight(fontSize: Any? = null, fontScaling: Boolean? = null, maxFontScale: Float? = null, lineHeight: Any? = null): Nothing = throw IllegalStateException()
       fun CompositionLocalProvider(vararg values: ProvidedValue, content: () -> Unit) {}
       class MutableState<T>(var value: T)
       operator fun <T> MutableState<T>.getValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>): T = value
@@ -362,7 +362,7 @@ module ComposeStubUniverse
       // KotlinJsonUI's com.kotlinjsonui.core.jsonUIFontSize: every text size through the text size rule.
       fun <T> jsonUIFontSize(size: T, fontScaling: Boolean? = null, maxFontScale: Float? = null): T = size
       fun jsonUILetterSpacing(fontScaling: Boolean? = null, maxFontScale: Float? = null): Any? = null
-      fun jsonUILineHeight(fontSize: Any? = null, fontScaling: Boolean? = null, maxFontScale: Float? = null, lineHeight: Any? = null): TextUnit = TextUnit()
+      fun jsonUILineHeight(fontSize: Any? = null, fontScaling: Boolean? = null, maxFontScale: Float? = null, lineHeight: Any? = null): Nothing = throw IllegalStateException()
       fun CompositionLocalProvider(vararg values: ProvidedValue, content: () -> Unit) {}
       class MutableState<T>(var value: T)
       operator fun <T> MutableState<T>.getValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>): T = value

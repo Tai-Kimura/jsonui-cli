@@ -232,8 +232,11 @@ module KjuiTools
           style_parts = []
           # Drawn by the text size rule as the size is (FontScale.line_height): a text that does not follow keeps its line
           # box (ticket kjui-theme-line-height-scales-under-font-scaling-false).
-          own_line = json_data['fontSize'] ? TextComponent.scaled_sp(json_data['fontSize'], 1.3, round: true) : nil
-          style_parts << "lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: drawn_size, line: own_line)}"
+          # Only where the size is drawn by the rule: an undeclared size follows the system, and so does its line.
+          if drawn_size
+            own_line = json_data['fontSize'] ? TextComponent.scaled_sp(json_data['fontSize'], 1.3, round: true) : nil
+            style_parts << "lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: drawn_size, line: own_line)}"
+          end
           if json_data['textShadow']
             required_imports&.add(:shadow_style)
             style_parts << TextComponent.text_shadow_expression(json_data['textShadow'], required_imports)
