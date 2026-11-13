@@ -1552,10 +1552,11 @@
     {
       "fixture": "SelectBox/fontScaling__false",
       "platforms": [
+        "android",
         "ios",
         "web"
       ],
-      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android draws the SelectBox's text at the system size whatever it declares (KotlinJsonUI, ticket kjui-selectbox-text-ignores-font-scaling-declaration) — android joins when it is fixed"
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
     },
     {
       "fixture": "SelectBox/fontSize__static",
@@ -1614,10 +1615,11 @@
     {
       "fixture": "SelectBox/maxFontScale__static",
       "platforms": [
+        "android",
         "ios",
         "web"
       ],
-      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type); android draws the SelectBox's text at the system size whatever it declares (KotlinJsonUI, ticket kjui-selectbox-text-ignores-font-scaling-declaration) — android joins when it is fixed"
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
     },
     {
       "fixture": "SelectBox/multiple__true",
