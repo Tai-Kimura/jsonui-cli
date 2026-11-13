@@ -72,6 +72,18 @@ export function jsonuiReorderA11y(count, start, action, locked = [], fixed = [])
   const [low, high] = jsonuiReorderBounds(count, locked, start);
   return to >= low && to <= high ? to : null;
 }
+export function jsonuiReorderItemsChanged(start, now) {
+  const same = (a, b) => {
+    const x = [...a].sort((p, q) => p - q);
+    const y = [...b].sort((p, q) => p - q);
+    return x.length === y.length && x.every((v, i) => v === y[i]);
+  };
+  return start.ids.length !== now.ids.length || start.ids.some((id, i) => id !== now.ids[i]) || !same(start.locked, now.locked) || !same(start.fixed, now.fixed);
+}
+function jsonuiHandleDrawn(row, handleId) {
+  const grip = row?.querySelector(`[id="${handleId.replace(/"/g, '\\"')}"]`);
+  return !!grip && grip.getClientRects().length > 0 && getComputedStyle(grip).visibility !== "hidden";
+}
 export function jsonuiReorderLocked(rows, property) {
   const out = [];
   (rows ?? []).forEach((row, i) => {
@@ -185,6 +197,17 @@ export function JsonuiReorderSection(props) {
       let footer = 0;
       let grabAt = 0;
       let scroller = document.documentElement;
+      let started = null;
+      const rowsNow = () => {
+        const { count: c, locked: l = [], fixed: f = [], handleId: h } = latest.current;
+        const ids = [];
+        for (let i = 0; i < c; i++) {
+          const el = rows.current.get(i);
+          if (el) ids.push(el);
+        }
+        const still2 = h ? [...f, ...ids.map((el, i) => jsonuiHandleDrawn(el, h) ? -1 : i).filter((i) => i >= 0)] : [...f];
+        return { ids, locked: [...l], fixed: [...new Set(still2)] };
+      };
       let scroll0 = 0;
       let frame = 0;
       let lastFrame = 0;
@@ -234,6 +257,7 @@ export function JsonuiReorderSection(props) {
         grabAt = y0 - rects[index].top;
         scroller = scrollerOf(box);
         scroll0 = scroller.scrollTop;
+        started = rowsNow();
         active = true;
         els.forEach((el, i) => {
           el.style.transition = i === index ? "none" : "transform 150ms ease";
@@ -263,8 +287,9 @@ export function JsonuiReorderSection(props) {
         if (!active) return finish(false);
         lastY = e.clientY;
         const to = jsonuiReorderRelease(heights, index, grabAt, dy(), fixed2, header, footer);
+        const changed = started !== null && jsonuiReorderItemsChanged(started, rowsNow());
         finish(true);
-        if (to !== null && to !== index) call(index, to);
+        if (!changed && to !== null && to !== index) call(index, to);
       };
       const cancel = (e) => {
         if (e.pointerId === pointerId) finish(active);
@@ -341,8 +366,7 @@ export function JsonuiReorderItem({ index, children }) {
   }, [ctx, index]);
   useEffect(() => {
     if (!ctx?.handleId || !ref.current) return;
-    const grip = ref.current.querySelector(`[id="${ctx.handleId.replace(/"/g, '\\"')}"]`);
-    const drawn = !!grip && grip.getClientRects().length > 0 && getComputedStyle(grip).visibility !== "hidden";
+    const drawn = jsonuiHandleDrawn(ref.current, ctx.handleId);
     if (drawn !== handleDrawn) setHandleDrawn(drawn);
   });
   if (!ctx) return <>{children}</>;

@@ -92,7 +92,7 @@ import './index.css'
 import { CollectionReorderProbe } from './generated/components/CollectionReorderProbe'
 import { StringManager } from './generated/StringManager'
 type Row = { cellId: string; name: string; locked?: boolean; skipped?: boolean; gripVisibility?: string }
-const w = window as unknown as { __calls: unknown[]; __reset: () => void; __lang: (l: string) => void }
+const w = window as unknown as { __calls: unknown[]; __reset: () => void; __lang: (l: string) => void; __rebuild: (k: string) => void }
 w.__lang = (l) => StringManager.setLanguage(l)
 w.__calls = []
 const rows = (names: string[], locked: number[] = []) =>
@@ -108,6 +108,14 @@ function Probe() {
   const [held, setHeld] = useState<Row[]>(HELD)
   const [skip, setSkip] = useState<Row[]>(SKIP)
   w.__reset = () => { setFree(FREE); setHeld(HELD); setSkip(SKIP); w.__calls = [] }
+  // The data rebuilt while a row is dragged (rule.itemsChange): the text alone, a row added above, the order turned,
+  // a row locked (held).
+  w.__rebuild = (k) => {
+    if (k === 'text') setFree((l) => l.map((r) => ({ ...r, name: r.name + "'" })))
+    if (k === 'insert') setFree((l) => [{ ...l[0], cellId: 'id-new', name: 'NEW' }, ...l])
+    if (k === 'reverse') setFree((l) => l.slice().reverse())
+    if (k === 'lock') setHeld((l) => l.map((r, i) => (i === 4 ? { ...r, locked: true } : r)))
+  }
   const data = {
     free: { sections: [{ header: { title: 'Header (release here: first place)' }, cells: { data: free },
                          footer: { title: 'Footer (release here: last place)' } }] },
@@ -296,6 +304,42 @@ const centre = (page, id) => page.evaluate((cid) => {
   const el = document.getElementById(cid); const r = el.getBoundingClientRect()
   window.scrollBy(0, r.top + r.height / 2 - window.innerHeight / 2)
 }, id)
+// The rows rebuilt under a drag (rule.itemsChange): the rebuild comes while the row is held; let go, a change of ids,
+// order or locked cancels it (nothing reported), the text alone does not.
+async function rebuildDrag(page, kind, from, over) {
+  const a = await box(page, from), c = await box(page, over)
+  const [x, y] = at(a, 0.3), [x2, y2] = at(c, 0.3, 0.75)
+  await page.mouse.move(x, y); await page.mouse.down(); await page.waitForTimeout(650)
+  for (let i = 1; i <= 10; i++) await page.mouse.move(x + ((x2 - x) * i) / 20, y + ((y2 - y) * i) / 20)
+  await page.evaluate((k) => window.__rebuild(k), kind); await page.waitForTimeout(120)
+  for (let i = 11; i <= 20; i++) await page.mouse.move(x + ((x2 - x) * i) / 20, y + ((y2 - y) * i) / 20)
+  await page.waitForTimeout(120); await page.mouse.up(); await page.waitForTimeout(250)
+}
+
+async function itemsChangeSteps(page) {
+  await reset(page)
+  await rebuildDrag(page, 'text', '#free_item_0', '#free_item_2')
+  report('rebuild: text only under the drag -> commits (to 2)', JSON.stringify(await calls(page)) === '[["free",0,0,2]]',
+    `calls=${JSON.stringify(await calls(page))}`)
+  for (const kind of ['insert', 'reverse']) {
+    await reset(page)
+    await rebuildDrag(page, kind, '#free_item_0', '#free_item_2')
+    report(`rebuild: ${kind} under the drag -> cancelled`, JSON.stringify(await calls(page)) === '[]',
+      `calls=${JSON.stringify(await calls(page))} order=${(await order(page, 'free')).slice(0, 4).join('|')}`)
+  }
+  await reset(page)
+  const grip = page.locator('#held_item_0 #grip').first()
+  const g = await grip.boundingBox()
+  const s1 = await box(page, '#held_item_1')
+  await page.mouse.move(...at(g)); await page.mouse.down(); await page.waitForTimeout(650)
+  await page.mouse.move(at(g)[0], at(g)[1] + 10)
+  await page.evaluate(() => window.__rebuild('lock')); await page.waitForTimeout(120)
+  await page.mouse.move(at(g)[0], at(s1, 0.5, 0.75)[1], { steps: 10 }); await page.waitForTimeout(120)
+  await page.mouse.up(); await page.waitForTimeout(250)
+  report('rebuild: a row locked under the drag -> cancelled', JSON.stringify(await calls(page)) === '[]',
+    `calls=${JSON.stringify(await calls(page))}`)
+}
+
 async function fixedSteps(page) {
   await reset(page)
   await centre(page, 'skip')
@@ -380,6 +424,7 @@ try {
   await tapSteps(page)
   await a11ySteps(page)
   await fixedSteps(page)
+  await itemsChangeSteps(page)
   await page.close()
 
   const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })

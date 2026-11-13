@@ -89,6 +89,30 @@ export function jsonuiReorderA11y(count: number, start: number, action: 'up' | '
 
 /** The indices of the rows whose value for *property* is true: reorderLockedProperty's (not picked up, nor passed)
  *  or reorderFixedProperty's (not picked up, passed). */
+/**
+ * Whether a drag let go with the rows `now` is cancelled, having read `start` when it began (rule.itemsChange): the
+ * ids differ in number or order, or the locked or the fixed rows differ. Ids are compared as they are (the helper
+ * compares the rows' elements, which React keeps by the cell's key).
+ */
+export function jsonuiReorderItemsChanged<T>(
+  start: { ids: readonly T[]; locked: readonly number[]; fixed: readonly number[] },
+  now: { ids: readonly T[]; locked: readonly number[]; fixed: readonly number[] },
+): boolean {
+  const same = (a: readonly number[], b: readonly number[]) => {
+    const x = [...a].sort((p, q) => p - q);
+    const y = [...b].sort((p, q) => p - q);
+    return x.length === y.length && x.every((v, i) => v === y[i]);
+  };
+  return start.ids.length !== now.ids.length || start.ids.some((id, i) => id !== now.ids[i]) ||
+    !same(start.locked, now.locked) || !same(start.fixed, now.fixed);
+}
+
+/** Whether a row's handle is drawn: in the row, laid out, not hidden. */
+function jsonuiHandleDrawn(row: HTMLElement | null | undefined, handleId: string): boolean {
+  const grip = row?.querySelector(`[id="${handleId.replace(/"/g, '\\"')}"]`) as HTMLElement | null;
+  return !!grip && grip.getClientRects().length > 0 && getComputedStyle(grip).visibility !== 'hidden';
+}
+
 export function jsonuiReorderLocked(rows: readonly unknown[] | null | undefined, property: string): number[] {
   const out: number[] = [];
   (rows ?? []).forEach((row, i) => {
@@ -228,6 +252,15 @@ export function JsonuiReorderSection(props: JsonuiReorderSectionProps) {
       let footer = 0;
       let grabAt = 0;
       let scroller: HTMLElement = document.documentElement;
+      // The rows as the drag read them when it began (rule.itemsChange): compared again when it is let go.
+      let started: { ids: HTMLElement[]; locked: number[]; fixed: number[] } | null = null;
+      const rowsNow = () => {
+        const { count: c, locked: l = [], fixed: f = [], handleId: h } = latest.current;
+        const ids: HTMLElement[] = [];
+        for (let i = 0; i < c; i++) { const el = rows.current.get(i); if (el) ids.push(el); }
+        const still = h ? [...f, ...ids.map((el, i) => (jsonuiHandleDrawn(el, h) ? -1 : i)).filter((i) => i >= 0)] : [...f];
+        return { ids, locked: [...l], fixed: [...new Set(still)] };
+      };
       let scroll0 = 0;
       let frame = 0;
       let lastFrame = 0;
@@ -277,6 +310,7 @@ export function JsonuiReorderSection(props: JsonuiReorderSectionProps) {
         grabAt = y0 - rects[index].top;
         scroller = scrollerOf(box);
         scroll0 = scroller.scrollTop;
+        started = rowsNow();
         active = true;
         els.forEach((el, i) => {
           el.style.transition = i === index ? 'none' : 'transform 150ms ease';
@@ -304,8 +338,10 @@ export function JsonuiReorderSection(props: JsonuiReorderSectionProps) {
         if (!active) return finish(false);
         lastY = e.clientY;
         const to = jsonuiReorderRelease(heights, index, grabAt, dy(), fixed, header, footer);
+        // The rows changed under the drag: its indexes would name other rows, so it is cancelled.
+        const changed = started !== null && jsonuiReorderItemsChanged(started, rowsNow());
         finish(true);
-        if (to !== null && to !== index) call(index, to);
+        if (!changed && to !== null && to !== index) call(index, to);
       };
       const cancel = (e: PointerEvent) => { if (e.pointerId === pointerId) finish(active); };
       function finish(dragged: boolean) {
@@ -379,8 +415,7 @@ export function JsonuiReorderItem({ index, children }: { index: number; children
   }, [ctx, index]);
   useEffect(() => {
     if (!ctx?.handleId || !ref.current) return;
-    const grip = ref.current.querySelector(`[id="${ctx.handleId.replace(/"/g, '\\"')}"]`) as HTMLElement | null;
-    const drawn = !!grip && grip.getClientRects().length > 0 && getComputedStyle(grip).visibility !== 'hidden';
+    const drawn = jsonuiHandleDrawn(ref.current, ctx.handleId);
     if (drawn !== handleDrawn) setHandleDrawn(drawn);
   });
   if (!ctx) return <>{children}</>;
