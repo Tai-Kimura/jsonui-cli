@@ -8,7 +8,7 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "185823f42b6260d5d01c88e24c98b2333c90f33e893fa59ce15b3e8bab4393e7",
+  "generatedFrom": "2a6eb187fd1ae68f8719104e20cf9de8b4e2a775e7810a0a737f48339a9a3719",
   "counts": {
     "fixtures": 1301,
     "assertable": 54,
@@ -16,7 +16,7 @@
     "interactive": 41,
     "control": 136,
     "declarationOnly": 77,
-    "skipped": 159,
+    "skipped": 161,
     "promoted": {
       "callback": 11
     }
@@ -32588,6 +32588,16 @@
     {
       "component": "Collection",
       "attribute": "onReorder",
+      "reason": "callback"
+    },
+    {
+      "component": "Collection",
+      "attribute": "onReorderStart",
+      "reason": "callback"
+    },
+    {
+      "component": "Collection",
+      "attribute": "onReorderEnd",
       "reason": "callback"
     },
     {

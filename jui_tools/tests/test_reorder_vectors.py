@@ -26,10 +26,10 @@ def _named(rows):
 
 def test_the_rule_loads_and_every_section_has_vectors():
     assert RULE is not None, "shared/core/reorder_rule.py did not load"
-    for section in ("drop", "drag", "iosOnMove", "a11y", "release", "autoScroll", "itemsChange"):
+    for section in ("drop", "drag", "iosOnMove", "a11y", "release", "autoScroll", "itemsChange", "callbacks"):
         assert DATA[section], section
     assert set(DATA["rule"]) == {"to", "drag", "locked", "fixed", "iosOnMove", "a11y", "a11yNames", "release",
-                                 "autoScroll", "itemsChange"}
+                                 "autoScroll", "itemsChange", "callbacks"}
 
 
 @pytest.mark.parametrize("v", _named(DATA["drop"]))
@@ -91,3 +91,20 @@ def test_items_change(v):
 def test_items_change_has_both_outcomes():
     outcomes = {v["cancelled"] for v in DATA["itemsChange"]}
     assert outcomes == {True, False}
+
+
+@pytest.mark.parametrize("v", _named(DATA["callbacks"]))
+def test_callbacks(v):
+    """rule.callbacks: a drag that began is start .. end with at most one reorder between; one never picked up, none."""
+    ev = v["events"]
+    if not ev:
+        assert v["how"] == "drag" and v["from"] in v.get("locked", []) + v.get("fixed", [])
+        return
+    assert ev[0] == ["start", 0, v["from"]] and ev[-1] == ["end", 0]
+    middle = ev[1:-1]
+    assert len(middle) <= 1
+    moved = v["how"] == "a11y" or (not v.get("cancelled") and v.get("to") != v["from"])
+    assert bool(middle) is moved
+    if middle:
+        to = v["to"] if v["how"] == "drag" else v["from"] + (-1 if v["action"] == "up" else 1)
+        assert middle[0] == ["reorder", 0, v["from"], to]
