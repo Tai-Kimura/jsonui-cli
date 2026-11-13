@@ -197,11 +197,14 @@ module KjuiTools
           if (color = text_color(json_data, required_imports))
             code += "\n" + indent("color = #{color},", depth + 1)
           end
+          drawn_size = nil
           if (size = json_data['fontSize'])
             required_imports&.add(:text_unit) if Helpers::BoundValue.bound?(size)
-            code += "\n" + indent("fontSize = #{Helpers::FontScale.wrap(Helpers::BoundValue.sp(size, null_expr: 'TextUnit.Unspecified'), json_data, required_imports)},", depth + 1)
+            drawn_size = Helpers::FontScale.wrap(Helpers::BoundValue.sp(size, null_expr: 'TextUnit.Unspecified'), json_data, required_imports)
+            code += "\n" + indent("fontSize = #{drawn_size},", depth + 1)
             code += "\n" + indent("letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)},", depth + 1)
           elsif (undeclared = Helpers::FontScale.undeclared_size(json_data, required_imports))
+            drawn_size = undeclared
             code += "\n" + indent("fontSize = #{undeclared},", depth + 1)
             code += "\n" + indent("letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)},", depth + 1)
           end
@@ -227,7 +230,10 @@ module KjuiTools
           # Undeclared, the theme's line stands. KotlinJsonUI Dynamic:
           # DynamicIconLabelComponent, the same rule.
           style_parts = []
-          style_parts << "lineHeight = #{TextComponent.scaled_sp(json_data['fontSize'], 1.3, round: true)}" if json_data['fontSize']
+          # Drawn by the text size rule as the size is (FontScale.line_height): a text that does not follow keeps its line
+          # box (ticket kjui-theme-line-height-scales-under-font-scaling-false).
+          own_line = json_data['fontSize'] ? TextComponent.scaled_sp(json_data['fontSize'], 1.3, round: true) : nil
+          style_parts << "lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: drawn_size, line: own_line)}"
           if json_data['textShadow']
             required_imports&.add(:shadow_style)
             style_parts << TextComponent.text_shadow_expression(json_data['textShadow'], required_imports)

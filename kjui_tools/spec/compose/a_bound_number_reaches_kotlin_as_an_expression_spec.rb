@@ -110,7 +110,7 @@ RSpec.describe 'a bound number reaches Kotlin as an expression' do
     val Float.dp: Dp get() = Dp()
     val Double.dp: Dp get() = Dp()
     class DpOffset(val x: Dp, val y: Dp)
-    class Color(val value: Long) { fun copy(alpha: Float, letterSpacing: Any? = null): Color = this; companion object { val Black = Color(0L) } }
+    class Color(val value: Long) { fun copy(alpha: Float, letterSpacing: Any? = null, lineHeight: Any? = null): Color = this; companion object { val Black = Color(0L) } }
     class Shadow(val radius: Dp, val color: Color = Color.Black, val offset: DpOffset? = null, val alpha: Float = 1f)
     object RectangleShape
     class Modifier { fun dropShadow(shape: Any, shadow: Shadow): Modifier = this }

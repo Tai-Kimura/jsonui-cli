@@ -45,7 +45,8 @@ module KjuiTools
           if color
             args << "color = #{Helpers::ResourceResolver.process_color(color, required_imports)}"
           end
-          args << "fontSize = #{Helpers::FontScale.wrap(Helpers::BoundValue.sp(size), json_data, required_imports)}" if size
+          hint_drawn = size ? Helpers::FontScale.wrap(Helpers::BoundValue.sp(size), json_data, required_imports) : nil
+          args << "fontSize = #{hint_drawn}" if size
           args << "letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}" if size
           if (weight = font_weight_for(font))
             required_imports&.add(:font_weight)
@@ -67,7 +68,12 @@ module KjuiTools
                              else
                                "#{format_sp(base_size.to_f * multiple.to_f)}.sp"
                              end
-            args << "style = LocalTextStyle.current.copy(lineHeight = #{Helpers::FontScale.wrap(line_height_sp, json_data, required_imports)})"
+            args << "style = LocalTextStyle.current.copy(lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: hint_drawn, line: line_height_sp)})"
+          else
+            # The theme's line by the text size rule as the size is (ticket
+            # kjui-theme-line-height-scales-under-font-scaling-false).
+            required_imports&.add(:local_text_style)
+            args << "style = LocalTextStyle.current.copy(lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: hint_drawn)})"
           end
 
           return "\n" + indent("placeholder = { Text(#{placeholder}) },", depth + 1) if args.length == 1
@@ -508,6 +514,11 @@ module KjuiTools
             if tv_undeclared
               style_parts << "fontSize = #{tv_undeclared}"
               style_parts << "letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}"
+              # On the field's own style (LocalTextStyle, its sp line height) the line too, by the same rule; a bare
+              # TextStyle has none, and the field's line is the font's own.
+              unless json_data['fontColor'] || tv_align
+                style_parts << "lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: tv_undeclared)}"
+              end
             end
             if style_parts.any?
               # The declarations alone keep the field's own style (LocalTextStyle, CustomTextField's default).

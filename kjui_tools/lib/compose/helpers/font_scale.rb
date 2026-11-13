@@ -50,6 +50,20 @@ module KjuiTools
           wrap('TextUnit.Unspecified', json_data, required_imports)
         end
 
+        # `jsonUILineHeight(<font>, <declarations>[, lineHeight = <line>])`: the line box by the same rule as the size
+        # (ticket kjui-theme-line-height-scales-under-font-scaling-false) - the text style's line height, or [line] (a
+        # text's own: a declared size x 1.3, lineHeightMultiple; sp as at 1.0), relative to [font], the size the text
+        # is drawn at (the same jsonUIFontSize(...) its fontSize takes). A text that follows keeps it unchanged.
+        def line_height(json_data, required_imports = nil, font: nil, line: nil)
+          required_imports&.add(:json_ui_line_height)
+          required_imports&.add(:text_unit) unless font
+          args = [font || 'TextUnit.Unspecified']
+          decl = declaration_args(json_data).sub(/\A, /, '')
+          args << decl unless decl.empty?
+          args << "lineHeight = #{line}" if line
+          "jsonUILineHeight(#{args.join(', ')})"
+        end
+
         # The declarations as named arguments of a call that takes them (PartialAttributesText): '' when none.
         def call_args(json_data)
           declaration_args(json_data)

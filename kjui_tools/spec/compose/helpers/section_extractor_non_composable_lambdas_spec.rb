@@ -71,7 +71,7 @@ RSpec.describe KjuiTools::Compose::Helpers::SectionExtractor do
     fun Box(modifier: Modifier = Modifier, contentAlignment: Alignment = Alignment.Center,
             propagateMinConstraints: Boolean = false, content: BoxScope.() -> Unit = {}) {}
     fun Column(modifier: Modifier = Modifier, content: ColumnScope.() -> Unit) {}
-    fun Text(text: String, color: Color = Color.Gray, letterSpacing: Any? = null) {}
+    fun Text(text: String, color: Color = Color.Gray, letterSpacing: Any? = null, lineHeight: Any? = null) {}
     fun CircularProgressIndicator() {}
     object android { object util { object Log { fun e(tag: String, msg: String): Int = 0 } } }
     object DynamicModeManager { fun isActive(): Boolean = false }

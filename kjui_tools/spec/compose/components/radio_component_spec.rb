@@ -455,7 +455,7 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
         object MaterialTheme { val colorScheme = ColorScheme() }
         fun jsonUITintOr(fallback: Color): Color = fallback
         fun Spacer(modifier: Modifier) {}
-        fun Text(text: String, color: Color = Color(), letterSpacing: Any? = null) {}
+        fun Text(text: String, color: Color = Color(), letterSpacing: Any? = null, lineHeight: Any? = null) {}
         class MutableState<T>(var value: T)
         operator fun <T> MutableState<T>.getValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>): T = value
         operator fun <T> MutableState<T>.setValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>, v: T) { value = v }
