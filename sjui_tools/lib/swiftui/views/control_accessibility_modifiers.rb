@@ -17,6 +17,11 @@ module SjuiTools
       #                             iOS has no live region, so a View's does
       #                             nothing here (attribute_definitions.json
       #                             declares it for web and Android).
+      #   accessibilitySelected   — `.accessibilityAddTraits(.isSelected)`, or
+      #                             `(<binding> ? .isSelected : [])`; false
+      #                             tells nothing. Where it takes effect is the
+      #                             rule's (a Button, or a View / IconLabel the
+      #                             tap rule makes one button).
       # A Radio forms its own element and names it (RadioConverter), so it
       # reads the label there.
       module ControlAccessibilityModifiers
@@ -30,6 +35,19 @@ module SjuiTools
             add_modifier_line ".accessibilityLabel(Text(#{expr}))"
           end
           apply_live_announcement if section == 'Label'
+          apply_selected_trait
+        end
+
+        def apply_selected_trait
+          selected = JsonUIShared::ControlAccessibility.selected(@component)
+          return if selected.nil?
+
+          if selected == true
+            add_modifier_line '.accessibilityAddTraits(.isSelected)'
+          else
+            gate = SwiftUI::Binding::BindingExpression.swift_bool_expr(selected[2..-2])
+            add_modifier_line ".accessibilityAddTraits(#{gate} ? .isSelected : [])"
+          end
         end
 
         # The accessibilityLabel as a Swift String expression, or nil.
