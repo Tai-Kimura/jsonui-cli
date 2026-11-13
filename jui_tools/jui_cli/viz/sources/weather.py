@@ -15,7 +15,11 @@ Where things are:
 
 The server asks Open-Meteo (no key) once every QUERY_EVERY_MS while on, and once at once when it is turned on. A
 failure is the source's error only: the last answer is used for up to STALE_AFTER_MS, then the outside shows the
-season alone.
+season alone. After a failure it asks again sooner: RETRY_AFTER_MS[n] after the n+1-th failure in a row (1, 2, 4, 8,
+16 minutes, then every QUERY_EVERY_MS), and back to QUERY_EVERY_MS once an answer comes. Until jsonui-cli 2.5.33 a
+failure waited the full QUERY_EVERY_MS: on a machine whose load made the TLS handshake miss TIMEOUT_SEC (then 5 s), the
+outside stayed without weather for hours after the load had gone (ticket
+2026-11-13-viz-weather-waits-30-min-after-a-failure).
 """
 from __future__ import annotations
 
@@ -33,8 +37,13 @@ URL = "https://api.open-meteo.com/v1/forecast"
 URL_ENV = "JUI_VIZ_WEATHER_URL"   # the e2e build only (JUI_VIZ_E2E=1): a stand-in for Open-Meteo on 127.0.0.1
 CURRENT = "weather_code,temperature_2m,precipitation,cloud_cover,is_day"
 QUERY_EVERY_MS = 30 * 60_000
+#: After the 1st, 2nd, ... failure in a row; past the end, QUERY_EVERY_MS.
+RETRY_AFTER_MS = (1 * 60_000, 2 * 60_000, 4 * 60_000, 8 * 60_000, 16 * 60_000)
 STALE_AFTER_MS = 3 * 3_600_000
-TIMEOUT_SEC = 5
+#: One query runs on the server's executor (the loop goes on, and a stop does not wait for it: viz_cmd._run_serve), so
+#: a slow handshake costs a thread, not the server. 5 s until 2.5.33 missed the handshake on a loaded machine; 20 s is
+#: the cloud prices' (document_tools infra/cost/fetch.TIMEOUT_SEC).
+TIMEOUT_SEC = 20
 DECIMALS = 2                      # about 1.1 km of latitude
 KINDS = ("clear", "cloudy", "fog", "rain", "snow", "thunder")
 
@@ -156,6 +165,13 @@ def parse(body) -> dict:
 
 # ---------------------------------------------------------------- the server's side
 
+def retry_after_ms(failures: int) -> int:
+    """How long after the *failures*-th failure in a row the next query waits."""
+    if failures < 1:
+        return QUERY_EVERY_MS
+    return min(RETRY_AFTER_MS[failures - 1] if failures <= len(RETRY_AFTER_MS) else QUERY_EVERY_MS, QUERY_EVERY_MS)
+
+
 class WeatherBook:
     """The setting, the last answer and when to ask next. ``fetcher`` and ``now`` are replaceable for the arms."""
 
@@ -169,6 +185,7 @@ class WeatherBook:
         self.error: str | None = None
         self.next_at = 0                     # 0: ask at the next chance
         self.tried = 0
+        self.failures = 0                    # failures in a row since the last answer (RETRY_AFTER_MS)
         self._write_status()
 
     @property
@@ -178,7 +195,7 @@ class WeatherBook:
     def set(self, on: bool, lat=None, lon=None) -> dict:
         """From the page's switch. On: rounded coordinates saved, asked at once. Off: removed, never asked."""
         self.setting = save_setting(on, lat, lon, self.config_path)
-        self.last, self.error, self.next_at = None, None, 0
+        self.last, self.error, self.next_at, self.failures = None, None, 0, 0
         self._write_status()
         return self.setting
 
@@ -202,8 +219,10 @@ class WeatherBook:
             return False
         if error:
             self.error = error
+            self.failures += 1
+            self.next_at = at + retry_after_ms(self.failures)
         else:
-            self.last, self.error = {**got, "at": at}, None
+            self.last, self.error, self.failures = {**got, "at": at}, None, 0
         self._write_status()
         return True
 
@@ -230,6 +249,7 @@ class WeatherBook:
         try:
             _write_json(self.status_path or status_json(), {
                 "on": self.on, "lastOkAt": self.last["at"] if self.last else None,
-                "lastTryAt": self.tried or None, "lastError": self.error})
+                "lastTryAt": self.tried or None, "lastError": self.error,
+                "nextTryAt": (self.next_at or None) if self.on else None})
         except OSError:
             pass
