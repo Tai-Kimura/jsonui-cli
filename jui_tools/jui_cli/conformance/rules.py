@@ -2164,6 +2164,12 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # tapBackground on a View is drawn only on a View with a tap (ruling (a)),
     # so the View host carries one (COMMON_EXTRA_HOSTS).
     "View.tapBackground": {"onClick": "@{conformanceTap}"},
+    # accessibilitySelected tells a screen reader only where the node is one
+    # button (shared/core/control_accessibility.rb `selected`): a View or an
+    # IconLabel with a tap. Without one the rule says nothing and the probe
+    # would read an unread spelling.
+    "View.accessibilitySelected": {"onClick": "@{conformanceTap}"},
+    "IconLabel.accessibilitySelected": {"onClick": "@{conformanceTap}"},
     # `direction` reverses the children of an ORIENTED container; with no
     # orientation the canonical answer is "no effect", so the fixture has to
     # supply one or it can never show anything. One orientation cannot serve
