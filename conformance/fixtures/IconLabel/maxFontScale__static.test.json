@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/IconLabel/maxFontScale__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance IconLabel.maxFontScale (static)",
+    "description": "Conformance fixture for 'maxFontScale' on IconLabel (section: IconLabel, class: visual). Value under test: 1.2.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "IconLabel"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "maxFontScale__static",
+      "description": "Conformance fixture for 'maxFontScale' on IconLabel (section: IconLabel, class: visual). Value under test: 1.2.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "IconLabel_maxFontScale__static"
+        }
+      ]
+    }
+  ]
+}

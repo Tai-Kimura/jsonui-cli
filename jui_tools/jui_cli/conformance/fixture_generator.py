@@ -496,6 +496,9 @@ def build_manifest_entry(
     companions = rules.BASE_COMPANIONS.get(plan.host)
     if companions:
         entry["companions"] = list(companions)
+    scale = rules.text_scale(rules.base_attrs_for(plan.host, plan.attribute, case.name))
+    if scale is not None:
+        entry["textScale"] = scale
     return entry
 
 
@@ -643,7 +646,7 @@ def build_control_test(
 
 def build_control_manifest_entry(
     host: str, needs_anchor: bool, layout_rel: str, test_rel: str, shape: str = "",
-    platforms: set | None = None,
+    platforms: set | None = None, extra: dict | None = None,
 ) -> dict:
     # Canonical platform ordering, restricted to the consumers' union.
     platform_list = (
@@ -673,6 +676,9 @@ def build_control_manifest_entry(
     companions = rules.BASE_COMPANIONS.get(host)
     if companions:
         entry["companions"] = list(companions)
+    scale = rules.text_scale(extra)
+    if scale is not None:
+        entry["textScale"] = scale
     return entry
 
 
@@ -881,7 +887,7 @@ def generate_conformance(definitions_path: Path, out_dir: Path) -> GenerationSum
         fixture_entries.append(
             build_control_manifest_entry(
                 host, needs_anchor, layout_rel, test_rel, shape,
-                platforms=control_platforms,
+                platforms=control_platforms, extra=extra,
             )
         )
         summary.fixture_count += 1
