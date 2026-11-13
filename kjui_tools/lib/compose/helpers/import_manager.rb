@@ -284,6 +284,8 @@ module KjuiTools
             semantics_live_region: ["import androidx.compose.ui.semantics.semantics",
                                     "import androidx.compose.ui.semantics.liveRegion",
                                     "import androidx.compose.ui.semantics.LiveRegionMode"],
+            semantics_selected: ["import androidx.compose.ui.semantics.semantics",
+                                 "import androidx.compose.ui.semantics.selected"],
             image: "import androidx.compose.foundation.Image",
             color_filter: "import androidx.compose.ui.graphics.ColorFilter",
             local_content_color: "import androidx.compose.material3.LocalContentColor",
