@@ -32,6 +32,13 @@ module KjuiTools
           "jsonUIFontSize(#{expr}#{declaration_args(json_data)})"
         end
 
+        # `jsonUILetterSpacing(<declarations>)`: the text style's letter spacing by the same rule as the size
+        # (shared/core/font_scale_vectors.json rule.letterSpacing), the companion of every emitted text size.
+        def letter_spacing(json_data, required_imports = nil)
+          required_imports&.add(:json_ui_letter_spacing)
+          "jsonUILetterSpacing(#{declaration_args(json_data).sub(/\A, /, '')})"
+        end
+
         # The declarations as named arguments of a call that takes them (PartialAttributesText): '' when none.
         def call_args(json_data)
           declaration_args(json_data)

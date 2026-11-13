@@ -101,7 +101,7 @@ RSpec.describe 'a bound number reaches Kotlin as an expression' do
     expect(builder.send(:generate_component, { 'type' => 'SelectBox', 'id' => 'p', 'padding' => BOUND }, 0))
       .to match(/contentPadding = PaddingValues\(.*data\.v/)
     expect(builder.send(:generate_component, { 'type' => 'SelectBox', 'id' => 'p', 'padding' => 4 }, 0))
-      .to include('contentPadding = PaddingValues(4.dp)')
+      .to include('contentPadding = PaddingValues(start = 4.dp, top = 4.dp, end = 4.dp, bottom = 4.dp)')
   end
 
   STUBS = <<~KOTLIN
@@ -110,7 +110,7 @@ RSpec.describe 'a bound number reaches Kotlin as an expression' do
     val Float.dp: Dp get() = Dp()
     val Double.dp: Dp get() = Dp()
     class DpOffset(val x: Dp, val y: Dp)
-    class Color(val value: Long) { fun copy(alpha: Float): Color = this; companion object { val Black = Color(0L) } }
+    class Color(val value: Long) { fun copy(alpha: Float, letterSpacing: Any? = null): Color = this; companion object { val Black = Color(0L) } }
     class Shadow(val radius: Dp, val color: Color = Color.Black, val offset: DpOffset? = null, val alpha: Float = 1f)
     object RectangleShape
     class Modifier { fun dropShadow(shape: Any, shadow: Shadow): Modifier = this }

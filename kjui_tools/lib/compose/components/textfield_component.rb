@@ -519,6 +519,7 @@ module KjuiTools
 
             if json_data['hintFontSize']
               placeholder_code += ",\n" + indent("fontSize = #{Helpers::FontScale.wrap(Helpers::BoundValue.sp(json_data['hintFontSize']), json_data, required_imports)}", depth + 2)
+              placeholder_code += ",\n" + indent("letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}", depth + 2)
             end
 
             if json_data['hintFont'] == 'bold'
@@ -690,6 +691,7 @@ module KjuiTools
           unless tf_resolved_var
             required_imports&.add(:configuration)
             style_parts << "fontSize = #{Helpers::FontScale.wrap('Configuration.TextField.defaultFontSize.sp', json_data, required_imports)}"
+            style_parts << "letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}"
           end
 
           if json_data['textAlign']

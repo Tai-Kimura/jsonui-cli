@@ -224,6 +224,7 @@ module KjuiTools
           component_code += "\n" + indent("fontFamily = #{font_ref}.family,", depth + 1)
           component_code += "\n" + indent("fontWeight = #{font_ref}.weight,", depth + 1)
           component_code += "\n" + indent("fontSize = #{Helpers::FontScale.wrap("#{font_ref}.size ?: TextUnit.Unspecified", json_data, required_imports)},", depth + 1)
+          component_code += "\n" + indent("letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)},", depth + 1)
           component_code += "\n" + indent("fontStyle = #{font_ref}.style ?: FontStyle.Normal,", depth + 1)
 
           # Text decoration (underline, strikethrough). A colour-carrying

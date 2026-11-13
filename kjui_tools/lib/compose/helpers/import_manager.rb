@@ -234,6 +234,7 @@ module KjuiTools
             line_spacing_between: "import com.kotlinjsonui.components.lineSpacingBetween",
             # Every text size through the text size rule (Helpers::FontScale).
             json_ui_font_size: "import com.kotlinjsonui.core.jsonUIFontSize",
+            json_ui_letter_spacing: "import com.kotlinjsonui.core.jsonUILetterSpacing",
             graphics_layer: "import androidx.compose.ui.graphics.graphicsLayer",
             LaunchedEffect: "import androidx.compose.runtime.LaunchedEffect",
             launched_effect: "import androidx.compose.runtime.LaunchedEffect",
