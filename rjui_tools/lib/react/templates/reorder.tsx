@@ -139,7 +139,7 @@ type Section = {
 
 const SectionContext = createContext<Section | null>(null);
 
-export type JsonuiReorderSectionProps = {
+export interface JsonuiReorderSectionProps {
   section: number;
   count: number;
   enabled?: boolean | null;
@@ -147,7 +147,7 @@ export type JsonuiReorderSectionProps = {
   handleId?: string;
   locked?: readonly number[];
   children?: React.ReactNode;
-};
+}
 
 function scrollerOf(el: HTMLElement): HTMLElement {
   for (let node: HTMLElement | null = el.parentElement; node; node = node.parentElement) {

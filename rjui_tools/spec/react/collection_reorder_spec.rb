@@ -9,6 +9,7 @@ require_relative '../spec_helper'
 require 'react/converters/collection_converter'
 require 'react/reorder'
 require 'core/config_manager'
+require_relative '../support/typescript_compiler'
 
 # A reorderable Collection on the web (ticket jui-collection-drag-to-reorder, ruling B 2026-11-13): the converter
 # wraps each section's rows in the generated helper's JsonuiReorderSection, each row in a JsonuiReorderItem (which
@@ -80,6 +81,32 @@ RSpec.describe 'a reorderable Collection (rjui)' do
         expect(out).not_to include('JsonuiReorder')
         expect(out).not_to include('data-jsonui-reorder')
       end
+    end
+  end
+
+  describe 'the emitted TypeScript' do
+    # Checked against the helper's own props (lib/react/templates/reorder.tsx), strict, as a consumer compiles it.
+    it 'compiles against the helper\'s declarations' do
+      out = convert(SECTIONS.merge('reorderable' => '@{editing}', 'reorderHandle' => 'grip',
+                                   'reorderLockedProperty' => 'isDivider'))
+      props = TypeScriptCompiler.template_declarations('reorder.tsx', 'JsonuiReorderSectionProps')
+                                .gsub('React.ReactNode', 'unknown')
+      ambient = <<~TS
+        #{props}
+        declare function JsonuiReorderSection(props: JsonuiReorderSectionProps): JSX.Element;
+        declare function JsonuiReorderItem(props: { index: number; children?: unknown; key?: string | number }): JSX.Element;
+        declare function jsonuiReorderLocked(rows: readonly unknown[] | null | undefined, property: string): number[];
+        declare const data: {
+          rows?: { sections?: { header?: unknown; footer?: unknown; cells?: { data?: unknown[] } }[] };
+          editing?: boolean;
+          onMoveStop?: (section: number, from: number, to: number) => void;
+        };
+        type RowCellData = { name?: string };
+        declare function RowCell(props: { id?: string; data: RowCellData }): JSX.Element;
+        declare function Head(props: { data: unknown }): JSX.Element;
+        declare function Foot(props: { data: unknown }): JSX.Element;
+      TS
+      expect(TypeScriptCompiler.component(out)).to compile_as_typescript.with_ambient(ambient)
     end
   end
 
