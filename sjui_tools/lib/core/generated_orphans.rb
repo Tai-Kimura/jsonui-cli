@@ -23,8 +23,12 @@ require_relative 'screen_index'
 #
 # A file that meets 1 and 3 but not 2 is not the generator's to delete, and is
 # named in a warning instead:
-#   - an output the generator owns only in part (a Compose GeneratedView: the
-#     generator rewrites the GENERATED_CODE block and nothing outside it);
+#   - an output the generator owns only in part (it rewrites a marked block and
+#     nothing outside it) — unless the face says the whole file is generated
+#     anyway and passes a `scaffold` test (a Compose GeneratedView, ruling
+#     2026-11-13: a GeneratedView is not a place for hand-written code). Such a
+#     file is DELETED; when the test says it held lines its scaffold does not
+#     have, a warning names it (git can bring it back);
 #   - an output with no @generated line (a Data file from an older generator);
 #   - a file the user writes (a View, a ViewModel). These are named only when
 #     a generated output of the same name was found orphaned in the same run
@@ -49,9 +53,17 @@ module JsonUIShared
     # home_dir: only for an output placed by the layout's own directory — the
     #          writer's own function from a layout's path (relative to the
     #          layouts directory) to the directory it writes that output in
-    Kind = Struct.new(:dir, :pattern, :owner, :home_dir, keyword_init: true)
+    # scaffold: only with owner :block — the face's test that a file holds
+    #          nothing outside its block but the scaffold the generator wrote
+    #          (path -> true/false). Given, the file is deleted either way and
+    #          a false is reported in `altered`.
+    Kind = Struct.new(:dir, :pattern, :owner, :home_dir, :scaffold, keyword_init: true)
 
-    Result = Struct.new(:removed, :kept, :skipped, keyword_init: true)
+    # altered: deleted files a kind's scaffold test said had been edited.
+    Result = Struct.new(:removed, :kept, :skipped, :altered, keyword_init: true)
+
+    ALTERED_WARNING = 'is a generated file, but it held lines its scaffold does not have; ' \
+                      'it was deleted with its layout — git can bring it back'
 
     WARNINGS = {
       block: 'its layout is gone; the generator owns only the GENERATED_CODE block, ' \
@@ -122,6 +134,7 @@ module JsonUIShared
 
       removed = []
       kept = []
+      altered = []
       orphaned = Set.new   # names no layout has
       moved = {}           # [name, directory of a stale copy] => where the current one is
       user_candidates = []
@@ -166,6 +179,11 @@ module JsonUIShared
             File.delete(path)
             removed << path
             remove_dir_if_empty(File.dirname(path), kind.dir)
+          elsif kind.owner == :block && kind.scaffold
+            altered << path unless kind.scaffold.call(path)
+            File.delete(path)
+            removed << path
+            remove_dir_if_empty(File.dirname(path), kind.dir)
           elsif kind.owner == :generator
             kept << [path, current ? moved_warning(:unmarked, shown_current) : WARNINGS[:unmarked]]
           else
@@ -182,7 +200,7 @@ module JsonUIShared
         end
       end
 
-      Result.new(removed: removed, kept: kept, skipped: nil)
+      Result.new(removed: removed, kept: kept, skipped: nil, altered: altered)
     end
 
     # Files an output of this run REPLACES — the same file written under
@@ -224,6 +242,7 @@ module JsonUIShared
         lines << [:info, "Pruned #{result.removed.size} generated file(s) whose layout is gone or moved:"]
         result.removed.each { |path| lines << [:info, "  - #{shown.call(path)}"] }
       end
+      Array(result.altered).each { |path| lines << [:warn, "#{shown.call(path)} #{ALTERED_WARNING}"] }
       unless result.kept.empty?
         lines << [:warn, "#{result.kept.size} file(s) whose layout is gone or moved were kept:"]
         result.kept.each { |path, why| lines << [:warn, "  - #{shown.call(path)}: #{why}"] }

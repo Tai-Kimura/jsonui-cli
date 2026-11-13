@@ -360,6 +360,23 @@ module KjuiTools
           template
         end
 
+        # Whether a GeneratedView holds nothing but what the generator writes:
+        # outside its GENERATED_CODE and RESPONSIVE_HELPERS blocks and its
+        # package / import lines (the build manages those), only the scaffold
+        # of generated_view_content — the composable's signature and its two
+        # comment lines — with any difference in whitespace or line breaks
+        # allowed. Measured 2026-11-13 on two consumer apps: 237 of 237
+        # GeneratedViews held exactly that. The build deletes a GeneratedView
+        # whose layout is gone either way and names one that fails this.
+        SCAFFOLD_SHAPE = %r{\A@Composablefun\w+GeneratedView\(data:\w+Data,viewModel:\w+ViewModel,modifier:Modifier=Modifier\)\{//GeneratedComposecodefrom\S+?\.json//Thiswillbeupdatedwhenyourun'kjuibuild'\}\z}.freeze
+
+        def self.scaffold_only?(content)
+          rest = content.gsub(%r{// >>> GENERATED_CODE_START.*?// >>> GENERATED_CODE_END}m, '')
+                        .gsub(%r{// >>> RESPONSIVE_HELPERS_START.*?// >>> RESPONSIVE_HELPERS_END}m, '')
+          rest = rest.lines.reject { |line| line.match?(/\A\s*(package|import)\s/) }.join
+          SCAFFOLD_SHAPE.match?(rest.gsub(/\s+/, ''))
+        end
+
         def create_data_template(file_path, view_name, package_name)
           return if File.exist?(file_path)
 

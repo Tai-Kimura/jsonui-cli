@@ -757,21 +757,30 @@ module KjuiTools
 
         # A deleted layout's outputs, by the rule the three faces share
         # (lib/core/generated_orphans.rb). The Data model carries @generated
-        # and is deleted. The GeneratedView (and a variant's) is not: the
-        # generator owns only its GENERATED_CODE block — it writes
-        # "DO NOT EDIT between GENERATED_CODE markers" and keeps the rest as
-        # the scaffold left it — so it is named instead, as are a hand-written
-        # View and ViewModel of the same name. One a MOVED layout left behind
-        # is found too, by the path generated_view_dir gives, and named.
+        # and is deleted. The GeneratedView (and a variant's) carries no
+        # @generated line — the generator rewrites its GENERATED_CODE block and
+        # leaves the rest as the scaffold wrote it — but it is a generated file
+        # all the same, not a place for hand-written code (ruling 2026-11-13,
+        # ticket jui-build-leaves-orphan-protocol-and-kjui-view-after-screen-
+        # removal: left behind, it names the deleted ViewModel and the app no
+        # longer compiles). It is deleted, and named in a warning when it held
+        # lines its scaffold does not have (ViewGenerator.scaffold_only?). One a
+        # MOVED layout left behind is found by the path generated_view_dir
+        # gives, and deleted the same way. A hand-written View and ViewModel of
+        # the same name are named, not deleted.
         def prune_layout_orphans(builder)
           require_relative '../../compose/data_model_updater'
+          require_relative '../../compose/generators/view_generator'
           orphans = JsonUIShared::GeneratedOrphans
           kinds = [
             orphans::Kind.new(dir: Compose::DataModelUpdater.new.data_dir, owner: :generator,
                               pattern: /\A(?<name>[A-Za-z0-9_]+)Data\.kt\z/),
             orphans::Kind.new(dir: builder.view_dir, owner: :block,
                               pattern: /\A(?<name>[A-Za-z0-9_]+)GeneratedView\.kt\z/,
-                              home_dir: ->(rel) { builder.generated_view_dir(rel) }),
+                              home_dir: ->(rel) { builder.generated_view_dir(rel) },
+                              scaffold: lambda { |path|
+                                Compose::Generators::ViewGenerator.scaffold_only?(File.read(path))
+                              }),
             orphans::Kind.new(dir: builder.view_dir, owner: :user,
                               pattern: /\A(?<name>[A-Za-z0-9_]+?)View\.kt\z/),
             orphans::Kind.new(dir: builder.viewmodel_dir, owner: :user,
@@ -781,6 +790,27 @@ module KjuiTools
           base = Core::ProjectFinder.get_full_source_path || Dir.pwd
           orphans.report_lines(result, base: base).each do |level, line|
             level == :warn ? Core::Logger.warn(line) : Core::Logger.info(line)
+          end
+          warn_hand_written_generated_views(builder.view_dir, base)
+        end
+
+        # A GeneratedView is generated (ruling 2026-11-13): the build rewrites
+        # its blocks and the rest is the scaffold. A line written by hand
+        # outside the blocks is in the wrong place — it is lost when the layout
+        # goes (the file is deleted then) — so a living one that holds such a
+        # line is named, one warning line each. Measured 2026-11-13: none of
+        # 236 GeneratedViews in two consumer apps holds one.
+        HAND_WRITTEN_GENERATED_VIEW = 'is a generated file, but it holds lines outside its GENERATED_CODE block ' \
+                                      'that its scaffold does not have; move them into the View — the build ' \
+                                      'deletes this file when its layout goes'
+
+        def warn_hand_written_generated_views(view_dir, base)
+          return unless view_dir && Dir.exist?(view_dir)
+
+          Dir.glob(File.join(view_dir, '**', '*GeneratedView.kt')).sort.each do |path|
+            next if Compose::Generators::ViewGenerator.scaffold_only?(File.read(path))
+
+            Core::Logger.warn("#{path.sub(%r{\A#{Regexp.escape(base)}/}, '')} #{HAND_WRITTEN_GENERATED_VIEW}")
           end
         end
 
