@@ -282,7 +282,24 @@ def test_a_room_whose_watcher_did_not_start_is_tried_again_after_a_while():
 # ---------------------------------------------------------------- (e) a stream FSEvents would not start
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="FSEvents is macOS's")
+def _fsevents_shape() -> str | None:
+    """watchdog's FSEvents here: "6" (_watchdog_fsevents.add_watch), "7" (a Stream per emitter), None off macOS."""
+    if sys.platform != "darwin":
+        return None
+    import _watchdog_fsevents as native
+    return "6" if hasattr(native, "add_watch") else "7" if hasattr(native, "Stream") else "?"
+
+
+def _only(shape: str):
+    """Off macOS: FSEvents is macOS's. On macOS: the arm of the other major's shape skips (each runs where that watchdog
+    is installed: 6.x in the gate's venv, 7.x in a 7.1.0 venv)."""
+    here = _fsevents_shape()
+    if here is None:
+        return pytest.mark.skipif(True, reason="FSEvents is macOS's")
+    return pytest.mark.skipif(here != shape, reason=f"watchdog's FSEvents here is the {here}.x shape, the arm is the {shape}.x one")
+
+
+@_only("6")
 def test_a_stream_fsevents_did_not_start_is_let_go_without_stopping_it(tmp_path, monkeypatch):
     """After fseventsd was restarted its streams would not start ("Cannot start fsevents stream"); the stream stays
     registered unstarted, and stopping the observer called FSEventStreamStop on it: SIGSEGV (2026-11-12 16:36). The
@@ -325,9 +342,8 @@ def test_a_stream_that_started_is_kept_and_stopped_as_before(tmp_path):
     obs = fs_watch.observer()
     obs.schedule(Handler(), str(tmp_path), recursive=True)
     obs.daemon = True
-    obs.start()
     try:
-        assert fs_watch.kept_or_none(obs, "a test folder") is obs
+        assert fs_watch.start(obs, "a test folder") is obs
         (tmp_path / "a.json").write_text("{}")
         assert seen.wait(10), "no event from FSEvents"
     finally:
@@ -336,7 +352,7 @@ def test_a_stream_that_started_is_kept_and_stopped_as_before(tmp_path):
     assert not obs.is_alive()
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="FSEvents is macOS's")
+@_only("6")
 def test_a_watcher_whose_one_folder_did_not_start_keeps_the_others(tmp_path, monkeypatch):
     """One folder's stream refused ("Cannot add watch ... already scheduled", another watcher holds it), the other
     folder's started: the watcher stays for the folder it has, as watchdog left it before, and the refused folder is
@@ -376,16 +392,82 @@ def test_a_watcher_whose_one_folder_did_not_start_keeps_the_others(tmp_path, mon
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="FSEvents is macOS's")
-def test_a_watchdog_whose_fsevents_is_not_6x_is_told_once_and_watches_nothing(tmp_path, monkeypatch, capsys):
+def test_a_watchdog_whose_fsevents_is_neither_6x_nor_7x_is_told_once_and_watches_nothing(tmp_path, monkeypatch, capsys):
     """watchdog 7.x replaced the FSEvents emitter with a Stream object (no _watchdog_fsevents.add_watch): the guarded
     emitter's start waited forever under 7.1.0, the room unwatched and the watchers' thread held (2.5.32). setup.py
     pins watchdog<7; an install the pin did not reach gets one line and no watcher, never a start that hangs."""
     import _watchdog_fsevents as native
     from jui_cli.viz.sources import fs_watch
 
-    monkeypatch.delattr(native, "add_watch")
+    monkeypatch.delattr(native, "add_watch", raising=False)
+    monkeypatch.delattr(native, "Stream", raising=False)
     monkeypatch.setattr(fs_watch, "_told", [])
     assert fs_watch.observer() is None
     assert fs_watch.observer() is None
-    lines = [line for line in capsys.readouterr().err.splitlines() if "is not the 6.x" in line]
-    assert len(lines) == 1 and "watchdog<7" in lines[0], lines
+    lines = [line for line in capsys.readouterr().err.splitlines() if "neither the 6.x nor the 7.x" in line]
+    assert len(lines) == 1 and "watchdog>=4.0.0,<8" in lines[0], lines
+
+
+class _StandInStream:
+    """watchdog 7.x's native Stream, standing in: run() raises as FSEventStreamStart's refusal does (before started()),
+    for a path holding "refused"; otherwise it says started and waits for stop()."""
+    made: list = []
+
+    def __init__(self, paths, latency=0.0):
+        self.paths, self.stopped = list(paths), threading.Event()
+        self.made.append(self)
+
+    def run(self, callback, started=None):
+        if any("refused" in str(p) for p in self.paths):
+            raise SystemError("Cannot start fsevents stream. Use a kqueue or polling observer instead.")
+        if started is not None:
+            started()
+        self.stopped.wait(30)
+
+    def stop(self):
+        self.stopped.set()
+
+
+@_only("7")
+def test_watchdog_7_a_stream_fsevents_did_not_start_leaves_the_room_unwatched_not_the_server_ended(tmp_path, monkeypatch, capsys):
+    """7.x: the emitter's start() raises a stream FSEvents would not start; fs_watch.start says so in one line, stops
+    the emitters it did start, and hands back None (Watchers tries the room again later). 2.5.32 gave 7.x no watcher
+    at all (pinned <7, told once)."""
+    from watchdog.events import FileSystemEventHandler
+    from watchdog.observers import fsevents
+    from jui_cli.viz.sources import fs_watch
+
+    _StandInStream.made = []
+    monkeypatch.setattr(fsevents._fsevents, "Stream", _StandInStream)
+    for name in ("a", "refused"):
+        (tmp_path / name).mkdir()
+    obs = fs_watch.observer()
+    assert obs is not None, "no watcher for watchdog 7.x"
+    for name in ("a", "refused"):
+        obs.schedule(FileSystemEventHandler(), str(tmp_path / name), recursive=True)
+    obs.daemon = True
+    assert fs_watch.start(obs, "a test room") is None
+    err = capsys.readouterr().err
+    assert "a test room not watched: FSEvents did not start (SystemError" in err, err
+    assert all(s.stopped.is_set() for s in _StandInStream.made if "refused" not in str(s.paths)), "a started stream left running"
+
+
+@_only("7")
+def test_watchdog_7_native_stream_stopped_before_or_after_its_run_is_safe():
+    """The C side 7.x relies on, run for real: stop() on a stream that never ran, and again after its run() ended,
+    only marks it stopped (no FSEventStreamStop on a stream that is not running: 6.x's SIGSEGV). A crash here ends
+    the test process."""
+    import _watchdog_fsevents as native
+
+    never = native.Stream(["/tmp"], latency=0.0)
+    never.stop()
+    never.stop()
+    assert never.run(lambda *a: None) is None   # stopped before: returns at once
+    ran = native.Stream(["/tmp"], latency=0.0)
+    t = threading.Thread(target=ran.run, args=(lambda *a: None,), daemon=True)
+    t.start()
+    time.sleep(0.3)
+    ran.stop()
+    t.join(5)
+    assert not t.is_alive()
+    ran.stop()                                   # after its run ended

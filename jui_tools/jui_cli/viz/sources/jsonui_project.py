@@ -1165,6 +1165,5 @@ def watch(project: JsonUIProject, on_change):
     for folder in folders:
         observer.schedule(Handler(), str(folder), recursive=True)
     observer.daemon = True
-    observer.start()
-    return fs_watch.kept_or_none(observer, "a room's files")
+    return fs_watch.start(observer, "a room's files")
 

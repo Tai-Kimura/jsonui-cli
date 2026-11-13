@@ -18,18 +18,27 @@ START_WAIT_SEC = 5.0
 
 
 def observer():
-    """A new observer (not started); None when the installed watchdog's FSEvents is not the shape the guard is written
-    for (6.x's _watchdog_fsevents.add_watch): 7.x replaced it with a Stream object, and the guarded emitter's start
-    then waited forever, the room unwatched and the watchers' thread held (2.5.32). setup.py pins watchdog<7; an
-    install the pin did not reach is told once, and its rooms go without a watcher rather than hang."""
+    """A new observer (not started), for the installed watchdog's FSEvents:
+
+    * 6.x (_watchdog_fsevents.add_watch): the guarded emitter below; a stream that did not start is never stopped.
+    * 7.x (_watchdog_fsevents.Stream, one per emitter): watchdog's own FSEventsObserver. Its native run() lets go of
+      a stream that did not start by itself (invalidated, never FSEventStreamStop'd, its run loop cleared) and its
+      stop() then only marks the stream stopped; the emitter's start() raises the error, which ``start`` below takes
+      (read in 7.0.0 and 7.1.0's watchdog_fsevents.c, ticket 2026-11-13-viz-watchdog-7-follow). The 6.x guard
+      overrode a run() 7.x no longer has, and its start waited forever (2.5.32 pinned watchdog<7 for that).
+    * neither: told once; the rooms go without a watcher rather than hang.
+    """
     if sys.platform != "darwin":
         from watchdog.observers import Observer
         return Observer()
     import _watchdog_fsevents as native
-    if not hasattr(native, "add_watch"):
-        _say_unknown_watchdog_once()
-        return None
-    return _guarded_fsevents_observer()
+    if hasattr(native, "add_watch"):
+        return _guarded_fsevents_observer()
+    if hasattr(native, "Stream"):
+        from watchdog.observers.fsevents import FSEventsObserver
+        return FSEventsObserver()
+    _say_unknown_watchdog_once()
+    return None
 
 
 _told = []
@@ -43,10 +52,32 @@ def _say_unknown_watchdog_once() -> None:
         from watchdog.version import VERSION_STRING as version
     except ImportError:  # pragma: no cover
         version = "?"
-    print(f"jui viz: watchdog {version} is not the 6.x this server is written for: the rooms' files are not watched "
-          "(a session's own writes still show, through its hooks; other changes show after a restart); "
-          "install watchdog<7 (pip install 'watchdog>=4.0.0,<7')",
+    print(f"jui viz: watchdog {version}'s FSEvents is neither the 6.x nor the 7.x this server knows: the rooms' files "
+          "are not watched (a session's own writes still show, through its hooks; other changes show after a "
+          "restart); install watchdog>=4.0.0,<8",
           file=sys.stderr, flush=True)
+
+
+def start(obs, what: str):
+    """Start ``obs`` and keep it when one folder or more is watched (``kept_or_none``); None when its start raised
+    (7.x: a stream FSEvents would not start), the emitters it did start stopped first."""
+    try:
+        obs.start()
+    except Exception as exc:  # noqa: BLE001 — the server does without this watcher rather than end
+        print(f"jui viz: {what} not watched: FSEvents did not start ({type(exc).__name__}: {exc})"[:1000],
+              file=sys.stderr, flush=True)
+        _let_go(obs)
+        return None
+    return kept_or_none(obs, what)
+
+
+def _let_go(obs) -> None:
+    try:
+        obs.stop()
+        if obs.is_alive():
+            obs.join(timeout=1)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def outcome(obs, wait_sec: float = START_WAIT_SEC) -> tuple[int, list[str]]:
@@ -130,9 +161,5 @@ def kept_or_none(obs, what: str):
         print(f"jui viz: {what}: a folder not watched: {line}"[:1000], file=sys.stderr, flush=True)
     if ok or not failed:
         return obs
-    try:
-        obs.stop()
-        obs.join(timeout=1)
-    except Exception:  # noqa: BLE001
-        pass
+    _let_go(obs)
     return None

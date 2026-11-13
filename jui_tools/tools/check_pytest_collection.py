@@ -167,6 +167,13 @@ ALLOWED_SKIP_REASONS: tuple[str, ...] = (
     # Allowed only because the code they pin is macOS-only and the release's own full suite runs on macOS, where they
     # execute (2.5.31: run there, passed); viz serve's users are on macOS.
     "FSEvents is macOS's",
+    # THE FOURTH SHAPE AGAIN, BY MAJOR VERSION (2.5.33, ticket 2026-11-13-viz-watchdog-7-follow). fs_watch knows two
+    # FSEvents shapes: 6.x's _watchdog_fsevents.add_watch (the guarded emitter) and 7.x's Stream per emitter (watchdog's
+    # own observer). Each shape's stand-in arms can only run where that watchdog is installed, so on a Mac one set skips:
+    # the gate's venv (6.0.0) skips the 7.x arms, a 7.x venv the 6.x ones. Allowed because each set ran where its
+    # watchdog is: 2.5.33's full suite on 6.0.0, and test_viz_change_storm.py on 7.0.0 and 7.1.0 (all passed). The
+    # release's run-suites.sh runs the 6.x venv only: a change to fs_watch is run on a 7.x venv by its author.
+    "watchdog's FSEvents here is the",
 )
 
 
