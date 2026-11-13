@@ -131,8 +131,15 @@ module SjuiTools
           family_literal, weight_literal, size_literal = build_font_spec_args(component)
 
           # Skip emission entirely when nothing was specified — the view will
-          # pick up the system default.
-          return if family_literal.nil? && weight_literal.nil? && size_literal.nil?
+          # pick up the system default. Unless the component declares
+          # fontScaling / maxFontScale: then its text is held to the rule at the
+          # configured size (font_scale_vectors.json rule.noFontSize).
+          if family_literal.nil? && weight_literal.nil? && size_literal.nil?
+            if component.key?('fontScaling') || component.key?('maxFontScale')
+              converter.add_modifier_line('.sjuiFont(FontSpec(family: nil, weight: nil, size: nil, italic: false))')
+            end
+            return
+          end
 
           # A bound family used to be quoted like a literal, which compiled
           # and then asked the font provider for a family called

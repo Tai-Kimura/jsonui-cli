@@ -42,6 +42,12 @@ RSpec.describe 'sjui fontScaling / maxFontScale' do
     end
   end
 
+  it 'a declaration without a fontSize still holds the text to the rule (rule.noFontSize)' do
+    expect(emit('type' => 'TextField', 'text' => '@{t}', 'fontScaling' => false))
+      .to include('.sjuiFont(FontSpec(family: nil, weight: nil, size: nil, italic: false))')
+    expect(emit('type' => 'TextField', 'text' => '@{t}')).not_to include('.sjuiFont(')
+  end
+
   it 'a component without text does not carry it' do
     expect(emit('type' => 'View', 'fontScaling' => false)).not_to include('.fontScaling(')
   end
