@@ -67,6 +67,16 @@ module EmittedSwift
   # defaulted parameters, because a stub that accepts more than the library
   # does lets a wrong argument list pass here and fail in a consumer build.
   COLLECTION_STACK_VIEW_STUB = <<~SWIFT
+    // SwiftJsonUI CollectionReorder.swift (feature/collection-reorder, ticket jui-collection-drag-to-reorder):
+    // the value a reorderable Collection's stack carries.
+    struct CollectionReorder {
+        let isEnabled: Bool
+        let usesHandle: Bool
+        let onReorder: (_ section: Int, _ from: Int, _ to: Int) -> Void
+        init(isEnabled: Bool, usesHandle: Bool = false, onReorder: @escaping (_ section: Int, _ from: Int, _ to: Int) -> Void) {
+            self.isEnabled = isEnabled; self.usesHandle = usesHandle; self.onReorder = onReorder
+        }
+    }
     enum CollectionStackMode { case lazy, eager, none }
     enum CollectionStackAxis { case vertical, horizontal }
     struct CollectionStackView<Content: View>: View {
@@ -84,6 +94,7 @@ module EmittedSwift
             insetTrailing: CGFloat = 0,
             contentInsets: EdgeInsets? = nil,
             fillsCrossAxis: Bool = false,
+            reorder: CollectionReorder? = nil,
             @ViewBuilder content: @escaping () -> Content
         ) { self.content = content }
         var body: some View { content() }

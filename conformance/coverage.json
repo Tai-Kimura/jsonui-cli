@@ -6,7 +6,6 @@
       "component": "Collection",
       "attribute": "onReorder",
       "platforms": [
-        "ios",
         "web"
       ],
       "reason": "unimplemented",
@@ -16,7 +15,6 @@
       "component": "Collection",
       "attribute": "reorderHandle",
       "platforms": [
-        "ios",
         "web"
       ],
       "reason": "unimplemented",
@@ -26,7 +24,6 @@
       "component": "Collection",
       "attribute": "reorderLockedProperty",
       "platforms": [
-        "ios",
         "web"
       ],
       "reason": "unimplemented",

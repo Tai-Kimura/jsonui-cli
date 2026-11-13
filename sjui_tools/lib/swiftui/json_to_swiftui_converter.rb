@@ -7,6 +7,7 @@ require_relative 'converter_factory'
 require_relative 'scrolling_cell_index'
 require_relative 'collection_cell_index'
 require_relative 'interaction_stop_index'
+require_relative 'reorder_handle_index'
 require_relative 'views/base_view_converter'
 require_relative 'views/responsive_helper'
 require_relative 'views/user_edit_binding_helper'
@@ -160,12 +161,18 @@ module SjuiTools
       # environment. Set by `sjui build`; a single-file conversion has none.
       attr_accessor :interaction_stoppable_ids
 
+      # { cell layout id => handle ids } (ReorderHandleIndex.build): set by `sjui build`; none for one file.
+      attr_accessor :reorder_handle_ids
+
       # Whether this layout's view reads a stop handed down from another
       # layout, set per file for the converters that emit its taps.
       def begin_interaction_environment(json_file_path)
         ids = interaction_stoppable_ids
         reads = ids && ids.include?(JsonUIShared::ScreenIndex.screen_id_for_path(json_file_path)) ? true : false
         Views::BaseViewConverter.reads_interaction_environment = reads
+        # The reorder handles of this layout, when a reorderable Collection draws its rows with it.
+        Views::BaseViewConverter.reorder_handle_ids =
+          (reorder_handle_ids || {}).fetch(JsonUIShared::ScreenIndex.screen_id_for_path(json_file_path), Set.new)
         reads
       end
 

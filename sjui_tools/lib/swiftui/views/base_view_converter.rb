@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'set'
 require_relative 'template_helper'
 require_relative '../../core/type_synonyms'
 require_relative '../../core/image_accessibility'
@@ -76,6 +77,16 @@ module SjuiTools
         # on it as on a bound flag (tap_gate_condition). Off for every other
         # layout, which is emitted as it was.
         @@reads_interaction_environment = false
+        # Per file: the ids of this layout's elements a reorderable Collection picks its rows up by (ReorderHandleIndex).
+        @@reorder_handle_ids = Set.new
+
+        def self.reorder_handle_ids=(value)
+          @@reorder_handle_ids = value || Set.new
+        end
+
+        def self.reorder_handle_ids
+          @@reorder_handle_ids
+        end
 
         def self.reads_interaction_environment=(value)
           @@reads_interaction_environment = value ? true : false
@@ -375,6 +386,8 @@ module SjuiTools
           if @component['id'] && !@accessibility_identifier_added
             apply_accessibility_identifier
             @accessibility_identifier_added = true
+            # The handle a reorderable Collection picks its rows up by (ticket jui-collection-drag-to-reorder).
+            add_modifier_line '.collectionReorderHandle()' if @@reorder_handle_ids.include?(@component['id'])
             apply_outer_disabled
           elsif collection_cell_root_without_id?
             apply_collection_cell_root_container
