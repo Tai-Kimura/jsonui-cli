@@ -31,3 +31,6 @@ screenshots/
 
 # Collection padding probe scratch (scripts/collection_padding_probe.mjs)
 .collection-padding-probe/
+
+# the reorder probe's work tree (scripts/collection_reorder_probe.mjs)
+.collection-reorder-probe/
