@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Button/maxFontScale__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Button.maxFontScale (static)",
+    "description": "Conformance fixture for 'maxFontScale' on Button (section: Button, class: visual). Value under test: 1.2.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Button"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "maxFontScale__static",
+      "description": "Conformance fixture for 'maxFontScale' on Button (section: Button, class: visual). Value under test: 1.2.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Button_maxFontScale__static"
+        }
+      ]
+    }
+  ]
+}

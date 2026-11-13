@@ -1,0 +1,32 @@
+{
+  "type": "screen",
+  "source": {
+    "layout": "fixtures/Switch/maxFontScale__static.layout.json"
+  },
+  "metadata": {
+    "name": "conformance Switch.maxFontScale (static)",
+    "description": "Conformance fixture for 'maxFontScale' on Switch (section: Switch, class: visual). Value under test: 1.2.",
+    "generatedBy": "@generated jui conformance generate — DO NOT EDIT",
+    "tags": [
+      "conformance",
+      "Switch"
+    ]
+  },
+  "platform": "all",
+  "cases": [
+    {
+      "name": "maxFontScale__static",
+      "description": "Conformance fixture for 'maxFontScale' on Switch (section: Switch, class: visual). Value under test: 1.2.",
+      "steps": [
+        {
+          "action": "waitFor",
+          "id": "root"
+        },
+        {
+          "action": "screenshot",
+          "name": "Switch_maxFontScale__static"
+        }
+      ]
+    }
+  ]
+}
