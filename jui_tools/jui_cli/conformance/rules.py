@@ -157,6 +157,11 @@ CROSS_FILE_ATTRS = {"include", "style"}
 #: Behavioral attributes with no observable effect in a static screenshot
 #: and no cross-platform assertion in the v1 runner vocabulary.
 BEHAVIORAL_ATTRS = {
+    # Text size following (ticket sjui-label-font-size-ignores-dynamic-type): they change the picture only at a
+    # text size other than the standard one, and the hosts draw every fixture at the standard size. They leave this
+    # set when the hosts take a per-fixture text size.
+    "fontScaling",
+    "maxFontScale",
     "canTap",
     "userInteractionEnabled",
     "touchDisabledState",

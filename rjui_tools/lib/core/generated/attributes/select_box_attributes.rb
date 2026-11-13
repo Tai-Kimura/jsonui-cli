@@ -42,6 +42,8 @@ module JsonUI
         { name: 'font', kind: :string }.freeze,
         # Font color - hex string or color name from colors.json
         { name: 'fontColor', kind: :string }.freeze,
+        # Whether this component's text follows the OS / browser text size (iOS Dynamic Type, Android font scale, the browser's font size). Absent: the app default (Configuration font scaling, true unless the app sets it). false: the declared fontSize is drawn at that size at every text size (iOS pins the component to the standard size; Android reads fontSize as dp; web as px). The faces grow differently up to their caps: Android 14+ grows small text more than large (non-linear, up to 2x); iOS grows linearly with .body (x2.82 at AX5 on iOS 27.2); the web linearly with the root font size. Applies to partialAttributes' sizes too.
+        { name: 'fontScaling', kind: :boolean }.freeze,
         # Font size
         { name: 'fontSize', kind: :number }.freeze,
         # Hint text (alias for prompt)
@@ -56,6 +58,8 @@ module JsonUI
         { name: 'items', kind: :array, bindable: true }.freeze,
         # Label styling attributes
         { name: 'labelAttributes', kind: :object }.freeze,
+        # The largest size this component's text is drawn at, as a multiple of its declared fontSize (>= 1): drawn <= fontSize x maxFontScale on every face. Only with fontScaling (declared or the app default) true; absent: no cap beyond the OS one. iOS rounds it down to a Dynamic Type step (the largest step whose .body ratio is at most it); Android caps after its non-linear conversion; the web draws min(rem, px x maxFontScale).
+        { name: 'maxFontScale', kind: :number }.freeze,
         # Maximum date (yyyy-MM-dd format, binding supported)
         { name: 'maximumDate', kind: :string, bindable: true }.freeze,
         # Minimum date (yyyy-MM-dd format, binding supported)

@@ -8,7 +8,7 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "d79b292ff3d97045321b5e1cce60228b73dc8a72dee927f58272bdb2d13085d5",
+  "generatedFrom": "d27aada66bcec7ddcf9c8e311aeb29a097039d7b065447faf0bef88fbf48a875",
   "counts": {
     "fixtures": 1300,
     "assertable": 54,
@@ -16,7 +16,7 @@
     "interactive": 41,
     "control": 136,
     "declarationOnly": 77,
-    "skipped": 159,
+    "skipped": 179,
     "promoted": {
       "callback": 11
     }
@@ -32102,6 +32102,26 @@
       "reason": "metadata (not rendered)"
     },
     {
+      "component": "Label",
+      "attribute": "fontScaling",
+      "reason": "behavioral (no visual or assertable effect in v1)"
+    },
+    {
+      "component": "Label",
+      "attribute": "maxFontScale",
+      "reason": "behavioral (no visual or assertable effect in v1)"
+    },
+    {
+      "component": "TextField",
+      "attribute": "fontScaling",
+      "reason": "behavioral (no visual or assertable effect in v1)"
+    },
+    {
+      "component": "TextField",
+      "attribute": "maxFontScale",
+      "reason": "behavioral (no visual or assertable effect in v1)"
+    },
+    {
       "component": "TextField",
       "attribute": "caretAttributes",
       "reason": "composite value (no representative static value in v1)"
@@ -32193,6 +32213,16 @@
     },
     {
       "component": "TextView",
+      "attribute": "fontScaling",
+      "reason": "behavioral (no visual or assertable effect in v1)"
+    },
+    {
+      "component": "TextView",
+      "attribute": "maxFontScale",
+      "reason": "behavioral (no visual or assertable effect in v1)"
+    },
+    {
+      "component": "TextView",
       "attribute": "scrollEnabled",
       "reason": "behavioral (no visual or assertable effect in v1)"
     },
@@ -32248,6 +32278,16 @@
     },
     {
       "component": "Button",
+      "attribute": "fontScaling",
+      "reason": "behavioral (no visual or assertable effect in v1)"
+    },
+    {
+      "component": "Button",
+      "attribute": "maxFontScale",
+      "reason": "behavioral (no visual or assertable effect in v1)"
+    },
+    {
+      "component": "Button",
       "attribute": "config",
       "reason": "metadata (not rendered)"
     },
@@ -32298,6 +32338,16 @@
     },
     {
       "component": "SelectBox",
+      "attribute": "fontScaling",
+      "reason": "behavioral (no visual or assertable effect in v1)"
+    },
+    {
+      "component": "SelectBox",
+      "attribute": "maxFontScale",
+      "reason": "behavioral (no visual or assertable effect in v1)"
+    },
+    {
+      "component": "SelectBox",
       "attribute": "dividerAttributes",
       "reason": "composite value (no representative static value in v1)"
     },
@@ -32327,6 +32377,16 @@
       "reason": "composite value (no representative static value in v1)"
     },
     {
+      "component": "Switch",
+      "attribute": "fontScaling",
+      "reason": "behavioral (no visual or assertable effect in v1)"
+    },
+    {
+      "component": "Switch",
+      "attribute": "maxFontScale",
+      "reason": "behavioral (no visual or assertable effect in v1)"
+    },
+    {
       "component": "Toggle",
       "attribute": "*",
       "reason": "component alias (fixtures live on the canonical section)"
@@ -32345,6 +32405,16 @@
       "component": "Segment",
       "attribute": "onValueChange",
       "reason": "callback"
+    },
+    {
+      "component": "Segment",
+      "attribute": "fontScaling",
+      "reason": "behavioral (no visual or assertable effect in v1)"
+    },
+    {
+      "component": "Segment",
+      "attribute": "maxFontScale",
+      "reason": "behavioral (no visual or assertable effect in v1)"
     },
     {
       "component": "Slider",
@@ -32573,6 +32643,16 @@
     },
     {
       "component": "Radio",
+      "attribute": "fontScaling",
+      "reason": "behavioral (no visual or assertable effect in v1)"
+    },
+    {
+      "component": "Radio",
+      "attribute": "maxFontScale",
+      "reason": "behavioral (no visual or assertable effect in v1)"
+    },
+    {
+      "component": "Radio",
       "attribute": "onValueChange",
       "reason": "callback"
     },
@@ -32590,6 +32670,16 @@
       "component": "CheckBox",
       "attribute": "_comment",
       "reason": "definition metadata, not an attribute"
+    },
+    {
+      "component": "CheckBox",
+      "attribute": "fontScaling",
+      "reason": "behavioral (no visual or assertable effect in v1)"
+    },
+    {
+      "component": "CheckBox",
+      "attribute": "maxFontScale",
+      "reason": "behavioral (no visual or assertable effect in v1)"
     },
     {
       "component": "Check",
@@ -32625,6 +32715,16 @@
       "component": "Blur",
       "attribute": "children",
       "reason": "structural (child container attribute)"
+    },
+    {
+      "component": "IconLabel",
+      "attribute": "fontScaling",
+      "reason": "behavioral (no visual or assertable effect in v1)"
+    },
+    {
+      "component": "IconLabel",
+      "attribute": "maxFontScale",
+      "reason": "behavioral (no visual or assertable effect in v1)"
     },
     {
       "component": "Web",

@@ -23,6 +23,8 @@ module JsonUI
         { name: 'enabled', kind: :boolean, bindable: true }.freeze,
         # Text color - hex string or color name from colors.json (binding supported). Declared from the implementation, which already read it: sjui toggle_converter.rb:62-63,71-72 (plan 51-E).
         { name: 'fontColor', kind: :string, bindable: true }.freeze,
+        # Whether this component's text follows the OS / browser text size (iOS Dynamic Type, Android font scale, the browser's font size). Absent: the app default (Configuration font scaling, true unless the app sets it). false: the declared fontSize is drawn at that size at every text size (iOS pins the component to the standard size; Android reads fontSize as dp; web as px). The faces grow differently up to their caps: Android 14+ grows small text more than large (non-linear, up to 2x); iOS grows linearly with .body (x2.82 at AX5 on iOS 27.2); the web linearly with the root font size. Applies to partialAttributes' sizes too.
+        { name: 'fontScaling', kind: :boolean }.freeze,
         # Font size (binding supported). Declared from the implementation, which already read it: sjui toggle_converter.rb hands the whole component to the shared apply_font_modifiers helper, so the size was honoured with no declaration behind it (plan 51-E).
         { name: 'fontSize', kind: :number, bindable: true }.freeze,
         # Switch state (binding for two-way) [binding: two-way]
@@ -33,6 +35,8 @@ module JsonUI
         { name: 'labelAttributes', kind: :object }.freeze,
         # Label position relative to the Switch.
         { name: 'labelPosition', kind: :enum, values: ['leading', 'trailing'].freeze }.freeze,
+        # The largest size this component's text is drawn at, as a multiple of its declared fontSize (>= 1): drawn <= fontSize x maxFontScale on every face. Only with fontScaling (declared or the app default) true; absent: no cap beyond the OS one. iOS rounds it down to a Dynamic Type step (the largest step whose .body ratio is at most it); Android caps after its non-linear conversion; the web draws min(rem, px x maxFontScale).
+        { name: 'maxFontScale', kind: :number }.freeze,
         # Off tint color - hex string or color name from colors.json (binding supported)
         { name: 'offTintColor', kind: :string, bindable: true }.freeze,
         # Track color when on - hex string or color name from colors.json

@@ -28,6 +28,8 @@ module JsonUI
         { name: 'font', kind: :string, bindable: true }.freeze,
         # Text color - hex string or color name from colors.json (binding supported)
         { name: 'fontColor', kind: :string, bindable: true }.freeze,
+        # Whether this component's text follows the OS / browser text size (iOS Dynamic Type, Android font scale, the browser's font size). Absent: the app default (Configuration font scaling, true unless the app sets it). false: the declared fontSize is drawn at that size at every text size (iOS pins the component to the standard size; Android reads fontSize as dp; web as px). The faces grow differently up to their caps: Android 14+ grows small text more than large (non-linear, up to 2x); iOS grows linearly with .body (x2.82 at AX5 on iOS 27.2); the web linearly with the root font size. Applies to partialAttributes' sizes too.
+        { name: 'fontScaling', kind: :boolean }.freeze,
         # Font size (binding supported)
         { name: 'fontSize', kind: :number, bindable: true }.freeze,
         # Font weight (e.g., 'bold', 'semibold', '500', 600). Canonical name matches Label and Button; the legacy `fontStyle` spelling folds here. Declared from the implementation, which already read it: sjui checkbox_converter.rb:74-76, which reads `fontStyle` and emits `fontWeight:` (plan 51-E). [accepts: string | number]
@@ -42,6 +44,8 @@ module JsonUI
         { name: 'isOn', kind: :boolean, bindable: true }.freeze,
         # Checkbox label (can be data binding)
         { name: 'label', kind: :string, bindable: true }.freeze,
+        # The largest size this component's text is drawn at, as a multiple of its declared fontSize (>= 1): drawn <= fontSize x maxFontScale on every face. Only with fontScaling (declared or the app default) true; absent: no cap beyond the OS one. iOS rounds it down to a Dynamic Type step (the largest step whose .body ratio is at most it); Android caps after its non-linear conversion; the web draws min(rem, px x maxFontScale).
+        { name: 'maxFontScale', kind: :number }.freeze,
         # Value change handler - binding only (@{functionName}). Legacy handler spellings fold here (sjui checkbox_converter.rb:122 reads `onValueChange || onClick || action || onValueChanged`; `onClick` stays common).
         { name: 'onValueChange', kind: :binding, aliases: ['action', 'onValueChanged'].freeze }.freeze,
         # Selected icon name
