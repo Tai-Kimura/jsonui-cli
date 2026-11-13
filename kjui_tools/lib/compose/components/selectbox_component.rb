@@ -371,26 +371,46 @@ module KjuiTools
             code += Helpers::ModifierBuilder.format(modifiers, depth)
           end
 
-          # contentPadding as component parameter (not modifier)
-          paddings = json_data['paddings'] || json_data['padding']
-          if paddings
-            if paddings.is_a?(Array) && paddings.length == 4
-              # JSON 4-element order is [top, right, bottom, left] (same as
-              # ModifierBuilder padding): right -> end, left -> start.
-              code += ",\n" + indent("contentPadding = PaddingValues(top = #{Helpers::BoundValue.dp(paddings[0])}, end = #{Helpers::BoundValue.dp(paddings[1])}, bottom = #{Helpers::BoundValue.dp(paddings[2])}, start = #{Helpers::BoundValue.dp(paddings[3])})", depth + 1)
-            elsif paddings.is_a?(Array) && paddings.length == 2
-              code += ",\n" + indent("contentPadding = PaddingValues(horizontal = #{Helpers::BoundValue.dp(paddings[1])}, vertical = #{Helpers::BoundValue.dp(paddings[0])})", depth + 1)
-            elsif paddings.is_a?(Array) && paddings.length == 1
-              code += ",\n" + indent("contentPadding = PaddingValues(#{Helpers::BoundValue.dp(paddings[0])})", depth + 1)
-            elsif paddings.is_a?(Numeric) || Helpers::BoundValue.bound?(paddings)
-              code += ",\n" + indent("contentPadding = PaddingValues(#{Helpers::BoundValue.dp(paddings)})", depth + 1)
-            end
+          # contentPadding as component parameter (not modifier), side by side (the three faces' rule, ticket
+          # kjui-selectbox-fixed-56dp-ignores-wrap-content-height): KotlinJsonUI's SelectBoxDefaults (12 / 0 / 12 / 0),
+          # then `padding`, then `paddings`, then each side's own key; a side nothing writes keeps the default.
+          sides = select_content_padding(json_data)
+          if sides
+            code += ",\n" + indent("contentPadding = PaddingValues(start = #{sides[:start]}, top = #{sides[:top]}, end = #{sides[:end]}, bottom = #{sides[:bottom]})", depth + 1)
           end
 
           code += "\n" + indent(")", depth)
           code
         end
         
+        # A select's content padding side by side, or nil when the layout writes none (SelectBoxDefaults stands):
+        # the default 12 / 0 / 12 / 0 (start / top / end / bottom), then `padding` (one value for the four sides),
+        # then `paddings` (1, 2 or 4 values; 4 is [top, right, bottom, left]), then paddingTop / Bottom / Left /
+        # Right / Start / End. Left / Right are start / end, as the 4-value order reads them.
+        def self.select_content_padding(json_data)
+          keys = %w[padding paddings paddingTop paddingBottom paddingLeft paddingRight paddingStart paddingEnd]
+          return nil unless keys.any? { |k| json_data.key?(k) }
+
+          sides = { start: '12.dp', top: '0.dp', end: '12.dp', bottom: '0.dp' }
+          [json_data['padding'], json_data['paddings']].compact.each do |value|
+            all = value.is_a?(Array) ? value : [value]
+            case all.length
+            when 1 then sides.each_key { |k| sides[k] = Helpers::BoundValue.dp(all[0]) }
+            when 2
+              sides[:top] = sides[:bottom] = Helpers::BoundValue.dp(all[0])
+              sides[:start] = sides[:end] = Helpers::BoundValue.dp(all[1])
+            when 4
+              sides[:top] = Helpers::BoundValue.dp(all[0]); sides[:end] = Helpers::BoundValue.dp(all[1])
+              sides[:bottom] = Helpers::BoundValue.dp(all[2]); sides[:start] = Helpers::BoundValue.dp(all[3])
+            end
+          end
+          { 'paddingTop' => :top, 'paddingBottom' => :bottom, 'paddingLeft' => :start, 'paddingRight' => :end,
+            'paddingStart' => :start, 'paddingEnd' => :end }.each do |key, side|
+            sides[side] = Helpers::BoundValue.dp(json_data[key]) if json_data.key?(key)
+          end
+          sides
+        end
+
         # The `SelectBoxCaret(...)` expression for a caretAttributes object, or
         # nil when the object is absent. An empty object is present: the face
         # then draws its own caret with every default (flush at the edge).
