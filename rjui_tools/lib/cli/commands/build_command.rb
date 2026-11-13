@@ -2546,6 +2546,13 @@ module RjuiTools
               fontSize?: number;
               /** Floor as a fraction of fontSize (iOS minimumScaleFactor). */
               minimumScaleFactor?: number;
+              /**
+               * The declared size as the component draws it (its fontScaling /
+               * maxFontScale, or the app default): a CSS length. Given, the
+               * text shrinks as a fraction of it, so it still follows (or
+               * does not follow) the browser's text size as declared.
+               */
+              fontCss?: string;
             }
           TS
           el_param = is_ts ? ': HTMLElement | null | undefined' : ''
@@ -2576,6 +2583,37 @@ module RjuiTools
             )#{cleanup_ret} {
               if (!el) return () => {};
 
+              // 0.5 when autoShrink is declared without a floor — the same
+              // fallback sjui's SwiftUI label converter uses, so the three
+              // platforms shrink to the same place. A factor at or above 1 is
+              // "do not shrink": the floor is the ceiling.
+              const factor = options.minimumScaleFactor ?? 0.5;
+
+              // The declared length (2.5.35, fontScaling / maxFontScale): the
+              // text is drawn at a fraction of it, between the factor and 1.
+              if (options.fontCss) {
+                const css = options.fontCss;
+                const lowest = Math.min(factor, 1);
+                const at = (r#{is_ts ? ': number' : ''}) => `calc(${css} * ${r})`;
+                const fitLength = () => {
+                  el.style.fontSize = at(1);
+                  if (lowest >= 1 || !overflows(el)) return;
+                  let lo = lowest;
+                  let hi = 1;
+                  for (let i = 0; i < 8 && hi - lo > 0.02; i++) {
+                    const mid = (lo + hi) / 2;
+                    el.style.fontSize = at(mid);
+                    if (overflows(el)) { hi = mid; } else { lo = mid; }
+                  }
+                  el.style.fontSize = at(lo);
+                };
+                fitLength();
+                if (typeof ResizeObserver === 'undefined' || !el.parentElement) return () => {};
+                const lengthObserver = new ResizeObserver(() => fitLength());
+                lengthObserver.observe(el.parentElement);
+                return () => lengthObserver.disconnect();
+              }
+
               // Sizes are in the layout's units (px at a 16px root) and are
               // written as rem, N / 16, as the static text-[Nrem] classes
               // are: a px write would pin the text against the browser's font
@@ -2585,11 +2623,6 @@ module RjuiTools
               const declared = options.fontSize ?? (parseFloat(getComputedStyle(el).fontSize) * 16 / root);
               if (!declared) return () => {};
               const size = (v#{is_ts ? ': number' : ''}) => (v / 16) + 'rem';
-              // 0.5 when autoShrink is declared without a floor — the same
-              // fallback sjui's SwiftUI label converter uses, so the three
-              // platforms shrink to the same place. A factor at or above 1 is
-              // "do not shrink": the floor is the ceiling.
-              const factor = options.minimumScaleFactor ?? 0.5;
               const floor = Math.max(1, declared * Math.min(factor, 1));
 
               const fit = () => {

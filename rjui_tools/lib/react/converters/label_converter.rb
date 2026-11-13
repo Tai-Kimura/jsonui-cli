@@ -148,7 +148,7 @@ module RjuiTools
             css = color.to_s.start_with?('#') ? TailwindMapper.css_hex(color) : "var(--color-#{color})"
             parts << "color: '#{css}'"
           end
-          parts << "fontSize: '#{TailwindMapper.rem(attrs['fontSize'])}'" if attrs['fontSize']
+          parts << "fontSize: '#{TailwindMapper.font_size_css(attrs['fontSize'], **font_scale_opts)}'" if attrs['fontSize']
           # `font` is a weight name or a family, as on the Label itself
           # (TailwindMapper.map_font): `bold` went to fontFamily and the hint
           # fell back to the browser's serif at the regular weight.
@@ -247,7 +247,7 @@ module RjuiTools
           classes = []
 
           if attrs.is_a?(Hash)
-            classes << TailwindMapper.map_font_size(attrs['fontSize']) if attrs['fontSize']
+            classes << TailwindMapper.map_font_size(attrs['fontSize'], **font_scale_opts) if attrs['fontSize']
             # `font` is polymorphic: a weight name or a family. map_font already
             # discriminates, the same way the base path uses it.
             if attrs['font']
@@ -287,7 +287,7 @@ module RjuiTools
             overridden << TailwindMapper.map_color(attributes['fontColor'], 'text') if attributes['fontColor']
           end
           if attrs['fontSize'] && attributes['fontSize']
-            overridden << TailwindMapper.map_font_size(attributes['fontSize'])
+            overridden.concat(TailwindMapper.map_font_size(attributes['fontSize'], **font_scale_opts).split(' '))
           end
           if attrs['font']
             overridden << TailwindMapper.map_font(attributes['font']) if attributes['font']
@@ -793,7 +793,7 @@ module RjuiTools
         # solve, so the inline style is safe here and only here.
         def build_partial_style(partial)
           styles = []
-          styles << "fontSize: '#{TailwindMapper.rem(partial['fontSize'])}'" if partial['fontSize']
+          styles << "fontSize: '#{TailwindMapper.font_size_css(partial['fontSize'], **font_scale_opts)}'" if partial['fontSize']
           styles << "fontWeight: '#{partial['fontWeight']}'" if partial['fontWeight']
           styles << "color: #{color_style_expr(partial['fontColor'])}" if has_binding?(partial['fontColor'])
           styles.join(', ')

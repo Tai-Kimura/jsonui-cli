@@ -19,6 +19,28 @@ const FontConfig = {
    */
   fontProvider: void 0,
   /**
+   * Whether text follows the browser's text size, for every component that
+   * does not declare `fontScaling` (the app default; true unless the app sets
+   * it), and the largest multiple of its fontSize it grows to, for every
+   * component that does not declare `maxFontScale` (undefined: no cap).
+   * Change them with `configureScaling`, which also sets the two custom
+   * properties the generated sizes read (--jui-font-unit, --jui-font-max);
+   * a page that never calls it draws every size as N / 16 rem, uncapped.
+   * A component with neither a fontSize nor a declaration writes no size and
+   * inherits the browser's, so `scaling: false` does not pin it.
+   */
+  scaling: true,
+  maxScale: void 0,
+  configureScaling(options) {
+    if (options.scaling !== void 0) this.scaling = options.scaling;
+    if ("maxScale" in options) this.maxScale = options.maxScale;
+    if (typeof document === "undefined") return;
+    const root = document.documentElement.style;
+    root.setProperty("--jui-font-unit", this.scaling ? "0.0625rem" : "1px");
+    if (this.scaling && this.maxScale !== void 0) root.setProperty("--jui-font-max", `${this.maxScale}px`);
+    else root.removeProperty("--jui-font-max");
+  },
+  /**
    * Generator entry point. Generated components call
    * `Configuration.Font.resolve(spec)` and spread the result into their
    * inline style attribute. Do not call directly from app code unless you
@@ -29,13 +51,19 @@ const FontConfig = {
     return defaultCss(spec);
   }
 };
+function fontLength(size, scaling, maxScale) {
+  if (scaling === false) return `${size}px`;
+  const unit = scaling === true ? `${size / 16}rem` : `calc(${size}*var(--jui-font-unit,0.0625rem))`;
+  const cap = maxScale !== void 0 ? `${size * maxScale}px` : `calc(${size}*var(--jui-font-max,10000px))`;
+  return `min(${unit},${cap})`;
+}
 function defaultCss(spec) {
   const css = {};
   if (spec.family) css.fontFamily = spec.family;
   if (spec.weight !== void 0) {
     css.fontWeight = spec.weight;
   }
-  if (spec.size !== void 0) css.fontSize = `${spec.size / 16}rem`;
+  if (spec.size !== void 0) css.fontSize = fontLength(spec.size, spec.scaling, spec.maxScale);
   if (spec.italic) css.fontStyle = "italic";
   return css;
 }
