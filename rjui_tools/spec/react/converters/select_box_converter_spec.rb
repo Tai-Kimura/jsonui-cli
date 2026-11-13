@@ -514,6 +514,26 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
         expect(result).to include("backgroundPosition: 'right 20px center'")
         expect(result).to include('showPicker')
       end
+
+      # colorScheme "dark" is the Date input's key for a dark background: the browser's calendar mark turned light
+      # under it, and the library's caret that replaced the mark does the same (ticket
+      # rjui-selectbox-color-scheme-dark-lost-with-the-library-caret). A tintColor still wins; a select (no Date)
+      # never read colorScheme and keeps the default.
+      it 'tints the default caret light on a Date input with a dark colorScheme' do
+        dark_svg = 'stroke=%22%23FFFFFF%22'
+        light_svg = 'stroke=%22%23000000%22'
+        base = { 'class' => 'SelectBox', 'id' => 'when', 'items' => %w[a], 'selectItemType' => 'Date' }
+        dark = create_converter(base.merge('colorScheme' => 'dark')).convert
+        expect(dark).to include(dark_svg)
+        expect(dark).not_to include(light_svg)
+        expect(dark).to include("colorScheme: 'dark'")
+        expect(create_converter(base.merge('colorScheme' => 'light')).convert).to include(light_svg)
+        expect(create_converter(base).convert).to include(light_svg)
+        tinted = create_converter(base.merge('colorScheme' => 'dark', 'caretAttributes' => { 'tintColor' => '#00FF00' })).convert
+        expect(tinted).to include('stroke=%22%2300FF00%22')
+        select = create_converter(base.merge('selectItemType' => nil, 'colorScheme' => 'dark').compact).convert
+        expect(select).to include(light_svg)
+      end
     end
 
     context 'date picker' do

@@ -246,6 +246,13 @@ module RjuiTools
         # combination has no fixture and is left as it falls.
         CARET_DEFAULT_SIZE = 16
         CARET_DEFAULT_TINT = '#000000'
+        # colorScheme: "dark" is the web's key for a SelectBox on a dark
+        # background (attribute_definitions: the native date picker icon's
+        # visibility). The browser's own arrow and calendar mark followed it;
+        # from 2.5.35 the library draws the caret instead, so the caret's
+        # default tint follows it the same way (ticket
+        # rjui-selectbox-color-scheme-dark-lost-with-the-library-caret).
+        CARET_DARK_SCHEME_TINT = '#FFFFFF'
         CARET_TEXT_GAP = 8
         CARET_CHEVRON_PATH = 'M6 9l6 6 6-6'
 
@@ -362,8 +369,15 @@ module RjuiTools
           tail = "\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">" \
                  "<path d=\"#{CARET_CHEVRON_PATH}\"/></svg>"
           [[:lit, "url(\"data:image/svg+xml,#{svg_uri_encode(head)}"]] +
-            caret_color_parts(caret['tintColor'] || CARET_DEFAULT_TINT, uri: true, fallback: CARET_DEFAULT_TINT) +
+            caret_color_parts(caret['tintColor'] || caret_default_tint, uri: true, fallback: caret_default_tint) +
             [[:lit, "#{svg_uri_encode(tail)}\")"]]
+        end
+
+        # The glyph's tint when caretAttributes names none: light on a Date
+        # input with a dark colorScheme (the only element colorScheme is
+        # written on, build_date_style_attr), else the default.
+        def caret_default_tint
+          date_picker? && attributes['colorScheme'] == 'dark' ? CARET_DARK_SCHEME_TINT : CARET_DEFAULT_TINT
         end
 
         def caret_box_layer(color)
