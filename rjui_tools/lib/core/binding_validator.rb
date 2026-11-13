@@ -97,6 +97,11 @@ module RjuiTools
         # onTabChange -> ((Int) -> Void)? (callback with Int parameter)
         return '((Int) -> Void)?' if var_name == 'onTabChange' || attribute_name == 'onTabChange'
 
+        # Collection.onReorder: (section, from, to), `to` counted after the move (ticket jui-collection-drag-to-reorder)
+        return '((Int, Int, Int) -> Void)?' if attribute_name == 'onReorder'
+        # Collection.reorderable bound: on / off
+        return 'Bool' if attribute_name == 'reorderable'
+
         # onClick, onXxx -> (() -> Void)? (cross-platform callback type)
         return '(() -> Void)?' if var_name.start_with?('on') && var_name[2]&.match?(/[A-Z]/)
 

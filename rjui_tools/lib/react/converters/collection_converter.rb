@@ -23,7 +23,7 @@ module RjuiTools
           content = generate_collection_content(inner + 2)
 
           jsx = <<~JSX.chomp
-            #{indent_str(inner)}<div#{id_attr}#{ref_attr}#{class_name_attr(class_name)}#{style_attr}#{scroll_attr}#{testid_attr}#{tag_attr}>
+            #{indent_str(inner)}<div#{id_attr}#{ref_attr}#{class_name_attr(class_name)}#{style_attr}#{scroll_attr}#{testid_attr}#{tag_attr}#{reorder? ? ' data-jsonui-reorder=""' : ''}>
             #{content}
             #{indent_str(inner)}</div>
           JSX
@@ -36,6 +36,75 @@ module RjuiTools
           end
 
           wrap_with_visibility(jsx, indent)
+        end
+
+        # ------------------------------------------------------------ reorder
+        # A reorderable Collection (ticket jui-collection-drag-to-reorder,
+        # ruling B 2026-11-13): its rows are wrapped by the generated reorder
+        # helper (lib/react/templates/reorder.tsx, written as
+        # @/generated/reorder when a layout uses it) — a JsonuiReorderSection
+        # around each section's map, a JsonuiReorderItem around each cell, and
+        # the Collection's own element marked as the container a release is
+        # judged in. v1 is one vertical column: a grid, a horizontal, a flow
+        # or a paging Collection is drawn as before.
+        def reorder?
+          return false unless reorder_enabled_expr
+          return false if horizontal_collection? || flow_collection? || paging?
+
+          columns = attributes['columns'] || attributes['columnCount']
+          columns.nil? || columns == 1
+        end
+
+        # `true`, the bound value, or nil when reorderable is off.
+        def reorder_enabled_expr
+          value = attributes['reorderable']
+          return 'true' if value == true
+          return nil unless value.is_a?(String) && has_binding?(value)
+
+          prop = extract_binding_value(value)
+          prop.nil? || prop.empty? ? nil : "(#{add_viewmodel_data_prefix(prop)} === true)"
+        end
+
+        def reorder_section_open(section_expr, cells_expr, indent, key: nil)
+          handler = attributes['onReorder']
+          on_reorder = if handler.is_a?(String) && has_binding?(handler) && (prop = extract_binding_value(handler)) && !prop.empty?
+                         " onReorder={#{add_viewmodel_data_prefix(prop)}}"
+                       else
+                         ''
+                       end
+          handle = attributes['reorderHandle']
+          handle_attr = handle.is_a?(String) && !handle.empty? ? " handleId=#{JSON.generate(handle)}" : ''
+          locked_prop = attributes['reorderLockedProperty']
+          locked_attr = if locked_prop.is_a?(String) && !locked_prop.empty?
+                          " locked={jsonuiReorderLocked(#{cells_expr}, #{JSON.generate(locked_prop)})}"
+                        else
+                          ''
+                        end
+          key_attr = key ? " key={#{key}}" : ''
+          "#{indent_str(indent)}<JsonuiReorderSection#{key_attr} section={#{section_expr}} count={(#{cells_expr}).length} " \
+            "enabled={#{reorder_enabled_expr}}#{on_reorder}#{handle_attr}#{locked_attr}>"
+        end
+
+        def reorder_section_close(indent)
+          "#{indent_str(indent)}</JsonuiReorderSection>"
+        end
+
+        # A cell's lines wrapped in its JsonuiReorderItem, which takes the key.
+        def reorder_item_lines(cell_lines, key_expr, index_var, indent)
+          inner = cell_lines.map { |line| line.sub(/ key=\{.*?\}(?=[ >])/, '') }
+          ["#{indent_str(indent)}<JsonuiReorderItem key={#{key_expr}} index={#{index_var}}>"] +
+            inner.map { |line| "  #{line}" } +
+            ["#{indent_str(indent)}</JsonuiReorderItem>"]
+        end
+
+        # A reorderable row's key is its identity when the Collection names
+        # one: the row moves, its key moves with it.
+        def reorder_key_expr(row_var, index_var, fallback)
+          prop = attributes['cellIdProperty']
+          return fallback unless prop.is_a?(String) && !prop.empty?
+
+          row = typescript? ? "(#{row_var} as Record<string, unknown>)" : row_var
+          "String(#{row}[\"cellId\"] ?? #{row}[#{JSON.generate(prop)}] ?? #{index_var})"
         end
 
         # The collection is horizontal when its layout says so — the same
@@ -900,6 +969,23 @@ module RjuiTools
               lines << horizontal_lanes_open(lanes, indent)
               indent += 2
             end
+            if reorder? && !lanes
+              mapped = auto_tracking && cell_id_prop ? "enrichCellIds(#{source_expr}, \"#{cell_id_prop}\")" : source_expr
+              lines << reorder_section_open(section_index.to_s, source_expr, indent)
+              lines << "#{indent_str(indent + 2)}{#{mapped}.map((cellData, cellIndex) => ("
+              cell = if (cell_size = cell_size_style)
+                       ["#{indent_str(indent + 4)}<div className=\"shrink-0 overflow-hidden\"#{cell_size}>",
+                        "#{indent_str(indent + 6)}<#{cell_view}#{cell_item_id_attr(item_index)} data={cellData#{cell_cast}} />",
+                        "#{indent_str(indent + 4)}</div>"]
+                     else
+                       ["#{indent_str(indent + 4)}<#{cell_view}#{cell_item_id_attr(item_index)} data={cellData#{cell_cast}} />"]
+                     end
+              lines.concat(reorder_item_lines(cell, key_expr, 'cellIndex', indent + 4))
+              lines << "#{indent_str(indent + 2)}))}"
+              lines << reorder_section_close(indent)
+              lines << section_edge_line(section, 'footer', section_index, items_binding, indent) if footer_view && edges
+              return lines.join("\n")
+            end
             if auto_tracking && cell_id_prop
               lines << "#{indent_str(indent)}{enrichCellIds(#{source_expr}, \"#{cell_id_prop}\").map((cellData, cellIndex) => ("
             else
@@ -1019,6 +1105,17 @@ module RjuiTools
                 indent -= 2
                 lines << "#{indent_str(indent)}</div>"
               end
+            elsif reorder?
+              cells = '(section.cells?.data ?? [])'
+              key = reorder_key_expr('cellData', 'cellIndex', '`${sectionIndex}_${cellIndex}`')
+              lines << "#{indent_str(indent)}{(#{items_binding}?.sections ?? []).map((section, sectionIndex) => ("
+              lines << reorder_section_open('sectionIndex', cells, indent + 2, key: 'sectionIndex')
+              lines << "#{indent_str(indent + 4)}{#{cells}.map((cellData, cellIndex) => ("
+              lines.concat(reorder_item_lines(legacy_cell_lines(cell_view, 'cellIndex', "cellData#{cast}", indent + 6),
+                                              key, 'cellIndex', indent + 6))
+              lines << "#{indent_str(indent + 4)}))}"
+              lines << reorder_section_close(indent + 2)
+              lines << "#{indent_str(indent)}))}"
             else
               lines << "#{indent_str(indent)}{(#{items_binding}?.sections ?? []).map((section, sectionIndex) =>"
               lines << "#{indent_str(indent + 2)}(section.cells?.data ?? []).map((cellData, cellIndex) => ("
@@ -1061,6 +1158,23 @@ module RjuiTools
             if lanes
               lines << horizontal_lanes_open(lanes, indent)
               indent += 2
+            end
+            if reorder?
+              cells = "(#{items_binding} ?? [])"
+              lines << reorder_section_open('0', cells, indent)
+              lines << "#{indent_str(indent + 2)}{#{items_binding}?.map((item#{item_type}, index#{index_type}) => ("
+              cell = if (cell_size = cell_size_style)
+                       ["#{indent_str(indent + 4)}<div className=\"shrink-0 overflow-hidden\"#{cell_size}>",
+                        "#{indent_str(indent + 6)}<#{cell_view}#{cell_item_id_attr('index')} data={item} />",
+                        "#{indent_str(indent + 4)}</div>"]
+                     else
+                       ["#{indent_str(indent + 4)}<#{cell_view}#{cell_item_id_attr('index')} data={item} />"]
+                     end
+              lines.concat(reorder_item_lines(cell, legacy_array_key_expr, 'index', indent + 4))
+              lines << "#{indent_str(indent + 2)}))}"
+              lines << reorder_section_close(indent)
+              lines << "#{indent_str(indent)}<#{footer_view} />" if footer_view
+              return lines.join("\n")
             end
             lines << "#{indent_str(indent)}{#{items_binding}?.map((item#{item_type}, index#{index_type}) => ("
             key_expr = legacy_array_key_expr

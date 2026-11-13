@@ -797,6 +797,8 @@ class StepValidator:
             self._validate_set_orientation_action(step, path, result)
         elif action == "emitHook":
             self._validate_emit_hook_action(step, path, result)
+        elif action == "moveItem":
+            self._validate_move_item_step(step, path, result)
         elif action == "setSliderValue":
             self._validate_slider_step(step, path, result, "setSliderValue")
 
@@ -888,6 +890,23 @@ class StepValidator:
                     path=path,
                     message=f"'{param}' must be a positive integer (logical pixels), got: {value!r}"
                 ))
+
+    def _validate_move_item_step(self, step: dict, path: str, result: ValidationResult):
+        """moveItem: the indices, and what the drivers refuse before they move anything (the sentences of
+        jsonui-test-runner schemas moveItemAction and specs/vectors/move-item.json)."""
+        def index(v) -> bool:
+            return isinstance(v, int) and not isinstance(v, bool) and v >= 0
+
+        def error(message: str):
+            result.errors.append(ValidationMessage(path=path, message=message))
+
+        for key in ("from", "to"):
+            if key in step and not index(step[key]):
+                error(f"'{key}' on moveItem must be a row index (an integer of 0 or more), got: {step[key]!r}")
+        if index(step.get("from")) and index(step.get("to")) and step["from"] == step["to"]:
+            error(f"moveItem's 'from' and 'to' are the same row ({step['from']}): nothing would move")
+        if "section" in step and step["section"] != 0:
+            error(f"moveItem moves within section 0 (v1: no move across or in other sections), got: {step['section']!r}")
 
     def _validate_slider_step(self, step: dict, path: str, result: ValidationResult, kind: str):
         """setSliderValue / the value assertion: the numbers, and what the

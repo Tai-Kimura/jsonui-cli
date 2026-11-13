@@ -136,6 +136,14 @@ SUPPORTED_ACTIONS = {
         "required": ["id", "index"],
         "optional": ["timeout", "within"]
     },
+    "moveItem": {
+        "description": "Long-press a reorderable Collection's row <id>_item_<from> (on its reorderHandle when "
+                       "it has one), drag it and release it over <id>_item_<to>: 'to' is its index after the "
+                       "move. Both rows must be on screen; from == to and a section other than 0 fail before "
+                       "anything moves. Assert the result with a following step",
+        "required": ["id", "from", "to"],
+        "optional": ["section", "handle", "timeout", "within"]
+    },
     "selectTab": {
         "description": "Select a tab by index in a TabView/TabBar (tab is resolved as {id}_tab_{index})",
         "required": ["id", "index"],
@@ -398,6 +406,7 @@ KEY_DRIVER_REQUIREMENTS = {
     # An older driver fails the step as an unknown action, by name — not in
     # silence — but only when the file runs; validate says so up front.
     "action:setSliderValue": {"android": "1.22.0", "ios": "2.3.0", "web": "1.19.0"},
+    "action:moveItem": {"android": "1.23.0", "ios": "2.4.0", "web": "1.20.0"},
     "assert:value": {"android": "1.22.0", "ios": "2.3.0", "web": "1.19.0"},
 }
 
@@ -476,6 +485,8 @@ VALID_STEP_KEYS = [
     "cropId", "threshold",
     # setSliderValue / the value assertion
     "range", "step", "tolerance",
+    # moveItem
+    "from", "to", "section", "handle",
     # File reference step keys (for flow tests)
     "file", "case", "cases",
     # Args for overriding screen test default args (for flow tests)
@@ -509,6 +520,10 @@ PARAMETER_DESCRIPTIONS = {
     "button": "Button text to tap in alert dialog (for alertTap action)",
     "label": "Human-readable step name for logs/reports. On selectOption: option label (visible text) to select — lowest precedence after index and value",
     "index": "Item/option/tab index, 0-based",
+    "from": "moveItem: the row to pick up (0-based, within the section)",
+    "to": "moveItem: where the row goes, its index after the move (0-based) — the `to` onReorder receives",
+    "section": "moveItem: the section the row moves in (v1: 0 only)",
+    "handle": "moveItem: the Collection's reorderHandle id — the element of that id inside the row is pressed",
     "within": "Element id to look the step's element up inside — a Collection cell's container `<collectionId>_item_<n>`, so `id` names that cell's child when every cell has one (the cell must be drawn: scrollUntilVisible to it first); count counts inside it",
     "args": "Arguments for variable substitution. In screen test cases, defines default values. In flow file references, overrides defaults",
     "optional": "When true, a failure of this step is recorded as a warning and execution continues",

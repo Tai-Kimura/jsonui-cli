@@ -649,6 +649,14 @@ module RjuiTools
           else
             ''
           end
+        # A reorderable Collection's rows (CollectionConverter#reorder?): the
+        # generated helper's section, item and locked rows, whichever it uses.
+        reorder_names = %w[JsonuiReorderSection JsonuiReorderItem jsonuiReorderLocked].select do |f|
+          jsx_content.match?(/[<\s{(]#{f}\b/)
+        end
+        unless reorder_names.empty?
+          include_id_import += "\nimport { #{reorder_names.join(', ')} } from '@/generated/reorder';"
+        end
         if @config['_place_prop'] && jsx_content.include?("#{IncludePlace::HELPER}(")
           include_id_import += "\nimport { #{IncludePlace::HELPER} } from '@/generated/includePlace';"
         end

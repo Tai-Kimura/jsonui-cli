@@ -30,6 +30,7 @@ module JsTemplates
     'EmbedContainer.tsx' => 'EmbedContainer.jsx',
     'linkify_text.tsx' => 'linkify_text.jsx',
     'network_image.tsx' => 'network_image.jsx',
+    'reorder.tsx' => 'reorder.jsx',
     'use_color_mode.ts' => 'use_color_mode.js'
   }.freeze
 

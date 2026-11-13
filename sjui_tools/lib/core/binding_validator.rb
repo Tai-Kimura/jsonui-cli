@@ -130,6 +130,11 @@ module SjuiTools
         # Callbacks with Int parameter
         return '((Int) -> Void)?' if %w[onTabChange onItemAppear].include?(var_name) || %w[onTabChange onItemAppear].include?(attribute_name)
 
+        # Collection.onReorder: (section, from, to), `to` counted after the move (ticket jui-collection-drag-to-reorder)
+        return '((Int, Int, Int) -> Void)?' if attribute_name == 'onReorder'
+        # Collection.reorderable bound: on / off
+        return 'Bool' if attribute_name == 'reorderable'
+
         # TextField/TextView event handlers with UITextField/UITextView parameter
         text_field_events = %w[onBeginEditing onEndEditing onTextChange onDeleteBackward onChangeSelection]
         text_field_bool_events = %w[onShouldReturn onShouldClear onShouldBeginEditing onShouldEndEditing]

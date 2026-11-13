@@ -10,6 +10,7 @@
     "screen-marker-probe": "node scripts/screen_marker_probe.mjs",
     "interaction-stop-probe": "node scripts/interaction_stop_probe.mjs",
     "collection-scroll-probe": "node scripts/collection_scroll_probe.mjs",
+    "collection-reorder-probe": "node scripts/collection_reorder_probe.mjs",
     "label-gravity-probe": "node scripts/label_gravity_probe.mjs",
     "collection-insets-probe": "node scripts/collection_insets_probe.mjs",
     "collection-padding-probe": "node scripts/collection_padding_probe.mjs",

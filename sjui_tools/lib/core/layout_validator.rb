@@ -27,6 +27,25 @@ module JsonUIShared
         }
       end
 
+      # A reorderable Collection needs an identity that moves with its rows
+      # (ticket jui-collection-drag-to-reorder, ruling B 2026-11-13): by
+      # index, the row under the finger and the row the data moved are told
+      # apart by position only, and a drag shows the wrong row for a beat
+      # (SwiftUI's ForEach, LazyColumn's key, React's key all key on it).
+      # `reorderable: false` is the default and asks nothing; a binding may
+      # turn it on, so it is warned like true.
+      reorderable = component['reorderable']
+      if reorderable && reorderable != 'false' && (cell_id_prop.nil? || cell_id_prop.to_s.empty?)
+        component_id = component['id'] ? " (id=#{component['id']})" : ''
+        warnings << {
+          level: :warning,
+          message: "Collection#{component_id} is reorderable but cellIdProperty is not set. " \
+                   'Rows reordered by index identity can show the wrong row while they move. ' \
+                   'Fix: add "cellIdProperty": "id" (or the field that uniquely identifies a row).',
+          location: source_path
+        }
+      end
+
       # Several cell layouts, and no `sections` to say which goes where.
       #
       # SSoT (`/Collection/cellClasses`): with `items` and no `sections`, ONE

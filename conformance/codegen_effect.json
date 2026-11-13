@@ -71,6 +71,106 @@
       "owner": "control accessibility (shared/core/control_accessibility.rb)",
       "reason": "A View is named only when it is one button to a screen reader (the tap rule's button / combine shape); the probe's View taps nothing, so no platform names it, by the rule the three codegens and both runtimes share (an iOS View that is no element hands a name to every child inside it). The tests that do name a tappable View are control_accessibility_spec in each tool.",
       "note": "jsonui-cli 2.3.38"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderable",
+      "platform": "ios",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "サポート1（sjui_tools・SwiftJsonUI）",
+      "reason": "並べ替え（ticket jui-collection-drag-to-reorder、裁定 B 2026-11-13）の土台で、宣言だけを先に入れた。各面の実装の前は何も読まない。実装した面は、この行を外す（測りが支えなくなると、この門が赤で知らせる）",
+      "note": "jsonui-cli 2.5.34 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderable",
+      "platform": "ios",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "サポート1（sjui_tools・SwiftJsonUI）",
+      "reason": "並べ替え（ticket jui-collection-drag-to-reorder、裁定 B 2026-11-13）の土台で、宣言だけを先に入れた。各面の実装の前は何も読まない。実装した面は、この行を外す（測りが支えなくなると、この門が赤で知らせる）",
+      "note": "jsonui-cli 2.5.34 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderHandle",
+      "platform": "ios",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "サポート1（sjui_tools・SwiftJsonUI）",
+      "reason": "並べ替え（ticket jui-collection-drag-to-reorder、裁定 B 2026-11-13）の土台で、宣言だけを先に入れた。各面の実装の前は何も読まない。実装した面は、この行を外す（測りが支えなくなると、この門が赤で知らせる）",
+      "note": "jsonui-cli 2.5.34 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderLockedProperty",
+      "platform": "ios",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "サポート1（sjui_tools・SwiftJsonUI）",
+      "reason": "並べ替え（ticket jui-collection-drag-to-reorder、裁定 B 2026-11-13）の土台で、宣言だけを先に入れた。各面の実装の前は何も読まない。実装した面は、この行を外す（測りが支えなくなると、この門が赤で知らせる）",
+      "note": "jsonui-cli 2.5.34 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderable",
+      "platform": "android",
+      "check": "C0",
+      "class": "unread-spelling",
+      "owner": "サポート2（kjui_tools・KotlinJsonUI）",
+      "reason": "並べ替え（ticket jui-collection-drag-to-reorder、裁定 B 2026-11-13）の土台で、宣言だけを先に入れた。各面の実装の前は何も読まない。実装した面は、この行を外す（測りが支えなくなると、この門が赤で知らせる）",
+      "note": "jsonui-cli 2.5.34 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderable",
+      "platform": "android",
+      "check": "C1",
+      "class": "bound-dropped",
+      "owner": "サポート2（kjui_tools・KotlinJsonUI）",
+      "reason": "並べ替え（ticket jui-collection-drag-to-reorder、裁定 B 2026-11-13）の土台で、宣言だけを先に入れた。各面の実装の前は何も読まない。実装した面は、この行を外す（測りが支えなくなると、この門が赤で知らせる）",
+      "note": "jsonui-cli 2.5.34 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderHandle",
+      "platform": "android",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "サポート2（kjui_tools・KotlinJsonUI）",
+      "reason": "並べ替え（ticket jui-collection-drag-to-reorder、裁定 B 2026-11-13）の土台で、宣言だけを先に入れた。各面の実装の前は何も読まない。実装した面は、この行を外す（測りが支えなくなると、この門が赤で知らせる）",
+      "note": "jsonui-cli 2.5.34 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderLockedProperty",
+      "platform": "android",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "サポート2（kjui_tools・KotlinJsonUI）",
+      "reason": "並べ替え（ticket jui-collection-drag-to-reorder、裁定 B 2026-11-13）の土台で、宣言だけを先に入れた。各面の実装の前は何も読まない。実装した面は、この行を外す（測りが支えなくなると、この門が赤で知らせる）",
+      "note": "jsonui-cli 2.5.34 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderHandle",
+      "platform": "web",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "reorder helper (rjui_tools CollectionConverter#reorder?, lib/react/templates/reorder.tsx)",
+      "reason": "reorderHandle is drawn only on a reorderable Collection (reorderable true or bound): the probe's Collection is not reorderable, so no value of it changes the output, by the rule (ticket jui-collection-drag-to-reorder). The tests that draw it are rjui_tools/spec/react/collection_reorder_spec.rb and conformance/hosts/web/scripts/collection_reorder_probe.mjs.",
+      "note": "jsonui-cli 2.5.34 の候補"
+    },
+    {
+      "component": "Collection",
+      "attribute": "reorderLockedProperty",
+      "platform": "web",
+      "check": "C0",
+      "class": "unenumerated-vocabulary",
+      "owner": "reorder helper (rjui_tools CollectionConverter#reorder?, lib/react/templates/reorder.tsx)",
+      "reason": "reorderLockedProperty is drawn only on a reorderable Collection (reorderable true or bound): the probe's Collection is not reorderable, so no value of it changes the output, by the rule (ticket jui-collection-drag-to-reorder). The tests that draw it are rjui_tools/spec/react/collection_reorder_spec.rb and conformance/hosts/web/scripts/collection_reorder_probe.mjs.",
+      "note": "jsonui-cli 2.5.34 の候補"
     }
   ]
 }

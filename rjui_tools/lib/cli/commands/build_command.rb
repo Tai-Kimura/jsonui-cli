@@ -15,6 +15,7 @@ require_relative '../../core/binding_validator'
 require_relative '../../core/resources/color_manager'
 require_relative '../../react/react_generator'
 require_relative '../../react/style_loader'
+require_relative '../../react/reorder'
 require_relative '../../core/layout_validator'
 require_relative '../../core/generated_orphans'
 require_relative '../../core/plural_validator'
@@ -178,6 +179,9 @@ module RjuiTools
           @config['_place_cache'] = {}
           @config['_partial_root_cache'] = {}
           emit_include_place_helper unless @config['_place_stems'].empty?
+          # A reorderable Collection's rows drag through the generated reorder
+          # helper (lib/react/templates/reorder.tsx): written when a layout has one.
+          emit_reorder_helper if layout_trees.values.any? { |tree| React::Reorder.used?(tree) }
 
           # Where an include call site reads the partial it hands data to.
           @config['_layouts_dir'] = File.expand_path(layouts_dir)
@@ -1633,6 +1637,17 @@ module RjuiTools
           JS
 
           File.write(path, content)
+          note_emitted_helper(path)
+          Core::Logger.info("Generated: #{path}")
+        end
+
+        # The reorder helper (ticket jui-collection-drag-to-reorder): the
+        # template, in the project's language, as @/generated/reorder.
+        def emit_reorder_helper
+          generated_dir = @config['generated_directory'] || 'src/generated'
+          FileUtils.mkdir_p(generated_dir)
+          path = File.join(generated_dir, Core::Templates.file_name('reorder.tsx', @config))
+          FileUtils.cp(Core::Templates.path('reorder.tsx', @config), path)
           note_emitted_helper(path)
           Core::Logger.info("Generated: #{path}")
         end

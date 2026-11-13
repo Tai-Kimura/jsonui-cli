@@ -278,6 +278,9 @@
           "$ref": "#/definitions/tapItemAction"
         },
         {
+          "$ref": "#/definitions/moveItemAction"
+        },
+        {
           "$ref": "#/definitions/selectTabAction"
         },
         {
@@ -1011,6 +1014,77 @@
         "action",
         "id",
         "index"
+      ],
+      "additionalProperties": false
+    },
+    "moveItemAction": {
+      "type": "object",
+      "x-doc": {
+        "ja": "コレクションの行を長押しでつかみ、ドラッグで並べ替える（reorderable な Collection）"
+      },
+      "description": "Reorder a reorderable Collection's row as a finger does (ticket jui-collection-drag-to-reorder): long-press the row `<id>_item_<from>` — on its handle when the step gives `handle` (the Collection's reorderHandle id): the element of that id inside the row, found as `within` finds an element — hold, drag to the row `<id>_item_<to>`, hold there 0.5 s and release over it, at 3/4 of its height when moving down and 1/4 when moving up (never on a centre: the rule of shared/core/reorder_vectors.json passes a row when the dragged centre goes beyond its centre, and iOS 27's own reordering counts a centre exactly as passed). Both rows must be on screen, and the press and the release at least 100 (pt / px / dp) from the screen's top and bottom — nearer, a list scrolls by itself under the held finger and the row lands further: a row that is not fails the step naming it (scroll it into view, away from the edges, first; the drag does not scroll). from == to fails before anything moves. v1 moves within a section and needs each row's address to be one element: on a Collection of several sections, whose rows' addresses repeat, the step fails naming the address; `section` is 0. The step performs the gesture only: assert its result as for any step — the rows' text in their new places, or the state the view model keeps. Press 1.0 s (the libraries' own drag begins at 0.5 s), move slowly. Which point is pressed and where the release lands are specs/vectors/move-item.json, run by the three drivers.",
+      "x-requires-driver": {
+        "android": "1.23.0",
+        "ios": "2.4.0",
+        "web": "1.20.0"
+      },
+      "properties": {
+        "action": {
+          "const": "moveItem"
+        },
+        "id": {
+          "$ref": "#/definitions/elementId",
+          "description": "The Collection's id; a row is `{id}_item_{n}`"
+        },
+        "within": {
+          "$ref": "#/definitions/within"
+        },
+        "from": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The row to pick up (0-based, within the section)"
+        },
+        "to": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Where the row is to go, its index after the move (0-based): the index onReorder receives as `to`"
+        },
+        "section": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 0,
+          "default": 0,
+          "description": "The section (v1: 0 only — a move within one section)"
+        },
+        "handle": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The reorderHandle's id when the Collection declares one: the element of that id inside the from row is pressed (as `within` finds an element). Without it the row's centre is pressed, which does not pick up a row of a Collection that has a handle."
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 5000,
+          "description": "Timeout in milliseconds for the two rows to be found on screen"
+        },
+        "label": {
+          "$ref": "#/definitions/label"
+        },
+        "optional": {
+          "$ref": "#/definitions/optional"
+        },
+        "when": {
+          "$ref": "#/definitions/condition"
+        },
+        "screen": {
+          "$ref": "#/definitions/stepScreen"
+        }
+      },
+      "required": [
+        "action",
+        "id",
+        "from",
+        "to"
       ],
       "additionalProperties": false
     },

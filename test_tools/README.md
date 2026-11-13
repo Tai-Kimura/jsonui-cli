@@ -1036,6 +1036,7 @@ Test files must be valid JSON with `.test.json` extension.
 | alertTap | button | timeout | Tap button in alert dialog |
 | selectOption | id | value, label, index, timeout | Select option from dropdown |
 | tapItem | id, index | timeout | Tap item at index in collection |
+| moveItem | id, from, to | section, handle, timeout, within | Long-press a reorderable Collection's row and drag it to `to` (its index after the move) |
 | selectTab | index | id, timeout | Select tab by index |
 | setSliderValue | id, value | range, step, timeout | Put a Slider at a value in its own units (drivers: ios 2.3.0, android 1.22.0, web 1.19.0) |
 
