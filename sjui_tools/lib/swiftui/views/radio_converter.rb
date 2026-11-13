@@ -246,11 +246,13 @@ module SjuiTools
             add_modifier_line ".accessibilityElement(children: .ignore)"
             add_modifier_line ".accessibilityLabel(#{label})"
           end
-          # The chosen single radio reads "selected" (ticket
-          # sjui-radio-checkbox-selected-state-not-read): the state was only
-          # the glyph's picture. Not chosen adds nothing.
+          # A single radio is a button, and the chosen one reads "selected"
+          # (ticket sjui-radio-checkbox-selected-state-not-read): the state
+          # was only the glyph's picture, and the codegen carried no trait at
+          # all where the dynamic face says `.isButton` (RadioConverter.swift).
+          # Not chosen adds nothing beyond the button.
           if single_selected
-            add_modifier_line ".accessibilityAddTraits((#{single_selected}) ? .isSelected : [])"
+            add_modifier_line ".accessibilityAddTraits((#{single_selected}) ? [.isButton, .isSelected] : .isButton)"
           end
 
           # 共通のモディファイアを適用

@@ -41,17 +41,23 @@ RSpec.describe 'Radio selected state for a screen reader' do
 
   it 'a single radio is selected exactly when its group holds its value' do
     code = emit({ 'type' => 'Radio', 'id' => 'r', 'text' => 'One', 'group' => 'g' })
-    expect(code).to include('.accessibilityAddTraits((selectedG == "r") ? .isSelected : [])')
+    expect(code).to include('.accessibilityAddTraits((selectedG == "r") ? [.isButton, .isSelected] : .isButton)')
   end
 
   it 'a single radio with a value is selected by that value' do
     code = emit({ 'type' => 'Radio', 'id' => 'r', 'text' => 'One', 'group' => 'g', 'value' => 'v1' })
-    expect(code).to include('.accessibilityAddTraits((selectedG == "v1") ? .isSelected : [])')
+    expect(code).to include('.accessibilityAddTraits((selectedG == "v1") ? [.isButton, .isSelected] : .isButton)')
   end
 
   it 'a text-less single radio carries the state too (it has no element of its own; the glyph reads it)' do
     code = emit({ 'type' => 'Radio', 'id' => 'r', 'group' => 'g' })
-    expect(code).to include('.accessibilityAddTraits((selectedG == "r") ? .isSelected : [])')
+    expect(code).to include('.accessibilityAddTraits((selectedG == "r") ? [.isButton, .isSelected] : .isButton)')
+  end
+
+  it 'a single radio is a button whether chosen or not, as the dynamic face' do
+    # The codegen carried no trait; RadioConverter.swift says `.isButton`.
+    code = emit({ 'type' => 'Radio', 'id' => 'r', 'text' => 'One', 'group' => 'g' })
+    expect(code).to match(/\.accessibilityAddTraits\(.*\? \[\.isButton, \.isSelected\] : \.isButton\)/)
   end
 
   it "each written option's label is selected when the selection is that option" do
