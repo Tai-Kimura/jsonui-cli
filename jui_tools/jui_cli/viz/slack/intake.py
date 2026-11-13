@@ -7,6 +7,12 @@ process_inbox  each inbox/ file, oldest first: filter adapter -> router adapter 
                file too and is tried again after RETRY_SEC (or on a fetch asked by hand).
 next_run       the schedule: slots every schedule.everyHours hours anchored on schedule.at (local time); a slot
                missed while the server was down runs at once. everyHours 0 = by hand only.
+retry          a scheduled fetch that failed (an error from Slack or the connector, or the run raised) is tried again
+               RETRY_AFTER_SEC[n] after the n+1-th failure in a row (1, 2, 4, 8, 16 minutes), then at the slots;
+               an answer without an error ends it. lastRun stays the last run, as before; the steps are the status's
+               ``retry`` ({failures, nextTryAt}). A fetch by hand is as it was (a success ends the steps too). Until
+               jsonui-cli 2.5.33 a failed slot waited for the next slot (hours), and a run that raised was tried again
+               on every pass (ticket 2026-11-13-viz-weather-waits-30-min-after-a-failure, its family).
 Service        the asyncio side for ``jui viz serve``: one loop polls inbox/ every WATCH_SEC and runs the schedule;
                fetch_now() is the API's 今すぐ取る. The work (HTTP, the child adapters, claude) runs off the loop.
                With source.mode "socket" it also keeps one Socket Mode connection per workspace (socket_mode.py),
@@ -34,6 +40,8 @@ from . import filters, routers, socket_mode, store
 
 WATCH_SEC = 2.0
 RETRY_SEC = 600.0
+#: A failed scheduled fetch: tried again this long after the 1st, 2nd, ... failure in a row; past the end, at the slots.
+RETRY_AFTER_SEC = (60.0, 120.0, 240.0, 480.0, 960.0)
 ERRORS_KEPT = 20
 
 #: What the intake is doing this moment, for the sorting factory's robot (slack_room.py reads it on its 2 s pass):
@@ -207,6 +215,18 @@ def record_error(root: Path, text: str) -> None:
         pass       # the folder cannot be written: nothing else can be either, and the loop goes on
 
 
+def record_failure(root: Path, trigger: str, schedule: dict) -> None:
+    """A run that raised: the retry steps go on (record_outcome) — without this, lastRun stayed where it was and the
+    slot stayed due, so a scheduled run that raised ran again on every pass."""
+    try:
+        store.ensure(root)
+        status = Status(root)
+        record_outcome(status.data, trigger, True, now_ms(), schedule)
+        status.save()
+    except OSError:
+        pass
+
+
 def _waits_for_parent(record: dict, root: Path) -> bool:
     message = record.get("message") if isinstance(record.get("message"), dict) else {}
     parent = message.get("thread_ts")
@@ -232,6 +252,34 @@ def next_run(last_ms: int | None, now: float, schedule: dict) -> float | None:
     return today + k * step
 
 
+def record_outcome(data: dict, trigger: str, failed: bool, at_ms: int, schedule: dict) -> None:
+    """The retry steps in the status's *data* after a run (see the module's ``retry``)."""
+    if not failed:
+        data.pop("retry", None)
+        return
+    if trigger not in ("schedule", "retry"):
+        return                                     # by hand: as it was
+    n = int((data.get("retry") or {}).get("failures") or 0) + 1
+    if n <= len(RETRY_AFTER_SEC):
+        nxt = at_ms + int(RETRY_AFTER_SEC[n - 1] * 1000)
+    else:
+        slot = next_run(at_ms, at_ms / 1000, schedule)
+        nxt = int(slot * 1000) if slot is not None else None
+    data["retry"] = {"failures": n, "nextTryAt": nxt}
+
+
+def due_trigger(data: dict | None, base: int | None, now: float, schedule: dict) -> str | None:
+    """What a pass at *now* starts: "retry" when a retry step is due, "schedule" when a slot is due and no retry step
+    is waiting, else None. *base*: schedule_base."""
+    retry_at = ((data or {}).get("retry") or {}).get("nextTryAt")
+    if isinstance(retry_at, (int, float)):
+        if now * 1000 >= retry_at:
+            return "retry"
+        return None                                # a step is waiting: the slot does not run before it
+    nxt = next_run(base, now, schedule)
+    return "schedule" if nxt is not None and nxt <= now else None
+
+
 def schedule_base(status: "Status | None") -> int | None:
     """What the schedule counts from: the last run, else when the intake first saw the folder."""
     if status is None:
@@ -254,8 +302,10 @@ def run_once(cfg: dict, root: Path, trigger: str, **kw) -> dict:
     finally:
         _work(None)
     status = Status(root)
-    status.data["lastRun"] = {"at": now_ms(), "trigger": trigger, "mode": (cfg.get("source") or {}).get("mode"),
+    at = now_ms()
+    status.data["lastRun"] = {"at": at, "trigger": trigger, "mode": (cfg.get("source") or {}).get("mode"),
                               "fetched": got["fetched"], "errors": got["errors"][:ERRORS_KEPT]}
+    record_outcome(status.data, trigger, bool(got["errors"]), at, cfg.get("schedule") or {})
     for err in got["errors"]:
         status.error(f"fetch: {err}")
     status.save()
@@ -302,6 +352,9 @@ def _snapshot(cfg: dict | None, cfg_error: str | None, running: bool, now: float
     status = Status(root) if (root / store.STATE).is_dir() else None
     last = (status.data.get("lastRun") if status else None) or None
     nxt = next_run(schedule_base(status), now, cfg.get("schedule") or {})
+    retry = (status.data.get("retry") if status else None) or None
+    if retry and isinstance(retry.get("nextTryAt"), (int, float)):
+        nxt = retry["nextTryAt"] / 1000            # the next fetch is the retry step
     mode = (cfg.get("source") or {}).get("mode")
     failed = (status.data.get("failed") if status else {}) or {}
     return {
@@ -311,7 +364,7 @@ def _snapshot(cfg: dict | None, cfg_error: str | None, running: bool, now: float
         "filterAdapter": (cfg.get("filter") or {}).get("adapter") or "builtin",
         "routerAdapter": (cfg.get("router") or {}).get("adapter") or "haiku",
         "schedule": cfg.get("schedule"),
-        "lastRun": last, "nextRun": int(nxt * 1000) if nxt is not None else None,
+        "lastRun": last, "nextRun": int(nxt * 1000) if nxt is not None else None, "retry": retry,
         "counts": store.counts(root),
         "failed": [{"file": k, "stage": v.get("stage"), "error": v.get("error"), "at": v.get("at")} for k, v in sorted(failed.items())],
         "errors": (status.data.get("errors") if status else []) or [],
@@ -421,6 +474,8 @@ class Service:
         except Exception as exc:  # noqa: BLE001 — said on the status; the schedule and the next press go on
             text = f"{trigger} fetch: unexpected {type(exc).__name__}: {exc}"
             await loop.run_in_executor(None, lambda: record_error(C.orchestration_dir(cfg), text))
+            await loop.run_in_executor(None, lambda: record_failure(C.orchestration_dir(cfg), trigger,
+                                                                    cfg.get("schedule") or {}))
             return 500, {"error": text}
         finally:
             self.running = False
@@ -477,12 +532,12 @@ class Service:
             root = C.orchestration_dir(cfg)
             status = Status(root) if (root / store.STATE).is_dir() else None
             base = schedule_base(status)
-            nxt = next_run(base, time.time(), cfg.get("schedule") or {})
+            due = due_trigger(status.data if status else None, base, time.time(), cfg.get("schedule") or {})
             if base is None:
                 # never run: make the folders and note when the schedule starts counting
                 await loop.run_in_executor(None, lambda: start_schedule(root))
-            elif nxt is not None and nxt <= time.time():
-                await self.fetch_now("schedule")
+            elif due is not None:
+                await self.fetch_now(due)
             elif store.inbox_files(root):
                 kw = {k: v for k, v in self.work_kw.items() if k in ("route", "apply_filter")}
                 await loop.run_in_executor(None, lambda: process_inbox(cfg, root, **kw))
