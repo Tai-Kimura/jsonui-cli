@@ -46,7 +46,7 @@ RSpec.describe 'kjui codegen: a reorderable Collection' do
       expect(code).to include('if (data.editing == true) CollectionReorder(true, false) { s, f, t -> data.onStopMove?.invoke(s, f, t) } else null,'), route
       expect(code).to include('CollectionReorderScope(stopListReorder) {'), route
       expect(code).to include('.collectionReorderContainer(stopListReorder)'), route
-      expect(code).to match(/CollectionReorderRow\(stopListReorder, 0, cellIndex, [\w.]+\.size, reorderLocked0\) \{/), route
+      expect(code).to match(/CollectionReorderRow\(stopListReorder, 0, cellIndex, [\w.]+\.size, reorderLocked0, id = \(.*\)\.toString\(\)\) \{/), route
       expect(code).to include('.testTag("stop_list_item_$cellIndex").collectionReorderActions()'), route
       expect(code.scan('{').size).to eq(code.scan('}').size), route
     end
@@ -73,7 +73,7 @@ RSpec.describe 'kjui codegen: a reorderable Collection' do
       expect(plain).not_to include('Fixed'), route
       code, = emit(extra.merge(KJUI_REORDER_DECL).merge('reorderFixedProperty' => 'skipped'))
       expect(code).to include('[it]["skipped"] == true }.toSet() }'), route
-      expect(code).to match(/CollectionReorderRow\(stopListReorder, 0, cellIndex, [\w.]+\.size, reorderLocked0, reorderLocked0Fixed\) \{/), route
+      expect(code).to match(/CollectionReorderRow\(stopListReorder, 0, cellIndex, [\w.]+\.size, reorderLocked0, reorderLocked0Fixed, id = \(.*\)\.toString\(\)\) \{/), route
       expect(code.sub(/\n[^\n]*reorderLocked0Fixed = remember[^\n]*/, '').gsub(', reorderLocked0Fixed', '')).to eq(plain), route
     end
     both, = emit(base.merge('reorderLockedProperty' => 'pinned', 'reorderFixedProperty' => 'skipped'))
@@ -95,7 +95,7 @@ RSpec.describe 'kjui codegen: a reorderable Collection' do
     [none, lazy].each do |code|
       expect(code).to include('CollectionReorderScope(stopListReorder) {')
       expect(code).to include('.collectionReorderContainer(stopListReorder)')
-      expect(code).to match(/CollectionReorderRow\(stopListReorder, sectionIndex, cellIndex, [\w.]+\.size, reorderLocked\) \{/)
+      expect(code).to match(/CollectionReorderRow\(stopListReorder, sectionIndex, cellIndex, [\w.]+\.size, reorderLocked, id = \(.*\)\.toString\(\)\) \{/)
       expect(code).to include('.collectionReorderActions()')
       expect(code.scan('{').size).to eq(code.scan('}').size)
     end
