@@ -6,6 +6,7 @@ require_relative 'resource_resolver'
 require_relative '../../core/string_literals'
 require_relative '../../core/logger'
 
+require_relative 'font_scale'
 module KjuiTools
   module Compose
     module Helpers
@@ -85,13 +86,13 @@ module KjuiTools
         # Convenience: produce the four `Text(...)` argument lines that consume a
         # ResolvedFont local. Returns a string already indented at `depth + 1`,
         # suitable for appending after the existing Text(...) parameters.
-        def self.text_arg_lines(var_name, depth, required_imports = nil)
+        def self.text_arg_lines(var_name, depth, required_imports = nil, json_data = nil)
           required_imports&.add(:font_style)
           required_imports&.add(:text_unit)
           [
             indent("fontFamily = #{var_name}.family,", depth + 1),
             indent("fontWeight = #{var_name}.weight,", depth + 1),
-            indent("fontSize = #{var_name}.size ?: TextUnit.Unspecified,", depth + 1),
+            indent("fontSize = #{FontScale.wrap("#{var_name}.size ?: TextUnit.Unspecified", json_data, required_imports)},", depth + 1),
             indent("fontStyle = #{var_name}.style ?: FontStyle.Normal,", depth + 1)
           ].join("\n")
         end
@@ -100,7 +101,7 @@ module KjuiTools
         # that emit a `style = TextStyle(...)` block instead of inline Text args
         # (e.g. PartialAttributesText). Returns a list of `key = value` fragments
         # WITHOUT trailing commas; the caller joins them.
-        def self.style_arg_fragments(var_name, required_imports = nil)
+        def self.style_arg_fragments(var_name, required_imports = nil, json_data = nil)
           required_imports&.add(:font_style)
           required_imports&.add(:local_text_style)
           # Unresolved slots fall back to the CURRENT style, not to
@@ -113,7 +114,7 @@ module KjuiTools
           [
             "fontFamily = (#{var_name}.family ?: LocalTextStyle.current.fontFamily)",
             "fontWeight = (#{var_name}.weight ?: LocalTextStyle.current.fontWeight)",
-            "fontSize = (#{var_name}.size ?: LocalTextStyle.current.fontSize)",
+            "fontSize = #{FontScale.wrap("#{var_name}.size ?: LocalTextStyle.current.fontSize", json_data, required_imports)}",
             "fontStyle = (#{var_name}.style ?: LocalTextStyle.current.fontStyle)"
           ]
         end

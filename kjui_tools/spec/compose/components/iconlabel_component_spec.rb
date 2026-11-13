@@ -151,7 +151,7 @@ RSpec.describe KjuiTools::Compose::Components::IconLabelComponent do
 
   describe 'text style' do
     it 'passes fontSize through' do
-      expect(generate('fontSize' => 12)).to include('fontSize = 12.sp')
+      expect(generate('fontSize' => 12)).to include('fontSize = jsonUIFontSize(12.sp)')
     end
 
     # IconLabelConverter treats `font: "bold"` as a weight, not a family.

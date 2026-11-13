@@ -55,6 +55,7 @@ RSpec.describe 'kjui codegen: layout boxes the frame-parity inventory found off'
       label = ->(node) { KjuiTools::Compose::Components::SwitchComponent.build_label_code({ 'type' => 'Switch', 'label' => 'Sample' }.merge(node), 1, Set.new) }
       expect(<<~KT).to compile_as_kotlin
         class TextUnit
+        fun <T> jsonUIFontSize(size: T, fontScaling: Boolean? = null, maxFontScale: Float? = null): T = size
         val Int.sp: TextUnit get() = TextUnit()
         interface Modifier { companion object : Modifier }
         interface RowScope { fun Modifier.weight(w: Float): Modifier = this }

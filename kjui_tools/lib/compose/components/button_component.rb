@@ -447,7 +447,7 @@ module KjuiTools
 
           var_name = next_resolved_var
           resolve_block = Helpers::FontSpecHelper.emit_resolve_block(var_name, font_args, depth, required_imports)
-          text_arg_lines = Helpers::FontSpecHelper.text_arg_lines(var_name, depth, required_imports)
+          text_arg_lines = Helpers::FontSpecHelper.text_arg_lines(var_name, depth, required_imports, json_data)
 
           resolve_block + "\n" + indent("Text(", depth) +
             "\n" + indent("text = #{text},", depth + 1) +

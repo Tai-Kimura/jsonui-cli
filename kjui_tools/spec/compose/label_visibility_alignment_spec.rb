@@ -70,6 +70,7 @@ RSpec.describe 'kjui codegen: a Label with a visibility and an alignment in its 
       class Density { fun Int.toDp(): Dp = Dp(toFloat()) }
       object LocalDensity { val current = Density() }
       class TextUnit { companion object { val Unspecified = TextUnit() } }
+      fun <T> jsonUIFontSize(size: T, fontScaling: Boolean? = null, maxFontScale: Float? = null): T = size
       class FontFamily
       class FontWeight
       class FontStyle { companion object { val Normal = FontStyle() } }

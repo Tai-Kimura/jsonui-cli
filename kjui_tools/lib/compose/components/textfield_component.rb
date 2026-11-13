@@ -518,7 +518,7 @@ module KjuiTools
             end
 
             if json_data['hintFontSize']
-              placeholder_code += ",\n" + indent("fontSize = #{Helpers::BoundValue.sp(json_data['hintFontSize'])}", depth + 2)
+              placeholder_code += ",\n" + indent("fontSize = #{Helpers::FontScale.wrap(Helpers::BoundValue.sp(json_data['hintFontSize']), json_data, required_imports)}", depth + 2)
             end
 
             if json_data['hintFont'] == 'bold'
@@ -543,7 +543,7 @@ module KjuiTools
                                  line_height = (hint_base.to_f * hint_multiple.to_f)
                                  "#{line_height == line_height.to_i ? line_height.to_i : line_height}.sp"
                                end
-              placeholder_code += ",\n" + indent("style = LocalTextStyle.current.copy(lineHeight = #{line_height_sp})", depth + 2)
+              placeholder_code += ",\n" + indent("style = LocalTextStyle.current.copy(lineHeight = #{Helpers::FontScale.wrap(line_height_sp, json_data, required_imports)})", depth + 2)
             end
 
             placeholder_code += "\n" + indent(") }", depth + 1)
@@ -664,7 +664,7 @@ module KjuiTools
           required_imports&.add(:text_style)
           style_parts = []
           if tf_resolved_var
-            style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(tf_resolved_var, required_imports))
+            style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(tf_resolved_var, required_imports, json_data))
           end
 
           # Use fontColor if specified; the undeclared default routes through
@@ -689,7 +689,7 @@ module KjuiTools
           # dynamic component applies (LocalTextStyle's 16sp is not it).
           unless tf_resolved_var
             required_imports&.add(:configuration)
-            style_parts << "fontSize = Configuration.TextField.defaultFontSize.sp"
+            style_parts << "fontSize = #{Helpers::FontScale.wrap('Configuration.TextField.defaultFontSize.sp', json_data, required_imports)}"
           end
 
           if json_data['textAlign']

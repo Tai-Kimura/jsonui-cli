@@ -68,6 +68,8 @@ module ComposeStubUniverse
           infix fun provides(value: Color) = ProvidedValue()
       }
       fun jsonUITintOr(fallback: Color): Color = fallback
+      // KotlinJsonUI's com.kotlinjsonui.core.jsonUIFontSize: every text size through the text size rule.
+      fun <T> jsonUIFontSize(size: T, fontScaling: Boolean? = null, maxFontScale: Float? = null): T = size
       fun CompositionLocalProvider(vararg values: ProvidedValue, content: () -> Unit) {}
       class MutableState<T>(var value: T)
       operator fun <T> MutableState<T>.getValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>): T = value
@@ -355,6 +357,8 @@ module ComposeStubUniverse
           infix fun provides(value: Color) = ProvidedValue()
       }
       fun jsonUITintOr(fallback: Color): Color = fallback
+      // KotlinJsonUI's com.kotlinjsonui.core.jsonUIFontSize: every text size through the text size rule.
+      fun <T> jsonUIFontSize(size: T, fontScaling: Boolean? = null, maxFontScale: Float? = null): T = size
       fun CompositionLocalProvider(vararg values: ProvidedValue, content: () -> Unit) {}
       class MutableState<T>(var value: T)
       operator fun <T> MutableState<T>.getValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>): T = value
