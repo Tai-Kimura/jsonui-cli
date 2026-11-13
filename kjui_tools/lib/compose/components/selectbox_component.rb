@@ -4,6 +4,7 @@ require_relative '../helpers/binding_expression'
 require_relative '../../core/binding_validator_core'
 require_relative '../helpers/static_seed'
 require_relative '../helpers/bound_value'
+require_relative '../helpers/font_scale'
 require_relative '../helpers/modifier_builder'
 require_relative '../helpers/resource_resolver'
 require_relative '../../core/string_literals'
@@ -290,6 +291,11 @@ module KjuiTools
           label_font_size = label_attrs['fontSize'] || json_data['fontSize']
           if label_font_size
             code += "\n" + indent("fontSize = #{Helpers::BoundValue.int_arg(label_font_size, fallback: 16)},", depth + 1)
+          end
+          # fontScaling / maxFontScale: SelectBox / DateSelectBox draw their text by the text size rule with them
+          # (KotlinJsonUI's FontScaling); undeclared, the app's defaults.
+          Helpers::FontScale.declaration_args(json_data).sub(/\A, /, '').split(', ').each do |arg|
+            code += "\n" + indent("#{arg},", depth + 1)
           end
 
           if json_data['font']

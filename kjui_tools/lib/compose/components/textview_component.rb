@@ -45,7 +45,7 @@ module KjuiTools
           if color
             args << "color = #{Helpers::ResourceResolver.process_color(color, required_imports)}"
           end
-          args << "fontSize = #{Helpers::BoundValue.sp(size)}" if size
+          args << "fontSize = #{Helpers::FontScale.wrap(Helpers::BoundValue.sp(size), json_data, required_imports)}" if size
           if (weight = font_weight_for(font))
             required_imports&.add(:font_weight)
             args << "fontWeight = #{weight}"
@@ -66,7 +66,7 @@ module KjuiTools
                              else
                                "#{format_sp(base_size.to_f * multiple.to_f)}.sp"
                              end
-            args << "style = LocalTextStyle.current.copy(lineHeight = #{line_height_sp})"
+            args << "style = LocalTextStyle.current.copy(lineHeight = #{Helpers::FontScale.wrap(line_height_sp, json_data, required_imports)})"
           end
 
           return "\n" + indent("placeholder = { Text(#{placeholder}) },", depth + 1) if args.length == 1
@@ -491,7 +491,7 @@ module KjuiTools
             required_imports&.add(:text_style)
             style_parts = []
             if tv_resolved_var
-              style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(tv_resolved_var, required_imports))
+              style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(tv_resolved_var, required_imports, json_data))
             end
             if json_data['fontColor']
               font_color = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)

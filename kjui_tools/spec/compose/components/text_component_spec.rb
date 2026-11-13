@@ -34,7 +34,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       json_data = { 'type' => 'Text', 'text' => 'Test', 'fontSize' => 16 }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('size = 16.sp,')
-      expect(result).to include('fontSize = resolved_text1.size ?: TextUnit.Unspecified')
+      expect(result).to include('fontSize = jsonUIFontSize(resolved_text1.size ?: TextUnit.Unspecified)')
     end
 
     it 'generates text with font color' do
@@ -498,7 +498,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       json_data = { 'type' => 'Text', 'text' => 'Link', 'linkable' => true, 'fontSize' => 14 }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to match(/val resolved_text\d+ = Configuration\.Font\.resolve\(FontSpec\(/)
-      expect(result).to include('fontSize = (resolved_text1.size ?: LocalTextStyle.current.fontSize)')
+      expect(result).to include('fontSize = jsonUIFontSize(resolved_text1.size ?: LocalTextStyle.current.fontSize)')
     end
 
     # kjui-partialattributes-label-missing-testtag: a linkable Label with an id
@@ -546,7 +546,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
       style = result[/^\s*style = LocalTextStyle\.current\.copy\((.*)\)$/, 1]
       expect(style).to include('color = Color(android.graphics.Color.parseColor("#FF0000"))')
       expect(result).to match(/FontSpec\([^)]*size = 16\.sp/m)
-      expect(style).to match(/fontSize = \(resolved_\w+\.size \?: LocalTextStyle\.current\.fontSize\)/)
+      expect(style).to match(/fontSize = jsonUIFontSize\(resolved_\w+\.size \?: LocalTextStyle\.current\.fontSize\)/)
       expect(style).to include('textAlign = TextAlign.Center')
       expect(required_imports).to include(:text_align)
     end
@@ -989,7 +989,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
         result = described_class.generate(json_data, 0, required_imports)
         expect(result).to include('fontFamily = resolved_text1.family,')
         expect(result).to include('fontWeight = resolved_text1.weight,')
-        expect(result).to include('fontSize = resolved_text1.size ?: TextUnit.Unspecified,')
+        expect(result).to include('fontSize = jsonUIFontSize(resolved_text1.size ?: TextUnit.Unspecified),')
         expect(result).to include('fontStyle = resolved_text1.style ?: FontStyle.Normal,')
       end
     end
@@ -1010,7 +1010,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
         expect(result).to include('val resolved_text2 = Configuration.Font.resolve(')
         expect(result).to include('size = 24.sp')
         expect(result).to include('weight = FontWeight.Bold')
-        expect(result).to include('fontSize = (if (data.isChosen) resolved_text2 else resolved_text1).size')
+        expect(result).to include('fontSize = jsonUIFontSize((if (data.isChosen) resolved_text2 else resolved_text1).size')
       end
 
       it 'swaps the colour on the same condition' do
@@ -1043,7 +1043,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
 
         expect(result).not_to include('if (true)')
         expect(result).not_to include('resolved_text1')
-        expect(result).to include('fontSize = resolved_text2.size ?: TextUnit.Unspecified,')
+        expect(result).to include('fontSize = jsonUIFontSize(resolved_text2.size ?: TextUnit.Unspecified),')
       end
 
       it 'prefers highlightAttributes and falls through when it has no usable key' do
@@ -1073,8 +1073,8 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
         # m x L, each against its own size (attribute_semantics
         # lineHeightMultipleBase): L(24) x 1.5 highlighted, L(14) x 1.2 not.
         expect(result).to include(
-          'lineHeight = if (data.sel) LabelLineHeight.multiple(24f, 1.5f, LocalTextStyle.current, LocalDensity.current) ' \
-          'else LabelLineHeight.multiple(14f, 1.2f, LocalTextStyle.current, LocalDensity.current)'
+          'lineHeight = if (data.sel) jsonUIFontSize(LabelLineHeight.multiple(24f, 1.5f, LocalTextStyle.current, LocalDensity.current)) ' \
+          'else jsonUIFontSize(LabelLineHeight.multiple(14f, 1.2f, LocalTextStyle.current, LocalDensity.current))'
         )
       end
 
@@ -1156,7 +1156,7 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent, 'hintAttributes' d
                    'hintAttributes' => { 'fontSize' => 12, 'font' => 'bold' })
     expect(result).to include('size = 12.sp')
     expect(result).to include('size = 16.sp')
-    expect(result).to include('fontSize = (if (labelText1.isEmpty()) resolved_text2 else resolved_text1).size')
+    expect(result).to include('fontSize = jsonUIFontSize((if (labelText1.isEmpty()) resolved_text2 else resolved_text1).size')
   end
 
   # A hint with no hintAttributes is shown in the default placeholder colour

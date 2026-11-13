@@ -232,6 +232,8 @@ module KjuiTools
             label_line_height: ["import com.kotlinjsonui.components.LabelLineHeight",
                                 "import androidx.compose.ui.platform.LocalDensity"],
             line_spacing_between: "import com.kotlinjsonui.components.lineSpacingBetween",
+            # Every text size through the text size rule (Helpers::FontScale).
+            json_ui_font_size: "import com.kotlinjsonui.core.jsonUIFontSize",
             graphics_layer: "import androidx.compose.ui.graphics.graphicsLayer",
             LaunchedEffect: "import androidx.compose.runtime.LaunchedEffect",
             launched_effect: "import androidx.compose.runtime.LaunchedEffect",

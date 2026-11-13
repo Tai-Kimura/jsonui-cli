@@ -223,7 +223,7 @@ module KjuiTools
           required_imports&.add(:text_unit)
           component_code += "\n" + indent("fontFamily = #{font_ref}.family,", depth + 1)
           component_code += "\n" + indent("fontWeight = #{font_ref}.weight,", depth + 1)
-          component_code += "\n" + indent("fontSize = #{font_ref}.size ?: TextUnit.Unspecified,", depth + 1)
+          component_code += "\n" + indent("fontSize = #{Helpers::FontScale.wrap("#{font_ref}.size ?: TextUnit.Unspecified", json_data, required_imports)},", depth + 1)
           component_code += "\n" + indent("fontStyle = #{font_ref}.style ?: FontStyle.Normal,", depth + 1)
 
           # Text decoration (underline, strikethrough). A colour-carrying
@@ -272,7 +272,7 @@ module KjuiTools
           if highlight && highlight_condition && highlight[:line_height_multiple]
             required_imports&.add(:text_style)
             hl_size = highlight.dig(:font_attrs, 'fontSize') || json_data['fontSize']
-            highlight_line_height = multiple_line_height(hl_size, highlight[:line_height_multiple], required_imports)
+            highlight_line_height = Helpers::FontScale.wrap(multiple_line_height(hl_size, highlight[:line_height_multiple], required_imports), json_data, required_imports)
             style_parts << if always_highlighted
                              "lineHeight = #{highlight_line_height}"
                            else
@@ -294,6 +294,7 @@ module KjuiTools
                                else
                                  scaled_sp(hint_size, 1.3, round: true)
                                end
+            hint_line_height = Helpers::FontScale.wrap(hint_line_height, json_data, required_imports)
             style_parts << "lineHeight = if (#{hint_condition}) #{hint_line_height} else #{base_line_height || 'LocalTextStyle.current.lineHeight'}"
           elsif base_line_height
             required_imports&.add(:text_style)
@@ -503,6 +504,8 @@ module KjuiTools
             # to fill its box (kjui-minimum-scale-factor-grows-text-past-its-
             # font-size; seen on a device).
             max_font_size = scaled_sp(json_data['fontSize'] || 14, 1)
+            min_font_size = Helpers::FontScale.wrap(min_font_size, json_data, required_imports)
+            max_font_size = Helpers::FontScale.wrap(max_font_size, json_data, required_imports)
             component_code += ",\n" + indent("autoSize = TextAutoSize.StepBased(minFontSize = #{min_font_size}, maxFontSize = #{max_font_size})", depth + 1)
           end
 
@@ -720,6 +723,11 @@ module KjuiTools
         # declares none of lineHeightMultiple / lineSpacing / fontSize (the
         # theme's line height then stands).
         def self.base_line_height_expression(json_data, required_imports)
+          # The line height follows the text size as the font size does (Helpers::FontScale).
+          Helpers::FontScale.wrap(raw_base_line_height_expression(json_data, required_imports), json_data, required_imports)
+        end
+
+        def self.raw_base_line_height_expression(json_data, required_imports)
           if json_data['lineHeightMultiple']
             multiple_line_height(json_data['fontSize'], json_data['lineHeightMultiple'], required_imports)
           elsif json_data['lineSpacing']
@@ -736,6 +744,15 @@ module KjuiTools
           required_imports&.add(:label_line_height)
           required_imports&.add(:local_text_style)
           "LabelLineHeight.multiple(#{label_size_arg(size)}, #{Helpers::BoundValue.float(multiple, fallback: 1)}, LocalTextStyle.current, LocalDensity.current)"
+        end
+
+        # The component's fontScaling / maxFontScale as PartialAttributesText arguments: the ranges' sizes follow
+        # them (KotlinJsonUI's PartialAttributesText). '' when the component declares neither.
+        def self.partial_font_scale_lines(json_data, depth)
+          args = Helpers::FontScale.declaration_args(json_data).sub(/\A, /, '')
+          return '' if args.empty?
+
+          args.split(', ').map { |a| "\n" + indent("#{a},", depth) }.join
         end
 
         # The declared font size as a Float? argument: null when undeclared,
@@ -793,6 +810,7 @@ module KjuiTools
 
           code += indent("PartialAttributesText(", depth)
           code += "\n" + indent("text = \"#{escape_string(text)}\",", depth + 1)
+          code += partial_font_scale_lines(json_data, depth + 1)
           # `linkable` is `["boolean", "binding"]`. The literal `true` froze a
           # bound declaration permanently ON (plan 49 lane C: Label.linkable) —
           # the routing test above still has to be a presence test, because the
@@ -816,7 +834,7 @@ module KjuiTools
           # Always pass through resolved font fields (centralised mapping).
           required_imports&.add(:font_style)
           required_imports&.add(:text_unit)
-          style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(var_name, required_imports))
+          style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(var_name, required_imports, json_data))
 
           if json_data['textAlign']
             required_imports&.add(:text_align)
@@ -909,6 +927,7 @@ module KjuiTools
 
           code += indent("PartialAttributesText(", depth)
           code += "\n" + indent("text = #{processed_text},", depth + 1)
+          code += partial_font_scale_lines(json_data, depth + 1)
 
           # Build partial attributes list
           # `listOfNotNull`, not `listOf`. `fromJsonRange` returns null when
@@ -1053,7 +1072,7 @@ module KjuiTools
 
           required_imports&.add(:font_style)
           required_imports&.add(:text_unit)
-          style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(var_name, required_imports))
+          style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(var_name, required_imports, json_data))
 
           if json_data['textAlign']
             required_imports&.add(:text_align)

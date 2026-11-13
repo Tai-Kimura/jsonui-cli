@@ -244,7 +244,7 @@ RSpec.describe KjuiTools::Compose::Components::ButtonComponent do
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('Configuration.Font.resolve(FontSpec(')
       expect(result).to include('size = 18.sp')
-      expect(result).to match(/fontSize = resolved_button\d+\.size \?: TextUnit\.Unspecified/)
+      expect(result).to match(/fontSize = jsonUIFontSize\(resolved_button\d+\.size \?: TextUnit\.Unspecified\)/)
     end
 
     it 'generates Button with fontColor' do

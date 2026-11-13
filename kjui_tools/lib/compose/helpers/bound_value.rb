@@ -9,6 +9,7 @@ require_relative '../../core/enum_spelling'
 # which helper it loaded first.
 require_relative 'resource_resolver'
 
+require_relative 'font_scale'
 module KjuiTools
   module Compose
     module Helpers

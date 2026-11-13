@@ -6,7 +6,6 @@
       "component": "Button",
       "attribute": "fontScaling",
       "platforms": [
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -16,7 +15,6 @@
       "component": "Button",
       "attribute": "maxFontScale",
       "platforms": [
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -26,7 +24,6 @@
       "component": "CheckBox",
       "attribute": "fontScaling",
       "platforms": [
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -36,7 +33,6 @@
       "component": "CheckBox",
       "attribute": "maxFontScale",
       "platforms": [
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -46,7 +42,6 @@
       "component": "IconLabel",
       "attribute": "fontScaling",
       "platforms": [
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -56,7 +51,6 @@
       "component": "IconLabel",
       "attribute": "maxFontScale",
       "platforms": [
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -66,7 +60,6 @@
       "component": "Label",
       "attribute": "fontScaling",
       "platforms": [
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -76,7 +69,6 @@
       "component": "Label",
       "attribute": "maxFontScale",
       "platforms": [
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -86,7 +78,6 @@
       "component": "Radio",
       "attribute": "fontScaling",
       "platforms": [
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -96,7 +87,6 @@
       "component": "Radio",
       "attribute": "maxFontScale",
       "platforms": [
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -133,7 +123,6 @@
       "component": "SelectBox",
       "attribute": "fontScaling",
       "platforms": [
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -143,7 +132,6 @@
       "component": "SelectBox",
       "attribute": "maxFontScale",
       "platforms": [
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -162,7 +150,6 @@
       "component": "Switch",
       "attribute": "fontScaling",
       "platforms": [
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -172,7 +159,6 @@
       "component": "Switch",
       "attribute": "maxFontScale",
       "platforms": [
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -182,7 +168,6 @@
       "component": "TextField",
       "attribute": "fontScaling",
       "platforms": [
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -192,7 +177,6 @@
       "component": "TextField",
       "attribute": "maxFontScale",
       "platforms": [
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -202,7 +186,6 @@
       "component": "TextView",
       "attribute": "fontScaling",
       "platforms": [
-        "android",
         "web"
       ],
       "reason": "unimplemented",
@@ -212,7 +195,6 @@
       "component": "TextView",
       "attribute": "maxFontScale",
       "platforms": [
-        "android",
         "web"
       ],
       "reason": "unimplemented",

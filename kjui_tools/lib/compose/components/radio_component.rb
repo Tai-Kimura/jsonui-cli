@@ -533,7 +533,7 @@ module KjuiTools
           if json_data['fontSize']
             # `#{...}.sp` raw put `@{v}.sp` in code position.
             required_imports&.add(:text_unit) if Helpers::BoundValue.bound?(json_data['fontSize'])
-            args += ", fontSize = #{Helpers::BoundValue.sp(json_data['fontSize'], null_expr: 'TextUnit.Unspecified')}"
+            args += ", fontSize = #{Helpers::FontScale.wrap(Helpers::BoundValue.sp(json_data['fontSize'], null_expr: 'TextUnit.Unspecified'), json_data, required_imports)}"
           end
           args
         end
