@@ -66,6 +66,9 @@ module KjuiTools
             window_insets: ["import androidx.compose.foundation.layout.WindowInsets",
                             "import androidx.compose.foundation.layout.safeDrawing",
                             "import androidx.compose.foundation.layout.asPaddingValues"],
+            # the safe-area overlap a scrollable adds (ContentInsetHelper).
+            safe_area_overlap: "import com.kotlinjsonui.components.rememberSafeAreaOverlap",
+            window_insets_sides_enum: "import androidx.compose.foundation.layout.WindowInsetsSides",
             window_insets_sides: ["import androidx.compose.foundation.layout.WindowInsetsSides",
                                   "import androidx.compose.foundation.layout.only"],
             # `keyboardAvoidancePadding` — the IME's current height, read to

@@ -33,37 +33,96 @@ module KjuiTools
       # Emitting nothing for `never` is also what keeps every existing Compose
       # screen exactly where it is: they have all been running with no inset,
       # which is what `never` means (plan 49 lane C, #4).
+      #
+      # What `always` adds is the part of the window's safe area the
+      # scrollable's frame OVERLAPS — a UIScrollView's safeAreaInsets are its
+      # own frame's overlap, so inside a SafeAreaView, or below a header, it is
+      # 0. Until jsonui-cli 2.5.40 this emitted the WHOLE window's inset
+      # (`WindowInsets.safeDrawing.asPaddingValues()`) wherever the scrollable
+      # sat, and a Collection inside a SafeAreaView drew an empty band of the
+      # status bar's height above its first row (ticket kjui-collection-
+      # content-inset-always-adds-whole-window-insets). The overlap needs the
+      # frame, so the emit is KotlinJsonUI's helper (rememberSafeAreaOverlap,
+      # the same one KotlinJsonUI's Dynamic calls):
+      #
+      #   run {
+      #       val safeArea = rememberSafeAreaOverlap(<sides>)
+      #       LazyColumn(modifier = Modifier…offset….then(safeArea.modifier)…,
+      #                  contentPadding = safeArea.contentPadding(<own>)) { … }
+      #   }
+      #
+      # `run` keeps the name to the one scrollable (siblings each have their
+      # own) and keeps the parent's scope (weight, align).
       module ContentInsetHelper
         module_function
 
-        FULL = 'WindowInsets.safeDrawing.asPaddingValues()'
+        NAME = 'safeArea'
 
-        # PaddingValues expression, or nil when nothing should be emitted.
-        # `horizontal:` picks the axis for `scrollableAxes`. A Collection adds
-        # its own content padding to it, side by side
-        # (CollectionComponent.collection_stack_content_padding_expr; 4f
-        # rulings 2026-09-27, rounds 16 and 17).
-        def safe_area_padding(value, horizontal: false)
-          case JsonUIShared::EnumSpelling.lowered(value, 'ScrollView', 'contentInsetAdjustmentBehavior')
-          when 'always', 'automatic'
-            FULL
-          when 'scrollableaxes'
-            side = horizontal ? 'Horizontal' : 'Vertical'
-            "WindowInsets.safeDrawing.only(WindowInsetsSides.#{side}).asPaddingValues()"
-          end
+        # KotlinJsonUI's first release with rememberSafeAreaOverlap.
+        MIN_LIBRARY_VERSION = '2.59.0'
+
+        def behaviour(value)
+          JsonUIShared::EnumSpelling.lowered(value, 'ScrollView', 'contentInsetAdjustmentBehavior')
+        end
+
+        # PaddingValues expression for the content, or nil when nothing should
+        # be emitted. `own` is the scrollable's declared content padding (a
+        # PaddingValues expression), added side by side (4f rulings
+        # 2026-09-27, rounds 16 and 17).
+        def safe_area_padding(value, horizontal: false, own: nil)
+          return nil unless adjusts?(value)
+
+          "#{NAME}.contentPadding(#{own})"
         end
 
         # True when this declaration asks for an inset the caller has to emit.
         def adjusts?(value)
-          !safe_area_padding(value).nil?
+          %w[always automatic scrollableaxes].include?(behaviour(value))
+        end
+
+        # The modifier measuring the frame the overlap is computed from: after
+        # the margins, the size and the offset (the box drawn), before the
+        # padding and the scroll (whose content would move under it).
+        def frame_modifiers(value)
+          adjusts?(value) ? [".then(#{NAME}.modifier)"] : []
+        end
+
+        # The sides argument: the scrolled axis for scrollableAxes, every side otherwise.
+        def sides_arg(value, horizontal:)
+          return '' unless behaviour(value) == 'scrollableaxes'
+
+          "WindowInsetsSides.#{horizontal ? 'Horizontal' : 'Vertical'}"
+        end
+
+        # `code` (one scrollable at `depth`) inside the run block that
+        # declares `safeArea`, or `code` unchanged when nothing is adjusted.
+        #
+        # A component that hands its children to the builder returns
+        # { code:, children:, closing: } (ScrollView): the block opens before
+        # the code and closes after the closing, and the children the builder
+        # draws in between stay at their depth.
+        def wrap(code, value, depth, horizontal:)
+          return code unless adjusts?(value)
+
+          pad = '    ' * depth
+          if code.is_a?(Hash)
+            return code.merge(code: "#{pad}// Requires KotlinJsonUI >= #{MIN_LIBRARY_VERSION} (safe-area overlap)\n" \
+                                    "#{pad}run {\n#{pad}    val #{NAME} = rememberSafeAreaOverlap(#{sides_arg(value, horizontal: horizontal)})\n" \
+                                    "#{code[:code]}",
+                              closing: "#{code[:closing]}\n#{pad}}")
+          end
+          inner = code.split("\n").map { |line| line.empty? ? line : "    #{line}" }.join("\n")
+          "#{pad}// Requires KotlinJsonUI >= #{MIN_LIBRARY_VERSION} (safe-area overlap)\n" \
+            "#{pad}run {\n#{pad}    val #{NAME} = rememberSafeAreaOverlap(#{sides_arg(value, horizontal: horizontal)})\n" \
+            "#{inner}\n#{pad}}"
         end
 
         # The import keys the emitted text needs, or [] when it emits nothing.
         def imports_for(value)
           return [] unless adjusts?(value)
 
-          keys = %i[window_insets]
-          keys << :window_insets_sides if JsonUIShared::EnumSpelling.lowered(value, 'ScrollView', 'contentInsetAdjustmentBehavior') == 'scrollableaxes'
+          keys = %i[safe_area_overlap]
+          keys << :window_insets_sides_enum if behaviour(value) == 'scrollableaxes'
           keys
         end
       end

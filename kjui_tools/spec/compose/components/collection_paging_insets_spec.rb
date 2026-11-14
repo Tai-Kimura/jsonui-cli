@@ -127,8 +127,8 @@ RSpec.describe 'kjui codegen: a paging Collection pads each page cell by its ins
   it 'the safe area is added to the insets on the page cell, not on the pager' do
     code = emit('insets' => [0, 0, 0, 30], 'contentInsetAdjustmentBehavior' => 'always')
     padding = code[/val pagePadding = (.*)$/, 1]
-    expect(padding).to start_with('WindowInsets.safeDrawing.asPaddingValues().let { safe ->')
-    expect(padding).to include('start = safe.calculateStartPadding(dir) + 30.dp')
+    # The overlap of the pager's frame (ContentInsetHelper), the insets added to it.
+    expect(padding).to eq('safeArea.contentPadding(PaddingValues(top = 0.dp, start = 30.dp, bottom = 0.dp, end = 0.dp))')
     pager = code[/HorizontalPager\((.*?)\) \{ page ->/m, 1]
     expect(pager).not_to include('contentPadding')
     expect(pager).not_to include('padding')
