@@ -61,13 +61,15 @@ check cannot see — neither is reported here.
 
 Generated ``StringManager*`` files are excluded from scanning: they
 DECLARE every key (the web stub embeds the whole table), they do not use
-them. Dependency/build directories are skipped.
+them. Dependency/build directories are skipped, and so are files git
+ignores that no generator wrote (see ``_git_ignored``).
 """
 from __future__ import annotations
 
 import json
 import plistlib
 import re
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
@@ -554,7 +556,65 @@ def _strip_comments(text: str) -> str:
     return "".join(out)
 
 
+# A file git ignores is not part of the app's sources: next-env.d.ts, which
+# `next dev` writes into a web face and the face's .gitignore lists, was
+# counted whenever someone had started the dev server — the same face scanned
+# 2230 files on one machine and 2229 on another. A file a generator wrote is
+# the exception and keeps counting even when a face ignores its output
+# directory: generated code and branch harnesses reference keys, and dropping
+# them would report those keys unused. Directories are not filtered
+# (`_iter_dirs`): an ignored .xcodeproj that XcodeGen writes still declares
+# the test targets.
+_GENERATED_SENTINEL = "@generated"
+_GENERATED_HEAD_BYTES = 4096
+
+
+def _wrote_by_generator(path: Path) -> bool:
+    try:
+        with path.open("rb") as handle:
+            head = handle.read(_GENERATED_HEAD_BYTES)
+    except OSError:
+        return False
+    return _GENERATED_SENTINEL.encode() in head
+
+
+def _git_ignored(root: Path, paths: list[Path]) -> set[Path]:
+    """The paths under *root* that git ignores (.gitignore, .git/info/exclude,
+    core.excludesFile) and does not track. Nothing when *root* is not in a
+    git work tree or git cannot answer, and nothing when *root* itself is
+    ignored — a face kept wholly outside git is still the face, and filtering
+    it would scan zero files without saying so."""
+    if not paths:
+        return set()
+    try:
+        whole = subprocess.run(
+            ["git", "-C", str(root), "check-ignore", "-q", "--", str(root)],
+            capture_output=True,
+        )
+        if whole.returncode != 1:
+            return set()
+        result = subprocess.run(
+            ["git", "-C", str(root), "check-ignore", "--stdin", "-z"],
+            input=b"".join(str(p).encode() + b"\0" for p in paths),
+            capture_output=True,
+        )
+    except OSError:
+        return set()
+    if result.returncode not in (0, 1):
+        return set()
+    return {Path(x) for x in result.stdout.decode(errors="surrogateescape").split("\0") if x}
+
+
 def _iter_source_files(root: Path, suffixes: tuple[str, ...]) -> Iterable[Path]:
+    found = list(_walk_source_files(root, suffixes))
+    ignored = _git_ignored(root, found)
+    for path in found:
+        if path in ignored and not _wrote_by_generator(path):
+            continue
+        yield path
+
+
+def _walk_source_files(root: Path, suffixes: tuple[str, ...]) -> Iterable[Path]:
     stack = [root]
     while stack:
         current = stack.pop()

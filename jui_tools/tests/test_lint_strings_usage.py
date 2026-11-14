@@ -10,6 +10,8 @@ proxy's camel spelling, or through a declared ``*_STRING_KEYS`` map.
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -1079,3 +1081,79 @@ class LibraryKeysAreUsedTests(unittest.TestCase):
                           .read_text(encoding="utf-8"))["rule"]["a11yNames"]
         for section, key in LIBRARY_KEYS:
             self.assertIn(f"{section}.{key}", rule)
+
+
+@unittest.skipUnless(shutil.which("git"), "git is not on PATH")
+class GitIgnoredFilesAreNotScannedTests(unittest.TestCase):
+    """A file git ignores is not the app's source, unless a generator wrote it.
+
+    A consumer's admin face read `usage scanned 2230 source file(s)` after `next dev` had written
+    next-env.d.ts (listed in the face's .gitignore) and 2229 without it. Measured on the eight consumer
+    faces before the fix: one ignored file on each of the six Next.js web faces, next-env.d.ts every time;
+    none on the iOS and Android faces.
+    """
+
+    GROUPS = {"screen": {"title": "T", "help": "H"}}
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _git(self, cwd: Path, *args: str) -> None:
+        subprocess.run(["git", "-C", str(cwd), *args], check=True, capture_output=True)
+
+    def _web_repo(self) -> VmFixture:
+        web = VmFixture(self.root / "web")
+        web.write("src/vm.ts", "const t = StringManager.currentLanguage.screenTitle;\n")
+        self._git(web.root, "init", "-q")
+        return web
+
+    def test_an_ignored_file_is_neither_counted_nor_read(self):
+        web = self._web_repo()
+        web.write(".gitignore", "next-env.d.ts\n")
+        web.write("next-env.d.ts", "const h = StringManager.currentLanguage.screenHelp;\n"
+                                   "const x = StringManager.currentLanguage.screenTypo;\n")
+        report = _usage(self.GROUPS, roots={"web": web.root})
+        self.assertEqual(report.scanned_files, 1)
+        self.assertEqual([f.site for f in report.unused], ["screen.help"])
+        self.assertEqual(report.missing, [])
+
+    def test_a_tracked_file_an_ignore_pattern_matches_is_still_read(self):
+        web = self._web_repo()
+        web.write(".gitignore", "*.d.ts\n")
+        web.write("src/env.d.ts", "const h = StringManager.currentLanguage.screenHelp;\n")
+        self._git(web.root, "add", "-f", "src/env.d.ts")
+        report = _usage(self.GROUPS, roots={"web": web.root})
+        self.assertEqual(report.scanned_files, 2)
+        self.assertEqual(report.unused, [])
+
+    def test_an_ignored_file_a_generator_wrote_is_still_read(self):
+        web = self._web_repo()
+        web.write(".gitignore", "src/generated/\n")
+        web.write("src/generated/components/Screen.tsx",
+                  "// @generated AUTO-GENERATED FILE — DO NOT EDIT\n"
+                  "const h = StringManager.currentLanguage.screenHelp;\n")
+        report = _usage(self.GROUPS, roots={"web": web.root})
+        self.assertEqual(report.scanned_files, 2)
+        self.assertEqual(report.unused, [])
+
+    def test_a_face_its_repository_ignores_whole_is_still_read(self):
+        self._git(self.root, "init", "-q")
+        (self.root / ".gitignore").write_text("web/\n", encoding="utf-8")
+        web = VmFixture(self.root / "web")
+        web.write("src/vm.ts", "const t = StringManager.currentLanguage.screenTitle;\n")
+        web.write("src/help.ts", "const h = StringManager.currentLanguage.screenHelp;\n")
+        report = _usage(self.GROUPS, roots={"web": web.root})
+        self.assertEqual(report.scanned_files, 2)
+        self.assertEqual(report.unused, [])
+
+    def test_a_face_outside_any_repository_is_read_whole(self):
+        web = VmFixture(self.root / "web")
+        web.write("src/vm.ts", "const t = StringManager.currentLanguage.screenTitle;\n")
+        web.write("next-env.d.ts", "const h = StringManager.currentLanguage.screenHelp;\n")
+        report = _usage(self.GROUPS, roots={"web": web.root})
+        self.assertEqual(report.scanned_files, 2)
+        self.assertEqual(report.unused, [])
