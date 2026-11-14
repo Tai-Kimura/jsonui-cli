@@ -36,10 +36,11 @@ RSpec.describe 'the web reorder helper and shared/core/reorder_vectors.json' do
       const bad = [];
       const check = (section, name, got, want) => { if (JSON.stringify(got) !== JSON.stringify(want)) bad.push(`${section}: ${name}: got ${got}, want ${want}`); };
       let n = 0;
-      for (const v of V.drag) { n++; check('drag', v.name, R.jsonuiReorderDragTo(v.heights, v.from, v.dy, v.locked || []), v.to); }
-      for (const v of V.release) { n++; check('release', v.name, R.jsonuiReorderRelease(v.heights, v.from, v.grabAt, v.dy, v.locked || [], v.header, v.footer), v.cancelled ? null : v.to); }
+      for (const v of V.drag) { n++; check('drag', v.name, R.jsonuiReorderDragTo(v.heights, v.from, v.dy, v.locked || [], v.fixed || []), v.to); }
+      for (const v of V.release) { n++; check('release', v.name, R.jsonuiReorderRelease(v.heights, v.from, v.grabAt, v.dy, v.locked || [], v.header, v.footer, v.fixed || []), v.cancelled ? null : v.to); }
       for (const v of V.autoScroll) { n++; const got = R.jsonuiReorderAutoScroll(v.viewport, v.fingerY); check('autoScroll', v.name, Math.abs(got - v.speed) < 1e-9 ? v.speed : got, v.speed); }
-      for (const v of V.a11y) { n++; check('a11y', v.name, R.jsonuiReorderA11y(v.rows, v.from, v.action, v.locked || []), v.to); }
+      for (const v of V.a11y) { n++; check('a11y', v.name, R.jsonuiReorderA11y(v.rows, v.from, v.action, v.locked || [], v.fixed || []), v.to); }
+      for (const v of V.itemsChange) { n++; check('itemsChange', v.name, R.jsonuiReorderItemsChanged(v.start, v.release), v.cancelled); }
       process.stdout.write(JSON.stringify({ n, bad }));
     JS
     out, err, status = Open3.capture3('node', '-e', script)
@@ -54,7 +55,7 @@ RSpec.describe 'the web reorder helper and shared/core/reorder_vectors.json' do
 
     result = run_vectors(template, vectors)
     data = JSON.parse(File.read(vectors))
-    expect(result['n']).to eq(%w[drag release autoScroll a11y].sum { |k| data[k].size })
+    expect(result['n']).to eq(%w[drag release autoScroll a11y itemsChange].sum { |k| data[k].size })
     expect(result['bad']).to eq([])
   end
 end

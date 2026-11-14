@@ -73,9 +73,10 @@ module EmittedSwift
         let isEnabled: Bool
         let usesHandle: Bool
         let hasLockedRows: Bool
+        let hasFixedRows: Bool
         let onReorder: (_ section: Int, _ from: Int, _ to: Int) -> Void
-        init(isEnabled: Bool, usesHandle: Bool = false, hasLockedRows: Bool = false, onReorder: @escaping (_ section: Int, _ from: Int, _ to: Int) -> Void) {
-            self.isEnabled = isEnabled; self.usesHandle = usesHandle; self.hasLockedRows = hasLockedRows; self.onReorder = onReorder
+        init(isEnabled: Bool, usesHandle: Bool = false, hasLockedRows: Bool = false, hasFixedRows: Bool = false, onReorder: @escaping (_ section: Int, _ from: Int, _ to: Int) -> Void) {
+            self.isEnabled = isEnabled; self.usesHandle = usesHandle; self.hasLockedRows = hasLockedRows; self.hasFixedRows = hasFixedRows; self.onReorder = onReorder
         }
     }
     enum CollectionStackMode { case lazy, eager, none }

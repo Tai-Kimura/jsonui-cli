@@ -11,11 +11,15 @@
 
 // A reorderable Collection's rows on the web (ticket jui-collection-drag-to-reorder, ruling B 2026-11-13).
 // The rule is shared/core/reorder_vectors.json, the same one SwiftJsonUI and KotlinJsonUI drag by: a long press
-// picks a row up, it follows the finger, it passes a row when its centre goes strictly beyond that row's centre,
-// a locked row is neither picked up nor passed, the list scrolls near its edges, and the release decides the move
+// picks a row up, it follows the finger, it passes a row when its centre goes strictly beyond that row's edge (the
+// row's top below it, its bottom above it — the gap stays under the dragged centre, as iOS 27's standard draws it),
+// a locked row is neither picked up nor passed, a fixed row (reorderFixedProperty, or a row whose handle is not
+// drawn) is not picked up but is passed, the list scrolls near its edges, and the release decides the move
 // inside the Collection (over its header the first place, over its footer the last) and cancels it outside.
 // Pointer events, not HTML5 drag and drop: the latter does not run on a phone's touch. A screen reader and a
-// keyboard get a "move up" / "move down" button on every row and hear where the row went.
+// keyboard get a "move up" / "move down" button on every row that can move and hear where the row went, in the
+// app's words when its strings.json has jsonui.reorder_move_up / reorder_move_down / reorder_moved_to, else in
+// Japanese or English.
 
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -34,30 +38,31 @@ export function jsonuiReorderBounds(count: number, locked: readonly number[], st
 }
 
 export function jsonuiReorderDragTo(heights: readonly number[], start: number, dy: number,
-                                    locked: readonly number[] = []): number | null {
-  if (locked.includes(start)) return null;
-  const centres: number[] = [];
+                                    locked: readonly number[] = [], fixed: readonly number[] = []): number | null {
+  if (locked.includes(start) || fixed.includes(start)) return null;
+  const tops: number[] = [];
   let top = 0;
   for (const height of heights) {
-    centres.push(top + height / 2);
+    tops.push(top);
     top += height;
   }
-  const dragged = centres[start] + dy;
+  const dragged = tops[start] + heights[start] / 2 + dy;
   let to = start;
-  for (let i = start + 1; i < heights.length; i++) if (centres[i] < dragged) to += 1;
-  for (let i = 0; i < start; i++) if (centres[i] > dragged) to -= 1;
+  for (let i = start + 1; i < heights.length; i++) if (tops[i] < dragged) to += 1;
+  for (let i = 0; i < start; i++) if (tops[i] + heights[i] > dragged) to -= 1;
   const [low, high] = jsonuiReorderBounds(heights.length, locked, start);
   return Math.max(low, Math.min(high, to));
 }
 
 export function jsonuiReorderRelease(heights: readonly number[], start: number, grabAt: number, dy: number,
-                                     locked: readonly number[] = [], header = 0, footer = 0): number | null {
+                                     locked: readonly number[] = [], header = 0, footer = 0,
+                                     fixed: readonly number[] = []): number | null {
   const rows = heights.reduce((sum, h) => sum + h, 0);
   let top = 0;
   for (let i = 0; i < start; i++) top += heights[i];
   const finger = header + top + grabAt + dy;
   if (!(finger >= 0 && finger < header + rows + footer)) return null;
-  if (locked.includes(start)) return null;
+  if (locked.includes(start) || fixed.includes(start)) return null;
   const [low, high] = jsonuiReorderBounds(heights.length, locked, start);
   if (finger < header) return low;
   if (finger >= header + rows) return high;
@@ -75,14 +80,39 @@ export function jsonuiReorderAutoScroll(viewport: number, fingerY: number,
 }
 
 export function jsonuiReorderA11y(count: number, start: number, action: 'up' | 'down',
-                                  locked: readonly number[] = []): number | null {
-  if (locked.includes(start)) return null;
+                                  locked: readonly number[] = [], fixed: readonly number[] = []): number | null {
+  if (locked.includes(start) || fixed.includes(start)) return null;
   const to = action === 'up' ? start - 1 : start + 1;
   const [low, high] = jsonuiReorderBounds(count, locked, start);
   return to >= low && to <= high ? to : null;
 }
 
-/** The indices of the rows whose reorderLockedProperty value is true (they are not picked up, nor passed). */
+/** The indices of the rows whose value for *property* is true: reorderLockedProperty's (not picked up, nor passed)
+ *  or reorderFixedProperty's (not picked up, passed). */
+/**
+ * Whether a drag let go with the rows `now` is cancelled, having read `start` when it began (rule.itemsChange): the
+ * ids differ in number or order, or the locked or the fixed rows differ. Ids are compared as they are (the helper
+ * compares the rows' elements, which React keeps by the cell's key).
+ */
+export function jsonuiReorderItemsChanged<T>(
+  start: { ids: readonly T[]; locked: readonly number[]; fixed: readonly number[] },
+  now: { ids: readonly T[]; locked: readonly number[]; fixed: readonly number[] },
+): boolean {
+  const same = (a: readonly number[], b: readonly number[]) => {
+    const x = [...a].sort((p, q) => p - q);
+    const y = [...b].sort((p, q) => p - q);
+    return x.length === y.length && x.every((v, i) => v === y[i]);
+  };
+  return start.ids.length !== now.ids.length || start.ids.some((id, i) => id !== now.ids[i]) ||
+    !same(start.locked, now.locked) || !same(start.fixed, now.fixed);
+}
+
+/** Whether a row's handle is drawn: in the row, laid out, not hidden. */
+function jsonuiHandleDrawn(row: HTMLElement | null | undefined, handleId: string): boolean {
+  const grip = row?.querySelector(`[id="${handleId.replace(/"/g, '\\"')}"]`) as HTMLElement | null;
+  return !!grip && grip.getClientRects().length > 0 && getComputedStyle(grip).visibility !== 'hidden';
+}
+
 export function jsonuiReorderLocked(rows: readonly unknown[] | null | undefined, property: string): number[] {
   const out: number[] = [];
   (rows ?? []).forEach((row, i) => {
@@ -97,12 +127,37 @@ type Words = { up: string; down: string; moved: (place: number) => string };
 const EN: Words = { up: 'Move up', down: 'Move down', moved: (place) => `Moved to position ${place}` };
 const JA: Words = { up: '上へ移動', down: '下へ移動', moved: (place) => `${place} 番目に移動しました` };
 
+/** The app's own word for *key* (its strings.json, through the generated StringManager), or undefined. */
+function appWord(key: string): string | undefined {
+  const strings = (globalThis as { __jsonuiStrings?: { getString(key: string): string } }).__jsonuiStrings;
+  const value = strings?.getString(key);
+  return value && value !== key ? value : undefined;
+}
+
+/** The words in the running language: the app's jsonui.reorder_* strings where it has them, else ours. */
+export function jsonuiReorderWords(): Words {
+  const strings = (globalThis as { __jsonuiStrings?: { language?: string } }).__jsonuiStrings;
+  const lang = (strings?.language || document.documentElement.lang || navigator.language || '').toLowerCase();
+  const ours = lang.startsWith('ja') ? JA : EN;
+  const up = appWord('jsonui_reorder_move_up');
+  const down = appWord('jsonui_reorder_move_down');
+  const moved = appWord('jsonui_reorder_moved_to');
+  return {
+    up: up ?? ours.up,
+    down: down ?? ours.down,
+    moved: moved ? (place) => moved.replace(/\{count\}/g, String(place)) : ours.moved,
+  };
+}
+
 function useWords(): Words {
-  // English while rendering on the server, the document's language once mounted (no hydration mismatch)
+  // English while rendering on the server, the running language once mounted (no hydration mismatch), and again
+  // when the app changes it (StringManager.setLanguage)
   const [words, setWords] = useState<Words>(EN);
   useEffect(() => {
-    const lang = (document.documentElement.lang || navigator.language || '').toLowerCase();
-    setWords(lang.startsWith('ja') ? JA : EN);
+    const update = () => setWords(jsonuiReorderWords());
+    update();
+    window.addEventListener('jsonui:languagechange', update);
+    return () => window.removeEventListener('jsonui:languagechange', update);
   }, []);
   return words;
 }
@@ -130,6 +185,8 @@ type Section = {
   count: number;
   enabled: boolean;
   locked: readonly number[];
+  fixed: readonly number[];
+  handleId?: string;
   words: Words;
   register: (index: number, el: HTMLElement | null) => void;
   pointerDown: (event: React.PointerEvent<HTMLElement>, index: number) => void;
@@ -144,8 +201,13 @@ export interface JsonuiReorderSectionProps {
   count: number;
   enabled?: boolean | null;
   onReorder?: ((section: number, from: number, to: number) => void) | null;
+  /** A row was picked up (rule.callbacks): (section, index). */
+  onReorderStart?: ((section: number, index: number) => void) | null;
+  /** That drag is over, once: after onReorder when it moved, alone otherwise (rule.callbacks). */
+  onReorderEnd?: ((section: number) => void) | null;
   handleId?: string;
   locked?: readonly number[];
+  fixed?: readonly number[];
   children?: React.ReactNode;
 }
 
@@ -159,7 +221,7 @@ function scrollerOf(el: HTMLElement): HTMLElement {
 
 /** One section of a reorderable Collection: its rows (JsonuiReorderItem) are dragged within it. */
 export function JsonuiReorderSection(props: JsonuiReorderSectionProps) {
-  const { section, count, enabled = true, onReorder, handleId, locked = [], children } = props;
+  const { section, count, enabled = true, onReorder, handleId, locked = [], fixed = [], children } = props;
   const words = useWords();
   const rows = useRef(new Map<number, HTMLElement>());
   const latest = useRef(props);
@@ -172,10 +234,13 @@ export function JsonuiReorderSection(props: JsonuiReorderSectionProps) {
       latest.current.onReorder?.(latest.current.section, from, to);
       setSaid(words.moved(to + 1));
     };
+    // rule.callbacks: a drag that began is start .. end, with onReorder between when the row moved.
+    const begin = (index: number) => latest.current.onReorderStart?.(latest.current.section, index);
+    const over = () => latest.current.onReorderEnd?.(latest.current.section);
 
     const pointerDown = (event: React.PointerEvent<HTMLElement>, index: number) => {
-      const { enabled: on = true, count: n, locked: fixed = [], handleId: handle } = latest.current;
-      if (!on || fixed.includes(index) || (event.pointerType === 'mouse' && event.button !== 0)) return;
+      const { enabled: on = true, count: n, locked: fixed = [], fixed: still = [], handleId: handle } = latest.current;
+      if (!on || fixed.includes(index) || still.includes(index) || (event.pointerType === 'mouse' && event.button !== 0)) return;
       const found = rows.current.get(index);
       if (!found) return;
       const row: HTMLElement = found;
@@ -194,6 +259,17 @@ export function JsonuiReorderSection(props: JsonuiReorderSectionProps) {
       let footer = 0;
       let grabAt = 0;
       let scroller: HTMLElement = document.documentElement;
+      // The rows as the drag read them when it began (rule.itemsChange): compared again when it is let go.
+      let started: { ids: HTMLElement[]; locked: number[]; fixed: number[] } | null = null;
+      let begun = false;   // onReorderStart was called: onReorderEnd is owed once
+      const end = () => { if (begun) { begun = false; over(); } };
+      const rowsNow = () => {
+        const { count: c, locked: l = [], fixed: f = [], handleId: h } = latest.current;
+        const ids: HTMLElement[] = [];
+        for (let i = 0; i < c; i++) { const el = rows.current.get(i); if (el) ids.push(el); }
+        const still = h ? [...f, ...ids.map((el, i) => (jsonuiHandleDrawn(el, h) ? -1 : i)).filter((i) => i >= 0)] : [...f];
+        return { ids, locked: [...l], fixed: [...new Set(still)] };
+      };
       let scroll0 = 0;
       let frame = 0;
       let lastFrame = 0;
@@ -243,7 +319,10 @@ export function JsonuiReorderSection(props: JsonuiReorderSectionProps) {
         grabAt = y0 - rects[index].top;
         scroller = scrollerOf(box);
         scroll0 = scroller.scrollTop;
+        started = rowsNow();
         active = true;
+        begun = true;
+        begin(index);
         els.forEach((el, i) => {
           el.style.transition = i === index ? 'none' : 'transform 150ms ease';
           if (i === index) {
@@ -270,10 +349,13 @@ export function JsonuiReorderSection(props: JsonuiReorderSectionProps) {
         if (!active) return finish(false);
         lastY = e.clientY;
         const to = jsonuiReorderRelease(heights, index, grabAt, dy(), fixed, header, footer);
+        // The rows changed under the drag: its indexes would name other rows, so it is cancelled.
+        const changed = started !== null && jsonuiReorderItemsChanged(started, rowsNow());
         finish(true);
-        if (to !== null && to !== index) call(index, to);
+        if (!changed && to !== null && to !== index) call(index, to);
+        end();
       };
-      const cancel = (e: PointerEvent) => { if (e.pointerId === pointerId) finish(active); };
+      const cancel = (e: PointerEvent) => { if (e.pointerId === pointerId) { finish(active); end(); } };
       function finish(dragged: boolean) {
         window.clearTimeout(timer);
         cancelAnimationFrame(frame);
@@ -309,9 +391,9 @@ export function JsonuiReorderSection(props: JsonuiReorderSectionProps) {
     };
 
     const step = (index: number, action: 'up' | 'down') => {
-      const { count: n, locked: fixed = [] } = latest.current;
-      const to = jsonuiReorderA11y(n, index, action, fixed);
-      if (to !== null) call(index, to);
+      const { count: n, locked: fixed = [], fixed: still = [] } = latest.current;
+      const to = jsonuiReorderA11y(n, index, action, fixed, still);
+      if (to !== null) { begin(index); call(index, to); over(); }
     };
 
     const register = (index: number, el: HTMLElement | null) => {
@@ -319,9 +401,9 @@ export function JsonuiReorderSection(props: JsonuiReorderSectionProps) {
       else rows.current.delete(index);
     };
 
-    return { section, count, enabled: enabled !== false && enabled !== null, locked, words, register, pointerDown,
-             clickCapture, step };
-  }, [section, count, enabled, locked, words]);
+    return { section, count, enabled: enabled !== false && enabled !== null, locked, fixed, handleId, words, register,
+             pointerDown, clickCapture, step };
+  }, [section, count, enabled, locked, fixed, handleId, words]);
 
   return (
     <SectionContext.Provider value={value}>
@@ -335,14 +417,23 @@ export function JsonuiReorderSection(props: JsonuiReorderSectionProps) {
 export function JsonuiReorderItem({ index, children }: { index: number; children?: React.ReactNode }) {
   const ctx = useContext(SectionContext);
   const ref = useRef<HTMLDivElement>(null);
+  // With a reorderHandle, a row whose handle is not drawn (gone, hidden or absent) is fixed: no drag (the press must
+  // be on the handle) and no move buttons. Read after every render, since the row's data can hide it.
+  const [handleDrawn, setHandleDrawn] = useState(true);
   useEffect(() => {
     if (!ctx) return;
     ctx.register(index, ref.current);
     return () => ctx.register(index, null);
   }, [ctx, index]);
+  useEffect(() => {
+    if (!ctx?.handleId || !ref.current) return;
+    const drawn = jsonuiHandleDrawn(ref.current, ctx.handleId);
+    if (drawn !== handleDrawn) setHandleDrawn(drawn);
+  });
   if (!ctx) return <>{children}</>;
-  const up = ctx.enabled ? jsonuiReorderA11y(ctx.count, index, 'up', ctx.locked) : null;
-  const down = ctx.enabled ? jsonuiReorderA11y(ctx.count, index, 'down', ctx.locked) : null;
+  const still = ctx.handleId && !handleDrawn ? [...ctx.fixed, index] : ctx.fixed;
+  const up = ctx.enabled ? jsonuiReorderA11y(ctx.count, index, 'up', ctx.locked, still) : null;
+  const down = ctx.enabled ? jsonuiReorderA11y(ctx.count, index, 'down', ctx.locked, still) : null;
   return (
     <div ref={ref} data-jsonui-reorder-index={index} onPointerDown={(e) => ctx.pointerDown(e, index)}
          onClickCapture={ctx.clickCapture}

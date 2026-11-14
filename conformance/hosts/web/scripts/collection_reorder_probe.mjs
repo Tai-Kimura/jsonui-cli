@@ -4,7 +4,7 @@
 //   npm run collection-reorder-probe            (add --video DIR to record a slow pass for people to watch)
 //
 // The rule is shared/core/reorder_vectors.json (ticket jui-collection-drag-to-reorder, ruling B 2026-11-13): a long
-// press picks a row up, it passes a row when its centre goes beyond that row's centre, a locked row is neither
+// press picks a row up, it passes a row when its centre goes beyond that row's edge, a locked row is neither
 // picked up nor passed, the list scrolls near its edges, and the release decides the move inside the Collection (its
 // header: the first place, its footer: the last) and cancels it outside. A screen reader gets "move up" / "move
 // down" on every row. The probe writes one layout, runs `rjui build` over it (the production codegen and its reorder
@@ -38,10 +38,11 @@ const VIDEO = arg('--video', 'REORDER_PROBE_VIDEO', '')
 // ------------------------------------------------------------ the layouts
 const CELL = {
   type: 'View', width: 'matchParent', height: 48, background: '#FFFFFF', orientation: 'horizontal', onClick: '@{onTap}',
-  data: [{ name: 'name', class: 'String', defaultValue: '' }, { name: 'onTap', class: '(() -> Void)?' }],
+  data: [{ name: 'name', class: 'String', defaultValue: '' }, { name: 'onTap', class: '(() -> Void)?' },
+         { name: 'gripVisibility', class: 'String', defaultValue: 'visible' }],
   child: [
     { type: 'Label', text: '@{name}', fontSize: 16, weight: 1, paddingLeft: 12, gravity: 'centerVertical', height: 'matchParent' },
-    { type: 'View', id: 'grip', width: 44, height: 'matchParent', background: '#DDDDDD',
+    { type: 'View', id: 'grip', width: 44, height: 'matchParent', background: '#DDDDDD', visibility: '@{gripVisibility}',
       child: [{ type: 'Label', text: '≡', fontSize: 18, centerInParent: true }] },
   ],
 }
@@ -54,16 +55,34 @@ const LAYOUT = {
   type: 'View', id: 'root', width: 'matchParent', orientation: 'vertical', spacing: 24, paddingTop: 16, paddingBottom: 600,
   data: [
     { name: 'free', class: 'CollectionDataSource' }, { name: 'held', class: 'CollectionDataSource' },
+    { name: 'skip', class: 'CollectionDataSource' },
     { name: 'onMoveFree', class: '((Int, Int, Int) -> Void)?' }, { name: 'onMoveHeld', class: '((Int, Int, Int) -> Void)?' },
+    { name: 'onMoveSkip', class: '((Int, Int, Int) -> Void)?' },
+    { name: 'onStartFree', class: '((Int, Int) -> Void)?' }, { name: 'onEndFree', class: '((Int) -> Void)?' },
   ],
   child: [
     { type: 'Collection', id: 'free', width: 'matchParent', lazy: 'none', items: '@{free}', cellIdProperty: 'cellId',
       sections: [{ header: 'probe_reorder_edge', cell: 'probe_reorder_cell', footer: 'probe_reorder_edge' }],
-      reorderable: true, onReorder: '@{onMoveFree}' },
+      reorderable: true, onReorder: '@{onMoveFree}', onReorderStart: '@{onStartFree}', onReorderEnd: '@{onEndFree}' },
     { type: 'Collection', id: 'held', width: 'matchParent', lazy: 'none', items: '@{held}', cellIdProperty: 'cellId',
       sections: [{ cell: 'probe_reorder_cell' }],
       reorderable: true, onReorder: '@{onMoveHeld}', reorderHandle: 'grip', reorderLockedProperty: 'locked' },
+    // 2.5.36: a fixed row (skipped) is passed; a row whose grip is not drawn is fixed the same way
+    { type: 'Collection', id: 'skip', width: 'matchParent', lazy: 'none', items: '@{skip}', cellIdProperty: 'cellId',
+      sections: [{ cell: 'probe_reorder_cell' }],
+      reorderable: true, onReorder: '@{onMoveSkip}', reorderHandle: 'grip', reorderFixedProperty: 'skipped' },
   ],
+}
+// The app's names for the screen reader's actions. English the same as the library's own (the steps above read them),
+// German its own: a step switches the app to German. rjui writes the languages the config names (en, de here) and
+// fills a language a key lacks from another, so the library's fallback (no key at all) is
+// rjui_tools/spec/react/reorder_helper_follows_the_shared_rule_spec.rb's.
+const STRINGS = {
+  jsonui: {
+    reorder_move_up: { en: 'Move up', de: 'Nach oben' },
+    reorder_move_down: { en: 'Move down', de: 'Nach unten' },
+    reorder_moved_to: { en: 'Moved to position {count}', de: 'Auf Platz {count}' },
+  },
 }
 
 // The page: the generated component with a view model that moves its rows as onReorder says.
@@ -72,24 +91,42 @@ import React, { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import { CollectionReorderProbe } from './generated/components/CollectionReorderProbe'
-type Row = { cellId: string; name: string; locked?: boolean }
-const w = window as unknown as { __calls: unknown[]; __reset: () => void }
+import { StringManager } from './generated/StringManager'
+type Row = { cellId: string; name: string; locked?: boolean; skipped?: boolean; gripVisibility?: string }
+const w = window as unknown as { __events: unknown[]; __calls: unknown[]; __reset: () => void; __lang: (l: string) => void; __rebuild: (k: string) => void }
+w.__lang = (l) => StringManager.setLanguage(l)
 w.__calls = []
+w.__events = []
 const rows = (names: string[], locked: number[] = []) =>
   names.map((name, i) => ({ cellId: 'id-' + name, name, onTap: () => w.__calls.push(['tap', name]),
                             ...(locked.includes(i) ? { locked: true } : {}) }))
 const FREE = rows(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'])
 const HELD = rows(['P', 'Q', '— locked —', 'R', 'S'], [2])
+const SKIP: Row[] = rows(['p1', 's (skipped)', 'p2', 'q (no grip)', 'r']).map((r, i) =>
+  i === 1 ? { ...r, skipped: true } : i === 3 ? { ...r, gripVisibility: 'gone' } : r)
 const move = (list: Row[], from: number, to: number) => { const next = list.slice(); next.splice(to, 0, next.splice(from, 1)[0]); return next }
 function Probe() {
   const [free, setFree] = useState<Row[]>(FREE)
   const [held, setHeld] = useState<Row[]>(HELD)
-  w.__reset = () => { setFree(FREE); setHeld(HELD); w.__calls = [] }
+  const [skip, setSkip] = useState<Row[]>(SKIP)
+  w.__reset = () => { setFree(FREE); setHeld(HELD); setSkip(SKIP); w.__calls = []; w.__events = [] }
+  // The data rebuilt while a row is dragged (rule.itemsChange): the text alone, a row added above, the order turned,
+  // a row locked (held).
+  w.__rebuild = (k) => {
+    if (k === 'text') setFree((l) => l.map((r) => ({ ...r, name: r.name + "'" })))
+    if (k === 'insert') setFree((l) => [{ ...l[0], cellId: 'id-new', name: 'NEW' }, ...l])
+    if (k === 'reverse') setFree((l) => l.slice().reverse())
+    if (k === 'lock') setHeld((l) => l.map((r, i) => (i === 4 ? { ...r, locked: true } : r)))
+  }
   const data = {
     free: { sections: [{ header: { title: 'Header (release here: first place)' }, cells: { data: free },
                          footer: { title: 'Footer (release here: last place)' } }] },
     held: { sections: [{ cells: { data: held } }] },
-    onMoveFree: (section: number, from: number, to: number) => { w.__calls.push(['free', section, from, to]); setFree((l) => move(l, from, to)) },
+    skip: { sections: [{ cells: { data: skip } }] },
+    onMoveSkip: (section: number, from: number, to: number) => { w.__calls.push(['skip', section, from, to]); setSkip((l) => move(l, from, to)) },
+    onMoveFree: (section: number, from: number, to: number) => { w.__calls.push(['free', section, from, to]); w.__events.push(['reorder', section, from, to]); setFree((l) => move(l, from, to)) },
+    onStartFree: (section: number, index: number) => { w.__events.push(['start', section, index]) },
+    onEndFree: (section: number) => { w.__events.push(['end', section]) },
     onMoveHeld: (section: number, from: number, to: number) => { w.__calls.push(['held', section, from, to]); setHeld((l) => move(l, from, to)) },
   }
   return <CollectionReorderProbe data={data as never} />
@@ -103,10 +140,12 @@ function prepare() {
   mkdirSync(join(WORK, 'src/Layouts/Resources'), { recursive: true })
   cpSync(join(HOST_ROOT, 'src/Strings'), join(WORK, 'src/Strings'), { recursive: true })
   const config = JSON.parse(readFileSync(join(HOST_ROOT, 'rjui.config.json'), 'utf8'))
+  config.languages = [...new Set([...(config.languages ?? ['en']), 'de'])]
   writeFileSync(join(WORK, 'rjui.config.json'), JSON.stringify(config, null, 2))
   writeFileSync(join(WORK, 'src/Layouts/pages/collection_reorder_probe.json'), JSON.stringify(LAYOUT, null, 1))
   writeFileSync(join(WORK, 'src/Layouts/probe_reorder_cell.json'), JSON.stringify(CELL, null, 1))
   writeFileSync(join(WORK, 'src/Layouts/probe_reorder_edge.json'), JSON.stringify(EDGE, null, 1))
+  writeFileSync(join(WORK, 'src/Layouts/Resources/strings.json'), JSON.stringify(STRINGS, null, 1))
   writeFileSync(join(WORK, 'src/main.tsx'), MAIN)
   writeFileSync(join(WORK, 'src/index.css'), '@import "tailwindcss";\n@source "./generated";\n@import "./generated/theme.css";\n')
   writeFileSync(join(WORK, 'index.html'),
@@ -263,6 +302,122 @@ async function a11ySteps(page) {
     nextToLocked === 0, `firstUp=${firstUp} locked=${lockedButtons} beside=${nextToLocked}`)
 }
 
+// 2.5.36: reorderFixedProperty and a row whose handle is not drawn (rule.fixed), and the app's names (rule.a11yNames)
+// The skip Collection in the middle of the window: a finger near the window's edge would auto-scroll the page.
+const centre = (page, id) => page.evaluate((cid) => {
+  const el = document.getElementById(cid); const r = el.getBoundingClientRect()
+  window.scrollBy(0, r.top + r.height / 2 - window.innerHeight / 2)
+}, id)
+// The rows rebuilt under a drag (rule.itemsChange): the rebuild comes while the row is held; let go, a change of ids,
+// order or locked cancels it (nothing reported), the text alone does not.
+async function rebuildDrag(page, kind, from, over) {
+  const a = await box(page, from), c = await box(page, over)
+  const [x, y] = at(a, 0.3), [x2, y2] = at(c, 0.3, 0.75)
+  await page.mouse.move(x, y); await page.mouse.down(); await page.waitForTimeout(650)
+  for (let i = 1; i <= 10; i++) await page.mouse.move(x + ((x2 - x) * i) / 20, y + ((y2 - y) * i) / 20)
+  await page.evaluate((k) => window.__rebuild(k), kind); await page.waitForTimeout(120)
+  for (let i = 11; i <= 20; i++) await page.mouse.move(x + ((x2 - x) * i) / 20, y + ((y2 - y) * i) / 20)
+  await page.waitForTimeout(120); await page.mouse.up(); await page.waitForTimeout(250)
+}
+
+async function itemsChangeSteps(page) {
+  await reset(page)
+  await rebuildDrag(page, 'text', '#free_item_0', '#free_item_2')
+  report('rebuild: text only under the drag -> commits (to 2)', JSON.stringify(await calls(page)) === '[["free",0,0,2]]',
+    `calls=${JSON.stringify(await calls(page))}`)
+  for (const kind of ['insert', 'reverse']) {
+    await reset(page)
+    await rebuildDrag(page, kind, '#free_item_0', '#free_item_2')
+    report(`rebuild: ${kind} under the drag -> cancelled`, JSON.stringify(await calls(page)) === '[]',
+      `calls=${JSON.stringify(await calls(page))} order=${(await order(page, 'free')).slice(0, 4).join('|')}`)
+  }
+  await reset(page)
+  const grip = page.locator('#held_item_0 #grip').first()
+  const g = await grip.boundingBox()
+  const s1 = await box(page, '#held_item_1')
+  await page.mouse.move(...at(g)); await page.mouse.down(); await page.waitForTimeout(650)
+  await page.mouse.move(at(g)[0], at(g)[1] + 10)
+  await page.evaluate(() => window.__rebuild('lock')); await page.waitForTimeout(120)
+  await page.mouse.move(at(g)[0], at(s1, 0.5, 0.75)[1], { steps: 10 }); await page.waitForTimeout(120)
+  await page.mouse.up(); await page.waitForTimeout(250)
+  report('rebuild: a row locked under the drag -> cancelled', JSON.stringify(await calls(page)) === '[]',
+    `calls=${JSON.stringify(await calls(page))}`)
+}
+
+// rule.callbacks: the drag's start and end around onReorder (the free list declares both).
+const events = (page) => page.evaluate(() => window.__events)
+async function callbackSteps(page) {
+  const want = (name, got, expected) => report(`callbacks: ${name}`, JSON.stringify(got) === JSON.stringify(expected), `events=${JSON.stringify(got)}`)
+  await reset(page)
+  let a = await box(page, '#free_item_1'), c = await box(page, '#free_item_3')
+  await mouseDrag(page, ...at(a, 0.3), ...at(c, 0.3, 0.75))
+  want('moved -> start, reorder, end', await events(page), [['start', 0, 1], ['reorder', 0, 1, 3], ['end', 0]])
+  await reset(page)
+  a = await box(page, '#free_item_1')
+  await mouseDrag(page, ...at(a, 0.3), ...at(a, 0.3, 0.55))
+  want('let go where it started -> start, end', await events(page), [['start', 0, 1], ['end', 0]])
+  await reset(page)
+  a = await box(page, '#free_item_1')
+  await mouseDrag(page, ...at(a, 0.3), at(a, 0.3)[0], 2)
+  want('released outside -> start, end', await events(page), [['start', 0, 1], ['end', 0]])
+  await reset(page)
+  await rebuildDrag(page, 'insert', '#free_item_1', '#free_item_3')
+  want('rows changed under it -> start, end', await events(page), [['start', 0, 1], ['end', 0]])
+  await reset(page)
+  await row(page, 'free_item_2').getByRole('button', { name: 'Move up' }).evaluate((b) => b.click())
+  await page.waitForTimeout(150)
+  want('screen reader move up -> start, reorder, end', await events(page), [['start', 0, 2], ['reorder', 0, 2, 1], ['end', 0]])
+}
+
+async function fixedSteps(page) {
+  await reset(page)
+  await centre(page, 'skip')
+  const buttons = async (id) => row(page, id).getByRole('button', { name: /^(Move (up|down)|Nach (oben|unten))$/ }).count()
+  const fixedButtons = await buttons('skip_item_1')
+  const gripless = await buttons('skip_item_3')
+  const besideFixed = await row(page, 'skip_item_2').getByRole('button', { name: 'Move up' }).count()
+  report('screen reader: no move on a fixed row nor on a row whose grip is not drawn; the row below a fixed one has one',
+    fixedButtons === 0 && gripless === 0 && besideFixed === 1, `fixed=${fixedButtons} gripless=${gripless} besideFixed=${besideFixed}`)
+  // p2's "Move up" passes the fixed row
+  await row(page, 'skip_item_2').getByRole('button', { name: 'Move up' }).focus()
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(200)
+  report('screen reader: "Move up" passes a fixed row -> to 1', JSON.stringify(await calls(page)) === '[["skip",0,2,1]]',
+    `calls=${JSON.stringify(await calls(page))}`)
+  // a drag by p2's grip up over p1 passes the fixed row; the fixed row's grip does not drag. The move button the
+  // step above focused shows itself over the row's end (where the grip is) until focus leaves it.
+  await page.evaluate(() => document.activeElement?.blur())
+  await reset(page)
+  await centre(page, 'skip')
+  const grip2 = await box(page, '#skip_item_2 #grip')
+  const p1 = await box(page, '#skip_item_0')
+  await mouseDrag(page, grip2.x + 10, grip2.y + grip2.height / 2, grip2.x + 10, p1.y + p1.height * 0.25)
+  const passed = JSON.stringify(await calls(page))
+  await reset(page)
+  await centre(page, 'skip')
+  const grip1 = await box(page, '#skip_item_1 #grip')
+  const q = await box(page, '#skip_item_3')
+  await mouseDrag(page, grip1.x + 10, grip1.y + grip1.height / 2, grip1.x + 10, q.y + q.height * 0.75)
+  const stayed = JSON.stringify(await calls(page))
+  report('mouse: p2 dragged by its grip passes the fixed row -> to 0; the fixed row does not drag',
+    passed === '[["skip",0,2,0]]' && stayed === '[]', `passed=${passed} fixedDrag=${stayed}`)
+  // the app's words, in German
+  await reset(page)
+  await page.evaluate(() => window.__lang('de'))
+  await page.waitForTimeout(200)
+  const german = row(page, 'free_item_0').getByRole('button', { name: 'Nach unten' })
+  const named = await german.count()
+  await german.focus()
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(200)
+  const said = await page.locator('#free [role="status"]').first().textContent()
+  await page.evaluate(() => window.__lang('en'))
+  await page.waitForTimeout(200)
+  const back = await row(page, 'free_item_1').getByRole('button', { name: 'Move down' }).count()
+  report('screen reader: the app\'s strings name the actions and the announcement in its language; English again after',
+    named === 1 && said === 'Auf Platz 2' && back === 1, `named=${named} said="${said}" englishAfter=${back}`)
+}
+
 async function touchSteps(page, cdp) {
   // a long press then a move drags, and the page does not scroll
   await reset(page)
@@ -297,6 +452,9 @@ try {
   await mouseSteps(page, false)
   await tapSteps(page)
   await a11ySteps(page)
+  await fixedSteps(page)
+  await itemsChangeSteps(page)
+  await callbackSteps(page)
   await page.close()
 
   const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })

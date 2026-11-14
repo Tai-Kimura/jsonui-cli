@@ -90,7 +90,7 @@ module CollectionFirstFrame
     fun rememberCollectionReorder(reorder: CollectionReorder?, scrollsItself: Boolean = true): CollectionReorderState = CollectionReorderState()
     fun Modifier.collectionReorderContainer(state: CollectionReorderState): Modifier = this
     fun CollectionReorderScope(state: CollectionReorderState, content: () -> Unit) { content() }
-    fun CollectionReorderRow(state: CollectionReorderState?, section: Int, index: Int, count: Int, locked: Set<Int> = emptySet(), content: () -> Unit) { content() }
+    fun CollectionReorderRow(state: CollectionReorderState?, section: Int, index: Int, count: Int, locked: Set<Int> = emptySet(), fixed: Set<Int> = emptySet(), id: String? = null, content: () -> Unit) { content() }
     fun Modifier.collectionReorderActions(): Modifier = this
     object com { object kotlinjsonui { object utils { object CellIdGenerator {
         fun enrichCellIds(data: List<Map<String, Any>>, property: String): List<Map<String, Any>> = data

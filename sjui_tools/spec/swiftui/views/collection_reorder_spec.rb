@@ -81,6 +81,23 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     end
   end
 
+  # Ticket jui-collection-reorder-fixed-row-vs-barrier-row: a fixed row does not move, has no VoiceOver move, and
+  # is passed. Declared, the rows read it from the cell data and CollectionReorder keeps the library's drag; not
+  # declared, the code is as it was.
+  it 'a Collection with fixed rows passes them to its rows and says so to CollectionReorder' do
+    SJUI_REORDER_ROUTES.each do |route, (extra, _style)|
+      plain = emit(extra.merge(SJUI_REORDER_DECL))
+      fixed = emit(extra.merge(SJUI_REORDER_DECL).merge('reorderFixedProperty' => 'skipped'))
+      expect(fixed).to include(', fixed: Set(cellsData.indices.filter { (cellsData[$0]["skipped"] as? Bool) == true }), reorder:'), route
+      expect(fixed).to include('hasLockedRows: false, hasFixedRows: true, onReorder:'), route
+      expect(plain).not_to include('fixed:'), route
+      expect(plain).not_to include('hasFixedRows'), route
+      expect(emit(extra.merge(SJUI_REORDER_DECL).merge('reorderFixedProperty' => ''))).to eq(plain), route
+      undone = fixed.sub(/, fixed: Set\(cellsData\.indices\.filter \{ [^\n]*?== true \}\)/, '').gsub('hasFixedRows: true, ', '')
+      expect(undone).to eq(plain), route
+    end
+  end
+
   it 'a horizontal or grid Collection does not reorder (v1)' do
     [{ 'layout' => 'horizontal', 'height' => 40 }, { 'columns' => 2 }].each do |extra|
       expect(emit(extra.merge(SJUI_REORDER_DECL))).not_to include('CollectionReorderRows'), extra.to_s
@@ -126,25 +143,37 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     expect(other).not_to include('.collectionReorderHandle()')
   end
 
+  # A handle that is not drawn makes its row fixed: its own hidden is applied inside .collectionReorderHandle, so
+  # the handle is told it (invisible and gone come from the VisibilityWrapper around it).
+  it "the handle's own hidden is passed to .collectionReorderHandle; without one, nothing" do
+    SjuiTools::SwiftUI::Views::BaseViewConverter.reorder_handle_ids = Set['grip']
+    factory = SjuiTools::SwiftUI::ConverterFactory.new
+    grip = ->(extra) { factory.create_converter({ 'type' => 'View', 'id' => 'grip', 'width' => 40, 'height' => 40 }.merge(extra), 0).convert.to_s }
+    expect(grip.call({})).to include('.collectionReorderHandle()')
+    expect(grip.call('hidden' => true)).to include('.collectionReorderHandle(hidden: true)')
+    expect(grip.call('hidden' => '@{gripHidden}')).to include('.collectionReorderHandle(hidden: data.gripHidden)')
+  end
+
   it 'type-checks on every route against the library declarations', :swift_compile do
     stubs = EmittedSwift::COLLECTION_DATA_SOURCE_STUB + EmittedSwift::COLLECTION_STACK_VIEW_STUB + cell_view_stub('ACellView') + <<~SWIFT
       // SwiftJsonUI CollectionReorder.swift (feature/collection-reorder), the public declarations.
       enum CollectionReorderStyle { case stack, list }
       struct CollectionReorderRows<Content: View>: View {
           let content: (Int) -> Content
-          init(section: Int, ids: [String], locked: Set<Int> = [], reorder: CollectionReorder?,
+          init(section: Int, ids: [String], locked: Set<Int> = [], fixed: Set<Int> = [], reorder: CollectionReorder?,
                style: CollectionReorderStyle = .stack, @ViewBuilder content: @escaping (Int) -> Content) { self.content = content }
           var body: some View { content(0) }
       }
       extension View {
           func collectionReorderContainer(_ reorder: CollectionReorder?) -> some View { self }
-          func collectionReorderHandle() -> some View { self }
+          func collectionReorderHandle(hidden: Bool = false) -> some View { self }
       }
     SWIFT
     codes = SJUI_REORDER_ROUTES.values.map { |extra, _| emit(extra.merge(SJUI_REORDER_DECL)) } +
             [emit(SJUI_REORDER_LEGACY.merge('lazy' => 'none').merge(SJUI_REORDER_DECL)), emit(SJUI_REORDER_LEGACY.merge('height' => 400).merge(SJUI_REORDER_DECL))] +
             [emit({ 'lazy' => 'none', 'reorderable' => true, 'onReorder' => '@{onStopMove}', 'reorderHandle' => 'grip',
-                    'reorderLockedProperty' => 'fixed', 'cellIdProperty' => 'id' })]
+                    'reorderLockedProperty' => 'fixed', 'cellIdProperty' => 'id' })] +
+            SJUI_REORDER_ROUTES.values.map { |extra, _| emit(extra.merge(SJUI_REORDER_DECL).merge('reorderFixedProperty' => 'skipped')) }
     data = ['var rows: CollectionDataSource? = nil', 'var editing: Bool = false', 'var onStopMove: ((Int, Int, Int) -> Void)? = nil']
     expect(compilable_view("VStack {\n#{codes.join("\n")}\n}", data: data, stubs: stubs)).to compile_as_swift
   end
