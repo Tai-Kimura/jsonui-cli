@@ -175,7 +175,8 @@ RSpec.describe KjuiTools::Compose::Components::IconLabelComponent do
     # at 14sp on a 16.5 dp line while the dynamic face kept 16 / 24.
     it 'adds a textShadow to the current text style, not to a bare TextStyle' do
       out = generate('textShadow' => { 'color' => '#000000', 'blur' => 2, 'offset' => [1, 1] })
-      expect(out).to include('style = LocalTextStyle.current.copy(shadow = ')
+      # One copy of the current style: the line (by the rule, from the size drawn) and the shadow.
+      expect(out).to match(/style = LocalTextStyle\.current\.copy\(lineHeight = jsonUILineHeight\([^\n]*\), shadow = /)
       expect(out).not_to include('TextStyle(shadow')
       expect(required_imports).to include(:local_text_style)
     end
@@ -201,9 +202,14 @@ RSpec.describe KjuiTools::Compose::Components::IconLabelComponent do
       expect(generate('fontSize' => '@{size}')).to match(/lineHeight = \(.*size.* \* 1\.3f?\)\.sp/)
     end
 
-    it "keeps the theme's line without a fontSize (control)" do
-      expect(generate).not_to include('lineHeight')
-      expect(generate).not_to include('style = ')
+    # Without a fontSize the line is the theme's, drawn by the rule from the size drawn — the provider's when it
+    # gives one (ruling 2026-11-14): under the default configuration jsonUILineHeight hands the theme's line back.
+    # Before, no line was emitted, and a provider size under Configuration.Font.scaling false kept the theme's sp
+    # line growing under a text that stood still (KotlinJsonUI ProviderLineFollowsTextDeviceTest).
+    it "draws the theme's line by the rule without a fontSize, with no line of its own" do
+      out = generate
+      expect(out).to match(/style = LocalTextStyle\.current\.copy\(lineHeight = jsonUILineHeight\(jsonUIFontSize\(resolved_iconlabel\d+\.size \?: TextUnit\.Unspecified\)\)\)/)
+      expect(out).not_to include('* 1.3f')
     end
   end
 

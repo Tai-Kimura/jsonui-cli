@@ -651,7 +651,11 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent, 'hintAttribute
   describe 'keyboardType aliases' do
     JSON.parse(File.read(File.expand_path('../../../../shared/core/attribute_definitions.json', __dir__)))['TextView']['keyboardType']['valueAliases'].each do |alias_name, canonical|
       it "draws #{alias_name} as #{canonical}" do
-        draw = ->(v) { described_class.generate({ 'type' => 'TextView', 'id' => 't', 'keyboardType' => v }, 0, Set.new) }
+        draw = lambda do |v|
+          KjuiTools::Compose::Helpers::FontSpecHelper.reset_counter!
+          described_class.reset_counter!
+          described_class.generate({ 'type' => 'TextView', 'id' => 't', 'keyboardType' => v }, 0, Set.new)
+        end
         expect(draw.call(alias_name)).to eq(draw.call(canonical))
       end
     end

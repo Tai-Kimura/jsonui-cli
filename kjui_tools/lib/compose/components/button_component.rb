@@ -444,10 +444,8 @@ module KjuiTools
           # button's text style), so an app without a provider draws the same.
           var_name = next_resolved_var
           resolve_block = Helpers::FontSpecHelper.emit_resolve_block(var_name, font_args, depth, required_imports)
-          # The line box by the rule where the size is: a font attribute (as the button's always took it), else a
-          # fontScaling / maxFontScale declared.
-          text_arg_lines = Helpers::FontSpecHelper.text_arg_lines(var_name, depth, required_imports, json_data,
-                                                                  line: font_args[:has_any] || nil)
+          # The line box by the rule, from the size drawn (the provider's when it gives one).
+          text_arg_lines = Helpers::FontSpecHelper.text_arg_lines(var_name, depth, required_imports, json_data)
 
           resolve_block + "\n" + indent("Text(", depth) +
             "\n" + indent("text = #{text},", depth + 1) +

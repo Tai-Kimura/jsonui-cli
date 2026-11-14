@@ -208,11 +208,8 @@ module KjuiTools
           end
           # The line box is the style's below (line: false here), drawn from the same size.
           code += "\n" + Helpers::FontSpecHelper.text_arg_lines(var, depth, required_imports, json_data, line: false)
-          # The size the text is drawn at - the provider's when it gives one, else the declared one - where it is drawn
-          # by the rule (a size or fontScaling / maxFontScale declared); nil otherwise, and the theme's line stands.
-          drawn_size = if size || !Helpers::FontScale.declaration_args(json_data).empty?
-                         Helpers::FontScale.wrap("#{var}.size ?: TextUnit.Unspecified", json_data, required_imports)
-                       end
+          # The size the text is drawn at - the provider's when it gives one, else the declared one, else the style's.
+          drawn_size = Helpers::FontScale.wrap("#{var}.size ?: TextUnit.Unspecified", json_data, required_imports)
           # `textShadow` — same `{color, blur, offset: [x, y]}` contract as
           # Label (the UIKit runtime passes the identical JSON to both), and
           # this component never reached ANY shadow path (plan 49 lane C:
@@ -233,12 +230,10 @@ module KjuiTools
           style_parts = []
           # Drawn by the text size rule as the size is (FontScale.line_height): a text that does not follow keeps its line
           # box (ticket kjui-theme-line-height-scales-under-font-scaling-false).
-          # Only where the size is drawn by the rule: an undeclared size follows the system, and so does its line.
-          if drawn_size
-            # A declared size's line (x 1.3) from the size drawn: the provider's when it gives one (ruling 2026-11-14).
-            own_line = json_data['fontSize'] ? "(#{var}.size?.let { it * 1.3f } ?: #{TextComponent.scaled_sp(json_data['fontSize'], 1.3, round: true)})" : nil
-            style_parts << "lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: drawn_size, line: own_line)}"
-          end
+          # Always, as the size is (P1): with nothing declared and the default configuration jsonUILineHeight hands the
+          # theme's line back. A declared size's line (x 1.3) from the size drawn: the provider's when it gives one.
+          own_line = json_data['fontSize'] ? "(#{var}.size?.let { it * 1.3f } ?: #{TextComponent.scaled_sp(json_data['fontSize'], 1.3, round: true)})" : nil
+          style_parts << "lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: drawn_size, line: own_line)}"
           if json_data['textShadow']
             required_imports&.add(:shadow_style)
             style_parts << TextComponent.text_shadow_expression(json_data['textShadow'], required_imports)

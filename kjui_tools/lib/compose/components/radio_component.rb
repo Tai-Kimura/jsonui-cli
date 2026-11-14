@@ -527,8 +527,7 @@ module KjuiTools
         def self.label_font_args(json_data, required_imports, var)
           # Through the app's fontProvider whatever the label declares (the requester's P1, ticket
           # jui-font-provider-not-reached-without-font-attributes-android-web): a slot it leaves null draws as before.
-          ', ' + Helpers::FontSpecHelper.text_arg_fragments(var, required_imports, json_data,
-                                                            line: json_data['fontSize'] ? true : nil).join(', ')
+          ', ' + Helpers::FontSpecHelper.text_arg_fragments(var, required_imports, json_data).join(', ')
         end
 
         # The label's FontSpec: `font` the weight spelling (the shared vocabulary, bound or not), `fontSize` a

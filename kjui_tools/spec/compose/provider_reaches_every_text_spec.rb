@@ -80,6 +80,18 @@ RSpec.describe 'kjui codegen: the font provider reaches every text' do
     expect(segment.scan(/text = \{\n\s+val segmentFont = Configuration\.Font\.resolve\(FontSpec\(\n\s+family = null,\n\s+weight = LocalTextStyle\.current\.fontWeight,/).size).to eq(2)
   end
 
+  # The line box is drawn by the rule from the size drawn — the provider's when it gives one — on the five that name no
+  # size and declare nothing (ruling 2026-11-14). They drew no lineHeight: a provider size under
+  # Configuration.Font.scaling false left the theme's sp line growing under a text that stood still (KotlinJsonUI
+  # ProviderLineFollowsTextDeviceTest draws both). Under the default configuration jsonUILineHeight hands the line back.
+  it 'the five that declare nothing draw their line from the size drawn' do
+    %w[Button Switch CheckBox Radio IconLabel].each do |name|
+      code = emit(node(name, PLAIN_TEXTS[name]))
+      var = code[/val (\w+) = Configuration\.Font\.resolve\(FontSpec\(/, 1]
+      expect(code).to include("lineHeight = jsonUILineHeight(jsonUIFontSize(#{var}.size ?: TextUnit.Unspecified))"), "#{name}:\n#{code}"
+    end
+  end
+
   it 'the emitted code compiles, each of the ten' do
     nodes = PLAIN_TEXTS.map { |name, extra| node(name, extra) }
     functions = nodes.each_with_index.map do |n, i|

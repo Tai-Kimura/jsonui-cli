@@ -99,18 +99,17 @@ module KjuiTools
         # ResolvedFont local. Returns a string already indented at `depth + 1`,
         # suitable for appending after the existing Text(...) parameters.
         # `default_size`: as style_arg_fragments; Unspecified (the Text's style) otherwise.
-        def self.text_arg_lines(var_name, depth, required_imports = nil, json_data = nil, default_size: nil, line: nil)
+        def self.text_arg_lines(var_name, depth, required_imports = nil, json_data = nil, default_size: nil, line: true)
           text_arg_fragments(var_name, required_imports, json_data, default_size: default_size, line: line)
             .map { |f| indent("#{f},", depth + 1) }.join("\n")
         end
 
         # The same five Text(...) arguments as `key = value` fragments, without commas.
-        # `line`: whether the line box is drawn by the rule too (the component declares a size, or fontScaling /
-        # maxFontScale); nil reads the declarations alone.
-        def self.text_arg_fragments(var_name, required_imports = nil, json_data = nil, default_size: nil, line: nil)
+        # `line`: whether the line box is drawn by the rule too. Always, since the size always is (P1: the provider may
+        # answer a size where nothing is declared); false only for a component that draws its own line (IconLabel).
+        def self.text_arg_fragments(var_name, required_imports = nil, json_data = nil, default_size: nil, line: true)
           required_imports&.add(:font_style)
           required_imports&.add(:text_unit)
-          line = !FontScale.declaration_args(json_data || {}).empty? if line.nil?
           drawn = FontScale.wrap("#{var_name}.size ?: #{default_size || 'TextUnit.Unspecified'}", json_data, required_imports)
           [
             "fontFamily = #{var_name}.family",
@@ -118,8 +117,8 @@ module KjuiTools
             "fontSize = #{drawn}",
             "letterSpacing = #{FontScale.letter_spacing(json_data, required_imports)}",
             # The line box by the same rule, relative to the size drawn (ticket
-            # kjui-theme-line-height-scales-under-font-scaling-false), where the size is drawn by the rule: a size or a
-            # fontScaling / maxFontScale declared (`line`). Otherwise the theme's line stands, as it did.
+            # kjui-theme-line-height-scales-under-font-scaling-false). With nothing declared and the default
+            # configuration, jsonUILineHeight hands the style's line back unchanged.
             (line ? "lineHeight = #{FontScale.line_height(json_data, required_imports, font: drawn)}" : nil),
             "fontStyle = #{var_name}.style ?: FontStyle.Normal"
           ].compact

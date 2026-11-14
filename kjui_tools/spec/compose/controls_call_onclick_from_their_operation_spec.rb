@@ -32,7 +32,9 @@ RSpec.describe 'kjui controls call onClick from their own operation' do
   call = 'data.onTap?.invoke()'
   gated = 'if ((data.gate ?: false)) { data.onTap?.invoke() }'
 
+  # The font var counter a build resets per file, so two emissions compare as the same file would.
   emit = lambda do |node|
+    KjuiTools::Compose::Helpers::FontSpecHelper.reset_counter!
     comp = JSON.parse(JSON.generate(node))
     JsonUIShared::TapAccessibility.annotate!(comp)
     KjuiTools::Compose::ComposeBuilder.new.send(:generate_component, comp, 0).to_s

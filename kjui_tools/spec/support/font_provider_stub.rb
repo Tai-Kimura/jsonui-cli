@@ -34,5 +34,6 @@ module FontProviderStub
     val Double.sp: TextUnit get() = TextUnit()
     fun <T> jsonUIFontSize(size: T, fontScaling: Boolean? = null, maxFontScale: Float? = null): T = size
     fun jsonUILetterSpacing(fontScaling: Boolean? = null, maxFontScale: Float? = null): Any? = null
+    fun jsonUILineHeight(fontSize: Any? = null, fontScaling: Boolean? = null, maxFontScale: Float? = null, lineHeight: Any? = null): TextUnit = TextUnit()
   KT
 end
