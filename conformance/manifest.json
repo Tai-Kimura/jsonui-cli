@@ -8,10 +8,10 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "1c78b62b22662112fb4fa1d597811d55e7247fc80cd60fea1c88cf4a61677ae4",
+  "generatedFrom": "4ff567bcf2bee36e9504e3be3194a246f027be5ef1b9418a3285beb5f800988e",
   "counts": {
-    "fixtures": 1349,
-    "assertable": 54,
+    "fixtures": 1352,
+    "assertable": 57,
     "visual": 1028,
     "interactive": 41,
     "control": 148,
@@ -31978,6 +31978,96 @@
         "fixtures/Collection/__cells/conformance_cell.layout.json",
         "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
         "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/cellAddress__sections_list",
+      "component": "Collection",
+      "attribute": "sections",
+      "case": "cellAddress__sections_list",
+      "class": "assertable",
+      "host": "Collection",
+      "writtenKey": "sections",
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/cellAddress__sections_list.layout.json",
+      "test": "fixtures/Collection/cellAddress__sections_list.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_within.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/cellAddress__sections_none",
+      "component": "Collection",
+      "attribute": "sections",
+      "case": "cellAddress__sections_none",
+      "class": "assertable",
+      "host": "Collection",
+      "writtenKey": "sections",
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/cellAddress__sections_none.layout.json",
+      "test": "fixtures/Collection/cellAddress__sections_none.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_within.layout.json"
+      ]
+    },
+    {
+      "id": "Collection/cellAddress__sections_flow",
+      "component": "Collection",
+      "attribute": "sections",
+      "case": "cellAddress__sections_flow",
+      "class": "assertable",
+      "host": "Collection",
+      "writtenKey": "sections",
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/cellAddress__sections_flow.layout.json",
+      "test": "fixtures/Collection/cellAddress__sections_flow.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": null,
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_within.layout.json"
       ]
     },
     {
