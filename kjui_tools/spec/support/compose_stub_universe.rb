@@ -55,7 +55,7 @@ module ComposeStubUniverse
       fun Icon(painter: Painter, contentDescription: String?) {}
       fun BadgedBox(badge: () -> Unit, content: () -> Unit) {}
       fun Badge(content: () -> Unit) {}
-      fun Text(text: String, letterSpacing: Any? = null) {}
+      fun Text(text: String, letterSpacing: Any? = null, lineHeight: Any? = null) {}
       fun Box(modifier: Modifier = Modifier, content: () -> Unit) {}
       class ProvidedValue
       class SafeAreaConfig(val ignoreBottom: Boolean = false)
@@ -71,6 +71,7 @@ module ComposeStubUniverse
       // KotlinJsonUI's com.kotlinjsonui.core.jsonUIFontSize: every text size through the text size rule.
       fun <T> jsonUIFontSize(size: T, fontScaling: Boolean? = null, maxFontScale: Float? = null): T = size
       fun jsonUILetterSpacing(fontScaling: Boolean? = null, maxFontScale: Float? = null): Any? = null
+      fun jsonUILineHeight(fontSize: Any? = null, fontScaling: Boolean? = null, maxFontScale: Float? = null, lineHeight: Any? = null): Nothing = throw IllegalStateException()
       fun CompositionLocalProvider(vararg values: ProvidedValue, content: () -> Unit) {}
       class MutableState<T>(var value: T)
       operator fun <T> MutableState<T>.getValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>): T = value
@@ -106,7 +107,7 @@ module ComposeStubUniverse
       val Double.dp: Dp get() = Dp(toFloat())
       val Float.dp: Dp get() = Dp(this)
       class Color(val argb: Int = 0) {
-          fun copy(alpha: Float = 1f, letterSpacing: Any? = null): Color = this
+          fun copy(alpha: Float = 1f, letterSpacing: Any? = null, lineHeight: Any? = null): Color = this
           companion object {
               val Transparent = Color(); val Unspecified = Color(); val Black = Color(); val Gray = Color()
           }
@@ -122,7 +123,7 @@ module ComposeStubUniverse
       class FontStyle { companion object { val Normal = FontStyle() } }
       class FontSpec(val family: String?, val weight: String?, val size: Int?, val italic: Boolean)
       class ResolvedFont(val family: FontFamily?, val weight: FontWeight?, val size: TextUnit?, val style: FontStyle?)
-      class TextStyle(val color: Color = Color(), val fontSize: TextUnit = TextUnit(), letterSpacing: Any? = null) {
+      class TextStyle(val color: Color = Color(), val fontSize: TextUnit = TextUnit(), letterSpacing: Any? = null, lineHeight: Any? = null) {
           fun copy(lineHeight: TextUnit = TextUnit(), letterSpacing: Any? = null, fontSize: TextUnit = TextUnit()): TextStyle = this
       }
       object LocalTextStyle { val current = TextStyle() }
@@ -226,7 +227,7 @@ module ComposeStubUniverse
                  contentPadding: PaddingValues = PaddingValues(0.dp), content: RowScope.() -> Unit) {}
       fun Text(text: String, color: Color = Color(), fontFamily: FontFamily? = null, fontWeight: FontWeight? = null,
                fontSize: TextUnit = TextUnit(), fontStyle: FontStyle? = null, modifier: Modifier = Modifier,
-               style: TextStyle? = null, letterSpacing: Any? = null) {}
+               style: TextStyle? = null, letterSpacing: Any? = null, lineHeight: Any? = null) {}
       fun Spacer(modifier: Modifier = Modifier) {}
       class RadioButtonColors
       object RadioButtonDefaults { fun colors(selectedColor: Color = Color(), unselectedColor: Color = Color()) = RadioButtonColors() }
@@ -361,6 +362,7 @@ module ComposeStubUniverse
       // KotlinJsonUI's com.kotlinjsonui.core.jsonUIFontSize: every text size through the text size rule.
       fun <T> jsonUIFontSize(size: T, fontScaling: Boolean? = null, maxFontScale: Float? = null): T = size
       fun jsonUILetterSpacing(fontScaling: Boolean? = null, maxFontScale: Float? = null): Any? = null
+      fun jsonUILineHeight(fontSize: Any? = null, fontScaling: Boolean? = null, maxFontScale: Float? = null, lineHeight: Any? = null): Nothing = throw IllegalStateException()
       fun CompositionLocalProvider(vararg values: ProvidedValue, content: () -> Unit) {}
       class MutableState<T>(var value: T)
       operator fun <T> MutableState<T>.getValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>): T = value

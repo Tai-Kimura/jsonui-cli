@@ -440,7 +440,8 @@ module KjuiTools
             # fontScaling / maxFontScale with no font attribute: the button's own text size by them.
             if (undeclared = Helpers::FontScale.undeclared_size(json_data, required_imports))
               align_arg += "\n" + indent("fontSize = #{undeclared},", depth + 1) +
-                           "\n" + indent("letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)},", depth + 1)
+                           "\n" + indent("letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)},", depth + 1) +
+                           "\n" + indent("lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: undeclared)},", depth + 1)
             end
             return indent("Text(#{text})", depth) if align_arg.empty?
 

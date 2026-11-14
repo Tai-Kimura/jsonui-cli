@@ -116,11 +116,14 @@ module KjuiTools
 
             if json_data['fontSize']
               required_imports&.add(:text_unit) if Helpers::BoundValue.bound?(json_data['fontSize'])
-              text_params << "fontSize = #{Helpers::FontScale.wrap(Helpers::BoundValue.sp(json_data['fontSize'], null_expr: 'TextUnit.Unspecified'), json_data, required_imports)}"
+              drawn = Helpers::FontScale.wrap(Helpers::BoundValue.sp(json_data['fontSize'], null_expr: 'TextUnit.Unspecified'), json_data, required_imports)
+              text_params << "fontSize = #{drawn}"
               text_params << "letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}"
+              text_params << "lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: drawn)}"
             elsif (undeclared = Helpers::FontScale.undeclared_size(json_data, required_imports))
               text_params << "fontSize = #{undeclared}"
               text_params << "letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}"
+              text_params << "lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: undeclared)}"
             end
 
             if json_data['fontColor']

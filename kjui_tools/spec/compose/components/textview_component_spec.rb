@@ -565,7 +565,7 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent, 'hintAttribute
   # Compose has no multiplier, so it resolves against the hint's own size.
   it 'resolves lineHeightMultiple against the hint size' do
     expect(field('hintAttributes' => { 'fontSize' => 14, 'lineHeightMultiple' => 1.4 }))
-      .to include('lineHeight = jsonUIFontSize(19.6.sp)')
+      .to include('lineHeight = 19.6.sp)')
   end
 
   # 19.599999999999998.sp is float noise, not a measurement.

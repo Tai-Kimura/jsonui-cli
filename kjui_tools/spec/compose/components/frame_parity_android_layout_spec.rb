@@ -57,10 +57,11 @@ RSpec.describe 'kjui codegen: layout boxes the frame-parity inventory found off'
         class TextUnit
         fun <T> jsonUIFontSize(size: T, fontScaling: Boolean? = null, maxFontScale: Float? = null): T = size
         fun jsonUILetterSpacing(fontScaling: Boolean? = null, maxFontScale: Float? = null): Any? = null
+      fun jsonUILineHeight(fontSize: Any? = null, fontScaling: Boolean? = null, maxFontScale: Float? = null, lineHeight: Any? = null): Nothing = throw IllegalStateException()
         val Int.sp: TextUnit get() = TextUnit()
         interface Modifier { companion object : Modifier }
         interface RowScope { fun Modifier.weight(w: Float): Modifier = this }
-        fun Text(text: String, fontSize: TextUnit? = null, modifier: Modifier = Modifier, letterSpacing: Any? = null) {}
+        fun Text(text: String, fontSize: TextUnit? = null, modifier: Modifier = Modifier, letterSpacing: Any? = null, lineHeight: Any? = null) {}
         fun RowScope.wrapped() {
         #{label.call('width' => 'wrapContent', 'fontSize' => 14)}
         #{label.call('width' => 300)}

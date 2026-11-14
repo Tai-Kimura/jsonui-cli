@@ -89,11 +89,14 @@ module KjuiTools
         def self.text_arg_lines(var_name, depth, required_imports = nil, json_data = nil)
           required_imports&.add(:font_style)
           required_imports&.add(:text_unit)
+          drawn = FontScale.wrap("#{var_name}.size ?: TextUnit.Unspecified", json_data, required_imports)
           [
             indent("fontFamily = #{var_name}.family,", depth + 1),
             indent("fontWeight = #{var_name}.weight,", depth + 1),
-            indent("fontSize = #{FontScale.wrap("#{var_name}.size ?: TextUnit.Unspecified", json_data, required_imports)},", depth + 1),
+            indent("fontSize = #{drawn},", depth + 1),
             indent("letterSpacing = #{FontScale.letter_spacing(json_data, required_imports)},", depth + 1),
+            # The line box by the same rule (ticket kjui-theme-line-height-scales-under-font-scaling-false).
+            indent("lineHeight = #{FontScale.line_height(json_data, required_imports, font: drawn)},", depth + 1),
             indent("fontStyle = #{var_name}.style ?: FontStyle.Normal,", depth + 1)
           ].join("\n")
         end

@@ -223,7 +223,8 @@ module KjuiTools
           required_imports&.add(:text_unit)
           component_code += "\n" + indent("fontFamily = #{font_ref}.family,", depth + 1)
           component_code += "\n" + indent("fontWeight = #{font_ref}.weight,", depth + 1)
-          component_code += "\n" + indent("fontSize = #{Helpers::FontScale.wrap("#{font_ref}.size ?: TextUnit.Unspecified", json_data, required_imports)},", depth + 1)
+          drawn_size = Helpers::FontScale.wrap("#{font_ref}.size ?: TextUnit.Unspecified", json_data, required_imports)
+          component_code += "\n" + indent("fontSize = #{drawn_size},", depth + 1)
           component_code += "\n" + indent("letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)},", depth + 1)
           component_code += "\n" + indent("fontStyle = #{font_ref}.style ?: FontStyle.Normal,", depth + 1)
 
@@ -269,17 +270,23 @@ module KjuiTools
           #
           # A highlight lineHeightMultiple resolves against the highlight's own
           # font size, the same way the base one resolves against the base size.
-          base_line_height = base_line_height_expression(json_data, required_imports)
+          #
+          # Every line height, the label's own or the theme's, goes through the text size rule as the size does,
+          # relative to the size drawn (FontScale.line_height; ticket
+          # kjui-theme-line-height-scales-under-font-scaling-false): a label that does not follow keeps its line box.
+          base_line_height = base_line_height_expression(json_data, required_imports, drawn_size)
+          theme_line_height = Helpers::FontScale.line_height(json_data, required_imports, font: drawn_size)
           if highlight && highlight_condition && highlight[:line_height_multiple]
             required_imports&.add(:text_style)
             hl_size = highlight.dig(:font_attrs, 'fontSize') || json_data['fontSize']
-            highlight_line_height = Helpers::FontScale.wrap(multiple_line_height(hl_size, highlight[:line_height_multiple], required_imports), json_data, required_imports)
+            highlight_line_height = Helpers::FontScale.line_height(json_data, required_imports, font: drawn_size,
+                                                                   line: multiple_line_height(hl_size, highlight[:line_height_multiple], required_imports))
             style_parts << if always_highlighted
                              "lineHeight = #{highlight_line_height}"
                            else
                              # Not TextUnit.Unspecified: copy() would drop the
                              # theme's line height, which an undeclared label keeps.
-                             "lineHeight = if (#{highlight_condition}) #{highlight_line_height} else #{base_line_height || 'LocalTextStyle.current.lineHeight'}"
+                             "lineHeight = if (#{highlight_condition}) #{highlight_line_height} else #{base_line_height || theme_line_height}"
                            end
           elsif hint && hint_condition && (hint[:line_height_multiple] || hint.dig(:font_attrs, 'fontSize'))
             # The hint bag's lineHeightMultiple resolves against the hint's
@@ -295,11 +302,14 @@ module KjuiTools
                                else
                                  scaled_sp(hint_size, 1.3, round: true)
                                end
-            hint_line_height = Helpers::FontScale.wrap(hint_line_height, json_data, required_imports)
-            style_parts << "lineHeight = if (#{hint_condition}) #{hint_line_height} else #{base_line_height || 'LocalTextStyle.current.lineHeight'}"
+            hint_line_height = Helpers::FontScale.line_height(json_data, required_imports, font: drawn_size, line: hint_line_height)
+            style_parts << "lineHeight = if (#{hint_condition}) #{hint_line_height} else #{base_line_height || theme_line_height}"
           elsif base_line_height
             required_imports&.add(:text_style)
             style_parts << "lineHeight = #{base_line_height}"
+          else
+            required_imports&.add(:text_style)
+            style_parts << "lineHeight = #{theme_line_height}"
           end
 
           if style_parts.any?
@@ -723,9 +733,12 @@ module KjuiTools
         # The label's own line height as a TextUnit expression, or nil when it
         # declares none of lineHeightMultiple / lineSpacing / fontSize (the
         # theme's line height then stands).
-        def self.base_line_height_expression(json_data, required_imports)
-          # The line height follows the text size as the font size does (Helpers::FontScale).
-          Helpers::FontScale.wrap(raw_base_line_height_expression(json_data, required_imports), json_data, required_imports)
+        def self.base_line_height_expression(json_data, required_imports, drawn_size = nil)
+          # The line height by the text size rule as the font size is, relative to the size drawn (Helpers::FontScale).
+          raw = raw_base_line_height_expression(json_data, required_imports)
+          return nil unless raw
+
+          Helpers::FontScale.line_height(json_data, required_imports, font: drawn_size, line: raw)
         end
 
         def self.raw_base_line_height_expression(json_data, required_imports)
@@ -836,6 +849,9 @@ module KjuiTools
           required_imports&.add(:font_style)
           required_imports&.add(:text_unit)
           style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(var_name, required_imports, json_data))
+          # The theme's line by the text size rule as the size is (ticket
+          # kjui-theme-line-height-scales-under-font-scaling-false), relative to the size drawn.
+          style_parts << "lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: Helpers::FontScale.wrap("#{var_name}.size ?: LocalTextStyle.current.fontSize", json_data, required_imports))}"
 
           if json_data['textAlign']
             required_imports&.add(:text_align)
@@ -1074,6 +1090,9 @@ module KjuiTools
           required_imports&.add(:font_style)
           required_imports&.add(:text_unit)
           style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(var_name, required_imports, json_data))
+          # The theme's line by the text size rule as the size is (ticket
+          # kjui-theme-line-height-scales-under-font-scaling-false), relative to the size drawn.
+          style_parts << "lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: Helpers::FontScale.wrap("#{var_name}.size ?: LocalTextStyle.current.fontSize", json_data, required_imports))}"
 
           if json_data['textAlign']
             required_imports&.add(:text_align)

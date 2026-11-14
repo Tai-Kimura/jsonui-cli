@@ -82,9 +82,27 @@ RSpec.describe 'kjui codegen: text size following' do
       .to include('textStyle = TextStyle(fontSize = jsonUIFontSize(Configuration.TextField.defaultFontSize.sp, fontScaling = false), letterSpacing = jsonUILetterSpacing(fontScaling = false))')
   end
 
-  it "a Label's line heights follow as its size does" do
+  it "a Label's line heights follow as its size does: its own, relative to the size drawn" do
     code = emit('type' => 'Label', 'text' => 't', 'fontSize' => 15, 'lineHeightMultiple' => 1.4, 'maxFontScale' => 1.2)
-    expect(code).to include('lineHeight = jsonUIFontSize(LabelLineHeight.multiple(15f, 1.4f, LocalTextStyle.current, LocalDensity.current), maxFontScale = 1.2f)')
+    expect(code).to match(/lineHeight = jsonUILineHeight\(jsonUIFontSize\(resolved_text\d+\.size \?: TextUnit\.Unspecified, maxFontScale = 1\.2f\), maxFontScale = 1\.2f, lineHeight = LabelLineHeight\.multiple\(15f, 1\.4f, LocalTextStyle\.current, LocalDensity\.current\)\)/)
+  end
+
+  it "every text with a size drawn by the rule draws its line box by it too (the theme's, or its own)" do
+    # Ticket kjui-theme-line-height-scales-under-font-scaling-false: the theme's line height is sp, so a text that does
+    # not follow grew its line box with the system. Each such text now takes jsonUILineHeight beside its letter spacing,
+    # relative to the size drawn; the library leaves a following text's line unchanged.
+    FONT_SCALING_TYPES.except('TextField', 'TextView').each do |type, extra|
+      code = emit({ 'type' => type, 'fontScaling' => false }.merge(extra))
+      expect(code).to match(/lineHeight = jsonUILineHeight\([^\n]*fontScaling = false/), type
+    end
+    # A TextField's placeholder with a hint size takes it.
+    # A TextView's text is on a bare TextStyle (as the Dynamic face's): no line height of its own to draw.
+    expect(emit('type' => 'TextView', 'text' => '@{t}', 'fontScaling' => false))
+      .to include('textStyle = TextStyle(fontSize = jsonUIFontSize(Configuration.TextField.defaultFontSize.sp, fontScaling = false), letterSpacing = jsonUILetterSpacing(fontScaling = false))')
+    expect(emit('type' => 'TextField', 'text' => '@{t}', 'hint' => 'h', 'hintFontSize' => 12, 'fontScaling' => false))
+      .to include('style = LocalTextStyle.current.copy(lineHeight = jsonUILineHeight(jsonUIFontSize(12.sp, fontScaling = false), fontScaling = false))')
+    # An undeclared hint size follows the system, and so does its line: nothing is added there.
+    expect(emit('type' => 'TextField', 'text' => '@{t}', 'hint' => 'h', 'fontScaling' => false)).not_to include('lineHeight = jsonUILineHeight(')
   end
 
   it "partialAttributes' sizes follow the Label: PartialAttributesText takes its declarations" do

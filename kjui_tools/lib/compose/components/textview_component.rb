@@ -45,7 +45,8 @@ module KjuiTools
           if color
             args << "color = #{Helpers::ResourceResolver.process_color(color, required_imports)}"
           end
-          args << "fontSize = #{Helpers::FontScale.wrap(Helpers::BoundValue.sp(size), json_data, required_imports)}" if size
+          hint_drawn = size ? Helpers::FontScale.wrap(Helpers::BoundValue.sp(size), json_data, required_imports) : nil
+          args << "fontSize = #{hint_drawn}" if size
           args << "letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}" if size
           if (weight = font_weight_for(font))
             required_imports&.add(:font_weight)
@@ -67,7 +68,13 @@ module KjuiTools
                              else
                                "#{format_sp(base_size.to_f * multiple.to_f)}.sp"
                              end
-            args << "style = LocalTextStyle.current.copy(lineHeight = #{Helpers::FontScale.wrap(line_height_sp, json_data, required_imports)})"
+            args << "style = LocalTextStyle.current.copy(lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: hint_drawn, line: line_height_sp)})"
+          elsif hint_drawn
+            # The theme's line by the text size rule as the size is (ticket
+            # kjui-theme-line-height-scales-under-font-scaling-false); an undeclared hint size follows the system,
+            # and so does its line.
+            required_imports&.add(:local_text_style)
+            args << "style = LocalTextStyle.current.copy(lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: hint_drawn)})"
           end
 
           return "\n" + indent("placeholder = { Text(#{placeholder}) },", depth + 1) if args.length == 1
@@ -515,6 +522,8 @@ module KjuiTools
             if tv_undeclared
               style_parts << "fontSize = #{tv_undeclared}"
               style_parts << "letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}"
+              # No line height: on a bare TextStyle (as the Dynamic TextView's) the field's line is the font's own, which
+              # follows the size the rule draws.
             end
             if style_parts.any?
               code += "\n" + indent("textStyle = TextStyle(#{style_parts.join(', ')}),", depth + 1)

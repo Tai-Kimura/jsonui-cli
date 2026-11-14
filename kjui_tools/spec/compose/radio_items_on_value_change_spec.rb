@@ -79,7 +79,7 @@ RSpec.describe 'kjui Radio items: a tap calls onValueChange with the item' do
       object MaterialTheme { val colorScheme = ColorScheme() }
       fun jsonUITintOr(fallback: Color): Color = fallback
       fun Spacer(modifier: Modifier) {}
-      fun Text(text: String, color: Color = Color(), letterSpacing: Any? = null) {}
+      fun Text(text: String, color: Color = Color(), letterSpacing: Any? = null, lineHeight: Any? = null) {}
       class Data(val sel: String = "", val list: List<String> = listOf("x", "y"), val h: ((String, String) -> Unit)? = null)
       class ViewModel { val writes = mutableListOf<String>(); fun updateData(values: Map<String, Any?>) { writes += values.values.map { it.toString() } } }
       fun staticGroup(data: Data, viewModel: ViewModel) {
