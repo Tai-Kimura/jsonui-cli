@@ -207,6 +207,12 @@ NETWORK_ATTRS = {
     ("NetworkImage", "headers"),
     ("NetworkImage", "cachePolicy"),
     ("NetworkImage", "timeout"),
+    # Act only while a read from disk or the network is in flight; an offline
+    # fixture has no src, so the frame never loads and none of them can show
+    # (ticket jui-networkimage-load-listener).
+    ("NetworkImage", "loadingRenderer"),
+    ("NetworkImage", "loadingDelay"),
+    ("NetworkImage", "transitionDuration"),
     ("Web", "url"),
 }
 

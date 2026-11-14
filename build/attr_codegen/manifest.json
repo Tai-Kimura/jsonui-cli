@@ -3,7 +3,7 @@
   "generatedBy": "jui generate attr-bindings --lang all",
   "source": {
     "file": "shared/core/attribute_definitions.json",
-    "sha256": "4ff567bcf2bee36e9504e3be3194a246f027be5ef1b9418a3285beb5f800988e"
+    "sha256": "fdc521560257d465a5093e8643a34f9f7fedbe57676cbde3cfacf749d04f32a8"
   },
   "files": {
     "kotlin/AttrCodegenSupport.kt": "3f56c8021ab16a32d0ed4a38e7839c27a08237bd095c4469255c800d1600b165",
@@ -24,7 +24,7 @@
     "kotlin/IndicatorAttributes.kt": "a07adfd887e2bb005991daf261814549580dd60db3b7ebcdb3a566a70200e563",
     "kotlin/InputAttributes.kt": "c894a484ebdddac8b02240303731e76c4d73d47e145c89221d4db8a8ce655efa",
     "kotlin/LabelAttributes.kt": "711f6b8c9297db480cc3426d0e1b9526db960b40f0ce9a12d3448c8f5f39ab9a",
-    "kotlin/NetworkImageAttributes.kt": "f3465b1a61f6109af1390b73a04371f52fba11bc28d3965654c80d0b4300ac0e",
+    "kotlin/NetworkImageAttributes.kt": "94e84ea8f5d4cff24bae62fe7fe633b14ff1274a2b2256926bcdaec6aff7eb42",
     "kotlin/ProgressAttributes.kt": "8cbc151ea0fba44f05648f26ebed9be742139f0c39c521fa88a0170e3d7920b7",
     "kotlin/RadioAttributes.kt": "ed24b93ba40b2aa9778498f62bc5b383ec6618452b393889d45b2fb5d3cdb1e4",
     "kotlin/SafeAreaViewAttributes.kt": "693491ed70ae08c35b172670f5e8f082a9b9dad4b89f81eac4c065a096b4de23",
@@ -56,7 +56,7 @@
     "ruby/indicator_attributes.rb": "56f89f46222509b33c7e14a42363dc6b28ddae7d7c3475b37988ef560217bf34",
     "ruby/input_attributes.rb": "192afd450ebc995004b2c834022fa6e33953eec039ef4ff33cf19018f987a944",
     "ruby/label_attributes.rb": "58e8fbcaf2f6515836d7feb7297fc61339577faa34702bd6fa41fb243b0aa583",
-    "ruby/network_image_attributes.rb": "efa7b6fb59dc5840a5959f3ab3d48ffdaf302bd67ec9389dca54f61d16373101",
+    "ruby/network_image_attributes.rb": "e8ce934accc8f5d752a2c005284e778f0019883fa67a13d5fbafca3cd23df64d",
     "ruby/progress_attributes.rb": "aa68d3fb931db997fdfbb95eff675bd791dd2ced198896cb16265af6497ad3b8",
     "ruby/radio_attributes.rb": "1b4062e2bf07b786f6fbcf608ef9f920f819fa5085a1634a9bd61bb02f800c19",
     "ruby/safe_area_view_attributes.rb": "9c0da39e9b1248f7c4091dcdf3f55388df88bc76919968e0cc49b21d9fec935a",
@@ -90,7 +90,7 @@
     "swift/IndicatorAttributes.swift": "1a3c46ec53d50d6d8d0fc551f933cd128eb94018e2c472943c42f3a93239d7a0",
     "swift/InputAttributes.swift": "a12fc398a43d6926d2a1da2bab6a21c8f8bb43c50b0710dc0c8c1e5535bcfb31",
     "swift/LabelAttributes.swift": "d0417eb51c9437a939c50e57317f788b337fc801ce58579a96dc0dc647010eba",
-    "swift/NetworkImageAttributes.swift": "975353efb2050bca43e2ca6ae5c6ee2c5b1ddcf1a3a3bd75fe4e1f93a2a00259",
+    "swift/NetworkImageAttributes.swift": "2beb33c264bc03ca96931bb2288dc5e45b7fd91d84ec65d7b122245b649b94cb",
     "swift/ProgressAttributes.swift": "389098a1fbba01fab044e1a632632e32a55eb1fed63fe6c80ff1ef07d03655f6",
     "swift/RadioAttributes.swift": "553c40a9d27b4852e43eeb8cb7234f6da70a09232ca1851387e8353db41ebf4f",
     "swift/SafeAreaViewAttributes.swift": "ab04f23a4c550b6364aa9d6761a98c3b62cb1cce82b2b7e13361a4c662d4af93",
