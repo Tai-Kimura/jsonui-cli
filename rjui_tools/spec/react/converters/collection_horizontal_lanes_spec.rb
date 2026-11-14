@@ -139,9 +139,9 @@ RSpec.describe 'rjui Collection: horizontal lanes' do
     # Section 0, 2 lanes of (100 - 4) / 2 = 48: A0 A1 down the first column, A2 at the top of the next.
     expect(at.values_at('A0', 'A1', 'A2')).to eq([[0, 0], [0, 52], [48, 0]]), at.inspect
     # Section 1, one lane: after section 0's block (2 columns: 40 + 8 + 40) and the 8 between blocks.
-    expect(at.values_at('B0', 'B1')).to eq([[96, 0], [144, 0]]), at.inspect
-    # Section 2, 3 lanes of (100 - 2 × 4) / 3 ≈ 30.7: C0 C1 C2 down a new column, C3 at the top of the next.
-    c = at.values_at('C0', 'C1', 'C2', 'C3')
+    expect(at.values_at('B3', 'B4')).to eq([[96, 0], [144, 0]]), at.inspect
+    # Section 2, 3 lanes of (100 - 2 × 4) / 3 ≈ 30.7: C5 C6 C7 down a new column, C8 at the top of the next.
+    c = at.values_at('C5', 'C6', 'C7', 'C8')
     expect(c.map(&:first).uniq.size).to eq(2), at.inspect
     expect([c[0][0], c[1][0], c[2][0]].uniq).to eq([192]), at.inspect
     expect([c[0][1], c[1][1] > c[0][1], c[2][1] > c[1][1], c[3]]).to eq([0, true, true, [240, 0]]), at.inspect

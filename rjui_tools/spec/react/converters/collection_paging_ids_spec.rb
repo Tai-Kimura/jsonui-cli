@@ -12,6 +12,9 @@ require 'react/converters/collection_converter'
 # pages — sjui's page tag and accessibility identifier, and kjui's pager test
 # tag, count the same way. Until jsonui-cli 1.9.0 each section's items were
 # `<id>_item_0…` again, so two sections' first pages answered one address.
+# From jsonui-cli 2.5.39 every route counts the same way (a list, a grid, a
+# flow, horizontal or vertical): the address is the cell's place among the
+# cells of the drawn sections, the n of scrollTo's Int.
 #
 # And a pager's pages are its cells (round 6's ruling, every drawn section in
 # order): a section's header and footer are not pages, as sjui's TabView,
@@ -87,18 +90,18 @@ RSpec.describe 'rjui Collection: paging item ids count across the sections' do
     expect(pages(convert('sections' => PAGING_IDS_SECTIONS), [2, 5, 3, 1])).to eq((0..5).map { |i| "pager_item_#{i}" })
   end
 
-  it 'control: a horizontal list draws the headers and footers among its children' do
+  it 'a horizontal list draws the headers and footers among its children, and its cells count across the sections as a pager does' do
     list = convert('paging' => false, 'sections' => PAGING_IDS_SECTIONS)
-    expect(pages(list, [2, 5, 3, 1])).to eq(%w[pager_item_0 pager_item_1 (no\ id) (no\ id) (no\ id) pager_item_0 pager_item_1
-                                                pager_item_2 pager_item_0])
+    expect(pages(list, [2, 5, 3, 1])).to eq(%w[pager_item_0 pager_item_1 (no\ id) (no\ id) (no\ id) pager_item_2 pager_item_3
+                                                pager_item_4 pager_item_5])
   end
 
   # A vertical Collection with `paging` is a list on iOS and Android (their
   # pagers are horizontal), so the web draws it as one too, whatever it snaps.
-  it 'control: a list keeps each section counting from 0 (only a pager is one run of pages)' do
+  it 'a vertical list counts its cells across the sections too (the address is one run on every route)' do
     [false, true].each do |paging|
       list = convert('layout' => 'vertical', 'paging' => paging, 'sections' => PAGING_IDS_SECTIONS.values_at(0, 2))
-      expect(ids(list, [2, 3])).to eq(%w[pager_item_0 pager_item_1 pager_item_0 pager_item_1 pager_item_2]), paging.to_s
+      expect(ids(list, [2, 3])).to eq((0..4).map { |i| "pager_item_#{i}" }), paging.to_s
       expect(pages(list, [2, 3]).count('(no id)')).to eq(2), paging.to_s # A's footer, B's header
     end
   end
