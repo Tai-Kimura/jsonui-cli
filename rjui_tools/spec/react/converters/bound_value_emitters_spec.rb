@@ -375,10 +375,12 @@ RSpec.describe 'bound value emitters' do
   # The other half of the contract, and the reason the change is safe: a value
   # with no binding in it takes the byte-identical path it always took.
   describe 'static values are untouched' do
-    it 'still maps a numeric fontSize to a class and emits no style' do
+    it 'still maps a numeric fontSize to a class and emits no bound style' do
       out = label('fontSize' => 16)
       expect(out).to include('text-base')
-      expect(out).not_to include('style={{')
+      # The only inline style is the font provider's spread (P1: every text
+      # goes through Configuration.Font.resolve), not a bound fontSize.
+      expect(out[/style=\{\{(.*?)\}\}/, 1].to_s.strip).to eq('...Configuration.Font.resolve({ size: 16, italic: false })')
     end
 
     it 'still maps a numeric cornerRadius and spacing to classes' do

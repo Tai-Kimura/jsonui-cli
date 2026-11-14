@@ -6,6 +6,7 @@ require 'json'
 require 'fileutils'
 require 'rbconfig'
 require_relative '../spec_helper'
+require_relative '../support/configuration_runtime'
 require 'core/config_manager'
 
 # An include draws the including layout's data (ruling 2026-10-02;
@@ -29,6 +30,7 @@ RSpec.describe 'an include draws the including layout data, through rjui build' 
   IRD_ESBUILD = File.expand_path('../support/node_modules/esbuild', __dir__)
 
   IRD_NODE_PROGRAM = <<~JS
+    #{ConfigurationRuntime.global_js}
     const fs = require('fs');
     const esbuild = require(process.argv[2]);
     const files = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
@@ -115,6 +117,7 @@ RSpec.describe 'an include draws the including layout data, through rjui build' 
   # records what it is called with; the rendered tree shows which tab's
   # content is drawn, and tab 0's button is pressed.
   IRD_TABS_PROGRAM = <<~JS
+    #{ConfigurationRuntime.global_js}
     const fs = require('fs'); const esbuild = require(process.argv[2]);
     const files = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
     const strip = (src) => src.split('\\n').filter((l) => !l.startsWith('import ')).join('\\n')

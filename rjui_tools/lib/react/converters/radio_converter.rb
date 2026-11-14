@@ -103,7 +103,10 @@ module RjuiTools
           end
 
           label_jsx = if label_text && !label_text.empty?
-                        "#{indent_str(indent + 2)}<span className=\"font-medium\">#{convert_text_binding(label_text)}</span>\n"
+                        # The title draws medium on its own (`font-medium`): its
+                        # FontSpec says so, so a provider that maps a weight to a
+                        # face draws it in the medium face (P1).
+                        "#{indent_str(indent + 2)}<span className=\"font-medium\" style={{ #{text_font_spread(weight: 'medium')} }}>#{convert_text_binding(label_text)}</span>\n"
                       else
                         ''
                       end

@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+require_relative 'configuration_runtime'
 
 require 'open3'
 require 'tmpdir'
@@ -89,7 +90,7 @@ module RjuiChromiumDraw
       log, st = Open3.capture2e('node', File.join(dir, 'strip.js'), File.join(dir, 'files.json'), File.join(dir, 'components.js'))
       raise "esbuild: #{log}" unless st.success?
 
-      app = "#{APP}\n#{File.read(File.join(dir, 'components.js'))}\n" \
+      app = "#{APP}\n#{ConfigurationRuntime.js}\n#{File.read(File.join(dir, 'components.js'))}\n" \
             "document.body.append(h(Screen, {}));\nfor (const e of effects) e();\nwindow.__drawn = true;\n"
       File.write(File.join(dir, 'app.js'), "(() => {\n#{app}\n})();\n")
       File.write(File.join(dir, 'content.html'), files.map { |f| File.read(f) }.join("\n"))
