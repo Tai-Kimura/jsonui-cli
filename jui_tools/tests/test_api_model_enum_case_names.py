@@ -269,7 +269,10 @@ class PinnedResolverTests(unittest.TestCase):
     def test_reads_the_fetch_scripts_pins(self):
         pinned = _pinned()
         self.assertEqual(pinned[("org.jetbrains.kotlin", "kotlin-compiler-embeddable")], "2.1.0")
-        self.assertEqual(len(pinned), len(re.findall(r'^\s+"\S+ \S+ \S+ [0-9a-f]{64}"$', FETCH_SCRIPT.read_text(), re.M)))
+        # Every line of the `jars=(...)` list; `warnings_jars=(...)` (the warnings arms' own compiler) is not these arms'.
+        block = re.search(r"^jars=\((.*?)^\)", FETCH_SCRIPT.read_text(), re.M | re.S).group(1)
+        self.assertEqual(len(pinned), len(re.findall(r'^\s+"\S+ \S+ \S+ [0-9a-f]{64}"$', block, re.M)))
+        self.assertNotIn("2.4.21", set(pinned.values()))
 
     def test_takes_the_pinned_compiler_beside_a_newer_one(self):
         with tempfile.TemporaryDirectory() as tmp:
