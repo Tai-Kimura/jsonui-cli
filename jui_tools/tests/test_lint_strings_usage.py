@@ -1060,3 +1060,22 @@ class ToolCopiesAreNotScannedTests(unittest.TestCase):
         report = _usage(self.GROUPS, roots={"web": web.root})
         self.assertEqual(report.scanned_files, 2)
         self.assertEqual(report.unused, [])
+
+
+class LibraryKeysAreUsedTests(unittest.TestCase):
+    """The keys a library reads by name at run time (rule.a11yNames in shared/core/reorder_vectors.json) are used
+    when an app declares them, though no layout or app code names them; any other key in the same section is not."""
+
+    def test_the_reorder_names_are_used_and_a_neighbour_is_not(self):
+        groups = {"jsonui": {"reorder_move_up": "Nach oben", "reorder_move_down": "Nach unten",
+                             "reorder_moved_to": "Auf Position %d verschoben", "reorder_typo": "x"}}
+        report = _usage(groups)
+        self.assertEqual([f.site for f in report.unused], ["jsonui.reorder_typo"])
+
+    def test_the_names_match_the_vectors_rule(self):
+        import json
+        from jui_cli.commands.lint_strings_usage import LIBRARY_KEYS
+        rule = json.loads((Path(__file__).resolve().parents[2] / "shared/core/reorder_vectors.json")
+                          .read_text(encoding="utf-8"))["rule"]["a11yNames"]
+        for section, key in LIBRARY_KEYS:
+            self.assertIn(f"{section}.{key}", rule)

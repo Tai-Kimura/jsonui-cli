@@ -3,6 +3,7 @@
 
 require 'json'
 require_relative 'tap_accessibility'
+require_relative 'control_accessibility'
 require_relative 'enum_spelling'
 require_relative 'type_synonyms'
 
@@ -258,6 +259,9 @@ module JsonUIShared
         if attr_def['required'] && !merged_component.key?(attr_name)
           # Skip width/height required check if weight is set and parent orientation allows it
           next if skip_dimension_required?(attr_name, merged_component, parent_orientation)
+          # A component the declaration exempts by name (`notRequiredFor`: section -> reason): a
+          # SelectBox's height, which it takes from its content when it is left out.
+          next if not_required_for?(attr_def, type)
 
           add_warning("Required attribute '#{attr_name}' is missing for component type '#{type}'")
         end
@@ -271,6 +275,9 @@ module JsonUIShared
 
       # `bind` beside the component's own value attribute
       check_bind_beside_own_value(merged_component, type)
+
+      # accessibilitySelected where it tells a screen reader nothing
+      check_accessibility_selected(merged_component)
 
       # A value attribute of the other kind (a Date SelectBox's selectedValue)
       check_value_attribute_of_another_kind(merged_component, type)
@@ -540,6 +547,12 @@ module JsonUIShared
       return unless Array(info['platform']).include?(self.class::PLATFORM)
 
       add_kept_info(@binding_infos, "'#{key}' on #{type} is bound: #{info['note']}")
+    end
+
+    # Whether `required` does not hold for this component (`notRequiredFor`: section -> reason).
+    def not_required_for?(attr_def, type)
+      table = attr_def['notRequiredFor']
+      table.is_a?(Hash) && table.key?(map_type_to_definition(type))
     end
 
     def not_applicable_reason(attr_def, type)
@@ -1028,6 +1041,18 @@ module JsonUIShared
       return unless text.is_a?(Hash) && text['binding_direction'] == 'two-way'
 
       add_warning("onClick on a #{section} is not called: a text field's tap focuses it")
+    end
+
+    # accessibilitySelected tells a screen reader the selected state only
+    # where the node is one button to it (shared/core/control_accessibility.rb
+    # `selected`): a Button, or a View / IconLabel the tap rule makes one
+    # button. Elsewhere nothing is told on any platform — this is the one
+    # sentence that says so, from the validator all three tools run.
+    def check_accessibility_selected(component)
+      return unless JsonUIShared::ControlAccessibility.selected_misplaced?(component)
+
+      add_warning("accessibilitySelected tells a screen reader nothing here: it takes effect on a Button, " \
+                  "and on a View or IconLabel whose onClick makes it one button (no control inside it, its tap not shut)")
     end
 
     # `bind` is an alternative spelling of the component's own value

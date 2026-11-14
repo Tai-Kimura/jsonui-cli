@@ -21,6 +21,7 @@
         "Two",
         "Three"
       ],
+      "selectedIndex": 0,
       "fontScaling": true
     }
   ]

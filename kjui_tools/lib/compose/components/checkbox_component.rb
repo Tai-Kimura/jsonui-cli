@@ -124,7 +124,8 @@ module KjuiTools
             )
             var = 'checkBoxFont'  # its own Row's lambda: one per scope, so a fixed name
             code += "\n" + Helpers::FontSpecHelper.emit_resolve_block(var, spec, depth + 1, required_imports)
-            text_params.concat(Helpers::FontSpecHelper.text_arg_fragments(var, required_imports, json_data))
+            text_params.concat(Helpers::FontSpecHelper.text_arg_fragments(var, required_imports, json_data,
+                                                                          line: json_data['fontSize'] ? true : nil))
 
             if json_data['fontColor']
               font_color = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)

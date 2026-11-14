@@ -1629,6 +1629,12 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     "maxFontScale": {"root.textScale": 2.0},
     "TextView.fontScaling": {"text": "Sample", "root.textScale": 2.0},
     "TextView.maxFontScale": {"text": "Sample", "root.textScale": 2.0},
+    # A selected value and a label to scale: without them the closed SelectBox and the Switch drew no text, so the
+    # rule went unmeasured on them (2026-11-14: Android's CheckBox kept a hole such a fixture could not see).
+    "SelectBox.fontScaling": {"selectedIndex": 0, "root.textScale": 2.0},
+    "SelectBox.maxFontScale": {"selectedIndex": 0, "root.textScale": 2.0},
+    "Switch.fontScaling": {"label": "Sample", "root.textScale": 2.0},
+    "Switch.maxFontScale": {"label": "Sample", "root.textScale": 2.0},
     "TextField.fontScaling": {"text": "Sample", "root.textScale": 2.0},
     "TextField.maxFontScale": {"text": "Sample", "root.textScale": 2.0},
     # Text-styling attributes need TEXT to style: the TextField/TextView base
@@ -2158,6 +2164,12 @@ BASE_ATTRS_BY_ATTRIBUTE: dict[str, dict[str, Any]] = {
     # tapBackground on a View is drawn only on a View with a tap (ruling (a)),
     # so the View host carries one (COMMON_EXTRA_HOSTS).
     "View.tapBackground": {"onClick": "@{conformanceTap}"},
+    # accessibilitySelected tells a screen reader only where the node is one
+    # button (shared/core/control_accessibility.rb `selected`): a View or an
+    # IconLabel with a tap. Without one the rule says nothing and the probe
+    # would read an unread spelling.
+    "View.accessibilitySelected": {"onClick": "@{conformanceTap}"},
+    "IconLabel.accessibilitySelected": {"onClick": "@{conformanceTap}"},
     # `direction` reverses the children of an ORIENTED container; with no
     # orientation the canonical answer is "no effect", so the fixture has to
     # supply one or it can never show anything. One orientation cannot serve

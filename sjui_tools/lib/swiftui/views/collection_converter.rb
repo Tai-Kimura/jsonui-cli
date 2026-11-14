@@ -2975,8 +2975,26 @@ module SjuiTools
           # standard reorderable moves a locked row while the finger drags.
           locked = @component['reorderLockedProperty'].is_a?(String) && !@component['reorderLockedProperty'].empty?
           name = handler_property(@component['onReorder'])
-          "CollectionReorder(isEnabled: #{enabled}, usesHandle: #{uses_handle}, hasLockedRows: #{locked}, " \
-            "onReorder: { section, from, to in data.#{name}?(section, from, to) })"
+          # Fixed rows (reorderFixedProperty) keep the library's drag too; the argument only when declared, so a
+          # Collection without it is emitted as it was.
+          fixed = reorder_fixed_property ? 'hasFixedRows: true, ' : ''
+          # onReorderStart (section, index) / onReorderEnd (section), only when declared (rule.callbacks; ticket
+          # jui-collection-reorder-start-callback-missing): a Collection without them is emitted as it was.
+          callbacks = +''
+          if handler_reference?(@component['onReorderStart'])
+            callbacks << "onReorderStart: { section, index in data.#{handler_property(@component['onReorderStart'])}?(section, index) }, "
+          end
+          if handler_reference?(@component['onReorderEnd'])
+            callbacks << "onReorderEnd: { section in data.#{handler_property(@component['onReorderEnd'])}?(section) }, "
+          end
+          "CollectionReorder(isEnabled: #{enabled}, usesHandle: #{uses_handle}, hasLockedRows: #{locked}, #{fixed}" \
+            "#{callbacks}onReorder: { section, from, to in data.#{name}?(section, from, to) })"
+        end
+
+        # reorderFixedProperty's key, or nil (ticket jui-collection-reorder-fixed-row-vs-barrier-row).
+        def reorder_fixed_property
+          prop = @component['reorderFixedProperty']
+          prop.is_a?(String) && !prop.empty? ? prop : nil
         end
 
         # A section's rows through CollectionReorderRows; `style` is :list or :stack.
@@ -2987,8 +3005,13 @@ module SjuiTools
                    else
                      '[]'
                    end
+          fixed = if (fixed_prop = reorder_fixed_property)
+                    ", fixed: Set(#{cells_expr}.indices.filter { (#{cells_expr}[$0][\"#{fixed_prop}\"] as? Bool) == true })"
+                  else
+                    ''
+                  end
           ids = "#{cells_expr}.enumerated().map { index, data in #{cell_key_expr('data', 'index')} }"
-          add_line "CollectionReorderRows(section: #{section_index}, ids: #{ids}, locked: #{locked}, reorder: #{reorder_value_expr}, style: .#{style}) { index in"
+          add_line "CollectionReorderRows(section: #{section_index}, ids: #{ids}, locked: #{locked}#{fixed}, reorder: #{reorder_value_expr}, style: .#{style}) { index in"
           indent do
             vars = { data_var: "#{cells_expr}[index]", index_var: 'index' }
             add_line "#{cell_view_name}(data: #{cell_data_arg(vars)})#{equatable ? '.equatable()' : ''}"

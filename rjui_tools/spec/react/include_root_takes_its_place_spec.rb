@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../spec_helper'
+require_relative '../support/configuration_runtime'
 require_relative '../../lib/cli/commands/build_command'
 require 'react/react_generator'
 require 'react/include_place'
@@ -157,6 +158,7 @@ RSpec.describe 'an included layout root takes its place in the including layout'
 
     it 'drops, keeps and adds' do
       out, err, st = Open3.capture3('node', '--input-type=module', '-e', <<~JS)
+        #{ConfigurationRuntime.global_js}
         #{helper_source(typescript: false)}
         console.log(JSON.stringify([
           jsonuiPlaceClass('w-2  flex-1 min-w-0 mt-auto', { add: 'self-stretch', drop: 'flex-1 min-w-0' }),
@@ -240,6 +242,7 @@ RSpec.describe 'an included layout root takes its place in the including layout'
         raise "tailwindcss: #{log}" unless st.success?
 
         File.write(File.join(dir, 'app.jsx'), <<~JSX)
+          #{ConfigurationRuntime.global_js}
           const h = (tag, props, ...kids) => {
             if (typeof tag === 'function') return tag(props || {});
             const el = document.createElement(tag);

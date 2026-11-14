@@ -235,6 +235,7 @@ module KjuiTools
             # Every text size through the text size rule (Helpers::FontScale).
             json_ui_font_size: "import com.kotlinjsonui.core.jsonUIFontSize",
             json_ui_letter_spacing: "import com.kotlinjsonui.core.jsonUILetterSpacing",
+            json_ui_line_height: "import com.kotlinjsonui.core.jsonUILineHeight",
             graphics_layer: "import androidx.compose.ui.graphics.graphicsLayer",
             LaunchedEffect: "import androidx.compose.runtime.LaunchedEffect",
             launched_effect: "import androidx.compose.runtime.LaunchedEffect",
@@ -284,6 +285,8 @@ module KjuiTools
             semantics_live_region: ["import androidx.compose.ui.semantics.semantics",
                                     "import androidx.compose.ui.semantics.liveRegion",
                                     "import androidx.compose.ui.semantics.LiveRegionMode"],
+            semantics_selected: ["import androidx.compose.ui.semantics.semantics",
+                                 "import androidx.compose.ui.semantics.selected"],
             image: "import androidx.compose.foundation.Image",
             color_filter: "import androidx.compose.ui.graphics.ColorFilter",
             local_content_color: "import androidx.compose.material3.LocalContentColor",

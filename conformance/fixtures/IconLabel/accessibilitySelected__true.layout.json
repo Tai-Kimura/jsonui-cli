@@ -13,14 +13,19 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "SelectBox",
+      "type": "IconLabel",
       "id": "target",
       "width": 200,
-      "items": [
-        "One",
-        "Two",
-        "Three"
-      ]
+      "height": "wrapContent",
+      "text": "Sample",
+      "onClick": "@{conformanceTap}",
+      "accessibilitySelected": true
+    }
+  ],
+  "data": [
+    {
+      "name": "conformanceTap",
+      "class": "() -> Void"
     }
   ]
 }

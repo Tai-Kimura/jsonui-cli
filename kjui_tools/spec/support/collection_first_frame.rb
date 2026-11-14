@@ -85,12 +85,14 @@ module CollectionFirstFrame
     }
     inline fun <T> key(vararg keys: Any?, block: () -> T): T = block()
     // KotlinJsonUI's CollectionReorder API, the signatures as the library declares them, drawing nothing of its own.
-    class CollectionReorder(val isEnabled: Boolean, val usesHandle: Boolean = false, val onReorder: (Int, Int, Int) -> Unit)
+    class CollectionReorder(val isEnabled: Boolean, val usesHandle: Boolean = false,
+                            val onReorderStart: ((Int, Int) -> Unit)? = null, val onReorderEnd: ((Int) -> Unit)? = null,
+                            val onReorder: (Int, Int, Int) -> Unit)
     class CollectionReorderState
     fun rememberCollectionReorder(reorder: CollectionReorder?, scrollsItself: Boolean = true): CollectionReorderState = CollectionReorderState()
     fun Modifier.collectionReorderContainer(state: CollectionReorderState): Modifier = this
     fun CollectionReorderScope(state: CollectionReorderState, content: () -> Unit) { content() }
-    fun CollectionReorderRow(state: CollectionReorderState?, section: Int, index: Int, count: Int, locked: Set<Int> = emptySet(), content: () -> Unit) { content() }
+    fun CollectionReorderRow(state: CollectionReorderState?, section: Int, index: Int, count: Int, locked: Set<Int> = emptySet(), fixed: Set<Int> = emptySet(), id: String? = null, content: () -> Unit) { content() }
     fun Modifier.collectionReorderActions(): Modifier = this
     object com { object kotlinjsonui { object utils { object CellIdGenerator {
         fun enrichCellIds(data: List<Map<String, Any>>, property: String): List<Map<String, Any>> = data
@@ -154,7 +156,8 @@ module CollectionFirstFrame
         class CellData(val viewName: String, val data: List<Map<String, Any>>)
         class HeaderFooterData(val viewName: String, val data: Map<String, Any>)
     }
-    class Data(val rows: CollectionDataSource? = null, val editing: Boolean = true, val onMove: ((Int, Int, Int) -> Unit)? = null)
+    class Data(val rows: CollectionDataSource? = null, val editing: Boolean = true, val onMove: ((Int, Int, Int) -> Unit)? = null,
+               val onStart: ((Int, Int) -> Unit)? = null, val onEnd: ((Int) -> Unit)? = null)
     fun cells(name: String, n: Int, rev: String) = CollectionDataSection.CellData(name, List(n) { mapOf<String, Any>("id" to "$name$it$rev") })
     fun edge(name: String, rev: String) = CollectionDataSection.HeaderFooterData(name, mapOf<String, Any>("id" to "$name$rev"))
     fun rows(rev: String) = Data(CollectionDataSource(listOf(

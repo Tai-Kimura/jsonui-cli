@@ -1622,7 +1622,7 @@ module KjuiTools
               if @reorder
                 # A reorderable row (ticket jui-collection-drag-to-reorder): the item's root is the row.
                 out += "\n" + reorder_locked_line(list, 'reorderLocked', d + 1)
-                out += "\n" + indent("CollectionReorderRow(#{@reorder[:var]}, sectionIndex, cellIndex, #{list}.size, reorderLocked) {", d + 1)
+                out += "\n" + indent("CollectionReorderRow(#{@reorder[:var]}, sectionIndex, cellIndex, #{list}.size, reorderLocked#{reorder_fixed_arg('reorderLocked')}#{reorder_id_arg(reorder_row_key_expr(json_data, "#{list}[cellIndex]"))}) {", d + 1)
               end
               out += "\n" + indent("Box(", d + 1)
               out += "\n" + indent("modifier = Modifier.fillMaxSize(),", d + 2)
@@ -1697,7 +1697,7 @@ module KjuiTools
             code += "\n" + reorder_locked_line('reorderCells', 'reorderLocked', depth)
             code += "\n" + indent("reorderCells.forEachIndexed { cellIndex, currentCellData ->", depth)
             code += "\n" + indent("val sectionIndex = 0", depth + 1)
-            code += "\n" + indent("key(#{reorder_row_key_expr(json_data, 'currentCellData')}) { CollectionReorderRow(#{@reorder[:var]}, 0, cellIndex, reorderCells.size, reorderLocked) {", depth + 1)
+            code += "\n" + indent("key(#{reorder_row_key_expr(json_data, 'currentCellData')}) { CollectionReorderRow(#{@reorder[:var]}, 0, cellIndex, reorderCells.size, reorderLocked#{reorder_fixed_arg('reorderLocked')}#{reorder_id_arg(reorder_row_key_expr(json_data, 'currentCellData'))}) {", depth + 1)
             code += class_list_cell(json_data, cell_name, depth + 2, required_imports, cell_extra: cell_extra + place.call('cellIndex') + '.collectionReorderActions()')
             code += "\n" + indent("} }", depth + 1)
             code += "\n" + indent("}", depth)
@@ -1752,7 +1752,7 @@ module KjuiTools
               code += "\n" + indent("val reorderCells = section.cells?.data.orEmpty()", depth + 1)
               code += "\n" + reorder_locked_line('reorderCells', 'reorderLocked', depth + 1)
               code += "\n" + indent("reorderCells.forEachIndexed { cellIndex, currentCellData ->", depth + 1)
-              code += "\n" + indent("key(#{reorder_row_key_expr(json_data, 'currentCellData')}) { CollectionReorderRow(#{@reorder[:var]}, sectionIndex, cellIndex, reorderCells.size, reorderLocked) {", depth + 2)
+              code += "\n" + indent("key(#{reorder_row_key_expr(json_data, 'currentCellData')}) { CollectionReorderRow(#{@reorder[:var]}, sectionIndex, cellIndex, reorderCells.size, reorderLocked#{reorder_fixed_arg('reorderLocked')}#{reorder_id_arg(reorder_row_key_expr(json_data, 'currentCellData'))}) {", depth + 2)
               code += class_list_cell(json_data, cell_name, depth + 3, required_imports, cell_extra: cell_extra + '.collectionReorderActions()')
               code += "\n" + indent("} }", depth + 2)
               code += "\n" + indent("}", depth + 1)
@@ -2863,7 +2863,7 @@ module KjuiTools
                             'cellIndex'
                           end
                 code += "\n" + indent("#{data_access}.forEachIndexed { cellIndex, _ ->", depth + 3)
-                code += "\n" + indent("key(#{row_key}) { CollectionReorderRow(#{@reorder[:var]}, #{index}, cellIndex, #{data_access}.size, reorderLocked#{index}) {", depth + 4)
+                code += "\n" + indent("key(#{row_key}) { CollectionReorderRow(#{@reorder[:var]}, #{index}, cellIndex, #{data_access}.size, reorderLocked#{index}#{reorder_fixed_arg("reorderLocked#{index}")}#{reorder_id_arg(row_key)}) {", depth + 4)
                 code += cell.call(depth + 5)
                 code += "\n" + indent("} }", depth + 4)
                 code += "\n" + indent("}", depth + 3)
@@ -3073,13 +3073,29 @@ module KjuiTools
                     end
           name = Helpers::BindingExpression.path_only(Helpers::ModifierBuilder.string_event_name(json_data['onReorder']))
           uses_handle = json_data['reorderHandle'].is_a?(String) && !json_data['reorderHandle'].empty?
-          @reorder = { var: var, locked: json_data['reorderLockedProperty'] }
+          @reorder = { var: var, locked: json_data['reorderLockedProperty'], fixed: json_data['reorderFixedProperty'] }
+          # onReorderStart (section, index) / onReorderEnd (section) when declared (shared/core/reorder_vectors.json
+          # rule.callbacks), named, before onReorder's trailing lambda; undeclared, the emit is as it was.
+          callbacks = ''
+          if (start = reorder_callback_name(json_data['onReorderStart']))
+            callbacks += ", onReorderStart = { s, i -> data.#{start}?.invoke(s, i) }"
+          end
+          if (finish = reorder_callback_name(json_data['onReorderEnd']))
+            callbacks += ", onReorderEnd = { s -> data.#{finish}?.invoke(s) }"
+          end
           prelude = indent("val #{var} = rememberCollectionReorder(", depth) + "\n" +
-                    indent("if (#{enabled}) CollectionReorder(true, #{uses_handle}) { s, f, t -> data.#{name}?.invoke(s, f, t) } else null,", depth + 1) + "\n" +
+                    indent("if (#{enabled}) CollectionReorder(true, #{uses_handle}#{callbacks}) { s, f, t -> data.#{name}?.invoke(s, f, t) } else null,", depth + 1) + "\n" +
                     indent("scrollsItself = #{scrolls},", depth + 1) + "\n" +
                     indent(")", depth) + "\n" +
                     indent("CollectionReorderScope(#{var}) {", depth) + "\n"
           [prelude, "\n" + indent("}", depth)]
+        end
+
+        # A declared callback's property path (the binding or the bare name), or nil.
+        def self.reorder_callback_name(value)
+          return nil unless value.is_a?(String) && JsonUIShared::TapAccessibility.handler?(value)
+
+          Helpers::BindingExpression.path_only(Helpers::ModifierBuilder.string_event_name(value))
         end
 
         # The Collection's code, opened in the reorder when it declares one (else as it was).
@@ -3095,6 +3111,12 @@ module KjuiTools
         end
 
         # A row's key for `key(...)`: its cellId, its cellIdProperty value, else its index.
+        # The row's id handed to CollectionReorderRow (its key): the drag compares the rows' ids when the data changes
+        # under it, and cancels (rule.itemsChange; ticket jui-collection-reorder-start-callback-missing).
+        def self.reorder_id_arg(key_expr)
+          ", id = (#{key_expr}).toString()"
+        end
+
         def self.reorder_row_key_expr(json_data, data_var)
           cip = json_data['cellIdProperty']
           by_prop = cip.is_a?(String) && !cip.empty? ? " ?: (#{data_var}[#{JsonUIShared::StringLiterals.kotlin(cip)}] as? String)" : ''
@@ -3109,7 +3131,20 @@ module KjuiTools
                  else
                    'emptySet<Int>()'
                  end
-          indent("val #{var_name} = #{expr}", depth)
+          line = indent("val #{var_name} = #{expr}", depth)
+          fixed = @reorder && @reorder[:fixed]
+          return line unless fixed.is_a?(String) && !fixed.empty?
+
+          # reorderFixedProperty (ticket jui-collection-reorder-fixed-row-vs-barrier-row): the rows that do not move
+          # but are passed. Only when declared, so a Collection without it is written as before.
+          line + "\n" + indent("val #{var_name}Fixed = remember(#{data_access}) { #{data_access}.indices.filter { " \
+                                 "#{data_access}[it][#{JsonUIShared::StringLiterals.kotlin(fixed)}] == true }.toSet() }", depth)
+        end
+
+        # The fixed set's argument after a locked set (reorder_locked_line), or nothing.
+        def self.reorder_fixed_arg(var_name)
+          fixed = @reorder && @reorder[:fixed]
+          fixed.is_a?(String) && !fixed.empty? ? ", #{var_name}Fixed" : ''
         end
 
         def self.generate_collection_stack(json_data, sections, depth, required_imports, parent_type, is_horizontal:)
@@ -3508,7 +3543,7 @@ module KjuiTools
               out += "\n" + indent("items(#{data_access}.size) { cellIndex ->", depth + 2)
             end
             # A reorderable row (ticket jui-collection-drag-to-reorder): the item's root is the row.
-            out += "\n" + indent("CollectionReorderRow(#{@reorder[:var]}, #{index}, cellIndex, #{data_access}.size, reorderLocked#{index}) {", depth + 2) if @reorder
+            out += "\n" + indent("CollectionReorderRow(#{@reorder[:var]}, #{index}, cellIndex, #{data_access}.size, reorderLocked#{index}#{reorder_fixed_arg("reorderLocked#{index}")}#{reorder_id_arg(reorder_row_key_expr(json_data, "#{data_access}[cellIndex]"))}) {", depth + 2) if @reorder
 
             on_item_appear = json_data['onItemAppear']
             if (appear_name = Helpers::ModifierBuilder.string_event_name(on_item_appear))
@@ -3631,7 +3666,7 @@ module KjuiTools
                         else
                           'cellIndex'
                         end
-              out += "\n" + indent("key(#{row_key}) { CollectionReorderRow(#{@reorder[:var]}, #{index}, cellIndex, #{data_access}.size, reorderLocked#{index}) {", depth + 2)
+              out += "\n" + indent("key(#{row_key}) { CollectionReorderRow(#{@reorder[:var]}, #{index}, cellIndex, #{data_access}.size, reorderLocked#{index}#{reorder_fixed_arg("reorderLocked#{index}")}#{reorder_id_arg(row_key)}) {", depth + 2)
             end
             on_item_appear = json_data['onItemAppear']
             if (appear_name = Helpers::ModifierBuilder.string_event_name(on_item_appear))

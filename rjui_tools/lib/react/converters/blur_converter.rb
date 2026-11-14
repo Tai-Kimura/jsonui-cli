@@ -64,7 +64,7 @@ module RjuiTools
           if existing_style.empty?
             " style={{ #{style_parts.join(', ')} }}"
           else
-            existing_style.sub(/\}\}$/, ", #{style_parts.join(', ')} }}")
+            existing_style.sub(/\}\}$/) { ", #{style_parts.join(', ')} }}" }
           end
         end
 

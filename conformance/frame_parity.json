@@ -29,6 +29,32 @@
       "reason": "Button control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (Material minimum height) — triage K"
     },
     {
+      "fixture": "Button/accessibilitySelected__false",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Button control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (Material minimum height) — triage K"
+    },
+    {
+      "fixture": "Button/accessibilitySelected__true",
+      "id": "target",
+      "outliers": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "Button control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (Material minimum height) — triage K"
+    },
+    {
       "fixture": "Button/disabledFontColor__binding",
       "id": "target",
       "outliers": [
@@ -5302,7 +5328,7 @@
       "reason": "SelectBox: a height the layout does not fix is the content's on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height: 0 above and below, 12 at the sides, the 16 x 16 caret 8 after the text); what still differs is each face's line height for the same font size (the web host's line-height, the platforms' own text metrics), and the vertical position that centres it; the declared width is drawn on every face — triage K, re-stated 2026-11-14"
     },
     {
-      "fixture": "__control/SelectBox__root.textScale-2.0",
+      "fixture": "__control/SelectBox__root.textScale-2.0_selectedIndex-0",
       "id": "target",
       "outliers": [
         "android",
@@ -5396,7 +5422,7 @@
       "reason": "labelled Switch: the thumb (Material3 52 wide) and the label's text width differ by about 7; the declared wrapContent is honoured on every face (the 1280-wide fill was the defect, fixed in KotlinJsonUI 2.43.5) — support lane 1"
     },
     {
-      "fixture": "__control/Switch__root.textScale-2.0",
+      "fixture": "__control/Switch__label-Sample_root.textScale-2.0",
       "id": "target",
       "outliers": [
         "android",

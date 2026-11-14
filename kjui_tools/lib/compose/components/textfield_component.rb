@@ -519,8 +519,10 @@ module KjuiTools
               placeholder_code += ",\n" + indent("color = Configuration.TextField.defaultPlaceholderColor", depth + 2)
             end
 
+            hint_drawn = nil
             if json_data['hintFontSize']
-              placeholder_code += ",\n" + indent("fontSize = #{Helpers::FontScale.wrap(Helpers::BoundValue.sp(json_data['hintFontSize']), json_data, required_imports)}", depth + 2)
+              hint_drawn = Helpers::FontScale.wrap(Helpers::BoundValue.sp(json_data['hintFontSize']), json_data, required_imports)
+              placeholder_code += ",\n" + indent("fontSize = #{hint_drawn}", depth + 2)
               placeholder_code += ",\n" + indent("letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}", depth + 2)
             end
 
@@ -546,7 +548,13 @@ module KjuiTools
                                  line_height = (hint_base.to_f * hint_multiple.to_f)
                                  "#{line_height == line_height.to_i ? line_height.to_i : line_height}.sp"
                                end
-              placeholder_code += ",\n" + indent("style = LocalTextStyle.current.copy(lineHeight = #{Helpers::FontScale.wrap(line_height_sp, json_data, required_imports)})", depth + 2)
+              placeholder_code += ",\n" + indent("style = LocalTextStyle.current.copy(lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: hint_drawn, line: line_height_sp)})", depth + 2)
+            elsif hint_drawn
+              # The theme's line by the text size rule as the size is (ticket
+              # kjui-theme-line-height-scales-under-font-scaling-false); an undeclared hint size follows the system,
+              # and so does its line.
+              required_imports&.add(:local_text_style)
+              placeholder_code += ",\n" + indent("style = LocalTextStyle.current.copy(lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: hint_drawn)})", depth + 2)
             end
 
             placeholder_code += "\n" + indent(") }", depth + 1)

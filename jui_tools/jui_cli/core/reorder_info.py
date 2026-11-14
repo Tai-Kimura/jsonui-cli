@@ -29,6 +29,7 @@ from pathlib import Path
 from .normalizer.style_merger import StyleMerger
 
 TAG = "INFO [ios-reorder]"
+CALLBACKS_TAG = "INFO [ios-reorder-callbacks]"
 #: The iOS where SwiftUI's reorderable() / reorderContainer(for:) begin (@available(iOS 27.0, *) in SDK 27.2).
 STANDARD_FROM = 27.0
 
@@ -102,10 +103,27 @@ def on_the_stack_path(node: dict) -> bool:
         return False
     if node.get("reorderLockedProperty"):   # the library's drag on every iOS: reorderable() moves a locked row too
         return False
+    if _declares_callbacks(node):   # the library's drag on every iOS: reorderContainer has no pick-up / let-go hook
+        return False
     horizontal = node.get("orientation") == "horizontal" or node.get("horizontalScroll") is True \
         or node.get("layout") == "horizontal"
     columns = node.get("columns", 1)
     return not horizontal and (columns in (None, 1) or not isinstance(columns, int))
+
+
+def _declares_callbacks(node: dict) -> bool:
+    return any(isinstance(node.get(k), str) and node.get(k) for k in ("onReorderStart", "onReorderEnd"))
+
+
+def on_the_list_path_with_callbacks(node: dict) -> bool:
+    """A reorderable Collection that iOS draws as a List (onMove) and that declares onReorderStart or onReorderEnd.
+
+    onMove has no pick-up: SwiftJsonUI calls start and end together when the row lands, and a release where it began
+    or a cancelled drag calls neither (rule.callbacks; the orchestrator's ruling 2026-11-14, ticket
+    jui-collection-reorder-start-callback-missing). Said as INFO, not a warning, on every minimum iOS."""
+    if node.get("type") != "Collection" or not _on(node.get("reorderable")) or not _declares_callbacks(node):
+        return False
+    return node.get("lazy") != "none" and bool(node.get("listStyle") or not node.get("sections"))
 
 
 def tree_lines(node, where: str, minimum: float | None, source: str) -> list[str]:
@@ -125,6 +143,13 @@ def tree_lines(node, where: str, minimum: float | None, source: str) -> list[str
                 f"{TAG}: {where}: '{ident}' (Collection) is reorderable: from iOS 27 it uses SwiftUI's standard "
                 f"reordering (reorderable / reorderContainer), and on {below} the library's own drag; "
                 f"{floor}.")
+        if on_the_list_path_with_callbacks(node):
+            ident = node.get("id") if isinstance(node.get("id"), str) else "(no id)"
+            found.append(
+                f"{CALLBACKS_TAG}: {where}: '{ident}' (Collection) declares onReorderStart / onReorderEnd and iOS draws it "
+                f"as a List (onMove), which has no pick-up: start and end come together when the row lands, and a "
+                f"release where it began or a cancelled drag calls neither (a stack, no listStyle with sections, calls "
+                f"them as the rule says).")
         for key, value in node.items():
             if key == "responsive":
                 continue

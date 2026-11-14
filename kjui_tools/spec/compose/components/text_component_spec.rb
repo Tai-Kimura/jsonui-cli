@@ -1073,8 +1073,11 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
         # m x L, each against its own size (attribute_semantics
         # lineHeightMultipleBase): L(24) x 1.5 highlighted, L(14) x 1.2 not.
         expect(result).to include(
-          'lineHeight = if (data.sel) jsonUIFontSize(LabelLineHeight.multiple(24f, 1.5f, LocalTextStyle.current, LocalDensity.current)) ' \
-          'else jsonUIFontSize(LabelLineHeight.multiple(14f, 1.2f, LocalTextStyle.current, LocalDensity.current))'
+          'lineHeight = LabelLineHeight.multiple(24f, 1.5f, LocalTextStyle.current, LocalDensity.current)) ' \
+          'else jsonUILineHeight('
+        )
+        expect(result).to include(
+          'lineHeight = LabelLineHeight.multiple(14f, 1.2f, LocalTextStyle.current, LocalDensity.current))'
         )
       end
 
@@ -1086,7 +1089,8 @@ RSpec.describe KjuiTools::Compose::Components::TextComponent do
           'highlightAttributes' => { 'lineHeightMultiple' => 1.5 }
         }
         result = described_class.generate(json_data, 0, required_imports)
-        expect(result).to include('else LocalTextStyle.current.lineHeight')
+        # The theme's line height, by the text size rule (jsonUILineHeight with no line of its own).
+        expect(result).to match(/else jsonUILineHeight\(jsonUIFontSize\([^\n]*\.size \?: TextUnit\.Unspecified\)\)/)
         expect(result).not_to include('else TextUnit.Unspecified')
       end
 

@@ -32,7 +32,11 @@ module KjuiTools
           wrapper_modifier_parts = []
 
           # Pass weight modifier to VisibilityWrapper so it works within ColumnScope/RowScope
-          weight_value = json_data['weight']
+          # The weight build_weight emits: in a Column `heightWeight` wins over the shorthand (ModifierBuilder.build_weight /
+          # weighted_axis). Only `weight` was hoisted, so a heightWeight under a visibility wrapper stayed on the child,
+          # inside the wrapper's BoxScope, where the Column's weight is not reachable (ticket
+          # kjui-section-extractor-drops-columnscope-for-weight; the client's timetable_panel, heightWeight 1.15).
+          weight_value = parent_type == 'Column' && json_data['heightWeight'] ? json_data['heightWeight'] : json_data['weight']
           has_weight_in_scope = weight_value && (parent_type == 'Column' || parent_type == 'Row')
           if has_weight_in_scope
             wrapper_modifier_parts << ".weight(#{weight_value}f)"

@@ -51,8 +51,10 @@ module RjuiTools
         # scaling / max_scale: the component's fontScaling / maxFontScale, only
         # when it declares them (the provider and the default css read them;
         # undeclared, the app default applies).
-        def build_resolve_spread(family: nil, weight: nil, size: nil, italic: false, scaling: nil, max_scale: nil)
-          return nil if family.nil? && weight.nil? && size.nil? && !italic
+        # `always`: a text with nothing written still goes to the provider
+        # (P1: every text is the app's font), with an empty spec.
+        def build_resolve_spread(family: nil, weight: nil, size: nil, italic: false, scaling: nil, max_scale: nil, always: false)
+          return nil if !always && family.nil? && weight.nil? && size.nil? && !italic
 
           fields = []
           fields << "family: #{js_string(family)}" unless family.nil?

@@ -116,7 +116,12 @@ module RjuiTools
           return style_attr if hint[:parts].empty?
 
           if style_attr.include?('style={{')
-            style_attr.sub(/ \}\}$/, ", #{hint[:parts].join(', ')} }}")
+            # The block form: a replacement STRING reads `\'` / `\\` as sub's
+            # own escapes (`\'` is the text after the match), and a hint
+            # font's escaped quote vanished — unseen while a Label with a hint
+            # had no inline style of its own; every Label has one now (its
+            # Configuration.Font.resolve spread).
+            style_attr.sub(/ \}\}$/) { ", #{hint[:parts].join(', ')} }}" }
           else
             " style={{ #{hint[:parts].join(', ')} }}"
           end

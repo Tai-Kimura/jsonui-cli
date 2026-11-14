@@ -141,6 +141,7 @@
     {
       "fixture": "CheckBox/fontScaling__false",
       "platforms": [
+        "android",
         "ios",
         "web"
       ],
@@ -218,6 +219,7 @@
     {
       "fixture": "CheckBox/maxFontScale__static",
       "platforms": [
+        "android",
         "ios",
         "web"
       ],
@@ -1550,6 +1552,8 @@
     {
       "fixture": "SelectBox/fontScaling__false",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ],
       "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
@@ -1611,6 +1615,8 @@
     {
       "fixture": "SelectBox/maxFontScale__static",
       "platforms": [
+        "android",
+        "ios",
         "web"
       ],
       "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
@@ -1784,6 +1790,15 @@
       ]
     },
     {
+      "fixture": "Switch/fontScaling__false",
+      "platforms": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
+    },
+    {
       "fixture": "Switch/isOn__true",
       "platforms": [
         "android",
@@ -1796,6 +1811,15 @@
       "platforms": [
         "android"
       ]
+    },
+    {
+      "fixture": "Switch/maxFontScale__static",
+      "platforms": [
+        "android",
+        "ios",
+        "web"
+      ],
+      "note": "drawn at textScale 2.0 against a control at the same size (ticket sjui-label-font-size-ignores-dynamic-type)"
     },
     {
       "fixture": "Switch/onTintColor__static",

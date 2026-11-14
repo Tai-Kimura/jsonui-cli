@@ -37,7 +37,7 @@ RSpec.describe 'kjui codegen: each declared shape of `items`' do
     object Alignment { class Vertical; val CenterVertically = Vertical() }
     fun Row(modifier: Modifier = Modifier, verticalAlignment: Alignment.Vertical = Alignment.CenterVertically, content: () -> Unit) {}
     fun Column(modifier: Modifier = Modifier, content: () -> Unit) {}
-    fun Text(text: String, color: Color = Color.Black, fontFamily: Any? = null, fontWeight: Any? = null, fontStyle: Any? = null, fontSize: Any? = null, letterSpacing: Any? = null) {}
+    fun Text(text: String, color: Color = Color.Black, fontFamily: Any? = null, fontWeight: Any? = null, fontStyle: Any? = null, fontSize: Any? = null, letterSpacing: Any? = null, lineHeight: Any? = null) {}
     // A Radio's selected colour: its own, else the tint a container handed
     // down (KotlinJsonUI's jsonUITintOr, InheritedTint).
     class RadioButtonColors

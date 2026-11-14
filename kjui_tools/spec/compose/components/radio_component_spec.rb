@@ -460,7 +460,7 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
         object MaterialTheme { val colorScheme = ColorScheme() }
         fun jsonUITintOr(fallback: Color): Color = fallback
         fun Spacer(modifier: Modifier) {}
-        fun Text(text: String, color: Color = Color(), fontFamily: Any? = null, fontWeight: Any? = null, fontStyle: Any? = null, fontSize: Any? = null, letterSpacing: Any? = null) {}
+        fun Text(text: String, color: Color = Color(), fontFamily: Any? = null, fontWeight: Any? = null, fontStyle: Any? = null, fontSize: Any? = null, letterSpacing: Any? = null, lineHeight: Any? = null) {}
         class MutableState<T>(var value: T)
         operator fun <T> MutableState<T>.getValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>): T = value
         operator fun <T> MutableState<T>.setValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>, v: T) { value = v }
@@ -479,9 +479,10 @@ RSpec.describe KjuiTools::Compose::Components::RadioComponent do
     it 'draws each option label with the declared size and colour' do
       code = described_class.generate({ 'type' => 'Radio', 'id' => 'r', 'items' => %w[a b],
                                         'fontSize' => 18, 'fontColor' => '#FF0000' }, 0, Set.new)
-      # Through the app's fontProvider (P1): the declared size is each option's FontSpec, drawn from what resolve gives.
+      # Through the app's fontProvider (P1): the declared size is each option's FontSpec, drawn from what resolve gives,
+      # and the line box by the rule from that same size.
       expect(code.scan(/size = 18\.sp,/).size).to eq(2)
-      expect(code.scan(/Text\("[ab]", color = [^\n]*fontSize = jsonUIFontSize\(radioFont\.size \?: TextUnit\.Unspecified\), letterSpacing = jsonUILetterSpacing\(\)/).size).to eq(2)
+      expect(code.scan(/Text\("[ab]", color = [^\n]*fontSize = jsonUIFontSize\(radioFont\.size \?: TextUnit\.Unspecified\), letterSpacing = jsonUILetterSpacing\(\), lineHeight = jsonUILineHeight\(jsonUIFontSize\(radioFont\.size \?: TextUnit\.Unspecified\)\)/).size).to eq(2)
       bare = described_class.generate({ 'type' => 'Radio', 'id' => 'r', 'items' => %w[a] }, 0, Set.new)
       expect(bare).to include('Text("a", color = Color.Black, fontFamily = radioFont.family, fontWeight = radioFont.weight')
       expect(bare).not_to include('size = 18.sp')

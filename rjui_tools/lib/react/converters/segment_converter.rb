@@ -54,7 +54,7 @@ module RjuiTools
             # reached convert_text_binding, which passes non-Strings through
             # untouched — so Ruby's Hash#inspect went into the JSX as
             # `{"label"=>"opt_a", "value"=>"a"}` and the file did not parse.
-            "#{indent_str(indent + 2)}<button key={#{index}}#{segment_item_id_attr(index)} className={`#{button_class}`}#{on_click_attr}#{button_disabled}>#{convert_text_binding(item)}</button>"
+            "#{indent_str(indent + 2)}<button key={#{index}}#{segment_item_id_attr(index)} className={`#{button_class}`}#{segment_pressed_attr(index, seeded: seeded)}#{on_click_attr}#{button_disabled}>#{convert_text_binding(item)}</button>"
           end.join("\n")
 
           # `disabled` is not a valid attribute on <div>; reflect the state via
@@ -167,6 +167,21 @@ module RjuiTools
             kept << item
           end
           kept
+        end
+
+        # Which segment is selected, told to a screen reader the way the buttons
+        # draw it (ticket rjui-segment-tabview-switch-state-not-exposed): the
+        # same expression the class reads, so the two cannot disagree. iOS's
+        # Picker and Android's Tab(selected=) already say it.
+        def segment_pressed_attr(index, seeded:)
+          selected_index = attributes['selectedIndex'] || attributes['selectedTabIndex'] || 0
+          if seeded
+            " aria-pressed={seeded === #{index}}"
+          elsif has_binding?(selected_index)
+            " aria-pressed={#{extract_binding_property(selected_index)} === #{index}}"
+          else
+            %( aria-pressed="#{selected_index.to_i == index}")
+          end
         end
 
         def build_button_class(index, seeded: false)

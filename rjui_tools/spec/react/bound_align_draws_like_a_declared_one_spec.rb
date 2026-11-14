@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../spec_helper'
+require_relative '../support/configuration_runtime'
 require 'json'
 require 'open3'
 require 'tmpdir'
@@ -67,7 +68,9 @@ RSpec.describe 'a bound or size-class alignment draws like a declared one' do
 
     it 'control: the declared forms are as they were' do
       expect(jsx(label('l', 'textAlign' => 'Right'))).to include('text-right', 'justify-end')
-      expect(jsx(label('l', 'textAlign' => 'Right'))).not_to include('style=')
+      # No inline textAlign: the declared form is classes. (The only inline
+      # style is the font provider's spread, P1.)
+      expect(jsx(label('l', 'textAlign' => 'Right'))).not_to include('textAlign')
       expect(jsx(image('i', 'top'))).to include('className="w-[80px] h-[80px] shrink-0 object-none object-top"')
     end
 
@@ -104,6 +107,7 @@ RSpec.describe 'a bound or size-class alignment draws like a declared one' do
         raise "tailwindcss: #{log}" unless st.success?
 
         File.write(File.join(dir, 'app.jsx'), <<~JSX)
+          #{ConfigurationRuntime.global_js}
           const h = (tag, props, ...kids) => {
             if (typeof tag === 'function') return tag(props || {});
             const el = document.createElement(tag);

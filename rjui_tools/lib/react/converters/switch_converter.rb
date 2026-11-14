@@ -120,10 +120,13 @@ module RjuiTools
           knob_classes = ['absolute left-[2px] top-[2px] w-[27px] h-[27px]', knob_color_class,
                           'rounded-full shadow transition-transform duration-200 peer-checked:translate-x-[20px]'].compact.join(' ')
 
-          # Create iOS-style toggle with hidden checkbox and styled span
+          # Create iOS-style toggle with hidden checkbox and styled span. The
+          # checkbox says it is a switch (role="switch", its checked the state),
+          # as iOS's Toggle and Android's Switch do (ticket
+          # rjui-segment-tabview-switch-state-not-exposed).
           <<~HTML.gsub("\n", '').gsub(/\s+/, ' ').strip
             <span className="relative inline-block w-[51px] h-[31px]">
-              <input type="checkbox"#{build_aria_label_attr} className="sr-only peer"#{checked_attr}#{on_change}#{disabled_attr} />
+              <input type="checkbox" role="switch"#{build_aria_label_attr} className="sr-only peer"#{checked_attr}#{on_change}#{disabled_attr} />
               <span className="#{track_classes}"#{style_attr_for(track_style)} />
               <span className="#{knob_classes}"#{style_attr_for(knob_style)} />
             </span>

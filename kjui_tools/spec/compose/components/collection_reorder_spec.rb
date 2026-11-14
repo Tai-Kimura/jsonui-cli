@@ -46,10 +46,24 @@ RSpec.describe 'kjui codegen: a reorderable Collection' do
       expect(code).to include('if (data.editing == true) CollectionReorder(true, false) { s, f, t -> data.onStopMove?.invoke(s, f, t) } else null,'), route
       expect(code).to include('CollectionReorderScope(stopListReorder) {'), route
       expect(code).to include('.collectionReorderContainer(stopListReorder)'), route
-      expect(code).to match(/CollectionReorderRow\(stopListReorder, 0, cellIndex, [\w.]+\.size, reorderLocked0\) \{/), route
+      expect(code).to match(/CollectionReorderRow\(stopListReorder, 0, cellIndex, [\w.]+\.size, reorderLocked0, id = \(.*\)\.toString\(\)\) \{/), route
       expect(code).to include('.testTag("stop_list_item_$cellIndex").collectionReorderActions()'), route
       expect(code.scan('{').size).to eq(code.scan('}').size), route
     end
+  end
+
+  # onReorderStart (section, index) / onReorderEnd (section) (shared/core/reorder_vectors.json rule.callbacks; ticket
+  # jui-collection-reorder-start-callback-missing): named before onReorder's trailing lambda when declared; undeclared,
+  # the emit is as it was.
+  it 'passes onReorderStart and onReorderEnd when declared, and nothing when not' do
+    code, = emit(KJUI_REORDER_DECL.merge('onReorderStart' => '@{onStopPick}', 'onReorderEnd' => 'onStopDrop'))
+    expect(code).to include('CollectionReorder(true, false, onReorderStart = { s, i -> data.onStopPick?.invoke(s, i) }, ' \
+                            'onReorderEnd = { s -> data.onStopDrop?.invoke(s) }) { s, f, t -> data.onStopMove?.invoke(s, f, t) }')
+    only_end, = emit(KJUI_REORDER_DECL.merge('onReorderEnd' => '@{onStopDrop}'))
+    expect(only_end).to include('CollectionReorder(true, false, onReorderEnd = { s -> data.onStopDrop?.invoke(s) }) {')
+    plain, = emit(KJUI_REORDER_DECL)
+    expect(plain).not_to include('onReorderStart')
+    expect(plain).not_to include('onReorderEnd')
   end
 
   it 'the container scrolls itself unless an outer scroll carries it (lazy none)' do
@@ -66,6 +80,21 @@ RSpec.describe 'kjui codegen: a reorderable Collection' do
     expect(code).to include('key(sectionKeys[cellIndex]) { CollectionReorderRow(')
   end
 
+  it 'a fixed row is read from the cell data and passed to its row; without the declaration the route is as it was' do
+    base = { 'lazy' => 'none', 'reorderable' => true, 'onReorder' => '@{onStopMove}', 'cellIdProperty' => 'id' }
+    KJUI_REORDER_ROUTES.each do |route, extra|
+      plain, = emit(extra.merge(KJUI_REORDER_DECL))
+      expect(plain).not_to include('Fixed'), route
+      code, = emit(extra.merge(KJUI_REORDER_DECL).merge('reorderFixedProperty' => 'skipped'))
+      expect(code).to include('[it]["skipped"] == true }.toSet() }'), route
+      expect(code).to match(/CollectionReorderRow\(stopListReorder, 0, cellIndex, [\w.]+\.size, reorderLocked0, reorderLocked0Fixed, id = \(.*\)\.toString\(\)\) \{/), route
+      expect(code.sub(/\n[^\n]*reorderLocked0Fixed = remember[^\n]*/, '').gsub(', reorderLocked0Fixed', '')).to eq(plain), route
+    end
+    both, = emit(base.merge('reorderLockedProperty' => 'pinned', 'reorderFixedProperty' => 'skipped'))
+    expect(both).to include('[it]["pinned"] == true }.toSet() }')
+    expect(both).to include('[it]["skipped"] == true }.toSet() }')
+  end
+
   it 'a horizontal or grid Collection does not reorder (v1)' do
     [{ 'layout' => 'horizontal' }, { 'columns' => 2 }].each do |extra|
       code, = emit(extra.merge(KJUI_REORDER_DECL))
@@ -80,7 +109,7 @@ RSpec.describe 'kjui codegen: a reorderable Collection' do
     [none, lazy].each do |code|
       expect(code).to include('CollectionReorderScope(stopListReorder) {')
       expect(code).to include('.collectionReorderContainer(stopListReorder)')
-      expect(code).to match(/CollectionReorderRow\(stopListReorder, sectionIndex, cellIndex, [\w.]+\.size, reorderLocked\) \{/)
+      expect(code).to match(/CollectionReorderRow\(stopListReorder, sectionIndex, cellIndex, [\w.]+\.size, reorderLocked, id = \(.*\)\.toString\(\)\) \{/)
       expect(code).to include('.collectionReorderActions()')
       expect(code.scan('{').size).to eq(code.scan('}').size)
     end
@@ -104,7 +133,8 @@ RSpec.describe 'kjui codegen: a reorderable Collection' do
       }
       functions = routes.flat_map do |name, extra|
         [["plain#{name.capitalize}", frame_emit(extra)],
-         ["reorder#{name.capitalize}", frame_emit(extra.merge('reorderable' => '@{editing}', 'onReorder' => '@{onMove}', 'reorderLockedProperty' => 'fixed'))]]
+         ["reorder#{name.capitalize}", frame_emit(extra.merge('reorderable' => '@{editing}', 'onReorder' => '@{onMove}', 'reorderLockedProperty' => 'fixed', 'reorderFixedProperty' => 'skipped',
+                                                             'onReorderStart' => '@{onStart}', 'onReorderEnd' => '@{onEnd}'))]]
       end.to_h
       expect(program(functions)).to compile_as_kotlin
       frames = run(functions)

@@ -54,7 +54,7 @@ module RjuiTools
             #{indent_str(indent + 2)}<div className="flex-1 overflow-auto">
             #{tab_panels_jsx}
             #{indent_str(indent + 2)}</div>
-            #{indent_str(indent + 2)}<nav className="#{nav_class}"#{nav_style}>
+            #{indent_str(indent + 2)}<nav role="tablist" className="#{nav_class}"#{nav_style}>
             #{tab_items_jsx}
             #{indent_str(indent + 2)}</nav>#{value_change}
             #{indent_str(indent)}</div>
@@ -153,6 +153,7 @@ module RjuiTools
 
           <<~JSX.chomp
             #{indent_str(6)}<button#{tab_id_attr}
+            #{indent_str(8)}role="tab" aria-selected={#{selected_binding} === #{index}}
             #{indent_str(8)}className={`#{button_class}`}#{style_attr}
             #{indent_str(8)}onClick={#{@seeded ? "() => { setSeeded(#{index}); #{write}; }" : "() => #{write}"}}#{disabled_attr}
             #{indent_str(6)}>

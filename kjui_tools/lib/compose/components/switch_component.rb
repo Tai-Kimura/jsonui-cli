@@ -322,7 +322,8 @@ module KjuiTools
           # fixed for the same spelling.
           out += "\n" + indent("text = #{Helpers::BoundValue.text(label_text_of(json_data) || '')},", depth + 2)
 
-          out += "\n" + Helpers::FontSpecHelper.text_arg_lines(var, depth + 1, required_imports, json_data)
+          out += "\n" + Helpers::FontSpecHelper.text_arg_lines(var, depth + 1, required_imports, json_data,
+                                                                  line: font_size ? true : nil)
 
           font_color = label_style_of(json_data, 'fontColor')
           if font_color

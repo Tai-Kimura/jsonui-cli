@@ -6,6 +6,7 @@ require 'json'
 require 'fileutils'
 require 'rbconfig'
 require_relative '../spec_helper'
+require_relative '../support/configuration_runtime'
 require 'core/config_manager'
 require 'core/layout_path'
 
@@ -104,6 +105,7 @@ RSpec.describe 'the viewId of a node inside an include, through rjui build' do
   # Renders the screen and operates every <select>: the first argument each
   # hands `pick`, in document order.
   IVI_NODE_PROGRAM = <<~JS
+    #{ConfigurationRuntime.global_js}
     const fs = require('fs');
     const esbuild = require(process.argv[2]);
     const files = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));

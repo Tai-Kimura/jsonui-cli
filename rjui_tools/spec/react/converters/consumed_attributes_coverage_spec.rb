@@ -62,9 +62,12 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       listStyle
       onItemAppear
       onReorder
+      onReorderEnd
+      onReorderStart
       onValueChange
       orientation
       paging
+      reorderFixedProperty
       reorderHandle
       reorderLockedProperty
       reorderable

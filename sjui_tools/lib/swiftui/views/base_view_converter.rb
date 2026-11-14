@@ -377,6 +377,17 @@ module SjuiTools
           segment progress slider indicator selectbox
         ].freeze
 
+        # The handle's own `hidden` (applied inside .collectionReorderHandle, so it is passed): a handle that is not
+        # drawn makes its row fixed (ticket jui-collection-reorder-fixed-row-vs-barrier-row). Invisible and gone come
+        # from the VisibilityWrapper around it. Nothing when the handle declares no hidden.
+        def reorder_handle_hidden_arg
+          hidden = @component['hidden']
+          return 'hidden: true' if hidden == true
+          return "hidden: #{binding_data_expr(hidden)}" if is_binding?(hidden)
+
+          ''
+        end
+
         def generated_code
           # Emit all modifiers from the bag in correct order
           @modifier_bag.emit_all(self)
@@ -387,7 +398,7 @@ module SjuiTools
             apply_accessibility_identifier
             @accessibility_identifier_added = true
             # The handle a reorderable Collection picks its rows up by (ticket jui-collection-drag-to-reorder).
-            add_modifier_line '.collectionReorderHandle()' if @@reorder_handle_ids.include?(@component['id'])
+            add_modifier_line ".collectionReorderHandle(#{reorder_handle_hidden_arg})" if @@reorder_handle_ids.include?(@component['id'])
             apply_outer_disabled
           elsif collection_cell_root_without_id?
             apply_collection_cell_root_container

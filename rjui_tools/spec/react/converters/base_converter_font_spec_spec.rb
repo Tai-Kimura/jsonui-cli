@@ -24,11 +24,15 @@ RSpec.describe 'BaseConverter FontSpec routing' do
       expect(classes).to include('text-base')
     end
 
-    it 'does not emit a Configuration.Font.resolve spread on the inline style' do
+    # P1 (ruling 2026-11-13): every text is the app's font. With no
+    # fontFamily the text still goes through Configuration.Font.resolve, with
+    # what it wrote and no family; the classes above stay beside it.
+    it 'emits a Configuration.Font.resolve spread with what it wrote and no family' do
       converter = make_label('text' => 'Hi', 'font' => 'bold', 'fontSize' => 16)
       converter.send(:build_class_name)
       style_attr = converter.send(:build_style_attr)
-      expect(style_attr).not_to include('Configuration.Font.resolve(')
+      expect(style_attr).to include("...Configuration.Font.resolve({ weight: 'bold', size: 16, italic: false })")
+      expect(style_attr).not_to include('family:')
     end
   end
 

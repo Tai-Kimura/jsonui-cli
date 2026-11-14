@@ -59,6 +59,14 @@ const FontConfig = {
   fontProvider: undefined as FontProvider | undefined,
 
   /**
+   * The app's default font family: what a text with no `fontFamily` is drawn
+   * in when no `fontProvider` is set (iOS `SwiftJsonUIConfiguration.font.name`,
+   * KotlinJsonUI `Configuration.Font.family`). Every generated text calls
+   * `resolve`, written family or not; undefined leaves the family to the page.
+   */
+  family: undefined as string | undefined,
+
+  /**
    * Whether text follows the browser's text size, for every component that
    * does not declare `fontScaling` (the app default; true unless the app sets
    * it), and the largest multiple of its fontSize it grows to, for every
@@ -90,7 +98,7 @@ const FontConfig = {
    */
   resolve(spec: FontSpec): React.CSSProperties {
     if (this.fontProvider) return this.fontProvider(spec);
-    return defaultCss(spec);
+    return defaultCss(spec.family ? spec : { ...spec, family: this.family });
   },
 };
 
@@ -108,11 +116,23 @@ function fontLength(size: number, scaling?: boolean, maxScale?: number): string 
   return `min(${unit},${cap})`;
 }
 
+/**
+ * A JsonUI weight name's CSS weight (shared/core/font_weight_mapping.json).
+ * The name went into font-weight as written, and `semibold`, `medium` or
+ * `light` is not a CSS weight: the browser dropped it and the text drew at
+ * the inherited weight. A CSS weight (`600`, `bold`) passes as written.
+ */
+const FONT_WEIGHTS: Record<string, string> = {
+  ultralight: '200', thin: '100', light: '300', regular: 'normal', normal: 'normal',
+  medium: '500', semibold: '600', bold: 'bold', heavy: '900', black: '900',
+};
+
 function defaultCss(spec: FontSpec): React.CSSProperties {
   const css: React.CSSProperties = {};
   if (spec.family) css.fontFamily = spec.family;
   if (spec.weight !== undefined) {
-    css.fontWeight = spec.weight as React.CSSProperties['fontWeight'];
+    const named = FONT_WEIGHTS[String(spec.weight).toLowerCase()];
+    css.fontWeight = (named ?? spec.weight) as React.CSSProperties['fontWeight'];
   }
   if (spec.size !== undefined) css.fontSize = fontLength(spec.size, spec.scaling, spec.maxScale);
   if (spec.italic) css.fontStyle = 'italic';

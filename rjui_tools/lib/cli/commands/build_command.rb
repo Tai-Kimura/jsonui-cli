@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require 'digest'
 require 'fileutils'
 require 'set'
 require_relative '../../core/config_manager'
@@ -777,20 +778,53 @@ module RjuiTools
         # Copy the Configuration.ts template (FontSpec / Configuration.Font)
         # into the host app's @/lib/jsonui/ directory so generated components
         # can import { Configuration } and route font specs through the
-        # host-supplied fontProvider. Idempotent — leaves an existing copy
-        # alone (consumers may have customized the provider field).
+        # host-supplied fontProvider.
+        #
+        # An existing copy that is byte for byte a template rjui wrote before
+        # (configuration_template_history.json) is the tool's and is replaced
+        # with the current template: the copy is never refreshed otherwise,
+        # so an app kept the FontSpec it was first given — no
+        # Configuration.Font.family, no scaling / maxScale, which the spread
+        # of a text that declares fontScaling passes (tsc rejects it). Any
+        # other copy is the app's and stays, with one INFO line saying what
+        # it is missing (the orchestrator's ruling 2026-11-14: (a) + (b)).
         def ensure_configuration_template
           lib_dir = @config['lib_directory'] || 'src/lib/jsonui'
           FileUtils.mkdir_p(lib_dir)
 
-          target_path = File.join(lib_dir, Core::Templates.file_name('Configuration.ts', @config))
-          return if File.exist?(target_path)
-
+          name = Core::Templates.file_name('Configuration.ts', @config)
+          target_path = File.join(lib_dir, name)
           template_path = Core::Templates.path('Configuration.ts', @config)
           return unless File.exist?(template_path)
 
-          File.write(target_path, File.read(template_path))
-          Core::Logger.success("Created Configuration template: #{target_path}")
+          template = File.binread(template_path)
+          unless File.exist?(target_path)
+            File.binwrite(target_path, template)
+            Core::Logger.success("Created Configuration template: #{target_path}")
+            return
+          end
+
+          current = File.binread(target_path)
+          return if current == template
+
+          if self.class.past_configuration_template?(name, current)
+            File.binwrite(target_path, template)
+            Core::Logger.success("Updated Configuration template: #{target_path} (it was an earlier rjui template, unchanged)")
+          else
+            Core::Logger.info(
+              "#{target_path} differs from the rjui template, so it was kept. To use Configuration.Font.family " \
+              "or fontScaling / maxFontScale, take the current template (#{template_path}) and carry your changes over."
+            )
+          end
+        end
+
+        CONFIGURATION_TEMPLATE_HISTORY = File.expand_path('../../react/configuration_template_history.json', __dir__)
+
+        # Whether `content` is byte for byte a Configuration template rjui
+        # wrote into an app (`name`: Configuration.ts / Configuration.js).
+        def self.past_configuration_template?(name, content)
+          shas = JSON.parse(File.read(CONFIGURATION_TEMPLATE_HISTORY))[name] || []
+          shas.include?(Digest::SHA256.hexdigest(content))
         end
 
         # Validate component and its children recursively
@@ -1371,6 +1405,9 @@ module RjuiTools
 
             export const StringManager = new StringManagerClass();
             export default StringManager;
+            // The library's own generated helpers read the app's strings by name through this, with no import of a
+            // file an app without strings does not have (reorder's screen reader names: jsonui_reorder_*).
+            globalThis.__jsonuiStrings = StringManager;
 
             // Reactive hook — generated components consume this as `const $s = useStringManager()`.
             // Subscribes to `setLanguage` events so every call site re-renders on language change.
@@ -1499,6 +1536,9 @@ module RjuiTools
 
             export const StringManager = new StringManagerClass();
             export default StringManager;
+            // The library's own generated helpers read the app's strings by name through this, with no import of a
+            // file an app without strings does not have (reorder's screen reader names: jsonui_reorder_*).
+            (globalThis as { __jsonuiStrings?: unknown }).__jsonuiStrings = StringManager;
 
             // Reactive hook — generated components consume this as `const $s = useStringManager()`.
             // Subscribes to `setLanguage` events so every call site re-renders on language change.

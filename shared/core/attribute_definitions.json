@@ -91,6 +91,9 @@
         "binding"
       ],
       "required": true,
+      "notRequiredFor": {
+        "SelectBox": "A SelectBox with no height takes its content's height on every face (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-height), so leaving it out is a declared layout, not a missing one."
+      },
       "description": "Height (number, 'matchParent', 'wrapContent') - binding supported. Not required if weight is specified."
     },
     "minWidth": {
@@ -2497,6 +2500,13 @@
     "_comment": "Component alias of TextField (web naming). Resolved by the L1 normalizer type rewrite and by every validator/codegen consumer - do not add attribute copies here."
   },
   "Button": {
+    "accessibilitySelected": {
+      "type": [
+        "boolean",
+        "binding"
+      ],
+      "description": "Whether screen readers are told this control is the selected one (iOS the .isSelected trait, Android semantics selected, web aria-pressed): a boolean or a binding, as with two buttons of which one is chosen. `false` tells nothing, on all three platforms (VoiceOver says nothing of a control that is not selected; the other two follow it). It takes effect where the control is one button to a screen reader: a Button, and a View or IconLabel whose onClick makes it one button (it holds no control of its own: the tap rule's button / combine shape, as accessibilityLabel's View). Elsewhere the build warns and nothing is told. Radio, CheckBox, Switch, Segment, TabView and SelectBox say their own state."
+    },
     "accessibilityLabel": {
       "type": [
         "string",
@@ -3773,6 +3783,13 @@
     }
   },
   "View": {
+    "accessibilitySelected": {
+      "type": [
+        "boolean",
+        "binding"
+      ],
+      "description": "Whether screen readers are told this control is the selected one (iOS the .isSelected trait, Android semantics selected, web aria-pressed): a boolean or a binding, as with two buttons of which one is chosen. `false` tells nothing, on all three platforms (VoiceOver says nothing of a control that is not selected; the other two follow it). It takes effect where the control is one button to a screen reader: a Button, and a View or IconLabel whose onClick makes it one button (it holds no control of its own: the tap rule's button / combine shape, as accessibilityLabel's View). Elsewhere the build warns and nothing is told. Radio, CheckBox, Switch, Segment, TabView and SelectBox say their own state."
+    },
     "accessibilityLabel": {
       "type": [
         "string",
@@ -4415,6 +4432,14 @@
       "type": "binding",
       "description": "Called when a dragged row is released at a new place: `@{handler}` with (section: Int, from: Int, to: Int) — Swift `(Int, Int, Int) -> Void`, Kotlin `(Int, Int, Int) -> Unit`, TS `(section: number, from: number, to: number) => void`. `to` is the row's index in the order AFTER the move (iOS onMove's destination, counted before the row is taken out, is converted by the library). Same section only (v1: no move across sections); a single-section Collection is section 0. Not called when the row is released where it started. The screen reader's move up / move down call it with to = from - 1 / from + 1 (ticket jui-collection-drag-to-reorder, ruling B 2026-11-13)."
     },
+    "onReorderStart": {
+      "type": "binding",
+      "description": "Called when a row is picked up to be reordered: `@{handler}` with (section: Int, index: Int) — Swift `(Int, Int) -> Void`, Kotlin `(Int, Int) -> Unit`, TS `(section: number, index: number) => void`. `index` is the row's index when it is picked up. A ViewModel that rebuilds its rows by time can hold the rebuild until onReorderEnd. The screen reader's move up / move down call it right before their onReorder (ticket jui-collection-reorder-start-callback-missing, the requester's instruction 2026-11-14)."
+    },
+    "onReorderEnd": {
+      "type": "binding",
+      "description": "Called once when a drag that onReorderStart began is over: `@{handler}` with (section: Int) — Swift `(Int) -> Void`, Kotlin `(Int) -> Unit`, TS `(section: number) => void`. It follows onReorder when the row moved, and comes alone when the row was let go where it started, outside the Collection, or the drag was cancelled because the rows changed under it (shared/core/reorder_vectors.json rule.itemsChange). The screen reader's move up / move down call it right after their onReorder (ticket jui-collection-reorder-start-callback-missing)."
+    },
     "reorderHandle": {
       "type": "string",
       "description": "The id of an element in the cell layout that starts the drag when long-pressed (e.g. a grip at the row's right edge). Without it, a long press anywhere on the row starts it. The rest of the row keeps its taps (ticket jui-collection-drag-to-reorder, ruling B 2026-11-13)."
@@ -4422,6 +4447,10 @@
     "reorderLockedProperty": {
       "type": "string",
       "description": "A key of the cell data: a row whose value for it is true does not move, and no other row is moved past it (a divider row). Section headers and footers are not rows and never move (ticket jui-collection-drag-to-reorder, ruling B 2026-11-13)."
+    },
+    "reorderFixedProperty": {
+      "type": "string",
+      "description": "A key of the cell data: a row whose value for it is true does not move and has no screen reader move up / down, but other rows are moved past it (a cancelled or skipped row). A row of a Collection with a reorderHandle whose handle is not drawn is fixed the same way. reorderLockedProperty wins when a row is both (ticket jui-collection-reorder-fixed-row-vs-barrier-row, ruling 2026-11-14)."
     },
     "currentPage": {
       "type": "binding",
@@ -5079,6 +5108,13 @@
         "array"
       ],
       "description": "Icon size. A number sizes both edges; a two-element [width, height] sizes them separately (rjui icon_label_converter.rb:130-138 reads both, and its spec covers both). NOT the same shape as CheckBox.iconSize, which is a square glyph and takes a number only. sjui icon_label_converter.rb:50-51 interpolates the value straight into `iconSize:`, so the array form is web-only today — declared here because the attribute's value space is a property of the attribute, not of whichever face lags (plan 51-E)."
+    },
+    "accessibilitySelected": {
+      "type": [
+        "boolean",
+        "binding"
+      ],
+      "description": "Whether screen readers are told this control is the selected one (iOS the .isSelected trait, Android semantics selected, web aria-pressed): a boolean or a binding, as with two buttons of which one is chosen. `false` tells nothing, on all three platforms (VoiceOver says nothing of a control that is not selected; the other two follow it). It takes effect where the control is one button to a screen reader: a Button, and a View or IconLabel whose onClick makes it one button (it holds no control of its own: the tap rule's button / combine shape, as accessibilityLabel's View). Elsewhere the build warns and nothing is told. Radio, CheckBox, Switch, Segment, TabView and SelectBox say their own state."
     },
     "contentDescription": {
       "type": "string",

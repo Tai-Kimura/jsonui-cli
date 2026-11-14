@@ -13,10 +13,12 @@
   "height": "matchParent",
   "child": [
     {
-      "type": "Switch",
+      "type": "Button",
       "id": "target",
-      "width": "wrapContent",
-      "height": "wrapContent"
+      "width": 200,
+      "height": "wrapContent",
+      "text": "Sample",
+      "accessibilitySelected": true
     }
   ]
 }

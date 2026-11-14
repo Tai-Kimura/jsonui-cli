@@ -181,8 +181,10 @@ RSpec.describe 'built-in props contract' do
 
     it 'pins the emit surface exactly (a new emit must extend this pin AND the props)' do
       surface = emitted_attribute_names(jsx, 'LinkifyText') - REACT_MANAGED_ATTRS
+      # `style`: every Label carries its Configuration.Font.resolve spread
+      # (P1), which LinkifyTextProps already declares and passes on.
       expect(surface.sort).to eq(
-        %w[className data-tag data-testid id onClick onKeyDown role tabIndex text].sort
+        %w[className data-tag data-testid id onClick onKeyDown role style tabIndex text].sort
       )
     end
 

@@ -19,6 +19,13 @@ const FontConfig = {
    */
   fontProvider: void 0,
   /**
+   * The app's default font family: what a text with no `fontFamily` is drawn
+   * in when no `fontProvider` is set (iOS `SwiftJsonUIConfiguration.font.name`,
+   * KotlinJsonUI `Configuration.Font.family`). Every generated text calls
+   * `resolve`, written family or not; undefined leaves the family to the page.
+   */
+  family: void 0,
+  /**
    * Whether text follows the browser's text size, for every component that
    * does not declare `fontScaling` (the app default; true unless the app sets
    * it), and the largest multiple of its fontSize it grows to, for every
@@ -48,7 +55,7 @@ const FontConfig = {
    */
   resolve(spec) {
     if (this.fontProvider) return this.fontProvider(spec);
-    return defaultCss(spec);
+    return defaultCss(spec.family ? spec : { ...spec, family: this.family });
   }
 };
 function fontLength(size, scaling, maxScale) {
@@ -57,11 +64,24 @@ function fontLength(size, scaling, maxScale) {
   const cap = maxScale !== void 0 ? `${size * maxScale}px` : `calc(${size}*var(--jui-font-max,10000px))`;
   return `min(${unit},${cap})`;
 }
+const FONT_WEIGHTS = {
+  ultralight: "200",
+  thin: "100",
+  light: "300",
+  regular: "normal",
+  normal: "normal",
+  medium: "500",
+  semibold: "600",
+  bold: "bold",
+  heavy: "900",
+  black: "900"
+};
 function defaultCss(spec) {
   const css = {};
   if (spec.family) css.fontFamily = spec.family;
   if (spec.weight !== void 0) {
-    css.fontWeight = spec.weight;
+    const named = FONT_WEIGHTS[String(spec.weight).toLowerCase()];
+    css.fontWeight = named ?? spec.weight;
   }
   if (spec.size !== void 0) css.fontSize = fontLength(spec.size, spec.scaling, spec.maxScale);
   if (spec.italic) css.fontStyle = "italic";

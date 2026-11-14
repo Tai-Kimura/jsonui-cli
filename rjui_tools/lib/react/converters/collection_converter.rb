@@ -72,6 +72,13 @@ module RjuiTools
                        else
                          ''
                        end
+          # onReorderStart / onReorderEnd (rule.callbacks): the drag's start and end, each when declared.
+          on_reorder += { 'onReorderStart' => attributes['onReorderStart'],
+                          'onReorderEnd' => attributes['onReorderEnd'] }.map do |key, value|
+            next '' unless value.is_a?(String) && has_binding?(value) && (p = extract_binding_value(value)) && !p.empty?
+
+            " #{key}={#{add_viewmodel_data_prefix(p)}}"
+          end.join
           handle = attributes['reorderHandle']
           handle_attr = handle.is_a?(String) && !handle.empty? ? " handleId=#{JSON.generate(handle)}" : ''
           locked_prop = attributes['reorderLockedProperty']
@@ -80,9 +87,16 @@ module RjuiTools
                         else
                           ''
                         end
+          # reorderFixedProperty: rows that do not move but are passed (the same helper picks them out).
+          fixed_prop = attributes['reorderFixedProperty']
+          fixed_attr = if fixed_prop.is_a?(String) && !fixed_prop.empty?
+                         " fixed={jsonuiReorderLocked(#{cells_expr}, #{JSON.generate(fixed_prop)})}"
+                       else
+                         ''
+                       end
           key_attr = key ? " key={#{key}}" : ''
           "#{indent_str(indent)}<JsonuiReorderSection#{key_attr} section={#{section_expr}} count={(#{cells_expr}).length} " \
-            "enabled={#{reorder_enabled_expr}}#{on_reorder}#{handle_attr}#{locked_attr}>"
+            "enabled={#{reorder_enabled_expr}}#{on_reorder}#{handle_attr}#{locked_attr}#{fixed_attr}>"
         end
 
         def reorder_section_close(indent)

@@ -71,6 +71,33 @@ RSpec.describe 'iOS control accessibility' do
     end
   end
 
+  describe 'accessibilitySelected' do
+    # The table every face runs (shared/core/control_accessibility_vectors.json): the .isSelected trait where the
+    # vector tells, gated by its binding; nothing where it tells nothing (false included).
+    vectors = JSON.parse(File.read(File.expand_path('../../../../shared/core/control_accessibility_vectors.json', __dir__)))
+    vectors['cases'].each do |c|
+      it c['name'] do
+        code = convert(c['layout'])
+        told = code.scan(/\.accessibilityAddTraits\((?:([^\n]*) \? )?\.isSelected(?: : \[\])?\)/)
+        case c['selected']
+        when nil then expect(code).not_to include('.isSelected')
+        when true then expect(told).to eq([[nil]])
+        else
+          expect(told.size).to eq(1)
+          expect(told.first.first).to include(c['selected'][2..-2])
+        end
+      end
+    end
+
+    it 'type-checks, bound and not' do
+      bound = convert({ 'type' => 'Button', 'text' => 'Must', 'onClick' => '@{onMust}', 'accessibilitySelected' => '@{isMust}' })
+      fixed = convert({ 'type' => 'View', 'onClick' => '@{onMust}', 'accessibilitySelected' => true })
+      tails = (bound.lines + fixed.lines).map(&:strip).select { |l| l.include?('.isSelected') }
+      expect(tails.size).to eq(2)
+      expect(compilable_view("Text(\"x\")\n#{tails.join("\n")}", data: ['var isMust: Bool? = nil'])).to compile_as_swift
+    end
+  end
+
   # The lines it adds reach a compiler, on a Text (StateAwareButtonView and
   # PartialAttributedText are the library's): a name from a binding, and a
   # Label's announcement.
