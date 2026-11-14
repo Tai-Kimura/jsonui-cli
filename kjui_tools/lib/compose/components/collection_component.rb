@@ -2872,6 +2872,8 @@ module KjuiTools
               code += "\n" + indent("LaunchedEffect(item) {", inner_depth)
               code += "\n" + indent("cellViewModel.updateData(item)", inner_depth + 1)
               code += "\n" + indent("}", inner_depth)
+              cell_box = cell_size_box_open(json_data, required_imports)
+              code += "\n" + indent(cell_box, inner_depth) if cell_box
               code += "\n" + indent("#{cell_class}View(", inner_depth)
               code += "\n" + indent("viewModel = cellViewModel,", inner_depth + 1)
               # The cell's place among the drawn sections' cells: its address
@@ -2883,6 +2885,7 @@ module KjuiTools
               end
               code += "\n" + cell_test_tag_modifier(json_data['id'], cell_address(sections, index, property_name), inner_depth + 1, flow_extra)
               code += "\n" + indent(")", inner_depth)
+              code += "\n" + indent("}", inner_depth) if cell_box
 
               if cell_id_property
                 code += "\n" + indent("}", ld + 1)
@@ -3101,6 +3104,8 @@ module KjuiTools
                 end
                 out += "\n" + seed_view_model_line("cellViewModel", "currentCellData", d)
                 out += "\n" + indent("LaunchedEffect(currentCellData) { cellViewModel.updateData(currentCellData) }", d)
+                cell_box = cell_size_box_open(json_data, required_imports)
+                out += "\n" + indent(cell_box, d) if cell_box
                 out += "\n" + indent("#{cell_class}View(", d)
                 out += "\n" + indent("viewModel = cellViewModel,", d + 1)
                 # No fillMaxWidth: the cell view defines its own size (dynamic
@@ -3114,7 +3119,9 @@ module KjuiTools
                           ''
                         end
                 out += "\n" + cell_test_tag_modifier(json_data['id'], cell_address(sections, index, property_name), d + 1, place + (@reorder ? '.collectionReorderActions()' : ''))
-                out + "\n" + indent(")", d)
+                out += "\n" + indent(")", d)
+                out += "\n" + indent("}", d) if cell_box
+                out
               end
               # A grid per section: a section of more than one column (its own
               # `columns`, else the Collection's) is laid out in rows of that
@@ -3247,10 +3254,13 @@ module KjuiTools
               end
               code += "\n" + seed_view_model_line("cellViewModel", "currentCellData", depth + 4)
               code += "\n" + indent("LaunchedEffect(currentCellData) { cellViewModel.updateData(currentCellData) }", depth + 4)
+              cell_box = cell_size_box_open(json_data, required_imports)
+              code += "\n" + indent(cell_box, depth + 4) if cell_box
               code += "\n" + indent("#{cell_class}View(", depth + 4)
               code += "\n" + indent("viewModel = cellViewModel,", depth + 5)
               code += "\n" + cell_test_tag_modifier(json_data['id'], cell_address(sections, index, property_name), depth + 5)
               code += "\n" + indent(")", depth + 4)
+              code += "\n" + indent("}", depth + 4) if cell_box
               code += "\n" + indent("}", depth + 3)
               code += "\n" + indent("}", depth + 2)
               code += "\n" + indent("}", depth + 1)
