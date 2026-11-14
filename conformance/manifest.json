@@ -8,15 +8,15 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "2a6eb187fd1ae68f8719104e20cf9de8b4e2a775e7810a0a737f48339a9a3719",
+  "generatedFrom": "abceefe792efb66e6b094864f7b3956793d6d9aa87736df594460e36783ea302",
   "counts": {
-    "fixtures": 1301,
+    "fixtures": 1348,
     "assertable": 54,
-    "visual": 992,
+    "visual": 1027,
     "interactive": 41,
-    "control": 136,
+    "control": 148,
     "declarationOnly": 77,
-    "skipped": 161,
+    "skipped": 159,
     "promoted": {
       "callback": 11
     }
@@ -7424,6 +7424,81 @@
       "control": "__control/Label"
     },
     {
+      "id": "Label/fontScaling__true",
+      "component": "Label",
+      "attribute": "fontScaling",
+      "case": "true",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "fontScaling",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/fontScaling__true.layout.json",
+      "test": "fixtures/Label/fontScaling__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Label/fontScaling@Label__root.textScale-2.0",
+      "control": "__control/Label__root.textScale-2.0",
+      "textScale": 2.0
+    },
+    {
+      "id": "Label/fontScaling__false",
+      "component": "Label",
+      "attribute": "fontScaling",
+      "case": "false",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "fontScaling",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/fontScaling__false.layout.json",
+      "test": "fixtures/Label/fontScaling__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Label/fontScaling@Label__root.textScale-2.0",
+      "control": "__control/Label__root.textScale-2.0",
+      "textScale": 2.0
+    },
+    {
+      "id": "Label/maxFontScale__static",
+      "component": "Label",
+      "attribute": "maxFontScale",
+      "case": "static",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": "maxFontScale",
+      "aliasOf": null,
+      "value": 1.2,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Label/maxFontScale__static.layout.json",
+      "test": "fixtures/Label/maxFontScale__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Label__root.textScale-2.0",
+      "textScale": 2.0
+    },
+    {
       "id": "Label/fontColor__static",
       "component": "Label",
       "attribute": "fontColor",
@@ -9413,6 +9488,81 @@
       "promotedFrom": null,
       "peerGroup": "TextField/fontSize@TextField",
       "control": "__control/TextField"
+    },
+    {
+      "id": "TextField/fontScaling__true",
+      "component": "TextField",
+      "attribute": "fontScaling",
+      "case": "true",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "fontScaling",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/fontScaling__true.layout.json",
+      "test": "fixtures/TextField/fontScaling__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "TextField/fontScaling@TextField__root.textScale-2.0_text-Sample",
+      "control": "__control/TextField__root.textScale-2.0_text-Sample",
+      "textScale": 2.0
+    },
+    {
+      "id": "TextField/fontScaling__false",
+      "component": "TextField",
+      "attribute": "fontScaling",
+      "case": "false",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "fontScaling",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/fontScaling__false.layout.json",
+      "test": "fixtures/TextField/fontScaling__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "TextField/fontScaling@TextField__root.textScale-2.0_text-Sample",
+      "control": "__control/TextField__root.textScale-2.0_text-Sample",
+      "textScale": 2.0
+    },
+    {
+      "id": "TextField/maxFontScale__static",
+      "component": "TextField",
+      "attribute": "maxFontScale",
+      "case": "static",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": "maxFontScale",
+      "aliasOf": null,
+      "value": 1.2,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextField/maxFontScale__static.layout.json",
+      "test": "fixtures/TextField/maxFontScale__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/TextField__root.textScale-2.0_text-Sample",
+      "textScale": 2.0
     },
     {
       "id": "TextField/fontColor__static",
@@ -12254,6 +12404,81 @@
       "control": "__control/TextView__text-Sample"
     },
     {
+      "id": "TextView/fontScaling__true",
+      "component": "TextView",
+      "attribute": "fontScaling",
+      "case": "true",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": "fontScaling",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextView/fontScaling__true.layout.json",
+      "test": "fixtures/TextView/fontScaling__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "TextView/fontScaling@TextView__root.textScale-2.0_text-Sample",
+      "control": "__control/TextView__root.textScale-2.0_text-Sample",
+      "textScale": 2.0
+    },
+    {
+      "id": "TextView/fontScaling__false",
+      "component": "TextView",
+      "attribute": "fontScaling",
+      "case": "false",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": "fontScaling",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextView/fontScaling__false.layout.json",
+      "test": "fixtures/TextView/fontScaling__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "TextView/fontScaling@TextView__root.textScale-2.0_text-Sample",
+      "control": "__control/TextView__root.textScale-2.0_text-Sample",
+      "textScale": 2.0
+    },
+    {
+      "id": "TextView/maxFontScale__static",
+      "component": "TextView",
+      "attribute": "maxFontScale",
+      "case": "static",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": "maxFontScale",
+      "aliasOf": null,
+      "value": 1.2,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/TextView/maxFontScale__static.layout.json",
+      "test": "fixtures/TextView/maxFontScale__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/TextView__root.textScale-2.0_text-Sample",
+      "textScale": 2.0
+    },
+    {
       "id": "TextView/fontColor__static",
       "component": "TextView",
       "attribute": "fontColor",
@@ -14020,6 +14245,54 @@
       "control": "__control/TextView"
     },
     {
+      "id": "Button/accessibilitySelected__true",
+      "component": "Button",
+      "attribute": "accessibilitySelected",
+      "case": "true",
+      "class": "visual",
+      "host": "Button",
+      "writtenKey": "accessibilitySelected",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Button/accessibilitySelected__true.layout.json",
+      "test": "fixtures/Button/accessibilitySelected__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Button/accessibilitySelected@Button",
+      "control": "__control/Button"
+    },
+    {
+      "id": "Button/accessibilitySelected__false",
+      "component": "Button",
+      "attribute": "accessibilitySelected",
+      "case": "false",
+      "class": "visual",
+      "host": "Button",
+      "writtenKey": "accessibilitySelected",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Button/accessibilitySelected__false.layout.json",
+      "test": "fixtures/Button/accessibilitySelected__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Button/accessibilitySelected@Button",
+      "control": "__control/Button"
+    },
+    {
       "id": "Button/accessibilityLabel__static",
       "component": "Button",
       "attribute": "accessibilityLabel",
@@ -14193,6 +14466,81 @@
       "promotedFrom": null,
       "peerGroup": null,
       "control": "__control/Button"
+    },
+    {
+      "id": "Button/fontScaling__true",
+      "component": "Button",
+      "attribute": "fontScaling",
+      "case": "true",
+      "class": "visual",
+      "host": "Button",
+      "writtenKey": "fontScaling",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Button/fontScaling__true.layout.json",
+      "test": "fixtures/Button/fontScaling__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Button/fontScaling@Button__root.textScale-2.0",
+      "control": "__control/Button__root.textScale-2.0",
+      "textScale": 2.0
+    },
+    {
+      "id": "Button/fontScaling__false",
+      "component": "Button",
+      "attribute": "fontScaling",
+      "case": "false",
+      "class": "visual",
+      "host": "Button",
+      "writtenKey": "fontScaling",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Button/fontScaling__false.layout.json",
+      "test": "fixtures/Button/fontScaling__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Button/fontScaling@Button__root.textScale-2.0",
+      "control": "__control/Button__root.textScale-2.0",
+      "textScale": 2.0
+    },
+    {
+      "id": "Button/maxFontScale__static",
+      "component": "Button",
+      "attribute": "maxFontScale",
+      "case": "static",
+      "class": "visual",
+      "host": "Button",
+      "writtenKey": "maxFontScale",
+      "aliasOf": null,
+      "value": 1.2,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Button/maxFontScale__static.layout.json",
+      "test": "fixtures/Button/maxFontScale__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Button__root.textScale-2.0",
+      "textScale": 2.0
     },
     {
       "id": "Button/fontColor__static",
@@ -17227,6 +17575,81 @@
       "control": "__control/SelectBox__prompt-Choose"
     },
     {
+      "id": "SelectBox/fontScaling__true",
+      "component": "SelectBox",
+      "attribute": "fontScaling",
+      "case": "true",
+      "class": "visual",
+      "host": "SelectBox",
+      "writtenKey": "fontScaling",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SelectBox/fontScaling__true.layout.json",
+      "test": "fixtures/SelectBox/fontScaling__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "SelectBox/fontScaling@SelectBox__root.textScale-2.0_selectedIndex-0",
+      "control": "__control/SelectBox__root.textScale-2.0_selectedIndex-0",
+      "textScale": 2.0
+    },
+    {
+      "id": "SelectBox/fontScaling__false",
+      "component": "SelectBox",
+      "attribute": "fontScaling",
+      "case": "false",
+      "class": "visual",
+      "host": "SelectBox",
+      "writtenKey": "fontScaling",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SelectBox/fontScaling__false.layout.json",
+      "test": "fixtures/SelectBox/fontScaling__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "SelectBox/fontScaling@SelectBox__root.textScale-2.0_selectedIndex-0",
+      "control": "__control/SelectBox__root.textScale-2.0_selectedIndex-0",
+      "textScale": 2.0
+    },
+    {
+      "id": "SelectBox/maxFontScale__static",
+      "component": "SelectBox",
+      "attribute": "maxFontScale",
+      "case": "static",
+      "class": "visual",
+      "host": "SelectBox",
+      "writtenKey": "maxFontScale",
+      "aliasOf": null,
+      "value": 1.2,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/SelectBox/maxFontScale__static.layout.json",
+      "test": "fixtures/SelectBox/maxFontScale__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/SelectBox__root.textScale-2.0_selectedIndex-0",
+      "textScale": 2.0
+    },
+    {
       "id": "SelectBox/fontColor__static",
       "component": "SelectBox",
       "attribute": "fontColor",
@@ -18573,6 +18996,81 @@
       "control": "__control/Switch__label-Sample"
     },
     {
+      "id": "Switch/fontScaling__true",
+      "component": "Switch",
+      "attribute": "fontScaling",
+      "case": "true",
+      "class": "visual",
+      "host": "Switch",
+      "writtenKey": "fontScaling",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Switch/fontScaling__true.layout.json",
+      "test": "fixtures/Switch/fontScaling__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Switch/fontScaling@Switch__label-Sample_root.textScale-2.0",
+      "control": "__control/Switch__label-Sample_root.textScale-2.0",
+      "textScale": 2.0
+    },
+    {
+      "id": "Switch/fontScaling__false",
+      "component": "Switch",
+      "attribute": "fontScaling",
+      "case": "false",
+      "class": "visual",
+      "host": "Switch",
+      "writtenKey": "fontScaling",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Switch/fontScaling__false.layout.json",
+      "test": "fixtures/Switch/fontScaling__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Switch/fontScaling@Switch__label-Sample_root.textScale-2.0",
+      "control": "__control/Switch__label-Sample_root.textScale-2.0",
+      "textScale": 2.0
+    },
+    {
+      "id": "Switch/maxFontScale__static",
+      "component": "Switch",
+      "attribute": "maxFontScale",
+      "case": "static",
+      "class": "visual",
+      "host": "Switch",
+      "writtenKey": "maxFontScale",
+      "aliasOf": null,
+      "value": 1.2,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Switch/maxFontScale__static.layout.json",
+      "test": "fixtures/Switch/maxFontScale__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Switch__label-Sample_root.textScale-2.0",
+      "textScale": 2.0
+    },
+    {
       "id": "Segment/accessibilityLabel__static",
       "component": "Segment",
       "attribute": "accessibilityLabel",
@@ -18929,6 +19427,75 @@
       "promotedFrom": null,
       "peerGroup": null,
       "control": "__control/Segment"
+    },
+    {
+      "id": "Segment/fontScaling__true",
+      "component": "Segment",
+      "attribute": "fontScaling",
+      "case": "true",
+      "class": "visual",
+      "host": "Segment",
+      "writtenKey": "fontScaling",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Segment/fontScaling__true.layout.json",
+      "test": "fixtures/Segment/fontScaling__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Segment/fontScaling@Segment__root.textScale-2.0",
+      "control": "__control/Segment__root.textScale-2.0",
+      "textScale": 2.0
+    },
+    {
+      "id": "Segment/fontScaling__false",
+      "component": "Segment",
+      "attribute": "fontScaling",
+      "case": "false",
+      "class": "visual",
+      "host": "Segment",
+      "writtenKey": "fontScaling",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Segment/fontScaling__false.layout.json",
+      "test": "fixtures/Segment/fontScaling__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Segment/fontScaling@Segment__root.textScale-2.0",
+      "control": "__control/Segment__root.textScale-2.0",
+      "textScale": 2.0
+    },
+    {
+      "id": "Segment/maxFontScale__static",
+      "component": "Segment",
+      "attribute": "maxFontScale",
+      "case": "static",
+      "class": "visual",
+      "host": "Segment",
+      "writtenKey": "maxFontScale",
+      "aliasOf": null,
+      "value": 1.2,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Segment/maxFontScale__static.layout.json",
+      "test": "fixtures/Segment/maxFontScale__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Segment__root.textScale-2.0",
+      "textScale": 2.0
     },
     {
       "id": "Slider/accessibilityLabel__static",
@@ -19765,6 +20332,54 @@
       "promotedFrom": null,
       "peerGroup": null,
       "control": "__control/Progress"
+    },
+    {
+      "id": "View/accessibilitySelected__true",
+      "component": "View",
+      "attribute": "accessibilitySelected",
+      "case": "true",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "accessibilitySelected",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/View/accessibilitySelected__true.layout.json",
+      "test": "fixtures/View/accessibilitySelected__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "View/accessibilitySelected@View__onClick--conformanceTap",
+      "control": "__control/View__onClick--conformanceTap"
+    },
+    {
+      "id": "View/accessibilitySelected__false",
+      "component": "View",
+      "attribute": "accessibilitySelected",
+      "case": "false",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": "accessibilitySelected",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/View/accessibilitySelected__false.layout.json",
+      "test": "fixtures/View/accessibilitySelected__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "View/accessibilitySelected@View__onClick--conformanceTap",
+      "control": "__control/View__onClick--conformanceTap"
     },
     {
       "id": "View/accessibilityLabel__static",
@@ -22334,35 +22949,6 @@
       ]
     },
     {
-      "id": "Collection/reorderFixedProperty__static",
-      "component": "Collection",
-      "attribute": "reorderFixedProperty",
-      "case": "static",
-      "class": "visual",
-      "host": "Collection",
-      "writtenKey": "reorderFixedProperty",
-      "aliasOf": null,
-      "value": "sample",
-      "platforms": [
-        "ios",
-        "android",
-        "web"
-      ],
-      "mode": null,
-      "deprecated": null,
-      "layout": "fixtures/Collection/reorderFixedProperty__static.layout.json",
-      "test": "fixtures/Collection/reorderFixedProperty__static.test.json",
-      "state": null,
-      "promotedFrom": null,
-      "peerGroup": null,
-      "control": "__control/Collection",
-      "companions": [
-        "fixtures/Collection/__cells/conformance_cell.layout.json",
-        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
-        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
-      ]
-    },
-    {
       "id": "Collection/containerInset__static",
       "component": "Collection",
       "attribute": "containerInset",
@@ -23205,6 +23791,81 @@
       "promotedFrom": null,
       "peerGroup": "Radio/fontSize@Radio",
       "control": "__control/Radio"
+    },
+    {
+      "id": "Radio/fontScaling__true",
+      "component": "Radio",
+      "attribute": "fontScaling",
+      "case": "true",
+      "class": "visual",
+      "host": "Radio",
+      "writtenKey": "fontScaling",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Radio/fontScaling__true.layout.json",
+      "test": "fixtures/Radio/fontScaling__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Radio/fontScaling@Radio__root.textScale-2.0",
+      "control": "__control/Radio__root.textScale-2.0",
+      "textScale": 2.0
+    },
+    {
+      "id": "Radio/fontScaling__false",
+      "component": "Radio",
+      "attribute": "fontScaling",
+      "case": "false",
+      "class": "visual",
+      "host": "Radio",
+      "writtenKey": "fontScaling",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Radio/fontScaling__false.layout.json",
+      "test": "fixtures/Radio/fontScaling__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "Radio/fontScaling@Radio__root.textScale-2.0",
+      "control": "__control/Radio__root.textScale-2.0",
+      "textScale": 2.0
+    },
+    {
+      "id": "Radio/maxFontScale__static",
+      "component": "Radio",
+      "attribute": "maxFontScale",
+      "case": "static",
+      "class": "visual",
+      "host": "Radio",
+      "writtenKey": "maxFontScale",
+      "aliasOf": null,
+      "value": 1.2,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Radio/maxFontScale__static.layout.json",
+      "test": "fixtures/Radio/maxFontScale__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Radio__root.textScale-2.0",
+      "textScale": 2.0
     },
     {
       "id": "Radio/fontColor__static",
@@ -24062,6 +24723,81 @@
       "promotedFrom": null,
       "peerGroup": "CheckBox/fontSize@CheckBox",
       "control": "__control/CheckBox"
+    },
+    {
+      "id": "CheckBox/fontScaling__true",
+      "component": "CheckBox",
+      "attribute": "fontScaling",
+      "case": "true",
+      "class": "visual",
+      "host": "CheckBox",
+      "writtenKey": "fontScaling",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/CheckBox/fontScaling__true.layout.json",
+      "test": "fixtures/CheckBox/fontScaling__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "CheckBox/fontScaling@CheckBox__root.textScale-2.0",
+      "control": "__control/CheckBox__root.textScale-2.0",
+      "textScale": 2.0
+    },
+    {
+      "id": "CheckBox/fontScaling__false",
+      "component": "CheckBox",
+      "attribute": "fontScaling",
+      "case": "false",
+      "class": "visual",
+      "host": "CheckBox",
+      "writtenKey": "fontScaling",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/CheckBox/fontScaling__false.layout.json",
+      "test": "fixtures/CheckBox/fontScaling__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "CheckBox/fontScaling@CheckBox__root.textScale-2.0",
+      "control": "__control/CheckBox__root.textScale-2.0",
+      "textScale": 2.0
+    },
+    {
+      "id": "CheckBox/maxFontScale__static",
+      "component": "CheckBox",
+      "attribute": "maxFontScale",
+      "case": "static",
+      "class": "visual",
+      "host": "CheckBox",
+      "writtenKey": "maxFontScale",
+      "aliasOf": null,
+      "value": 1.2,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/CheckBox/maxFontScale__static.layout.json",
+      "test": "fixtures/CheckBox/maxFontScale__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/CheckBox__root.textScale-2.0",
+      "textScale": 2.0
     },
     {
       "id": "CheckBox/fontColor__static",
@@ -25329,6 +26065,81 @@
       "control": "__control/IconLabel"
     },
     {
+      "id": "IconLabel/fontScaling__true",
+      "component": "IconLabel",
+      "attribute": "fontScaling",
+      "case": "true",
+      "class": "visual",
+      "host": "IconLabel",
+      "writtenKey": "fontScaling",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/IconLabel/fontScaling__true.layout.json",
+      "test": "fixtures/IconLabel/fontScaling__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "IconLabel/fontScaling@IconLabel__root.textScale-2.0",
+      "control": "__control/IconLabel__root.textScale-2.0",
+      "textScale": 2.0
+    },
+    {
+      "id": "IconLabel/fontScaling__false",
+      "component": "IconLabel",
+      "attribute": "fontScaling",
+      "case": "false",
+      "class": "visual",
+      "host": "IconLabel",
+      "writtenKey": "fontScaling",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/IconLabel/fontScaling__false.layout.json",
+      "test": "fixtures/IconLabel/fontScaling__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "IconLabel/fontScaling@IconLabel__root.textScale-2.0",
+      "control": "__control/IconLabel__root.textScale-2.0",
+      "textScale": 2.0
+    },
+    {
+      "id": "IconLabel/maxFontScale__static",
+      "component": "IconLabel",
+      "attribute": "maxFontScale",
+      "case": "static",
+      "class": "visual",
+      "host": "IconLabel",
+      "writtenKey": "maxFontScale",
+      "aliasOf": null,
+      "value": 1.2,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/IconLabel/maxFontScale__static.layout.json",
+      "test": "fixtures/IconLabel/maxFontScale__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/IconLabel__root.textScale-2.0",
+      "textScale": 2.0
+    },
+    {
       "id": "IconLabel/fontColor__static",
       "component": "IconLabel",
       "attribute": "fontColor",
@@ -25598,6 +26409,54 @@
       "promotedFrom": null,
       "peerGroup": null,
       "control": "__control/IconLabel__icon-off-conformance-sample"
+    },
+    {
+      "id": "IconLabel/accessibilitySelected__true",
+      "component": "IconLabel",
+      "attribute": "accessibilitySelected",
+      "case": "true",
+      "class": "visual",
+      "host": "IconLabel",
+      "writtenKey": "accessibilitySelected",
+      "aliasOf": null,
+      "value": true,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/IconLabel/accessibilitySelected__true.layout.json",
+      "test": "fixtures/IconLabel/accessibilitySelected__true.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "IconLabel/accessibilitySelected@IconLabel__onClick--conformanceTap",
+      "control": "__control/IconLabel__onClick--conformanceTap"
+    },
+    {
+      "id": "IconLabel/accessibilitySelected__false",
+      "component": "IconLabel",
+      "attribute": "accessibilitySelected",
+      "case": "false",
+      "class": "visual",
+      "host": "IconLabel",
+      "writtenKey": "accessibilitySelected",
+      "aliasOf": null,
+      "value": false,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/IconLabel/accessibilitySelected__false.layout.json",
+      "test": "fixtures/IconLabel/accessibilitySelected__false.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": "IconLabel/accessibilitySelected@IconLabel__onClick--conformanceTap",
+      "control": "__control/IconLabel__onClick--conformanceTap"
     },
     {
       "id": "IconLabel/contentDescription__static",
@@ -27186,6 +28045,31 @@
       "isControl": true
     },
     {
+      "id": "__control/Button__root.textScale-2.0",
+      "component": "__control",
+      "attribute": null,
+      "case": "Button",
+      "class": "visual",
+      "host": "Button",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Button__root.textScale-2.0.layout.json",
+      "test": "fixtures/__control/Button__root.textScale-2.0.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "textScale": 2.0
+    },
+    {
       "id": "__control/CheckBox",
       "component": "__control",
       "attribute": null,
@@ -27278,6 +28162,31 @@
       "promotedFrom": null,
       "control": null,
       "isControl": true
+    },
+    {
+      "id": "__control/CheckBox__root.textScale-2.0",
+      "component": "__control",
+      "attribute": null,
+      "case": "CheckBox",
+      "class": "visual",
+      "host": "CheckBox",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/CheckBox__root.textScale-2.0.layout.json",
+      "test": "fixtures/__control/CheckBox__root.textScale-2.0.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "textScale": 2.0
     },
     {
       "id": "__control/Collection",
@@ -27671,6 +28580,55 @@
       "promotedFrom": null,
       "control": null,
       "isControl": true
+    },
+    {
+      "id": "__control/IconLabel__onClick--conformanceTap",
+      "component": "__control",
+      "attribute": null,
+      "case": "IconLabel",
+      "class": "visual",
+      "host": "IconLabel",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/IconLabel__onClick--conformanceTap.layout.json",
+      "test": "fixtures/__control/IconLabel__onClick--conformanceTap.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/IconLabel__root.textScale-2.0",
+      "component": "__control",
+      "attribute": null,
+      "case": "IconLabel",
+      "class": "visual",
+      "host": "IconLabel",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/IconLabel__root.textScale-2.0.layout.json",
+      "test": "fixtures/__control/IconLabel__root.textScale-2.0.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "textScale": 2.0
     },
     {
       "id": "__control/IconLabel__selected-True",
@@ -28099,6 +29057,31 @@
       "isControl": true
     },
     {
+      "id": "__control/Label__root.textScale-2.0",
+      "component": "__control",
+      "attribute": null,
+      "case": "Label",
+      "class": "visual",
+      "host": "Label",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Label__root.textScale-2.0.layout.json",
+      "test": "fixtures/__control/Label__root.textScale-2.0.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "textScale": 2.0
+    },
+    {
       "id": "__control/Label__selected-True",
       "component": "__control",
       "attribute": null,
@@ -28476,6 +29459,31 @@
       "isControl": true
     },
     {
+      "id": "__control/Radio__root.textScale-2.0",
+      "component": "__control",
+      "attribute": null,
+      "case": "Radio",
+      "class": "visual",
+      "host": "Radio",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Radio__root.textScale-2.0.layout.json",
+      "test": "fixtures/__control/Radio__root.textScale-2.0.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "textScale": 2.0
+    },
+    {
       "id": "__control/SafeAreaView",
       "component": "__control",
       "attribute": null,
@@ -28667,6 +29675,29 @@
       "isControl": true
     },
     {
+      "id": "__control/Segment__root.textScale-2.0",
+      "component": "__control",
+      "attribute": null,
+      "case": "Segment",
+      "class": "visual",
+      "host": "Segment",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Segment__root.textScale-2.0.layout.json",
+      "test": "fixtures/__control/Segment__root.textScale-2.0.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "textScale": 2.0
+    },
+    {
       "id": "__control/SelectBox",
       "component": "__control",
       "attribute": null,
@@ -28785,6 +29816,31 @@
       "promotedFrom": null,
       "control": null,
       "isControl": true
+    },
+    {
+      "id": "__control/SelectBox__root.textScale-2.0_selectedIndex-0",
+      "component": "__control",
+      "attribute": null,
+      "case": "SelectBox",
+      "class": "visual",
+      "host": "SelectBox",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/SelectBox__root.textScale-2.0_selectedIndex-0.layout.json",
+      "test": "fixtures/__control/SelectBox__root.textScale-2.0_selectedIndex-0.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "textScale": 2.0
     },
     {
       "id": "__control/SelectBox__selectItemType-Date",
@@ -28929,6 +29985,31 @@
       "promotedFrom": null,
       "control": null,
       "isControl": true
+    },
+    {
+      "id": "__control/Switch__label-Sample_root.textScale-2.0",
+      "component": "__control",
+      "attribute": null,
+      "case": "Switch",
+      "class": "visual",
+      "host": "Switch",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/Switch__label-Sample_root.textScale-2.0.layout.json",
+      "test": "fixtures/__control/Switch__label-Sample_root.textScale-2.0.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "textScale": 2.0
     },
     {
       "id": "__control/Switch__labelAttributes--text-Sample",
@@ -29093,6 +30174,31 @@
       "promotedFrom": null,
       "control": null,
       "isControl": true
+    },
+    {
+      "id": "__control/TextField__root.textScale-2.0_text-Sample",
+      "component": "__control",
+      "attribute": null,
+      "case": "TextField",
+      "class": "visual",
+      "host": "TextField",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/TextField__root.textScale-2.0_text-Sample.layout.json",
+      "test": "fixtures/__control/TextField__root.textScale-2.0_text-Sample.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "textScale": 2.0
     },
     {
       "id": "__control/TextField__text-Clear-me",
@@ -29325,6 +30431,31 @@
       "promotedFrom": null,
       "control": null,
       "isControl": true
+    },
+    {
+      "id": "__control/TextView__root.textScale-2.0_text-Sample",
+      "component": "__control",
+      "attribute": null,
+      "case": "TextView",
+      "class": "visual",
+      "host": "TextView",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/TextView__root.textScale-2.0_text-Sample.layout.json",
+      "test": "fixtures/__control/TextView__root.textScale-2.0_text-Sample.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true,
+      "textScale": 2.0
     },
     {
       "id": "__control/TextView__text-Sample",
@@ -29703,6 +30834,30 @@
       "deprecated": null,
       "layout": "fixtures/__control/View__no-background_root.backdrop-5f535fdc.layout.json",
       "test": "fixtures/__control/View__no-background_root.backdrop-5f535fdc.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "control": null,
+      "isControl": true
+    },
+    {
+      "id": "__control/View__onClick--conformanceTap",
+      "component": "__control",
+      "attribute": null,
+      "case": "View",
+      "class": "visual",
+      "host": "View",
+      "writtenKey": null,
+      "aliasOf": null,
+      "value": null,
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/__control/View__onClick--conformanceTap.layout.json",
+      "test": "fixtures/__control/View__onClick--conformanceTap.test.json",
       "state": null,
       "promotedFrom": null,
       "control": null,
@@ -32588,16 +33743,6 @@
     {
       "component": "Collection",
       "attribute": "onReorder",
-      "reason": "callback"
-    },
-    {
-      "component": "Collection",
-      "attribute": "onReorderStart",
-      "reason": "callback"
-    },
-    {
-      "component": "Collection",
-      "attribute": "onReorderEnd",
       "reason": "callback"
     },
     {

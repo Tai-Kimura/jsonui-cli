@@ -14,7 +14,7 @@ module RjuiTools
           id_attr = build_id_attr
           on_click = build_on_click
           disabled_attr = build_disabled_attr
-          testid_attr = build_testid_attr + build_aria_label_attr
+          testid_attr = build_testid_attr + build_aria_label_attr + build_aria_selected_attr
           tag_attr = build_tag_attr
 
           # Check if we need partialAttributes rendering (styled text spans)
@@ -132,6 +132,11 @@ module RjuiTools
 
         def build_on_click
           build_onclick_attr
+        end
+
+        # accessibilitySelected is on the <button> beside its label (convert), handler or not.
+        def selected_on_the_tap?
+          false
         end
 
         def build_disabled_attr

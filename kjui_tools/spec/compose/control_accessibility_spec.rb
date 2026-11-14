@@ -85,14 +85,40 @@ RSpec.describe 'kjui control accessibility' do
     end
   end
 
+  describe 'accessibilitySelected' do
+    # The table every face runs (shared/core/control_accessibility_vectors.json): `selected = true` where the vector
+    # tells, gated by its binding; nothing where it tells nothing (false included, as on iOS).
+    vectors = JSON.parse(File.read(File.expand_path('../../../shared/core/control_accessibility_vectors.json', __dir__)))
+    vectors['cases'].each do |c|
+      it c['name'] do
+        code, imports = emit(c['layout'])
+        told = code.scan(/\.then\((?:if \(([^\n]*)\) )?Modifier\.semantics \{ selected = true \}(?: else Modifier)?\)/)
+        case c['selected']
+        when nil
+          expect(told).to eq([])
+          expect(code).not_to include('selected = ')
+        when true
+          expect(told).to eq([[nil]])
+          expect(imports).to include(:semantics_selected)
+        else
+          expect(told.size).to eq(1)
+          expect(told.first.first).to include("data.#{c['selected'][2..-2]}")
+        end
+      end
+    end
+  end
+
   # The modifiers it adds reach a compiler, on stubs shaped as
   # androidx.compose.ui.semantics declares them.
   it 'adds modifiers that compile' do
     named, = emit({ 'type' => 'Button', 'text' => 'Open', 'accessibilityLabel' => '@{name}' })
     live, = emit({ 'type' => 'Label', 'text' => '@{s}', 'accessibilityLiveRegion' => 'assertive' })
-    added = (named.lines + live.lines).map(&:strip).select { |l| l.include?('contentDescription = label') || l.include?('liveRegion =') }
+    chosen, = emit({ 'type' => 'Button', 'text' => 'Must', 'accessibilitySelected' => '@{isMust}' })
+    fixed, = emit({ 'type' => 'View', 'onClick' => '@{open}', 'accessibilitySelected' => true })
+    added = (named.lines + live.lines + chosen.lines + fixed.lines).map(&:strip)
+                                      .select { |l| l.include?('contentDescription = label') || l.include?('liveRegion =') || l.include?('selected = true') }
                                       .map { |l| l.sub(/\Amodifier = Modifier/, '').sub(/,\z/, '') }
-    expect(added.size).to eq(2)
+    expect(added.size).to eq(4)
     source = <<~KOTLIN
       interface Modifier {
           fun then(other: Modifier): Modifier = other
@@ -102,9 +128,10 @@ RSpec.describe 'kjui control accessibility' do
       class SemanticsPropertyReceiver {
           var contentDescription: String = ""
           var liveRegion: LiveRegionMode = LiveRegionMode.Polite
+          var selected: Boolean = false
       }
       fun Modifier.semantics(properties: SemanticsPropertyReceiver.() -> Unit): Modifier = this
-      class Data(val name: String?)
+      class Data(val name: String?, val isMust: Boolean?)
       fun screen(data: Data): Modifier = Modifier
       #{added.map { |l| "    #{l}" }.join("\n")}
     KOTLIN

@@ -3,6 +3,7 @@
 
 require 'json'
 require_relative 'tap_accessibility'
+require_relative 'control_accessibility'
 require_relative 'enum_spelling'
 require_relative 'type_synonyms'
 
@@ -274,6 +275,9 @@ module JsonUIShared
 
       # `bind` beside the component's own value attribute
       check_bind_beside_own_value(merged_component, type)
+
+      # accessibilitySelected where it tells a screen reader nothing
+      check_accessibility_selected(merged_component)
 
       # A value attribute of the other kind (a Date SelectBox's selectedValue)
       check_value_attribute_of_another_kind(merged_component, type)
@@ -1037,6 +1041,18 @@ module JsonUIShared
       return unless text.is_a?(Hash) && text['binding_direction'] == 'two-way'
 
       add_warning("onClick on a #{section} is not called: a text field's tap focuses it")
+    end
+
+    # accessibilitySelected tells a screen reader the selected state only
+    # where the node is one button to it (shared/core/control_accessibility.rb
+    # `selected`): a Button, or a View / IconLabel the tap rule makes one
+    # button. Elsewhere nothing is told on any platform — this is the one
+    # sentence that says so, from the validator all three tools run.
+    def check_accessibility_selected(component)
+      return unless JsonUIShared::ControlAccessibility.selected_misplaced?(component)
+
+      add_warning("accessibilitySelected tells a screen reader nothing here: it takes effect on a Button, " \
+                  "and on a View or IconLabel whose onClick makes it one button (no control inside it, its tap not shut)")
     end
 
     # `bind` is an alternative spelling of the component's own value

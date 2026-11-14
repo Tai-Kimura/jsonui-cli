@@ -3094,6 +3094,23 @@ module RjuiTools
           end
         end
 
+        # ` aria-pressed` for a control that says it is the selected one
+        # (accessibilitySelected; shared/core/control_accessibility.rb
+        # `selected`, which also says where it takes effect: a Button, a View
+        # or IconLabel the tap rule makes one button). `true` is pressed; a
+        # binding is pressed while it holds and says nothing otherwise; false
+        # says nothing, as iOS's .isSelected and Android's selected say
+        # nothing of a control that is not selected. "" when there is nothing
+        # to tell.
+        def build_aria_selected_attr
+          selected = JsonUIShared::ControlAccessibility.selected(@json)
+          return '' if selected.nil?
+          return ' aria-pressed="true"' if selected == true
+
+          expr = bound_value_expr(selected)
+          expr ? " aria-pressed={(#{expr}) ? true : undefined}" : ''
+        end
+
         # ` role="status" aria-live="polite"` (or alert / assertive) for a
         # node whose changes are read out (ControlAccessibility.live), else "".
         # A View that is a button keeps its role (keyboard_tap_attrs): an
@@ -3172,7 +3189,15 @@ module RjuiTools
           attr = click_attr
           return attr if attr.empty? || attr.include?('ERROR')
 
-          attr + keyboard_tap_attrs
+          # Where it takes effect is the rule's (ControlAccessibility.selected: a tap that is one button). A
+          # <button> carries it whether or not it has a handler (ButtonConverter, beside its label).
+          attr + keyboard_tap_attrs + (selected_on_the_tap? ? build_aria_selected_attr : '')
+        end
+
+        # Whether accessibilitySelected goes beside the tap (a View, an IconLabel) — a Button puts it on its
+        # <button> itself.
+        def selected_on_the_tap?
+          true
         end
 
         # A tap on an element that is not a control — the tap rule's `button`
