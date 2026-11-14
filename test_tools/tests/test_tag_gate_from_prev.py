@@ -350,6 +350,65 @@ def test_a_rewritten_or_removed_mark_is_red(tmp_path, capsys, change, kind, coun
     assert len(_fails(out)) == 1 and "survives" in _fails(out)[0], out
 
 
+# A ledger (conformance/codegen_parity.json and its kind) drops an entry once
+# the fix it waited for lands; the entry's lines name the version that
+# recorded it (ticket check-tag-from-prev-resolved-ledger-entries: v2.5.37
+# removed control_TextView's entry and this arm was red on its two lines).
+LEDGER = "conformance/ledger.json"
+NOTE = f'"note": "jsonui-cli {OLD} (run 1)"'
+
+
+def _ledger(*entries: dict) -> str:
+    import json as _json
+    return _json.dumps({"schemaVersion": 1, "entries": list(entries)}, indent=2, ensure_ascii=False) + "\n"
+
+
+KEPT = {"screenshot": "b.png", "platform": "ios", "status": "mismatch", "note": "older"}
+ENTRY = {"screenshot": "a.png", "platform": "android", "status": "mismatch",
+         "reason": f"waits for the fix in {NEW}", "note": f"jsonui-cli {OLD} (run 1)"}
+
+
+def _ledger_repo(tmp_path: Path, after: str) -> dict:
+    r = _repo(tmp_path, mark=False, after_bump=None)
+    # PREV has the entry: rebuild PREV with the ledger in it.
+    repo = r["repo"]
+    _git(repo, "checkout", "-q", r["prev"])
+    _git(repo, "checkout", "-q", "-b", "with-ledger")
+    _commit(repo, "ledger", {LEDGER: _ledger(KEPT, ENTRY)})
+    _tag(repo, r["prev"], f"{r['prev']}\n", "HEAD")
+    _commit(repo, f"{NEW}: stamp", {**_stamped(NEW), LEDGER: after})
+    _tag(repo, r["tag"], _body(repo, r["prev"]))
+    return r
+
+
+def test_a_mark_that_left_with_its_whole_ledger_entry_is_retired_and_green(tmp_path, capsys):
+    r = _ledger_repo(tmp_path, _ledger(KEPT))
+    rc, out = _run(gate, capsys, r["repo"], r["prev"], r["tag"])
+    assert rc == 0, out
+    assert f"RETIRED x1 {LEDGER}: {NOTE}" in out, out
+    assert "0 rewritten or removed, 1 retired" in out, out
+
+
+@pytest.mark.parametrize("after, why", [
+    (_ledger(KEPT, {**ENTRY, "note": "jsonui-cli later (run 2)"}), "the note rewritten, the entry kept"),
+    (_ledger({**ENTRY, "note": "moved"}, KEPT), "the entry moved and rewritten"),
+    (_ledger(KEPT, {k: v for k, v in ENTRY.items() if k != "note"}), "the note line alone dropped"),
+    ("{}\n", "the list itself gone"),
+])
+def test_a_ledger_mark_whose_entry_stays_is_still_gone_and_red(tmp_path, capsys, after, why):
+    r = _ledger_repo(tmp_path, after)
+    rc, out = _run(gate, capsys, r["repo"], r["prev"], r["tag"])
+    assert rc == 1, f"{why}\n{out}"
+    assert f"GONE   x1 {LEDGER}: {NOTE}" in out, f"{why}\n{out}"
+    assert len(_fails(out)) == 1 and "survives" in _fails(out)[0], out
+
+
+def test_a_removed_line_outside_a_json_ledger_is_never_retired(tmp_path, capsys):
+    r = _repo(tmp_path, bump={**_stamped(NEW), "docs/history.md": f"Until {PP} this returned None.\n"})
+    rc, out = _run(gate, capsys, r["repo"], r["prev"], r["tag"])
+    assert rc == 1 and "RETIRED" not in out, out
+
+
 def test_no_mark_at_prev_is_inert_not_a_pass_by_accident(tmp_path, capsys):
     r = _repo(tmp_path, mark=False)
     rc, out = _run(gate, capsys, r["repo"], r["prev"], r["tag"])
@@ -547,19 +606,22 @@ def test_the_exit_status_is_the_verdict_when_run_as_a_file(tmp_path):
 # ------------------------------------------------------------ mutations ---
 
 MEMBERSHIP = 'not (sets["missing"] or sets["extra"] or sets["duplicate"] or sets["unresolved"])'
-MARKS_JUDGED = "not gone,"
+MARKS_JUDGED = "not lost,"
 
 
 @pytest.mark.parametrize("name, find, replace, arm", [
     ("membership judged by count", MEMBERSHIP, 'sets["listed_lines"] == len(sets["expected"])',
      "delete s1, duplicate m1"),
     ("marks judged by total", MARKS_JUDGED, "sum(a.values()) <= sum(b.values()),", "swap"),
+    ("every gone ledger line retired", 'if not path.endswith(".json"):\n        return False', 'if path.endswith(".json"):\n        return True', "ledger"),
 ])
 def test_a_mutation_of_the_gate_flips_a_verdict(tmp_path, capsys, name, find, replace, arm):
     source = SCRIPT.read_text(encoding="utf-8")
     assert source.count(find) == 1, name
     mutant = _load(source.replace(find, replace))
-    if arm == "swap":
+    if arm == "ledger":
+        r = _ledger_repo(tmp_path, _ledger(KEPT, {**ENTRY, "note": "jsonui-cli later (run 2)"}))
+    elif arm == "swap":
         r = _repo(tmp_path, bump={**_stamped(NEW),
                                   "docs/history.md": f"Until {PP} this returned None.\nAs of {NEW} the answer is cached.\n",
                                   "docs/other.md": f"Since {OLD} another note.\n"})
