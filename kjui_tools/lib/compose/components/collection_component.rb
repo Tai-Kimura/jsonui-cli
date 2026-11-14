@@ -3113,8 +3113,12 @@ module KjuiTools
         # A row's key for `key(...)`: its cellId, its cellIdProperty value, else its index.
         # The row's id handed to CollectionReorderRow (its key): the drag compares the rows' ids when the data changes
         # under it, and cancels (rule.itemsChange; ticket jui-collection-reorder-start-callback-missing).
+        # Every key is a String (sectionKeys / eagerKeys, a List<String>; the cellId / cellIdProperty chain, which ends
+        # in cellIndex.toString()) but the bare index: only that one is converted. `.toString()` on a String is a
+        # redundant conversion, a warning, and an app built with allWarningsAsErrors fails on it (ticket
+        # kjui-collection-reorder-id-redundant-tostring-fails-warnings-as-errors).
         def self.reorder_id_arg(key_expr)
-          ", id = (#{key_expr}).toString()"
+          key_expr == 'cellIndex' ? ', id = cellIndex.toString()' : ", id = #{key_expr}"
         end
 
         def self.reorder_row_key_expr(json_data, data_var)

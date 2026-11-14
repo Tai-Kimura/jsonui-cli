@@ -46,7 +46,7 @@ RSpec.describe 'kjui codegen: a reorderable Collection' do
       expect(code).to include('if (data.editing == true) CollectionReorder(true, false) { s, f, t -> data.onStopMove?.invoke(s, f, t) } else null,'), route
       expect(code).to include('CollectionReorderScope(stopListReorder) {'), route
       expect(code).to include('.collectionReorderContainer(stopListReorder)'), route
-      expect(code).to match(/CollectionReorderRow\(stopListReorder, 0, cellIndex, [\w.]+\.size, reorderLocked0, id = \(.*\)\.toString\(\)\) \{/), route
+      expect(code).to match(/CollectionReorderRow\(stopListReorder, 0, cellIndex, [\w.]+\.size, reorderLocked0, id = .+\) \{/), route
       expect(code).to include('.testTag("stop_list_item_$cellIndex").collectionReorderActions()'), route
       expect(code.scan('{').size).to eq(code.scan('}').size), route
     end
@@ -87,7 +87,7 @@ RSpec.describe 'kjui codegen: a reorderable Collection' do
       expect(plain).not_to include('Fixed'), route
       code, = emit(extra.merge(KJUI_REORDER_DECL).merge('reorderFixedProperty' => 'skipped'))
       expect(code).to include('[it]["skipped"] == true }.toSet() }'), route
-      expect(code).to match(/CollectionReorderRow\(stopListReorder, 0, cellIndex, [\w.]+\.size, reorderLocked0, reorderLocked0Fixed, id = \(.*\)\.toString\(\)\) \{/), route
+      expect(code).to match(/CollectionReorderRow\(stopListReorder, 0, cellIndex, [\w.]+\.size, reorderLocked0, reorderLocked0Fixed, id = .+\) \{/), route
       expect(code.sub(/\n[^\n]*reorderLocked0Fixed = remember[^\n]*/, '').gsub(', reorderLocked0Fixed', '')).to eq(plain), route
     end
     both, = emit(base.merge('reorderLockedProperty' => 'pinned', 'reorderFixedProperty' => 'skipped'))
@@ -109,7 +109,7 @@ RSpec.describe 'kjui codegen: a reorderable Collection' do
     [none, lazy].each do |code|
       expect(code).to include('CollectionReorderScope(stopListReorder) {')
       expect(code).to include('.collectionReorderContainer(stopListReorder)')
-      expect(code).to match(/CollectionReorderRow\(stopListReorder, sectionIndex, cellIndex, [\w.]+\.size, reorderLocked, id = \(.*\)\.toString\(\)\) \{/)
+      expect(code).to match(/CollectionReorderRow\(stopListReorder, sectionIndex, cellIndex, [\w.]+\.size, reorderLocked, id = .+\) \{/)
       expect(code).to include('.collectionReorderActions()')
       expect(code.scan('{').size).to eq(code.scan('}').size)
     end
@@ -142,6 +142,25 @@ RSpec.describe 'kjui codegen: a reorderable Collection' do
         expect(frames["reorder#{name.capitalize}"]).to eq(frames["plain#{name.capitalize}"]), name
         expect(frames["reorder#{name.capitalize}"]).to include('Aa0'), name
       end
+    end
+
+    # An app built with allWarningsAsErrors (client's) fails on a warning in emitted code: the reorder routes compile
+    # with -Werror, every key shape (cellIdProperty fixed and auto, none) and every option (ticket
+    # kjui-collection-reorder-id-redundant-tostring-fails-warnings-as-errors: `id = (sectionKeys[cellIndex]).toString()`
+    # on a List<String> was a redundant conversion).
+    it 'every reorderable route compiles with warnings as errors, each key shape' do
+      decl = { 'reorderable' => '@{editing}', 'onReorder' => '@{onMove}', 'reorderLockedProperty' => 'fixed', 'reorderFixedProperty' => 'skipped',
+               'onReorderStart' => '@{onStart}', 'onReorderEnd' => '@{onEnd}' }
+      routes = {
+        'none' => { 'lazy' => 'none' }, 'noneId' => { 'lazy' => 'none', 'cellIdProperty' => 'id' },
+        'noneAuto' => { 'lazy' => 'none', 'cellIdProperty' => 'id', 'autoChangeTrackingId' => true },
+        'list' => {}, 'listId' => { 'cellIdProperty' => 'id' },
+        'wrap' => { 'height' => 'wrapContent' }, 'wrapId' => { 'height' => 'wrapContent', 'cellIdProperty' => 'id' },
+        'classList' => { 'sections' => nil, 'cellClasses' => ['ACell'] },
+        'classListId' => { 'sections' => nil, 'cellClasses' => ['ACell'], 'cellIdProperty' => 'id' }
+      }
+      functions = routes.to_h { |name, extra| ["reorder#{name[0].upcase}#{name[1..]}", frame_emit(extra.merge(decl))] }
+      expect(program(functions)).to compile_as_kotlin.with_warnings_as_errors
     end
   end
 

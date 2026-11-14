@@ -50,6 +50,42 @@ module KotlinCompiler
 
   PINNED = pinned_versions.freeze
 
+  # The warnings arms' compiler (the fetch script's `warnings_jars=(...)`): the Kotlin of an app built with
+  # allWarningsAsErrors, whose warnings 2.1.0 does not all report.
+  def pinned_warnings_versions(script = FETCH_SCRIPT)
+    return {} unless File.file?(script)
+
+    File.read(script)[/^warnings_jars=\((.*?)^\)/m, 1].to_s.scan(/"([^"\s]+) ([^"\s]+) ([^"\s]+) [0-9a-f]{64}"/)
+        .to_h { |group, artifact, version| [[group, artifact], version] }
+  end
+
+  WARNINGS_PINNED = pinned_warnings_versions.freeze
+
+  def warnings_jar(group, artifact)
+    @warnings_jars ||= {}
+    key = [group, artifact]
+    return @warnings_jars[key] if @warnings_jars.key?(key)
+
+    @warnings_jars[key] = resolve(group, artifact, pinned: WARNINGS_PINNED)
+  end
+
+  WARNINGS_COMPILER = [%w[org.jetbrains.kotlin kotlin-compiler-embeddable], %w[org.jetbrains.kotlin kotlin-stdlib],
+                       %w[org.jetbrains.kotlin kotlin-script-runtime], %w[org.jetbrains.kotlin kotlin-daemon-embeddable]].freeze
+
+  # nil when the warnings compiler is all there, else what is missing.
+  def warnings_unavailable_reason
+    missing = WARNINGS_COMPILER.reject { |g, a| warnings_jar(g, a) }
+    return nil if missing.empty?
+
+    "the warnings compiler is not in the Gradle cache at #{WARNINGS_PINNED.values.uniq.join(', ')}: " \
+      "#{missing.map { |g, a| "#{g}:#{a}" }.join(', ')} — fetch: #{FETCH_HINT}"
+  end
+
+  def warnings_compiler_classpath
+    (WARNINGS_COMPILER.map { |g, a| warnings_jar(g, a) } +
+     [jar('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm'), jar('org.jetbrains', 'annotations')]).compact.join(':')
+  end
+
   # The jar of `artifact` at its pinned version under `home`'s module cache,
   # or nil: an exact version, never the newest present (2.4.20 beside 2.1.0
   # is not 2.1.0, and 1.9 sorts after 1.10 as a string).
@@ -238,7 +274,10 @@ module KotlinCompiler
   # must live in its own package, so that an emit naming it without its
   # import does not resolve (a single file has one package, so a stub beside
   # the emit would be found whether or not the emit imports it).
-  def compile(source, libraries: [], files: {}, test_bridge_stubs: true)
+  # `warnings_as_errors`: compile as an app with allWarningsAsErrors does (-Werror), and report each warning as an
+  # error — a warning in emitted code fails such an app's build (ticket
+  # kjui-collection-reorder-id-redundant-tostring-fails-warnings-as-errors).
+  def compile(source, libraries: [], files: {}, test_bridge_stubs: true, warnings_as_errors: false)
     stdlib   = jar('org.jetbrains.kotlin', 'kotlin-stdlib')
     reflect  = jar('org.jetbrains.kotlin', 'kotlin-reflect')
     annots   = jar('org.jetbrains', 'annotations')
@@ -250,6 +289,10 @@ module KotlinCompiler
     compiler_cp = compiler_classpath
     extra       = libraries.map { |lib| jar(*LIBRARIES.fetch(lib)) }
     target_cp   = ([stdlib, reflect, annots, coroutin] + extra).compact.join(':')
+    if warnings_as_errors
+      compiler_cp = warnings_compiler_classpath
+      target_cp = ([warnings_jar('org.jetbrains.kotlin', 'kotlin-stdlib'), annots, coroutin] + extra).compact.join(':')
+    end
 
     Dir.mktmpdir('kjui_kotlin') do |dir|
       file = File.join(dir, 'Emitted.kt')
@@ -263,10 +306,11 @@ module KotlinCompiler
       out, err, = Open3.capture3(
         java_bin, '-cp', compiler_cp,
         'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
-        '-no-stdlib', '-cp', target_cp, '-d', File.join(dir, 'out'), file, *others
+        '-no-stdlib', '-cp', target_cp, '-d', File.join(dir, 'out'), *(warnings_as_errors ? ['-Werror'] : []), file, *others
       )
       text = "#{out}\n#{err}"
-      errors = text.lines.select { |l| l.include?('error:') }.map(&:strip)
+      marker = warnings_as_errors ? /error:|warning:/ : /error:/
+      errors = text.lines.select { |l| l.match?(marker) }.map(&:strip)
       Result.new(errors.empty?, errors)
     end
   end
@@ -326,6 +370,14 @@ RSpec::Matchers.define :compile_as_kotlin do |*libraries|
       RSpec::Core::Pending.mark_skipped!(example, message) if example
       raise RSpec::Core::Pending::SkipDeclaredInExample, message
     end
+    if @werror && (reason = KotlinCompiler.warnings_unavailable_reason)
+      message = "compile_as_kotlin.with_warnings_as_errors: #{reason}"
+      raise KotlinCompiler::Unavailable, message if ENV['KJUI_REQUIRE_KOTLINC'] == '1'
+
+      example = RSpec.current_example
+      RSpec::Core::Pending.mark_skipped!(example, message) if example
+      raise RSpec::Core::Pending::SkipDeclaredInExample, message
+    end
     missing = libraries.reject { |lib| KotlinCompiler.jar(*KotlinCompiler::LIBRARIES.fetch(lib)) }
     unless missing.empty?
       message = "compile_as_kotlin: not in the Gradle cache at the pinned version: #{missing.join(', ')} — fetch: #{KotlinCompiler::FETCH_HINT}"
@@ -336,12 +388,15 @@ RSpec::Matchers.define :compile_as_kotlin do |*libraries|
       raise RSpec::Core::Pending::SkipDeclaredInExample, message
     end
 
-    @result = KotlinCompiler.compile(source, libraries: libraries, files: @files || {})
+    @result = KotlinCompiler.compile(source, libraries: libraries, files: @files || {}, warnings_as_errors: @werror || false)
     @result.success?
   end
 
   # `expect(src).to compile_as_kotlin.alongside('Stubs.kt' => text)`
   chain(:alongside) { |files| @files = files }
+
+  # `expect(src).to compile_as_kotlin.with_warnings_as_errors`: -Werror, as an app with allWarningsAsErrors builds it.
+  chain(:with_warnings_as_errors) { @werror = true }
 
   failure_message do |source|
     "expected the emitted Kotlin to compile, but got:\n" \

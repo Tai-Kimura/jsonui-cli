@@ -49,10 +49,21 @@ jars=(
   "org.jetbrains.kotlinx kotlinx-datetime-jvm 0.6.2 102764921129e1e44a74f408b7a0b8dac6d1892c6042e0e48f8bdbbbf78c6d2e"
 )
 
+# The compiler the warnings arms build with (KotlinCompiler.compile(warnings_as_errors: true)): the Kotlin of the
+# apps that build with allWarningsAsErrors. 2.1.0 does not report what they fail on — a redundant `.toString()` on a
+# String, the 2.5.37 reorder id (ticket kjui-collection-reorder-id-redundant-tostring-fails-warnings-as-errors) — so
+# these arms compile with a compiler of their own; the other arms keep 2.1.0.
+warnings_jars=(
+  "org.jetbrains.kotlin kotlin-compiler-embeddable 2.4.21 ef19419c765e7ac8404465fa026ca8fc4dbb8a822de0fc79aa53c8dce29f1d02"
+  "org.jetbrains.kotlin kotlin-stdlib 2.4.21 bd8250210584cb659847dce9cda660f8e9906e5def7fbebcea93dc6dcb6a88a3"
+  "org.jetbrains.kotlin kotlin-script-runtime 2.4.21 a658cf5902a1525a06c264a5e42b437e97a6679ddeef8ca641246f270cf6a013"
+  "org.jetbrains.kotlin kotlin-daemon-embeddable 2.4.21 7b3ef24674e5bcffcadfc4e43202ea314194939ecbcdd90a4770b2f1b04e0d07"
+)
+
 sha256() { sha256sum "$1" | cut -d' ' -f1; }
 sha1() { sha1sum "$1" | cut -d' ' -f1; }
 
-for line in "${jars[@]}"; do
+for line in "${jars[@]}" "${warnings_jars[@]}"; do
   read -r group artifact version want <<<"$line"
   name="$artifact-$version.jar"
   existing=$(find "$modules/$group/$artifact/$version" -name "$name" 2>/dev/null | head -n 1 || true)
