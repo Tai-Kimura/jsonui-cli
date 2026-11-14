@@ -197,6 +197,6 @@ RSpec.describe 'kjui codegen: the class-list Collection (cellClasses, items, no 
                    "#{emit(CLASS_LIST_BASE.merge(attributes))}\n}"
     end
     source = "#{CLASS_LIST_STUBS}\n#{scaffold('RowCell')}#{scaffold('HeadCell')}#{scaffold('FootCell')}\n#{functions.join("\n\n")}\n"
-    expect(source).to compile_as_kotlin
+    expect(source).to compile_as_kotlin.with_warnings_as_errors
   end
 end

@@ -150,7 +150,7 @@ RSpec.describe 'kjui codegen: a class-list Collection whose items are a declared
         "// #{declared}, #{route}\n@Composable fun route#{d}_#{r}(data: Data#{d}, viewModel: Any) {\n#{emit(extra, definition)}\n}"
       end
     end
-    expect("#{CLASS_LIST_ITEMS_STUBS}\n#{functions.join("\n\n")}\n").to compile_as_kotlin
+    expect("#{CLASS_LIST_ITEMS_STUBS}\n#{functions.join("\n\n")}\n").to compile_as_kotlin.with_warnings_as_errors
   end
   # A cell's key: the row's own cellIdProperty value, as the sections path keys
   # its cells (ticket 2026-10-23-rjui-collection-array-items-key-ignores-cell-
@@ -178,6 +178,6 @@ RSpec.describe 'kjui codegen: a class-list Collection whose items are a declared
           "#{emit(extra.merge('cellIdProperty' => 'id'), definition)}\n}"
       end
     end
-    expect("#{CLASS_LIST_ITEMS_STUBS}\n#{functions.join("\n\n")}\n").to compile_as_kotlin
+    expect("#{CLASS_LIST_ITEMS_STUBS}\n#{functions.join("\n\n")}\n").to compile_as_kotlin.with_warnings_as_errors
   end
 end

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../helpers/content_inset_helper'
+require_relative '../helpers/kotlin_cast'
 require_relative '../helpers/modifier_builder'
 require_relative '../../core/normalization'
 require_relative '../../core/string_literals'
@@ -1566,7 +1567,7 @@ module KjuiTools
                 Core::Logger.warn("Collection #{json_data['id'] || '(unnamed)'}: items '#{property_name}' is a list of " \
                                   "#{element.name}; a cell reads its own #{own_data || 'Data'} or a map, so its cells draw with no data.")
               end
-              '.mapNotNull { it as? Map<String, Any> }'
+              ".mapNotNull { #{Helpers::KotlinCast.as_nullable('it', 'Map<String, Any>')} }"
             end
           receiver = Helpers::ResourceResolver.generated_property_nullable?(property_name) ? "data.#{property_name}.orEmpty()" : "data.#{property_name}"
           "#{receiver}#{conversion}"
@@ -2651,13 +2652,12 @@ module KjuiTools
               code += "\n" + indent("}", inner_depth)
               code += "\n" + indent("#{cell_class}View(", inner_depth)
               code += "\n" + indent("viewModel = cellViewModel,", inner_depth + 1)
-              # The cell's place among the drawn sections' cells: the cells of
-              # the drawn sections before this one, then its own index.
+              # The cell's place among the drawn sections' cells: its address
+              # (cell_address — the hoisted counts, not data.<items>?.sections
+              # inside the section's ?.let, where the safe call is a warning).
               flow_extra = ''
               if flow_scroll_to
-                before = sections.first(index).each_with_index.select { |s, _| s.is_a?(Hash) && s['cell'] }
-                                 .map { |_, j| "(#{scroll_sections_expr(property_name)}.getOrNull(#{j})?.cells?.data?.size ?: 0) + " }.join
-                flow_extra = ".onGloballyPositioned { flowCellTargets[#{before}cellIndex] = it }"
+                flow_extra = ".onGloballyPositioned { flowCellTargets[#{cell_address(sections, index, property_name)}] = it }"
               end
               code += "\n" + cell_test_tag_modifier(json_data['id'], cell_address(sections, index, property_name), inner_depth + 1, flow_extra)
               code += "\n" + indent(")", inner_depth)
@@ -2884,9 +2884,9 @@ module KjuiTools
                 # honors the declared width; a full-width cell declares
                 # matchParent itself). Stretching here was the parity deviation
                 # measured across every android Collection fixture.
+                # The cell's place is its address (cell_address, as the flow's).
                 place = if places
-                          before = drawn_cells_before(sections, index) { |j| "#{scroll_sections_expr(property_name)}.getOrNull(#{j})?.cells?.data?.size" }
-                          ".onGloballyPositioned { collectionCellPlaces[#{before}cellIndex] = it }"
+                          ".onGloballyPositioned { collectionCellPlaces[#{cell_address(sections, index, property_name)}] = it }"
                         else
                           ''
                         end

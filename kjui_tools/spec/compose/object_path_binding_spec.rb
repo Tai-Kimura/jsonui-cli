@@ -22,7 +22,9 @@ RSpec.describe 'kjui codegen: a path into an Object data item' do
     KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
       'obj' => { 'name' => 'obj', 'class' => 'Object' },
       'items' => { 'name' => 'items', 'class' => 'Array' },
-      'user' => { 'name' => 'user', 'class' => 'UserDto' }
+      'user' => { 'name' => 'user', 'class' => 'UserDto' },
+      'profile' => { 'name' => 'profile', 'class' => 'Object', 'defaultValue' => { 'name' => 'Grace' } },
+      'rows' => { 'name' => 'rows', 'class' => 'Array', 'defaultValue' => ['a'] }
     }
     example.run
   ensure
@@ -37,6 +39,28 @@ RSpec.describe 'kjui codegen: a path into an Object data item' do
   it 'reads a list by index, and an element as a map' do
     expect(OBJECT_PATH_EXPR.interpolated_access('items[1]')).to eq('"${data.items?.getOrNull(1) ?: ""}"')
     expect(OBJECT_PATH_EXPR.interpolated_access('items[0].title')).to eq('"${(data.items?.getOrNull(0) as? Map<*, *>)?.get("title") ?: ""}"')
+  end
+
+  # kjui-map-list-data-bindings-warn-under-all-warnings-as-errors: an item
+  # with a defaultValue is a non-null field, and `?.` on it was "unnecessary
+  # safe call" — an error under allWarningsAsErrors (conformance Cx0025-28).
+  # The first step on a non-null container is `.`; past it, a step reads what
+  # it reached (Any?) and keeps `?.`.
+  it 'reads a non-null container (one with a defaultValue) with `.` at its first step' do
+    expect(OBJECT_PATH_EXPR.interpolated_access('profile.name')).to eq('"${data.profile.get("name") ?: ""}"')
+    expect(OBJECT_PATH_EXPR.interpolated_access('profile.a.b')).to eq('"${(data.profile.get("a") as? Map<*, *>)?.get("b") ?: ""}"')
+    expect(OBJECT_PATH_EXPR.interpolated_access('rows[0]')).to eq('"${data.rows.getOrNull(0) ?: ""}"')
+  end
+
+  it 'compiles with allWarningsAsErrors, a nullable and a non-null container alike' do
+    expect(<<~KT).to compile_as_kotlin.with_warnings_as_errors
+      class Data(val obj: Map<String, Any?>? = null, val items: List<Any?>? = null,
+                 val profile: Map<String, Any?> = mapOf("name" to "Grace"), val rows: List<Any?> = listOf("a"))
+      fun all(data: Data): List<String> = listOf(
+          #{%w[obj.name obj.a.b items[0].title items[1] profile.name profile.a.b rows[0]].map { |p| OBJECT_PATH_EXPR.interpolated_access(p) }.join(",
+    ")}
+      )
+    KT
   end
 
   it 'leaves a model type path as property access (control)' do
@@ -75,12 +99,13 @@ RSpec.describe 'kjui codegen: a path into an Object data item' do
     builder = KjuiTools::Compose::ComposeBuilder.allocate
     builder.instance_variable_set(:@mode, 'compose')
     casts = { 'obj' => 'Object', 'meta' => 'Hash', 'rows' => 'Array' }.to_h { |n, c| [n, builder.send(:get_kotlin_cast, c, n)] }
-    # Through 1.9.5: value as? Object / Hash / Array.
-    expect(casts['obj']).to eq('value as? Map<String, Any?> ?: updated.obj')
-    expect(casts['rows']).to eq('value as? List<Any?> ?: updated.rows')
-    expect(<<~KT).to compile_as_kotlin
+    # Through 1.9.5: value as? Object / Hash / Array. The cast to a generic
+    # type is unchecked: suppressed on the expression, so an app built with
+    # allWarningsAsErrors compiles it (it carried no @Suppress until 2.5.40).
+    expect(casts['obj']).to eq('(@Suppress("UNCHECKED_CAST") (value as? Map<String, Any?>)) ?: updated.obj')
+    expect(casts['rows']).to eq('(@Suppress("UNCHECKED_CAST") (value as? List<Any?>)) ?: updated.rows')
+    expect(<<~KT).to compile_as_kotlin.with_warnings_as_errors
       data class Data(val obj: Map<String, Any?>? = null, val meta: Map<String, Any?>? = null, val rows: List<Any?>? = null)
-      @Suppress("UNCHECKED_CAST")
       fun apply(updated: Data, key: String, value: Any): Data = when (key) {
           "obj" -> updated.copy(obj = #{casts['obj']})
           "meta" -> updated.copy(meta = #{casts['meta']})
@@ -100,10 +125,10 @@ RSpec.describe 'kjui codegen: a path into an Object data item' do
       { 'name' => 'loose', 'class' => 'Object' }
     ]
     text = updater.send(:generate_data_content, 'Probe', props, [])
-    expect(text).to include('profile = map["profile"] as? Map<String, Any?> ?: mapOf("name" to "Grace")')
-    expect(text).to include('items = map["items"] as? List<Any?> ?: listOf("a")')
+    expect(text).to include('profile = (@Suppress("UNCHECKED_CAST") (map["profile"] as? Map<String, Any?>)) ?: mapOf("name" to "Grace")')
+    expect(text).to include('items = (@Suppress("UNCHECKED_CAST") (map["items"] as? List<Any?>)) ?: listOf("a")')
     model = text.lines.reject { |l| l.start_with?('package ') }.join
-    expect(model).to compile_as_kotlin
+    expect(model).to compile_as_kotlin.with_warnings_as_errors
   ensure
     KjuiTools::Core::TypeConverter.clear_project_type_map_cache
   end

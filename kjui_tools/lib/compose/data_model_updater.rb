@@ -4,6 +4,7 @@ require 'json'
 require 'fileutils'
 require 'set'
 require_relative '../core/config_manager'
+require_relative 'helpers/kotlin_cast'
 require_relative '../core/project_finder'
 require_relative '../core/type_converter'
 require_relative 'helpers/resource_resolver'
@@ -26,21 +27,6 @@ module KjuiTools
       # Where Data models are written; the build's orphan sweep reads it here
       # rather than spelling it again.
       attr_reader :data_dir
-
-      # `<subject> as? <type>`. A cast to a generic type the runtime cannot
-      # check — Map<String, Any?>, List<Any?> — is an "unchecked cast"
-      # warning, an error in an app built with allWarningsAsErrors
-      # (kjui-map-list-data-bindings-warn-under-all-warnings-as-errors). The
-      # cast is what the field needs (the map holds what the Data class was
-      # written from), so the warning is suppressed on that expression alone.
-      # A star projection (List<*>) is checked and stays as it is.
-      def self.cast_expr(subject, kotlin_type)
-        cast = "#{subject} as? #{kotlin_type}"
-        args = kotlin_type[/<(.*)>/, 1]
-        return cast if args.nil? || args.split(',').all? { |arg| arg.strip == '*' }
-
-        "(@Suppress(\"UNCHECKED_CAST\") (#{cast}))"
-      end
 
       def initialize
         @config = Core::ConfigManager.load_config
@@ -332,12 +318,12 @@ module KjuiTools
               # non-null field a defaultValue gives — the Data class did not
               # compile (conformance Label/text__binding_dot_path and three
               # more — kjui-object-path-binding-does-not-compile).
-              content += "#{self.class.cast_expr("map[\"#{name}\"]", kotlin_type)} ?: #{from_map_fallback(prop, class_type, 'emptyList()')}"
+              content += "#{Helpers::KotlinCast.as_nullable("map[\"#{name}\"]", kotlin_type)} ?: #{from_map_fallback(prop, class_type, 'emptyList()')}"
             when /^Map<.*>$/, 'Object', 'object', 'Hash', 'hash'
-              content += "#{self.class.cast_expr("map[\"#{name}\"]", kotlin_type)} ?: #{from_map_fallback(prop, class_type, 'emptyMap()')}"
+              content += "#{Helpers::KotlinCast.as_nullable("map[\"#{name}\"]", kotlin_type)} ?: #{from_map_fallback(prop, class_type, 'emptyMap()')}"
             else
               # For custom types, try to cast directly
-              content += self.class.cast_expr("map[\"#{name}\"]", kotlin_type)
+              content += Helpers::KotlinCast.as_nullable("map[\"#{name}\"]", kotlin_type)
             end
 
             content += "," if index < data_properties.length - 1

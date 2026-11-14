@@ -155,12 +155,13 @@ module KjuiTools
 
             expr = "data.#{head}"
             typed = true # expr is still the declared Map / List, not an element
-            # The declared container is non-null when it has a defaultValue
-            # (the Data class's field, property_nullable?): its first step is
-            # `.`. A `?.` there was "unnecessary safe call on a non-null
-            # receiver" — an error in an app built with allWarningsAsErrors
-            # (kjui-map-list-data-bindings-warn-under-all-warnings-as-errors).
-            head_call = property_nullable?(head) ? '?.' : '.'
+            # The declared container's field is non-null when the Data class
+            # writes it so (generated_property_nullable?, DataModelUpdater's own
+            # rule): its first step is `.`. A `?.` there was "unnecessary safe
+            # call on a non-null receiver" — an error in an app built with
+            # allWarningsAsErrors (kjui-map-list-data-bindings-warn-under-all-
+            # warnings-as-errors).
+            head_call = ResourceResolver.generated_property_nullable?(head) ? '?.' : '.'
             tokens.drop(1).each do |field, index|
               if field
                 expr = typed && kind == :map ? "#{expr}#{head_call}get(#{quote(field)})" : "(#{expr} as? Map<*, *>)?.get(#{quote(field)})"
