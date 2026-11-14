@@ -1103,7 +1103,19 @@ module KjuiTools
           end
         end
 
+        # A Collection whose contentInsetAdjustmentBehavior asks for the safe
+        # area is drawn inside the run block that measures it
+        # (ContentInsetHelper.wrap).
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
+          code = generate_scrollable(json_data, depth, required_imports, parent_type)
+          return code unless json_data.is_a?(Hash)
+
+          layout = json_data['layout'] || json_data['orientation'] || 'vertical'
+          horizontal = layout == 'horizontal' || json_data['horizontalScroll'] == true
+          Helpers::ContentInsetHelper.wrap(code, json_data['contentInsetAdjustmentBehavior'], depth, horizontal: horizontal)
+        end
+
+        def self.generate_scrollable(json_data, depth, required_imports = nil, parent_type = nil)
           # `items` is declared ["array", "binding"]; what these emitters draw
           # from is the binding (the data's sections). An array names no data:
           # it is set aside here, as the sjui and rjui Collections set it
@@ -1408,6 +1420,7 @@ module KjuiTools
 
           # 3. Alpha + Background (clip + background)
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          modifiers.concat(Helpers::ContentInsetHelper.frame_modifiers(json_data['contentInsetAdjustmentBehavior']))
           # testTag after margins and offset, before alpha: the tagged box (resource-id
           # bounds, TalkBack focus) is the drawn box. Ticket
           # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
@@ -2122,6 +2135,7 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          modifiers.concat(Helpers::ContentInsetHelper.frame_modifiers(json_data['contentInsetAdjustmentBehavior']))
           # testTag after margins and offset, before alpha: the tagged box (resource-id
           # bounds, TalkBack focus) is the drawn box. Ticket
           # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
@@ -2475,6 +2489,7 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          modifiers.concat(Helpers::ContentInsetHelper.frame_modifiers(json_data['contentInsetAdjustmentBehavior']))
           # testTag after margins and offset, before alpha: the tagged box (resource-id
           # bounds, TalkBack focus) is the drawn box. Ticket
           # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
@@ -2795,6 +2810,7 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          modifiers.concat(Helpers::ContentInsetHelper.frame_modifiers(json_data['contentInsetAdjustmentBehavior']))
           # testTag after margins and offset, before alpha: the tagged box (resource-id
           # bounds, TalkBack focus) is the drawn box. Ticket
           # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
@@ -2996,6 +3012,7 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          modifiers.concat(Helpers::ContentInsetHelper.frame_modifiers(json_data['contentInsetAdjustmentBehavior']))
           # testTag after margins and offset, before alpha: the tagged box (resource-id
           # bounds, TalkBack focus) is the drawn box. Ticket
           # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
@@ -3288,6 +3305,7 @@ module KjuiTools
             modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           end
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          modifiers.concat(Helpers::ContentInsetHelper.frame_modifiers(json_data['contentInsetAdjustmentBehavior']))
           # testTag after margins and offset, before alpha: the tagged box (resource-id
           # bounds, TalkBack focus) is the drawn box. Ticket
           # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
@@ -3515,8 +3533,8 @@ module KjuiTools
           declared = content_padding_values(json_data['insets'])
           inset_h = json_data['insetHorizontal']
           inset_v = json_data['insetVertical']
-          safe = Helpers::ContentInsetHelper.safe_area_padding(json_data['contentInsetAdjustmentBehavior'], horizontal: is_horizontal)
-          return safe unless declared || inset_h || inset_v
+          behaviour = json_data['contentInsetAdjustmentBehavior']
+          return Helpers::ContentInsetHelper.safe_area_padding(behaviour, horizontal: is_horizontal) unless declared || inset_h || inset_v
 
           own = if declared && !inset_h && !inset_v
                   content_padding_expr(declared)
@@ -3525,13 +3543,9 @@ module KjuiTools
                 end
           sides = content_padding_sides(declared, inset_h, inset_v)
           own ||= "PaddingValues(top = #{sides[0]}, start = #{sides[3]}, bottom = #{sides[2]}, end = #{sides[1]})"
-          return own unless safe
-
-          # Added to the safe area side by side, start and end in the layout's
-          # direction.
-          "#{safe}.let { safe -> val dir = androidx.compose.ui.platform.LocalLayoutDirection.current; " \
-            "PaddingValues(start = safe.calculateStartPadding(dir) + #{sides[3]}, top = safe.calculateTopPadding() + #{sides[0]}, " \
-            "end = safe.calculateEndPadding(dir) + #{sides[1]}, bottom = safe.calculateBottomPadding() + #{sides[2]}) }"
+          # The safe area's overlap is added to it side by side
+          # (ContentInsetHelper; the frame read when the content measures).
+          Helpers::ContentInsetHelper.safe_area_padding(behaviour, horizontal: is_horizontal, own: own) || own
         end
 
         # [top, end, bottom, start] as Dp expressions: the declared values

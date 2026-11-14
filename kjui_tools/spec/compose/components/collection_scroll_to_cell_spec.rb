@@ -95,6 +95,18 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     }
     fun WindowInsets(left: Dp = Dp(), top: Dp = Dp(), right: Dp = Dp(), bottom: Dp = Dp()) = WindowInsets(left.v, top.v, right.v, bottom.v)
     fun contentPadded(values: PaddingValues?) { values?.let { Drawn.chain += "cp($it)" } }
+    // KotlinJsonUI's rememberSafeAreaOverlap (jsonui-cli 2.5.40): the part of
+    // the safe area the scrollable's frame overlaps. These programs have no
+    // window, so the frame is the whole window's and the overlap is all of
+    // safeDrawing; the overlap arithmetic is pinned in KotlinJsonUI's
+    // SafeAreaOverlapTest.
+    class SafeAreaOverlap(val insets: WindowInsets) {
+        val modifier: Modifier = Modifier
+        fun contentPadding(own: PaddingValues = PaddingValues(0, 0, 0, 0)) =
+            PaddingValues(own.top + insets.t, own.start + insets.l, own.bottom + insets.b, own.end + insets.r)
+    }
+    fun rememberSafeAreaOverlap(sides: WindowInsetsSides? = null) =
+        SafeAreaOverlap(if (sides == null) WindowInsets.safeDrawing else WindowInsets.safeDrawing.only(sides))
     object GridCells { class Fixed(val count: Int) }
     class GridItemSpan(val span: Int)
     class LazyGridItemSpanScope(val maxLineSpan: Int, val maxCurrentLineSpan: Int)

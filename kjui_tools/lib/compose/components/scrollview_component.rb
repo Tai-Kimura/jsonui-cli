@@ -26,7 +26,16 @@ module KjuiTools
           (json_data['horizontalScroll'] ? true : false) || json_data['orientation'] == 'horizontal'
         end
 
+        # The run block that measures the safe-area overlap goes round the
+        # ScrollView when its contentInsetAdjustmentBehavior asks for it
+        # (ContentInsetHelper.wrap).
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil, is_root: false)
+          code = generate_scrollable(json_data, depth, required_imports, parent_type, is_root: is_root)
+          Helpers::ContentInsetHelper.wrap(code, json_data['contentInsetAdjustmentBehavior'], depth,
+                                           horizontal: horizontal?(json_data))
+        end
+
+        def self.generate_scrollable(json_data, depth, required_imports = nil, parent_type = nil, is_root: false)
           # スクロール方向の判定 — horizontalScroll true or orientation
           # horizontal scrolls sideways, anything else vertically, as sjui
           # and rjui read it. Neither key outranks the other (a pair that
@@ -146,6 +155,7 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_margins(json_data))
           modifiers.concat(Helpers::ModifierBuilder.build_size(json_data, parent_type, required_imports))
           modifiers.concat(Helpers::ModifierBuilder.build_offset(json_data, required_imports))
+          modifiers.concat(Helpers::ContentInsetHelper.frame_modifiers(json_data['contentInsetAdjustmentBehavior']))
           # testTag after margins and offset, before alpha: the tagged box (resource-id
           # bounds, TalkBack focus) is the drawn box. Ticket
           # kjui-a11y-bounds-of-a-margined-view-include-its-margin.
