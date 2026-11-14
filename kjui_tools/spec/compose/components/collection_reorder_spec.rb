@@ -52,6 +52,20 @@ RSpec.describe 'kjui codegen: a reorderable Collection' do
     end
   end
 
+  # onReorderStart (section, index) / onReorderEnd (section) (shared/core/reorder_vectors.json rule.callbacks; ticket
+  # jui-collection-reorder-start-callback-missing): named before onReorder's trailing lambda when declared; undeclared,
+  # the emit is as it was.
+  it 'passes onReorderStart and onReorderEnd when declared, and nothing when not' do
+    code, = emit(KJUI_REORDER_DECL.merge('onReorderStart' => '@{onStopPick}', 'onReorderEnd' => 'onStopDrop'))
+    expect(code).to include('CollectionReorder(true, false, onReorderStart = { s, i -> data.onStopPick?.invoke(s, i) }, ' \
+                            'onReorderEnd = { s -> data.onStopDrop?.invoke(s) }) { s, f, t -> data.onStopMove?.invoke(s, f, t) }')
+    only_end, = emit(KJUI_REORDER_DECL.merge('onReorderEnd' => '@{onStopDrop}'))
+    expect(only_end).to include('CollectionReorder(true, false, onReorderEnd = { s -> data.onStopDrop?.invoke(s) }) {')
+    plain, = emit(KJUI_REORDER_DECL)
+    expect(plain).not_to include('onReorderStart')
+    expect(plain).not_to include('onReorderEnd')
+  end
+
   it 'the container scrolls itself unless an outer scroll carries it (lazy none)' do
     expect(emit({ 'lazy' => 'none' }.merge(KJUI_REORDER_DECL)).first).to include('scrollsItself = false,')
     expect(emit({ 'height' => 'wrapContent' }.merge(KJUI_REORDER_DECL)).first).to include('scrollsItself = true,')
@@ -119,7 +133,8 @@ RSpec.describe 'kjui codegen: a reorderable Collection' do
       }
       functions = routes.flat_map do |name, extra|
         [["plain#{name.capitalize}", frame_emit(extra)],
-         ["reorder#{name.capitalize}", frame_emit(extra.merge('reorderable' => '@{editing}', 'onReorder' => '@{onMove}', 'reorderLockedProperty' => 'fixed', 'reorderFixedProperty' => 'skipped'))]]
+         ["reorder#{name.capitalize}", frame_emit(extra.merge('reorderable' => '@{editing}', 'onReorder' => '@{onMove}', 'reorderLockedProperty' => 'fixed', 'reorderFixedProperty' => 'skipped',
+                                                             'onReorderStart' => '@{onStart}', 'onReorderEnd' => '@{onEnd}'))]]
       end.to_h
       expect(program(functions)).to compile_as_kotlin
       frames = run(functions)

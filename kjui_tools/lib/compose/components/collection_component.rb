@@ -3074,12 +3074,28 @@ module KjuiTools
           name = Helpers::BindingExpression.path_only(Helpers::ModifierBuilder.string_event_name(json_data['onReorder']))
           uses_handle = json_data['reorderHandle'].is_a?(String) && !json_data['reorderHandle'].empty?
           @reorder = { var: var, locked: json_data['reorderLockedProperty'], fixed: json_data['reorderFixedProperty'] }
+          # onReorderStart (section, index) / onReorderEnd (section) when declared (shared/core/reorder_vectors.json
+          # rule.callbacks), named, before onReorder's trailing lambda; undeclared, the emit is as it was.
+          callbacks = ''
+          if (start = reorder_callback_name(json_data['onReorderStart']))
+            callbacks += ", onReorderStart = { s, i -> data.#{start}?.invoke(s, i) }"
+          end
+          if (finish = reorder_callback_name(json_data['onReorderEnd']))
+            callbacks += ", onReorderEnd = { s -> data.#{finish}?.invoke(s) }"
+          end
           prelude = indent("val #{var} = rememberCollectionReorder(", depth) + "\n" +
-                    indent("if (#{enabled}) CollectionReorder(true, #{uses_handle}) { s, f, t -> data.#{name}?.invoke(s, f, t) } else null,", depth + 1) + "\n" +
+                    indent("if (#{enabled}) CollectionReorder(true, #{uses_handle}#{callbacks}) { s, f, t -> data.#{name}?.invoke(s, f, t) } else null,", depth + 1) + "\n" +
                     indent("scrollsItself = #{scrolls},", depth + 1) + "\n" +
                     indent(")", depth) + "\n" +
                     indent("CollectionReorderScope(#{var}) {", depth) + "\n"
           [prelude, "\n" + indent("}", depth)]
+        end
+
+        # A declared callback's property path (the binding or the bare name), or nil.
+        def self.reorder_callback_name(value)
+          return nil unless value.is_a?(String) && JsonUIShared::TapAccessibility.handler?(value)
+
+          Helpers::BindingExpression.path_only(Helpers::ModifierBuilder.string_event_name(value))
         end
 
         # The Collection's code, opened in the reorder when it declares one (else as it was).

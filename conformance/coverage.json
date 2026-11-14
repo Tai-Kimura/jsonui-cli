@@ -28,24 +28,6 @@
       ],
       "reason": "legacy",
       "note": "UIKit-only KVC binding (SJUIViewCreator sets view.binding / bindingSet). The last Ruby reader was sjui's table_converter.rb, folded into the Collection route when 49-E ruled Table is a Collection — so this became unread by that ruling, not by anything failing. The declaration says it is superseded by `@{...}` in the attribute value itself; the UIKit runtime still honours it for layouts that predate that, which is why it is not deleted. Reason `legacy` rather than `unimplemented`: nothing is missing."
-    },
-    {
-      "component": "Collection",
-      "attribute": "onReorderStart",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented",
-      "note": "並べ替えの始まり・終わりの口（ticket jui-collection-reorder-start-callback-missing、依頼者の指示 2026-11-14、2.5.37）。shared の宣言と規則（reorder_vectors.json rule.callbacks と callbacks の例）を先に入れた。各面の実装で閉じる（web: triage担当、Android: サポート2、iOS: サポート1）。閉じた面はこの行から外す"
-    },
-    {
-      "component": "Collection",
-      "attribute": "onReorderEnd",
-      "platforms": [
-        "android"
-      ],
-      "reason": "unimplemented",
-      "note": "並べ替えの始まり・終わりの口（ticket jui-collection-reorder-start-callback-missing、依頼者の指示 2026-11-14、2.5.37）。shared の宣言と規則（reorder_vectors.json rule.callbacks と callbacks の例）を先に入れた。各面の実装で閉じる（web: triage担当、Android: サポート2、iOS: サポート1）。閉じた面はこの行から外す"
     }
   ]
 }
