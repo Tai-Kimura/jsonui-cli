@@ -25,7 +25,8 @@ RSpec.describe 'web control accessibility' do
       'CheckBox' => [{ 'type' => 'CheckBox', 'id' => 'c', 'checked' => '@{on}' }, /<input id="c" type="checkbox" aria-label="Name"/],
       'CheckBox with a label' => [{ 'type' => 'CheckBox', 'label' => 'Wine', 'checked' => '@{on}' }, /<label.*?>\s*<input type="checkbox" aria-label="Name"/],
       'Check (the alias section)' => [{ 'type' => 'Check', 'checked' => '@{on}' }, /<input type="checkbox" aria-label="Name"/],
-      'Switch' => [{ 'type' => 'Switch', 'isOn' => '@{on}' }, /<input type="checkbox" aria-label="Name" className="sr-only peer"/],
+      # The switch says it is one (role="switch", 0e1bceb7c); the name still rides the element that takes focus.
+      'Switch' => [{ 'type' => 'Switch', 'isOn' => '@{on}' }, /<input type="checkbox" role="switch" aria-label="Name" className="sr-only peer"/],
       'Radio' => [{ 'type' => 'Radio', 'id' => 'r', 'text' => 'A' }, /<input type="radio" aria-label="Name" name="r"/],
       'a Radio group' => [{ 'type' => 'Radio', 'id' => 'g', 'items' => %w[a b], 'selectedValue' => '@{v}' }, /<div id="g".*? role="radiogroup" aria-label="Name">/],
       'Segment' => [{ 'type' => 'Segment', 'id' => 'sg', 'items' => %w[a b] }, /<div id="sg".*? role="group" aria-label="Name">/],

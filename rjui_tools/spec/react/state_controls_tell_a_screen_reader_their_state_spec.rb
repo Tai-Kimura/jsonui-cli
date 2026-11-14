@@ -5,6 +5,8 @@ require 'json'
 require 'open3'
 require 'tmpdir'
 require_relative '../support/headless_chromium'
+require_relative '../support/configuration_runtime'
+require_relative '../support/typescript_compiler'
 require 'react/converters/segment_converter'
 require 'react/converters/tab_view_converter'
 require 'react/converters/switch_converter'
@@ -48,6 +50,25 @@ RSpec.describe 'rjui: a Segment, a TabView and a Switch tell a screen reader the
     expect(on).to include('type="checkbox" role="switch"')
   end
 
+  it 'the emit compiles as TypeScript', :typescript_compile do
+    ts = StateControlsTellTheirState::OPTS.merge('typescript' => true)
+    conv = StateControlsTellTheirState::CONV
+    elements = [
+      conv::SegmentConverter.new({ 'type' => 'Segment', 'id' => 'seg', 'items' => %w[Apple Banana Cherry],
+                                   'selectedIndex' => '@{sel}' }, ts).convert,
+      conv::TabViewConverter.new({ 'type' => 'TabView', 'id' => 'tabs', 'selectedIndex' => '@{sel}',
+                                   'tabs' => [{ 'title' => 'Home', 'view' => 'one' }, { 'title' => 'Search', 'view' => 'two' }] }, ts).convert,
+      conv::SwitchConverter.new({ 'type' => 'Switch', 'id' => 'on', 'isOn' => '@{on}', 'accessibilityLabel' => 'Wifi' }, ts).convert
+    ]
+    expect(TypeScriptCompiler.component(*elements)).to compile_as_typescript.with_ambient(<<~TS)
+      declare namespace React { type CSSProperties = { [property: string]: string | number | undefined } }
+      declare const data: { sel?: number; on: boolean; onOnChange?: (value: boolean) => void; [key: string]: any };
+      // React types an <input>'s onChange event; the minimal ambient types no element (as converter_table_spec).
+      declare namespace JSX { interface IntrinsicElements { input: { onChange?: (e: { target: { checked: boolean } }) => void; [attr: string]: unknown } } }
+      declare const One: any; declare const Two: any; declare const Circle: any;
+    TS
+  end
+
   it 'a static selected index and a seeded segment say which button is pressed' do
     conv = StateControlsTellTheirState::CONV::SegmentConverter
     seeded = conv.new({ 'type' => 'Segment', 'id' => 's', 'items' => %w[a b], 'selectedIndex' => 1 }, StateControlsTellTheirState::OPTS).convert
@@ -65,6 +86,8 @@ RSpec.describe 'rjui: a Segment, a TabView and a Switch tell a screen reader the
 
     Dir.mktmpdir('rjui_state_aria') do |dir|
       File.write(File.join(dir, 'app.jsx'), <<~JSX)
+        // Every text component's emit reads Configuration.Font.resolve (P1): the template's own.
+        #{ConfigurationRuntime.global_js}
         // Every prop the JSX writes lands as the attribute a browser builds from it; `checked` is the property.
         const h = (tag, props, ...kids) => {
           if (typeof tag === 'function') return tag(props || {});
