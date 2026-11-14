@@ -3,6 +3,8 @@
 require 'set'
 require 'compose/components/collection_component'
 require 'compose/helpers/resource_resolver'
+require_relative '../../support/kotlin_compiler'
+require_relative '../../support/collection_first_frame'
 
 # kjui-collection-grid-row-matchparent-cell-height-unbounded: a non-lazy grid
 # Collection (lazy none, columns >= 2) lays its cells out as Rows of weighted
@@ -75,6 +77,33 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
       [sections_grid, class_list_grid].each do |code|
         expect(code).not_to include('IntrinsicSize'), code
       end
+    end
+  end
+
+  # The rows compile, with warnings as errors, on the sections grid and the
+  # class-list grid (the stub universe of spec/support/collection_first_frame.rb,
+  # plus the IntrinsicSize the row asks for).
+  describe 'compiled' do
+    include CollectionFirstFrame
+
+    INTRINSIC_STUBS = <<~KOTLIN
+      enum class IntrinsicSize { Min, Max }
+      fun Modifier.height(intrinsicSize: IntrinsicSize): Modifier = this
+    KOTLIN
+
+    it 'the grids compile with allWarningsAsErrors' do
+      RESOLVER.cell_layouts = { 'ACell' => MATCH_PARENT }
+      functions = {
+        'sectionsGrid' => described_class.generate({ 'type' => 'Collection', 'id' => 'grid', 'lazy' => 'none', 'columns' => 2,
+                                                     'columnSpacing' => 12, 'items' => '@{rows}',
+                                                     'sections' => [{ 'cell' => 'ACell' }] }, 0, Set.new),
+        'classListGrid' => described_class.generate({ 'type' => 'Collection', 'id' => 'grid', 'lazy' => 'none', 'columns' => 2,
+                                                      'items' => '@{rows}', 'cellClasses' => ['ACell'] }, 0, Set.new)
+      }
+      functions.each_value { |code| expect(code).to include(FILLS_ROW), code }
+      expect(INTRINSIC_STUBS + program(functions)).to compile_as_kotlin.with_warnings_as_errors
+    ensure
+      RESOLVER.cell_layouts = nil
     end
   end
 

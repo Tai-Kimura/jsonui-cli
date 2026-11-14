@@ -87,7 +87,8 @@ module ProcessStateGuard
     # the third is one warning per colour for the whole run.
     'Thread.current[:kjui_data_definitions]' => 'emptied at the start of every spec file, as a build sets it per layout',
     'Thread.current[:kjui_string_namespaces]' => 'emptied at the start of every spec file, as a build sets it per layout',
-    'Thread.current[:kjui_warned_colors]' => 'emptied at the start of every spec file: a run warns of a colour once'
+    'Thread.current[:kjui_warned_colors]' => 'emptied at the start of every spec file: a run warns of a colour once',
+    'Thread.current[:kjui_cell_layouts]' => 'emptied at the start of every spec file: the cell layouts a build has read'
   }.freeze
 
   module_function
