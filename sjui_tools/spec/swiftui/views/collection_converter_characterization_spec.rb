@@ -112,7 +112,9 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       expect(code).to include('BCellView(data: { () -> [String: Any] in var refreshed = cell.data; ').and include('return refreshed }()).equatable()')
       expect(code).to include('.frame(height: 44, alignment: .topLeading)')
       expect(code).to include('.accessibilityIdentifier("twosec_item_\\(cellIndex)")')
-      expect(code).to include('.accessibilityIdentifier("twosec_item_\\(cell.index)")')
+      # Section 1's address counts section 0's cells (2.5.39).
+      expect(code).to include('let sectionStart = (data.items.sections[0].cells?.data.count ?? 0)')
+      expect(code).to include('.accessibilityIdentifier("twosec_item_\\(sectionStart + cell.index)")')
     end
   end
 

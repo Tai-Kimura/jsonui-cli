@@ -422,7 +422,7 @@ module SjuiTools
                               apply_cell_frame
 
                               # Add accessibilityIdentifier for test automation (tapItem action)
-                              apply_cell_item_identifier(vars[:index_var])
+                              apply_cell_item_identifier(vars)
                             end
                             add_line "}"
                           end
@@ -465,7 +465,7 @@ module SjuiTools
                             generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                             apply_cell_frame
                             # Add accessibilityIdentifier for test automation (tapItem action)
-                            apply_cell_item_identifier(vars[:index_var])
+                            apply_cell_item_identifier(vars)
                           end
                           add_line "}"
                         end
@@ -560,7 +560,7 @@ module SjuiTools
                               apply_cell_frame(grid: true)
 
                               # Add accessibilityIdentifier for test automation (tapItem action)
-                              apply_cell_item_identifier(vars[:index_var])
+                              apply_cell_item_identifier(vars)
                             end
                             add_line "}"
                           end
@@ -769,10 +769,27 @@ module SjuiTools
         # is exactly how the static side lost two arms". The static side had
         # not been consolidated, so a change here had to be made sixteen
         # times or be silently partial.
+        #
+        # The n is the cell's ADDRESS (attribute_semantics
+        # idBox.collectionCellRoot): its place among the cells of every drawn
+        # section — the cells of the sections before its own, then its index
+        # in its section — the n of scrollTo's Int and of a pager's page.
+        # Until 2.5.39 every route but the pager restarted it at 0 per
+        # section, so two sections each had an `_item_0` and a test could not
+        # reach the second one (ticket jui-collection-item-identifier-repeats-
+        # per-section). A loop's vars carry it as `:address`
+        # (open_cell_foreach) when it differs from the index.
         def apply_cell_item_identifier(index_var)
           return unless @component['id']
 
-          add_modifier_line ".accessibilityIdentifier(\"#{JsonUIShared::StringLiterals.swift_body(@component['id'])}_item_\\(#{index_var})\")"
+          address = index_var.is_a?(Hash) ? (index_var[:address] || index_var[:index_var]) : index_var
+          add_modifier_line ".accessibilityIdentifier(\"#{JsonUIShared::StringLiterals.swift_body(@component['id'])}_item_\\(#{address})\")"
+        end
+
+        # The cells of the data sections before the running `sectionIndex`
+        # (the class-list route, which draws every data section at run time).
+        def runtime_cells_before(data_source_ref)
+          "#{data_source_ref}.sections.prefix(sectionIndex).reduce(0) { $0 + ($1.cells?.data.count ?? 0) }"
         end
 
         def apply_cell_frame(grid: false)
@@ -938,7 +955,7 @@ module SjuiTools
                         add_line "#{cell_view_name}(data: #{cell_data_arg(vars)}).equatable()"
                         generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                         apply_cell_frame
-                        apply_cell_item_identifier(vars[:index_var])
+                        apply_cell_item_identifier(vars)
                       end
                       add_line "}"
                     end
@@ -962,7 +979,7 @@ module SjuiTools
                       add_line "#{cell_class_name}(data: #{cell_data_arg(vars)})"
                       generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                       apply_cell_frame
-                      apply_cell_item_identifier(vars[:index_var])
+                      apply_cell_item_identifier(vars)
                     end
                     add_line "}"
                   end
@@ -1023,7 +1040,7 @@ module SjuiTools
                             add_line "#{cell_view_name}(data: #{cell_data_arg(vars)}).equatable()"
                             generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                             apply_cell_frame(grid: true)
-                            apply_cell_item_identifier(vars[:index_var])
+                            apply_cell_item_identifier(vars)
                           end
                           add_line "}"
                         end
@@ -1153,7 +1170,7 @@ module SjuiTools
                             add_line "#{cell_view_name}(data: #{cell_data_arg(vars)}).equatable()"
                             generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                             apply_cell_frame
-                            apply_cell_item_identifier(vars[:index_var])
+                            apply_cell_item_identifier(vars)
                           end
                           add_line "}"
                         end
@@ -1180,7 +1197,7 @@ module SjuiTools
                       add_line "#{cell_class_name}(data: #{cell_data_arg(vars)})"
                       generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                       apply_cell_frame
-                      apply_cell_item_identifier(vars[:index_var])
+                      apply_cell_item_identifier(vars)
                     end
                     add_line "}"
                   end
@@ -1434,7 +1451,7 @@ module SjuiTools
           if spacing > 0
             add_modifier_line ".padding(.horizontal, #{spacing / 2.0})"
           end
-          apply_cell_item_identifier(vars[:index_var])
+          apply_cell_item_identifier(vars)
           # The Collection's insets (with insetHorizontal / insetVertical)
           # pad the cell on its page: a page is the pager's size, so this is
           # the padding around the cells inside the pager's scroll (the SSoT's
@@ -1524,7 +1541,7 @@ module SjuiTools
                           add_line "#{cell_view_name}(data: #{cell_data_arg(vars)}).equatable()"
                           generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                           apply_cell_frame
-                          apply_cell_item_identifier(vars[:index_var])
+                          apply_cell_item_identifier(vars)
                         end
                         add_line "}"
                       end
@@ -1551,7 +1568,7 @@ module SjuiTools
                       add_line "#{cell_class_name}(data: #{cell_data_arg(vars)})"
                       generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                       apply_cell_frame
-                      apply_cell_item_identifier(vars[:index_var])
+                      apply_cell_item_identifier(vars)
                     end
                     add_line "}"
                   end
@@ -2058,6 +2075,14 @@ module SjuiTools
         # unless two sections share a key (not changed here — every face
         # Collection of two or more sections has cellIdProperty).
         def open_cell_foreach(data_source_expr, page_start: nil, section_index: nil, pager: false)
+          vars = open_cell_foreach_loop(data_source_expr, page_start: page_start, section_index: section_index, pager: pager)
+          return vars unless @address_start
+
+          vars.merge(address: "sectionStart + #{vars[:index_var]}")
+        end
+
+        def open_cell_foreach_loop(data_source_expr, page_start: nil, section_index: nil, pager: false)
+          @address_start = nil
           cell_id_property = @component['cellIdProperty']
           auto_tracking = @component['autoChangeTrackingId'] == true
 
@@ -2085,7 +2110,13 @@ module SjuiTools
           # cells' cellIds are the keys).
           keyed = cell_id_property || cell_id_scroll?
           section_start = later && !page_start && has_scroll_to? && !keyed && earlier_cells_count(section_index)
-          add_line "let sectionStart = #{section_start}" if section_start
+          # A later section's cells' address (apply_cell_item_identifier)
+          # counts the drawn sections' cells before it — the same sum as
+          # sectionStart. A pager's later section already counts from its
+          # pageStart.
+          address_start = later && !page_start && @component['id'] && earlier_cells_count(section_index)
+          add_line "let sectionStart = #{section_start || address_start}" if section_start || address_start
+          @address_start = address_start
           # A key an earlier drawn section has is that section's to answer: a
           # scrollTo names the FIRST cell, in section order, whose key it is
           # (the orchestrator's ruling 2026-09-27; the SSoT's Collection.scrollTo). A later
@@ -2449,7 +2480,8 @@ module SjuiTools
                 maybe_indent(own_columns) do
                   add_line "if let cellsData = section.cells?.data {"
                   if reorder_declared? && !own_columns
-                    indent { emit_reorder_rows('cellsData', index, cell_view_name, @reorder_style || :stack) }
+                    indent { emit_reorder_rows('cellsData', index, cell_view_name, @reorder_style || :stack,
+                                                 cells_before: @component['id'] && index.to_i.positive? && earlier_cells_count(index)) }
                     add_line "}"
                     next
                   end
@@ -2460,7 +2492,7 @@ module SjuiTools
                       generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
                       apply_cell_frame(grid: !own_columns.nil?)
                       # Add accessibilityIdentifier for test automation (tapItem action)
-                      apply_cell_item_identifier(vars[:index_var])
+                      apply_cell_item_identifier(vars)
                     end
                     add_line "}"
                   end
@@ -2537,7 +2569,8 @@ module SjuiTools
             add_line guard
             if reorder_declared? && cell_view && !columns_is_multi?
               # The data's sections, each one a reorderable section of its own (its index at run time).
-              indent { emit_reorder_rows('cellsData', 'sectionIndex', cell_view, @reorder_style || :stack, equatable: false) }
+              indent { emit_reorder_rows('cellsData', 'sectionIndex', cell_view, @reorder_style || :stack, equatable: false,
+                                                 cells_before: runtime_cells_before(data_source_ref)) }
               add_line "}"
               next # the rest of this block is the plain loop; the ForEach closes after it, as for the plain loop
             end
@@ -2567,7 +2600,7 @@ module SjuiTools
                   add_line "#{cell_view}(data: #{cell_data_arg(data_var: 'cellData', index_var: 'cellIndex')})"
                   generate_cell_identity('cellIndex', every_section: true)
                   apply_cell_frame(grid: columns_is_multi?)
-                  apply_cell_item_identifier('cellIndex')
+                  apply_cell_item_identifier("#{runtime_cells_before(data_source_ref)} + cellIndex")
                 else
                   add_line "// No cellClasses declared — the cell view name is only"
                   add_line "// known at runtime, so nothing can be instantiated here."
@@ -2687,7 +2720,7 @@ module SjuiTools
               add_line "#{cell_view}(data: #{cell_data_arg(vars)})"
               generate_cell_identity(vars[:index_var], scroll_id: vars[:scroll_id])
               apply_cell_frame(grid: columns_is_multi?)
-              apply_cell_item_identifier(vars[:index_var])
+              apply_cell_item_identifier(vars)
             end
             add_line "}"
           end
@@ -2998,7 +3031,9 @@ module SjuiTools
         end
 
         # A section's rows through CollectionReorderRows; `style` is :list or :stack.
-        def emit_reorder_rows(cells_expr, section_index, cell_view_name, style, equatable: true)
+        # `cells_before`: the cells of the sections before this one, a Swift
+        # expression (nil for the first) — the rows' address counts them.
+        def emit_reorder_rows(cells_expr, section_index, cell_view_name, style, equatable: true, cells_before: nil)
           locked_prop = @component['reorderLockedProperty']
           locked = if locked_prop.is_a?(String) && !locked_prop.empty?
                      "Set(#{cells_expr}.indices.filter { (#{cells_expr}[$0][\"#{locked_prop}\"] as? Bool) == true })"
@@ -3016,7 +3051,7 @@ module SjuiTools
             vars = { data_var: "#{cells_expr}[index]", index_var: 'index' }
             add_line "#{cell_view_name}(data: #{cell_data_arg(vars)})#{equatable ? '.equatable()' : ''}"
             apply_cell_frame(grid: false)
-            apply_cell_item_identifier('index')
+            apply_cell_item_identifier(cells_before ? "(#{cells_before}) + index" : 'index')
           end
           add_line "}"
         end

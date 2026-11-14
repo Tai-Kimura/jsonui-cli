@@ -196,10 +196,12 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       end
     end
 
-    it 'control: no scrollTo, no sectionStart and no .id' do
+    it 'control: no scrollTo, no .id (sectionStart is only the address)' do
       code = convert({})
-      expect(code).not_to include('sectionStart')
       expect(code).not_to include('.id(')
+      # From 2.5.39 a later section's cells' address counts the sections
+      # before (collection_cell_address_across_sections_spec).
+      expect(code).to include('.accessibilityIdentifier("list_item_\\(sectionStart + cell.index)")')
     end
 
     it 'control: one section emits as before' do
