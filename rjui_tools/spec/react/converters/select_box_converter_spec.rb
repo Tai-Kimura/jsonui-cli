@@ -422,6 +422,20 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
         ).convert
       end
 
+      # tintColor paints the default chevron only; the app's picture keeps its own colours (the requester's ruling
+      # 2026-11-14, the three faces alike; ticket kjui-date-selectbox-caret-attributes-not-emitted). The web drew it so
+      # already - a picture is a background layer, which nothing tints - so this pins the rule, list box and Date box.
+      [{}, { 'selectItemType' => 'Date' }].each do |mode|
+        it "tintColor paints the default chevron, never the picture (#{mode.empty? ? 'list' : 'Date'})" do
+          chevron = select_with({ 'tintColor' => '#00C800' }, mode)
+          expect(chevron).to match(/<svg [^>]*stroke="currentColor"[^>]*style=\{\{ color: '#00C800' \}\}/)
+          picture = select_with({ 'src' => 'ic_calendar', 'tintColor' => '#00C800' }, mode)
+          expect(picture).to include('url("/images/ic_calendar.svg")')
+          expect(picture).not_to include('#00C800')
+          expect(picture).not_to match(/mask|filter:/)
+        end
+      end
+
       # The three faces draw one caret (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-
       # height): a 16 x 16 chevron box 12 from the trailing edge, 8 from the text, nothing above or below the text,
       # 12 on the left. The browser's arrow is gone.

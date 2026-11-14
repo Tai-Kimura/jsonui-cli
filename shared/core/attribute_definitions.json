@@ -3224,7 +3224,7 @@
       "properties": {
         "src": {
           "type": "string",
-          "description": "Caret image asset name. Optional — absent means the face's default chevron glyph."
+          "description": "Caret image asset name. Optional — absent means the face's default chevron glyph. Drawn in its own colours: tintColor does not paint it."
         },
         "width": {
           "type": "number",
@@ -3236,7 +3236,7 @@
         },
         "tintColor": {
           "type": "string",
-          "description": "Caret tint color - hex string or color name from colors.json. Applies to the default glyph and to a template `src`. Absent, the default glyph follows the text colour: Android tints it with the text colour, and the web strokes an inline svg with currentColor, so it follows fontColor, a bound one and the page's own dark mode (data-theme, prefers-color-scheme) at runtime; a Date input written colorScheme \"dark\" with no fontColor draws it light. Known difference: iOS draws the default glyph gray (.gray) whatever the text colour, readable on light and dark alike (ticket rjui-selectbox-caret-fixed-black-ignores-theme-dark-mode, the orchestrator's ruling 2026-11-14)."
+          "description": "Caret tint color - hex string or color name from colors.json. Paints the default glyph only: a `src` picture keeps its own colours on every face, template asset or not (the requester's ruling 2026-11-14). Absent, the default glyph follows the text colour: Android tints it with the text colour, and the web strokes an inline svg with currentColor, so it follows fontColor, a bound one and the page's own dark mode (data-theme, prefers-color-scheme) at runtime; a Date input written colorScheme \"dark\" with no fontColor draws it light. Known difference: iOS draws the default glyph gray (.gray) whatever the text colour, readable on light and dark alike (ticket rjui-selectbox-caret-fixed-black-ignores-theme-dark-mode, the orchestrator's ruling 2026-11-14)."
         },
         "background": {
           "type": "string",
