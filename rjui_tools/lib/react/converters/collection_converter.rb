@@ -956,7 +956,7 @@ module RjuiTools
           if cell_view && items_binding
             cell_cast = config['typescript'] ? " as unknown as #{cell_view}Data" : ''
             source_expr = "(#{items_binding}?.sections?.[#{section_index}]?.cells?.data ?? [])"
-            item_index = paging_item_index(section_index, items_binding)
+            item_index = cell_item_index(section_index, items_binding)
             # Wrap the key in String(...) so the result always conforms to
             # React's Key type (string | number) even when cellData is typed
             # as a user-defined closed shape. Bracket-indexing cellId avoids
@@ -1028,16 +1028,15 @@ module RjuiTools
           lines.join("\n")
         end
 
-        # A paging Collection's item address counts across the sections — a
-        # page's place among all the pages, as sjui's page tag and kjui's
-        # pager index do (the orchestrator's ruling 2026-09-26, round 7): the cells of the
-        # drawn sections before this one, then its own index. Until
-        # jsonui-cli 1.9.0 each section's items were `<id>_item_0…` again.
-        # Every other route, and a pager's first drawn section, keep
-        # `cellIndex`.
-        def paging_item_index(section_index, items_binding)
-          return 'cellIndex' unless paging?
-
+        # A cell's address counts across the sections (user ruling 2026-11-14,
+        # ticket jui-collection-item-identifier-repeats-per-section;
+        # attribute_semantics idBox.collectionCellRoot): the cells of the drawn
+        # sections before this one, then its own index — the n of scrollTo's
+        # Int. A pager's did from jsonui-cli 1.9.0 (the orchestrator's ruling
+        # 2026-09-26, round 7); every other route restarted at 0 per section
+        # until 2.5.39, so two sections each had an `_item_0`. The first
+        # section keeps `cellIndex`.
+        def cell_item_index(section_index, items_binding)
           before = (attributes['sections'] || []).first(section_index).each_with_index
                                                  .select { |section, _| section.is_a?(Hash) && section['cell'] }
                                                  .map { |_, index| "(#{items_binding}?.sections?.[#{index}]?.cells?.data?.length ?? 0)" }
@@ -1045,6 +1044,12 @@ module RjuiTools
         end
 
         # A horizontal paging Collection: a pager, one cell per page.
+        # The class-list route draws every data section at run time: its cells'
+        # addresses count the cells of the sections before (cell_item_index).
+        def legacy_cell_index(items_binding)
+          "(#{items_binding}?.sections ?? []).slice(0, sectionIndex).reduce((n, s) => n + (s.cells?.data?.length ?? 0), 0) + cellIndex"
+        end
+
         def paging?
           horizontal_collection? && attributes['paging'] == true
         end
@@ -1125,7 +1130,7 @@ module RjuiTools
               lines << "#{indent_str(indent)}{(#{items_binding}?.sections ?? []).map((section, sectionIndex) => ("
               lines << reorder_section_open('sectionIndex', cells, indent + 2, key: 'sectionIndex')
               lines << "#{indent_str(indent + 4)}{#{cells}.map((cellData, cellIndex) => ("
-              lines.concat(reorder_item_lines(legacy_cell_lines(cell_view, 'cellIndex', "cellData#{cast}", indent + 6),
+              lines.concat(reorder_item_lines(legacy_cell_lines(cell_view, 'cellIndex', "cellData#{cast}", indent + 6, legacy_cell_index(items_binding)),
                                               key, 'cellIndex', indent + 6))
               lines << "#{indent_str(indent + 4)}))}"
               lines << reorder_section_close(indent + 2)
@@ -1133,7 +1138,8 @@ module RjuiTools
             else
               lines << "#{indent_str(indent)}{(#{items_binding}?.sections ?? []).map((section, sectionIndex) =>"
               lines << "#{indent_str(indent + 2)}(section.cells?.data ?? []).map((cellData, cellIndex) => ("
-              lines.concat(legacy_cell_lines(cell_view, '`${sectionIndex}_${cellIndex}`', "cellData#{cast}", indent + 4))
+              lines.concat(legacy_cell_lines(cell_view, '`${sectionIndex}_${cellIndex}`', "cellData#{cast}", indent + 4,
+                                             legacy_cell_index(items_binding)))
               lines << "#{indent_str(indent + 2)}))"
               lines << "#{indent_str(indent)})}"
             end
@@ -1227,13 +1233,13 @@ module RjuiTools
 
         # One class-list cell; the key rides the outermost element of the map
         # (the section path's wrapper contract).
-        def legacy_cell_lines(cell_view, key_expr, data_expr, indent)
+        def legacy_cell_lines(cell_view, key_expr, data_expr, indent, index_expr = 'cellIndex')
           if (cell_size = cell_size_style)
             ["#{indent_str(indent)}<div key={#{key_expr}} className=\"shrink-0 overflow-hidden\"#{cell_size}>",
-             "#{indent_str(indent + 2)}<#{cell_view}#{cell_item_id_attr('cellIndex')} data={#{data_expr}} />",
+             "#{indent_str(indent + 2)}<#{cell_view}#{cell_item_id_attr(index_expr)} data={#{data_expr}} />",
              "#{indent_str(indent)}</div>"]
           else
-            ["#{indent_str(indent)}<#{cell_view} key={#{key_expr}}#{cell_item_id_attr('cellIndex')} data={#{data_expr}} />"]
+            ["#{indent_str(indent)}<#{cell_view} key={#{key_expr}}#{cell_item_id_attr(index_expr)} data={#{data_expr}} />"]
           end
         end
 
