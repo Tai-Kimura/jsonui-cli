@@ -100,12 +100,16 @@ RSpec.describe 'kjui codegen: a path into an Object data item' do
     builder.instance_variable_set(:@mode, 'compose')
     casts = { 'obj' => 'Object', 'meta' => 'Hash', 'rows' => 'Array' }.to_h { |n, c| [n, builder.send(:get_kotlin_cast, c, n)] }
     # Through 1.9.5: value as? Object / Hash / Array. The cast to a generic
-    # type is unchecked: suppressed on the expression, so an app built with
-    # allWarningsAsErrors compiles it (it carried no @Suppress until 2.5.40).
-    expect(casts['obj']).to eq('(@Suppress("UNCHECKED_CAST") (value as? Map<String, Any?>)) ?: updated.obj')
-    expect(casts['rows']).to eq('(@Suppress("UNCHECKED_CAST") (value as? List<Any?>)) ?: updated.rows')
+    # type is unchecked; updateData carries @Suppress("UNCHECKED_CAST") when a
+    # property is an Object / Hash / Array too (it counted List<…> / Map<…>
+    # only through 2.5.38, and an app built with allWarningsAsErrors failed).
+    expect(casts['obj']).to eq('value as? Map<String, Any?> ?: updated.obj')
+    expect(casts['rows']).to eq('value as? List<Any?> ?: updated.rows')
+    update = builder.send(:generate_update_data_function, [{ 'name' => 'obj', 'class' => 'Object' }], 'Probe')
+    expect(update).to include("    @Suppress(\"UNCHECKED_CAST\")\n")
     expect(<<~KT).to compile_as_kotlin.with_warnings_as_errors
       data class Data(val obj: Map<String, Any?>? = null, val meta: Map<String, Any?>? = null, val rows: List<Any?>? = null)
+      @Suppress("UNCHECKED_CAST")
       fun apply(updated: Data, key: String, value: Any): Data = when (key) {
           "obj" -> updated.copy(obj = #{casts['obj']})
           "meta" -> updated.copy(meta = #{casts['meta']})
@@ -125,8 +129,9 @@ RSpec.describe 'kjui codegen: a path into an Object data item' do
       { 'name' => 'loose', 'class' => 'Object' }
     ]
     text = updater.send(:generate_data_content, 'Probe', props, [])
-    expect(text).to include('profile = (@Suppress("UNCHECKED_CAST") (map["profile"] as? Map<String, Any?>)) ?: mapOf("name" to "Grace")')
-    expect(text).to include('items = (@Suppress("UNCHECKED_CAST") (map["items"] as? List<Any?>)) ?: listOf("a")')
+    expect(text).to include('profile = map["profile"] as? Map<String, Any?> ?: mapOf("name" to "Grace")')
+    expect(text).to include('items = map["items"] as? List<Any?> ?: listOf("a")')
+    expect(text).to include("@Suppress(\"UNCHECKED_CAST\")\n        fun fromMap")
     model = text.lines.reject { |l| l.start_with?('package ') }.join
     expect(model).to compile_as_kotlin.with_warnings_as_errors
   ensure

@@ -4,7 +4,6 @@ require 'json'
 require 'fileutils'
 require 'set'
 require_relative '../core/config_manager'
-require_relative 'helpers/kotlin_cast'
 require_relative '../core/project_finder'
 require_relative '../core/logger'
 require_relative '../core/type_converter'
@@ -2166,7 +2165,14 @@ module KjuiTools
         has_unchecked_cast = data_properties.any? { |prop|
           class_type = prop['class'].to_s
           class_type.include?('-> Unit') || class_type.include?('-> Void') ||
-            class_type.match?(/^(List|Map)<.*>$/)
+            class_type.match?(/^(List|Map)<.*>$/) ||
+            # A JSON container is held as Map<String, Any?> / List<Any?>
+            # (map_to_kotlin_type), and its cast is as unchecked: through
+            # 2.5.38 it was not counted here, and an Object / Hash / Array item
+            # was an "Unchecked cast" warning — an error in an app built with
+            # allWarningsAsErrors (kjui-map-list-data-bindings-warn-under-all-
+            # warnings-as-errors).
+            %w[object hash array].include?(class_type.strip.delete_suffix('?').downcase)
         }
         # No request-level de-dupe. `if (updates == _lastUpdateData) return`
         # compared a call to the PREVIOUS CALL, not to the current state: once
@@ -2259,9 +2265,9 @@ module KjuiTools
           # `value as? Object` did not compile against the Data field
           # (kjui-object-path-binding-does-not-compile).
           model_type = DataModelUpdater.allocate.send(:map_to_kotlin_type, class_type)
-          "#{Helpers::KotlinCast.as_nullable('value', model_type)} ?: updated.#{name}"
+          "value as? #{model_type} ?: updated.#{name}"
         else
-          "#{Helpers::KotlinCast.as_nullable('value', kotlin_type)} ?: updated.#{name}"
+          "value as? #{kotlin_type} ?: updated.#{name}"
         end
       end
 

@@ -4,7 +4,6 @@ require 'json'
 require 'fileutils'
 require 'set'
 require_relative '../core/config_manager'
-require_relative 'helpers/kotlin_cast'
 require_relative '../core/project_finder'
 require_relative '../core/type_converter'
 require_relative 'helpers/resource_resolver'
@@ -270,7 +269,14 @@ module KjuiTools
         has_unchecked_cast = data_properties.any? { |prop|
           class_type = prop['class'].to_s
           class_type.include?('-> Unit') || class_type.include?('-> Void') ||
-            class_type.match?(/^(List|Map)<.*>$/)
+            class_type.match?(/^(List|Map)<.*>$/) ||
+            # A JSON container is held as Map<String, Any?> / List<Any?>
+            # (map_to_kotlin_type), and its cast is as unchecked: through
+            # 2.5.38 it was not counted here, and an Object / Hash / Array item
+            # was an "Unchecked cast" warning — an error in an app built with
+            # allWarningsAsErrors (kjui-map-list-data-bindings-warn-under-all-
+            # warnings-as-errors).
+            %w[object hash array].include?(class_type.strip.delete_suffix('?').downcase)
         }
         if has_unchecked_cast
           content += "        @Suppress(\"UNCHECKED_CAST\")\n"
@@ -318,12 +324,12 @@ module KjuiTools
               # non-null field a defaultValue gives — the Data class did not
               # compile (conformance Label/text__binding_dot_path and three
               # more — kjui-object-path-binding-does-not-compile).
-              content += "#{Helpers::KotlinCast.as_nullable("map[\"#{name}\"]", kotlin_type)} ?: #{from_map_fallback(prop, class_type, 'emptyList()')}"
+              content += "map[\"#{name}\"] as? #{kotlin_type} ?: #{from_map_fallback(prop, class_type, 'emptyList()')}"
             when /^Map<.*>$/, 'Object', 'object', 'Hash', 'hash'
-              content += "#{Helpers::KotlinCast.as_nullable("map[\"#{name}\"]", kotlin_type)} ?: #{from_map_fallback(prop, class_type, 'emptyMap()')}"
+              content += "map[\"#{name}\"] as? #{kotlin_type} ?: #{from_map_fallback(prop, class_type, 'emptyMap()')}"
             else
               # For custom types, try to cast directly
-              content += Helpers::KotlinCast.as_nullable("map[\"#{name}\"]", kotlin_type)
+              content += "map[\"#{name}\"] as? #{kotlin_type}"
             end
 
             content += "," if index < data_properties.length - 1
