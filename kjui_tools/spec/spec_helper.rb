@@ -54,6 +54,9 @@ RSpec.configure do |config|
 
       KjuiTools::Compose::Components.const_get(name, false).reset_counter!
     end
+    if defined?(KjuiTools::Compose::Helpers::FontSpecHelper)
+      KjuiTools::Compose::Helpers::FontSpecHelper.reset_counter!
+    end
 
     # What a build keeps per thread while it writes one layout (its data
     # declarations, its strings sections) and for the whole run (the colours

@@ -7,6 +7,7 @@ require_relative '../helpers/bound_value'
 require_relative '../helpers/static_seed'
 require_relative '../../core/enum_spelling'
 require_relative 'button_component'
+require_relative '../helpers/font_spec_helper'
 
 module KjuiTools
   module Compose
@@ -306,32 +307,27 @@ module KjuiTools
         # The label Text block, as a string, so generate_with_label can put it
         # before or after the Switch depending on labelPosition.
         def self.build_label_code(json_data, depth, required_imports)
-          out = "\n" + indent("Text(", depth + 1)
+          # The label goes through the app's fontProvider whatever it declares (the requester's P1, ticket
+          # jui-font-provider-not-reached-without-font-attributes-android-web); a slot the provider leaves null
+          # draws as before (the Text's style).
+          font_size = label_style_of(json_data, 'fontSize')
+          font = label_style_of(json_data, 'font')
+          weight = font && (font.to_s.downcase == 'bold' ? 'FontWeight.Bold' : 'FontWeight.Normal')
+          spec = Helpers::FontSpecHelper.plain_spec(weight, font_size, required_imports)
+          var = 'switchFont'  # its own Row's lambda: one per scope, so a fixed name
+          out = "\n" + Helpers::FontSpecHelper.emit_resolve_block(var, spec, depth + 1, required_imports)
+          out += "\n" + indent("Text(", depth + 1)
           # `label` is `["string", "binding"]`; the old string literal put the
           # characters `@{...}` on screen, which is the bug CheckBox already
           # fixed for the same spelling.
           out += "\n" + indent("text = #{Helpers::BoundValue.text(label_text_of(json_data) || '')},", depth + 2)
 
-          font_size = label_style_of(json_data, 'fontSize')
-          if font_size
-            required_imports&.add(:text_unit) if Helpers::BoundValue.bound?(font_size)
-            out += "\n" + indent("fontSize = #{Helpers::FontScale.wrap(Helpers::BoundValue.sp(font_size, null_expr: 'TextUnit.Unspecified'), json_data, required_imports)},", depth + 2)
-            out += "\n" + indent("letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)},", depth + 2)
-          elsif (undeclared = Helpers::FontScale.undeclared_size(json_data, required_imports))
-            out += "\n" + indent("fontSize = #{undeclared},", depth + 2)
-            out += "\n" + indent("letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)},", depth + 2)
-          end
+          out += "\n" + Helpers::FontSpecHelper.text_arg_lines(var, depth + 1, required_imports, json_data)
 
           font_color = label_style_of(json_data, 'fontColor')
           if font_color
             resolved = Helpers::ResourceResolver.process_color(font_color, required_imports)
             out += "\n" + indent("color = #{resolved},", depth + 2)
-          end
-
-          font = label_style_of(json_data, 'font')
-          if font
-            font_weight = font.to_s.downcase == 'bold' ? 'FontWeight.Bold' : 'FontWeight.Normal'
-            out += "\n" + indent("fontWeight = #{font_weight},", depth + 2)
           end
 
           # weight(1f) on the label pushes the Switch to the far edge of a Row

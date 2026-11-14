@@ -235,6 +235,7 @@ module KjuiTools
             # Every text size through the text size rule (Helpers::FontScale).
             json_ui_font_size: "import com.kotlinjsonui.core.jsonUIFontSize",
             json_ui_letter_spacing: "import com.kotlinjsonui.core.jsonUILetterSpacing",
+            json_ui_line_height: "import com.kotlinjsonui.core.jsonUILineHeight",
             graphics_layer: "import androidx.compose.ui.graphics.graphicsLayer",
             LaunchedEffect: "import androidx.compose.runtime.LaunchedEffect",
             launched_effect: "import androidx.compose.runtime.LaunchedEffect",

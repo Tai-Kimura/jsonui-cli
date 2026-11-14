@@ -32,18 +32,18 @@ RSpec.describe KjuiTools::Compose::Components::ButtonComponent do
     it 'drops the "Button" placeholder for an icon-only button' do
       # The placeholder is for a button with nothing in it; an icon-only
       # button would otherwise render the word "Button" beside its icon.
-      expect(generate('image' => 'menu')).not_to include('Text("Button")')
+      expect(generate('image' => 'menu')).not_to include('"Button"')
     end
 
     it 'keeps the placeholder when there is neither text nor icon' do
-      expect(generate({})).to include('Text("Button")')
+      expect(generate({})).to include('text = "Button",')
     end
 
     it 'lays an icon and a label out in a Row with a gap' do
       result = generate('image' => 'menu', 'text' => 'Menu')
       expect(result).to include('Row(verticalAlignment = Alignment.CenterVertically)')
       expect(result).to include('Spacer(modifier = Modifier.width(8.dp))')
-      expect(result).to include('Text("Menu")')
+      expect(result).to include('text = "Menu",')
     end
 
     it 'emits no Row for an icon-only button' do
@@ -96,7 +96,9 @@ RSpec.describe KjuiTools::Compose::Components::ButtonComponent do
       result = generate('text' => 'Save')
       expect(result).not_to include('painterResource')
       expect(result).not_to include('Row(')
-      expect(result).to include('Text("Save")')
+      expect(result).to include('text = "Save",')
+      # Through the font provider whatever it declares (P1); nothing else changes.
+      expect(result).to include('Configuration.Font.resolve')
     end
 
     it 'still routes font attributes through the FontSpec hook beside an icon' do

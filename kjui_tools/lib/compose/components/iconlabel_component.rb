@@ -187,7 +187,16 @@ module KjuiTools
           text = json_data['text']
           return nil if text.nil?
 
-          code = indent("Text(", depth) + "\n"
+          # The text goes through the app's fontProvider whatever it declares (the requester's P1, ticket
+          # jui-font-provider-not-reached-without-font-attributes-android-web): FontSpec carries the weight and size it
+          # declares, and a slot the provider leaves null draws as before (the Text's style).
+          size = json_data['fontSize']
+          required_imports&.add(:text_unit)
+          required_imports&.add(:font_style)
+          spec = Helpers::FontSpecHelper.plain_spec(font_weight(json_data), size, required_imports)
+          var = Helpers::FontSpecHelper.next_var('iconlabel')
+          code = Helpers::FontSpecHelper.emit_resolve_block(var, spec, depth, required_imports) + "\n"
+          code += indent("Text(", depth) + "\n"
           # required_imports must ride along: when the extractor externalized
           # this text, the resolver emits stringResource(R.string.…) and the
           # imports have to register with it (missing them left every
@@ -197,18 +206,10 @@ module KjuiTools
           if (color = text_color(json_data, required_imports))
             code += "\n" + indent("color = #{color},", depth + 1)
           end
-          if (size = json_data['fontSize'])
-            required_imports&.add(:text_unit) if Helpers::BoundValue.bound?(size)
-            code += "\n" + indent("fontSize = #{Helpers::FontScale.wrap(Helpers::BoundValue.sp(size, null_expr: 'TextUnit.Unspecified'), json_data, required_imports)},", depth + 1)
-            code += "\n" + indent("letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)},", depth + 1)
-          elsif (undeclared = Helpers::FontScale.undeclared_size(json_data, required_imports))
-            code += "\n" + indent("fontSize = #{undeclared},", depth + 1)
-            code += "\n" + indent("letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)},", depth + 1)
-          end
-          if (weight = font_weight(json_data))
-            required_imports&.add(:font_weight)
-            code += "\n" + indent("fontWeight = #{weight},", depth + 1)
-          end
+          # The line box is the style's below (line: false here), drawn from the same size.
+          code += "\n" + Helpers::FontSpecHelper.text_arg_lines(var, depth, required_imports, json_data, line: false)
+          # The size the text is drawn at - the provider's when it gives one, else the declared one, else the style's.
+          drawn_size = Helpers::FontScale.wrap("#{var}.size ?: TextUnit.Unspecified", json_data, required_imports)
           # `textShadow` — same `{color, blur, offset: [x, y]}` contract as
           # Label (the UIKit runtime passes the identical JSON to both), and
           # this component never reached ANY shadow path (plan 49 lane C:
@@ -227,7 +228,12 @@ module KjuiTools
           # Undeclared, the theme's line stands. KotlinJsonUI Dynamic:
           # DynamicIconLabelComponent, the same rule.
           style_parts = []
-          style_parts << "lineHeight = #{TextComponent.scaled_sp(json_data['fontSize'], 1.3, round: true)}" if json_data['fontSize']
+          # Drawn by the text size rule as the size is (FontScale.line_height): a text that does not follow keeps its line
+          # box (ticket kjui-theme-line-height-scales-under-font-scaling-false).
+          # Always, as the size is (P1): with nothing declared and the default configuration jsonUILineHeight hands the
+          # theme's line back. A declared size's line (x 1.3) from the size drawn: the provider's when it gives one.
+          own_line = json_data['fontSize'] ? "(#{var}.size?.let { it * 1.3f } ?: #{TextComponent.scaled_sp(json_data['fontSize'], 1.3, round: true)})" : nil
+          style_parts << "lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: drawn_size, line: own_line)}"
           if json_data['textShadow']
             required_imports&.add(:shadow_style)
             style_parts << TextComponent.text_shadow_expression(json_data['textShadow'], required_imports)

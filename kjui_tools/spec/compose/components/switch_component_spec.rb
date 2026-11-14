@@ -191,7 +191,9 @@ RSpec.describe KjuiTools::Compose::Components::SwitchComponent do
     it 'styles the flat label with the flat fontColor and fontSize' do
       out = plain('label' => 'Wi-Fi', 'fontColor' => '#FF0000', 'fontSize' => 18)
       expect(out).to include('#FF0000')
-      expect(out).to include('fontSize = jsonUIFontSize(18.sp)')
+      # Through the app's fontProvider (P1): the declared size is the FontSpec's.
+      expect(out).to include('size = 18.sp,')
+      expect(out).to include('fontSize = jsonUIFontSize(switchFont.size ?: TextUnit.Unspecified)')
     end
 
     # The nested bag outranks the flat spelling, the precedence the dynamic

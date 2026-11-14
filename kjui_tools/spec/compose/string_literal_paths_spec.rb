@@ -295,7 +295,8 @@ RSpec.describe 'author text reaches generated Kotlin through the one escaper' do
     tab = self.class.tabview('title' => t)
     fragments = {
       'text' => cut.call(self.class.label('text' => t), /^\s*text = (.*?),$/m),
-      'button' => cut.call(components::ButtonComponent.generate({ 'type' => 'Button', 'text' => t }, 0, Set.new), /^\s*Text\((.*?)\)$/m),
+      # Every button's text goes through the font provider (P1), so its Text takes named arguments.
+      'button' => cut.call(components::ButtonComponent.generate({ 'type' => 'Button', 'text' => t }, 0, Set.new), /^\s*text = (.*?),$/m),
       'hint' => cut.call(components::TextFieldComponent.generate({ 'type' => 'TextField', 'hint' => t }, 0, Set.new), /^\s*text = (.*?),$/m),
       'tabTitle' => cut.call(tab, /label = \{ Text\((.*?)\) \},$/m),
       'selectItems' => cut.call(self.class.selectbox('items' => [t, 'b']), /options = (listOf\(.*?\)),$/m),

@@ -565,7 +565,7 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent, 'hintAttribute
   # Compose has no multiplier, so it resolves against the hint's own size.
   it 'resolves lineHeightMultiple against the hint size' do
     expect(field('hintAttributes' => { 'fontSize' => 14, 'lineHeightMultiple' => 1.4 }))
-      .to include('lineHeight = jsonUIFontSize(19.6.sp)')
+      .to include('lineHeight = 19.6.sp)')
   end
 
   # 19.599999999999998.sp is float noise, not a measurement.
@@ -651,7 +651,11 @@ RSpec.describe KjuiTools::Compose::Components::TextViewComponent, 'hintAttribute
   describe 'keyboardType aliases' do
     JSON.parse(File.read(File.expand_path('../../../../shared/core/attribute_definitions.json', __dir__)))['TextView']['keyboardType']['valueAliases'].each do |alias_name, canonical|
       it "draws #{alias_name} as #{canonical}" do
-        draw = ->(v) { described_class.generate({ 'type' => 'TextView', 'id' => 't', 'keyboardType' => v }, 0, Set.new) }
+        draw = lambda do |v|
+          KjuiTools::Compose::Helpers::FontSpecHelper.reset_counter!
+          described_class.reset_counter!
+          described_class.generate({ 'type' => 'TextView', 'id' => 't', 'keyboardType' => v }, 0, Set.new)
+        end
         expect(draw.call(alias_name)).to eq(draw.call(canonical))
       end
     end

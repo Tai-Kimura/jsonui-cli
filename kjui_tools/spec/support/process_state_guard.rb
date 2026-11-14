@@ -81,6 +81,7 @@ module ProcessStateGuard
     'KjuiTools::Compose::Components::ButtonComponent.@counter' => 'reset_counter! at the start of every spec file',
     'KjuiTools::Compose::Components::ButtonComponent.@interaction_names' => 'reset_counter! at the start of every spec file',
     'KjuiTools::Compose::Components::ConstraintLayoutComponent.@counter' => 'reset_counter! at the start of every spec file',
+    'KjuiTools::Compose::Helpers::FontSpecHelper.@vars' => 'reset_counter! at the start of every spec file',
     # Per thread: a build sets the first two for each layout before it reads
     # them (ComposeBuilder#build_file, #build_variant_file, begin_layout);
     # the third is one warning per colour for the whole run.

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../../support/font_provider_stub'
+
 require 'core/bind_fold'
 require 'compose/components/selectbox_component'
 require 'compose/components/container_component'
@@ -344,6 +346,8 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
         }
         result = described_class.generate(json_data, 1, required_imports)
         expect(<<~KOTLIN).to compile_as_kotlin
+          #{FontProviderStub::FONT}
+          #{FontProviderStub::SIZE}
           annotation class Composable
           class Color(val argb: Int) { companion object { val Unspecified = Color(0) } }
           object android { object graphics { object Color { fun parseColor(s: String): Int = 0 } } }
@@ -376,7 +380,7 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
           @Composable
           fun SelectBox(
               value: String,
-              onValueChange: (String) -> Unit,
+              onValueChange: (String) -> Unit, resolvedFont: Any? = null,
               options: List<String>,
               modifier: Modifier = Modifier,
               caret: SelectBoxCaret? = null
@@ -718,6 +722,8 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent, 'datePickerMo
   it 'passes datetime as dateAndTime' do
     draw = ->(v) { described_class.generate({ 'type' => 'SelectBox', 'id' => 's', 'selectItemType' => 'Date', 'datePickerMode' => v }, 0, Set.new) }
     expect(draw.call('datetime')).to include('datePickerMode = "dateAndTime"')
-    expect(draw.call('datetime')).to eq(draw.call('dateAndTime'))
+    # The same but for the resolved font's name, numbered per file (P1).
+    same = ->(c) { c.gsub(/resolved_selectbox\d+/, 'resolved_selectbox') }
+    expect(same.call(draw.call('datetime'))).to eq(same.call(draw.call('dateAndTime')))
   end
 end

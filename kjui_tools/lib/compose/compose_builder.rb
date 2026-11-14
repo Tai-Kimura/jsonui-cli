@@ -302,6 +302,7 @@ module KjuiTools
           Components::TextViewComponent.reset_counter!
           Components::ButtonComponent.reset_counter!
           Components::ConstraintLayoutComponent.reset_counter!
+          Helpers::FontSpecHelper.reset_counter!
 
           # Collect data definitions for ResourceResolver to check optional/non-optional
           data_properties = extract_data_properties(json_data)
@@ -1974,6 +1975,7 @@ module KjuiTools
         Components::TextViewComponent.reset_counter!
         Components::ButtonComponent.reset_counter!
         Components::ConstraintLayoutComponent.reset_counter!
+        Helpers::FontSpecHelper.reset_counter!
 
         # Optionality checks resolve against the BASE data section
         base_json = JSON.parse(File.read(base_json_file))

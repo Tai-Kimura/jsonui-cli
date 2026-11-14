@@ -81,6 +81,18 @@ module KjuiTools
         # inner expression through value_access — `data.#{$1}` spliced a
         # `?? default` in verbatim, `data.x ?? y`, not Kotlin: plan 49 lane C)
         # or static (the seed of the box's own state), else "".
+        # `font` as the weight this component has always read (five names, Normal otherwise).
+        def self.select_font_weight(font)
+          case font.to_s.downcase
+          when 'bold' then 'FontWeight.Bold'
+          when 'semibold' then 'FontWeight.SemiBold'
+          when 'medium' then 'FontWeight.Medium'
+          when 'light' then 'FontWeight.Light'
+          when 'thin' then 'FontWeight.Thin'
+          else 'FontWeight.Normal'
+          end
+        end
+
         def self.date_value(json_data)
           date = json_data['selectedDate']
           if date.is_a?(String) && date.match(/@\{([^}]+)\}/)
@@ -93,13 +105,24 @@ module KjuiTools
         end
 
         def self.generate_body(json_data, depth, required_imports, parent_type, selected, is_date_picker, seeded)
+          # The text goes through the app's fontProvider whatever it declares (the requester's P1, ticket
+          # jui-font-provider-not-reached-without-font-attributes-android-web): FontSpec carries the weight (`font`)
+          # and size (labelAttributes.fontSize / fontSize) it declares, and the component draws the provider's
+          # family / weight / size / style where it gives one (resolvedFont), fontSize / fontWeight otherwise.
+          font_var = Helpers::FontSpecHelper.next_var('selectbox')
+          label_bag = json_data['labelAttributes'].is_a?(Hash) ? json_data['labelAttributes'] : {}
+          spec_weight = json_data['font'] && select_font_weight(json_data['font'])
+          spec = Helpers::FontSpecHelper.plain_spec(spec_weight, label_bag['fontSize'] || json_data['fontSize'], required_imports,
+                                                    size_null: 'null', drawn_weight: 'FontWeight.Normal')
+          code = Helpers::FontSpecHelper.emit_resolve_block(font_var, spec, depth, required_imports) + "\n"
           # Use DateSelectBox for date type
           if is_date_picker
             required_imports&.add(:date_selectbox_component)
-            code = indent("DateSelectBox(", depth)
+            code += indent("DateSelectBox(", depth)
           else
-            code = indent("SelectBox(", depth)
+            code += indent("SelectBox(", depth)
           end
+          code += "\n" + indent("resolvedFont = #{font_var},", depth + 1)
           code += "\n" + indent("value = #{selected},", depth + 1)
           
           # Handle onValueChange callback
@@ -299,21 +322,7 @@ module KjuiTools
           end
 
           if json_data['font']
-            font_weight = case json_data['font'].to_s.downcase
-            when 'bold'
-              'FontWeight.Bold'
-            when 'semibold'
-              'FontWeight.SemiBold'
-            when 'medium'
-              'FontWeight.Medium'
-            when 'light'
-              'FontWeight.Light'
-            when 'thin'
-              'FontWeight.Thin'
-            else
-              'FontWeight.Normal'
-            end
-            code += "\n" + indent("fontWeight = #{font_weight},", depth + 1)
+            code += "\n" + indent("fontWeight = #{select_font_weight(json_data['font'])},", depth + 1)
           end
           
           # Add cancel button background color if specified

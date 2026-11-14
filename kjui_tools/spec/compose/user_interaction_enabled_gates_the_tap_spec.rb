@@ -37,6 +37,7 @@ RSpec.describe 'kjui userInteractionEnabled gates the click as canTap does' do
   counters = %w[TextComponent TextFieldComponent TextViewComponent ButtonComponent ConstraintLayoutComponent]
   emit = lambda do |node|
     counters.each { |c| KjuiTools::Compose::Components.const_get(c).reset_counter! }
+    KjuiTools::Compose::Helpers::FontSpecHelper.reset_counter!
     comp = JSON.parse(JSON.generate(node))
     JsonUIShared::ImageAccessibility.annotate!(comp, source_path: 'probe.json')
     tap.annotate!(comp)

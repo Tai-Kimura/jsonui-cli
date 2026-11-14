@@ -45,7 +45,8 @@ module KjuiTools
           if color
             args << "color = #{Helpers::ResourceResolver.process_color(color, required_imports)}"
           end
-          args << "fontSize = #{Helpers::FontScale.wrap(Helpers::BoundValue.sp(size), json_data, required_imports)}" if size
+          hint_drawn = size ? Helpers::FontScale.wrap(Helpers::BoundValue.sp(size), json_data, required_imports) : nil
+          args << "fontSize = #{hint_drawn}" if size
           args << "letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}" if size
           if (weight = font_weight_for(font))
             required_imports&.add(:font_weight)
@@ -67,7 +68,13 @@ module KjuiTools
                              else
                                "#{format_sp(base_size.to_f * multiple.to_f)}.sp"
                              end
-            args << "style = LocalTextStyle.current.copy(lineHeight = #{Helpers::FontScale.wrap(line_height_sp, json_data, required_imports)})"
+            args << "style = LocalTextStyle.current.copy(lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: hint_drawn, line: line_height_sp)})"
+          elsif hint_drawn
+            # The theme's line by the text size rule as the size is (ticket
+            # kjui-theme-line-height-scales-under-font-scaling-false); an undeclared hint size follows the system,
+            # and so does its line.
+            required_imports&.add(:local_text_style)
+            args << "style = LocalTextStyle.current.copy(lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: hint_drawn)})"
           end
 
           return "\n" + indent("placeholder = { Text(#{placeholder}) },", depth + 1) if args.length == 1
@@ -169,12 +176,13 @@ module KjuiTools
           # Build FontSpec resolve block ahead of CustomTextField(...) so the
           # textStyle parameter can reference the resolved local. Emits only when
           # at least one font attribute is set.
-          tv_font_args = Helpers::FontSpecHelper.build_font_spec_args(json_data, required_imports)
-          tv_resolved_var = nil
-          if tv_font_args[:has_any]
-            tv_resolved_var = next_resolved_var
-            code += Helpers::FontSpecHelper.emit_resolve_block(tv_resolved_var, tv_font_args, depth, required_imports) + "\n"
-          end
+          # Always, a font attribute or not: every text goes through the app's fontProvider (the requester's P1,
+          # ticket jui-font-provider-not-reached-without-font-attributes-android-web).
+          tv_font_args = Helpers::FontSpecHelper.with_drawn_weight(
+            Helpers::FontSpecHelper.build_font_spec_args(json_data, required_imports), required_imports
+          )
+          tv_resolved_var = next_resolved_var
+          code += Helpers::FontSpecHelper.emit_resolve_block(tv_resolved_var, tv_font_args, depth, required_imports) + "\n"
 
           # ViewModel-driven focus binding — same wiring as TextFieldComponent
           # (kjui-textfield-isfocused-focus-binding-not-generated, extended to
@@ -488,38 +496,33 @@ module KjuiTools
           # vocabulary rather than growing a fourth copy of it.
           tv_align = json_data['textAlign'] &&
                      TextComponent.compose_text_align(json_data['textAlign'], json_data['type'] || 'TextView')
-          # fontScaling / maxFontScale with no font attribute: the field's text size by them (the size it draws,
-          # the text style's), on the style the field already takes.
-          # The size a TextView draws without one is Configuration.TextField.defaultFontSize, as KotlinJsonUI's Dynamic
-          # TextView draws it (shared/core/font_scale_vectors.json rule.noFontSize: Android TextField and TextView 14);
-          # on a bare TextStyle, as the Dynamic face's, so the two draw the same text (codegen parity, run 43488822719:
-          # LocalTextStyle's 16 on its 24sp line drew it larger and lower).
-          tv_undeclared = if !tv_resolved_var && !Helpers::FontScale.declaration_args(json_data).empty?
-                            required_imports&.add(:configuration)
-                            Helpers::FontScale.wrap('Configuration.TextField.defaultFontSize.sp', json_data, required_imports)
-                          end
-          if tv_resolved_var || json_data['fontColor'] || tv_align || tv_undeclared
-            required_imports&.add(:text_style)
-            style_parts = []
-            if tv_resolved_var
-              style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(tv_resolved_var, required_imports, json_data))
-            end
-            if json_data['fontColor']
-              font_color = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
-              style_parts << "color = #{font_color}"
-            end
-            if tv_align
-              required_imports&.add(:text_align)
-              style_parts << "textAlign = #{tv_align}"
-            end
-            if tv_undeclared
-              style_parts << "fontSize = #{tv_undeclared}"
-              style_parts << "letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}"
-            end
-            if style_parts.any?
-              code += "\n" + indent("textStyle = TextStyle(#{style_parts.join(', ')}),", depth + 1)
-            end
+          # The field's text style, a bare TextStyle (as the Dynamic TextView's), with the provider's slots over it
+          # (the requester's P1: every text goes through the app's fontProvider):
+          # - with a font attribute, the resolved font with the current style under each null slot, as before;
+          # - with none, Configuration.TextField.defaultFontSize, as KotlinJsonUI's Dynamic TextView draws it
+          #   (shared/core/font_scale_vectors.json rule.noFontSize: Android TextField and TextView 14), by its
+          #   fontScaling / maxFontScale when it declares them, and a slot the provider leaves null unset (ticket
+          #   kjui-textview-default-size-differs-from-dynamic; codegen parity, run 43488822719). No line height: on a
+          #   bare TextStyle the field's line is the font's own, which follows the size drawn.
+          tv_has_font = tv_font_args[:has_any]
+          required_imports&.add(:text_style)
+          style_parts = if tv_has_font
+                          Helpers::FontSpecHelper.style_arg_fragments(tv_resolved_var, required_imports, json_data)
+                        else
+                          required_imports&.add(:configuration)
+                          Helpers::FontSpecHelper.style_arg_fragments(tv_resolved_var, required_imports, json_data,
+                                                                      default_size: 'Configuration.TextField.defaultFontSize.sp',
+                                                                      unset: true)
+                        end
+          if json_data['fontColor']
+            font_color = Helpers::ResourceResolver.process_color(json_data['fontColor'], required_imports)
+            style_parts << "color = #{font_color}"
           end
+          if tv_align
+            required_imports&.add(:text_align)
+            style_parts << "textAlign = #{tv_align}"
+          end
+          code += "\n" + indent("textStyle = TextStyle(#{style_parts.join(', ')}),", depth + 1)
 
           # Keyboard options
           keyboard_options = []

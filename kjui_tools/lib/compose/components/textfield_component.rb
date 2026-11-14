@@ -297,14 +297,16 @@ module KjuiTools
           end
 
           # Build FontSpec resolve block before CustomTextField(...) so the
-          # textStyle parameter can reference the resolved local. Emits only when
-          # at least one font attribute is set.
-          tf_font_args = Helpers::FontSpecHelper.build_font_spec_args(json_data, required_imports)
-          tf_resolved_var = nil
-          if tf_font_args[:has_any]
-            tf_resolved_var = next_resolved_var
-            code += Helpers::FontSpecHelper.emit_resolve_block(tf_resolved_var, tf_font_args, depth, required_imports) + "\n"
-          end
+          # textStyle parameter can reference the resolved local. Always, a font
+          # attribute or not: every text goes through the app's fontProvider (the
+          # requester's P1, ticket jui-font-provider-not-reached-without-font-
+          # attributes-android-web); a slot it leaves null falls to what the field
+          # drew before.
+          tf_font_args = Helpers::FontSpecHelper.with_drawn_weight(
+            Helpers::FontSpecHelper.build_font_spec_args(json_data, required_imports), required_imports
+          )
+          tf_resolved_var = next_resolved_var
+          code += Helpers::FontSpecHelper.emit_resolve_block(tf_resolved_var, tf_font_args, depth, required_imports) + "\n"
 
           # Focus chain (id / nextFocus).
           #
@@ -517,8 +519,10 @@ module KjuiTools
               placeholder_code += ",\n" + indent("color = Configuration.TextField.defaultPlaceholderColor", depth + 2)
             end
 
+            hint_drawn = nil
             if json_data['hintFontSize']
-              placeholder_code += ",\n" + indent("fontSize = #{Helpers::FontScale.wrap(Helpers::BoundValue.sp(json_data['hintFontSize']), json_data, required_imports)}", depth + 2)
+              hint_drawn = Helpers::FontScale.wrap(Helpers::BoundValue.sp(json_data['hintFontSize']), json_data, required_imports)
+              placeholder_code += ",\n" + indent("fontSize = #{hint_drawn}", depth + 2)
               placeholder_code += ",\n" + indent("letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}", depth + 2)
             end
 
@@ -544,7 +548,13 @@ module KjuiTools
                                  line_height = (hint_base.to_f * hint_multiple.to_f)
                                  "#{line_height == line_height.to_i ? line_height.to_i : line_height}.sp"
                                end
-              placeholder_code += ",\n" + indent("style = LocalTextStyle.current.copy(lineHeight = #{Helpers::FontScale.wrap(line_height_sp, json_data, required_imports)})", depth + 2)
+              placeholder_code += ",\n" + indent("style = LocalTextStyle.current.copy(lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: hint_drawn, line: line_height_sp)})", depth + 2)
+            elsif hint_drawn
+              # The theme's line by the text size rule as the size is (ticket
+              # kjui-theme-line-height-scales-under-font-scaling-false); an undeclared hint size follows the system,
+              # and so does its line.
+              required_imports&.add(:local_text_style)
+              placeholder_code += ",\n" + indent("style = LocalTextStyle.current.copy(lineHeight = #{Helpers::FontScale.line_height(json_data, required_imports, font: hint_drawn)})", depth + 2)
             end
 
             placeholder_code += "\n" + indent(") }", depth + 1)
@@ -664,9 +674,18 @@ module KjuiTools
           # the full context. fontColor stays inline.
           required_imports&.add(:text_style)
           style_parts = []
-          if tf_resolved_var
-            style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(tf_resolved_var, required_imports, json_data))
-          end
+          # No font attribute: the size the field drew before, the Configuration default the dynamic component
+          # applies (LocalTextStyle's 16sp is not it). A field with a font attribute and no fontSize keeps the text
+          # style's size, as before.
+          tf_default_size = unless tf_font_args[:has_any]
+                              required_imports&.add(:configuration)
+                              'Configuration.TextField.defaultFontSize.sp'
+                            end
+          # A field with no font attribute built a fresh TextStyle (no family, weight or style of its own): a slot
+          # the provider leaves null stays unset there, as before (unset).
+          style_parts.concat(Helpers::FontSpecHelper.style_arg_fragments(tf_resolved_var, required_imports, json_data,
+                                                                         default_size: tf_default_size,
+                                                                         unset: !tf_font_args[:has_any]))
 
           # Use fontColor if specified; the undeclared default routes through
           # Configuration.TextField (the theming surface the dynamic component
@@ -686,13 +705,6 @@ module KjuiTools
             style_parts << "color = Configuration.TextField.defaultTextColor"
           end
 
-          # Undeclared font size follows the same Configuration default the
-          # dynamic component applies (LocalTextStyle's 16sp is not it).
-          unless tf_resolved_var
-            required_imports&.add(:configuration)
-            style_parts << "fontSize = #{Helpers::FontScale.wrap('Configuration.TextField.defaultFontSize.sp', json_data, required_imports)}"
-            style_parts << "letterSpacing = #{Helpers::FontScale.letter_spacing(json_data, required_imports)}"
-          end
 
           if json_data['textAlign']
             required_imports&.add(:text_align)
