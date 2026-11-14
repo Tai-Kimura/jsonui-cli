@@ -95,6 +95,71 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
     end
   end
 
+  # A cell's address counts the cells of the drawn sections before its own
+  # (2.5.39, the orchestrator's ruling (a2), ticket jui-collection-item-
+  # identifier-repeats-per-section): until then a second section's cells took
+  # `_item_0`, `_item_1`, ... again — the first section's ids — on every route
+  # but the pager. Section 0's cells keep `cellIndex`; section 1's add section
+  # 0's count, read from the list hoisted before the Collection. The run-based
+  # specs (collection_flow_sections, collection_section_grid,
+  # collection_scroll_to_cell) read the n each route draws; this sweep keeps
+  # every combination the SSoT declares on the rule.
+  describe 'a second section continues the first section\'s count' do
+    def build_two(layout:, lazy:, paging:, columns:)
+      json = {
+        'type' => 'Collection', 'id' => 'target',
+        'sections' => [{ 'cell' => 'a_cell' }, { 'cell' => 'b_cell' }],
+        'items' => '@{items}',
+      }
+      json['layout'] = layout if layout
+      json['lazy'] = lazy if lazy
+      json['paging'] = true if paging
+      json['columns'] = columns if columns
+      described_class.generate(json, 0, Set.new)
+    end
+
+    # The testTag of the view call each `<Name>View(` opens.
+    def tags_after(code, view)
+      code.scan(/#{view}\(.*?testTag\("target_item_(.*?)"\)/m).flatten
+    end
+
+    LAYOUTS.each do |layout|
+      LAZY.each do |lazy|
+        [false, true].each do |paging|
+          [nil, 2].each do |columns|
+            label = "layout=#{layout} lazy=#{lazy}#{paging ? ' paging' : ''}#{columns ? " columns=#{columns}" : ''}"
+            it label do
+              code = build_two(layout: layout, lazy: lazy, paging: paging, columns: columns)
+              second = tags_after(code, 'BCellView')
+              next if second.empty? # this route draws the first section only
+
+              tags_after(code, 'ACellView').each { |tag| expect(%w[$cellIndex $page]).to include(tag), "#{label}: #{tag}" }
+              second.each do |tag|
+                expect(['$page', '${(cellCounts_target.getOrNull(0) ?: 0) + cellIndex}']).to include(tag), "#{label}: #{tag}"
+              end
+              if second.any? { |tag| tag.include?('cellCounts_target') }
+                expect(code).to match(/\Aval cellCounts_target = data\.items\??\.sections(?:\.orEmpty\(\))?\.map \{ it\.cells\?\.data\?\.size \?: 0 \}\n/), code
+              end
+            end
+          end
+        end
+      end
+    end
+
+    it 'a Collection of one section reads no count and hoists none' do
+      code = build(layout: 'vertical', lazy: nil, paging: false)
+      expect(code).not_to include('cellCounts_')
+      expect(code).to include('testTag("target_item_$cellIndex")')
+    end
+
+    it 'the class-list shape (no sections) adds the data sections before the cell\'s own' do
+      code = described_class.generate({ 'type' => 'Collection', 'id' => 'target', 'items' => '@{items}',
+                                        'cellClasses' => ['a_cell'], 'lazy' => 'none' }, 0, Set.new)
+      expect(code).to match(/\Aval cellCounts_target = data\.items\??\.sections(?:\.orEmpty\(\))?\.map \{ it\.cells\?\.data\?\.size \?: 0 \}\n/), code
+      expect(code).to include('testTag("target_item_${cellCounts_target.take(sectionIndex).sum() + cellIndex}")'), code
+    end
+  end
+
   describe 'the rule lives in one place' do
     # The gap was two arms forgetting a line that seven others carried. A
     # tenth arm should inherit it rather than have to remember it.
