@@ -188,11 +188,11 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       section_scroll_routes.each do |route, extra|
         b = blocks(convert(extra.merge('scrollTo' => '@{target}')))
         expect(b[0]).to include('.id(cellIndex)'), route
-        expect(b[2]).to include('let sectionStart = (dataSource.sections[0].cells?.data.count ?? 0)'), route
+        sum = ->(list) { "let sectionStart: Int = [#{list}].reduce(0) { (count: Int, index: Int) -> Int in count + (dataSource.sections[index].cells?.data.count ?? 0) }" }
+        expect(b[2]).to include(sum.call('0')), route
         expect(b[2]).to include('.id(sectionStart + cell.index)'), route
         # The header-only section 1 draws no cell: it is not counted.
-        expect(b[3]).to include('let sectionStart = (dataSource.sections[0].cells?.data.count ?? 0) + ' \
-                                '(dataSource.sections[2].cells?.data.count ?? 0)'), route
+        expect(b[3]).to include(sum.call('0, 2')), route
       end
     end
 

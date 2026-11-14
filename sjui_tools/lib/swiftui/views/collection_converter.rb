@@ -788,8 +788,21 @@ module SjuiTools
 
         # The cells of the data sections before the running `sectionIndex`
         # (the class-list route, which draws every data section at run time).
+        #
+        # Always bound to a TYPED `let` (cells_before_let), never written into
+        # the identifier's interpolation: an untyped reduce closure inside a
+        # string interpolation inside a ViewBuilder ForEach timed out the type
+        # checker of the macos-15 Xcode ("unable to type-check this expression
+        # in reasonable time") while Xcode 27.2 took it (2.5.39 release-check).
         def runtime_cells_before(data_source_ref)
-          "#{data_source_ref}.sections.prefix(sectionIndex).reduce(0) { $0 + ($1.cells?.data.count ?? 0) }"
+          "#{data_source_ref}.sections.prefix(sectionIndex).reduce(0) { (count: Int, section: CollectionDataSection) -> Int in " \
+            "count + (section.cells?.data.count ?? 0) }"
+        end
+
+        # `let cellsBefore: Int = <expr>` — the cells before a section, typed,
+        # for the identifier to read as a plain Int (runtime_cells_before).
+        def cells_before_let(expr)
+          add_line "let cellsBefore: Int = #{expr}"
         end
 
         def apply_cell_frame(grid: false)
@@ -1284,8 +1297,7 @@ module SjuiTools
                   data_ref = is_optional ? "dataSource" : "data.#{property_name}"
                   add_line "let section = #{data_ref}.sections[#{index}]"
                   unless drawn.empty?
-                    counts = drawn.map { |j| "(#{data_ref}.sections[#{j}].cells?.data.count ?? 0)" }
-                    add_line "let pageStart = #{counts.join(' + ')}"
+                    add_line "let pageStart: Int = #{cells_of_sections(data_ref, drawn)}"
                   end
                   add_line "if let cellsData = section.cells?.data {"
                   indent do
@@ -2115,7 +2127,7 @@ module SjuiTools
           # sectionStart. A pager's later section already counts from its
           # pageStart.
           address_start = later && !page_start && @component['id'] && earlier_cells_count(section_index)
-          add_line "let sectionStart = #{section_start || address_start}" if section_start || address_start
+          add_line "let sectionStart: Int = #{section_start || address_start}" if section_start || address_start
           @address_start = address_start
           # A key an earlier drawn section has is that section's to answer: a
           # scrollTo names the FIRST cell, in section order, whose key it is
@@ -2272,10 +2284,21 @@ module SjuiTools
           return nil unless prop
 
           data_ref = is_property_optional?(prop) ? 'dataSource' : "data.#{prop}"
-          terms = (@component['sections'] || []).first(section_index).each_with_index
-                                                .select { |section, _| section.is_a?(Hash) && section['cell'] }
-                                                .map { |_, j| "(#{data_ref}.sections[#{j}].cells?.data.count ?? 0)" }
-          terms.empty? ? nil : terms.join(' + ')
+          drawn = (@component['sections'] || []).first(section_index).each_with_index
+                                                .select { |section, _| section.is_a?(Hash) && section['cell'] }.map(&:last)
+          drawn.empty? ? nil : cells_of_sections(data_ref, drawn)
+        end
+
+        # The cells of the sections `indices` (literal), as ONE typed reduce:
+        # `[0, 2].reduce(0) { (count: Int, index: Int) -> Int in count +
+        # (<data>.sections[index].cells?.data.count ?? 0) }`. One `??` however
+        # many sections there are — a `(… ?? 0) + (… ?? 0) + …` chain grows the
+        # type checker's work with every section, and an untyped closure in an
+        # interpolation timed it out on the macos-15 Xcode (2.5.39
+        # release-check). Bound to a typed `let` by every caller.
+        def cells_of_sections(data_ref, indices)
+          "[#{indices.join(', ')}].reduce(0) { (count: Int, index: Int) -> Int in " \
+            "count + (#{data_ref}.sections[index].cells?.data.count ?? 0) }"
         end
 
         # The keys of the drawn sections before `section_index`, as a Swift
@@ -2480,8 +2503,12 @@ module SjuiTools
                 maybe_indent(own_columns) do
                   add_line "if let cellsData = section.cells?.data {"
                   if reorder_declared? && !own_columns
-                    indent { emit_reorder_rows('cellsData', index, cell_view_name, @reorder_style || :stack,
-                                                 cells_before: @component['id'] && index.to_i.positive? && earlier_cells_count(index)) }
+                    indent do
+                      before = @component['id'] && index.to_i.positive? && earlier_cells_count(index)
+                      cells_before_let(before) if before
+                      emit_reorder_rows('cellsData', index, cell_view_name, @reorder_style || :stack,
+                                        cells_before: before ? 'cellsBefore' : nil)
+                    end
                     add_line "}"
                     next
                   end
@@ -2569,12 +2596,16 @@ module SjuiTools
             add_line guard
             if reorder_declared? && cell_view && !columns_is_multi?
               # The data's sections, each one a reorderable section of its own (its index at run time).
-              indent { emit_reorder_rows('cellsData', 'sectionIndex', cell_view, @reorder_style || :stack, equatable: false,
-                                                 cells_before: runtime_cells_before(data_source_ref)) }
+              indent do
+                cells_before_let(runtime_cells_before(data_source_ref)) if @component['id']
+                emit_reorder_rows('cellsData', 'sectionIndex', cell_view, @reorder_style || :stack, equatable: false,
+                                  cells_before: @component['id'] ? 'cellsBefore' : nil)
+              end
               add_line "}"
               next # the rest of this block is the plain loop; the ForEach closes after it, as for the plain loop
             end
             indent do
+              cells_before_let(runtime_cells_before(data_source_ref)) if cell_view && @component['id']
               if cell_view && @component['cellIdProperty']
                 # cellIdProperty is the cells' identity here too (the orchestrator's round 16):
                 # keyed_loop_ids over the section's cells as its lookup reads
@@ -2600,7 +2631,7 @@ module SjuiTools
                   add_line "#{cell_view}(data: #{cell_data_arg(data_var: 'cellData', index_var: 'cellIndex')})"
                   generate_cell_identity('cellIndex', every_section: true)
                   apply_cell_frame(grid: columns_is_multi?)
-                  apply_cell_item_identifier("#{runtime_cells_before(data_source_ref)} + cellIndex")
+                  apply_cell_item_identifier('cellsBefore + cellIndex')
                 else
                   add_line "// No cellClasses declared — the cell view name is only"
                   add_line "// known at runtime, so nothing can be instantiated here."
@@ -3051,7 +3082,7 @@ module SjuiTools
             vars = { data_var: "#{cells_expr}[index]", index_var: 'index' }
             add_line "#{cell_view_name}(data: #{cell_data_arg(vars)})#{equatable ? '.equatable()' : ''}"
             apply_cell_frame(grid: false)
-            apply_cell_item_identifier(cells_before ? "(#{cells_before}) + index" : 'index')
+            apply_cell_item_identifier(cells_before ? "#{cells_before} + index" : 'index')
           end
           add_line "}"
         end

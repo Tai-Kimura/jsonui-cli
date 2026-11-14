@@ -64,8 +64,9 @@ RSpec.describe 'Collection cellClasses with items and no sections' do
       code = emit(base.merge('cellClasses' => ['ItemCollectionViewCell']))
       # The class list draws every data section: the address counts the
       # cells of the sections before (2.5.39; 0 before the first).
-      expect(code).to include('.accessibilityIdentifier("target_item_\\(dataSource.sections.prefix(sectionIndex)' \
-                              '.reduce(0) { $0 + ($1.cells?.data.count ?? 0) } + cellIndex)")')
+      expect(code).to include('let cellsBefore: Int = dataSource.sections.prefix(sectionIndex).reduce(0) ' \
+                              '{ (count: Int, section: CollectionDataSection) -> Int in count + (section.cells?.data.count ?? 0) }')
+      expect(code).to include('.accessibilityIdentifier("target_item_\\(cellsBefore + cellIndex)")')
     end
 
     it 'drops the viewName binding it no longer reads' do

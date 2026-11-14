@@ -26,8 +26,15 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
   end
 
   let(:sections) { [{ 'cell' => 'ACell' }, { 'header' => 'HCell' }, { 'cell' => 'BCell' }, { 'cell' => 'CCell' }] }
-  let(:before_2) { '(dataSource.sections[0].cells?.data.count ?? 0)' }
-  let(:before_3) { '(dataSource.sections[0].cells?.data.count ?? 0) + (dataSource.sections[2].cells?.data.count ?? 0)' }
+  def self.sum_of(indices)
+    "[#{indices.join(', ')}].reduce(0) { (count: Int, index: Int) -> Int in count + (dataSource.sections[index].cells?.data.count ?? 0) }"
+  end
+  let(:before_2) { self.class.sum_of([0]) }
+  let(:before_3) { self.class.sum_of([0, 2]) }
+  let(:runtime_before) do
+    'dataSource.sections.prefix(sectionIndex).reduce(0) { (count: Int, section: CollectionDataSection) -> Int in ' \
+      'count + (section.cells?.data.count ?? 0) }'
+  end
 
   def convert(attrs)
     described_class.new({ 'type' => 'Collection', 'id' => 'list', 'items' => '@{rows}' }.merge(attrs)).convert.to_s
@@ -45,28 +52,57 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       expect(ids[0]).to match(/\A(cellIndex|cell\.index)\z/)
       expect(ids[1]).to eq('sectionStart + cell.index')
       expect(ids[2]).to eq('sectionStart + cell.index')
-      expect(code).to include("let sectionStart = #{before_2}\n")
-      expect(code).to include("let sectionStart = #{before_3}\n")
+      expect(code).to include("let sectionStart: Int = #{before_2}\n")
+      expect(code).to include("let sectionStart: Int = #{before_3}\n")
     end
   end
 
   it 'a pager already counted every page (control: unchanged)' do
     code = convert('sections' => sections, 'orientation' => 'horizontal', 'paging' => true)
     expect(identifiers(code)).to eq(%w[cellIndex cell.index cell.index])
-    expect(code).to include("let pageStart = #{before_2}\n", "let pageStart = #{before_3}\n")
+    expect(code).to include("let pageStart: Int = #{before_2}\n", "let pageStart: Int = #{before_3}\n")
     expect(code).not_to include('sectionStart')
   end
 
   it 'reorderable rows count the sections before theirs' do
     code = convert('sections' => sections, 'reorderable' => true, 'onReorder' => '@{onMove}')
-    expect(identifiers(code)).to eq(['index', "(#{before_2}) + index", "(#{before_3}) + index"])
+    expect(identifiers(code)).to eq(['index', 'cellsBefore + index', 'cellsBefore + index'])
+    expect(code).to include("let cellsBefore: Int = #{before_2}\n", "let cellsBefore: Int = #{before_3}\n")
   end
 
   it 'the class list adds the data sections before the running one at run time' do
-    before = 'dataSource.sections.prefix(sectionIndex).reduce(0) { $0 + ($1.cells?.data.count ?? 0) }'
-    expect(identifiers(convert('cellClasses' => ['ACell']))).to eq(["#{before} + cellIndex"])
+    plain = convert('cellClasses' => ['ACell'])
+    expect(identifiers(plain)).to eq(['cellsBefore + cellIndex'])
+    expect(plain).to include("let cellsBefore: Int = #{runtime_before}\n")
     reorder = convert('cellClasses' => ['ACell'], 'reorderable' => true, 'onReorder' => '@{onMove}')
-    expect(identifiers(reorder)).to eq(["(#{before}) + index"])
+    expect(identifiers(reorder)).to eq(['cellsBefore + index'])
+    expect(reorder).to include("let cellsBefore: Int = #{runtime_before}\n")
+  end
+
+  # The 2.5.39 release-check: on the macos-15 Xcode, an untyped reduce
+  # closure inside the identifier's string interpolation (in a ViewBuilder
+  # ForEach) failed "unable to type-check this expression in reasonable time"
+  # in 13 compile arms, while Xcode 27.2 compiled it. The shape is therefore
+  # pinned on the generated text: the interpolation holds names and `+` only,
+  # and every count it reads is a `let … : Int` whose closure is typed.
+  it 'keeps every count out of the interpolation, in a typed let' do
+    shapes = self.class.address_routes.values.map { |extra| { 'sections' => sections }.merge(extra) } +
+             [{ 'sections' => sections, 'orientation' => 'horizontal', 'paging' => true },
+              { 'sections' => sections, 'reorderable' => true, 'onReorder' => '@{onMove}' },
+              { 'cellClasses' => ['ACell'] },
+              { 'cellClasses' => ['ACell'], 'reorderable' => true, 'onReorder' => '@{onMove}' },
+              { 'cellClasses' => ['ACell'], 'cellIdProperty' => 'key' }]
+    shapes.each do |attrs|
+      code = convert(attrs)
+      ids = identifiers(code)
+      expect(ids).not_to be_empty, attrs.inspect
+      ids.each { |expr| expect(expr).to match(/\A[A-Za-z.]+( \+ [A-Za-z.]+)?\z/), "#{attrs.inspect}: #{expr}" }
+      code.scan(/let (sectionStart|pageStart|cellsBefore)(:? ?[A-Za-z]*) = (.*)$/).each do |name, type, expr|
+        expect(type).to eq(': Int'), "#{attrs.inspect}: #{name}"
+        expect(expr.scan('??').size).to be <= 1, "#{attrs.inspect}: #{name} = #{expr}"
+        expect(expr).not_to match(/\{ *\$0|\{ *[a-z]+ in/), "#{attrs.inspect}: #{name}'s closure is untyped"
+      end
+    end
   end
 
   it 'a Collection of one section keeps its ids (control)' do

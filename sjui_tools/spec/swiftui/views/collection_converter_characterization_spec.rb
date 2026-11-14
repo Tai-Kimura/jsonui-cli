@@ -113,7 +113,8 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       expect(code).to include('.frame(height: 44, alignment: .topLeading)')
       expect(code).to include('.accessibilityIdentifier("twosec_item_\\(cellIndex)")')
       # Section 1's address counts section 0's cells (2.5.39).
-      expect(code).to include('let sectionStart = (data.items.sections[0].cells?.data.count ?? 0)')
+      expect(code).to include('let sectionStart: Int = [0].reduce(0) { (count: Int, index: Int) -> Int in ' \
+                              'count + (data.items.sections[index].cells?.data.count ?? 0) }')
       expect(code).to include('.accessibilityIdentifier("twosec_item_\\(sectionStart + cell.index)")')
     end
   end
