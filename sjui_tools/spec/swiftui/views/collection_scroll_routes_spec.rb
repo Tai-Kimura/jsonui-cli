@@ -171,7 +171,9 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       expect(code).not_to include('.id(')
       expect(code).not_to include('$0.offset')
       expect(code).not_to include('id: \\.offset')
-      expect(code).not_to include('sectionStart')
+      # sectionStart is the cells' address only (2.5.39), never a scroll id.
+      expect(code).not_to include('.id(sectionStart')
+      expect(code).to include('.accessibilityIdentifier("list_item_\\(sectionStart + cell.index)")')
       expect(code).to include('.onChange(of: data.target) { _, cellId in')
       expect(code).to include('scrollProxy.scrollTo(cellId, anchor: .bottom)')
     end

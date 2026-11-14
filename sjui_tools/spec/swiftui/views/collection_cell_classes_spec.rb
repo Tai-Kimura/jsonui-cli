@@ -62,7 +62,10 @@ RSpec.describe 'Collection cellClasses with items and no sections' do
 
     it 'carries the cell address, like every other cell path' do
       code = emit(base.merge('cellClasses' => ['ItemCollectionViewCell']))
-      expect(code).to include('.accessibilityIdentifier("target_item_\\(cellIndex)")')
+      # The class list draws every data section: the address counts the
+      # cells of the sections before (2.5.39; 0 before the first).
+      expect(code).to include('.accessibilityIdentifier("target_item_\\(dataSource.sections.prefix(sectionIndex)' \
+                              '.reduce(0) { $0 + ($1.cells?.data.count ?? 0) } + cellIndex)")')
     end
 
     it 'drops the viewName binding it no longer reads' do
