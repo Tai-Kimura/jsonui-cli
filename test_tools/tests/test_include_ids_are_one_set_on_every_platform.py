@@ -42,6 +42,7 @@ SPECIMENS = sorted(FIXTURE["specimens"])
 SCREEN = FIXTURE["screen"]
 ESBUILD = Path(os.environ.get("JSONUI_TEST_ESBUILD")
                or REPO / "rjui_tools/spec/support/node_modules/.bin/esbuild")
+CONFIGURATION_TEMPLATE = REPO / "rjui_tools/lib/react/templates/Configuration.ts"
 ENV = {**os.environ, "LC_ALL": "en_US.UTF-8", "LANG": "en_US.UTF-8"}
 
 SJUI = r"""
@@ -183,9 +184,15 @@ def _render_web(web: Path) -> list:
         _missing("node / esbuild", "npm ci --prefix rjui_tools/spec/support")
     (web / "react_stub.js").write_text(REACT_STUB, encoding="utf-8")
     (web / "gen" / "StringManager.ts").write_text(STRING_MANAGER_STUB, encoding="utf-8")
+    # Every text component's emit imports `Configuration` from the app's copy of
+    # the template (P1: every text is the app's font): the template's own, as
+    # an app that sets no provider and no family has it.
+    (web / "lib" / "jsonui").mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(CONFIGURATION_TEMPLATE, web / "lib" / "jsonui" / "Configuration.ts")
     (web / "tsconfig.json").write_text(json.dumps({"compilerOptions": {
         "baseUrl": ".", "jsx": "react",
-        "paths": {"@/generated/*": ["gen/*"], "react": ["react_stub.js"]}}}), encoding="utf-8")
+        "paths": {"@/generated/*": ["gen/*"], "@/lib/jsonui/*": ["lib/jsonui/*"],
+                  "react": ["react_stub.js"]}}}), encoding="utf-8")
     (web / "entry.tsx").write_text(ENTRY.format(component=_pascal(Path(SCREEN).stem)),
                                    encoding="utf-8")
     bundle = subprocess.run(
