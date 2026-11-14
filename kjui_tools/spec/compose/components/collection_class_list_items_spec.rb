@@ -31,7 +31,7 @@ RSpec.describe 'kjui codegen: a class-list Collection whose items are a declared
     '[RowCellData] = []' => [{ 'name' => 'rows', 'class' => '[RowCellData]', 'defaultValue' => '[]' },
                              'data.rows.map { it.toMap() }', 'val rows: List<RowCellData> = emptyList()'],
     'Array (no default)' => [{ 'name' => 'rows', 'class' => 'Array' },
-                             'data.rows.orEmpty().mapNotNull { it as? Map<String, Any> }', 'val rows: List<Any?>? = null']
+                             'data.rows.orEmpty().mapNotNull { (@Suppress("UNCHECKED_CAST") (it as? Map<String, Any>)) }', 'val rows: List<Any?>? = null']
   }.freeze
 
   def emit(extra, definition)
@@ -74,7 +74,7 @@ RSpec.describe 'kjui codegen: a class-list Collection whose items are a declared
     allow(KjuiTools::Core::Logger).to receive(:warn) { |m| said << m }
     code = emit({}, { 'name' => 'rows', 'class' => '[Booking]', 'defaultValue' => '[]' })
     expect(said.join).to include("items 'rows' is a list of Booking; a cell reads its own RowCellData or a map")
-    expect(code).to include('data.rows.mapNotNull { it as? Map<String, Any> }')
+    expect(code).to include('data.rows.mapNotNull { (@Suppress("UNCHECKED_CAST") (it as? Map<String, Any>)) }')
   end
 
   # A lazy "none" flow that declares `height: "wrapContent"` gets two
@@ -150,7 +150,7 @@ RSpec.describe 'kjui codegen: a class-list Collection whose items are a declared
         "// #{declared}, #{route}\n@Composable fun route#{d}_#{r}(data: Data#{d}, viewModel: Any) {\n#{emit(extra, definition)}\n}"
       end
     end
-    expect("#{CLASS_LIST_ITEMS_STUBS}\n#{functions.join("\n\n")}\n").to compile_as_kotlin
+    expect("#{CLASS_LIST_ITEMS_STUBS}\n#{functions.join("\n\n")}\n").to compile_as_kotlin.with_warnings_as_errors
   end
   # A cell's key: the row's own cellIdProperty value, as the sections path keys
   # its cells (ticket 2026-10-23-rjui-collection-array-items-key-ignores-cell-
@@ -178,6 +178,6 @@ RSpec.describe 'kjui codegen: a class-list Collection whose items are a declared
           "#{emit(extra.merge('cellIdProperty' => 'id'), definition)}\n}"
       end
     end
-    expect("#{CLASS_LIST_ITEMS_STUBS}\n#{functions.join("\n\n")}\n").to compile_as_kotlin
+    expect("#{CLASS_LIST_ITEMS_STUBS}\n#{functions.join("\n\n")}\n").to compile_as_kotlin.with_warnings_as_errors
   end
 end

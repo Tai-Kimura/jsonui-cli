@@ -266,7 +266,9 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
         class CellData(val viewName: String, val data: List<Map<String, Any>>)
         class HeaderFooterData(val viewName: String, val data: Map<String, Any>)
     }
-    class Data(val rows: CollectionDataSource? = null, val target: Any? = null, val cols: Int = 2, val mode: String = "lazy", val t: Int? = 20, val anchor: String? = "bottom")
+    // `anchor` is Any?: the layouts bind scrollAnchor to it without declaring its class, so the emitter reads it
+    // as an unknown type (`?.toString()`); a String here made that call redundant under allWarningsAsErrors.
+    class Data(val rows: CollectionDataSource? = null, val target: Any? = null, val cols: Int = 2, val mode: String = "lazy", val t: Int? = 20, val anchor: Any? = "bottom")
 
     // The pager composes each page in turn; the page it was asked for is the scroll.
     class PagerState(val pageCount: () -> Int) {
@@ -643,7 +645,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
   end
 
   it 'every route compiles (the compile arm; the run below compiles it again to run it)' do
-    expect(one_file(routes)).to compile_as_kotlin
+    expect(one_file(routes)).to compile_as_kotlin.with_warnings_as_errors
   end
 
   def landed(lines, label)

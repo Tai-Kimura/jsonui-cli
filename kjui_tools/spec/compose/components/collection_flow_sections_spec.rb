@@ -134,7 +134,7 @@ RSpec.describe 'kjui codegen: a flow per section' do
   end
 
   it 'every route compiles (the compile arm; the run below compiles it again to run it)' do
-    expect(program(routes)).to compile_as_kotlin
+    expect(program(routes)).to compile_as_kotlin.with_warnings_as_errors
   end
 
   it 'each section wraps in a region of its own, on every route that draws sections; one section as before' do

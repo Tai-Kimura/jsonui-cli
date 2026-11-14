@@ -4,6 +4,7 @@ require 'json'
 require 'fileutils'
 require 'set'
 require_relative '../core/config_manager'
+require_relative 'helpers/kotlin_cast'
 require_relative '../core/project_finder'
 require_relative '../core/type_converter'
 require_relative 'helpers/resource_resolver'
@@ -317,12 +318,12 @@ module KjuiTools
               # non-null field a defaultValue gives — the Data class did not
               # compile (conformance Label/text__binding_dot_path and three
               # more — kjui-object-path-binding-does-not-compile).
-              content += "map[\"#{name}\"] as? #{kotlin_type} ?: #{from_map_fallback(prop, class_type, 'emptyList()')}"
+              content += "#{Helpers::KotlinCast.as_nullable("map[\"#{name}\"]", kotlin_type)} ?: #{from_map_fallback(prop, class_type, 'emptyList()')}"
             when /^Map<.*>$/, 'Object', 'object', 'Hash', 'hash'
-              content += "map[\"#{name}\"] as? #{kotlin_type} ?: #{from_map_fallback(prop, class_type, 'emptyMap()')}"
+              content += "#{Helpers::KotlinCast.as_nullable("map[\"#{name}\"]", kotlin_type)} ?: #{from_map_fallback(prop, class_type, 'emptyMap()')}"
             else
               # For custom types, try to cast directly
-              content += "map[\"#{name}\"] as? #{kotlin_type}"
+              content += Helpers::KotlinCast.as_nullable("map[\"#{name}\"]", kotlin_type)
             end
 
             content += "," if index < data_properties.length - 1

@@ -4,6 +4,7 @@ require 'json'
 require 'fileutils'
 require 'set'
 require_relative '../core/config_manager'
+require_relative 'helpers/kotlin_cast'
 require_relative '../core/project_finder'
 require_relative '../core/logger'
 require_relative '../core/type_converter'
@@ -2258,9 +2259,9 @@ module KjuiTools
           # `value as? Object` did not compile against the Data field
           # (kjui-object-path-binding-does-not-compile).
           model_type = DataModelUpdater.allocate.send(:map_to_kotlin_type, class_type)
-          "value as? #{model_type} ?: updated.#{name}"
+          "#{Helpers::KotlinCast.as_nullable('value', model_type)} ?: updated.#{name}"
         else
-          "value as? #{kotlin_type} ?: updated.#{name}"
+          "#{Helpers::KotlinCast.as_nullable('value', kotlin_type)} ?: updated.#{name}"
         end
       end
 
