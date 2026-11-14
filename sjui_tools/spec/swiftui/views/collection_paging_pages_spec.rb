@@ -38,7 +38,8 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
   # The tag each page carries, in the order the pages are drawn, for a data
   # source whose sections hold `counts` cells: read off the emitted text —
   # each section block's guard (`sections.count > k`), its `pageStart` sum
-  # (each `sections[j]…count ?? 0` term is counts[j]) and its `.tag(…)`.
+  # (a typed reduce over the literal section indices `[j, …]`, each j adding
+  # counts[j]; 2.5.39) and its `.tag(…)`.
   def tags(code, counts)
     blocks = code.scan(/sections\.count > (\d+) \{\n(.*?)\.tag\(([^)]*)\)/m)
     expect(blocks).not_to be_empty, code
@@ -46,11 +47,11 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
       k = k.to_i
       next [] unless k < counts.size
 
-      start = body[/let pageStart = (.*)$/, 1]
+      start = body[/let pageStart: Int = (.*)$/, 1]
       offset = if start
-                 sum = start.gsub(/\((?:dataSource|data\.rows)\.sections\[(\d+)\]\.cells\?\.data\.count \?\? 0\)/) { counts[Regexp.last_match(1).to_i].to_s }
-                 expect(sum).to match(/\A[\d +]+\z/), start
-                 sum.split('+').sum(&:to_i)
+                 indices = start[/\A\[([\d, ]+)\]\.reduce\(0\) \{ \(count: Int, index: Int\) -> Int in count \+ \((?:dataSource|data\.rows)\.sections\[index\]\.cells\?\.data\.count \?\? 0\) \}\z/, 1]
+                 expect(indices).not_to be_nil, start
+                 indices.split(',').sum { |j| counts[j.to_i] }
                else
                  0
                end
