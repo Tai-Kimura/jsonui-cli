@@ -60,6 +60,7 @@ module ProcessStateGuard
     'KjuiTools::Compose::Helpers::FontSpecHelper.@css_weight_index' => 'the css column of shared/core/font_weight_mapping.json beside the tool',
     'KjuiTools::Core::AttributeAliasFold.@definitions' => 'lib/core/attribute_definitions.json',
     'KjuiTools::Core::AttributeAliasFold.@by_section' => "the alias maps read from lib/core/attribute_definitions.json, per section",
+    'KjuiTools::Compose::Components::CollectionComponent.@content_sized_image_types' => 'lib/core/grid_row_height.json (contentSizedImages)',
     'KjuiTools::Compose::Helpers::ModifierBuilder.@not_applicable_validator' => "the validator the emitter asks for common's notApplicableTo (lib/core/attribute_definitions.json, lib/core/type_synonyms.json)"
   }.freeze
 
