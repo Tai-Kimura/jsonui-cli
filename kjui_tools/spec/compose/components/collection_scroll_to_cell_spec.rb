@@ -41,6 +41,9 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     model = generator.send(:cell_viewmodel_content, class_name, 'x_cell', 'com.example')
     params = view[/fun #{class_name}View\((.*?)\)\s*\{/m, 1] or raise "no #{class_name}View in the scaffold"
     update = model[/fun updateData\((.*?)\)/, 1] or raise "no updateData in the scaffold"
+    # A drawn cell is named by its letter and the n of its address
+    # (`<id>_item_<n>`), which counts across the sections since 2.5.39 (ruling
+    # (a2)): the n scrollTo's Int names — "6" lands on B6, the seventh cell.
     "class #{class_name}ViewModel { fun updateData(#{update}) {} }\n" \
       "@Composable fun #{class_name}View(#{params.strip}) { Drawn.draw(\"#{letter}\" + ((modifier as? Tagged)?.tag?.substringAfterLast('_') ?: \"\")) }\n"
   end
@@ -661,36 +664,37 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     # The Ints are cells; -1 names none. The String "3#77" is no cell's key
     # (key = cellId here, and no cell has one): the legacy lazy item 3, A2 on
     # the stack (B2, reversed), and said.
-    expect([0, 3, 6, 9, '3#77', -1].map { |t| landed(lines, "stack #{t}") }).to eq(%w[A0 A3 B1 B4 A2 none]), lines.inspect
-    expect([0, 3, 6, 9, -1].map { |t| landed(lines, "stackReversed #{t}") }).to eq(%w[A0 A3 B1 B4 none]), lines.inspect
+    expect([0, 3, 6, 9, '3#77', -1].map { |t| landed(lines, "stack #{t}") }).to eq(%w[A0 A3 B6 B9 A2 none]), lines.inspect
+    expect([0, 3, 6, 9, -1].map { |t| landed(lines, "stackReversed #{t}") }).to eq(%w[A0 A3 B6 B9 none]), lines.inspect
     expect(read(lines, 'stack 3#77')[:logs]).to eq(1), lines.inspect
     # The grid's items: H A0 … A4 _ B0 … — A4 leaves its row part filled, so a
     # filler precedes B0; item 6 is the filler.
     %w[grid gridReversed gridBound].each do |route|
-      expect([0, 3, 6, 9, -1].map { |t| landed(lines, "#{route} #{t}") }).to eq(%w[A0 A3 B1 B4 none]), lines.inspect
+      expect([0, 3, 6, 9, -1].map { |t| landed(lines, "#{route} #{t}") }).to eq(%w[A0 A3 B6 B9 none]), lines.inspect
     end
     %w[stackKeys gridKeys].each do |route|
       # k3 is A3's key and B0's: the first section's. "0#77" is no key: read,
       # as before jsonui-cli 1.9.0, as the lazy item index — item 0, the
       # header — and said (the orchestrator's ruling, round 11). "nothing" scrolls nowhere.
-      expect(%w[k3 x2 k1 0#77 nothing].map { |t| landed(lines, "#{route} #{t}") }).to eq(%w[A3 B2 A1 H none]), lines.inspect
+      expect(%w[k3 x2 k1 0#77 nothing].map { |t| landed(lines, "#{route} #{t}") }).to eq(%w[A3 B7 A1 H none]), lines.inspect
       expect(%w[k3 0#77 nothing].map { |t| read(lines, "#{route} #{t}")[:logs] }).to eq([0, 1, 0]), lines.inspect
       # An Int with cellIdProperty is the counted cell — A3 — not a key and
       # not the lazy item 3 (A2) it was read as until jsonui-cli 1.9.0.
       expect(read(lines, "#{route} 3").values_at(:at, :logs)).to eq(['A3', 0]), lines.inspect
     end
     # Under autoChangeTrackingId a cell's key is its enriched cellId.
-    expect(%w[k3_e x2_e k3].map { |t| landed(lines, "stackEnriched #{t}") }).to eq(%w[A3 B2 none]), lines.inspect
+    expect(%w[k3_e x2_e k3].map { |t| landed(lines, "stackEnriched #{t}") }).to eq(%w[A3 B7 none]), lines.inspect
     # The class-list grid: a header item, then every data section's cells,
-    # each drawn with cellClasses[0] (so the second section's cell 1 is A1).
-    expect([0, 6].map { |t| lines["classList #{t}"].split(' ').first(2) }).to eq([%w[A0 @1], %w[A1 @7]]), lines.inspect
+    # each drawn with cellClasses[0] (so the second section's cell 1 is A6:
+    # its address counts the first section's five, 2.5.39).
+    expect([0, 6].map { |t| lines["classList #{t}"].split(' ').first(2) }).to eq([%w[A0 @1], %w[A6 @7]]), lines.inspect
   end
 
   # Round 11 (the orchestrator's ruling 2026-09-27).
   it 'a scroll runs on a change: the value the list first composes with scrolls nowhere' do
     lines = run_emitted(routes)
     expect(read(lines, 'stackInitial 6')[:index]).to eq(-1), lines.inspect
-    expect(read(lines, 'stack 6')[:at]).to eq('B1'), lines.inspect
+    expect(read(lines, 'stack 6')[:at]).to eq('B6'), lines.inspect
   end
 
   it 'scrollAnchor lands the item: bottom its end at the viewport end, center its middle, top its start; reversed, top and bottom trade' do
@@ -749,13 +753,13 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     lines = run_emitted(routes)
     # Ten cells: bottom is the last, B4 (item 12, after H A0…A4 F H B0…B3);
     # center the sixth, B0. The grid: B4 after its filler, item 11.
-    expect(read(lines, 'stackAnchor ').values_at(:at, :index)).to eq(['B4', 12]), lines.inspect
-    expect(read(lines, 'stackAnchorCenter ').values_at(:at, :index)).to eq(['B0', 8]), lines.inspect
+    expect(read(lines, 'stackAnchor ').values_at(:at, :index)).to eq(['B9', 12]), lines.inspect
+    expect(read(lines, 'stackAnchorCenter ').values_at(:at, :index)).to eq(['B5', 8]), lines.inspect
     # centred, not at the top edge (kjui-defaultscrollanchor-center-differs-
     # when-content-overflows): scrollToItem puts B0 at 0, then it goes back
     # by (100 - 28) / 2 to its middle. Until 2026-10-14 no shift was made.
     expect(read(lines, 'stackAnchorCenter ')[:offset]).to eq(-36), lines.inspect
-    expect(read(lines, 'gridAnchor ').values_at(:at, :index)).to eq(['B4', 11]), lines.inspect
+    expect(read(lines, 'gridAnchor ').values_at(:at, :index)).to eq(['B9', 11]), lines.inspect
   end
 
   it 'the pager and the flow scroll by the rule too (they read no scrollTo before 1.9.0)' do
@@ -793,7 +797,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
   it "a bound `lazy` decides at run time: EAGER scrolls its cells, LAZY its items (and reads the legacy form)" do
     lines = run_emitted(routes)
     expect(%w[6 3#77].map { |t| read(lines, "eagerBound #{t}").values_at(:index, :logs) }).to eq([[124, 0], [-1, 0]]), lines.inspect
-    expect(%w[6 3#77].map { |t| read(lines, "eagerBoundLazy #{t}").values_at(:at, :logs) }).to eq([['B1', 0], ['A2', 1]]), lines.inspect
+    expect(%w[6 3#77].map { |t| read(lines, "eagerBoundLazy #{t}").values_at(:at, :logs) }).to eq([['B6', 0], ['A2', 1]]), lines.inspect
   end
 
   it 'the wrapContent Column scrolls to the cell by the rule; `lazy: none` scrolls nowhere' do
@@ -821,7 +825,7 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     # middle cell, B0.
     expect(read(lines, 'stackReversedAnchor ')[:index]).to eq(-1), lines.inspect
     expect(read(lines, 'stackReversedAnchorTop ').values_at(:at, :index)).to eq(['A4', 11]), lines.inspect
-    expect(read(lines, 'stackReversedAnchorCenter ').values_at(:at, :index)).to eq(['B0', 1]), lines.inspect
+    expect(read(lines, 'stackReversedAnchorCenter ').values_at(:at, :index)).to eq(['B5', 1]), lines.inspect
     expect(read(lines, 'gridReversedAnchor ')[:index]).to eq(-1), lines.inspect
     expect(read(lines, 'gridReversedAnchorTop ')[:at]).to eq('A4'), lines.inspect
   end

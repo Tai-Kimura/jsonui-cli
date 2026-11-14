@@ -34,9 +34,56 @@ module KjuiTools
         # bind ($cellIndex / $index / $page); `extra` is any modifier chain
         # that arm needs after the tag; `lead` any it needs before the tag
         # (the pager's page padding).
+        #
+        # `index_expr` is the cell's ADDRESS, not its index in its section: the
+        # cells of the drawn sections before its own, then its index there —
+        # cells only, headers and footers not counted (cell_address; the
+        # orchestrator's ruling (a2), ticket jui-collection-item-identifier-
+        # repeats-per-section). Until 2.5.39 a second section's cells took
+        # `_item_0`, `_item_1`, ... again, the first section's ids, and a test
+        # addressing one reached whichever was found first. The pager's `page`
+        # already counted across its sources.
         def self.cell_test_tag_modifier(collection_id, index_expr, depth, extra = '', lead: '')
-          tag = collection_id ? ".testTag(\"#{JsonUIShared::StringLiterals.kotlin_body(collection_id)}_item_\$#{index_expr}\")" : ''
+          index = index_expr.match?(/\A[A-Za-z_][A-Za-z0-9_]*\z/) ? "\$#{index_expr}" : "\${#{index_expr}}"
+          tag = collection_id ? ".testTag(\"#{JsonUIShared::StringLiterals.kotlin_body(collection_id)}_item_#{index}\")" : ''
           indent("modifier = Modifier#{lead}#{tag}#{extra}", depth)
+        end
+
+        # A cell's address in a declared-sections route: the cells of the
+        # declared sections before section `index` that draw a cell (read from
+        # the data, as scrollTo counts them), then `cellIndex`. Section 0's
+        # cells and a Collection of one section keep `cellIndex`.
+        #
+        # The counts are read from a list hoisted before the Collection
+        # (cell_counts_line), not from `data.<items>?.sections` at the cell: a
+        # route opens a section as `data.rows?.sections?.getOrNull(1)?.let`,
+        # inside which Kotlin knows `data.rows` is not null, and a safe call on
+        # it there is a warning — an error under allWarningsAsErrors.
+        def self.cell_address(sections, index, property_name, index_expr = 'cellIndex')
+          return index_expr unless property_name && @cell_counts
+
+          before = drawn_cells_before(sections, index) { |j| "#{@cell_counts[:var]}.getOrNull(#{j})" }
+          return index_expr if before.empty?
+
+          @cell_counts[:used] = property_name
+          "#{before}#{index_expr}"
+        end
+
+        # The class-list routes' address: the data sections before
+        # `sectionIndex` (in scope where the route walks every data section).
+        def self.class_list_cell_address(property_name)
+          return 'cellIndex' unless property_name && @cell_counts
+
+          @cell_counts[:used] = property_name
+          "#{@cell_counts[:var]}.take(sectionIndex).sum() + cellIndex"
+        end
+
+        # The hoisted list cell_address reads: each data section's cell count.
+        def self.cell_counts_line(depth)
+          property_name = @cell_counts && @cell_counts[:used]
+          return '' unless property_name
+
+          indent("val #{@cell_counts[:var]} = #{scroll_sections_expr(property_name)}.map { it.cells?.data?.size ?: 0 }", depth) + "\n"
         end
 
         # defaultScrollAnchor (center / bottom): where the list starts, applied
@@ -1018,6 +1065,16 @@ module KjuiTools
         end
 
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
+          outer = @cell_counts
+          id = json_data['id']
+          @cell_counts = id.is_a?(String) && !id.empty? ? { var: "cellCounts_#{id.gsub(/[^A-Za-z0-9_]/, '_')}", used: nil } : nil
+          code = generate_route(json_data, depth, required_imports, parent_type)
+          cell_counts_line(depth) + code
+        ensure
+          @cell_counts = outer
+        end
+
+        def self.generate_route(json_data, depth, required_imports = nil, parent_type = nil)
           # `items` is declared ["array", "binding"]; what these emitters draw
           # from is the binding (the data's sections). An array names no data:
           # it is set aside here, as the sjui and rjui Collections set it
@@ -1552,7 +1609,7 @@ module KjuiTools
         # One cell, with `sectionIndex`, `cellIndex` and `currentCellData` in
         # scope: its own ViewModel fed the cell's data — the scaffold's
         # `XView(viewModel, modifier)`, as the sections path calls it.
-        def self.class_list_cell(json_data, cell_name, depth, required_imports, cell_extra: '')
+        def self.class_list_cell(json_data, cell_name, depth, required_imports, cell_extra: '', address: 'cellIndex')
           cell_class = cell_class_name(cell_name)
           code = "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_class}_cell_\${sectionIndex}_\${cellIndex}_\${viewModel.hashCode()}\")", depth)
           code += "\n" + seed_view_model_line("cellViewModel", "currentCellData", depth)
@@ -1572,7 +1629,7 @@ module KjuiTools
           end
           code += "\n" + indent("#{cell_class}View(", depth)
           code += "\n" + indent("viewModel = cellViewModel,", depth + 1)
-          code += "\n" + cell_test_tag_modifier(json_data['id'], 'cellIndex', depth + 1, cell_extra)
+          code += "\n" + cell_test_tag_modifier(json_data['id'], address, depth + 1, cell_extra)
           code += "\n" + indent(")", depth)
           closers.times { code += "\n" + indent("}", depth) }
           code
@@ -1617,7 +1674,7 @@ module KjuiTools
           end
           if cell_name && property_name
             # The cells of the list `list` names, at depth `d`.
-            cells = lambda do |d, list = 'cellData.data', key = nil|
+            cells = lambda do |d, list = 'cellData.data', key = nil, address = 'cellIndex'|
               out = "\n" + indent("items(#{list}.size#{key ? ", key = #{key}" : ''}) { cellIndex ->", d)
               if @reorder
                 # A reorderable row (ticket jui-collection-drag-to-reorder): the item's root is the row.
@@ -1629,7 +1686,7 @@ module KjuiTools
               out += "\n" + indent("contentAlignment = #{gravity_alignment}", d + 2)
               out += "\n" + indent(") {", d + 1)
               out += "\n" + indent("val currentCellData = #{list}[cellIndex]", d + 2)
-              out += class_list_cell(json_data, cell_name, d + 2, required_imports, cell_extra: @reorder ? '.collectionReorderActions()' : '')
+              out += class_list_cell(json_data, cell_name, d + 2, required_imports, cell_extra: @reorder ? '.collectionReorderActions()' : '', address: address)
               out += "\n" + indent("}", d + 1)
               out += "\n" + indent("}", d + 1) if @reorder
               out + "\n" + indent("}", d)
@@ -1658,7 +1715,7 @@ module KjuiTools
               code += "\n" + indent("// #{cell_name}: every data section", depth)
               code += "\n" + indent("#{sections_access(property_name)}.forEachIndexed { sectionIndex, section ->", depth)
               code += "\n" + indent("section.cells?.let { cellData ->", depth + 1)
-              code += cells.call(depth + 2)
+              code += cells.call(depth + 2, 'cellData.data', nil, class_list_cell_address(property_name))
               code += "\n" + indent("}", depth + 1)
             end
             code += "\n" + indent("}", depth)
@@ -1739,7 +1796,8 @@ module KjuiTools
               end
               code += "\n" + indent("Box(modifier = Modifier.weight(1f)) {", depth + 3)
               code += class_list_cell(json_data, cell_name, depth + 4, required_imports,
-                                      cell_extra: place.call("rowIndex * #{count.include?('.') || count.include?('(') ? "(#{count})" : count} + columnIndex"))
+                                      cell_extra: place.call("rowIndex * #{count.include?('.') || count.include?('(') ? "(#{count})" : count} + columnIndex"),
+                                      address: array ? 'cellIndex' : class_list_cell_address(property_name))
               code += "\n" + indent("}", depth + 3)
               code += "\n" + indent("}", depth + 2)
               code += "\n" + indent("repeat(#{count} - rowCells.size) { Spacer(modifier = Modifier.weight(1f)) }", depth + 2)
@@ -1753,7 +1811,8 @@ module KjuiTools
               code += "\n" + reorder_locked_line('reorderCells', 'reorderLocked', depth + 1)
               code += "\n" + indent("reorderCells.forEachIndexed { cellIndex, currentCellData ->", depth + 1)
               code += "\n" + indent("key(#{reorder_row_key_expr(json_data, 'currentCellData')}) { CollectionReorderRow(#{@reorder[:var]}, sectionIndex, cellIndex, reorderCells.size, reorderLocked#{reorder_fixed_arg('reorderLocked')}#{reorder_id_arg(reorder_row_key_expr(json_data, 'currentCellData'))}) {", depth + 2)
-              code += class_list_cell(json_data, cell_name, depth + 3, required_imports, cell_extra: cell_extra + '.collectionReorderActions()')
+              code += class_list_cell(json_data, cell_name, depth + 3, required_imports, cell_extra: cell_extra + '.collectionReorderActions()',
+                                      address: class_list_cell_address(property_name))
               code += "\n" + indent("} }", depth + 2)
               code += "\n" + indent("}", depth + 1)
               code += "\n" + indent("}", depth)
@@ -1762,7 +1821,8 @@ module KjuiTools
               code += "\n" + indent("#{sections_access(property_name)}.forEachIndexed { sectionIndex, section ->", depth)
               code += "\n" + indent("section.cells?.data?.forEachIndexed { cellIndex, currentCellData ->", depth + 1)
               code += class_list_cell(json_data, cell_name, depth + 2, required_imports,
-                                      cell_extra: place.call("#{scroll_sections_expr(property_name)}.take(sectionIndex).sumOf { it.cells?.data?.size ?: 0 } + cellIndex"))
+                                      cell_extra: place.call(class_list_cell_address(property_name)),
+                                      address: class_list_cell_address(property_name))
               code += "\n" + indent("}", depth + 1)
               code += "\n" + indent("}", depth)
             end
@@ -1961,7 +2021,7 @@ module KjuiTools
                 code += "\n" + indent("viewModel = cellViewModel,", depth + 6)
                 # Add testTag for test automation (tapItem action)
                 collection_id = json_data['id']
-                code += "\n" + cell_test_tag_modifier(collection_id, 'cellIndex', depth + 6)
+                code += "\n" + cell_test_tag_modifier(collection_id, cell_address(sections, index, property_name), depth + 6)
                 code += "\n" + indent(")", depth + 5)
                 if cell_size_box_open(json_data, nil)
                   code += "\n" + indent("}", depth + 5)
@@ -2599,7 +2659,7 @@ module KjuiTools
                                  .map { |_, j| "(#{scroll_sections_expr(property_name)}.getOrNull(#{j})?.cells?.data?.size ?: 0) + " }.join
                 flow_extra = ".onGloballyPositioned { flowCellTargets[#{before}cellIndex] = it }"
               end
-              code += "\n" + cell_test_tag_modifier(json_data['id'], 'cellIndex', inner_depth + 1, flow_extra)
+              code += "\n" + cell_test_tag_modifier(json_data['id'], cell_address(sections, index, property_name), inner_depth + 1, flow_extra)
               code += "\n" + indent(")", inner_depth)
 
               if cell_id_property
@@ -2830,7 +2890,7 @@ module KjuiTools
                         else
                           ''
                         end
-                out += "\n" + cell_test_tag_modifier(json_data['id'], 'cellIndex', d + 1, place + (@reorder ? '.collectionReorderActions()' : ''))
+                out += "\n" + cell_test_tag_modifier(json_data['id'], cell_address(sections, index, property_name), d + 1, place + (@reorder ? '.collectionReorderActions()' : ''))
                 out + "\n" + indent(")", d)
               end
               # A grid per section: a section of more than one column (its own
@@ -2965,7 +3025,7 @@ module KjuiTools
               code += "\n" + indent("LaunchedEffect(currentCellData) { cellViewModel.updateData(currentCellData) }", depth + 4)
               code += "\n" + indent("#{cell_class}View(", depth + 4)
               code += "\n" + indent("viewModel = cellViewModel,", depth + 5)
-              code += "\n" + cell_test_tag_modifier(json_data['id'], 'cellIndex', depth + 5)
+              code += "\n" + cell_test_tag_modifier(json_data['id'], cell_address(sections, index, property_name), depth + 5)
               code += "\n" + indent(")", depth + 4)
               code += "\n" + indent("}", depth + 3)
               code += "\n" + indent("}", depth + 2)
@@ -3576,7 +3636,7 @@ module KjuiTools
             out += "\n" + indent("viewModel = cellViewModel,", depth + 4)
             collection_id = json_data['id']
             # No fillMaxWidth on cells — see the grid path note above.
-            out += "\n" + cell_test_tag_modifier(collection_id, 'cellIndex', depth + 4, "#{@reorder ? '.collectionReorderActions()' : ''}")
+            out += "\n" + cell_test_tag_modifier(collection_id, cell_address(sections, index, property_name), depth + 4, "#{@reorder ? '.collectionReorderActions()' : ''}")
             out += "\n" + indent(")", depth + 3)
             if cell_size_box_open(json_data, nil)
               out += "\n" + indent("}", depth + 3)
@@ -3700,7 +3760,7 @@ module KjuiTools
             collection_id = json_data['id']
             # No fillMaxWidth on cells — see the grid path note above.
             place = places ? ".onGloballyPositioned { collectionCellPlaces[#{drawn_cells_before(sections, index) { |j| "section#{j}?.cells?.data?.size" }}cellIndex] = it }" : ''
-            out += "\n" + cell_test_tag_modifier(collection_id, 'cellIndex', depth + 4, place + (@reorder ? '.collectionReorderActions()' : ''))
+            out += "\n" + cell_test_tag_modifier(collection_id, cell_address(sections, index, property_name), depth + 4, place + (@reorder ? '.collectionReorderActions()' : ''))
             out += "\n" + indent(")", depth + 3)
             if cell_size_box_open(json_data, nil)
               out += "\n" + indent("}", depth + 3)

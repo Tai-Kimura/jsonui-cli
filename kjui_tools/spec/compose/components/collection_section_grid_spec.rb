@@ -198,20 +198,23 @@ RSpec.describe 'kjui codegen: a grid per section' do
 
   it 'lays each section out from a row of its own, on every route, adding no empty row' do
     lines = run_emitted(routes)
+    # A cell is named by the n of its address, counted across the drawn
+    # sections (2.5.39, ruling (a2)): the B section's cells follow the A
+    # section's; a section that draws only a header counts none.
     %w[lazy eager horizontal binding].each do |route|
-      expect(lines["#{route} section 1 ends a row part filled"]).to eq('A0A1|A2_|B0B1'), lines.inspect
-      expect(lines["#{route} section 1 fills its last row"]).to eq('A0A1|B0B1'), lines.inspect
-      expect(lines["#{route} section 2 has a header"]).to eq('A0A1|A2|_.|B0B1'), lines.inspect
+      expect(lines["#{route} section 1 ends a row part filled"]).to eq('A0A1|A2_|B3B4'), lines.inspect
+      expect(lines["#{route} section 1 fills its last row"]).to eq('A0A1|B2B3'), lines.inspect
+      expect(lines["#{route} section 2 has a header"]).to eq('A0A1|A2|_.|B3B4'), lines.inspect
     end
     %w[none wrap ownColumns bindingNone].each do |route|
-      expect(lines["#{route} section 1 ends a row part filled"]).to eq('A0A1|A2_|B0B1'), lines.inspect
-      expect(lines["#{route} section 1 fills its last row"]).to eq('A0A1|B0B1'), lines.inspect
-      expect(lines["#{route} section 2 has a header"]).to eq('A0A1|A2_|H|B0B1'), lines.inspect
+      expect(lines["#{route} section 1 ends a row part filled"]).to eq('A0A1|A2_|B3B4'), lines.inspect
+      expect(lines["#{route} section 1 fills its last row"]).to eq('A0A1|B2B3'), lines.inspect
+      expect(lines["#{route} section 2 has a header"]).to eq('A0A1|A2_|H|B3B4'), lines.inspect
     end
     # Columns 2 and 3 in one grid of 6: section 1's cells span 3, section 2's
     # 2 — the fill is counted in grid units, so two cells of 3 fill a row.
-    expect(lines['lcm section 1 ends a row part filled']).to eq('A0..A1..|A2.._..|B0.B1.'), lines.inspect
-    expect(lines['lcm section 1 fills its last row']).to eq('A0..A1..|B0.B1.'), lines.inspect
+    expect(lines['lcm section 1 ends a row part filled']).to eq('A0..A1..|A2.._..|B3.B4.'), lines.inspect
+    expect(lines['lcm section 1 fills its last row']).to eq('A0..A1..|B2.B3.'), lines.inspect
   end
 
   it 'a single section is emitted as it was (nothing to separate)' do

@@ -157,20 +157,24 @@ RSpec.describe 'kjui codegen: a flow per section' do
 
       run.lines.to_h { |l| l.chomp.split(' => ', 2) }
     end
+    # A cell is named by the n of its address, counted across the drawn
+    # sections (2.5.39, ruling (a2)): section 1's cells follow section 0's
+    # three; a section that draws no cell (headerOnly's) counts none.
     %w[plain matchParent fixedHeight lazyNone tracked].each do |route|
-      expect(lines[route]).to eq('A0A1A2|B0B1'), lines.inspect
+      expect(lines[route]).to eq('A0A1A2|B3B4'), lines.inspect
     end
     expect(lines['oneSection']).to eq('A0A1A2'), lines.inspect
     # The header a line of its own above the section's region, the footer
     # below (the orchestrator's ruling 2026-09-26, round 7; the flow drew neither) — each in a
     # full-width row, the view at its own size.
-    %w[edges edgesLazyNone edgesTracked].each { |route| expect(lines[route]).to eq('H|A0A1A2|F|B0B1'), lines.inspect }
+    %w[edges edgesLazyNone edgesTracked].each { |route| expect(lines[route]).to eq('H|A0A1A2|F|B3B4'), lines.inspect }
     expect(lines['edgesOneSection']).to eq('H|A0A1A2'), lines.inspect
     expect(lines['headerOnly']).to eq('H|B0B1'), lines.inspect
   end
 
   it 'spaces the sections by the line spacing, and each region by the declared spacings' do
-    code = emit
+    # The cells' address counts (cell_counts_line) come first, before the Column.
+    code = emit.sub(/\A\s*val cellCounts_\w+ = .*\n/, '')
     expect(code).to match(/\A\s*Column\(/)
     column_args = code[/\A\s*Column\((.*?)\n\s*\) \{/m, 1]
     expect(column_args).to include('verticalArrangement = Arrangement.spacedBy(6.dp)'), code
@@ -246,7 +250,8 @@ RSpec.describe 'kjui codegen: a flow per section' do
 
           ran
         end
-        expect(out[/DRAWN (.*)/, 1]).to eq('0:a0 1:a1 2:a2 0:b0 1:b1'), "#{extra}\n#{out}"
+        # The n is the cell's address across the sections (2.5.39, ruling (a2)).
+        expect(out[/DRAWN (.*)/, 1]).to eq('0:a0 1:a1 2:a2 3:b0 4:b1'), "#{extra}\n#{out}"
         expect(out[/DISTINCT (\d+)/, 1]).to eq('5'), "#{extra}\n#{out}"
       end
     end
