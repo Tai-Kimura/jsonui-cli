@@ -3,6 +3,58 @@
   "_comment": "The hand-written half of frame_parity.json: which cross-platform frame disagreements are a platform idiom (category 3), on which fields, and why. `jui conformance frame-parity --update` measures, applies these rules (the first rule whose fixture / id globs match wins; fields: the fields allowed to differ), and writes frame_parity.json. A matched id that also differs OUTSIDE its rule's fields is not ledgered and is named, so a defect cannot ride in with an idiom on the same id. A rule with no fields keeps its ids out on purpose. `expected` ({host: {field: value}}) pins the named faces to a stated amount within the gate's tolerance, the unnamed faces must agree, or the id is refused. HAND-MAINTAINED.",
   "rules": [
     {
+      "fixture": "Label/fontScaling__false",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 20.33
+        }
+      },
+      "reason": "fontScaling false at textScale 2.0 draws the line of 1.0 on every face (the size and, since 2.5.37, the line box by the same rule: ticket kjui-theme-line-height-scales-under-font-scaling-false), so each face is its own control's height — ios 20.33, android 24, web 24: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base)"
+    },
+    {
+      "fixture": "IconLabel/fontScaling__false",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 19.33
+        }
+      },
+      "reason": "fontScaling false at textScale 2.0 draws the line of 1.0 on every face (the size and, since 2.5.37, the line box by the same rule: ticket kjui-theme-line-height-scales-under-font-scaling-false), so each face is its own control's height — an IconLabel's text line is its OS's Label line (user ruling 2026-10-05; iOS measured 19.33, its IconLabel default font): ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base)"
+    },
+    {
+      "fixture": "Label/maxFontScale__static",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 23
+        }
+      },
+      "reason": "maxFontScale 1.2 at textScale 2.0 draws the 1.0 line x 1.2 (the size and, since 2.5.37, the line box by the same rule: ticket kjui-theme-line-height-scales-under-font-scaling-false) — android 29 and web 28.8 from their 24; iOS rounds the cap down to a Dynamic Type step (sjui-label-font-size-ignores-dynamic-type) from its own 20.33, so it draws 23: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base)"
+    },
+    {
+      "fixture": "IconLabel/maxFontScale__static",
+      "id": "target",
+      "fields": [
+        "height"
+      ],
+      "expected": {
+        "ios": {
+          "height": 22.67
+        }
+      },
+      "reason": "maxFontScale 1.2 at textScale 2.0 draws the 1.0 line x 1.2 (the size and, since 2.5.37, the line box by the same rule: ticket kjui-theme-line-height-scales-under-font-scaling-false) — android 29 and web 28.8 from their 24; iOS rounds the cap down to a Dynamic Type step (sjui-label-font-size-ignores-dynamic-type) from its own 19.33 (its IconLabel default font), so it draws 22.67: ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base)"
+    },
+    {
       "fixture": "*/fontScaling__*",
       "id": "target",
       "fields": [
