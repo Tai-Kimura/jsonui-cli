@@ -119,6 +119,41 @@ module KjuiTools
             Thread.current[:kjui_data_definitions] = definitions
           end
 
+          # A Collection cell's layout (its root node, as the layout file
+          # holds it), by the name a section's `cell` / `cellClasses` gives:
+          # the distributed copy under the layouts directory, found as
+          # find_cell_subdirectory finds it (`<name>.json` anywhere below).
+          # nil when there is none. `cell_layouts=` sets them (tests, and a
+          # caller that already holds them); what is read from disk is kept
+          # for the build (thread-local, as data_definitions).
+          def cell_layouts=(layouts)
+            Thread.current[:kjui_cell_layouts] = layouts
+          end
+
+          def cell_layout(name)
+            return nil unless name.is_a?(String) && !name.empty?
+
+            layouts = (Thread.current[:kjui_cell_layouts] ||= {})
+            return layouts[name] if layouts.key?(name)
+
+            layouts[name] = read_cell_layout(name)
+          end
+
+          def read_cell_layout(name)
+            source_directory = cached_config['source_directory'] || 'src/main'
+            layouts_dir = File.join(cached_source_path, source_directory, cached_config['layouts_directory'] || 'assets/Layouts')
+            return nil unless File.directory?(layouts_dir)
+
+            snake = name.split('/').last.gsub(/([a-z0-9])([A-Z])/, '\\1_\\2').downcase
+            direct = File.join(layouts_dir, "#{name}.json")
+            file = File.file?(direct) ? direct : Dir.glob(File.join(layouts_dir, '**', "#{snake}.json")).min
+            return nil unless file
+
+            JSON.parse(File.read(file))
+          rescue JSON::ParserError, SystemCallError
+            nil
+          end
+
           # The strings.json sections the layout being generated owns
           # (StringManagerCore#namespace_candidates), kjui's relative-path
           # spelling first. Thread-local per-build state, the same channel

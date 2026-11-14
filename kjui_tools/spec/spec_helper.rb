@@ -64,6 +64,6 @@ RSpec.configure do |config|
     # it reads them; a spec that builds left them for the next file, and
     # a_bound_number's shadow read another file's `v` as declared with a
     # default (seed 41884).
-    %i[kjui_data_definitions kjui_string_namespaces kjui_warned_colors].each { |key| Thread.current[key] = nil }
+    %i[kjui_data_definitions kjui_string_namespaces kjui_warned_colors kjui_cell_layouts].each { |key| Thread.current[key] = nil }
   end
 end
