@@ -495,13 +495,13 @@ module KjuiTools
           # vocabulary rather than growing a fourth copy of it.
           tv_align = json_data['textAlign'] &&
                      TextComponent.compose_text_align(json_data['textAlign'], json_data['type'] || 'TextView')
-          # fontScaling / maxFontScale with no font attribute: the field's text size by them (the size it draws,
-          # the text style's), on the style the field already takes.
-          # The size a TextView draws without one is Configuration.TextField.defaultFontSize, as KotlinJsonUI's Dynamic
-          # TextView draws it (shared/core/font_scale_vectors.json rule.noFontSize: Android TextField and TextView 14);
-          # on a bare TextStyle, as the Dynamic face's, so the two draw the same text (codegen parity, run 43488822719:
-          # LocalTextStyle's 16 on its 24sp line drew it larger and lower).
-          tv_undeclared = if !tv_resolved_var && !Helpers::FontScale.declaration_args(json_data).empty?
+          # With no font attribute the field draws Configuration.TextField.defaultFontSize, as KotlinJsonUI's Dynamic
+          # TextView draws it (shared/core/font_scale_vectors.json rule.noFontSize: Android TextField and TextView 14),
+          # by its fontScaling / maxFontScale when it declares them, and on a bare TextStyle as the Dynamic face's, so
+          # the two faces draw the same text. Before, an undeclared TextView kept CustomTextField's LocalTextStyle
+          # (bodyLarge 16sp on a 24sp line) and drew larger and lower than the Dynamic one (ticket
+          # kjui-textview-default-size-differs-from-dynamic; codegen parity, run 43488822719).
+          tv_undeclared = if !tv_resolved_var
                             required_imports&.add(:configuration)
                             Helpers::FontScale.wrap('Configuration.TextField.defaultFontSize.sp', json_data, required_imports)
                           end
