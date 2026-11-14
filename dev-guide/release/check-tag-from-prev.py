@@ -253,6 +253,76 @@ def marks(repo: str, ref: str, version: str, exclude: set[str]) -> Counter:
     return found
 
 
+def _field(text: str):
+    """A JSON line as ("key", value) or (None, value); None when it is not one field on one line."""
+    line = text.strip().rstrip(",")
+    try:
+        field = json.loads("{" + line + "}")
+        if len(field) == 1:
+            return next(iter(field.items()))
+    except ValueError:
+        pass
+    try:
+        value = json.loads(line)
+    except ValueError:
+        return None
+    return (None, value) if isinstance(value, (str, int, float)) and not isinstance(value, bool) else None
+
+
+def _holds(node, key, value) -> bool:
+    """`node` carries the field (key: value), or the bare value, anywhere inside it."""
+    if isinstance(node, dict):
+        return any((k == key and v == value) or _holds(v, key, value) for k, v in node.items())
+    if isinstance(node, list):
+        return any((key is None and e == value) or _holds(e, key, value) for e in node)
+    return False
+
+
+def _entries(doc, path=()):
+    """Every list reachable from the root through object keys alone, as (keys, list)."""
+    if isinstance(doc, dict):
+        for k, v in doc.items():
+            if isinstance(v, list):
+                yield path + (k,), v
+            yield from _entries(v, path + (k,))
+
+
+def retired(repo: str, prev: str, tag: str, path: str, text: str, version: str) -> bool:
+    """A mark that left with its whole ledger entry (ticket check-tag-from-prev-resolved-ledger-entries,
+    v2.5.37): a JSON file at both refs, the line one field of an object in a list, and at TAG that list
+    has no object agreeing with it on every field that does not name `version`. An entry whose
+    version-naming line was rewritten keeps its other fields, so it is still GONE, as in 2.5.33."""
+    if not path.endswith(".json"):
+        return False
+    field = _field(text)
+    if field is None:
+        return False
+    key, value = field
+    try:
+        before = json.loads(git(repo, "show", f"{prev}:{path}", check=False) or "null")
+        after = json.loads(git(repo, "show", f"{tag}:{path}", check=False) or "null")
+    except ValueError:
+        return False
+    if before is None or after is None:
+        return False
+    later = dict(_entries(after))
+    names = mentions(version)
+    owners = 0
+    for keys, items in _entries(before):
+        for entry in items:
+            if not (isinstance(entry, dict) and _holds(entry, key, value)):
+                continue
+            owners += 1
+            identity = {k: v for k, v in entry.items()
+                        if not names.search(json.dumps(v, ensure_ascii=False))}
+            if not identity or keys not in later:
+                return False
+            if any(isinstance(e, dict) and all(k in e and e[k] == v for k, v in identity.items())
+                   for e in later[keys]):
+                return False
+    return owners > 0
+
+
 class Gate:
     def __init__(self) -> None:
         self.n = self.passed = self.failed = 0
@@ -349,11 +419,20 @@ def main(argv: list[str]) -> int:
         if not a:
             print(f"     ℹ️  {prev} has no mark naming {old_s}: this arm is INERT this train (nothing to rewrite)")
         tag_lines = {(p, t) for p, t in b} | {(p, t) for p, t in marks(repo, tag, new_s, set(stamps))}
+        lost: Counter = Counter()
         for (path, text), k in sorted(gone.items()):
-            kind = "BUMPED" if (path, mentions(old_s).sub(new_s, text)) in tag_lines else "GONE"
+            if (path, mentions(old_s).sub(new_s, text)) in tag_lines:
+                kind = "BUMPED"
+            elif retired(repo, prev, tag, path, text, old_s):
+                kind = "RETIRED"   # printed, not judged: the ledger entry it belonged to left whole
+            else:
+                kind = "GONE"
+            if kind != "RETIRED":
+                lost[(path, text)] += k
             print(f"       {kind:6s} x{k} {path}: {text.strip()[:110]}")
-        gate.check("from PREV", f"every mark naming {old_s} in {prev} survives in {tag}", not gone,
-                   f"{sum(gone.values())} rewritten or removed")
+        gate.check("from PREV", f"every mark naming {old_s} in {prev} survives in {tag}"
+                   " (a mark retired with its whole ledger entry excepted)", not lost,
+                   f"{sum(lost.values())} rewritten or removed, {sum(gone.values()) - sum(lost.values())} retired")
 
     verdict = "ALL CHECKS PASSED" if gate.failed == 0 else "SOME CHECKS FAILED"
     print(f"== {verdict}: {gate.passed} PASS / {gate.failed} FAIL of {gate.n}")
