@@ -765,6 +765,28 @@
       "reason": "CheckBox control chrome: the platform's own control height (and the vertical position that centres it), not a layout value; the declared width is drawn on every face (touch-target height) — triage K"
     },
     {
+      "fixture": "IconLabel/accessibilitySelected__false",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "an IconLabel's text line is its OS's Label line (user ruling 2026-10-05; iOS measured 19.33, its IconLabel default font): ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "IconLabel/accessibilitySelected__true",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "an IconLabel's text line is its OS's Label line (user ruling 2026-10-05; iOS measured 19.33, its IconLabel default font): ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
       "fixture": "IconLabel/fontColor__static",
       "id": "target",
       "outliers": [
@@ -4933,6 +4955,17 @@
     },
     {
       "fixture": "__control/IconLabel",
+      "id": "target",
+      "outliers": [
+        "ios"
+      ],
+      "fields": [
+        "height"
+      ],
+      "reason": "an IconLabel's text line is its OS's Label line (see IconLabel/*): ruling 5 (user, 2026-10-05): each face's ordinary line is its own and the difference is allowed — one undeclared line is ios 20.33 (SF 17pt, the line SwiftUI lays out) / android 24 (Material3 bodyLarge 16sp on 24) / web 24 (Tailwind text-base); a wrapped iOS label adds its own 1.67 leading between lines (22 a line after the first), android and web 24 a line"
+    },
+    {
+      "fixture": "__control/IconLabel__onClick--conformanceTap",
       "id": "target",
       "outliers": [
         "ios"
