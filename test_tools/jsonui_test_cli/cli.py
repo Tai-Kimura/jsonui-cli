@@ -1644,7 +1644,8 @@ def _print_model_change_note(absent, orphans):
           "reports routes it cannot see.")
 
 
-def _branch_check_summary(reports: list, scanned: int, orphans=()) -> int:
+def _branch_check_summary(reports: list, scanned: int, orphans=(),
+                          orphaned_screens=None) -> int:
     """Print the check verdict for `generate branch-tests --check`.
 
     Findings are folded by path, not by screen. The runtime is one file the
@@ -1666,6 +1667,7 @@ def _branch_check_summary(reports: list, scanned: int, orphans=()) -> int:
     # filter that removes those reports from the comparison is exactly the
     # one that hid this finding from every gate.
     stale: dict[Path, None] = {}
+    stale_orphan: dict[Path, None] = {}
     unowned: dict[Path, None] = {}
     for report in reports:
         for path in getattr(report, "stale", ()):
@@ -1686,6 +1688,18 @@ def _branch_check_summary(reports: list, scanned: int, orphans=()) -> int:
     for path in absent:
         print(f"  [ABSENT]  {path} (never generated)")
     _print_model_change_note(absent, orphans)
+    if orphaned_screens is not None:
+        for path, screen in zip(orphaned_screens.tests, orphaned_screens.screens):
+            # Gating, as the retired leftovers above are: a screen that left
+            # the scan is counted by nothing else, so its test kept compiling
+            # against what was removed while every count stayed green.
+            print(f"  [RETIRED] {path} ('{screen}' no longer declares "
+                  "branchContracts; regenerate to remove it)")
+            stale_orphan[path] = None
+        for harness in orphaned_screens.harnesses:
+            print(f"  [WARN]    {harness} is the harness of a screen that no "
+                  "longer declares branchContracts — consumer-owned, not this "
+                  "tool's to remove")
     for path in stale:
         # Gating. `--check` did not count a screen that is not applicable to
         # this platform, so a leftover from before the branches moved was
@@ -1736,8 +1750,8 @@ def _branch_check_summary(reports: list, scanned: int, orphans=()) -> int:
           # release split `[NOTE]` apart to remove, reappearing in a summary
           # line three commits later.
           f"({len(matched)} file(s) current, {len(drifted)} drifted, "
-          f"{len(absent)} absent, {len(stale)} retired)")
-    if drifted or absent or stale:
+          f"{len(absent)} absent, {len(stale) + len(stale_orphan)} retired)")
+    if drifted or absent or stale or stale_orphan:
         print("Regenerate with the same command without --check.")
         return 1
     return 0
@@ -1998,6 +2012,13 @@ def cmd_generate_branch_tests(args):
         return 1
 
     named_one = bool(args.screen)
+    # The screens that declare branchContracts NOW. A whole-project run has
+    # them already; a run that named one screen reads them only to say what
+    # is left behind (None: the scan could not be completed, so nothing is
+    # said rather than something guessed).
+    live = None if named_one else set(screens)
+    if named_one:
+        live = _live_branch_screens()
     reports = []
     failures: list[tuple[str, str]] = []
     for screen in screens:
@@ -2006,6 +2027,13 @@ def cmd_generate_branch_tests(args):
             if named_one:
                 # One screen was asked for, so its failure is the answer.
                 print(f"Error: {error}", file=sys.stderr)
+                if live is not None and screen not in live:
+                    # The screen was named, so the run knows it: a test it
+                    # generated before its spec (or its contracts) went is
+                    # retired here, and its harness is named.
+                    _print_orphaned_screens(
+                        _orphans(args, live, only=screen, retire=not check),
+                        removed=not check, note=check, stream=sys.stderr)
                 return rc
             # Across a whole project, stopping at the first screen that
             # cannot generate hides every screen after it — including the
@@ -2019,12 +2047,23 @@ def cmd_generate_branch_tests(args):
         print(f"  [FAILED]  {screen}: {error}", file=sys.stderr)
 
     from .branch_tests import UNMATCHED_GATE_UNAVAILABLE, unmatched_gate_unavailable
+    # A whole-project run retires the tests of screens that left the scan;
+    # a run that named one screen only names them (it was not asked about
+    # the others). Check mode deletes nothing. The screen just generated is
+    # live whatever the scan says (`--spec` may point outside spec_directory).
+    if named_one and live is not None:
+        live = live | {args.screen}
+    orphans = (_orphans(args, live, retire=not (check or named_one))
+               if live is not None else None)
     if check:
         from .branch_tests import orphaned_sub_spec_artefacts
         rc = _branch_check_summary(
             reports, scanned_count,
             orphaned_sub_spec_artefacts(
-                Path.cwd(), _branch_dirs(args)[0], args.platform))
+                Path.cwd(), _branch_dirs(args)[0], args.platform),
+            orphaned_screens=None if named_one else orphans)
+        if named_one and orphans is not None:
+            _print_orphaned_screens(orphans, removed=False, note=True)
         if failures:
             # Not verifiable is not verified: a screen that cannot be
             # generated cannot be compared to what is on disk either.
@@ -2041,6 +2080,8 @@ def cmd_generate_branch_tests(args):
     if failures:
         for report in reports:
             _print_branch_generation(report, show_siblings=False)
+        if orphans is not None:
+            _print_orphaned_screens(orphans, removed=not named_one, note=named_one)
         _print_invoke_port_notes(r.harness_file for r in reports
                                  if r.harness_lacks_invoke)
         generated, skipped = _branch_generated_and_skipped(reports)
@@ -2055,6 +2096,8 @@ def cmd_generate_branch_tests(args):
         # The "regenerate the siblings too" note answers a question that
         # only arises when one screen was regenerated on its own.
         _print_branch_generation(report, show_siblings=len(reports) == 1)
+    if orphans is not None:
+        _print_orphaned_screens(orphans, removed=not named_one, note=named_one)
     _print_invoke_port_notes(r.harness_file for r in reports
                              if r.harness_lacks_invoke)
     print(app_rules.note())
@@ -2072,6 +2115,55 @@ def cmd_generate_branch_tests(args):
     if named_one and _named_screen_skipped(reports, args):
         return 1
     return 0
+
+
+def _live_branch_screens():
+    """The screens declaring branchContracts now, or None if unreadable."""
+    from .branch_tests import BranchTestGenerationError, discover_branch_screens
+    try:
+        screens, _, problems = discover_branch_screens(Path.cwd())
+    except BranchTestGenerationError:
+        return None
+    if problems:
+        # A spec that was not read may be the one that still declares the
+        # screen; calling its test an orphan would be a guess.
+        return None
+    return set(screens)
+
+
+def _orphans(args, live, *, only=None, retire=False):
+    from .branch_tests import orphaned_screen_tests
+    out_dir, harness_dir = _branch_dirs(args)
+    return orphaned_screen_tests(
+        Path.cwd(), out_dir, harness_dir, args.platform, args.package, live,
+        only=only, retire=retire)
+
+
+def _print_orphaned_screens(orphans, *, removed: bool, note: bool = False,
+                            stream=None) -> None:
+    """Name the tests of screens that no longer declare branchContracts.
+
+    The test is this tool's and goes (or, in a check or a one-screen run, is
+    named); the harness beside it is the consumer's and is only ever named —
+    with the screen gone it imports a ViewModel that may no longer exist, so
+    it is the next thing the test build trips over.
+    """
+    if not orphans.tests:
+        return
+    out = stream if stream is not None else sys.stdout
+    for path, screen in zip(orphans.tests, orphans.screens):
+        if removed:
+            print(f"  removed {path} ('{screen}' no longer declares "
+                  "branchContracts — its spec or its contracts are gone)",
+                  file=out)
+        elif note:
+            print(f"  note: {path} belongs to '{screen}', which no longer "
+                  "declares branchContracts — run `jsonui-test generate "
+                  "branch-tests` without a screen name to remove it", file=out)
+    for harness in orphans.harnesses:
+        print(f"  [WARN] {harness} is the harness of a screen that no longer "
+              "declares branchContracts — consumer-owned, left alone; delete "
+              "it by hand if the screen is gone", file=out)
 
 
 def _branch_generated_and_skipped(reports) -> tuple[int, int]:
