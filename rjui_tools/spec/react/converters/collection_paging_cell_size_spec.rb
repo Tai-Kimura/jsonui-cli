@@ -9,7 +9,10 @@ require_relative '../../support/typescript_compiler'
 # ticket collection-cellwidth-cellheight-unread-on-some-routes), as sjui's
 # TabView page centres the cell's frame and kjui's HorizontalPager page its
 # size box. Until then the wrapper was the snap child: a page was the cell's
-# width and the pager snapped cell by cell.
+# width and the pager snapped cell by cell. With no size declared the cell
+# itself sits in the middle of the page-wide child (the orchestrator's ruling
+# 2026-11-15, the same family): a cell narrower than the pager showed the
+# next one beside it on the same page.
 RSpec.describe RjuiTools::React::Converters::CollectionConverter, 'a pager\'s declared cell size' do
   PAGER_CELL_PAGE_OPEN = '<div key={cellIndex} className="w-full shrink-0 flex items-center justify-center">'
   PAGER_CELL_SIZE_OPEN = '<div className="shrink-0 overflow-hidden" style={{ width: \'150px\', height: \'40px\' }}>'
@@ -32,8 +35,15 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter, 'a pager\'s de
     expect(legacy).to include("style={{ width: '150px' }}")
   end
 
-  it 'leaves a pager with no declared size, and a row that does not page, as they were' do
-    expect(emit('paging' => true)).not_to include('justify-center')
+  it 'with no declared size, puts the cell itself in the middle of the page-wide snap child' do
+    code = emit('paging' => true)
+    expect(code).to match(/#{Regexp.escape(PAGER_CELL_PAGE_OPEN)}\n\s*<ACell id=\{`pager_item_\$\{cellIndex\}`\} data=\{cellData\} \/>\n\s*<\/div>/)
+    expect(code).not_to include('overflow-hidden')
+    legacy = emit('paging' => true, 'sections' => nil, 'cellClasses' => ['ACell'])
+    expect(legacy).to include('className="w-full shrink-0 flex items-center justify-center"')
+  end
+
+  it 'leaves a row that does not page as it was' do
     row = emit('cellWidth' => 150, 'cellHeight' => 40)
     expect(row).not_to include('w-full shrink-0 flex items-center justify-center')
     expect(row).to include("<div key={cellIndex} #{PAGER_CELL_SIZE_OPEN.delete_prefix('<div ')}")

@@ -38,7 +38,8 @@ RSpec.describe 'rjui Collection: paging item ids count across the sections' do
     run(jsx, counts)['ids']
   end
 
-  # The root's children — a pager's pages — by id, `(no id)` for one without.
+  # The root's children — a pager's pages — by id (a page box's, its one
+  # cell's), `(no id)` for one without.
   def pages(jsx, counts)
     run(jsx, counts)['pages']
   end
@@ -62,7 +63,10 @@ RSpec.describe 'rjui Collection: paging item ids count across the sections' do
         (function walk(node) { if (!node || typeof node !== 'object') return;
           if (node.props && typeof node.props.id === 'string' && node.props.id.includes('_item_')) out.push(node.props.id);
           (node.children || []).forEach(walk); })(root);
-        const pages = root.children.filter((c) => c && typeof c === 'object').map((c) => c.props.id || '(no id)');
+        // A pager's page is a page-wide box holding its cell (the ruling 2026-11-15): its id is the cell's.
+        const pageCell = (c) => (c.tag === 'div' && String(c.props.className || '').includes('w-full shrink-0 flex items-center justify-center')
+          && c.children.length === 1 ? c.children[0] : c);
+        const pages = root.children.filter((c) => c && typeof c === 'object').map((c) => pageCell(c).props.id || '(no id)');
         console.log(JSON.stringify({ ids: out, pages }));
       JSX
       built, status = Open3.capture2e(esbuild, File.join(dir, 'app.jsx'), '--jsx-factory=h', '--outfile=' + File.join(dir, 'app.js'))
