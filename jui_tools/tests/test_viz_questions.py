@@ -320,17 +320,24 @@ def test_holds_from_the_page_keep_the_hook_waiting_for_the_answer(tmp_path):
             ws = await _page(client, port)
             proc = _hook(tmp_path, _pre())
             card = await _wait(lambda: next((c for c in world.questions.cards.values() if c["hookWaiting"]), None))
-            for _ in range(4):                       # 4 s of answering: past the 1.5 s wait, held each second
+            # 4 s of answering, past the 1.5 s wait, held every 0.25 s. Each hold moves the wait to 1.5 s after it,
+            # so a send may come up to 1.25 s late before the window closes. It was held each second (0.5 s to
+            # spare), and under a loaded full suite one send came late enough that the hook timed out and printed
+            # nothing: a JSONDecodeError on "" (ticket viz-question-hold-test-flakes-under-load, 2026-11-14).
+            for _ in range(16):
                 await ws.send_json({"type": "question.hold", "reqId": 2, "questionId": card["id"]})
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.25)
+            ended = card.get("waitEndReason")
             await ws.send_json({"type": "question.answer", "reqId": 3, "questionId": card["id"],
                                 "answers": {FRUIT["question"]: {"labels": ["りんご"]}, COLOR["question"]: {"labels": ["赤"]}}})
             out = await _finish(proc)
             await ws.close()
-            return out
+            return out, ended
         finally:
             await client.close()
-    out = json.loads(asyncio.run(run()))
+    out, ended = asyncio.run(run())
+    assert ended is None and out, f"the hook stopped waiting while the page held the card (waitEndReason {ended!r}, out {out!r})"
+    out = json.loads(out)
     assert out["hookSpecificOutput"]["updatedInput"]["answers"] == {FRUIT["question"]: "りんご", COLOR["question"]: "赤"}
 
 
