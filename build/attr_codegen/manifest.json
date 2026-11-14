@@ -3,7 +3,7 @@
   "generatedBy": "jui generate attr-bindings --lang all",
   "source": {
     "file": "shared/core/attribute_definitions.json",
-    "sha256": "0ef28bbe7aee62d0ffb3783a154cf0bf4c7c9b095ad71364870f551af82939d2"
+    "sha256": "109138826c836087b6c771bf7f1904e63f60d66c067babce913b8bb44e2ec646"
   },
   "files": {
     "kotlin/AttrCodegenSupport.kt": "3f56c8021ab16a32d0ed4a38e7839c27a08237bd095c4469255c800d1600b165",
@@ -30,7 +30,7 @@
     "kotlin/SafeAreaViewAttributes.kt": "693491ed70ae08c35b172670f5e8f082a9b9dad4b89f81eac4c065a096b4de23",
     "kotlin/ScrollViewAttributes.kt": "33c736518c5e9dbdf95115e2762f05df2d652b61a5f4ef5d62121463148e7691",
     "kotlin/SegmentAttributes.kt": "ba392137e89b9f1809ad3cc8fe71917966cf68f819cd1daaa62cd59ce868b870",
-    "kotlin/SelectBoxAttributes.kt": "8e4655ade048fcfa6736033441189e82fd6641d651d3d580de31b2e699093c6e",
+    "kotlin/SelectBoxAttributes.kt": "e3b80c796e2c4181c5fa3fb90e3ba53a982b7de32f63e7170d8cf7f359970ac5",
     "kotlin/SliderAttributes.kt": "9110b426e5786e3746d2031344d8ee08d03187b63f4751c573b20f56467d5ad7",
     "kotlin/SwitchAttributes.kt": "0371e02658bf2bc0ac9d91b42f0fd0b46c939711cba21c117ab50f2da913b168",
     "kotlin/TabViewAttributes.kt": "aa3e11b917e07895beaf84eb4c9dbedb954695d0fc0bf7115ff9310df470ce98",
@@ -62,7 +62,7 @@
     "ruby/safe_area_view_attributes.rb": "9c0da39e9b1248f7c4091dcdf3f55388df88bc76919968e0cc49b21d9fec935a",
     "ruby/scroll_view_attributes.rb": "bcbc4e3026ba9d181894c4e02edcbb8e701f000053ec70f647f4433c87d3ed37",
     "ruby/segment_attributes.rb": "0301a5f1f2fc0613e46fbe0852890fa5ebd1582cd43997108d766a0b7e8e2701",
-    "ruby/select_box_attributes.rb": "c930b693890ba7b1fed17adaa4e3f55c8b1864ba6ca0140612231fff331564ee",
+    "ruby/select_box_attributes.rb": "9c18bd9d8f43aa98f99603107c554afc5d1d73290176db42dab70f8ab0714df2",
     "ruby/skipped_attributes.json": "91523bae8f1d575dcfc795171b6b7f46dc7b8c7a4068b3ad628742526e1527d0",
     "ruby/slider_attributes.rb": "212606235401f882dd40d22f94c8cb2acc1af66fadc77f8393785e0b8c31feb4",
     "ruby/switch_attributes.rb": "c7706c85105803255569a768eb80ff2875ce806ad7808fc5bb97415a9327e6a1",
@@ -96,7 +96,7 @@
     "swift/SafeAreaViewAttributes.swift": "ab04f23a4c550b6364aa9d6761a98c3b62cb1cce82b2b7e13361a4c662d4af93",
     "swift/ScrollViewAttributes.swift": "56f82780d8929b4cfe8282f5f657fe2d9271a78ef566ddab9f5ccd9e4107d714",
     "swift/SegmentAttributes.swift": "2f59c30efc944d03b9fcf1bea27339eef122fc4b34817e290a227f13704d870b",
-    "swift/SelectBoxAttributes.swift": "1a7b390880130eb7c4f157daed1ddde40cd281b25423a27548bb7cd1d91cd25b",
+    "swift/SelectBoxAttributes.swift": "2bf735b2fb225144c7389e2d69d3c80b138e1d23c16665d5efde3f44822020a4",
     "swift/SliderAttributes.swift": "fc707363cc41caa4b74657210e2e8dbe81f4b46af06d9e036b5a7d52d9d7715a",
     "swift/SwitchAttributes.swift": "6b068bba2404e6fe84cb71a588fafd1d4a9433833d1b5b654b85488e23e8c48b",
     "swift/TabViewAttributes.swift": "5aab93be5ef05437fd1e706c9032dcdf095d0024341fb83034129f17969b8801",

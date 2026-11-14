@@ -318,12 +318,23 @@ RSpec.describe KjuiTools::Compose::Components::SelectBoxComponent do
         expect(result).to include('caret = SelectBoxCaret(rightMargin = 24),')
       end
 
-      it 'is not emitted for a date picker, which has no closed-state caret' do
-        json_data = { 'type' => 'SelectBox', 'selectItemType' => 'Date', 'caretAttributes' => fixture_caret }
+      # ticket kjui-date-selectbox-caret-attributes-not-emitted: KotlinJsonUI's DateSelectBox draws the same
+      # closed-state caret as SelectBox (caret: SelectBoxCaret?, since 2.5.36), as SwiftJsonUI's date SelectBoxView and
+      # the web date input do; the Date branch dropped the object, so the app's picture never reached Android.
+      it 'is passed to a date picker too, every key of it' do
+        caret = fixture_caret.merge('src' => 'ic_calendar_gold')
+        json_data = { 'type' => 'SelectBox', 'selectItemType' => 'Date', 'caretAttributes' => caret }
         result = described_class.generate(json_data, 0, required_imports)
         expect(result).to include('DateSelectBox(')
-        expect(result).not_to include('caret =')
-        expect(required_imports).not_to include(:selectbox_caret)
+        expect(result).to include(
+          'caret = SelectBoxCaret(painter = painterResource(id = R.drawable.ic_calendar_gold), width = 32, height = 32, ' \
+          'tintColor = Color(android.graphics.Color.parseColor("#FF0000")), ' \
+          'background = Color(android.graphics.Color.parseColor("#00AA00")), rightMargin = 24),'
+        )
+        expect(required_imports).to include(:selectbox_caret, :painter_resource)
+        # absent: nothing, as on a list SelectBox (the library's own chevron stays)
+        plain = described_class.generate({ 'type' => 'SelectBox', 'selectItemType' => 'Date' }, 0, Set.new)
+        expect(plain).not_to include('caret =')
       end
 
       it 'does not touch a SelectBox whose caretAttributes is not an object' do

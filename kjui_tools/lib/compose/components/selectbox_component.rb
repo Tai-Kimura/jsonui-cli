@@ -340,12 +340,12 @@ module KjuiTools
           # `caretAttributes` (SSoT SelectBox.caretAttributes, cross-platform
           # since 1.8.101): present → the library draws the caret itself from
           # a SelectBoxCaret; absent → nothing is emitted, the native arrow
-          # stays and the picture does not move. A date picker has no
-          # closed-state caret, so the Date branch never emits it.
-          unless is_date_picker
-            caret_arg = caret_expression(json_data['caretAttributes'], required_imports)
-            code += "\n" + indent("caret = #{caret_arg},", depth + 1) if caret_arg
-          end
+          # stays and the picture does not move. A Date box takes it too:
+          # DateSelectBox draws the same closed-state caret (SelectBoxArrow)
+          # since 2.5.36, as SwiftJsonUI's date SelectBoxView and the web date
+          # input do (ticket kjui-date-selectbox-caret-attributes-not-emitted).
+          caret_arg = caret_expression(json_data['caretAttributes'], required_imports)
+          code += "\n" + indent("caret = #{caret_arg},", depth + 1) if caret_arg
           
           # Build modifiers
           modifiers = []
