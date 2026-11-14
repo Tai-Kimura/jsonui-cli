@@ -425,23 +425,48 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
       # The three faces draw one caret (ruling 2026-11-13, ticket kjui-selectbox-fixed-56dp-ignores-wrap-content-
       # height): a 16 x 16 chevron box 12 from the trailing edge, 8 from the text, nothing above or below the text,
       # 12 on the left. The browser's arrow is gone.
+      # The default caret is an inline <svg> stroked with currentColor, over the control's trailing edge in a box
+      # that takes the control's place in the layout: it follows the text colour and a theme's dark mode at runtime,
+      # as the browser's own arrow did up to 2.5.34 (ticket rjui-selectbox-caret-fixed-black-ignores-theme-dark-mode).
+      def svg_of(code)
+        code[/<svg aria-hidden="true"[^\n]*<\/svg>/]
+      end
+
       it 'draws the library caret when the object is absent' do
         plain = create_converter({ 'class' => 'SelectBox', 'id' => 'pick', 'items' => %w[One Two Three] }).convert
         expect(plain).to include('appearance-none')
-        expect(plain).to include("backgroundPosition: 'right 12px center'")
-        expect(plain).to include("backgroundSize: '16px 16px'")
+        svg = svg_of(plain)
+        expect(svg).to include('stroke="currentColor"')
+        expect(svg).to include('right-[12px] w-[16px] h-[16px]')
+        expect(svg).not_to include('style=')
+        expect(plain).not_to include('backgroundImage')
+        expect(plain).not_to include('#000000')
         expect(plain).to include("paddingRight: '36px'")
         expect(plain).to include('pl-3')
         expect(plain).not_to match(/\b(pr-8|py-2)\b/)
       end
 
+      it 'keeps the control, its id and its handlers, in a box that takes its place in the layout' do
+        code = create_converter({ 'class' => 'SelectBox', 'id' => 'pick', 'items' => %w[a], 'width' => 200,
+                                  'weight' => 1, 'responsive' => { 'regular' => { 'width' => 300 } } }).convert
+        box = code[/<div className="relative inline-flex[^"]*"/]
+        expect(box).to include('w-[200px]')
+        expect(box).to include('lg:w-[300px]')
+        expect(box).to include('flex-1')
+        select = code[/<select[^>]*>/]
+        expect(select).to include('id="pick"')
+        expect(select).to include('w-full')
+        expect(select).not_to include('w-[200px]')
+        expect(code.index('<div')).to be < code.index('<select')
+        expect(code.index('</select>')).to be < code.index('<svg')
+      end
+
       it "puts the caret at the layout's right padding, side by side as the three faces read it" do
-        at = ->(extra) { create_converter({ 'class' => 'SelectBox', 'id' => 'pick', 'items' => %w[a] }.merge(extra)).convert }
-        expect(at.call('padding' => 10)).to include("backgroundPosition: 'right 10px center'")
-        expect(at.call('paddings' => [0, 16])).to include("backgroundPosition: 'right 16px center'")
-        expect(at.call('padding' => 10, 'paddingRight' => 4)).to include("backgroundPosition: 'right 4px center'")
-        expect(at.call('paddingRight' => 4, 'caretAttributes' => { 'rightMargin' => 20 }))
-          .to include("backgroundPosition: 'right 20px center'")
+        at = ->(extra) { svg_of(create_converter({ 'class' => 'SelectBox', 'id' => 'pick', 'items' => %w[a] }.merge(extra)).convert) }
+        expect(at.call('padding' => 10)).to include('right-[10px]')
+        expect(at.call('paddings' => [0, 16])).to include('right-[16px]')
+        expect(at.call('padding' => 10, 'paddingRight' => 4)).to include('right-[4px]')
+        expect(at.call('paddingRight' => 4, 'caretAttributes' => { 'rightMargin' => 20 })).to include('right-[20px]')
       end
 
       it 'moves the arrow in from the edge with rightMargin alone (the reported case)' do
@@ -449,20 +474,21 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
         expect(result).to include('appearance-none')
         expect(result).not_to include('pr-8')
         expect(result).to include('pl-3')
-        expect(result).to include("backgroundPosition: 'right 12px center'")
-        expect(result).to include("backgroundSize: '16px 16px'")
+        expect(svg_of(result)).to include('right-[12px] w-[16px] h-[16px]')
         expect(result).to include("paddingRight: '36px'")
-        expect(result).to include('url("data:image/svg+xml,')
-        expect(result).to include('stroke=%22%23000000%22')
+        expect(result).not_to include('data:image/svg+xml')
       end
 
       it 'sizes, tints, boxes and insets the caret from the fixture values' do
         result = select_with('width' => 32, 'height' => 32, 'tintColor' => '#FF0000',
                              'background' => '#00AA00', 'rightMargin' => 24)
+        svg = svg_of(result)
+        expect(svg).to include('right-[24px] w-[32px] h-[32px]')
+        expect(svg).to include("style={{ color: '#FF0000' }}")
+        # The box stays a background layer of the control, under the svg.
         expect(result).to include("backgroundSize: '32px 32px'")
         expect(result).to include("backgroundPosition: 'right 24px center'")
         expect(result).to include("backgroundRepeat: 'no-repeat'")
-        expect(result).to include('stroke=%22%23FF0000%22')
         expect(result).to include('linear-gradient(#00AA00, #00AA00)')
         expect(result).to include("paddingRight: '64px'")
         expect(result).not_to include('linear-gradient(#FF0000')
@@ -471,29 +497,28 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
       it 'treats an empty object as the default caret' do
         result = select_with({})
         expect(result).to include('appearance-none')
-        expect(result).to include("backgroundPosition: 'right 12px center'")
+        expect(svg_of(result)).to include('right-[12px]')
         expect(result).not_to include('linear-gradient(')
       end
 
-      # `ColorManager.resolveColor` is typed `string | undefined`. Unguarded,
-      # `encodeURIComponent(...)` is a TS2345 in the generated host (CI run
-      # 35172403874 — the conformance host maps the fixture's `#FF0000` to its
-      # `dark_red` entry, so the generated caret fixture hits exactly this
-      # branch), and an unresolved name inside the template literal would
-      # write the text `undefined` into the CSS and void the whole
-      # background-image. The fallbacks are the layer's own defaults.
-      it 'resolves a colors.json key through ColorManager at runtime, guarded for an unresolved name' do
+      it 'follows the text: fontColor, fixed or bound, strokes the default caret' do
+        fixed = create_converter({ 'class' => 'SelectBox', 'id' => 'p', 'items' => %w[a], 'fontColor' => '#FF0000' }).convert
+        expect(svg_of(fixed)).to include("style={{ color: '#FF0000' }}")
+        bound = create_converter({ 'class' => 'SelectBox', 'id' => 'p', 'items' => %w[a], 'fontColor' => '@{ink}' }).convert
+        expect(svg_of(bound)).to match(/style=\{\{ color: .*data\.ink/)
+      end
+
+      it 'resolves a colors.json key through ColorManager at runtime' do
         result = select_with('tintColor' => 'brand', 'background' => 'accent')
-        expect(result).to include('backgroundImage: `url("data:image/svg+xml,')
-        expect(result).to include("encodeURIComponent(ColorManager.resolveColor('brand') ?? '#000000')")
+        expect(svg_of(result)).to match(/style=\{\{ color: .*ColorManager\.\w+\('brand'\)/)
         expect(result).to include("linear-gradient(${(ColorManager.cssColor('accent') ?? 'transparent')}, ${(ColorManager.cssColor('accent') ?? 'transparent')})")
-        expect(result).not_to include("encodeURIComponent(ColorManager.resolveColor('brand'))")
       end
 
       it 'uses the named asset instead of the chevron when src is given' do
         result = select_with('src' => 'caret.svg', 'rightMargin' => 4)
         expect(result).to include('url("/images/caret.svg")')
         expect(result).not_to include('data:image/svg+xml')
+        expect(result).not_to include('<svg')
         expect(result).to include('appearance-none')
       end
 
@@ -501,6 +526,7 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
         result = select_with({ 'rightMargin' => 12 }, 'multiple' => true)
         expect(result).not_to include('appearance-none')
         expect(result).not_to include('backgroundImage')
+        expect(result).not_to include('<svg')
         expect(result).to include('px-3')
       end
 
@@ -511,28 +537,25 @@ RSpec.describe RjuiTools::React::Converters::SelectBoxConverter do
         expect(result).to include('<input')
         expect(result).to include('appearance-none')
         expect(result).to include('[&::-webkit-calendar-picker-indicator]:hidden')
-        expect(result).to include("backgroundPosition: 'right 20px center'")
+        expect(svg_of(result)).to include('right-[20px]')
         expect(result).to include('showPicker')
       end
 
       # colorScheme "dark" is the Date input's key for a dark background: the browser's calendar mark turned light
       # under it, and the library's caret that replaced the mark does the same (ticket
       # rjui-selectbox-color-scheme-dark-lost-with-the-library-caret). A tintColor still wins; a select (no Date)
-      # never read colorScheme and keeps the default.
+      # never read colorScheme and follows its text.
       it 'tints the default caret light on a Date input with a dark colorScheme' do
-        dark_svg = 'stroke=%22%23FFFFFF%22'
-        light_svg = 'stroke=%22%23000000%22'
         base = { 'class' => 'SelectBox', 'id' => 'when', 'items' => %w[a], 'selectItemType' => 'Date' }
         dark = create_converter(base.merge('colorScheme' => 'dark')).convert
-        expect(dark).to include(dark_svg)
-        expect(dark).not_to include(light_svg)
+        expect(svg_of(dark)).to include("style={{ color: '#FFFFFF' }}")
         expect(dark).to include("colorScheme: 'dark'")
-        expect(create_converter(base.merge('colorScheme' => 'light')).convert).to include(light_svg)
-        expect(create_converter(base).convert).to include(light_svg)
+        expect(svg_of(create_converter(base.merge('colorScheme' => 'light')).convert)).not_to include('style=')
+        expect(svg_of(create_converter(base).convert)).not_to include('style=')
         tinted = create_converter(base.merge('colorScheme' => 'dark', 'caretAttributes' => { 'tintColor' => '#00FF00' })).convert
-        expect(tinted).to include('stroke=%22%2300FF00%22')
+        expect(svg_of(tinted)).to include("style={{ color: '#00FF00' }}")
         select = create_converter(base.merge('selectItemType' => nil, 'colorScheme' => 'dark').compact).convert
-        expect(select).to include(light_svg)
+        expect(svg_of(select)).not_to include('style=')
       end
     end
 

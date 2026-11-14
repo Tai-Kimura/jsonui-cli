@@ -8,15 +8,15 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "abceefe792efb66e6b094864f7b3956793d6d9aa87736df594460e36783ea302",
+  "generatedFrom": "0ef28bbe7aee62d0ffb3783a154cf0bf4c7c9b095ad71364870f551af82939d2",
   "counts": {
-    "fixtures": 1348,
+    "fixtures": 1349,
     "assertable": 54,
-    "visual": 1027,
+    "visual": 1028,
     "interactive": 41,
     "control": 148,
     "declarationOnly": 77,
-    "skipped": 159,
+    "skipped": 161,
     "promoted": {
       "callback": 11
     }
@@ -22949,6 +22949,35 @@
       ]
     },
     {
+      "id": "Collection/reorderFixedProperty__static",
+      "component": "Collection",
+      "attribute": "reorderFixedProperty",
+      "case": "static",
+      "class": "visual",
+      "host": "Collection",
+      "writtenKey": "reorderFixedProperty",
+      "aliasOf": null,
+      "value": "sample",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "mode": null,
+      "deprecated": null,
+      "layout": "fixtures/Collection/reorderFixedProperty__static.layout.json",
+      "test": "fixtures/Collection/reorderFixedProperty__static.test.json",
+      "state": null,
+      "promotedFrom": null,
+      "peerGroup": null,
+      "control": "__control/Collection",
+      "companions": [
+        "fixtures/Collection/__cells/conformance_cell.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare.layout.json",
+        "fixtures/Collection/__cells/conformance_cell_bare_single.layout.json"
+      ]
+    },
+    {
       "id": "Collection/containerInset__static",
       "component": "Collection",
       "attribute": "containerInset",
@@ -33743,6 +33772,16 @@
     {
       "component": "Collection",
       "attribute": "onReorder",
+      "reason": "callback"
+    },
+    {
+      "component": "Collection",
+      "attribute": "onReorderStart",
+      "reason": "callback"
+    },
+    {
+      "component": "Collection",
+      "attribute": "onReorderEnd",
       "reason": "callback"
     },
     {

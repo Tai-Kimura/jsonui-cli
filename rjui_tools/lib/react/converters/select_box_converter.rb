@@ -16,6 +16,13 @@ module RjuiTools
           return generate_date_picker(indent) if date_picker?
 
           class_name = build_class_name
+          box_classes = []
+          box_styles = {}
+          if @caret_svg
+            box_classes, control_classes = split_layout_classes(class_name)
+            class_name = (control_classes + ['w-full']).join(' ')
+            box_styles = take_box_styles!
+          end
           style_attr = build_style_attr
           id_attr = build_id_attr
           testid_attr = build_testid_attr + build_aria_label_attr
@@ -32,7 +39,7 @@ module RjuiTools
             generate_static_select(indent, id_attr, class_name, style_attr, testid_attr, tag_attr, value_attr, on_change, disabled_attr, items)
           end
 
-          wrap_with_visibility(jsx, indent)
+          wrap_with_visibility(wrap_in_caret_box(jsx, indent, box_classes, box_styles), indent)
         end
 
         protected
@@ -343,17 +350,105 @@ module RjuiTools
           classes << 'appearance-none'
           classes << '[&::-webkit-calendar-picker-indicator]:hidden' if date_picker?
 
-          layers = caret_glyph_layer(caret)
-          layers += [[:lit, ', ']] + caret_box_layer(caret['background']) if caret['background']
+          # The default glyph is an inline <svg> drawn over the box (caret_svg): its stroke is currentColor, so it
+          # follows the text colour and whatever makes it (a theme's dark mode, a binding) at runtime, as the
+          # browser's own arrow did up to 2.5.34 (ticket rjui-selectbox-caret-fixed-black-ignores-theme-dark-mode).
+          # A raster `src` and the box's `background` stay background layers of the control.
+          @caret_svg = caret['src'] ? nil : { width: width, height: height, right: right, tint: caret['tintColor'] }
+          layers = caret['src'] ? caret_glyph_layer(caret) : []
+          layers += [[:lit, ', ']] unless layers.empty? || caret['background'].nil?
+          layers += caret_box_layer(caret['background']) if caret['background']
 
-          @dynamic_styles['backgroundImage'] = js_string_expr(layers)
-          @dynamic_styles['backgroundRepeat'] = "'no-repeat'"
-          @dynamic_styles['backgroundPosition'] = "'right #{right}px center'"
-          @dynamic_styles['backgroundSize'] = "'#{width}px #{height}px'"
+          unless layers.empty?
+            @dynamic_styles['backgroundImage'] = js_string_expr(layers)
+            @dynamic_styles['backgroundRepeat'] = "'no-repeat'"
+            @dynamic_styles['backgroundPosition'] = "'right #{right}px center'"
+            @dynamic_styles['backgroundSize'] = "'#{width}px #{height}px'"
+          end
           # The text's escape width follows the caret. The fixed `pr-8` (32px)
           # would put a 32px caret at rightMargin 24 straight over the text.
           @dynamic_styles['paddingRight'] = "'#{right + width + CARET_TEXT_GAP}px'"
           classes
+        end
+
+        # --- the caret's box ------------------------------------------------------
+        # The control sits in a box that takes its place in the layout (its size, margins, flex, position, the size
+        # classes' responsive forms and the custom properties they read); the control fills the box, and the default
+        # caret is an <svg> placed over the control's trailing edge, stroked with currentColor. The control keeps its
+        # id, testID, label and every handler: tests and screen readers reach it as before (the orchestrator's ruling
+        # 2026-11-14).
+        LAYOUT_CLASS = /\A-?(?:w|h|min-w|min-h|max-w|max-h|size|m|mx|my|mt|mr|mb|ml|ms|me|grow|shrink|basis|self|justify-self|place-self|order|col|row|top|bottom|left|right|inset|inset-x|inset-y|z)(?:-|\z)|\A(?:flex-(?:1|auto|initial|none|\d+|\[.*\])|grow|shrink|absolute|relative|fixed|sticky|static|hidden|invisible|visible|collapse)\z/
+        LAYOUT_PROPERTY = /\A(?:width|height|min-width|min-height|max-width|max-height|margin(?:-\w+)?|flex(?:-\w+)?|align-self|justify-self|place-self|order|grid-(?:area|column|row)(?:-\w+)?|position|top|bottom|left|right|inset|z-index|visibility)\z/
+        LAYOUT_STYLE_KEYS = %w[width height minWidth minHeight maxWidth maxHeight margin marginTop marginBottom marginLeft
+                               marginRight marginInline marginBlock flex flexGrow flexShrink flexBasis alignSelf
+                               justifySelf placeSelf order gridArea gridColumn gridRow position top bottom left right
+                               inset zIndex visibility].freeze
+
+        # A class's base, past its variants (`lg:`, `landscape:`, `hover:` ...); `[prop:value]` is its property.
+        def layout_class?(token)
+          base = token.sub(/\A(?:[^:\[\]]+:)+/, '')
+          if (prop = base[/\A\[([a-z-]+):/, 1])
+            return LAYOUT_PROPERTY.match?(prop)
+          end
+          LAYOUT_CLASS.match?(base)
+        end
+
+        # [the box's classes, the control's]
+        def split_layout_classes(class_name)
+          tokens = class_name.split(/\s+/).reject(&:empty?)
+          [tokens.select { |t| layout_class?(t) }, tokens.reject { |t| layout_class?(t) }]
+        end
+
+        # The inline styles the box takes: the layout keys and every custom property (they inherit, so the control
+        # still reads them).
+        def take_box_styles!
+          return {} unless @dynamic_styles
+
+          taken = @dynamic_styles.select { |key, _| LAYOUT_STYLE_KEYS.include?(key.to_s) || key.to_s.start_with?('--') }
+          taken.each_key { |key| @dynamic_styles.delete(key) }
+          taken
+        end
+
+        def box_style_attr(styles)
+          return '' if styles.empty?
+
+          pairs = styles.map { |key, value| format_dynamic_style_pair(key, value) }
+          cast = styles.keys.any? { |k| k.to_s.start_with?('--') } && typescript? ? ' as React.CSSProperties' : ''
+          " style={{ #{pairs.join(', ')} }#{cast}}"
+        end
+
+        # The colour the caret is stroked in: caretAttributes.tintColor, else the text's own fontColor, else the
+        # text's colour as it falls (currentColor, inherited). A Date input written `colorScheme: "dark"` with
+        # neither is light, as its own picker mark was.
+        def caret_svg_color_style(tint)
+          value = tint || attributes['fontColor']
+          if value
+            " style={{ color: #{color_style_expr(value)} }}"
+          elsif date_picker? && attributes['colorScheme'] == 'dark'
+            " style={{ color: '#{CARET_DARK_SCHEME_TINT}' }}"
+          else
+            ''
+          end
+        end
+
+        def caret_svg(indent)
+          c = @caret_svg
+          "#{indent_str(indent)}<svg aria-hidden=\"true\" focusable=\"false\" viewBox=\"0 0 24 24\" fill=\"none\" " \
+            "stroke=\"currentColor\" strokeWidth={2} strokeLinecap=\"round\" strokeLinejoin=\"round\" " \
+            "className=\"pointer-events-none absolute top-1/2 -translate-y-1/2 right-[#{c[:right]}px] " \
+            "w-[#{c[:width]}px] h-[#{c[:height]}px]\"#{caret_svg_color_style(c[:tint])}>" \
+            "<path d=\"#{CARET_CHEVRON_PATH}\" /></svg>"
+        end
+
+        # The control in its box, with the caret over it. Without a default caret (a list box, a raster src) the
+        # control is emitted as it was.
+        def wrap_in_caret_box(control_jsx, indent, box_classes, box_styles)
+          return control_jsx if @caret_svg.nil?
+
+          inner = control_jsx.lines.map { |l| l.strip.empty? ? l : "  #{l}" }.join
+          classes = (['relative', 'inline-flex'] + box_classes).join(' ')
+          "#{indent_str(indent)}<div className=\"#{classes}\"#{box_style_attr(box_styles)}>\n" \
+            "#{inner}\n#{caret_svg(indent + 2)}\n#{indent_str(indent)}</div>"
         end
 
         # Parts are [:lit, text] / [:expr, js] so one renderer can decide
@@ -801,6 +896,13 @@ module RjuiTools
 
         def generate_date_picker(indent)
           class_name = build_class_name
+          box_classes = []
+          box_styles = {}
+          if @caret_svg
+            box_classes, control_classes = split_layout_classes(class_name)
+            class_name = (control_classes + ['w-full']).join(' ')
+            box_styles = take_box_styles!
+          end
           style_attr = build_style_attr
           id_attr = build_id_attr
           testid_attr = build_testid_attr + build_aria_label_attr
@@ -865,7 +967,7 @@ module RjuiTools
 
           jsx = "#{indent_str(indent)}<input#{id_attr} className=\"#{class_name}\" type=\"#{input_type}\"#{value_attr}#{on_change}#{min_attr}#{max_attr}#{step_attr}#{picker_attr}#{click_attr}#{disabled_attr}#{combined_style}#{testid_attr}#{tag_attr} />"
 
-          wrap_with_visibility(jsx, indent)
+          wrap_with_visibility(wrap_in_caret_box(jsx, indent, box_classes, box_styles), indent)
         end
 
         def build_date_style_attr
