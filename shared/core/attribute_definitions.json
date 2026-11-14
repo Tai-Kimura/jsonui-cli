@@ -3244,7 +3244,7 @@
         },
         "rightMargin": {
           "type": "number",
-          "description": "Distance from the select's trailing edge to the caret's trailing edge (pt / dp / px). Absent: 0, which is the UIKit contract this object came from (the caret sits flush against the edge)."
+          "description": "Distance from the select's trailing edge to the caret's trailing edge (pt / dp / px). Absent: where the default arrow sits without caretAttributes (the select's trailing padding, 12 by default), on every face and mode, so the object's presence never moves the caret (the requester's ruling 2026-11-14). Write 0 to put it flush against the edge."
         }
       }
     },

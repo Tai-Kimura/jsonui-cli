@@ -422,7 +422,8 @@ module KjuiTools
 
         # The `SelectBoxCaret(...)` expression for a caretAttributes object, or
         # nil when the object is absent. An empty object is present: the face
-        # then draws its own caret with every default (flush at the edge).
+        # then draws its own caret with every default (where the default arrow
+        # sits: an absent rightMargin is the select's trailing padding).
         # `src` resolves as a drawable name exactly as Image's `src` does.
         # Numbers land as dp Ints on the library surface (cornerRadius is the
         # precedent); a key of the wrong type is left out, not emitted as 0.
