@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'json'
 require_relative '../helpers/content_inset_helper'
 require_relative '../helpers/modifier_builder'
 require_relative '../style_loader'
@@ -7,6 +8,7 @@ require_relative '../../core/normalization'
 require_relative '../../core/string_literals'
 require_relative '../../core/attribute_types'
 require_relative '../../core/enum_spelling'
+require_relative '../../core/type_synonyms'
 
 module KjuiTools
   module Compose
@@ -95,33 +97,89 @@ module KjuiTools
           end
         end
 
-        # A grid row of a non-lazy Collection (a Row of weighted cell boxes)
-        # whose cell's root is height matchParent: the row takes its tallest
-        # cell's height (IntrinsicSize.Min) and each cell box fills it, as a
-        # wrapContent Row does for a matchParent child (ModifierBuilder.
-        # adjust_for_intrinsic_size!) and as iOS's grid draws it. Without it
-        # the cell's fillMaxHeight reached for the parent's remaining height
-        # and a row of two cards took the screen (ticket kjui-collection-grid-
-        # row-matchparent-cell-height-unbounded). Not when the cell holds a
-        # SubcomposeLayout (a lazy list, a pager...): IntrinsicSize.Min asks
-        # it for its intrinsic height and it throws — the row stays as it was,
-        # as adjust_for_intrinsic_size! leaves such a parent.
-        def self.cell_fills_row_height?(cell_name)
+        # How a grid's cell sits in its row (lib/core/grid_row_height.json),
+        # read from the cell's layout (ResourceResolver.cell_layout), styles
+        # merged:
+        #   :fill  the cell's root is height matchParent: the row is as tall as
+        #          its tallest cell (IntrinsicSize.Min) and each cell box fills
+        #          it, as a wrapContent Row does for a matchParent child
+        #          (ModifierBuilder.adjust_for_intrinsic_size!) and as iOS's
+        #          grid draws it. Without it a non-lazy row's cells reached for
+        #          the parent's remaining height and a row of two cards took the
+        #          screen (ticket kjui-collection-grid-row-matchparent-cell-
+        #          height-unbounded).
+        #   :own   the root is matchParent but the cell holds an image whose
+        #          height its picture decides: IntrinsicSize.Min would take the
+        #          picture's own pixel height (a placeholder's 128 px, a tall
+        #          picture's 600 px), so the cell is its own height — the row
+        #          is not aligned (iOS aligns it) and does not reach for the
+        #          parent's height either (ticket kjui-collection-lazy-grid-
+        #          and-flow-rows-do-not-align-cell-heights).
+        #   nil    as it was: a root that is not matchParent, a layout that
+        #          cannot be read, or a cell holding a SubcomposeLayout (a lazy
+        #          list, a pager...), which throws when IntrinsicSize.Min asks
+        #          it, and which an unbounded height would not measure.
+        def self.cell_row_mode(cell_name)
           root = Helpers::ResourceResolver.cell_layout(cell_name)
-          return false unless root.is_a?(Hash)
+          return nil unless root.is_a?(Hash)
 
           root = StyleLoader.load_and_merge(Marshal.load(Marshal.dump(root)))
-          Helpers::ModifierBuilder.child_dimension(root, 'height') == 'matchParent' &&
-            !Helpers::ModifierBuilder.subcompose_descendant?([root])
+          return nil unless Helpers::ModifierBuilder.child_dimension(root, 'height') == 'matchParent'
+          return nil if Helpers::ModifierBuilder.subcompose_descendant?([root])
+
+          content_sized_image?(root) ? :own : :fill
         end
 
-        # The row's modifier and the cell box's, for a grid row whose cells
-        # fill its height (cell_fills_row_height?), else as they were.
-        def self.grid_row_modifiers(fills, spacing, required_imports)
-          required_imports&.add(:intrinsic_size) if fills
-          row = fills ? 'Modifier.fillMaxWidth().height(IntrinsicSize.Min)' : 'Modifier.fillMaxWidth()'
+        def self.cell_fills_row_height?(cell_name)
+          cell_row_mode(cell_name) == :fill
+        end
+
+        GRID_ROW_HEIGHT = JSON.parse(File.read(File.expand_path('../../core/grid_row_height.json', __dir__))).freeze
+        FIXED_HEIGHT = /\A\d+(\.\d+)?\z/.freeze
+
+        # An image (grid_row_height.json contentSizedImages, its type read
+        # through type_synonyms.json) whose height its picture decides, at or
+        # below `node`, styles merged and includes followed.
+        def self.content_sized_image?(node, seen = [])
+          return false unless node.is_a?(Hash)
+
+          if (included = node['include']).is_a?(String)
+            return false if seen.include?(included) || seen.size > 16
+
+            layout = Helpers::ResourceResolver.cell_layout(included)
+            return false unless layout.is_a?(Hash)
+
+            return content_sized_image?(StyleLoader.load_and_merge(Marshal.load(Marshal.dump(layout))), seen + [included])
+          end
+
+          type = node['type'].to_s
+          canonical = JsonUIShared::TypeSynonyms.entries.dig(type, 'canonical') || type
+          if GRID_ROW_HEIGHT.dig('contentSizedImages', 'types').include?(canonical)
+            height = Helpers::ModifierBuilder.child_dimension(node, 'height')
+            return true unless height.is_a?(Numeric) || (height.is_a?(String) && height.match?(FIXED_HEIGHT))
+          end
+          %w[child children].any? do |key|
+            value = node[key]
+            (value.is_a?(Hash) ? [value] : Array(value)).any? { |child| content_sized_image?(child, seen) }
+          end
+        end
+
+        # The row's modifier and the cell box's, for a grid row of cells in
+        # `mode` (cell_row_mode): :fill a row its tallest cell's height and
+        # boxes filling it; :own boxes measuring the cell with no height bound
+        # (its own height, not the parent's); else as they were.
+        def self.grid_row_modifiers(mode, spacing, required_imports)
+          mode = :fill if mode == true
+          required_imports&.add(:intrinsic_size) if mode == :fill
+          required_imports&.add(:alignment) if mode == :own
+          row = mode == :fill ? 'Modifier.fillMaxWidth().height(IntrinsicSize.Min)' : 'Modifier.fillMaxWidth()'
           row_args = spacing ? "modifier = #{row}, horizontalArrangement = Arrangement.spacedBy(#{Helpers::BoundValue.dp(spacing)})" : "modifier = #{row}"
-          [row_args, fills ? 'Modifier.weight(1f).fillMaxHeight()' : 'Modifier.weight(1f)']
+          box = case mode
+                when :fill then 'Modifier.weight(1f).fillMaxHeight()'
+                when :own then 'Modifier.weight(1f).wrapContentHeight(align = Alignment.Top, unbounded = true)'
+                else 'Modifier.weight(1f)'
+                end
+          [row_args, box]
         end
 
         # A section of the vertical lazy grid whose cells fill their row's
@@ -1889,7 +1947,7 @@ module KjuiTools
               end
               spacing = json_data['columnSpacing'] || json_data['itemSpacing']
               required_imports&.add(:arrangement) if spacing
-              row_args, box_modifier = grid_row_modifiers(cell_fills_row_height?(cell_name), spacing, required_imports)
+              row_args, box_modifier = grid_row_modifiers(cell_row_mode(cell_name), spacing, required_imports)
               if places
                 code += "\n" + indent("classListCells.chunked(#{count}).forEachIndexed { rowIndex, rowCells ->", depth)
                 code += "\n" + indent("Row(#{row_args}) {", depth + 1)
@@ -3042,7 +3100,7 @@ module KjuiTools
               if per_row
                 spacing = json_data['columnSpacing'] || json_data['itemSpacing']
                 required_imports&.add(:arrangement) if spacing
-                row_args, box_modifier = grid_row_modifiers(cell_fills_row_height?(cell_view_name), spacing, required_imports)
+                row_args, box_modifier = grid_row_modifiers(cell_row_mode(cell_view_name), spacing, required_imports)
                 code += "\n" + indent("#{data_access}.chunked(#{per_row}).forEachIndexed { rowIndex, rowCells ->", depth + 3)
                 code += "\n" + indent("Row(#{row_args}) {", depth + 4)
                 code += "\n" + indent("rowCells.indices.forEach { columnIndex ->", depth + 5)

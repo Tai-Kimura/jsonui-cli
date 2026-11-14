@@ -89,6 +89,7 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
     INTRINSIC_STUBS = <<~KOTLIN
       enum class IntrinsicSize { Min, Max }
       fun Modifier.height(intrinsicSize: IntrinsicSize): Modifier = this
+      fun Modifier.wrapContentHeight(align: Alignment, unbounded: Boolean = false): Modifier = this
     KOTLIN
 
     it 'the grids compile with allWarningsAsErrors' do
@@ -104,7 +105,11 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
         'lazyClassListGrid' => described_class.generate({ 'type' => 'Collection', 'id' => 'grid', 'columns' => 2,
                                                           'items' => '@{rows}', 'cellClasses' => ['ACell'] }, 0, Set.new)
       }
-      functions.each_value { |code| expect(code).to include(FILLS_ROW), code }
+      RESOLVER.cell_layouts = { 'ACell' => MATCH_PARENT.merge('child' => [{ 'type' => 'NetworkImage', 'width' => 'matchParent', 'height' => 'matchParent', 'src' => '@{u}' }]) }
+      functions['ownGrid'] = described_class.generate({ 'type' => 'Collection', 'id' => 'grid', 'lazy' => 'none', 'columns' => 2,
+                                                       'items' => '@{rows}', 'sections' => [{ 'cell' => 'ACell' }] }, 0, Set.new)
+      expect(functions['ownGrid']).to include('wrapContentHeight(align = Alignment.Top, unbounded = true)')
+      functions.except('ownGrid').each_value { |code| expect(code).to include(FILLS_ROW), code }
       expect(INTRINSIC_STUBS + program(functions)).to compile_as_kotlin.with_warnings_as_errors
     ensure
       RESOLVER.cell_layouts = nil
@@ -157,6 +162,71 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
     it 'a cell whose root wraps its content: as it was' do
       plain = with_cell(nil) { [lazy_grid, lazy_class_list] }
       with_cell(MATCH_PARENT.merge('height' => 'wrapContent')) { expect([lazy_grid, lazy_class_list]).to eq(plain) }
+    end
+  end
+
+  # A cell holding an image whose height its picture decides (lib/core/
+  # grid_row_height.json): IntrinsicSize.Min would take the picture's own
+  # pixel height (a 128 px placeholder, a 600 px picture — measured on an
+  # emulator), so the cell is its own height. On the non-lazy grid its box
+  # measures it with no height bound — not the parent's remaining height of
+  # 2.5.38; on the lazy grid the section is as it was.
+  describe 'a cell holding an image its picture sizes' do
+    OWN_BOX = 'Box(modifier = Modifier.weight(1f).wrapContentHeight(align = Alignment.Top, unbounded = true))'
+
+    def image_cell(image)
+      MATCH_PARENT.merge('child' => [{ 'type' => 'View', 'width' => 'matchParent', 'height' => 'matchParent', 'child' => [image] }])
+    end
+
+    NETWORK = { 'type' => 'NetworkImage', 'width' => 'matchParent', 'height' => 'matchParent', 'src' => '@{imageUrl}' }.freeze
+
+    def lazy_grid
+      described_class.generate({ 'type' => 'Collection', 'id' => 'grid', 'columns' => 2,
+                                 'items' => '@{items}', 'sections' => [{ 'cell' => 'card_cell' }] }, 0, Set.new)
+    end
+
+    it 'the non-lazy rows measure it its own height, the row not aligned' do
+      with_cell(image_cell(NETWORK)) do
+        [sections_grid, class_list_grid].each do |code|
+          expect(code).to include(OWN_BOX), code
+          expect(code).not_to include('IntrinsicSize'), code
+        end
+      end
+    end
+
+    it 'the lazy grid is as it was' do
+      plain = with_cell(nil) { lazy_grid }
+      with_cell(image_cell(NETWORK)) { expect(lazy_grid).to eq(plain) }
+    end
+
+    {
+      'an Image of no height' => { 'type' => 'Image', 'width' => 'matchParent', 'srcName' => 'x' },
+      'an ImageView (Image)' => { 'type' => 'ImageView', 'width' => 'matchParent', 'height' => 'wrapContent', 'srcName' => 'x' },
+      'a CircleImage (Image)' => { 'type' => 'CircleImage', 'width' => 40, 'height' => 'matchParent', 'src' => '@{u}' },
+      'an AsyncImage (NetworkImage)' => { 'type' => 'AsyncImage', 'width' => 'matchParent', 'height' => '@{h}', 'src' => '@{u}' }
+    }.each do |label, image|
+      it "#{label} is sized by its picture" do
+        with_cell(image_cell(image)) { expect(sections_grid).to include(OWN_BOX) }
+      end
+    end
+
+    it 'an image of a fixed height leaves the rows aligned' do
+      [120, '120', '96.5'].each do |height|
+        with_cell(image_cell(NETWORK.merge('height' => height))) do
+          expect(sections_grid).to include(FILLS_ROW), height.inspect
+        end
+      end
+    end
+
+    it 'follows an include to the image in it' do
+      RESOLVER.cell_layouts = { 'card_cell' => MATCH_PARENT.merge('child' => [{ 'include' => 'photo_part' }]),
+                                'photo_part' => { 'type' => 'View', 'child' => [NETWORK] } }
+      expect(sections_grid).to include(OWN_BOX)
+      RESOLVER.cell_layouts = { 'card_cell' => MATCH_PARENT.merge('child' => [{ 'include' => 'text_part' }]),
+                                'text_part' => { 'type' => 'Label', 'text' => 'x' } }
+      expect(sections_grid).to include(FILLS_ROW)
+    ensure
+      RESOLVER.cell_layouts = nil
     end
   end
 
