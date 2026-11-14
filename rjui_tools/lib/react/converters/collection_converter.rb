@@ -857,6 +857,27 @@ module RjuiTools
           style_attr_for(pairs)
         end
 
+        # A keyed cell in its size wrapper (cell_size_style). A pager's page
+        # is the pager's width: the wrapper sits in the middle of a page-wide
+        # snap child (the requester's ruling 2026-11-15, ticket
+        # collection-cellwidth-cellheight-unread-on-some-routes), as sjui's
+        # TabView page centres its cell's frame and kjui's HorizontalPager
+        # page its size box. Until then the wrapper was the snap child, and
+        # a page was the cell's width.
+        def sized_cell_lines(key_expr, cell_size, cell_line, indent)
+          unless paging?
+            return ["#{indent_str(indent)}<div key={#{key_expr}} className=\"shrink-0 overflow-hidden\"#{cell_size}>",
+                    "#{indent_str(indent + 2)}#{cell_line}",
+                    "#{indent_str(indent)}</div>"]
+          end
+
+          ["#{indent_str(indent)}<div key={#{key_expr}} className=\"w-full shrink-0 flex items-center justify-center\">",
+           "#{indent_str(indent + 2)}<div className=\"shrink-0 overflow-hidden\"#{cell_size}>",
+           "#{indent_str(indent + 4)}#{cell_line}",
+           "#{indent_str(indent + 2)}</div>",
+           "#{indent_str(indent)}</div>"]
+        end
+
         # A number passes through; its numeric-string spelling takes the SAME
         # path (plan 43's C3 rule — `"8"` and `8` are two spellings of one
         # value and must emit one text). Anything else is not a size.
@@ -1009,9 +1030,7 @@ module RjuiTools
             # element, so the React key moves onto it — a key inside the
             # wrapper is a key React never sees.
             if (cell_size = cell_size_style)
-              lines << "#{indent_str(indent + 2)}<div key={#{key_expr}} className=\"shrink-0 overflow-hidden\"#{cell_size}>"
-              lines << "#{indent_str(indent + 4)}<#{cell_view}#{cell_item_id_attr(item_index)} data={cellData#{cell_cast}} />"
-              lines << "#{indent_str(indent + 2)}</div>"
+              lines.concat(sized_cell_lines(key_expr, cell_size, "<#{cell_view}#{cell_item_id_attr(item_index)} data={cellData#{cell_cast}} />", indent + 2))
             else
               lines << "#{indent_str(indent + 2)}<#{cell_view} key={#{key_expr}}#{cell_item_id_attr(item_index)} data={cellData#{cell_cast}} />"
             end
@@ -1199,9 +1218,7 @@ module RjuiTools
             lines << "#{indent_str(indent)}{#{items_binding}?.map((item#{item_type}, index#{index_type}) => ("
             key_expr = legacy_array_key_expr
             if (cell_size = cell_size_style)
-              lines << "#{indent_str(indent + 2)}<div key={#{key_expr}} className=\"shrink-0 overflow-hidden\"#{cell_size}>"
-              lines << "#{indent_str(indent + 4)}<#{cell_view}#{cell_item_id_attr('index')} data={item} />"
-              lines << "#{indent_str(indent + 2)}</div>"
+              lines.concat(sized_cell_lines(key_expr, cell_size, "<#{cell_view}#{cell_item_id_attr('index')} data={item} />", indent + 2))
             else
               lines << "#{indent_str(indent + 2)}<#{cell_view} key={#{key_expr}}#{cell_item_id_attr('index')} data={item} />"
             end
@@ -1235,9 +1252,7 @@ module RjuiTools
         # (the section path's wrapper contract).
         def legacy_cell_lines(cell_view, key_expr, data_expr, indent, index_expr = 'cellIndex')
           if (cell_size = cell_size_style)
-            ["#{indent_str(indent)}<div key={#{key_expr}} className=\"shrink-0 overflow-hidden\"#{cell_size}>",
-             "#{indent_str(indent + 2)}<#{cell_view}#{cell_item_id_attr(index_expr)} data={#{data_expr}} />",
-             "#{indent_str(indent)}</div>"]
+            sized_cell_lines(key_expr, cell_size, "<#{cell_view}#{cell_item_id_attr(index_expr)} data={#{data_expr}} />", indent)
           else
             ["#{indent_str(indent)}<#{cell_view} key={#{key_expr}}#{cell_item_id_attr(index_expr)} data={#{data_expr}} />"]
           end

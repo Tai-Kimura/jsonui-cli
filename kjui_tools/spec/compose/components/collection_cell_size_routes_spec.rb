@@ -14,9 +14,9 @@ require_relative '../../support/collection_first_frame'
 # wrapContent, the non-lazy grid, the non-lazy row and the flow drew every
 # cell at its own size, where sjui, rjui and KotlinJsonUI Dynamic size it. Each route now draws the cell in the Box the lazy routes draw
 # (cell_size_box_open): the declared size, the cell anchored top-start and
-# clipped there. The pager is not here: where a page draws a smaller cell is
-# not settled (sjui centres it in the page, rjui makes the page the cell's
-# width, KotlinJsonUI Dynamic's page fills).
+# clipped there. The pager's page draws the same box in its middle (the
+# requester's ruling 2026-11-15, as sjui's TabView page centres the cell's
+# frame); until then its cell filled the page.
 RSpec.describe 'kjui codegen: a Collection cell takes the declared cellWidth / cellHeight on every route' do
   include CollectionFirstFrame
 
@@ -26,8 +26,12 @@ RSpec.describe 'kjui codegen: a Collection cell takes the declared cellWidth / c
     'row' => { 'layout' => 'horizontal' }, 'rowLazyNone' => { 'layout' => 'horizontal', 'lazy' => 'none' },
     'flow' => { 'layout' => 'flow' }, 'flowLazyNone' => { 'layout' => 'flow', 'lazy' => 'none' },
     'classListLazyNone' => { 'sections' => nil, 'cellClasses' => ['ACell'], 'lazy' => 'none' },
-    'classListFlow' => { 'sections' => nil, 'cellClasses' => ['ACell'], 'layout' => 'flow' }
+    'classListFlow' => { 'sections' => nil, 'cellClasses' => ['ACell'], 'layout' => 'flow' },
+    'pager' => { 'layout' => 'horizontal', 'paging' => true },
+    'pagerOneSection' => { 'layout' => 'horizontal', 'paging' => true, 'sections' => [{ 'cell' => 'ACell' }] },
+    'classListPager' => { 'sections' => nil, 'cellClasses' => ['ACell'], 'layout' => 'horizontal', 'paging' => true }
   }.freeze
+  SIZE_PAGER_ROUTES = %w[pager pagerOneSection classListPager].freeze
   SIZE_SECTIONS = [{ 'cell' => 'ACell' }, { 'cell' => 'BCell' }].freeze
   SIZE_BOX = 'Box(modifier = Modifier.width(157.dp).height(63.dp).clipToBounds()) {'
 
@@ -49,8 +53,29 @@ RSpec.describe 'kjui codegen: a Collection cell takes the declared cellWidth / c
     end
   end
 
+  it 'a pager draws the box in the middle of its page, the page padding inside the page' do
+    SIZE_PAGER_ROUTES.each do |route|
+      code = emit(SIZE_ROUTES[route], true)
+      views = code.scan(/^\s*[AB]CellView\($/).size
+      page = /Box\(modifier = Modifier\.fillMaxSize\(\), contentAlignment = Alignment\.Center\) \{\n\s*#{Regexp.escape(SIZE_BOX)}\n\s*[AB]CellView\(/
+      expect(code.scan(page).size).to eq(views), "#{route}:\n#{code}"
+      expect(code).not_to include('.fillMaxSize()) {'), route
+      expect(code).not_to match(/_item_\$page"\)\.fillMaxSize\(\)/), route
+      padded = emit(SIZE_ROUTES[route].merge('insets' => [4, 8, 4, 8]), true)
+      expect(padded).to include('Box(modifier = Modifier.fillMaxSize().padding(pagePadding), contentAlignment = Alignment.Center) {'), route
+    end
+  end
+
+  it 'a pager with neither declared draws its cell filling the page, as it was' do
+    SIZE_PAGER_ROUTES.each do |route|
+      code = emit(SIZE_ROUTES[route], false)
+      expect(code).to match(/_item_\$page"\)\.fillMaxSize\(\)/), route
+      expect(code).not_to include('Alignment.Center'), route
+    end
+  end
+
   it 'only cellWidth, or only cellHeight: the box takes the one declared' do
-    %w[lazyNone rowLazyNone flow].each do |route|
+    %w[lazyNone rowLazyNone flow pager].each do |route|
       %w[cellWidth cellHeight].each do |attr|
         node = { 'type' => 'Collection', 'id' => 'list', 'items' => '@{rows}', 'sections' => SIZE_SECTIONS }
                .merge(SIZE_ROUTES[route]).merge(attr => 157).compact

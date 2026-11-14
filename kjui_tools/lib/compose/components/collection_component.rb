@@ -2449,7 +2449,7 @@ module KjuiTools
 
           # Render cell content
           if !one_section && sources.any?
-            code += paging_cells(json_data, sources, depth + 1, cell_lead)
+            code += paging_cells(json_data, sources, depth + 1, cell_lead, required_imports)
           elsif one_section
             cell_view_name = sections.first['cell']
             if cell_view_name
@@ -2473,11 +2473,7 @@ module KjuiTools
               code += "\n" + indent("LaunchedEffect(item) {", depth + 3)
               code += "\n" + indent("cellViewModel.updateData(item)", depth + 4)
               code += "\n" + indent("}", depth + 3)
-              code += "\n" + indent("#{cell_class}View(", depth + 3)
-              code += "\n" + indent("viewModel = cellViewModel,", depth + 4)
-              collection_id = json_data['id']
-              code += "\n" + cell_test_tag_modifier(collection_id, 'page', depth + 4, '.fillMaxSize()', lead: cell_lead)
-              code += "\n" + indent(")", depth + 3)
+              code += paging_cell_view(json_data, cell_class, depth + 3, cell_lead, required_imports)
               code += "\n" + indent("}", depth + 2)
               code += "\n" + indent("}", depth + 1)
             end
@@ -2524,12 +2520,41 @@ module KjuiTools
           code
         end
 
+        # A page's cell view. It fills the page (the page padding `lead`
+        # inside), as it always has; with a declared cellWidth / cellHeight
+        # it is drawn in the size box every other route draws it in
+        # (cell_size_box_open: the cell anchored top-start, clipped at the
+        # declared size), and the box sits in the middle of the page (the
+        # requester's ruling 2026-11-15, ticket collection-cellwidth-
+        # cellheight-unread-on-some-routes), as sjui's TabView page centres
+        # its cell's frame. Until then the pager read neither: the cell
+        # filled the page.
+        def self.paging_cell_view(json_data, cell_class, depth, lead, required_imports)
+          cell_box = cell_size_box_open(json_data, required_imports)
+          unless cell_box
+            return "\n" + indent("#{cell_class}View(", depth) +
+                   "\n" + indent("viewModel = cellViewModel,", depth + 1) +
+                   "\n" + cell_test_tag_modifier(json_data['id'], 'page', depth + 1, '.fillMaxSize()', lead: lead) +
+                   "\n" + indent(")", depth)
+          end
+
+          required_imports&.add(:alignment)
+          "\n" + indent("Box(modifier = Modifier.fillMaxSize()#{lead}, contentAlignment = Alignment.Center) {", depth) +
+            "\n" + indent(cell_box, depth + 1) +
+            "\n" + indent("#{cell_class}View(", depth + 2) +
+            "\n" + indent("viewModel = cellViewModel,", depth + 3) +
+            "\n" + cell_test_tag_modifier(json_data['id'], 'page', depth + 3) +
+            "\n" + indent(")", depth + 2) +
+            "\n" + indent("}", depth + 1) +
+            "\n" + indent("}", depth)
+        end
+
         # The page body: the source the page falls in, and its cell there. A
         # page's index counts across all the sources, so `page` is the pager's
         # own index and the item's test tag and ViewModel key are unique.
         # `lead`: the page's padding (generate_paging_horizontal), before the
         # cell's test tag so the tag's bounds are the padded cell's.
-        def self.paging_cells(json_data, sources, depth, lead = '')
+        def self.paging_cells(json_data, sources, depth, lead = '', required_imports = nil)
           code = "\n" + indent("var pageStart = 0", depth)
           sources.each_with_index do |(cell, _), n|
             cell_class = cell_class_name(cell)
@@ -2540,10 +2565,7 @@ module KjuiTools
             code += "\n" + indent("LaunchedEffect(item) {", depth + 1)
             code += "\n" + indent("cellViewModel.updateData(item)", depth + 2)
             code += "\n" + indent("}", depth + 1)
-            code += "\n" + indent("#{cell_class}View(", depth + 1)
-            code += "\n" + indent("viewModel = cellViewModel,", depth + 2)
-            code += "\n" + cell_test_tag_modifier(json_data['id'], 'page', depth + 2, '.fillMaxSize()', lead: lead)
-            code += "\n" + indent(")", depth + 1)
+            code += paging_cell_view(json_data, cell_class, depth + 1, lead, required_imports)
             code += "\n" + indent("}", depth)
             code += "\n" + indent("pageStart += pageSection#{n}.size", depth) if n < sources.size - 1
           end
