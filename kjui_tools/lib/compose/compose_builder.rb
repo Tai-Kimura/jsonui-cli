@@ -2258,9 +2258,9 @@ module KjuiTools
           # `value as? Object` did not compile against the Data field
           # (kjui-object-path-binding-does-not-compile).
           model_type = DataModelUpdater.allocate.send(:map_to_kotlin_type, class_type)
-          "value as? #{model_type} ?: updated.#{name}"
+          "#{DataModelUpdater.cast_expr('value', model_type)} ?: updated.#{name}"
         else
-          "value as? #{kotlin_type} ?: updated.#{name}"
+          "#{DataModelUpdater.cast_expr('value', kotlin_type)} ?: updated.#{name}"
         end
       end
 
