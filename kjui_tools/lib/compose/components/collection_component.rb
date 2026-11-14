@@ -134,7 +134,15 @@ module KjuiTools
           cell_row_mode(cell_name) == :fill
         end
 
-        GRID_ROW_HEIGHT = JSON.parse(File.read(File.expand_path('../../core/grid_row_height.json', __dir__))).freeze
+        # Read when a grid row first asks, not when the file is required: a
+        # copy of the tool whose link is dangling builds every layout that has
+        # no such row.
+        def self.content_sized_image_types
+          @content_sized_image_types ||= begin
+            grid_table = JSON.parse(File.read(File.expand_path('../../core/grid_row_height.json', __dir__)))
+            grid_table['contentSizedImages']['types'].freeze
+          end
+        end
         FIXED_HEIGHT = /\A\d+(\.\d+)?\z/.freeze
 
         # An image (grid_row_height.json contentSizedImages, its type read
@@ -154,7 +162,7 @@ module KjuiTools
 
           type = node['type'].to_s
           canonical = JsonUIShared::TypeSynonyms.entries.dig(type, 'canonical') || type
-          if GRID_ROW_HEIGHT.dig('contentSizedImages', 'types').include?(canonical)
+          if content_sized_image_types.include?(canonical)
             height = Helpers::ModifierBuilder.child_dimension(node, 'height')
             return true unless height.is_a?(Numeric) || (height.is_a?(String) && height.match?(FIXED_HEIGHT))
           end
