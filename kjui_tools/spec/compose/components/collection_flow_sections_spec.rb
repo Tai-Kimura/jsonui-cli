@@ -173,8 +173,7 @@ RSpec.describe 'kjui codegen: a flow per section' do
   end
 
   it 'spaces the sections by the line spacing, and each region by the declared spacings' do
-    # The cells' address counts (cell_counts_line) come first, before the Column.
-    code = emit.sub(/\A\s*val cellCounts_\w+ = .*\n/, '')
+    code = emit
     expect(code).to match(/\A\s*Column\(/)
     column_args = code[/\A\s*Column\((.*?)\n\s*\) \{/m, 1]
     expect(column_args).to include('verticalArrangement = Arrangement.spacedBy(6.dp)'), code
