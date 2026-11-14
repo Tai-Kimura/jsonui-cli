@@ -31,7 +31,7 @@ RSpec.describe 'kjui codegen: a class-list Collection whose items are a declared
     '[RowCellData] = []' => [{ 'name' => 'rows', 'class' => '[RowCellData]', 'defaultValue' => '[]' },
                              'data.rows.map { it.toMap() }', 'val rows: List<RowCellData> = emptyList()'],
     'Array (no default)' => [{ 'name' => 'rows', 'class' => 'Array' },
-                             'data.rows.orEmpty().mapNotNull { it as? Map<String, Any> }', 'val rows: List<Any?>? = null']
+                             'data.rows.orEmpty().mapNotNull { (@Suppress("UNCHECKED_CAST") (it as? Map<String, Any>)) }', 'val rows: List<Any?>? = null']
   }.freeze
 
   def emit(extra, definition)
@@ -74,7 +74,7 @@ RSpec.describe 'kjui codegen: a class-list Collection whose items are a declared
     allow(KjuiTools::Core::Logger).to receive(:warn) { |m| said << m }
     code = emit({}, { 'name' => 'rows', 'class' => '[Booking]', 'defaultValue' => '[]' })
     expect(said.join).to include("items 'rows' is a list of Booking; a cell reads its own RowCellData or a map")
-    expect(code).to include('data.rows.mapNotNull { it as? Map<String, Any> }')
+    expect(code).to include('data.rows.mapNotNull { (@Suppress("UNCHECKED_CAST") (it as? Map<String, Any>)) }')
   end
 
   # A lazy "none" flow that declares `height: "wrapContent"` gets two
