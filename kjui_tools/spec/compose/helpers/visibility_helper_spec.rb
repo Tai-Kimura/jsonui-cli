@@ -119,6 +119,38 @@ RSpec.describe KjuiTools::Compose::Helpers::VisibilityHelper do
       end
     end
 
+    # Ticket kjui-section-extractor-drops-columnscope-for-weight: in a Column, `heightWeight` is the weight build_weight
+    # emits (it wins over `weight`), and only `weight` was hoisted - the client's timetable_panel (heightWeight 1.15 with
+    # a visibility) kept its `.weight(1.15f)` on the child inside the wrapper's BoxScope, where the Column's weight is
+    # not reachable (a layout-scope DslMarker: "cannot be called in this context by implicit receiver").
+    context 'heightWeight in a Column' do
+      let(:panel_code) do
+        <<~KOTLIN.chomp
+          Column(
+              modifier = Modifier
+                  .weight(1.15f)
+                  .fillMaxWidth()
+                  .testTag("timetable_panel"),
+          ) {
+          }
+        KOTLIN
+      end
+
+      it 'is hoisted to the wrapper as weight is, and the child fills it' do
+        json_data = { 'visibility' => '@{timetablePanelVisibility}', 'heightWeight' => 1.15 }
+        result = described_class.wrap_with_visibility(json_data, panel_code, 0, required_imports, 'Column')
+        expect(result).to include('modifier = Modifier.weight(1.15f)')
+        expect(result.scan('.weight(').length).to eq(1)
+        expect(result).to include('.fillMaxHeight()')
+      end
+
+      it 'is not a Row child\'s weight (control: a heightWeight in a Row is left as it was)' do
+        json_data = { 'visibility' => '@{v}', 'heightWeight' => 1 }
+        result = described_class.wrap_with_visibility(json_data, panel_code, 0, required_imports, 'Row')
+        expect(result).not_to include('modifier = Modifier.weight(')
+      end
+    end
+
     # Regression: kjui-visibility-weight-gsub-strips-descendant-weights.
     # The wrap target's OWN modifier chain must lose its weight (hoisted to
     # the wrapper), but a weighted DESCENDANT (e.g. a centering spacer child
