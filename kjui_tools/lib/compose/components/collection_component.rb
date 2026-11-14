@@ -55,36 +55,44 @@ module KjuiTools
         # the data, as scrollTo counts them), then `cellIndex`. Section 0's
         # cells and a Collection of one section keep `cellIndex`.
         #
-        # The counts are read from a list hoisted before the Collection
-        # (cell_counts_line), not from `data.<items>?.sections` at the cell: a
-        # route opens a section as `data.rows?.sections?.getOrNull(1)?.let`,
-        # inside which Kotlin knows `data.rows` is not null, and a safe call on
-        # it there is a warning — an error under allWarningsAsErrors.
+        # Read in place, with no local: a route opens a section as
+        # `data.rows?.sections?.getOrNull(1)?.let`, inside which Kotlin knows
+        # `data.rows` is not null, and `data.rows?.` there is "unnecessary
+        # safe call" — an error under allWarningsAsErrors. A nullable items
+        # property is read through `listOfNotNull(data.rows)`, which takes the
+        # value as it is in either case. The first spelling of 2.5.39 hoisted
+        # the counts into a `val` before the Collection instead, and the val
+        # changed how the SectionExtractor cut a large view (a consumer's
+        # sections folded back into their parents: 42 oversized functions
+        # became 44).
         def self.cell_address(sections, index, property_name, index_expr = 'cellIndex')
-          return index_expr unless property_name && @cell_counts
+          return index_expr unless property_name
 
-          before = drawn_cells_before(sections, index) { |j| "#{@cell_counts[:var]}.getOrNull(#{j})" }
-          return index_expr if before.empty?
+          before = sections.first(index).each_with_index
+                           .select { |section, _| section.is_a?(Hash) && section['cell'] }
+                           .map { |_, j| "#{section_cell_count(property_name, j)} + " }.join
+          before.empty? ? index_expr : "#{before}#{index_expr}"
+        end
 
-          @cell_counts[:used] = property_name
-          "#{before}#{index_expr}"
+        # The cells of data section `j`, an Int.
+        def self.section_cell_count(property_name, j)
+          if Helpers::ResourceResolver.generated_property_nullable?(property_name)
+            "listOfNotNull(data.#{property_name}).sumOf { it.sections.getOrNull(#{j})?.cells?.data?.size ?: 0 }"
+          else
+            "(data.#{property_name}.sections.getOrNull(#{j})?.cells?.data?.size ?: 0)"
+          end
         end
 
         # The class-list routes' address: the data sections before
         # `sectionIndex` (in scope where the route walks every data section).
         def self.class_list_cell_address(property_name)
-          return 'cellIndex' unless property_name && @cell_counts
+          return 'cellIndex' unless property_name
 
-          @cell_counts[:used] = property_name
-          "#{@cell_counts[:var]}.take(sectionIndex).sum() + cellIndex"
-        end
-
-        # The hoisted list cell_address reads: each data section's cell count.
-        def self.cell_counts_line(depth)
-          property_name = @cell_counts && @cell_counts[:used]
-          return '' unless property_name
-
-          indent("val #{@cell_counts[:var]} = #{scroll_sections_expr(property_name)}.map { it.cells?.data?.size ?: 0 }", depth) + "\n"
+          if Helpers::ResourceResolver.generated_property_nullable?(property_name)
+            "listOfNotNull(data.#{property_name}).sumOf { source -> source.sections.take(sectionIndex).sumOf { it.cells?.data?.size ?: 0 } } + cellIndex"
+          else
+            "data.#{property_name}.sections.take(sectionIndex).sumOf { it.cells?.data?.size ?: 0 } + cellIndex"
+          end
         end
 
         # defaultScrollAnchor (center / bottom): where the list starts, applied
@@ -1066,16 +1074,6 @@ module KjuiTools
         end
 
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
-          outer = @cell_counts
-          id = json_data['id']
-          @cell_counts = id.is_a?(String) && !id.empty? ? { var: "cellCounts_#{id.gsub(/[^A-Za-z0-9_]/, '_')}", used: nil } : nil
-          code = generate_route(json_data, depth, required_imports, parent_type)
-          cell_counts_line(depth) + code
-        ensure
-          @cell_counts = outer
-        end
-
-        def self.generate_route(json_data, depth, required_imports = nil, parent_type = nil)
           # `items` is declared ["array", "binding"]; what these emitters draw
           # from is the binding (the data's sections). An array names no data:
           # it is set aside here, as the sjui and rjui Collections set it

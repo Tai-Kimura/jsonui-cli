@@ -100,11 +100,16 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
   # identifier-repeats-per-section): until then a second section's cells took
   # `_item_0`, `_item_1`, ... again — the first section's ids — on every route
   # but the pager. Section 0's cells keep `cellIndex`; section 1's add section
-  # 0's count, read from the list hoisted before the Collection. The run-based
+  # 0's count, read in place from the data (no local: a `val` before the
+  # Collection changed how a large view was cut into sections). The run-based
   # specs (collection_flow_sections, collection_section_grid,
   # collection_scroll_to_cell) read the n each route draws; this sweep keeps
   # every combination the SSoT declares on the rule.
   describe 'a second section continues the first section\'s count' do
+    # `items` is not declared here, so the Data field is nullable: the count is
+    # read through listOfNotNull (no safe call on a smart-cast receiver).
+    SECOND_SECTION_TAG = '${listOfNotNull(data.items).sumOf { it.sections.getOrNull(0)?.cells?.data?.size ?: 0 } + cellIndex}'
+
     def build_two(layout:, lazy:, paging:, columns:)
       json = {
         'type' => 'Collection', 'id' => 'target',
@@ -135,28 +140,25 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
 
               tags_after(code, 'ACellView').each { |tag| expect(%w[$cellIndex $page]).to include(tag), "#{label}: #{tag}" }
               second.each do |tag|
-                expect(['$page', '${(cellCounts_target.getOrNull(0) ?: 0) + cellIndex}']).to include(tag), "#{label}: #{tag}"
+                expect(['$page', SECOND_SECTION_TAG]).to include(tag), "#{label}: #{tag}"
               end
-              if second.any? { |tag| tag.include?('cellCounts_target') }
-                expect(code).to match(/\Aval cellCounts_target = data\.items\??\.sections(?:\.orEmpty\(\))?\.map \{ it\.cells\?\.data\?\.size \?: 0 \}\n/), code
-              end
+              expect(code).not_to match(/^\s*val cellCounts_/), code
             end
           end
         end
       end
     end
 
-    it 'a Collection of one section reads no count and hoists none' do
+    it 'a Collection of one section reads no count' do
       code = build(layout: 'vertical', lazy: nil, paging: false)
-      expect(code).not_to include('cellCounts_')
+      expect(code).not_to include('listOfNotNull(')
       expect(code).to include('testTag("target_item_$cellIndex")')
     end
 
     it 'the class-list shape (no sections) adds the data sections before the cell\'s own' do
       code = described_class.generate({ 'type' => 'Collection', 'id' => 'target', 'items' => '@{items}',
                                         'cellClasses' => ['a_cell'], 'lazy' => 'none' }, 0, Set.new)
-      expect(code).to match(/\Aval cellCounts_target = data\.items\??\.sections(?:\.orEmpty\(\))?\.map \{ it\.cells\?\.data\?\.size \?: 0 \}\n/), code
-      expect(code).to include('testTag("target_item_${cellCounts_target.take(sectionIndex).sum() + cellIndex}")'), code
+      expect(code).to include('testTag("target_item_${listOfNotNull(data.items).sumOf { source -> source.sections.take(sectionIndex).sumOf { it.cells?.data?.size ?: 0 } } + cellIndex}")'), code
     end
   end
 
