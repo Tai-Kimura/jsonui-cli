@@ -82,6 +82,18 @@ RSpec.describe 'kjui codegen: text size following' do
       .to include('textStyle = TextStyle(fontSize = jsonUIFontSize(Configuration.TextField.defaultFontSize.sp, fontScaling = false), letterSpacing = jsonUILetterSpacing(fontScaling = false))')
   end
 
+  it 'a TextView with no font attribute and no declaration draws the Dynamic default size, not LocalTextStyle' do
+    # ticket kjui-textview-default-size-differs-from-dynamic: the undeclared TextView kept CustomTextField's
+    # LocalTextStyle (bodyLarge 16sp on a 24sp line) while the Dynamic TextView draws
+    # Configuration.TextField.defaultFontSize (14) on a bare TextStyle (codegen parity control_TextView, d 13 at 2.0).
+    expect(emit('type' => 'TextView', 'text' => '@{t}'))
+      .to include('textStyle = TextStyle(fontSize = jsonUIFontSize(Configuration.TextField.defaultFontSize.sp), letterSpacing = jsonUILetterSpacing())')
+    # A TextView whose font resolves keeps its own size: the default is only for the one that has none.
+    sized = emit('type' => 'TextView', 'text' => '@{t}', 'fontSize' => 15)
+    expect(sized).not_to include('Configuration.TextField.defaultFontSize')
+    expect(sized).to include('textStyle = TextStyle(')
+  end
+
   it "a Label's line heights follow as its size does" do
     code = emit('type' => 'Label', 'text' => 't', 'fontSize' => 15, 'lineHeightMultiple' => 1.4, 'maxFontScale' => 1.2)
     expect(code).to include('lineHeight = jsonUIFontSize(LabelLineHeight.multiple(15f, 1.4f, LocalTextStyle.current, LocalDensity.current), maxFontScale = 1.2f)')
