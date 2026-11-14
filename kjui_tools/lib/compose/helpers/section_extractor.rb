@@ -71,29 +71,110 @@ module KjuiTools
         # (control flow adds depth but provides no scope, and lifting that
         # without a receiver does not compile).
         def self.scope_bound_needs_outer_receiver?(code)
+          !outer_scope_needs(code).empty?
+        end
+
+        # The scope kinds the chunk's scope-bound modifiers / calls / members need from OUTSIDE it: one group (the
+        # kinds any of which would do) per occurrence no enclosing provider inside the chunk satisfies. A provider is
+        # the lambda of a container call (its kind from SCOPE_KIND_OF_CALL; an unknown PascalCase container is taken to
+        # provide any scope, as before), a lazy-DSL block, or a content / lazyContent named lambda. A
+        # receiver-transparent call (RECEIVER_TRANSPARENT_CALLS) and control flow provide none, and a VisibilityWrapper
+        # provides BoxScope only: a `.weight(` under it is still its Column's / Row's (ticket
+        # kjui-section-extractor-drops-columnscope-for-weight).
+        def self.outer_scope_needs(code)
           provider_stack = []
-          code.each_line do |raw|
-            line = raw.strip
+          needs = []
+          lines = code.lines.map(&:strip)
+          lines.each_with_index do |line, idx|
             next if line.empty?
-            if provider_stack.none? &&
-               (SCOPE_BOUND_MODIFIER_PREFIXES.any? { |m| line.include?(m) } ||
-                SCOPE_BOUND_CALL_PREFIXES.any? { |m| line.include?(m) } ||
-                SCOPE_BOUND_MEMBER_PATTERNS.any? { |re| line.match?(re) })
-              return true
+            scope_needs_of(line).each do |group|
+              satisfied = provider_stack.any? { |k| k == :any || group.include?(k) }
+              needs << group unless satisfied
             end
             opens = line.count('{')
             closes = line.count('}')
             net = opens - closes
             if net.positive?
-              provides = line.match?(/\A[A-Z]\w*\s*\(/) || line.match?(/\A\)\s*\{\z/) ||
-                         line.match?(/\A(?:item|items|itemsIndexed|stickyHeader)\b/) ||
-                         line.match?(/\b(?:content|lazyContent)\s*=\s*\{/)
-              net.times { provider_stack << provides }
+              kind = provider_kind(lines, idx)
+              net.times { provider_stack << kind }
             elsif net.negative?
               (-net).times { provider_stack.pop }
             end
           end
-          false
+          needs.uniq
+        end
+
+        # What the lambda opened on ``lines[idx]`` provides: a scope kind, :any, or nil.
+        def self.provider_kind(lines, idx)
+          line = lines[idx]
+          return :lazy_item if line.match?(/\A(?:item|items|itemsIndexed|stickyHeader)\b/)
+          return :any if line.match?(/\b(?:content|lazyContent)\s*=\s*\{/)
+          return nil unless line.match?(/\A[A-Z]\w*\s*\(/) || line.match?(/\A[A-Z]\w*\s*\{/) || line.match?(/\A\)\s*\{\z/)
+
+          call = call_keyword(lines, idx)
+          return nil if call.nil? || !call.match?(/\A[A-Z]/) || RECEIVER_TRANSPARENT_CALLS.include?(call)
+
+          SCOPE_KIND_OF_CALL.fetch(call, :any)
+        end
+
+        # The groups of scope kinds a line's scope-bound occurrences need (any kind of a group would do).
+        def self.scope_needs_of(line)
+          groups = []
+          SCOPE_BOUND_MODIFIER_PREFIXES.each { |m| groups << SCOPE_NEEDS.fetch(m, [:any_provider]) if line.include?(m) }
+          SCOPE_BOUND_CALL_PREFIXES.each { |m| groups << SCOPE_NEEDS.fetch(m, [:any_provider]) if line.include?(m) }
+          SCOPE_BOUND_MEMBER_PATTERNS.each { |re| groups << [:any_provider] if line.match?(re) }
+          groups
+        end
+
+        # The scope each scope-bound occurrence needs. `.align(` is Box's, Row's and Column's own (a different
+        # parameter each; kjui writes the one its parent takes); a need of :any_provider is met only by a provider
+        # the table does not know (taken as any, as before), so its old behaviour stands.
+        SCOPE_NEEDS = {
+          '.weight(' => %i[row column], '.align(' => %i[box row column], '.alignBy(' => %i[row column],
+          '.alignByBaseline(' => %i[row column], '.matchParentSize(' => %i[box],
+          '.fillParentMaxSize(' => %i[lazy_item], '.fillParentMaxWidth(' => %i[lazy_item],
+          '.fillParentMaxHeight(' => %i[lazy_item], '.animateItemPlacement(' => %i[lazy_item],
+          '.animateItem(' => %i[lazy_item], 'NavigationBarItem(' => %i[row]
+        }.freeze
+
+        # The scope a container call's lambda provides. A call not listed is taken to provide any (as before).
+        SCOPE_KIND_OF_CALL = {
+          'Column' => :column, 'Row' => :row, 'Box' => :box, 'VisibilityWrapper' => :box, 'BadgedBox' => :box,
+          'FlowRow' => :row, 'FlowColumn' => :column
+        }.freeze
+
+        # The receiver a lifted section takes for a scope kind.
+        RECEIVER_OF_KIND = {
+          row: 'androidx.compose.foundation.layout.RowScope.',
+          column: 'androidx.compose.foundation.layout.ColumnScope.',
+          box: 'androidx.compose.foundation.layout.BoxScope.',
+          lazy_item: 'androidx.compose.foundation.lazy.LazyItemScope.'
+        }.freeze
+
+        # Containers whose content lambda adds no receiver: the content runs in the scope around the call (a
+        # `.weight(` under `Column { CollectionReorderScope(...) { ... } }` is the Column's). Kept transparent like control
+        # flow, both in the guard above and when the extractor looks for the receiver to give a lifted section.
+        RECEIVER_TRANSPARENT_CALLS = %w[
+          CollectionReorderScope CollectionReorderRow CompositionLocalProvider Scaffold IconToggleButton
+        ].freeze
+
+        # The call whose lambda opens at ``lines[idx]`` (stripped lines): its first word, or for a `) {` the first
+        # word of the line its arguments opened on; nil when it cannot be found.
+        def self.call_keyword(lines, idx)
+          opening = lines[idx]
+          first = opening[/\A(\w+)/, 1]
+          return first if first
+
+          balance = opening.count(')') - opening.count('(')
+          i = idx - 1
+          while i >= 0 && balance.positive?
+            s = lines[i]
+            balance += s.count(')') - s.count('(')
+            return s[/\A(\w+)/, 1] if balance <= 0
+
+            i -= 1
+          end
+          nil
         end
 
         # Brace nesting peak with string literals and // comments stripped.
@@ -748,11 +829,10 @@ module KjuiTools
           # (all-or-nothing keeps the boundary bookkeeping simple: a partial
           # lift would still shrink the body on the next process_once pass).
           def lift_branches(lines, segments, prefix, env)
-            receiver = enclosing_receiver(lines, segments[:boundaries].first)
-
             branch_bodies = segments[:branches].map do |b|
               lines[b[:start]..b[:end_idx]].join("\n")
             end
+            receiver = enclosing_receiver(lines, segments[:boundaries].first, branch_bodies.join("\n"))
 
             # Refuse when a branch reaches into cell-lambda locals it doesn't
             # declare, or needs a scope receiver we couldn't identify.
@@ -798,7 +878,15 @@ module KjuiTools
           # opener and maps its keyword to a scope-receiver FQN. Returns nil
           # when the enclosing scope is unknown (e.g. LazyColumn's own DSL
           # block, where an extracted @Composable couldn't be called anyway).
-          def enclosing_receiver(lines, gate_idx)
+          def enclosing_receiver(lines, gate_idx, body = nil)
+            # The scope kinds the lifted code needs from outside (ticket
+            # kjui-section-extractor-drops-columnscope-for-weight): the
+            # receiver is the nearest enclosing container, past control flow and
+            # receiver-transparent wrappers, when its scope meets every one.
+            # A container whose scope does not (a VisibilityWrapper's BoxScope
+            # for a `.weight(`) is not walked past: Compose's layout scopes
+            # share a DslMarker, so the outer one is not reachable inside it.
+            needs = body ? SectionExtractor.outer_scope_needs(body).reject { |g| g == [:any_provider] } : []
             depth = 0
             (gate_idx - 1).downto(0) do |i|
               stripped = lines[i].strip
@@ -808,12 +896,17 @@ module KjuiTools
                 keyword = container_keyword(lines, i)
                 # Control flow is receiver-TRANSPARENT: `if (...) {` around a
                 # grid does not change which scope the grid's `.weight(`
-                # resolves against. Keep walking to the real container.
-                if %w[if else when].include?(keyword)
+                # resolves against. Keep walking to the real container. So is
+                # a wrapper whose lambda adds no receiver.
+                if %w[if else when].include?(keyword) || RECEIVER_TRANSPARENT_CALLS.include?(keyword)
                   depth = 0
                   next
                 end
-                return SCOPE_RECEIVERS[keyword]
+                kind = SCOPE_KIND_OF_CALL[keyword] || { 'item' => :lazy_item, 'items' => :lazy_item, 'itemsIndexed' => :lazy_item }[keyword]
+                return SCOPE_RECEIVERS[keyword] if needs.empty? || kind.nil?
+                return RECEIVER_OF_KIND[kind] if needs.all? { |g| g.include?(kind) }
+
+                return nil
               end
             end
             nil
@@ -954,7 +1047,7 @@ module KjuiTools
               next if scoped.size > 1
               needs_scope = SectionExtractor.scope_bound_needs_outer_receiver?(seg)
               needs_scope ||= scoped.any?
-              receiver = enclosing_receiver(lines, seg_start)
+              receiver = enclosing_receiver(lines, seg_start, seg)
               next if scoped.any? && scoped.first != receiver
               next if needs_scope && receiver.nil?
 
