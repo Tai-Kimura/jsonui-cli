@@ -142,7 +142,21 @@ RSpec.describe RjuiTools::React::Converters::CollectionConverter do
         converter = create_converter({ 'class' => 'Collection', 'id' => 'gallery_thumbnail_row',
                                        'cellClasses' => ['ItemCell'], 'items' => '@{listItems}' })
         result = converter.convert
-        expect(result).to include('id={`gallery_thumbnail_row_item_${cellIndex}`} data={cellData} />')
+        # Counted across the data sections (ticket jui-collection-item-identifier-repeats-per-section).
+        expect(result).to include('id={`gallery_thumbnail_row_item_${(data.listItems?.sections ?? []).slice(0, sectionIndex).reduce((n, s) => n + (s.cells?.data?.length ?? 0), 0) + cellIndex}`} data={cellData} />')
+      end
+
+      # A cell's address counts the cells of the sections before its own (user ruling 2026-11-14, ticket
+      # jui-collection-item-identifier-repeats-per-section): the first section's are cellIndex, a later one's start
+      # after them. They restarted at 0 per section, so two sections each had an `_item_0`.
+      it 'counts a sectioned Collection\'s addresses across the sections' do
+        result = create_converter({ 'class' => 'Collection', 'id' => 'stops', 'items' => '@{rows}',
+                                    'sections' => [{ 'cell' => 'ACell' }, { 'header' => 'HCell' }, { 'cell' => 'BCell' }] }).convert
+        ids = result.scan(/id=\{`stops_item_\$\{([^`]*)\}`\}/).flatten
+        expect(ids.size).to eq(2), result
+        expect(ids[0]).to eq('cellIndex')
+        # the header-only section draws no cells and is not counted
+        expect(ids[1]).to eq('(data.rows?.sections?.[0]?.cells?.data?.length ?? 0) + cellIndex')
       end
 
       it 'omits the item identifier when the collection has no literal id' do

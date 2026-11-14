@@ -134,7 +134,111 @@ def build_collection_address_fixtures(
 
     files.extend(_no_items_files(source_label))
     entries.append(_no_items_entry())
+    for shape, extra in _SECTION_SHAPES:
+        f, e = _sections_fixture(source_label, shape, extra)
+        files.extend(f)
+        entries.append(e)
     return files, entries
+
+
+#: A cell's address across sections (user ruling 2026-11-14, ticket
+#: jui-collection-item-identifier-repeats-per-section): N counts the cells of
+#: all the drawn sections in order, cells only — the n of scrollTo's Int. Two
+#: sections, one cell then two, each under a header: the second section's
+#: cells are target_item_1 and target_item_2, read inside each address by
+#: their title. Until 2.5.39 N restarted at 0 per section: two
+#: `target_item_0`, no `target_item_2`, and a driver's first match read A0
+#: where B0 was meant. Headers are not counted (they wear no address).
+#: The shapes: a vertical list (the default container), `lazy: "none"`, and
+#: flow — the routes that draw sections with a different loop on each path.
+_SECTION_SHAPES = (
+    ("list", {}),
+    ("none", {"lazy": "none"}),
+    ("flow", {"layout": "flow"}),
+)
+_SECTION_CELL = "conformance_cell_within"
+_SECTION_HEADER = "conformance_cell"
+
+
+def _sections_layout(source_label: str, extra: dict) -> dict:
+    target = {
+        "type": "Collection",
+        "id": "target",
+        "width": 200,
+        "height": 300,
+        "background": "#DDDDDD",
+        "sections": [{"cell": _SECTION_CELL, "header": _SECTION_HEADER},
+                     {"cell": _SECTION_CELL, "header": _SECTION_HEADER}],
+        "items": "@{items}",
+        **extra,
+    }
+    return {
+        "_generated": _marker(source_label),
+        "type": "View",
+        "id": "root",
+        "width": "matchParent",
+        "height": "matchParent",
+        "child": [target],
+        "data": [{
+            "name": "items",
+            "class": "CollectionDataSource",
+            "defaultValue": {"sections": [
+                {"cell": _SECTION_CELL, "header": {"title": "Header A"}, "cells": [{"title": "A0"}]},
+                {"cell": _SECTION_CELL, "header": {"title": "Header B"}, "cells": [{"title": "B0"}, {"title": "B1"}]},
+            ]},
+        }],
+    }
+
+
+def _sections_fixture(source_label: str, shape: str, extra: dict) -> tuple[list[tuple[str, dict]], dict]:
+    case = f"cellAddress__sections_{shape}"
+    layout_rel = f"fixtures/Collection/{case}.layout.json"
+    test_rel = f"fixtures/Collection/{case}.test.json"
+    description = (
+        f"A Collection of two sections ({shape}): the addresses count the cells across the sections — "
+        "the first section's cell is target_item_0, the second's target_item_1 and target_item_2; headers are not counted."
+    )
+    steps = [{"action": "waitFor", "id": "root"}]
+    steps += [{"action": "waitFor", "id": f"target_item_{i}"} for i in range(3)]
+    steps += [{"assert": "text", "id": "within_title", "within": f"target_item_{i}", "equals": t}
+              for i, t in enumerate(("A0", "B0", "B1"))]
+    steps += [{"assert": "notVisible", "id": "target_item_3"}]
+    test = {
+        "type": "screen",
+        "source": {"layout": layout_rel},
+        "metadata": {
+            "name": f"conformance {case}",
+            "description": description,
+            "generatedBy": TEST_GENERATED_BY,
+            "tags": ["conformance", "Collection"],
+        },
+        "platform": "all",
+        "cases": [{"name": case, "description": description, "steps": steps}],
+    }
+    entry = {
+        "id": f"Collection/{case}",
+        "component": "Collection",
+        "attribute": "sections",
+        "case": case,
+        "class": rules.CLASS_ASSERTABLE,
+        "host": "Collection",
+        "writtenKey": "sections",
+        "aliasOf": None,
+        "value": None,
+        "platforms": list(_PLATFORMS),
+        "mode": None,
+        "deprecated": None,
+        "layout": layout_rel,
+        "test": test_rel,
+        "state": None,
+        "promotedFrom": None,
+        "peerGroup": None,
+        "control": None,
+        "companions": list(rules.BASE_COMPANIONS["Collection"]) + [
+            f"fixtures/Collection/__cells/{_SECTION_CELL}.layout.json"
+        ],
+    }
+    return [(layout_rel, _sections_layout(source_label, extra)), (test_rel, test)], entry
 
 
 #: A horizontal sectioned Collection that declares NO `items`.

@@ -177,13 +177,13 @@ RSpec.describe 'a converter writes the DOM id with the include prefix and the bi
 
     it "under an include with an id, take the include's prefix before the suffix, as on iOS and Android" do
       jsx, = run(RjuiTools::React::Converters::CollectionConverter, collection, on)
-      expect(jsx).to include('id={`${jsonuiIncludeId(idPrefix, "rows")}_item_${cellIndex}`}')
+      expect(jsx).to include('id={`${jsonuiIncludeId(idPrefix, "rows")}_item_${(data.rows?.sections ?? []).slice(0, sectionIndex).reduce((n, s) => n + (s.cells?.data?.length ?? 0), 0) + cellIndex}`}')
       expect(jsx).not_to include('id={`rows_item_')
     end
 
     it 'control: off, the ids they always had' do
       jsx, = run(RjuiTools::React::Converters::CollectionConverter, collection, off)
-      expect(jsx).to include('id={`rows_item_${cellIndex}`}')
+      expect(jsx).to include('id={`rows_item_${(data.rows?.sections ?? []).slice(0, sectionIndex).reduce((n, s) => n + (s.cells?.data?.length ?? 0), 0) + cellIndex}`}')
     end
   end
 

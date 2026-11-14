@@ -186,12 +186,12 @@ RSpec.describe 'rjui Collection: flow sections, and the rows and columns of a gr
     # Section A: 40 + 10 per cell, 4 on a 200 line (190), A4 on the next line 20 + 4 down.
     expect(at.values_at('A0', 'A1', 'A3', 'A4')).to eq([[0, 0], [50, 0], [150, 0], [0, 24]]), at.inspect
     # Section B: its own line, under A's two lines and the 4 between the blocks.
-    expect(at.values_at('B0', 'B1')).to eq([[0, 48], [50, 48]]), at.inspect
+    expect(at.values_at('B6', 'B7')).to eq([[0, 48], [50, 48]]), at.inspect
   end
 
   it 'renders: a lone columnSpacing spaces the columns and not the rows, on the flow and on the grid' do
     flow = render(convert(FLOW_TWO_SECTIONS.merge('columnSpacing' => 10)))
-    expect(flow.values_at('A0', 'A1', 'A4', 'B0')).to eq([[0, 0], [50, 0], [0, 20], [0, 40]]), flow.inspect
+    expect(flow.values_at('A0', 'A1', 'A4', 'B6')).to eq([[0, 0], [50, 0], [0, 20], [0, 40]]), flow.inspect
     grid = render(convert('columns' => 2, 'columnSpacing' => 10, 'sections' => [{ 'cell' => 'ACell' }]))
     # Two columns of (200 - 10) / 2 = 95: A1 at 105, A2 on the next row, 20 down.
     expect(grid.values_at('A0', 'A1', 'A2')).to eq([[0, 0], [105, 0], [0, 20]]), grid.inspect
@@ -202,7 +202,7 @@ RSpec.describe 'rjui Collection: flow sections, and the rows and columns of a gr
     at = render(convert(FLOW_TWO_SECTIONS.merge('sections' => edges, 'lineSpacing' => 4, 'columnSpacing' => 10)),
                 sections: EDGE_DATA, boxes: true)
     # H0 10 high, 4, section A's two lines (20 + 4 + 20), 4, F0, 4, H1, 4, B.
-    expect(at.values_at('H0', 'A0', 'A4', 'F0', 'H1', 'B0')).to eq(
+    expect(at.values_at('H0', 'A0', 'A4', 'F0', 'H1', 'B6')).to eq(
       [[0, 0, 200, 10], [0, 14, 40, 20], [0, 38, 40, 20], [0, 62, 200, 10], [0, 76, 200, 10], [0, 90, 40, 20]]
     ), at.inspect
     # One section with a header: the header its own row, the cells under it.
@@ -241,13 +241,13 @@ RSpec.describe 'rjui Collection: flow sections, and the rows and columns of a gr
     edges = [{ 'cell' => 'ACell', 'header' => 'HCell', 'footer' => 'FCell' }, { 'cell' => 'BCell' }]
     at = render(convert(GRID_TWO_SECTIONS.merge('sections' => edges)),
                 sections: '[{ header: { n: 0 }, cells: rows(5), footer: { n: 0 } }, { cells: rows(2) }]', boxes: true)
-    # H0 10, 4, A's rows at 14 / 38 / 62 (A4 alone), 4, F0 at 86, 4, B0 a row of its own at 100.
-    expect(at.values_at('H0', 'A0', 'A1', 'A4', 'F0', 'B0', 'B1')).to eq(
+    # H0 10, 4, A's rows at 14 / 38 / 62 (A4 alone), 4, F0 at 86, 4, B5 a row of its own at 100.
+    expect(at.values_at('H0', 'A0', 'A1', 'A4', 'F0', 'B5', 'B6')).to eq(
       [[0, 0, 200, 10], [0, 14, 40, 20], [105, 14, 40, 20], [0, 62, 40, 20], [0, 86, 200, 10], [0, 100, 40, 20], [105, 100, 40, 20]]
     ), at.inspect
     # No header or footer: section B still starts a row, not beside A4.
     plain = render(convert(GRID_TWO_SECTIONS), sections: '[{ cells: rows(5) }, { cells: rows(2) }]')
-    expect(plain.values_at('A4', 'B0', 'B1')).to eq([[0, 48], [0, 72], [105, 72]]), plain.inspect
+    expect(plain.values_at('A4', 'B5', 'B6')).to eq([[0, 48], [0, 72], [105, 72]]), plain.inspect
   end
 
   it 'the grids type-check in the whole element, with a header, a footer and a bound column count' do
