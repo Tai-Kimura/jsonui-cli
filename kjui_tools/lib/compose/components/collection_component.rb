@@ -124,6 +124,46 @@ module KjuiTools
           [row_args, fills ? 'Modifier.weight(1f).fillMaxHeight()' : 'Modifier.weight(1f)']
         end
 
+        # A section of the vertical lazy grid whose cells fill their row's
+        # height (cell_fills_row_height?): its columns, the cells per row it
+        # draws as one full-width item (a Row the height of its tallest cell),
+        # else nil. A LazyVerticalGrid measures each item on its own, the
+        # height unbounded, and a line is as tall as its tallest item: nothing
+        # stretches an item to its line (Compose foundation 1.10,
+        # LazyGridMeasuredLineProvider.childConstraints), so a matchParent
+        # cell stayed its own height where iOS's LazyVGrid draws the row's
+        # (ticket kjui-collection-lazy-grid-and-flow-rows-do-not-align-cell-
+        # heights). Not on a horizontal grid (its rows are columns of lanes),
+        # not with a bound column count (the row's width in cells is not
+        # known here), not for one column (nothing to align), not with
+        # reorder (its rows move one cell at a time).
+        def self.lazy_grid_row_columns(json_data, section, section_columns, columns_binding)
+          return nil if @reorder || columns_binding || horizontal_collection?(json_data)
+          return nil unless section_columns.is_a?(Integer) && section_columns > 1
+          return nil unless section['cell'] && cell_fills_row_height?(section['cell'])
+
+          section_columns
+        end
+
+        # The class-list lazy grid's row width in cells, when its cells fill
+        # their row's height (as lazy_grid_row_columns for a section), else nil.
+        # Not with reorder (its rows move one cell at a time).
+        def self.class_list_row_columns(json_data, cell_name, is_horizontal)
+          return nil if @reorder || is_horizontal || horizontal_collection?(json_data)
+
+          info = columns_emit_info(json_data)
+          return nil if info[:is_binding] || !info[:literal].is_a?(Integer) || info[:literal] < 2
+          return nil unless cell_name && cell_fills_row_height?(cell_name)
+
+          info[:literal]
+        end
+
+        # The Collection scrolls horizontally (generate's reading of layout).
+        def self.horizontal_collection?(json_data)
+          json_data['horizontalScroll'] == true ||
+            (json_data['layout'] || json_data['orientation']) == 'horizontal'
+        end
+
         # defaultScrollAnchor (center / bottom): where the list starts, applied
         # once, when it first has cells. The cell is counted by the scrollTo
         # rule — across the drawn sections, headers, footers and fillers not
@@ -499,12 +539,18 @@ module KjuiTools
           if route == :pager || route == :class_list
             lists = scroll_lists_expr(json_data, sections, route, is_horizontal)
             header = route == :class_list && (names = class_list(json_data)) && names[1] && !is_horizontal ? '1 + ' : ''
+            # A class-list grid drawn a row per item (class_list_row_columns):
+            # the cell's row is the item.
+            per_row = route == :class_list && (names = class_list(json_data)) && class_list_row_columns(json_data, names[0], is_horizontal)
+            # Each data section starts its own rows, so the rows before the
+            # cell's section are counted section by section.
+            cell_item = per_row ? "run { var rest = cell; var item = 0; for (list in #{lists}) { if (rest < list.size) return@run item + rest / #{per_row}; rest -= list.size; item += (list.size + #{per_row - 1}) / #{per_row} }; -1 }" : 'cell'
             if prefix.empty?
               add.call("if (cell < 0 || cell >= #{lists}.sumOf { it.size }) return@LaunchedEffect")
-              add.call("val index = #{header}cell")
+              add.call("val index = #{header}#{cell_item}")
             else
               add.call("if (legacyIndex == null && cell >= #{lists}.sumOf { it.size }) return@LaunchedEffect")
-              add.call("val index = #{prefix}(#{header}cell)")
+              add.call("val index = #{prefix}(#{header}#{cell_item})")
             end
             return lines.join("\n") + "\n"
           end
@@ -533,11 +579,20 @@ module KjuiTools
             end
             add.call('section.cells?.let { cells ->', 2)
             add.call('if (fill != 0) { item += 1; fill = 0 }', 3) if line_breaks
-            add.call("if (target == #{i}) return@run item + rest", 3)
-            add.call('item += cells.data.size', 3)
-            if line_breaks
-              span = columns_info[:is_binding] ? 1 : grid_columns / (section['columns'] || default_columns)
-              add.call("fill = (fill + cells.data.size * #{span}) % #{units}", 3)
+            per_row = route == :grid && lazy_grid_row_columns(json_data, section, section['columns'] || default_columns, columns_info[:is_binding])
+            if per_row
+              # A full-width item per row (lazy_grid_row_columns): the cell's
+              # row is the item, and the rows leave no row part filled.
+              add.call("if (target == #{i}) return@run item + rest / #{per_row}", 3)
+              add.call("item += (cells.data.size + #{per_row - 1}) / #{per_row}", 3)
+              add.call('fill = 0', 3) if line_breaks
+            else
+              add.call("if (target == #{i}) return@run item + rest", 3)
+              add.call('item += cells.data.size', 3)
+              if line_breaks
+                span = columns_info[:is_binding] ? 1 : grid_columns / (section['columns'] || default_columns)
+                add.call("fill = (fill + cells.data.size * #{span}) % #{units}", 3)
+              end
             end
             add.call('}', 2)
             if section['footer']
@@ -1702,7 +1757,29 @@ module KjuiTools
           end
           if cell_name && property_name
             # The cells of the list `list` names, at depth `d`.
+            per_row = class_list_row_columns(json_data, cell_name, is_horizontal)
             cells = lambda do |d, list = 'cellData.data', key = nil, address = 'cellIndex'|
+              if per_row
+                # Cells that fill their row's height: a full-width item per
+                # row, as the sections grid draws them (lazy_grid_row_columns).
+                row_key = key ? ", key = { rowIndex -> (rowIndex * #{per_row} until minOf((rowIndex + 1) * #{per_row}, #{list}.size)).joinToString(\"|\") { c -> (#{key.delete_prefix('{ ').delete_suffix(' }').gsub(/\bit\b/, 'c')}).toString() } }" : ''
+                row_args, box_modifier = grid_row_modifiers(true, json_data['columnSpacing'] || json_data['itemSpacing'], required_imports)
+                out = "\n" + indent("items((#{list}.size + #{per_row - 1}) / #{per_row}#{row_key}, span = { GridItemSpan(maxLineSpan) }) { rowIndex ->", d)
+                out += "\n" + indent("Row(#{row_args}) {", d + 1)
+                out += "\n" + indent("for (columnIndex in 0 until #{per_row}) {", d + 2)
+                out += "\n" + indent("val cellIndex = rowIndex * #{per_row} + columnIndex", d + 3)
+                out += "\n" + indent("if (cellIndex < #{list}.size) {", d + 3)
+                out += "\n" + indent("Box(modifier = #{box_modifier}, contentAlignment = #{gravity_alignment}) {", d + 4)
+                out += "\n" + indent("val currentCellData = #{list}[cellIndex]", d + 5)
+                out += class_list_cell(json_data, cell_name, d + 5, required_imports, address: address)
+                out += "\n" + indent("}", d + 4)
+                out += "\n" + indent("} else {", d + 3)
+                out += "\n" + indent("Spacer(modifier = Modifier.weight(1f))", d + 4)
+                out += "\n" + indent("}", d + 3)
+                out += "\n" + indent("}", d + 2)
+                out += "\n" + indent("}", d + 1)
+                next out + "\n" + indent("}", d)
+              end
               out = "\n" + indent("items(#{list}.size#{key ? ", key = #{key}" : ''}) { cellIndex ->", d)
               if @reorder
                 # A reorderable row (ticket jui-collection-drag-to-reorder): the item's root is the row.
@@ -2002,65 +2079,101 @@ module KjuiTools
                   code += "\n" + indent("gridLineFill = 0", depth + 4)
                   code += "\n" + indent("}", depth + 3)
                 end
-                if key_expr && item_span > 1
-                  code += "\n" + indent("items(#{data_access}.size, #{key_expr}, span = { GridItemSpan(#{item_span}) }) { cellIndex ->", depth + 3)
-                elsif key_expr
-                  code += "\n" + indent("items(#{data_access}.size, #{key_expr}) { cellIndex ->", depth + 3)
-                elsif item_span > 1
-                  code += "\n" + indent("items(#{data_access}.size, span = { GridItemSpan(#{item_span}) }) { cellIndex ->", depth + 3)
-                else
-                  code += "\n" + indent("items(#{data_access}.size) { cellIndex ->", depth + 3)
+                # The cell's content, its root at depth `d`: its data, its own
+                # ViewModel, the chrome and size boxes, the view.
+                cell_content = lambda do |d|
+                  cell_class = cell_class_name(cell_view_name)
+                  out = "\n" + indent("val currentCellData = #{data_access}[cellIndex]", d)
+                  if cell_id_prop && !use_hoisted
+                    # The section's disambiguated key (lazyKeys): two cells sharing
+                    # a key shared one ViewModel, and the later one's data drew in
+                    # both (measured, the orchestrator's round 11).
+                    out += "\n" + indent("val cellId = lazyKeys[cellIndex]", d)
+                    out += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_cell_#{index}_\${cellId}_\${viewModel.hashCode()}\")", d)
+                  elsif cell_id_prop
+                    out += "\n" + indent("val cellId = (currentCellData[\"cellId\"] as? String) ?: (currentCellData[\"#{cell_id_prop}\"] as? String) ?: \"$cellIndex\"", d)
+                    out += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_cell_#{index}_\${cellId}_\${viewModel.hashCode()}\")", d)
+                  else
+                    out += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_cell_#{index}_\${cellIndex}_\${viewModel.hashCode()}\")", d)
+                  end
+                  out += "\n" + seed_view_model_line("cellViewModel", "currentCellData", d)
+                  out += "\n" + indent("LaunchedEffect(currentCellData) {", d)
+                  out += "\n" + indent("cellViewModel.updateData(currentCellData)", d + 1)
+                  out += "\n" + indent("}", d)
+                  if (chrome = chrome_open(json_data, required_imports))
+                    out += "\n" + indent(chrome, d)
+                  end
+                  if (cell_box = cell_size_box_open(json_data, required_imports))
+                    out += "\n" + indent(cell_box, d)
+                  end
+                  out += "\n" + indent("#{cell_class}View(", d)
+                  out += "\n" + indent("viewModel = cellViewModel,", d + 1)
+                  # Add testTag for test automation (tapItem action)
+                  out += "\n" + cell_test_tag_modifier(json_data['id'], cell_address(sections, index, property_name), d + 1)
+                  out += "\n" + indent(")", d)
+                  out += "\n" + indent("}", d) if cell_size_box_open(json_data, nil)
+                  out += "\n" + indent("}", d) if chrome_open(json_data, nil)
+                  out
                 end
-                # onItemAppear callback
                 on_item_appear = json_data['onItemAppear']
-                if (appear_name = Helpers::ModifierBuilder.string_event_name(on_item_appear))
-                  code += "\n" + indent("LaunchedEffect(Unit) { #{index_handler_call(Helpers::BindingExpression.path_only(appear_name), json_data, 'cellIndex')} }", depth + 4)
-                end
-                # Wrap cell in Box for alignment
-                code += "\n" + indent("Box(", depth + 4)
-                code += "\n" + indent("modifier = Modifier.fillMaxSize(),", depth + 5)
-                code += "\n" + indent("contentAlignment = #{gravity_alignment}", depth + 5)
-                code += "\n" + indent(") {", depth + 4)
-                cell_class = cell_class_name(cell_view_name)
-                code += "\n" + indent("val currentCellData = #{data_access}[cellIndex]", depth + 5)
-                if cell_id_prop && !use_hoisted
-                  # The section's disambiguated key (lazyKeys): two cells sharing
-                  # a key shared one ViewModel, and the later one's data drew in
-                  # both (measured, the orchestrator's round 11).
-                  code += "\n" + indent("val cellId = lazyKeys[cellIndex]", depth + 5)
-                  code += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_cell_#{index}_\${cellId}_\${viewModel.hashCode()}\")", depth + 5)
-                elsif cell_id_prop
-                  code += "\n" + indent("val cellId = (currentCellData[\"cellId\"] as? String) ?: (currentCellData[\"#{cell_id_prop}\"] as? String) ?: \"$cellIndex\"", depth + 5)
-                  code += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_cell_#{index}_\${cellId}_\${viewModel.hashCode()}\")", depth + 5)
+                appear_name = Helpers::ModifierBuilder.string_event_name(on_item_appear)
+                appear_line = ->(d) { appear_name ? "\n" + indent("LaunchedEffect(Unit) { #{index_handler_call(Helpers::BindingExpression.path_only(appear_name), json_data, 'cellIndex')} }", d) : '' }
+
+                if (per_row = lazy_grid_row_columns(json_data, section, section_columns, columns_binding))
+                  # Cells that fill their row's height (lazy_grid_row_columns):
+                  # a full-width item per row, the row a Row the height of its
+                  # tallest cell, as the non-lazy grid draws it. Each cell keeps
+                  # its index, address, ViewModel and onItemAppear.
+                  row_key = if key_expr
+                              cell_key = use_hoisted ? "(enrichedData#{index}[c][\"cellId\"] as? String) ?: c.toString()" : 'lazyKeys[c]'
+                              ", key = { rowIndex -> #{lazy_key("(rowIndex * #{per_row} until minOf((rowIndex + 1) * #{per_row}, #{data_access}.size)).joinToString(\"|\") { c -> #{cell_key} }", index)} }"
+                            else
+                              ''
+                            end
+                  row_args, box_modifier = grid_row_modifiers(true, json_data['columnSpacing'] || json_data['itemSpacing'], required_imports)
+                  code += "\n" + indent("items((#{data_access}.size + #{per_row - 1}) / #{per_row}#{row_key}, span = { GridItemSpan(maxLineSpan) }) { rowIndex ->", depth + 3)
+                  code += "\n" + indent("Row(#{row_args}) {", depth + 4)
+                  code += "\n" + indent("for (columnIndex in 0 until #{per_row}) {", depth + 5)
+                  code += "\n" + indent("val cellIndex = rowIndex * #{per_row} + columnIndex", depth + 6)
+                  code += "\n" + indent("if (cellIndex < #{data_access}.size) {", depth + 6)
+                  code += "\n" + indent("Box(modifier = #{box_modifier}, contentAlignment = #{gravity_alignment}) {", depth + 7)
+                  code += appear_line.call(depth + 8)
+                  code += cell_content.call(depth + 8)
+                  code += "\n" + indent("}", depth + 7)
+                  code += "\n" + indent("} else {", depth + 6)
+                  code += "\n" + indent("Spacer(modifier = Modifier.weight(1f))", depth + 7)
+                  code += "\n" + indent("}", depth + 6)
+                  code += "\n" + indent("}", depth + 5)
+                  code += "\n" + indent("}", depth + 4)
+                  code += "\n" + indent("}", depth + 3)
+                  # Full-width rows leave no row part filled.
+                  code += "\n" + indent("gridLineFill = 0", depth + 3) if line_breaks
                 else
-                  code += "\n" + indent("val cellViewModel: #{cell_class}ViewModel = viewModel(key = \"#{cell_view_name}_cell_#{index}_\${cellIndex}_\${viewModel.hashCode()}\")", depth + 5)
-                end
-                code += "\n" + seed_view_model_line("cellViewModel", "currentCellData", depth + 5)
-                code += "\n" + indent("LaunchedEffect(currentCellData) {", depth + 5)
-                code += "\n" + indent("cellViewModel.updateData(currentCellData)", depth + 6)
-                code += "\n" + indent("}", depth + 5)
-                if (chrome = chrome_open(json_data, required_imports))
-                  code += "\n" + indent(chrome, depth + 5)
-                end
-                if (cell_box = cell_size_box_open(json_data, required_imports))
-                  code += "\n" + indent(cell_box, depth + 5)
-                end
-                code += "\n" + indent("#{cell_class}View(", depth + 5)
-                code += "\n" + indent("viewModel = cellViewModel,", depth + 6)
-                # Add testTag for test automation (tapItem action)
-                collection_id = json_data['id']
-                code += "\n" + cell_test_tag_modifier(collection_id, cell_address(sections, index, property_name), depth + 6)
-                code += "\n" + indent(")", depth + 5)
-                if cell_size_box_open(json_data, nil)
-                  code += "\n" + indent("}", depth + 5)
-                end
-                if chrome_open(json_data, nil)
-                  code += "\n" + indent("}", depth + 5)
-                end
-                code += "\n" + indent("}", depth + 4)
-                code += "\n" + indent("}", depth + 3)
-                if line_breaks
-                  code += "\n" + indent("gridLineFill = (gridLineFill + #{data_access}.size * #{item_span}) % #{grid_units}", depth + 3)
+                if key_expr && item_span > 1
+                    code += "\n" + indent("items(#{data_access}.size, #{key_expr}, span = { GridItemSpan(#{item_span}) }) { cellIndex ->", depth + 3)
+                  elsif key_expr
+                    code += "\n" + indent("items(#{data_access}.size, #{key_expr}) { cellIndex ->", depth + 3)
+                  elsif item_span > 1
+                    code += "\n" + indent("items(#{data_access}.size, span = { GridItemSpan(#{item_span}) }) { cellIndex ->", depth + 3)
+                  else
+                    code += "\n" + indent("items(#{data_access}.size) { cellIndex ->", depth + 3)
+                  end
+                  # onItemAppear callback
+                  on_item_appear = json_data['onItemAppear']
+                  if (appear_name = Helpers::ModifierBuilder.string_event_name(on_item_appear))
+                    code += "\n" + indent("LaunchedEffect(Unit) { #{index_handler_call(Helpers::BindingExpression.path_only(appear_name), json_data, 'cellIndex')} }", depth + 4)
+                  end
+                  # Wrap cell in Box for alignment
+                  code += "\n" + indent("Box(", depth + 4)
+                  code += "\n" + indent("modifier = Modifier.fillMaxSize(),", depth + 5)
+                  code += "\n" + indent("contentAlignment = #{gravity_alignment}", depth + 5)
+                  code += "\n" + indent(") {", depth + 4)
+                  code += cell_content.call(depth + 5)
+                  code += "\n" + indent("}", depth + 4)
+                  code += "\n" + indent("}", depth + 3)
+                  if line_breaks
+                    code += "\n" + indent("gridLineFill = (gridLineFill + #{data_access}.size * #{item_span}) % #{grid_units}", depth + 3)
+                  end
                 end
                 code += "\n" + indent("}", depth + 2)
                 

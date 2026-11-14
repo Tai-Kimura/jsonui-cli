@@ -320,6 +320,12 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     fun Column(modifier: Modifier = Modifier, verticalArrangement: Arrangement? = null, content: () -> Unit) { content() }
     fun FlowRow(modifier: Modifier = Modifier, horizontalArrangement: Arrangement? = null, verticalArrangement: Arrangement? = null, content: () -> Unit) { content() }
     fun Row(modifier: Modifier = Modifier, horizontalArrangement: Arrangement? = null, content: () -> Unit) { content() }
+    // A lazy grid drawn a row per item (lazy_grid_row_columns): the row's
+    // height, its weighted cell boxes and the filler of a short last row.
+    enum class IntrinsicSize { Min, Max }
+    fun Modifier.height(intrinsicSize: IntrinsicSize): Modifier = this
+    fun Modifier.weight(weight: Float): Modifier = this
+    fun Spacer(modifier: Modifier = Modifier) {}
     // The matchParent flow's box, measured with a bounded height.
     class BoxWithConstraintsScope { val constraints = androidx.compose.ui.unit.Constraints(0, 100, 0, 100) }
     fun BoxWithConstraints(modifier: Modifier = Modifier, content: BoxWithConstraintsScope.() -> Unit) { BoxWithConstraintsScope().content() }
@@ -1075,4 +1081,67 @@ RSpec.describe 'kjui codegen: scrollTo names a cell' do
     end
     expect(misses).to be_empty, "#{misses.size} misses:\n#{misses.join("\n")}"
   end
+
+  # kjui-collection-lazy-grid-and-flow-rows-do-not-align-cell-heights: a
+  # section of the vertical lazy grid whose cells fill their row's height is
+  # drawn a full-width item per row. scrollTo counts that section in rows: the
+  # Int it names lands on the item that holds the cell of that address
+  # (`_item_<n>`, drawn here as its letter and n) — in the row section, before
+  # it, after it, with both sections in rows, under defaultScrollAnchor and on
+  # the class-list grid.
+  describe 'a grid whose cells fill their row' do
+    ROW_CELL = { 'type' => 'View', 'width' => 'matchParent', 'height' => 'matchParent' }.freeze
+
+    def emit_with_rows(cells, node)
+      KjuiTools::Compose::Helpers::ResourceResolver.cell_layouts = cells.to_h { |c| [c, ROW_CELL] }
+      emit(node)
+    ensure
+      KjuiTools::Compose::Helpers::ResourceResolver.cell_layouts = nil
+    end
+
+    it 'scrollTo n lands on the row that holds the cell addressed n' do
+      targets = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+      routes = {
+        'rowsBoth' => [emit_with_rows(%w[ACell BCell], grid_node), { grid: true }, targets],
+        'rowsFirst' => [emit_with_rows(%w[ACell], grid_node), { grid: true }, targets],
+        'rowsSecond' => [emit_with_rows(%w[BCell], grid_node), { grid: true }, targets],
+        'rowsKeys' => [emit_with_rows(%w[ACell BCell], grid_node('cellIdProperty' => 'key')), { grid: true }, %w[k3 x2]]
+      }
+      expect(routes['rowsBoth'][0]).to include('span = { GridItemSpan(maxLineSpan) }) { rowIndex ->')
+      expect(routes['rowsFirst'][0].scan('{ rowIndex ->').size).to eq(1)
+      lines = run_emitted(routes)
+      %w[rowsBoth rowsFirst rowsSecond].each do |route|
+        targets.each do |n|
+          name = n < 5 ? "A#{n}" : "B#{n}"
+          expect(landed(lines, "#{route} #{n}")).to include(name), "#{route} #{n}: #{lines["#{route} #{n}"]}"
+        end
+      end
+      # A row is one item: the rows of both sections are A0A1 A2A3 A4 and B5B6 B7B8 B9.
+      expect(lines['rowsBoth 0']).to include('of H A0A1 A2A3 A4 B5B6 B7B8 B9'), lines['rowsBoth 0']
+      # Keys: the first cell with the key (k3 is A3's), its row.
+      expect(landed(lines, 'rowsKeys k3')).to eq('A2A3')
+      expect(landed(lines, 'rowsKeys x2')).to eq('B7B8')
+    end
+
+    it 'defaultScrollAnchor bottom rests on the last row' do
+      routes = { 'rowsAnchor' => [emit_with_rows(%w[ACell BCell], grid_node('defaultScrollAnchor' => 'bottom')), { grid: true }, [''], nil] }
+      expect(read(run_emitted(routes), 'rowsAnchor ')[:at]).to eq('B9')
+    end
+
+    it 'the class-list grid counts its rows too' do
+      node = { 'type' => 'Collection', 'id' => 'list', 'items' => '@{rows}', 'scrollTo' => '@{target}', 'columns' => 2,
+               'cellClasses' => ['ACell'], 'headerClasses' => ['HCell'] }
+      routes = { 'rowsClassList' => [emit_with_rows(%w[ACell], node), { grid: true }, [0, 4, 6, 9]] }
+      lines = run_emitted(routes)
+      # Every data section drawn with cellClasses[0]: rows A0A1 A2A3 A4, then A5A6 A7A8 A9.
+      expect([0, 4, 6, 9].map { |n| landed(lines, "rowsClassList #{n}") }).to eq(%w[A0A1 A4 A5A6 A9]), lines.inspect
+    end
+
+    it 'each cell keeps its own onItemAppear, inside its row' do
+      code = emit_with_rows(%w[ACell BCell], grid_node('onItemAppear' => '@{onAppear}'))
+      rows = code.scan(/\{ rowIndex ->.*?\n\s*Row\(.*?for \(columnIndex in 0 until 2\) \{.*?if \(cellIndex < .*?\) \{\n\s*Box\(.*?\) \{\n\s*(LaunchedEffect\(Unit\) \{ [^\n]*cellIndex[^\n]* \})/m)
+      expect(rows.size).to eq(2), code
+    end
+  end
+
 end

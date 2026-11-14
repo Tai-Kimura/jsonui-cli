@@ -98,12 +98,65 @@ RSpec.describe KjuiTools::Compose::Components::CollectionComponent do
                                                      'columnSpacing' => 12, 'items' => '@{rows}',
                                                      'sections' => [{ 'cell' => 'ACell' }] }, 0, Set.new),
         'classListGrid' => described_class.generate({ 'type' => 'Collection', 'id' => 'grid', 'lazy' => 'none', 'columns' => 2,
-                                                      'items' => '@{rows}', 'cellClasses' => ['ACell'] }, 0, Set.new)
+                                                      'items' => '@{rows}', 'cellClasses' => ['ACell'] }, 0, Set.new),
+        'lazyGrid' => described_class.generate({ 'type' => 'Collection', 'id' => 'grid', 'columns' => 2,
+                                                 'items' => '@{rows}', 'sections' => [{ 'cell' => 'ACell' }] }, 0, Set.new),
+        'lazyClassListGrid' => described_class.generate({ 'type' => 'Collection', 'id' => 'grid', 'columns' => 2,
+                                                          'items' => '@{rows}', 'cellClasses' => ['ACell'] }, 0, Set.new)
       }
       functions.each_value { |code| expect(code).to include(FILLS_ROW), code }
       expect(INTRINSIC_STUBS + program(functions)).to compile_as_kotlin.with_warnings_as_errors
     ensure
       RESOLVER.cell_layouts = nil
+    end
+  end
+
+  # The vertical lazy grid (kjui-collection-lazy-grid-and-flow-rows-do-not-
+  # align-cell-heights): a LazyVerticalGrid stretches no item to its line, so a
+  # section whose cells fill their row is drawn a full-width item per row,
+  # the row as the non-lazy grid draws it.
+  describe 'the lazy grid' do
+    def lazy_grid(extra = {})
+      described_class.generate({ 'type' => 'Collection', 'id' => 'grid', 'columns' => 2, 'columnSpacing' => 12,
+                                 'items' => '@{items}', 'sections' => [{ 'cell' => 'card_cell' }] }.merge(extra), 0, Set.new)
+    end
+
+    def lazy_class_list(extra = {})
+      described_class.generate({ 'type' => 'Collection', 'id' => 'grid', 'columns' => 2,
+                                 'items' => '@{items}', 'cellClasses' => ['card_cell'] }.merge(extra), 0, Set.new)
+    end
+
+    it 'draws a full-width item per row of a section whose cells fill their row (sections and class-list)' do
+      with_cell(MATCH_PARENT) do
+        [lazy_grid, lazy_class_list].each do |code|
+          expect(code).to include('LazyVerticalGrid('), code
+          expect(code).to match(/items\(\(.*?\.size \+ 1\) \/ 2, span = \{ GridItemSpan\(maxLineSpan\) \}\) \{ rowIndex ->/), code
+          expect(code).to include('Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)'), code
+          expect(code).to include('Box(modifier = Modifier.weight(1f).fillMaxHeight(), contentAlignment ='), code
+          expect(code).to include('Spacer(modifier = Modifier.weight(1f))'), code
+        end
+        expect(lazy_grid).to include('Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp))')
+      end
+    end
+
+    # Where the rule does not apply the emission is the one a cell with no
+    # layout to read gets, byte for byte.
+    {
+      'a horizontal grid' => { 'layout' => 'horizontal' },
+      'a bound column count' => { 'columns' => '@{cols}' },
+      'one column' => { 'columns' => 1 }
+    }.each do |label, extra|
+      it "#{label}: as it was" do
+        plain = with_cell(nil) { [lazy_grid(extra), lazy_class_list(extra)] }
+        with_cell(MATCH_PARENT) do
+          expect([lazy_grid(extra), lazy_class_list(extra)]).to eq(plain)
+        end
+      end
+    end
+
+    it 'a cell whose root wraps its content: as it was' do
+      plain = with_cell(nil) { [lazy_grid, lazy_class_list] }
+      with_cell(MATCH_PARENT.merge('height' => 'wrapContent')) { expect([lazy_grid, lazy_class_list]).to eq(plain) }
     end
   end
 
