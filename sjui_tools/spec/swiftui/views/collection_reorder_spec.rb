@@ -154,6 +154,21 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
     expect(grip.call('hidden' => '@{gripHidden}')).to include('.collectionReorderHandle(hidden: data.gripHidden)')
   end
 
+  # onReorderStart / onReorderEnd (rule.callbacks; ticket jui-collection-reorder-start-callback-missing): passed to
+  # CollectionReorder only when declared, so a Collection without them is emitted as it was.
+  it 'passes onReorderStart and onReorderEnd to CollectionReorder, only when declared' do
+    both = emit({ 'lazy' => 'none' }.merge(SJUI_REORDER_DECL).merge('onReorderStart' => '@{onStopBegan}', 'onReorderEnd' => '@{onStopEnded}'))
+    expect(both).to include('onReorderStart: { section, index in data.onStopBegan?(section, index) }, ' \
+                            'onReorderEnd: { section in data.onStopEnded?(section) }, ' \
+                            'onReorder: { section, from, to in data.onStopMove?(section, from, to) })')
+    only_end = emit({ 'lazy' => 'none' }.merge(SJUI_REORDER_DECL).merge('onReorderEnd' => '@{onStopEnded}'))
+    expect(only_end).to include('onReorderEnd: { section in data.onStopEnded?(section) }, onReorder:')
+    expect(only_end).not_to include('onReorderStart')
+    plain = emit({ 'lazy' => 'none' }.merge(SJUI_REORDER_DECL))
+    expect(plain).not_to include('onReorderStart')
+    expect(plain).not_to include('onReorderEnd')
+  end
+
   it 'type-checks on every route against the library declarations', :swift_compile do
     stubs = EmittedSwift::COLLECTION_DATA_SOURCE_STUB + EmittedSwift::COLLECTION_STACK_VIEW_STUB + cell_view_stub('ACellView') + <<~SWIFT
       // SwiftJsonUI CollectionReorder.swift (feature/collection-reorder), the public declarations.
@@ -173,8 +188,10 @@ RSpec.describe SjuiTools::SwiftUI::Views::CollectionConverter do
             [emit(SJUI_REORDER_LEGACY.merge('lazy' => 'none').merge(SJUI_REORDER_DECL)), emit(SJUI_REORDER_LEGACY.merge('height' => 400).merge(SJUI_REORDER_DECL))] +
             [emit({ 'lazy' => 'none', 'reorderable' => true, 'onReorder' => '@{onStopMove}', 'reorderHandle' => 'grip',
                     'reorderLockedProperty' => 'fixed', 'cellIdProperty' => 'id' })] +
-            SJUI_REORDER_ROUTES.values.map { |extra, _| emit(extra.merge(SJUI_REORDER_DECL).merge('reorderFixedProperty' => 'skipped')) }
-    data = ['var rows: CollectionDataSource? = nil', 'var editing: Bool = false', 'var onStopMove: ((Int, Int, Int) -> Void)? = nil']
+            SJUI_REORDER_ROUTES.values.map { |extra, _| emit(extra.merge(SJUI_REORDER_DECL).merge('reorderFixedProperty' => 'skipped')) } +
+            SJUI_REORDER_ROUTES.values.map { |extra, _| emit(extra.merge(SJUI_REORDER_DECL).merge('onReorderStart' => '@{onStopBegan}', 'onReorderEnd' => '@{onStopEnded}')) }
+    data = ['var rows: CollectionDataSource? = nil', 'var editing: Bool = false', 'var onStopMove: ((Int, Int, Int) -> Void)? = nil',
+            'var onStopBegan: ((Int, Int) -> Void)? = nil', 'var onStopEnded: ((Int) -> Void)? = nil']
     expect(compilable_view("VStack {\n#{codes.join("\n")}\n}", data: data, stubs: stubs)).to compile_as_swift
   end
 end

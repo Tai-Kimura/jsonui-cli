@@ -33,7 +33,6 @@
       "component": "Collection",
       "attribute": "onReorderStart",
       "platforms": [
-        "ios",
         "android"
       ],
       "reason": "unimplemented",
@@ -43,7 +42,6 @@
       "component": "Collection",
       "attribute": "onReorderEnd",
       "platforms": [
-        "ios",
         "android"
       ],
       "reason": "unimplemented",
