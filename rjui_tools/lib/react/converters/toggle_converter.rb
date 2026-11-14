@@ -11,16 +11,27 @@ module RjuiTools
       class ToggleConverter < BaseConverter
         def convert(indent = 2)
           class_name = build_class_name
+          # 'label' is the CheckBox-specific spelling and wins over the
+          # generic text (kjui reads the same order — 33 cross-effect
+          # adjudication: label overrides text on every platform).
+          text = attributes['label'] || attributes['text'] || ''
+          # Without a label the <input> is the element: its accent joins the one
+          # style the element gets (build_style_attr), as the base's tintColor
+          # does. Written as a second ` style={{ accentColor }}` beside it, a
+          # labelless CheckBox with checkedColor / tintColor / onTintColor had two
+          # `style` attributes once every element's style carries the font
+          # (2.5.37, P1) — TS17001, and the later one dropped the accent (ticket
+          # rjui-checkbox-without-label-emits-two-style-attributes).
+          if text.empty? && (tint = checkbox_tint)
+            @dynamic_styles ||= {}
+            @dynamic_styles['accentColor'] = color_style_expr(tint)
+          end
           style_attr = build_style_attr
           id_attr = build_id_attr
           testid_attr = build_testid_attr
           tag_attr = build_tag_attr
           # On the <input>, which takes focus: the <label> around it is no stop.
           aria_label = build_aria_label_attr
-          # 'label' is the CheckBox-specific spelling and wins over the
-          # generic text (kjui reads the same order — 33 cross-effect
-          # adjudication: label overrides text on every platform).
-          text = attributes['label'] || attributes['text'] || ''
 
           # Get state binding
           checked_attr = build_checked_attr
@@ -32,7 +43,7 @@ module RjuiTools
           jsx = if text.empty?
             # Checkbox only (no label)
             <<~JSX.chomp
-              #{indent_str(indent)}<input#{id_attr} type="checkbox"#{aria_label}#{class_name_attr(class_name)}#{value_attr}#{checked_attr}#{on_change}#{disabled_attr}#{checkbox_style}#{style_attr}#{testid_attr}#{tag_attr} />
+              #{indent_str(indent)}<input#{id_attr} type="checkbox"#{aria_label}#{class_name_attr(class_name)}#{value_attr}#{checked_attr}#{on_change}#{disabled_attr}#{style_attr}#{testid_attr}#{tag_attr} />
             JSX
           else
             # Checkbox with label. The layout `id` lands on the <label>
@@ -166,9 +177,15 @@ module RjuiTools
           end
         end
 
+        # Same precedence as kjui's switch_component: onTintColor || tint || tintColor.
+        def checkbox_tint
+          attributes['onTintColor'] || attributes['tintColor']
+        end
+
+        # The accent of the <input> inside a label (its own element; the label
+        # takes build_style_attr).
         def build_checkbox_style
-          # Same precedence as kjui's switch_component: onTintColor || tint || tintColor.
-          tint_color = attributes['onTintColor'] || attributes['tintColor']
+          tint_color = checkbox_tint
           return '' unless tint_color
 
           # color_style_expr, not raw interpolation: a colors.json token
