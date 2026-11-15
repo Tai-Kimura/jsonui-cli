@@ -12,7 +12,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 interface NetworkImageProps {
   id?: string;
@@ -34,6 +34,15 @@ interface NetworkImageProps {
   loading?: 'lazy' | 'eager';
   onLoad?: () => void;
   onError?: () => void;
+  // The load listener (ticket jui-networkimage-load-listener). transitionDuration
+  // is T, the ms of the opacity fade into the loaded or the error image
+  // (ease-out); an image the browser already holds is shown at once, with no
+  // fade. onLoadStateChange is called on a change only: 'loading' when src is
+  // set, then 'loaded' / 'failed' from the load / error events; an image the
+  // browser already holds calls 'loaded' alone. loadingRenderer is not a web
+  // attribute: the web face draws placeholder.
+  transitionDuration?: number;
+  onLoadStateChange?: (state: string) => void;
   // Common attribute surface the converter can emit onto any component
   // (onClick binding, bound inline styles, testId/tag data attributes).
   // Every render branch forwards these on its root element so a declaration
@@ -66,6 +75,8 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
   loading: fetchHint,
   onLoad,
   onError,
+  transitionDuration = 0,
+  onLoadStateChange,
   onClick,
   role,
   tabIndex,
@@ -96,6 +107,20 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
   // shipped build, invisible to a settled screenshot (plan 51-A, #19).
   const [loading, setLoading] = useState(!!src);
   const [error, setError] = useState(false);
+  // The fade: 'start' draws the image at opacity 0, 'run' moves it to 1 over
+  // transitionDuration ms on the next frame.
+  const [fade, setFade] = useState<'none' | 'start' | 'run'>('none');
+  // The handler is read through a ref: a handler written inline is a new
+  // function every render, and in the effect's dependencies it would load
+  // the image again on every render.
+  const stateHandler = useRef(onLoadStateChange);
+  stateHandler.current = onLoadStateChange;
+  const lastState = useRef<string | null>(null);
+  const report = (state: string) => {
+    if (lastState.current === state) return;
+    lastState.current = state;
+    stateHandler.current?.(state);
+  };
 
   useEffect(() => {
     if (!src) {
@@ -110,11 +135,15 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
 
     setLoading(true);
     setError(false);
+    setFade('none');
 
     const img = new Image();
+    let cached = false;
     img.onload = () => {
       setImageUrl(src);
       setLoading(false);
+      if (!cached && transitionDuration > 0) setFade('start');
+      report('loaded');
       onLoad?.();
     };
     img.onerror = () => {
@@ -123,16 +152,35 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
       const errorDisplay = errorImage || defaultImage;
       if (errorDisplay) {
         setImageUrl(errorDisplay);
+        if (transitionDuration > 0) setFade('start');
       }
+      report('failed');
       onError?.();
     };
     img.src = src;
+    // An image the browser already holds is complete as soon as src is set:
+    // shown at once, 'loaded' alone.
+    cached = img.complete && img.naturalWidth > 0;
+    if (!cached) report('loading');
 
     return () => {
       img.onload = null;
       img.onerror = null;
     };
-  }, [src, placeholder, defaultImage, errorImage, onLoad, onError]);
+    // report reads refs only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src, placeholder, defaultImage, errorImage, onLoad, onError, transitionDuration]);
+
+  useEffect(() => {
+    if (fade !== 'start') return;
+    const frame = requestAnimationFrame(() => setFade('run'));
+    return () => cancelAnimationFrame(frame);
+  }, [fade]);
+
+  const fadeStyle: React.CSSProperties | undefined =
+    fade === 'start' ? { opacity: 0 }
+    : fade === 'run' ? { opacity: 1, transition: `opacity ${transitionDuration}ms ease-out` }
+    : undefined;
 
   const objectFitMap: Record<string, string> = {
     cover: 'object-cover',
@@ -184,6 +232,7 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
   return (
     <img
       {...rootProps}
+      style={fadeStyle ? { ...style, ...fadeStyle } : style}
       src={imageUrl}
       alt={alt}
       loading={fetchHint}

@@ -8,7 +8,7 @@
     "agentWarning": "LLM/Agent: you MUST NOT modify this file."
   },
   "schemaVersion": 2,
-  "generatedFrom": "4ff567bcf2bee36e9504e3be3194a246f027be5ef1b9418a3285beb5f800988e",
+  "generatedFrom": "0d6a3f9dfee8aa42843f001808bede3442e71cd10e9c3a0bfcfdb5dfa2095afa",
   "counts": {
     "fixtures": 1352,
     "assertable": 57,
@@ -16,7 +16,7 @@
     "interactive": 41,
     "control": 148,
     "declarationOnly": 77,
-    "skipped": 161,
+    "skipped": 165,
     "promoted": {
       "callback": 11
     }
@@ -33593,6 +33593,26 @@
       "component": "NetworkImage",
       "attribute": "headers",
       "reason": "network resource (v1 fixtures are offline)"
+    },
+    {
+      "component": "NetworkImage",
+      "attribute": "loadingRenderer",
+      "reason": "network resource (v1 fixtures are offline)"
+    },
+    {
+      "component": "NetworkImage",
+      "attribute": "loadingDelay",
+      "reason": "network resource (v1 fixtures are offline)"
+    },
+    {
+      "component": "NetworkImage",
+      "attribute": "transitionDuration",
+      "reason": "network resource (v1 fixtures are offline)"
+    },
+    {
+      "component": "NetworkImage",
+      "attribute": "onLoadStateChange",
+      "reason": "callback"
     },
     {
       "component": "SelectBox",

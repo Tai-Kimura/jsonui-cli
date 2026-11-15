@@ -45,20 +45,20 @@ RSpec.describe KjuiTools::Compose::Components::NetworkImageComponent do
 
     it 'gives the no-src slot defaultImage and nothing else' do
       result = generate('defaultImage' => 'fallback_asset')
-      expect(result).to include('fallback = painterResource(R.drawable.fallback_asset)')
+      expect(result).to include('fallback = R.drawable.fallback_asset')
     end
 
     it 'summons no image at all when only errorImage is declared' do
       result = generate('errorImage' => 'error_asset')
       expect(result).not_to include('fallback = ')
-      expect(result).to include('error = painterResource(R.drawable.error_asset)')
+      expect(result).to include('error = R.drawable.error_asset')
     end
 
     it 'summons no image at all when only loadingImage is declared' do
       result = generate('loadingImage' => 'loading_asset')
       expect(result).not_to include('fallback = ')
       expect(result).not_to include('error = ')
-      expect(result).to include('placeholder = painterResource(R.drawable.loading_asset)')
+      expect(result).to include('placeholder = R.drawable.loading_asset')
     end
 
     it 'summons no image at all when only placeholder is declared' do
@@ -69,14 +69,14 @@ RSpec.describe KjuiTools::Compose::Components::NetworkImageComponent do
 
     it 'falls the error slot back to defaultImage, never to the loading image' do
       result = generate('placeholder' => 'loading_asset', 'defaultImage' => 'fallback_asset')
-      expect(result).to include('error = painterResource(R.drawable.fallback_asset)')
-      expect(result).to include('fallback = painterResource(R.drawable.fallback_asset)')
+      expect(result).to include('error = R.drawable.fallback_asset')
+      expect(result).to include('fallback = R.drawable.fallback_asset')
     end
 
     it 'keeps errorImage ahead of defaultImage in the error slot' do
       result = generate('errorImage' => 'error_asset', 'defaultImage' => 'fallback_asset')
-      expect(result).to include('error = painterResource(R.drawable.error_asset)')
-      expect(result).to include('fallback = painterResource(R.drawable.fallback_asset)')
+      expect(result).to include('error = R.drawable.error_asset')
+      expect(result).to include('fallback = R.drawable.fallback_asset')
     end
 
     it 'emits no state slot, and no painter imports, when none is declared' do

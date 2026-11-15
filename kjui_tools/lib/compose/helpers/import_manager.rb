@@ -68,6 +68,7 @@ module KjuiTools
                             "import androidx.compose.foundation.layout.asPaddingValues"],
             # the safe-area overlap a scrollable adds (ContentInsetHelper).
             safe_area_overlap: "import com.kotlinjsonui.components.rememberSafeAreaOverlap",
+            kjui_network_image: "import com.kotlinjsonui.image.KjuiNetworkImage",
             window_insets_sides_enum: "import androidx.compose.foundation.layout.WindowInsetsSides",
             window_insets_sides: ["import androidx.compose.foundation.layout.WindowInsetsSides",
                                   "import androidx.compose.foundation.layout.only"],

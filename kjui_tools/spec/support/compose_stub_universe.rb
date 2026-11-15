@@ -274,6 +274,12 @@ module ComposeStubUniverse
       fun Image(painter: Painter, contentDescription: String?, modifier: Modifier = Modifier,
                 contentScale: ContentScale = ContentScale.Fit) {}
       fun AsyncImage(model: Any?, contentDescription: String?, modifier: Modifier = Modifier) {}
+      // KotlinJsonUI 2.60.0 com.kotlinjsonui.image.KjuiNetworkImage: every NetworkImage emits it.
+      fun KjuiNetworkImage(model: Any?, contentDescription: String?, modifier: Modifier = Modifier,
+                           contentScale: ContentScale = ContentScale.Fit, alignment: Alignment = Alignment.Center,
+                           placeholder: Int = 0, error: Int = 0, fallback: Int = 0,
+                           loadingRenderer: String? = null, loadingDelayMillis: Int = 200, transitionMillis: Int = -1,
+                           onLoadStateChange: ((String) -> Unit)? = null) {}
       class SwitchColors
       object SwitchDefaults {
           fun colors(checkedTrackColor: Color = Color(), uncheckedTrackColor: Color = Color(),

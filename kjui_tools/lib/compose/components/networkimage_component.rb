@@ -33,7 +33,11 @@ module KjuiTools
         end
 
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
-          required_imports&.add(:async_image)
+          # Every NetworkImage is drawn by KotlinJsonUI's KjuiNetworkImage
+          # (2.60.0): with none of the load listener's attributes it is coil's
+          # AsyncImage as before, the state images passed as resource ids
+          # (ticket jui-networkimage-load-listener, A-6).
+          required_imports&.add(:kjui_network_image)
 
           # NetworkImage uses 'source' or 'url' for image URL. An absent
           # source must be a NULL model, not "": Coil routes an empty string
@@ -50,7 +54,8 @@ module KjuiTools
           # and has no alt, which the build names.
           content_description = Helpers::ImageAccessibilityHelper.content_description(json_data, 'Image', required_imports)
 
-          code = indent("AsyncImage(", depth)
+          code = indent("// Requires KotlinJsonUI >= 2.60.0 (KjuiNetworkImage)", depth) + "\n"
+          code += indent("KjuiNetworkImage(", depth)
           code += "\n" + indent("model = #{image_model(json_data, url, required_imports)},", depth + 1)
           code += "\n" + indent("contentDescription = #{content_description},", depth + 1)
 
@@ -71,9 +76,7 @@ module KjuiTools
 
           # Placeholder
           if placeholder
-            required_imports&.add(:painter_resource)
-            required_imports&.add(:r_class)
-            code += "\n" + indent("placeholder = #{state_painter(placeholder, required_imports) || "painterResource(#{Helpers::ResourceResolver.drawable_id(placeholder)})"},", depth + 1)
+            code += "\n" + indent("placeholder = #{state_res_id(placeholder, required_imports)},", depth + 1)
           end
 
           # renderingMode — declared for swift and kotlin, and only Image read
@@ -160,12 +163,14 @@ module KjuiTools
           error_image = json_data['errorImage'] || default_image
           fallback_image = default_image
           state_args = []
-          state_args << "error = #{state_painter(error_image, required_imports) || "painterResource(#{Helpers::ResourceResolver.drawable_id(drawable_for(error_image))})"}" if error_image
-          state_args << "fallback = #{state_painter(fallback_image, required_imports) || "painterResource(#{Helpers::ResourceResolver.drawable_id(drawable_for(fallback_image))})"}" if fallback_image
+          state_args << "error = #{state_res_id(error_image, required_imports)}" if error_image
+          state_args << "fallback = #{state_res_id(fallback_image, required_imports)}" if fallback_image
+          state_args.concat(load_listener_arguments(json_data, required_imports))
           unless state_args.empty?
-            required_imports&.add(:painter_resource)
-            required_imports&.add(:r_class)
-            code += ",\n" + state_args.map { |arg| indent(arg, depth + 1) }.join(",\n")
+            # With no modifier the last argument line already ends in a
+            # comma (contentDescription, or a placeholder), and a second one
+            # was written after it: `null,,` does not compile.
+            code += (code.end_with?(',') ? "\n" : ",\n") + state_args.map { |arg| indent(arg, depth + 1) }.join(",\n")
           end
 
           code += "\n" + indent(")", depth)
@@ -174,14 +179,69 @@ module KjuiTools
 
         private
 
-        # Drawable identifier for a state image, with the file extension the
-        # layout may carry stripped first.
-        # A bound state image, looked up by name at run time; nil for a written
-        # one. The slot is Optional, so a name no drawable carries is null.
-        def self.state_painter(name, required_imports)
-          return nil unless Helpers::BindingExpression.whole_binding?(name)
+        # Delay and fade bounds (attribute_definitions.json NetworkImage).
+        LOAD_MILLIS_RANGE = {
+          'loadingDelay' => 0..2000,
+          'transitionDuration' => 0..1000
+        }.freeze
 
-          Helpers::ResourceResolver.drawable_painter(name, required_imports, empty: 'null')
+        # A state image as KjuiNetworkImage's resource id: a written name is
+        # its drawable (extension stripped), a bound one is looked up by name
+        # at run time, 0 when no drawable carries it.
+        def self.state_res_id(name, required_imports)
+          if Helpers::BindingExpression.whole_binding?(name)
+            Helpers::ResourceResolver.drawable_res_id(name, required_imports)
+          else
+            Helpers::ResourceResolver.drawable_res_id(drawable_for(name), required_imports)
+          end
+        end
+
+        # The load listener's arguments (ticket jui-networkimage-load-listener),
+        # after the state images, in KjuiNetworkImage's order; [] when the
+        # image writes none of the four.
+        def self.load_listener_arguments(json_data, required_imports)
+          args = []
+          renderer = json_data['loadingRenderer']
+          unless renderer.nil?
+            value = Helpers::BindingExpression.whole_binding?(renderer) ? Helpers::ResourceResolver.bound_string_value(renderer) : quote(renderer.to_s)
+            args << "loadingRenderer = #{value}"
+          end
+          delay = load_millis(json_data, 'loadingDelay', json_data['loadingDelay'])
+          args << "loadingDelayMillis = #{delay}" unless delay.nil?
+          fade = load_millis(json_data, 'transitionDuration', json_data['transitionDuration'])
+          args << "transitionMillis = #{fade}" unless fade.nil?
+          handler = json_data['onLoadStateChange']
+          if handler && Helpers::ModifierBuilder.is_binding?(handler)
+            view_id = Helpers::ModifierBuilder.view_id(json_data)
+            call = Helpers::ModifierBuilder.get_event_handler_invocation(handler, view_id, 'state')
+            # An unused lambda parameter is a warning, an error under
+            # allWarningsAsErrors: a handler that takes no state gets `_`.
+            param = call.match?(/\bstate\b/) ? 'state' : '_'
+            args << "onLoadStateChange = { #{param} -> #{call} }"
+          end
+          args
+        end
+
+        # A written number of milliseconds as an Int literal, held to its
+        # declared range: outside it, WARN and clamp; not a number, WARN and
+        # leave it out (not bindable).
+        def self.load_millis(json_data, key, value)
+          return nil if value.nil?
+
+          range = LOAD_MILLIS_RANGE.fetch(key)
+
+          number = value.is_a?(Numeric) ? value : (Float(value.to_s) rescue nil)
+          if number.nil?
+            KjuiTools::Core::Logger.warn "[kjui] NetworkImage #{json_data['id'].inspect}: '#{key}' is #{value.inspect}, not a number of milliseconds; left out"
+            return nil
+          end
+          millis = number.round
+          unless range.cover?(millis)
+            clamped = millis.clamp(range.min, range.max)
+            KjuiTools::Core::Logger.warn "[kjui] NetworkImage #{json_data['id'].inspect}: '#{key}' #{value} is outside #{range.min}-#{range.max} ms; #{clamped} is used"
+            millis = clamped
+          end
+          millis
         end
 
         def self.drawable_for(name)
