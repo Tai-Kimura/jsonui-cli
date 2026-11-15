@@ -1,12 +1,15 @@
 # frozen_string_literal: true
 
 require 'swiftui/views/network_image_converter'
+require_relative '../../support/emitted_swift'
 
 # Ticket jui-networkimage-load-listener: loadingRenderer, loadingDelay,
 # transitionDuration and onLoadStateChange are the last NetworkImage
 # initializer arguments, after headers, in that order (Swift matches labels
 # positionally). An image that writes none of them emits what it did before.
 RSpec.describe SjuiTools::SwiftUI::Views::NetworkImageConverter do
+  include EmittedSwift
+
   before(:all) do
     SjuiTools::SwiftUI::Views::BaseViewConverter.validation_enabled = false
   end
@@ -64,6 +67,40 @@ RSpec.describe SjuiTools::SwiftUI::Views::NetworkImageConverter do
     code = generated({ 'loadingDelay' => 'soon' })
     expect(code).not_to include('loadingDelay')
     expect(code).not_to include('Requires SwiftJsonUI')
+  end
+
+  # SwiftJsonUI 10.41.0's NetworkImage init, as far as these arguments go:
+  # the labels in order and their types (ticket jui-networkimage-load-listener).
+  NETWORK_IMAGE_STUB = <<~SWIFT
+    struct NetworkImage: View {
+        enum ContentMode { case fit, fill, center, stretch, top, bottom, left, right }
+        init(url: String? = nil, placeholder: String? = nil, defaultImage: String? = nil,
+             errorImage: String? = nil, loadingImage: String? = nil, contentMode: ContentMode = .fit,
+             renderingMode: Image.TemplateRenderingMode? = nil, headers: [String: String] = [:],
+             loadingRenderer: String? = nil, loadingDelay: Int? = nil, transitionDuration: Int? = nil,
+             onLoadStateChange: ((String) -> Void)? = nil) {}
+        var body: some View { EmptyView() }
+    }
+  SWIFT
+
+  it 'compiles with every argument and every handler shape' do
+    SjuiTools::SwiftUI::Views::ColorHelper.data_definitions = {
+      'onState1' => { 'class' => '((String) -> Void)?' },
+      'onState2' => { 'class' => '((String, String) -> Void)?' },
+      'onState0' => { 'class' => '(() -> Void)?' }
+    }
+    codes = [
+      generated({ 'placeholder' => 'dots' }),
+      generated({ 'headers' => { 'X-A' => '1' }, 'loadingRenderer' => 'fill_meter', 'loadingDelay' => 200, 'transitionDuration' => 240 }),
+      generated({ 'loadingRenderer' => '@{renderer}' }),
+      generated({ 'onLoadStateChange' => '@{onState1}' }),
+      generated({ 'onLoadStateChange' => '@{onState2}' }),
+      generated({ 'onLoadStateChange' => '@{onState0}' })
+    ]
+    data = ['var photoUrl: String = ""', 'var renderer: String? = nil',
+            'var onState1: ((String) -> Void)? = nil', 'var onState2: ((String, String) -> Void)? = nil',
+            'var onState0: (() -> Void)? = nil']
+    expect(compilable_view("VStack {\n#{codes.join("\n")}\n}", data: data, stubs: NETWORK_IMAGE_STUB)).to compile_as_swift
   end
 
   describe 'onLoadStateChange' do

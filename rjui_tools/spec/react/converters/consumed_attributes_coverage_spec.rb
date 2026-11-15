@@ -164,9 +164,11 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       loading
       loadingImage
       onClick
+      onLoadStateChange
       onclick
       placeholder
       src
+      transitionDuration
       url
     ],
     'progress_converter.rb' => %w[height maximumValue progress progressHeight progressTintColor tintColor trackTintColor width],
