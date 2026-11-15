@@ -142,13 +142,10 @@ module SjuiTools
             if measure_width || measure_height
               # its own size, before the frame stretches it to the viewport
               add_modifier_line ".fixedSize(horizontal: #{measure_width ? 'true' : 'false'}, vertical: #{measure_height ? 'true' : 'false'})"
-              if measure_width && fit_height
-                add_modifier_line ".onGeometryChange(for: CGSize.self) { $0.size } action: { size in #{fit_length} = size.width; #{fit_height} = size.height }"
-              elsif measure_width
-                add_modifier_line ".onGeometryChange(for: CGFloat.self) { $0.size.width } action: { #{fit_length} = $0 }"
-              else
-                add_modifier_line ".onGeometryChange(for: CGFloat.self) { $0.size.height } action: { #{fit_height || fit_length} = $0 }"
-              end
+              # one single-expression reading per axis, the shape older
+              # compilers type-check without a hint
+              add_modifier_line ".onGeometryChange(for: CGFloat.self) { $0.size.width } action: { #{fit_length} = $0 }" if measure_width
+              add_modifier_line ".onGeometryChange(for: CGFloat.self) { $0.size.height } action: { #{fit_height || fit_length} = $0 }" if measure_height
             end
             # Stretched to the ScrollView's size and placed where the stack is
             # aligned: without an alignment the frame centred the stack, so a

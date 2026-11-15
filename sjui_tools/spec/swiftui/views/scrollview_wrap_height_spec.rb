@@ -75,13 +75,14 @@ RSpec.describe SjuiTools::SwiftUI::Views::ScrollViewConverter do
                            '.frame(idealWidth: chipsContentLength, maxWidth: chipsContentLength)')
   end
 
-  it 'horizontal, width and height wrapContent: both measured in one reading' do
+  it 'horizontal, width and height wrapContent: both measured, one reading an axis' do
     conv = converter('width' => 'wrapContent', 'height' => 'wrapContent')
     got = lines(conv)
     expect(conv.state_variables).to contain_exactly('@State private var chipsContentHeight: CGFloat? = nil',
                                                     '@State private var chipsContentLength: CGFloat? = nil')
     expect(got).to include('.fixedSize(horizontal: true, vertical: true)',
-                           '.onGeometryChange(for: CGSize.self) { $0.size } action: { size in chipsContentLength = size.width; chipsContentHeight = size.height }',
+                           '.onGeometryChange(for: CGFloat.self) { $0.size.width } action: { chipsContentLength = $0 }',
+                           '.onGeometryChange(for: CGFloat.self) { $0.size.height } action: { chipsContentHeight = $0 }',
                            '.frame(height: chipsContentHeight)',
                            '.frame(idealWidth: chipsContentLength, maxWidth: chipsContentLength)')
   end
