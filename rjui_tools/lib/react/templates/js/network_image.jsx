@@ -48,7 +48,8 @@ export const NetworkImage = ({
     "data-tag": dataTag
   };
   const [imageUrl, setImageUrl] = useState(defaultImage || placeholder || null);
-  const [loading, setLoading] = useState(!!src);
+  const noSrc = !src || src.trim() === "";
+  const [loading, setLoading] = useState(!noSrc);
   const [error, setError] = useState(false);
   const [fade, setFade] = useState("none");
   const stateHandler = useRef(onLoadStateChange);
@@ -62,10 +63,12 @@ export const NetworkImage = ({
     stateHandler.current?.(state);
   };
   useEffect(() => {
-    if (!src) {
+    if (noSrc || !src) {
       setImageUrl(defaultImage || placeholder || null);
       setLoading(false);
       setError(false);
+      setFade("none");
+      lastState.current = null;
       return;
     }
     setLoading(true);
@@ -98,7 +101,7 @@ export const NetworkImage = ({
       img.onload = null;
       img.onerror = null;
     };
-  }, [src, placeholder, defaultImage, errorImage, onLoad, onError, transitionDuration]);
+  }, [src, noSrc, placeholder, defaultImage, errorImage, onLoad, onError, transitionDuration]);
   useEffect(() => {
     if (fade !== "start") return;
     const frame = requestAnimationFrame(() => setFade("run"));

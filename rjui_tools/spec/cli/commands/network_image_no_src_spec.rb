@@ -19,8 +19,17 @@ RSpec.describe 'NetworkImage template no-src state' do
   end
 
   it 'seeds the loading state from src rather than assuming a load is in flight' do
-    expect(template).to include('useState(!!src)')
+    expect(template).to include('useState(!noSrc)')
     expect(template).not_to include('useState(true)')
+  end
+
+  # networkImage.noSrc as SwiftJsonUI and KotlinJsonUI read it: a src that is
+  # only whitespace is no src (defaultImage, nothing reported, no request),
+  # not a load that fails into errorImage; a src that comes back after none
+  # is reported afresh.
+  it 'reads a src of only whitespace as no src, and forgets the last state reported when src goes away' do
+    expect(template).to include("const noSrc = !src || src.trim() === '';")
+    expect(template).to match(/if \(noSrc \|\| !src\) \{.*?lastState\.current = null;\s*return;/m)
   end
 
   it 'still seeds the displayed image with defaultImage ahead of placeholder' do
