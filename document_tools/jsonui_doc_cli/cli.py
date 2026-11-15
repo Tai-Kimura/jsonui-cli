@@ -497,8 +497,14 @@ def _cmd_generate_html(args):
     # Generation must succeed even when checks fail — the drift page is most
     # useful exactly when things drifted (plan 01 §4).
     if getattr(args, "with_checks", False):
+        # `check` with no arguments, read from the check command's own parser:
+        # through jsonui-cli 2.5.40 this was a hand-written Namespace, which
+        # missed `--json` once `check` grew it, and every --with-checks run
+        # stopped at once on "'Namespace' object has no attribute 'json'"
+        # (found 2026-11-15, ticket mcp-doc-generate-html-timeout-leaves-
+        # partial-output).
         import argparse as _argparse
-        check_args = _argparse.Namespace(filter=None, list=False, project=None)
+        check_args = _add_check_arguments(_argparse.ArgumentParser(add_help=False)).parse_args([])
         check_exit = cmd_check(check_args)
         if check_exit != 0:
             print(f"  Note: checks exited {check_exit} "
@@ -2536,6 +2542,36 @@ def _cost_migration(args):
     return code
 
 
+def _add_check_arguments(check_parser):
+    """The `check` command's arguments, on `check_parser` (returned). One
+    definition for the command line and for `generate html --with-checks`,
+    which runs `check` with these arguments' defaults."""
+    check_parser.add_argument(
+        "filter",
+        nargs="?",
+        help=(
+            "Restrict which checks run: 'db' / 'api' / 'db:<name>' / "
+            "a declared check name (default: all)"
+        ),
+    )
+    check_parser.add_argument(
+        "--list",
+        action="store_true",
+        help="Show what would run (name, type, exact command) without running",
+    )
+    check_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print one JSON object on stdout (each check's status, counts, the results that are not ok, its "
+             "report's path); the lines the terminal shows go to stderr",
+    )
+    check_parser.add_argument(
+        "-p", "--project",
+        help="Project directory (default: walk up from cwd to jui.config.json)",
+    )
+    return check_parser
+
+
 def cmd_check(args):
     """Run declared contract checks (docs ⇔ implementation).
 
@@ -3094,29 +3130,7 @@ def main():
             "vs docs). Executes only commands declared in jui.config.json."
         ),
     )
-    check_parser.add_argument(
-        "filter",
-        nargs="?",
-        help=(
-            "Restrict which checks run: 'db' / 'api' / 'db:<name>' / "
-            "a declared check name (default: all)"
-        ),
-    )
-    check_parser.add_argument(
-        "--list",
-        action="store_true",
-        help="Show what would run (name, type, exact command) without running",
-    )
-    check_parser.add_argument(
-        "--json",
-        action="store_true",
-        help="Print one JSON object on stdout (each check's status, counts, the results that are not ok, its "
-             "report's path); the lines the terminal shows go to stderr",
-    )
-    check_parser.add_argument(
-        "-p", "--project",
-        help="Project directory (default: walk up from cwd to jui.config.json)",
-    )
+    _add_check_arguments(check_parser)
 
     args = parser.parse_args()
 
