@@ -28,16 +28,17 @@ module RjuiTools
 
         protected
 
+        # rjui.config's defaults.textField: fontColor, padding and background, for a TextField that
+        # does not write them (the layout's own keys win). They were written into the typed
+        # attributes before those were built, and any of them failed the build (NoMethodError on
+        # nil). No cornerRadius: a TextField with none is square on every platform (the requester's
+        # ruling 2026-11-15, ticket jui-button-default-corner-radius-differs).
         def apply_defaults
-          # Apply textField defaults if not explicitly set
-          text_field_defaults = defaults('textField')
-          return if text_field_defaults.empty?
+          given = defaults('textField').slice('fontColor', 'padding', 'background').compact
+          return if given.empty?
 
-          @json = json.dup
-          @attributes['fontColor'] ||= text_field_defaults['fontColor']
-          @attributes['padding'] ||= text_field_defaults['padding']
-          @attributes['background'] ||= text_field_defaults['background']
-          @attributes['cornerRadius'] ||= text_field_defaults['cornerRadius']
+          @json = given.merge(json)
+          @attributes = nil
         end
 
         # A text input keeps a CSS border: its text stays clear of its own

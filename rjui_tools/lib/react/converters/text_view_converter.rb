@@ -27,16 +27,17 @@ module RjuiTools
 
         protected
 
+        # rjui.config's defaults.textView: fontColor, padding and background, for a TextView that
+        # does not write them (the layout's own keys win). They were written into the typed
+        # attributes before those were built, and any of them failed the build (NoMethodError on
+        # nil). No cornerRadius: a TextView with none is square on every platform (the requester's
+        # ruling 2026-11-15, ticket jui-button-default-corner-radius-differs).
         def apply_defaults
-          # Apply textView defaults if not explicitly set
-          text_view_defaults = defaults('textView')
-          return if text_view_defaults.empty?
+          given = defaults('textView').slice('fontColor', 'padding', 'background').compact
+          return if given.empty?
 
-          @json = json.dup
-          @attributes['fontColor'] ||= text_view_defaults['fontColor']
-          @attributes['padding'] ||= text_view_defaults['padding']
-          @attributes['background'] ||= text_view_defaults['background']
-          @attributes['cornerRadius'] ||= text_view_defaults['cornerRadius']
+          @json = given.merge(json)
+          @attributes = nil
         end
 
         # The declared `resize` enum is the CSS `resize` vocabulary, one

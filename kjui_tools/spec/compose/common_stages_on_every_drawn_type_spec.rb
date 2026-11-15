@@ -299,22 +299,22 @@ RSpec.describe 'kjui codegen: the common stages reach every type it draws' do
 
   # The outline of a shadow is the shape the component draws, where that is
   # not the node's own box: CircleImage is clipped to a circle; Button,
-  # TextField / TextView (CustomTextField) and SelectBox draw rounded corners
-  # of their own when no cornerRadius is declared — Button its `shape =`
-  # argument, CustomTextField `shape ?: RoundedCornerShape(Configuration
-  # .TextField.defaultCornerRadius.dp)`, SelectBox `cornerRadius: Int = 8`
-  # (KotlinJsonUI library). A RectangleShape shadow would sit square behind
-  # them. With cornerRadius declared, the drawn shape is the declared one.
+  # TextField / TextView (CustomTextField) and SelectBox draw a shape of their
+  # own when no cornerRadius is declared — Button its `shape =` argument and
+  # CustomTextField `shape ?: RoundedCornerShape(0.dp)`, both square (the
+  # requester's ruling 2026-11-15, ticket jui-button-default-corner-radius-
+  # differs); SelectBox `cornerRadius: Int = 8` (KotlinJsonUI library). With
+  # cornerRadius declared, the drawn shape is the declared one.
   outlines = {
     'CircleImage' => %w[CircleShape CircleShape],
-    'Button' => ['RoundedCornerShape(Configuration.Button.defaultCornerRadius.dp)', 'RoundedCornerShape(6.dp)'],
-    'TextField' => ['RoundedCornerShape(Configuration.TextField.defaultCornerRadius.dp)', 'RoundedCornerShape(6.dp)'],
-    'TextView' => ['RoundedCornerShape(Configuration.TextField.defaultCornerRadius.dp)', 'RoundedCornerShape(6.dp)'],
+    'Button' => ['RoundedCornerShape(0.dp)', 'RoundedCornerShape(6.dp)'],
+    'TextField' => ['RoundedCornerShape(0.dp)', 'RoundedCornerShape(6.dp)'],
+    'TextView' => ['RoundedCornerShape(0.dp)', 'RoundedCornerShape(6.dp)'],
     'SelectBox' => ['RoundedCornerShape(8.dp)', 'RoundedCornerShape(6.dp)']
   }
   # Where the emit names the drawn shape itself, it is the same one.
   drawn = {
-    'Button' => ['shape = RoundedCornerShape(Configuration.Button.defaultCornerRadius.dp)', 'shape = RoundedCornerShape(6.dp)'],
+    'Button' => ['shape = RoundedCornerShape(0.dp)', 'shape = RoundedCornerShape(6.dp)'],
     'TextField' => [nil, 'shape = RoundedCornerShape(6.dp)'], 'TextView' => [nil, 'shape = RoundedCornerShape(6.dp)'],
     'SelectBox' => [nil, 'cornerRadius = 6,'], 'CircleImage' => ['.clip(CircleShape)', '.clip(CircleShape)']
   }

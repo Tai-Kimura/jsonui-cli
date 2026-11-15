@@ -12,6 +12,9 @@ module KjuiTools
       class SegmentComponent
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)
           required_imports&.add(:segment)
+          # Each label on one line, as iOS draws a segment's (the requester's ruling 2026-11-15,
+          # ticket jui-segment-android-draws-no-track, option (a)).
+          required_imports&.add(:text_overflow)
 
           # `selectedTabIndex` is the declared alias of selectedIndex (the
           # dynamic table folds it; TabView declares the same alias). Folding
@@ -95,13 +98,13 @@ module KjuiTools
           # Tab colors - only add if specified, otherwise use defaults from Configuration
           colors_params = []
 
-          # Background color (containerColor) - default to transparent
+          # The track (containerColor): the declared background; none written, the library's
+          # Segment draws iOS's track (the ruling 2026-11-15, option (a)). It was
+          # Color.Transparent, under Material's TabRow.
           bg_value = json_data['background']
           if bg_value
             bg_color = Helpers::ResourceResolver.process_color(bg_value, required_imports)
             colors_params << "containerColor = #{bg_color}"
-          else
-            colors_params << "containerColor = Color.Transparent"
           end
           
           # Label colours: fontColor is the unselected label and
@@ -138,6 +141,12 @@ module KjuiTools
             colors_params << "indicatorColor = #{indicator_color}"
           end
           
+          # The declared cornerRadius is the track's corner (the library's Segment rounds the fill
+          # 2dp less); none written, a capsule, as iOS draws it (the ruling 2026-11-15, option (a)).
+          if json_data['cornerRadius']
+            colors_params << "cornerRadius = #{Helpers::BoundValue.dp(json_data['cornerRadius'])}"
+          end
+
           if colors_params.any?
             code += "\n" + indent(colors_params.join(",\n"), depth + 1) + ","
           end
@@ -198,7 +207,7 @@ module KjuiTools
           # Generate tabs
           if segments.is_a?(Array)
             segments.each_with_index do |segment, index|
-              code += "\n" + indent("Tab(", depth + 1)
+              code += "\n" + indent("SegmentTab(", depth + 1)
               code += "\n" + indent("modifier = Modifier.testTag(#{JsonUIShared::StringLiterals.kotlin("#{json_data['id']}_tab_#{index}")}),", depth + 2) if tab_tags
               # For selected comparison, handle both dynamic and static cases
               selected_comparison = is_dynamic_index ? "(#{selected_index} == #{index})" : (selected_index == index).to_s
@@ -275,6 +284,7 @@ module KjuiTools
                 code += "\n" + indent("Text(", depth + 3)
                 code += "\n" + indent("#{resolved_text},", depth + 4)
                 code += "\n" + Helpers::FontSpecHelper.text_arg_lines(font_var, depth + 3, required_imports, json_data)
+                code += "\n" + indent("maxLines = 1, overflow = TextOverflow.Ellipsis,", depth + 4)
                 
                 # Use conditional color based on selection
                 if is_dynamic_index
@@ -307,7 +317,7 @@ module KjuiTools
                 resolved_text = Helpers::ResourceResolver.process_text(segment, required_imports)
                 code += "\n" + indent("text = {", depth + 2)
                 code += "\n" + Helpers::FontSpecHelper.emit_resolve_block(font_var, font_spec, depth + 3, required_imports)
-                code += "\n" + indent("Text(#{resolved_text}, #{segment_font_args(json_data, required_imports, font_var)})", depth + 3)
+                code += "\n" + indent("Text(#{resolved_text}, #{segment_font_args(json_data, required_imports, font_var)}, maxLines = 1, overflow = TextOverflow.Ellipsis)", depth + 3)
                 code += "\n" + indent("}", depth + 2)
               end
               
@@ -317,7 +327,7 @@ module KjuiTools
             # Dynamic segments from data binding
             segments_var = $1
             code += "\n" + indent("data.#{segments_var}.forEachIndexed { index, segment ->", depth + 1)
-            code += "\n" + indent("Tab(", depth + 2)
+            code += "\n" + indent("SegmentTab(", depth + 2)
             # For dynamic segments, selected_index comparison depends on whether the index itself is dynamic
             selected_comparison = is_dynamic_index ? "(#{selected_index} == index)" : "(#{selected_index} == index)"
             code += "\n" + indent("selected = #{selected_comparison},", depth + 3)
@@ -385,6 +395,7 @@ module KjuiTools
               code += "\n" + indent("Text(", depth + 4)
               code += "\n" + indent("segment,", depth + 5)
               code += "\n" + Helpers::FontSpecHelper.text_arg_lines(font_var, depth + 4, required_imports, json_data)
+              code += "\n" + indent("maxLines = 1, overflow = TextOverflow.Ellipsis,", depth + 5)
               
               # Use conditional color based on selection
               if selected_color && normal_color
@@ -404,7 +415,7 @@ module KjuiTools
             else
               code += "\n" + indent("text = {", depth + 3)
               code += "\n" + Helpers::FontSpecHelper.emit_resolve_block(font_var, font_spec, depth + 4, required_imports)
-              code += "\n" + indent("Text(segment, #{segment_font_args(json_data, required_imports, font_var)})", depth + 4)
+              code += "\n" + indent("Text(segment, #{segment_font_args(json_data, required_imports, font_var)}, maxLines = 1, overflow = TextOverflow.Ellipsis)", depth + 4)
               code += "\n" + indent("}", depth + 3)
             end
             

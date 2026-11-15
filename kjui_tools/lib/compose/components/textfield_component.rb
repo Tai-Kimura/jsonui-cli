@@ -188,14 +188,13 @@ module KjuiTools
 
         # The outline CustomTextField draws: the declared cornerRadius (the
         # builder's own reading), else the library's default —
-        # `shape ?: RoundedCornerShape(Configuration.TextField.defaultCornerRadius.dp)`
-        # (KotlinJsonUI CustomTextField.kt). A RectangleShape shadow sat
-        # square behind the rounded field.
+        # `shape ?: RoundedCornerShape(0.dp)` (KotlinJsonUI CustomTextField.kt;
+        # square since the requester's ruling 2026-11-15, ticket
+        # jui-button-default-corner-radius-differs — it was 8).
         def self.shadow_outline(json_data, required_imports)
           return nil if json_data['cornerRadius']
 
-          required_imports&.add(:configuration)
-          'RoundedCornerShape(Configuration.TextField.defaultCornerRadius.dp)'
+          'RoundedCornerShape(0.dp)'
         end
 
         def self.generate(json_data, depth, required_imports = nil, parent_type = nil)

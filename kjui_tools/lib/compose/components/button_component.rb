@@ -134,8 +134,8 @@ module KjuiTools
           modifiers.concat(Helpers::ModifierBuilder.build_alpha(json_data, required_imports))
           # Shadow: alpha → shadow, the slot every other component uses. The
           # outline is the button's own — the declared cornerRadius, or the
-          # default radius the `shape =` argument below draws.
-          shadow_shape = json_data['cornerRadius'] ? nil : 'RoundedCornerShape(Configuration.Button.defaultCornerRadius.dp)'
+          # square corner the `shape =` argument below draws without one.
+          shadow_shape = json_data['cornerRadius'] ? nil : 'RoundedCornerShape(0.dp)'
           modifiers.concat(Helpers::ModifierBuilder.build_shadow(json_data, required_imports, shape: shadow_shape))
           # onLongPress: Button's own inner .clickable consumes the down event
           # in the Main pass, so the detector must watch the Initial pass
@@ -151,12 +151,15 @@ module KjuiTools
             code += Helpers::ModifierBuilder.format(modifiers, depth)
           end
           
-          # Add shape with cornerRadius (always set to match dynamic defaults)
+          # Add shape with cornerRadius (always set: Material's own Button shape is a pill).
+          # No cornerRadius is square, as on iOS and the web (the requester's ruling
+          # 2026-11-15, ticket jui-button-default-corner-radius-differs; it was
+          # Configuration.Button.defaultCornerRadius, 8).
           required_imports&.add(:shape)
           required_imports&.add(:configuration)
           # A bound cornerRadius is an expression (BoundValue.dp); `@{r}` was
           # written into the Kotlin as `RoundedCornerShape(@{r}.dp)` (B8).
-          corner_radius = Helpers::BoundValue.dp(json_data['cornerRadius']) || 'Configuration.Button.defaultCornerRadius.dp'
+          corner_radius = Helpers::BoundValue.dp(json_data['cornerRadius']) || '0.dp'
           code += ",\n" + indent("shape = RoundedCornerShape(#{corner_radius})", depth + 1)
           
           # Add contentPadding for internal padding

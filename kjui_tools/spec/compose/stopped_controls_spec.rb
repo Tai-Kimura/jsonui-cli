@@ -61,7 +61,7 @@ RSpec.describe 'kjui a control a stop holds' do
     # `modifier` argument, or — when the call has a `modifier = Modifier…`
     # of its own (a Segment Tab's `<id>_tab_<n>` testTag) — in front of
     # that chain.
-    calls = code.scan(/\b(RadioButton|Checkbox|Tab)\((.*?)\n\s*\)/m).reject { |_, args| args.include?('testTagsAsResourceId') }.map do |what, args|
+    calls = code.scan(/\b(RadioButton|Checkbox|SegmentTab|Tab)\((.*?)\n\s*\)/m).reject { |_, args| args.include?('testTagsAsResourceId') }.map do |what, args|
       [what, args.include?("modifier = #{element.delete_prefix('.then(').delete_suffix(')').sub(/\A\.semantics/, 'Modifier.semantics')}") ||
              args.include?("modifier = Modifier#{element}")]
     end

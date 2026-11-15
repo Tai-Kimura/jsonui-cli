@@ -55,7 +55,7 @@ module ComposeStubUniverse
       fun Icon(painter: Painter, contentDescription: String?) {}
       fun BadgedBox(badge: () -> Unit, content: () -> Unit) {}
       fun Badge(content: () -> Unit) {}
-      fun Text(text: String, fontFamily: Any? = null, fontWeight: Any? = null, fontStyle: Any? = null, fontSize: Any? = null, letterSpacing: Any? = null, lineHeight: Any? = null) {}
+      fun Text(text: String, fontFamily: Any? = null, fontWeight: Any? = null, fontStyle: Any? = null, fontSize: Any? = null, letterSpacing: Any? = null, lineHeight: Any? = null, maxLines: Int = Int.MAX_VALUE, overflow: Any? = null) {}
       fun Box(modifier: Modifier = Modifier, content: () -> Unit) {}
       class ProvidedValue
       class SafeAreaConfig(val ignoreBottom: Boolean = false)
@@ -125,6 +125,7 @@ module ComposeStubUniverse
           val Black = FontWeight()
       } }
       class FontStyle { companion object { val Normal = FontStyle(); val Italic = FontStyle() } }
+      class TextOverflow { companion object { val Ellipsis = TextOverflow(); val Clip = TextOverflow() } }
       // KotlinJsonUI's FontSpec: what a component declares, handed to Configuration.Font.resolve (the app's fontProvider).
       class FontSpec(val family: String? = null, val weight: FontWeight? = null, val size: TextUnit? = null, val italic: Boolean = false)
       class ResolvedFont(val family: FontFamily?, val weight: FontWeight?, val size: TextUnit?, val style: FontStyle?)
@@ -226,9 +227,9 @@ module ComposeStubUniverse
       }
       object Configuration {
           object Button {
-              val defaultTextColor = Color(); val defaultBackgroundColor = Color(); val defaultCornerRadius: Int = 8
+              val defaultTextColor = Color(); val defaultBackgroundColor = Color(); val defaultCornerRadius: Int = 0
           }
-          object TextField { val defaultTextColor = Color(); val defaultFontSize: Int = 16; val defaultCornerRadius: Int = 8; val defaultPlaceholderColor = Color() }
+          object TextField { val defaultTextColor = Color(); val defaultFontSize: Int = 16; val defaultPlaceholderColor = Color() }
           object Font { fun resolve(spec: FontSpec) = ResolvedFont(null, null, null, null) }
       }
       fun Button(onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true,
@@ -236,7 +237,8 @@ module ComposeStubUniverse
                  contentPadding: PaddingValues = PaddingValues(0.dp), content: RowScope.() -> Unit) {}
       fun Text(text: String, color: Color = Color(), fontFamily: FontFamily? = null, fontWeight: FontWeight? = null,
                fontSize: TextUnit = TextUnit(), fontStyle: FontStyle? = null, modifier: Modifier = Modifier,
-               style: TextStyle? = null, letterSpacing: Any? = null, lineHeight: Any? = null) {}
+               style: TextStyle? = null, letterSpacing: Any? = null, lineHeight: Any? = null,
+               maxLines: Int = Int.MAX_VALUE, overflow: Any? = null) {}
       fun Spacer(modifier: Modifier = Modifier) {}
       class RadioButtonColors
       object RadioButtonDefaults { fun colors(selectedColor: Color = Color(), unselectedColor: Color = Color()) = RadioButtonColors() }
@@ -312,8 +314,10 @@ module ComposeStubUniverse
                         datePickerMode: String = "date", minuteInterval: Int = 1, enabled: Boolean = true,
                         cornerRadius: Int? = null, fontSize: Int = 16) {}
       fun Segment(selectedTabIndex: Int, modifier: Modifier = Modifier, enabled: Boolean = true,
-                  containerColor: Color = Color(), content: () -> Unit) {}
+                  containerColor: Color? = null, contentColor: Color? = null, selectedContentColor: Color? = null,
+                  indicatorColor: Color? = null, cornerRadius: Dp? = null, content: () -> Unit) {}
       fun Tab(selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, text: (() -> Unit)? = null) {}
+      fun SegmentTab(selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, text: () -> Unit) {}
       class GridCells { companion object { fun Fixed(count: Int) = GridCells() } }
       fun LazyVerticalGrid(columns: GridCells, modifier: Modifier = Modifier, contentPadding: PaddingValues? = null,
                            verticalArrangement: Arrangement = Arrangement(), horizontalArrangement: Arrangement = Arrangement(),

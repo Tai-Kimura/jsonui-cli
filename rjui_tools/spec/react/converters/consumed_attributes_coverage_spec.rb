@@ -229,7 +229,6 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       autoFocus
       autocapitalizationType
       autocorrectionType
-      background
       borderStyle
       borderWidth
       caretAttributes
@@ -238,7 +237,6 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       disabledBackground
       editable
       enabled
-      fontColor
       hint
       hintColor
       hintFont
@@ -254,7 +252,6 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       onFocus
       onSubmit
       onTextChange
-      padding
       pattern
       placeholder
       placeholderColor
@@ -268,7 +265,6 @@ RSpec.describe 'Converter consumed-attribute coverage' do
     ],
     'text_view_converter.rb' => %w[
       autoFocus
-      background
       borderColor
       borderWidth
       cols
@@ -279,7 +275,6 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       editable
       enabled
       flexible
-      fontColor
       hideOnFocused
       hint
       hintAttributes
@@ -295,7 +290,6 @@ RSpec.describe 'Converter consumed-attribute coverage' do
       minHeight
       name
       onTextChange
-      padding
       pattern
       placeholder
       required

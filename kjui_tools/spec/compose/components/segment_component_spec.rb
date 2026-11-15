@@ -32,7 +32,7 @@ RSpec.describe KjuiTools::Compose::Components::SegmentComponent do
         'items' => ['First', 'Second', 'Third']
       }
       result = described_class.generate(json_data, 0, required_imports)
-      expect(result).to include('Tab(')
+      expect(result).to include('SegmentTab(')
       expect(result).to include('First')
       expect(result).to include('Second')
       expect(result).to include('Third')
@@ -134,14 +134,30 @@ RSpec.describe KjuiTools::Compose::Components::SegmentComponent do
       expect(result).to include('enabled = (data.isEnabled ?: false)')
     end
 
-    it 'generates Segment with backgroundColor' do
+    it 'draws a declared background as the track (containerColor)' do
       json_data = {
         'type' => 'Segment',
-        'backgroundColor' => '#EEEEEE',
+        'background' => '#EEEEEE',
         'items' => ['A', 'B']
       }
       result = described_class.generate(json_data, 0, required_imports)
       expect(result).to include('containerColor')
+    end
+
+    # The ruling 2026-11-15 (ticket jui-segment-android-draws-no-track, option (a)): with no
+    # background the library's Segment draws iOS's track; each segment is a SegmentTab whose
+    # label is on one line. It was containerColor = Color.Transparent and Material's Tab.
+    it "hands a declared cornerRadius to the Segment as its track's corner" do
+      result = described_class.generate({ 'type' => 'Segment', 'items' => %w[A B], 'cornerRadius' => 8 }, 0, required_imports)
+      expect(result).to include('cornerRadius = 8.dp')
+    end
+
+    it "leaves the track to the library when no background is written, and writes one-line SegmentTabs" do
+      result = described_class.generate({ 'type' => 'Segment', 'items' => %w[A B] }, 0, required_imports)
+      expect(result).not_to include('containerColor')
+      expect(result.scan('SegmentTab(').size).to eq(2)
+      expect(result).not_to match(/(?<!Segment)Tab\(/)
+      expect(result.scan('maxLines = 1, overflow = TextOverflow.Ellipsis').size).to eq(2)
     end
 
     it 'generates Segment with fontColor' do

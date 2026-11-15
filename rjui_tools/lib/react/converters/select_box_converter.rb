@@ -56,7 +56,9 @@ module RjuiTools
 
           # Default select styling
           classes << 'border'
-          classes << 'rounded-md'
+          # 8px when no cornerRadius is declared, as on iOS and Android (the requester's ruling
+          # 2026-11-15, ticket jui-button-default-corner-radius-differs; it was rounded-md, 6px).
+          classes << 'rounded-lg'
           # The left side's default; the right side is the caret's (apply_caret_attributes).
           classes << default_paddings(left: 'pl-3', all: 'pl-3')
           classes << 'bg-white' unless attributes['background']

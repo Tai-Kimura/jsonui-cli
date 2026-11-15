@@ -635,8 +635,8 @@ module KjuiTools
 
       # The composables inside a control that are nodes of their own with a
       # click action: a Radio's RadioButton, a CheckBox's Checkbox, a
-      # Segment's Tab. Each takes a `modifier`.
-      INNER_CONTROL_CALLS = %w[RadioButton Checkbox Tab].freeze
+      # Segment's SegmentTab (Material's Tab until the ruling 2026-11-15). Each takes a `modifier`.
+      INNER_CONTROL_CALLS = %w[RadioButton Checkbox SegmentTab Tab].freeze
 
       # The nodes inside a stopped control a user operates on their own — a
       # Radio's rows (`.clickable`) and RadioButtons, a Segment's Tabs, a
