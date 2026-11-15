@@ -105,7 +105,11 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
   // inversion of the canonical noSrc chain), and without one it flashed the
   // pulsing grey box. Both were recorded by a MutationObserver probe on the
   // shipped build, invisible to a settled screenshot (plan 51-A, #19).
-  const [loading, setLoading] = useState(!!src);
+  // No src is undefined, "" or only whitespace (networkImage.noSrc, the
+  // same rule SwiftJsonUI and KotlinJsonUI apply): a blank URL is data that is
+  // missing, not an image that failed, so it draws defaultImage, not errorImage.
+  const noSrc = !src || src.trim() === '';
+  const [loading, setLoading] = useState(!noSrc);
   const [error, setError] = useState(false);
   // The fade: 'start' draws the image at opacity 0, 'run' moves it to 1 over
   // transitionDuration ms on the next frame.
@@ -127,13 +131,16 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
   };
 
   useEffect(() => {
-    if (!src) {
+    if (noSrc || !src) {
       // No source: the canonical no-src display is defaultImage (then
       // placeholder as grace) so a row whose URL becomes empty doesn't
-      // keep showing the previous image.
+      // keep showing the previous image. Nothing is reported (there is no
+      // state name for it), and a src that comes back is reported afresh.
       setImageUrl(defaultImage || placeholder || null);
       setLoading(false);
       setError(false);
+      setFade('none');
+      lastState.current = null;
       return;
     }
 
@@ -171,7 +178,7 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
       img.onload = null;
       img.onerror = null;
     };
-  }, [src, placeholder, defaultImage, errorImage, onLoad, onError, transitionDuration]);
+  }, [src, noSrc, placeholder, defaultImage, errorImage, onLoad, onError, transitionDuration]);
 
   useEffect(() => {
     if (fade !== 'start') return;
