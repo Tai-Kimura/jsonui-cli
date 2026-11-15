@@ -112,9 +112,13 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
   const [fade, setFade] = useState<'none' | 'start' | 'run'>('none');
   // The handler is read through a ref: a handler written inline is a new
   // function every render, and in the effect's dependencies it would load
-  // the image again on every render.
+  // the image again on every render. The ref is written after each render
+  // (React reads no ref a render writes), by an effect declared before the
+  // load's own, so the load reports to this render's handler.
   const stateHandler = useRef(onLoadStateChange);
-  stateHandler.current = onLoadStateChange;
+  useEffect(() => {
+    stateHandler.current = onLoadStateChange;
+  });
   const lastState = useRef<string | null>(null);
   const report = (state: string) => {
     if (lastState.current === state) return;
@@ -167,8 +171,6 @@ export const NetworkImage: React.FC<NetworkImageProps> = ({
       img.onload = null;
       img.onerror = null;
     };
-    // report reads refs only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src, placeholder, defaultImage, errorImage, onLoad, onError, transitionDuration]);
 
   useEffect(() => {
