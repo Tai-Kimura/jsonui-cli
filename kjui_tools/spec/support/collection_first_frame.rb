@@ -40,7 +40,7 @@ module CollectionFirstFrame
     interface Alignment {
         interface Vertical; interface Horizontal
         companion object {
-            val TopStart = object : Alignment {}; val Top = object : Vertical {}
+            val TopStart = object : Alignment {}; val Center = object : Alignment {}; val Top = object : Vertical {}
             val CenterHorizontally = object : Horizontal {}; val End = object : Horizontal {}
         }
     }
