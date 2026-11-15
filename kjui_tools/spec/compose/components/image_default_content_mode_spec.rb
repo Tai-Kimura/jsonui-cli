@@ -130,6 +130,13 @@ RSpec.describe 'kjui Compose codegen: an image with no contentMode' do
                      placeholder: Painter? = null, error: Painter? = null, fallback: Painter? = error,
                      alignment: Alignment = Alignment.Center, contentScale: ContentScale = ContentScale.Fit,
                      alpha: Float = 1f, colorFilter: ColorFilter? = null) {}
+      // KotlinJsonUI 2.60.0 com.kotlinjsonui.image.KjuiNetworkImage: what a NetworkImage
+      // emits (ticket jui-networkimage-load-listener); the state images are resource ids.
+      fun KjuiNetworkImage(model: Any?, contentDescription: String?, modifier: Modifier = Modifier,
+                           contentScale: ContentScale = ContentScale.Fit, alignment: Alignment = Alignment.Center,
+                           colorFilter: ColorFilter? = null, placeholder: Int = 0, error: Int = 0, fallback: Int = 0,
+                           loadingRenderer: String? = null, loadingDelayMillis: Int = 200, transitionMillis: Int = -1,
+                           onLoadStateChange: ((String) -> Unit)? = null) {}
       #{emits.each_with_index.map { |e, i| "fun emitted#{i}() {\n#{e}\n}" }.join("\n")}
     KOTLIN
     expect(source).to compile_as_kotlin

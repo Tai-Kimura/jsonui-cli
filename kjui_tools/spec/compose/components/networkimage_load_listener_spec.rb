@@ -3,6 +3,7 @@
 require 'set'
 require_relative '../../../lib/compose/components/networkimage_component'
 require_relative '../../../lib/compose/helpers/resource_resolver'
+require_relative '../../support/compose_stub_universe'
 
 # Ticket jui-networkimage-load-listener. Every NetworkImage is KotlinJsonUI's
 # KjuiNetworkImage (2.60.0) with its state images as resource ids; the load
@@ -67,6 +68,37 @@ RSpec.describe KjuiTools::Compose::Components::NetworkImageComponent do
     expect(generated({ 'transitionDuration' => 4000 }).first).to include('transitionMillis = 1000')
     expect(KjuiTools::Core::Logger).to receive(:warn).with(/'loadingDelay' is "soon", not a number/)
     expect(generated({ 'loadingDelay' => 'soon' }).first).not_to include('loadingDelayMillis')
+  end
+
+  # The shapes above, handed to a compiler against KjuiNetworkImage's
+  # declaration (spec/support/compose_stub_universe.rb), each handler shape
+  # with the class the data declares it with.
+  it 'compiles with every argument and every handler shape' do
+    cases = {
+      'none' => [{ 'errorImage' => 'broken' }, nil],
+      'written' => [{ 'loadingRenderer' => 'fill_meter', 'loadingDelay' => 200, 'transitionDuration' => 240 }, nil],
+      'bound renderer' => [{ 'loadingRenderer' => '@{renderer}' }, nil],
+      'state' => [{ 'onLoadStateChange' => '@{onState1}' }, '((String) -> Unit)?'],
+      'id and state' => [{ 'onLoadStateChange' => '@{onState2}' }, '((String, String) -> Unit)?'],
+      'nothing' => [{ 'onLoadStateChange' => '@{onState0}' }, '(() -> Unit)?']
+    }
+    KjuiTools::Compose::Helpers::ResourceResolver.data_definitions = {
+      'onState1' => { 'class' => '((String) -> Unit)?' },
+      'onState2' => { 'class' => '((String, String) -> Unit)?' },
+      'onState0' => { 'class' => '(() -> Unit)?' }
+    }
+    emitted = cases.map.with_index do |(label, (extra, _)), i|
+      "// #{label}\nfun emitted#{i}(data: Data) {\n#{generated(extra).first}\n}"
+    end.join("\n\n")
+    expect(<<~KOTLIN).to compile_as_kotlin
+      #{ComposeStubUniverse.common_stages(emitted)}
+      class Data(
+          val photoUrl: String? = null, val renderer: String? = null,
+          val onState1: ((String) -> Unit)? = null, val onState2: ((String, String) -> Unit)? = null,
+          val onState0: (() -> Unit)? = null
+      )
+      #{emitted}
+    KOTLIN
   end
 
   describe 'onLoadStateChange' do

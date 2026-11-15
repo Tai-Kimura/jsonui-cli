@@ -2,6 +2,7 @@
 
 require_relative '../../spec_helper'
 require 'react/converters/network_image_converter'
+require_relative '../../support/typescript_compiler'
 
 # Ticket jui-networkimage-load-listener: the web face takes transitionDuration
 # (a CSS opacity fade) and onLoadStateChange; loadingRenderer and loadingDelay
@@ -30,6 +31,31 @@ RSpec.describe RjuiTools::React::Converters::NetworkImageConverter do
     code = converted({ 'loadingRenderer' => 'fill_meter', 'loadingDelay' => 200, 'placeholder' => 'dots.png' })
     expect(code).not_to match(/loadingRenderer|loadingDelay/)
     expect(code).to include('placeholder="dots.png"')
+  end
+
+  # The emits above, type-checked against the props the NetworkImage template
+  # declares (transitionDuration: number, onLoadStateChange: (state: string) => void).
+  it 'compiles as TypeScript with every handler shape', :typescript_compile do
+    classes = { 'onState1' => '((String) -> Void)?', 'onState2' => '((String, String) -> Void)?', 'onState0' => '(() -> Void)?' }
+    elements = [
+      converted({ 'transitionDuration' => 240 }),
+      converted({ 'onLoadStateChange' => '@{onState1}' }, classes),
+      converted({ 'onLoadStateChange' => '@{onState2}' }, classes),
+      converted({ 'onLoadStateChange' => '@{onState0}' }, classes)
+    ]
+    ambient = TypeScriptCompiler::AMBIENT + <<~TS
+      declare const data: {
+        photoUrl: string; onState1?: (state: string) => void;
+        onState2?: (id: string, state: string) => void; onState0?: () => void
+      };
+      declare namespace React {
+        type CSSProperties = { [property: string]: string | number | undefined };
+        type MouseEvent<T> = { target: T }; type KeyboardEvent<T> = { target: T };
+      }
+      #{TypeScriptCompiler.template_declarations('network_image.tsx', 'NetworkImageProps')}
+      declare const NetworkImage: (props: NetworkImageProps) => JSX.Element;
+    TS
+    expect(TypeScriptCompiler.component(*elements)).to compile_as_typescript.with_ambient(ambient)
   end
 
   describe 'onLoadStateChange' do

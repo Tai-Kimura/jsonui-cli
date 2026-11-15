@@ -189,13 +189,13 @@ module RjuiTools
 
           number = value.is_a?(Numeric) ? value : (Float(value.to_s) rescue nil)
           if number.nil?
-            RjuiTools::Core::Logger.warn "[rjui] NetworkImage #{json['id'].inspect}: 'transitionDuration' is #{value.inspect}, not a number of milliseconds; left out"
+            RjuiTools::Core::Logger.warn "[rjui] NetworkImage #{JsonUIShared::LayoutPath.view_id(json).inspect}: 'transitionDuration' is #{value.inspect}, not a number of milliseconds; left out"
             return ''
           end
           millis = number.round
           unless (0..1000).cover?(millis)
             clamped = millis.clamp(0, 1000)
-            RjuiTools::Core::Logger.warn "[rjui] NetworkImage #{json['id'].inspect}: 'transitionDuration' #{value} is outside 0-1000 ms; #{clamped} is used"
+            RjuiTools::Core::Logger.warn "[rjui] NetworkImage #{JsonUIShared::LayoutPath.view_id(json).inspect}: 'transitionDuration' #{value} is outside 0-1000 ms; #{clamped} is used"
             millis = clamped
           end
           " transitionDuration={#{millis}}"

@@ -46,11 +46,11 @@ RSpec.describe 'a bound value slot on the Android build path' do
     [{ 'type' => 'CheckBox', 'id' => 'c', 'text' => 'x' }, 'selectedIcon', 'R.drawable.w_name'],
     [{ 'type' => 'IconLabel', 'id' => 'il', 'text' => 'x' }, 'icon_on', 'painterResource(id = R.drawable.w_name)'],
     [{ 'type' => 'IconLabel', 'id' => 'il', 'text' => 'x' }, 'icon_off', 'painterResource(id = R.drawable.w_name)'],
-    [{ 'type' => 'NetworkImage', 'id' => 'n', 'url' => 'https://example.com/a.png' }, 'hint', 'placeholder = painterResource(R.drawable.w_name)'],
-    [{ 'type' => 'NetworkImage', 'id' => 'n', 'url' => 'https://example.com/a.png' }, 'placeholder', 'placeholder = painterResource(R.drawable.w_name)'],
-    [{ 'type' => 'NetworkImage', 'id' => 'n', 'url' => 'https://example.com/a.png' }, 'loadingImage', 'placeholder = painterResource(R.drawable.w_name)'],
-    [{ 'type' => 'NetworkImage', 'id' => 'n', 'url' => 'https://example.com/a.png' }, 'errorImage', 'error = painterResource(R.drawable.w_name)'],
-    [{ 'type' => 'NetworkImage', 'id' => 'n', 'url' => 'https://example.com/a.png' }, 'defaultImage', 'fallback = painterResource(R.drawable.w_name)']
+    [{ 'type' => 'NetworkImage', 'id' => 'n', 'url' => 'https://example.com/a.png' }, 'hint', 'placeholder = R.drawable.w_name'],
+    [{ 'type' => 'NetworkImage', 'id' => 'n', 'url' => 'https://example.com/a.png' }, 'placeholder', 'placeholder = R.drawable.w_name'],
+    [{ 'type' => 'NetworkImage', 'id' => 'n', 'url' => 'https://example.com/a.png' }, 'loadingImage', 'placeholder = R.drawable.w_name'],
+    [{ 'type' => 'NetworkImage', 'id' => 'n', 'url' => 'https://example.com/a.png' }, 'errorImage', 'error = R.drawable.w_name'],
+    [{ 'type' => 'NetworkImage', 'id' => 'n', 'url' => 'https://example.com/a.png' }, 'defaultImage', 'fallback = R.drawable.w_name']
   ].freeze
 
   BOUND_DRAWABLE_CASES.each do |node, slot, written|
@@ -70,12 +70,16 @@ RSpec.describe 'a bound value slot on the Android build path' do
     end
   end
 
-  it 'an unknown bound name draws nothing where the slot needs a Painter, and null where it is Optional' do
+  # NetworkImage's state images are KjuiNetworkImage's resource ids (KotlinJsonUI
+  # 2.60.0, ticket jui-networkimage-load-listener): an unknown bound name is the
+  # 0 getIdentifier answers, which the slot reads as no image.
+  it 'an unknown bound name draws nothing where the slot needs a Painter, and is 0 where the slot is a resource id' do
     built({ 'type' => 'IconLabel', 'id' => 'il', 'text' => 'x', 'icon_off' => '@{v}' }) do |kotlin|
       expect(kotlin).to include('if (id != 0) painterResource(id = id) else androidx.compose.ui.graphics.painter.ColorPainter(')
     end
     built({ 'type' => 'NetworkImage', 'id' => 'n', 'url' => 'https://example.com/a.png', 'errorImage' => '@{v}' }) do |kotlin|
-      expect(kotlin).to include('if (id != 0) painterResource(id = id) else null')
+      expect(kotlin).to include('error = LocalContext.current.let { ctx -> ctx.resources.getIdentifier(')
+      expect(kotlin).not_to include('painterResource')
     end
   end
 
@@ -96,7 +100,7 @@ RSpec.describe 'a bound value slot on the Android build path' do
   # The lookup is well-typed Kotlin against the names it calls (types only:
   # the Compose compiler is not here), both where a Painter is required and
   # where the slot is Optional.
-  it 'the bound drawable lookup compiles, required and Optional' do
+  it 'the bound drawable lookup compiles, required, Optional and as a resource id' do
     resolver = KjuiTools::Compose::Helpers::ResourceResolver
     required = resolver.drawable_painter('@{v}', nil)
     optional = resolver.drawable_painter('@{v}', nil, empty: 'null')
@@ -109,6 +113,7 @@ RSpec.describe 'a bound value slot on the Android build path' do
       class Data(var v: String = "")
       fun probe(data: Data): Painter = #{required}
       fun probeOptional(data: Data): Painter? = #{optional}
+      fun probeId(data: Data): Int = #{resolver.drawable_res_id('@{v}', nil)}
     KOTLIN
       'Painter.kt' => "package androidx.compose.ui.graphics.painter\nopen class Painter\n" \
                       "class ColorPainter(val color: androidx.compose.ui.graphics.Color) : Painter()\n",
