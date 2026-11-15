@@ -52,7 +52,9 @@ export const NetworkImage = ({
   const [error, setError] = useState(false);
   const [fade, setFade] = useState("none");
   const stateHandler = useRef(onLoadStateChange);
-  stateHandler.current = onLoadStateChange;
+  useEffect(() => {
+    stateHandler.current = onLoadStateChange;
+  });
   const lastState = useRef(null);
   const report = (state) => {
     if (lastState.current === state) return;
