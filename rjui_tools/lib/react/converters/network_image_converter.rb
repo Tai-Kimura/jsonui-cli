@@ -35,8 +35,10 @@ module RjuiTools
           # Corner radius
           corner_radius_style = build_corner_radius_style
 
+          load_listener = "#{transition_duration_attr}#{on_load_state_change_attr}"
+
           jsx = <<~JSX.chomp
-            #{indent_str(indent)}<NetworkImage#{id_attr}#{class_name_attr(class_name)}#{src}#{content_mode}#{placeholder_attr}#{error_image}#{build_alt_attr}#{loading_attr}#{on_load}#{on_error}#{onclick_attr}#{corner_radius_style}#{style_attr}#{testid_attr}#{tag_attr} />
+            #{indent_str(indent)}<NetworkImage#{id_attr}#{class_name_attr(class_name)}#{src}#{content_mode}#{placeholder_attr}#{error_image}#{build_alt_attr}#{loading_attr}#{on_load}#{on_error}#{load_listener}#{onclick_attr}#{corner_radius_style}#{style_attr}#{testid_attr}#{tag_attr} />
           JSX
 
           wrap_with_visibility(jsx, indent)
@@ -174,6 +176,51 @@ module RjuiTools
             attr += jsx_attr_text('defaultImage', default_image)
           end
           attr
+        end
+
+        # transitionDuration (ticket jui-networkimage-load-listener): T ms of
+        # the CSS opacity fade into the loaded or the error image. 0-1000; a
+        # value outside is WARNed and clamped, one that is not a number is
+        # WARNed and left out. loadingRenderer / loadingDelay are not declared
+        # for react (no native renderer on the web): placeholder is drawn.
+        def transition_duration_attr
+          value = attributes['transitionDuration']
+          return '' if value.nil?
+
+          number = value.is_a?(Numeric) ? value : (Float(value.to_s) rescue nil)
+          if number.nil?
+            RjuiTools::Core::Logger.warn "[rjui] NetworkImage #{json['id'].inspect}: 'transitionDuration' is #{value.inspect}, not a number of milliseconds; left out"
+            return ''
+          end
+          millis = number.round
+          unless (0..1000).cover?(millis)
+            clamped = millis.clamp(0, 1000)
+            RjuiTools::Core::Logger.warn "[rjui] NetworkImage #{json['id'].inspect}: 'transitionDuration' #{value} is outside 0-1000 ms; #{clamped} is used"
+            millis = clamped
+          end
+          " transitionDuration={#{millis}}"
+        end
+
+        # onLoadStateChange: the handler as the layout's data declares it,
+        # the same shapes as on iOS and Android - `()` with nothing,
+        # `(String)` with the state, `(String, String)` with the viewId and
+        # the state. Binding only: a bare string names no handler.
+        def on_load_state_change_attr
+          handler = attributes['onLoadStateChange']
+          return '' unless handler.is_a?(String) && has_binding?(handler)
+
+          callee = extract_binding_property(handler)
+          return '' if callee.nil? || callee.empty?
+
+          name = handler[/\A@\{\s*([^}]+?)\s*\}\z/, 1]
+          classes = config['_data_classes'] || {}
+          params = name ? self.class.declared_parameters(name, classes).map { |t| t.delete_suffix('?') } : []
+          call = case params.size
+                 when 0 then "#{callee}?.()"
+                 when 1 then "#{callee}?.(state)"
+                 else "#{callee}?.(#{view_id_expr}, state)"
+                 end
+          params.empty? ? " onLoadStateChange={() => #{call}}" : " onLoadStateChange={(state) => #{call}}"
         end
 
         def build_event_handler(event_name)

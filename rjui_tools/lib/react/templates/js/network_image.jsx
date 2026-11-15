@@ -12,7 +12,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 export const NetworkImage = ({
   id,
   src,
@@ -27,6 +27,8 @@ export const NetworkImage = ({
   loading: fetchHint,
   onLoad,
   onError,
+  transitionDuration = 0,
+  onLoadStateChange,
   onClick,
   role,
   tabIndex,
@@ -48,6 +50,15 @@ export const NetworkImage = ({
   const [imageUrl, setImageUrl] = useState(defaultImage || placeholder || null);
   const [loading, setLoading] = useState(!!src);
   const [error, setError] = useState(false);
+  const [fade, setFade] = useState("none");
+  const stateHandler = useRef(onLoadStateChange);
+  stateHandler.current = onLoadStateChange;
+  const lastState = useRef(null);
+  const report = (state) => {
+    if (lastState.current === state) return;
+    lastState.current = state;
+    stateHandler.current?.(state);
+  };
   useEffect(() => {
     if (!src) {
       setImageUrl(defaultImage || placeholder || null);
@@ -57,10 +68,14 @@ export const NetworkImage = ({
     }
     setLoading(true);
     setError(false);
+    setFade("none");
     const img = new Image();
+    let cached = false;
     img.onload = () => {
       setImageUrl(src);
       setLoading(false);
+      if (!cached && transitionDuration > 0) setFade("start");
+      report("loaded");
       onLoad?.();
     };
     img.onerror = () => {
@@ -69,15 +84,25 @@ export const NetworkImage = ({
       const errorDisplay = errorImage || defaultImage;
       if (errorDisplay) {
         setImageUrl(errorDisplay);
+        if (transitionDuration > 0) setFade("start");
       }
+      report("failed");
       onError?.();
     };
     img.src = src;
+    cached = img.complete && img.naturalWidth > 0;
+    if (!cached) report("loading");
     return () => {
       img.onload = null;
       img.onerror = null;
     };
-  }, [src, placeholder, defaultImage, errorImage, onLoad, onError]);
+  }, [src, placeholder, defaultImage, errorImage, onLoad, onError, transitionDuration]);
+  useEffect(() => {
+    if (fade !== "start") return;
+    const frame = requestAnimationFrame(() => setFade("run"));
+    return () => cancelAnimationFrame(frame);
+  }, [fade]);
+  const fadeStyle = fade === "start" ? { opacity: 0 } : fade === "run" ? { opacity: 1, transition: `opacity ${transitionDuration}ms ease-out` } : void 0;
   const objectFitMap = {
     cover: "object-cover",
     contain: "object-contain",
@@ -111,6 +136,7 @@ export const NetworkImage = ({
   }
   return <img
     {...rootProps}
+    style={fadeStyle ? { ...style, ...fadeStyle } : style}
     src={imageUrl}
     alt={alt}
     loading={fetchHint}

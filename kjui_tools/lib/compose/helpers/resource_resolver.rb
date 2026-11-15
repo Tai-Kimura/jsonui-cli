@@ -96,6 +96,22 @@ module KjuiTools
               ".let { id -> if (id != 0) painterResource(id = id) else #{empty} }"
           end
 
+          # A drawable the layout names, as an Int resource id
+          # (KjuiNetworkImage's placeholder / error / fallback slots). A written
+          # name is drawable_id's; a binding is the name the data holds, looked
+          # up at run time, and an unknown name is 0, which the slot reads as
+          # no image (as the null painter it replaces did).
+          def drawable_res_id(raw, required_imports)
+            unless BindingExpression.whole_binding?(raw)
+              required_imports&.add(:r_class)
+              return drawable_id(raw)
+            end
+
+            required_imports&.add(:local_context)
+            name = bound_string_value(raw)
+            "LocalContext.current.let { ctx -> ctx.resources.getIdentifier(#{bound_drawable_name(name)}, \"drawable\", ctx.packageName) }"
+          end
+
           # A whole binding in a String slot, as a non-null Kotlin String
           # (`data.x`, or `(data.x ?: "")` for a property with no default);
           # nil for anything that is not a whole binding.
