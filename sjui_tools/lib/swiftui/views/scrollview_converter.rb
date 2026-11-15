@@ -84,6 +84,21 @@ module SjuiTools
           # content is measured at its own height (content_fit_height) and the
           # ScrollView framed at it.
           fit_height = content_fit_height(axes)
+          # A ScrollView wrapContent along its scroll axis (a vertical one of
+          # height wrapContent, a horizontal one of width wrapContent) is its
+          # content's length there, at most — less when its parent offers less,
+          # scrolling inside — as KotlinJsonUI and web draw it. The same
+          # GeometryReader offered its ideal length, 10pt, to a parent that
+          # asks (a wrapContent View with a maxHeight: a legend panel drew its
+          # scroll 10pt tall) and took all the length it was offered otherwise
+          # (a 200pt content in a 778pt ScrollView; ticket
+          # sjui-vertical-scrollview-wrapcontent-height-is-10pt). The content
+          # is measured along the scroll (content_fit_length) and the
+          # ScrollView framed at it, ideal and max. SwiftJsonUI Dynamic:
+          # DynamicScrollViewContainer, the same frame.
+          fit_length = content_fit_length(axes)
+          measure_width = fit_length && axes == '.horizontal'
+          measure_height = fit_height || (fit_length && axes == '.vertical')
 
           # AdvancedKeyboardAvoidingScrollViewを使用
           # keyboardAvoidance: falseの場合はconfigurationでisEnabled: falseを指定
@@ -124,10 +139,13 @@ module SjuiTools
               add_line "Spacer(minLength: 0)"
             end
             add_line "}"
-            if fit_height
-              # its own height, before the frame stretches it to the viewport
-              add_modifier_line ".fixedSize(horizontal: false, vertical: true)"
-              add_modifier_line ".onGeometryChange(for: CGFloat.self) { $0.size.height } action: { #{fit_height} = $0 }"
+            if measure_width || measure_height
+              # its own size, before the frame stretches it to the viewport
+              add_modifier_line ".fixedSize(horizontal: #{measure_width ? 'true' : 'false'}, vertical: #{measure_height ? 'true' : 'false'})"
+              # one single-expression reading per axis, the shape older
+              # compilers type-check without a hint
+              add_modifier_line ".onGeometryChange(for: CGFloat.self) { $0.size.width } action: { #{fit_length} = $0 }" if measure_width
+              add_modifier_line ".onGeometryChange(for: CGFloat.self) { $0.size.height } action: { #{fit_height || fit_length} = $0 }" if measure_height
             end
             # Stretched to the ScrollView's size and placed where the stack is
             # aligned: without an alignment the frame centred the stack, so a
@@ -138,6 +156,13 @@ module SjuiTools
           add_line "}"
           
           add_modifier_line ".frame(height: #{fit_height})" if fit_height
+          if fit_length
+            if axes == '.horizontal'
+              add_modifier_line ".frame(idealWidth: #{fit_length}, maxWidth: #{fit_length})"
+            else
+              add_modifier_line ".frame(idealHeight: #{fit_length}, maxHeight: #{fit_length})"
+            end
+          end
 
           # scrollEnabled — emit .scrollDisabled(_:) (not .disabled(_:)) so a
           # dynamic toggle does not interrupt an in-flight pan / deceleration.
@@ -221,6 +246,19 @@ module SjuiTools
 
           name = @component['id'] ? to_camel_case(@component['id']) : to_camel_case(position_name('scrollView'))
           state = "#{name}ContentHeight"
+          @state_variables << "@State private var #{state}: CGFloat? = nil"
+          state
+        end
+
+        # A ScrollView wrapContent along its scroll axis: the name of its
+        # content length's state there, declared here (nil until measured: no
+        # frame, as before); nil for any other ScrollView.
+        def content_fit_length(axes)
+          along = axes == '.horizontal' ? 'width' : 'height'
+          return nil unless @component[along] == 'wrapContent'
+
+          name = @component['id'] ? to_camel_case(@component['id']) : to_camel_case(position_name('scrollView'))
+          state = "#{name}ContentLength"
           @state_variables << "@State private var #{state}: CGFloat? = nil"
           state
         end
